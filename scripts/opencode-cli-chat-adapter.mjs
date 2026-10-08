@@ -16,6 +16,13 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const fileSize = path => { try { return statSync(path).size; } catch { return 0; } };
 const safeError = value => String(value?.message ?? value).replace(/(?:Bearer\s+)[^\s,;]+/gi, 'Bearer [redacted]').replace(/\b(?:sk|rk|tok)[-_][A-Za-z0-9_-]{12,}\b/g, '[redacted]').slice(0, 500);
+function isConfirmedTerminalAbort(error, sessionID, boundary) {
+  const confirmed = boundary?.session_id === sessionID && boundary.status === 'aborted' &&
+    boundary.abort_result?.ok === true && boundary.abort_result?.abort_confirmed === true;
+  if (!confirmed || error?.name !== 'MessageAbortedError') return false;
+  const message = error?.data?.message ?? error?.message;
+  return message === '' || message === 'Aborted';
+}
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const jsonResponse = (res, status, value) => {
   if (res.destroyed || res.writableEnded) return;
@@ -329,7 +336,7 @@ function createEventWatcher({ baseUrl, directory, client, onViolation }) {
           } else if (event.type === 'session.error') {
             sessionErrors.push({ sessionID: event.properties?.sessionID ?? null,
               name: event.properties?.error?.name ?? 'Error',
-              message: String(event.properties?.error?.message ?? '').slice(0, 300) });
+              message: String(event.properties?.error?.data?.message ?? event.properties?.error?.message ?? '').slice(0, 300) });
           }
         }
       }
@@ -521,8 +528,15 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         }
         diagnostics.server_session_cleanup_reason = cleanupReason;
       }
-      const cliEventErrors = events.filter(event => event?.type === 'error').map(event => ({
-        name: event.error?.name ?? 'Error', message: safeError(event.error?.message ?? event.error ?? 'OpenCode CLI error') }));
+      const cliErrorEvents = events.filter(event => event?.type === 'error');
+      const cliEventErrors = cliErrorEvents.map(event => ({
+        sessionID: event.sessionID ?? event.properties?.sessionID ?? null,
+        name: event.error?.name ?? 'Error',
+        message: safeError(event.error?.data?.message ?? event.error?.message ?? event.error ?? 'OpenCode CLI error') }));
+      const ignoredTerminalAbortEvents = cliErrorEvents.filter(event => isConfirmedTerminalAbort(
+        event.error, event.sessionID ?? event.properties?.sessionID, terminalActionBoundary));
+      const remainingCliEventErrors = cliEventErrors.filter((_, index) => !ignoredTerminalAbortEvents.includes(cliErrorEvents[index]));
+      diagnostics.ignored_confirmed_terminal_abort_events = ignoredTerminalAbortEvents.length;
       diagnostics.cli_event_errors = cliEventErrors;
       if (timedOut) throw Object.assign(new Error(`OpenCode CLI request exceeded ${timeoutMs} ms`), { code: 'REQUEST_TIMEOUT' });
       if (clientCancelled) throw Object.assign(new Error('OpenCode CLI request was cancelled by the client'), { code: 'CLIENT_CANCELLED' });
@@ -532,15 +546,13 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
-      if (cliEventErrors.length) throw Object.assign(new Error('OpenCode CLI emitted provider error event(s)'), {
-        code: 'CLI_EVENT_ERROR', cliEventErrors });
+      if (remainingCliEventErrors.length) throw Object.assign(new Error('OpenCode CLI emitted provider error event(s)'), {
+        code: 'CLI_EVENT_ERROR', cliEventErrors: remainingCliEventErrors });
       if (terminalActionBoundary?.continued_after_submit) throw Object.assign(new Error(
         'OpenCode session started another model step after a completed audited action'), { code: 'TERMINAL_BOUNDARY_LATE' });
       await watcher.close();
-      const sessionErrors = watcher.sessionErrors.filter(error =>
-        !(terminalActionBoundary?.status === 'aborted' &&
-          error.sessionID === terminalActionBoundary.session_id &&
-          error.name === 'MessageAbortedError' && error.message === ''));
+      const sessionErrors = watcher.sessionErrors.filter(error => !isConfirmedTerminalAbort({
+        name: error.name, message: error.message }, error.sessionID, terminalActionBoundary));
       diagnostics.session_errors = watcher.sessionErrors;
       if (sessionErrors.length) throw Object.assign(new Error('OpenCode CLI emitted session error event(s)'), {
         code: 'SESSION_ERROR', sessionErrors });

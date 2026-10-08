@@ -135,11 +135,15 @@ def merge_pieces(prefix: Path, delta: Path, output: Path):
 
 
 def audit_splits(path: Path):
+    return audit_split_rows(rows(path))
+
+
+def audit_split_rows(source_rows):
     counts = collections.Counter()
     group_splits = collections.defaultdict(set)
     source_splits = {}
     ids = set()
-    for row in rows(path):
+    for row in source_rows:
         ids.add(row['id'])
         split = row.get('split')
         if split not in ('train', 'test'): raise ValueError(f'invalid split on {row["id"]}')
@@ -165,6 +169,8 @@ def main():
                    help='defaults to --delta-native when the approved records feed both streams')
     p.add_argument('--approval-id-field', default='approved_row_ids')
     p.add_argument('--admission-kind', default='exact-native-runtime-oracle')
+    p.add_argument('--compact-only', action='store_true',
+                   help='write only the admitted delta and compact audit; do not copy or assemble full base prefixes')
     args = p.parse_args()
     paths = {k: getattr(args, k.replace('-', '_')) for k in ('base-native','base-recurrence','base-receipt','delta-native',
         'delta-pieces','base-native-pieces','base-recurrence-pieces','approval','out')}
@@ -301,6 +307,65 @@ def main():
     wanted = set().union(*(referenced_soft(r.get('messages')) | referenced_soft(r.get('target')) for r in delta_n))
     if delta_piece_names != wanted:
         raise ValueError(f'delta piece names do not exactly match delta soft references; missing={sorted(wanted-delta_piece_names)}, extra={sorted(delta_piece_names-wanted)}')
+
+    if args.compact_only:
+        # Validate the virtual prefix+delta in memory while publishing only compact additions.
+        # This keeps the already adopted prefix as a hash-bound dependency and avoids a redundant
+        # hundreds-of-megabytes copy during proposal construction.
+        merged_pieces = {piece['name']: piece for piece in rows(paths['base-native-pieces'], 'name')}
+        exact_piece_duplicates = []
+        for piece in rows(paths['delta-pieces'], 'name'):
+            prior = merged_pieces.get(piece['name'])
+            if prior is not None:
+                if prior != piece: raise ValueError(f'piece name conflict: {piece["name"]}')
+                exact_piece_duplicates.append(piece['name'])
+            else: merged_pieces[piece['name']] = piece
+        missing = set().union(*(referenced_soft(r.get('messages')) | referenced_soft(r.get('target')) for r in delta_n)) - set(merged_pieces)
+        if missing: raise ValueError(f'missing pieces in virtual native prefix for selected delta: {sorted(missing)}')
+        split_audit = audit_split_rows([*base_n, *delta_n])
+        names = {'delta': 'delta-native-records.jsonl', 'delta_pieces': 'delta-native-pieces.jsonl',
+                 'audit': 'recurrence-audit.json'}
+        with (out / names['delta']).open('xb') as stream:
+            for row in delta_n: stream.write(line(row))
+        shutil.copyfile(paths['delta-pieces'], out / names['delta_pieces'])
+        audit_path = out / names['audit']
+        subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
+                        str(paths['base-recurrence']), '--out', str(audit_path)], cwd=ROOT, check=True)
+        recurrence_audit = json.loads(audit_path.read_text())
+        if recurrence_audit.get('structurally_closed') is not True:
+            raise ValueError('unchanged recurrence prefix is not structurally closed')
+        manifest = {
+          'schema': 'natlang.approved-neuralese-compact-native-delta-proposal/1',
+          'status': 'compact delta only; separate root integration review required',
+          'compact_only': True,
+          'approval': {'path': str(paths['approval'].resolve()), 'sha256': sha(paths['approval']),
+                       'id_field': args.approval_id_field, 'approved_ids': approved},
+          'admitted_facets': {'native': True, 'recurrence': False, 'native_only_receipt': native_only},
+          'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
+                     for k,v in {**paths, 'delta-recurrence': delta_r}.items() if k != 'out'},
+          'virtual_prefix': {
+            'native': {'path': str(paths['base-native'].resolve()), 'sha256': sha(paths['base-native']),
+                       'bytes': paths['base-native'].stat().st_size,
+                       'rows': len(base_n), 'train': sum(r.get('split') == 'train' for r in base_n),
+                       'test': sum(r.get('split') == 'test' for r in base_n)},
+            'recurrence': {'path': str(paths['base-recurrence'].resolve()), 'sha256': sha(paths['base-recurrence']),
+                           'bytes': paths['base-recurrence'].stat().st_size, 'rows': len(base_r)},
+            'native_pieces': {'path': str(paths['base-native-pieces'].resolve()),
+                              'sha256': sha(paths['base-native-pieces']), 'rows': len(merged_pieces)-len(delta_piece_names)+len(exact_piece_duplicates)}},
+          'native_split_group_audit_virtual': split_audit,
+          'piece_merge': {'added': len(delta_piece_names)-len(exact_piece_duplicates),
+                          'exact_duplicates': sorted(exact_piece_duplicates), 'virtual_total': len(merged_pieces)},
+          'recurrence_audit': recurrence_audit,
+          'outputs': {name: {'sha256': sha(out/name), 'bytes': (out/name).stat().st_size}
+                      for name in names.values()},
+          'assembler': {'path': str(Path(__file__).relative_to(ROOT)), 'sha256': sha(Path(__file__))},
+          'limits': {'full_base_assembly_performed': False, 'task_or_trajectory_admission': False,
+                     'model_qualification': False, 'publication': False, 'training_launch': False}}
+        (out/'proposal-manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
+        print(json.dumps({'status': manifest['status'], 'native': split_audit,
+                          'delta_rows': len(delta_n), 'recurrence_unchanged_rows': len(base_r),
+                          'proposal_manifest_sha256': sha(out/'proposal-manifest.json')}, indent=2))
+        return
 
     names = {'native': 'native-records.jsonl', 'recurrence': 'recurrence-records.jsonl',
              'native_pieces': 'native-pieces.jsonl', 'recurrence_pieces': 'recurrence-pieces.jsonl',

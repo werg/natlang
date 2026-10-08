@@ -117,6 +117,47 @@
       "mutable_outputs_registered": false,
       "runtime_source_commit": "e3198f93d07f63ce54eb0bb08b665cf39aa15829",
       "declaration_commit": "d7585f582680377b679a75fd8ea3ca34e439193f"
+    },
+    "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1": {
+      "source_snapshot": "authored-root-five-world-luna-20261008-v1",
+      "root_action_admission": "runs/semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/root-selected-child-action-admission-v1.json",
+      "root_admission_sha256": "9a049c767b3fcb7bbdb02269d2b52e5f0d91d6074b645df7bcb839af15b059d9",
+      "root_compact_composition_adoption": "runs/semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/root-composition-adoption-v1.json",
+      "root_compact_composition_adoption_sha256": "b3bd1417182f0402ddacdddd929487a2523156ca75587b885308a6d221a4106f",
+      "native_action_delta": 38,
+      "ordinary_gold_text_delta": 38,
+      "train": 38,
+      "test": 0,
+      "source_groups": 5,
+      "text_coverage": "38/38",
+      "text_omissions": 0,
+      "suffix_decodes_pinned_tokenizer": 38,
+      "virtual_cumulative_counts": {
+        "native": {
+          "total": 5450,
+          "train": 3415,
+          "test": 2035
+        },
+        "text": {
+          "total": 4682,
+          "train": 2978,
+          "test": 1704
+        },
+        "recurrence": 4961
+      },
+      "publication_snapshot": "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1",
+      "manifest_sha256": "ff5ac914124d64d18da85db0bc9e2b3e4e702d999cfdcedb199ab3fb483a05d7",
+      "availability": {
+        "pop": "verified 72 files",
+        "dgx": "verified 72 files"
+      },
+      "admission": "root-adopted exact sampled child-action native SFT and faithful ordinary text compact delta; not active input",
+      "remaining": [
+        "virtual counts only; no cumulative assembly",
+        "no active GPU input change or training launch",
+        "no recurrence, writer, runtime, whole-trajectory, DPO or new-world qualification",
+        "future use requires full canonical assembly and separate reviewed launch handoff"
+      ]
     }
   },
   "teacher_outcome_coverage": {

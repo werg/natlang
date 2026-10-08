@@ -1,0 +1,399 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/capsule-receipt-v1.json",
+      "bytes": 2036,
+      "sha256": "14005d789a77f978a9c899efccbe29c5a03a0928947b3c6de1ffef22881ca2fc"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/code-input-provenance-v1.json",
+      "bytes": 3125,
+      "sha256": "5162c1e38a7d783cce7012be30b5c559d14f537dae7a63dce7862457a925c34e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/conversion-environment-v1.json",
+      "bytes": 524,
+      "sha256": "671d406a6269e62a6f501655d6173075982c74d5e25ea88995ccb525ce182995"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/dependencies/authored-root-five-world-luna-20261008-v1.json",
+      "bytes": 248377,
+      "sha256": "e558f3a7b712ac2c7072a710eba19019354b00fee76df1a0cb88741236277283"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/dependencies/v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1.json",
+      "bytes": 8059,
+      "sha256": "00618847904ee88f39eb66d0e780c491a39975e1960f7f26368f8bb50fdbaf29"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/scripts/assemble_admitted_neuralese_cohort.py",
+      "bytes": 25917,
+      "sha256": "070681b32677d656bf94cf777e207328aa2455b0897f760fefe6137c50cf798f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/scripts/audit_neuralese_recurrence.py",
+      "bytes": 49169,
+      "sha256": "4b487d85b1444d0cd9c112fc7859f2e7da62362bca1dc740fdebd2649b80e1fa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 42586,
+      "sha256": "33f04a15b78beeabac8dc47772318ff68142215be6b3ed37af92b1c2b855ec7e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/training/neuralese/natlang_neuralese/data/text_corpus.py",
+      "bytes": 70224,
+      "sha256": "3edaba8914ab4a393e9689e953e57264ca4c70b6860fb0a6b85ff8cd1cb4785d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/training/neuralese/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/training/neuralese/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/inputs/training/neuralese/natlang_neuralese/train/trajectories.py",
+      "bytes": 125337,
+      "sha256": "32602ced387abffd829bd0f1317281a9cc92715f035cbf84d58b023ad3875a57"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/delta-publication-v1/source-raw-pins-v1.json",
+      "bytes": 17595,
+      "sha256": "a3ae67c5e8d32f29607a6dbcf0ca041ae0aa23b39ec8d5fa6abc336ff68a794a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/native/assembled/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/native/assembled/delta-native-records.jsonl",
+      "bytes": 5421180,
+      "sha256": "66d486b0ad707191ed49fdc1395de6fb2f9574f431eb98b2e4c1f6661ffc2541",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/native/assembled/proposal-manifest.json",
+      "bytes": 12552,
+      "sha256": "af8724e1ce5207ffb70de1f8c6ebfff54eb71f0b7bf34113fae6fb9aa4c8d14a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/native/assembled/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/native/delta-native-pieces-empty-v1.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/root-composition-adoption-v1.json",
+      "bytes": 1838,
+      "sha256": "b3bd1417182f0402ddacdddd929487a2523156ca75587b885308a6d221a4106f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/root-integration-review-v1.json",
+      "bytes": 10038,
+      "sha256": "6376bdd7889cf5b086a684a071c2ae10458dc74784c0210828fed2b530592657"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/README.md",
+      "bytes": 1445,
+      "sha256": "98e52435b61b2b15b0480728484873b0a1c1dc73afaa14abc799e404d0ef29d7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/decoded-supervised-suffixes.jsonl",
+      "bytes": 63005,
+      "sha256": "42a3ae4622b9de6b68b2d9a42e3e234c1f90eaf0651f3bf9009181656ae8a594",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/delta-provenance.jsonl",
+      "bytes": 74207,
+      "sha256": "e4ca2ed2ea26248fd236cd387c9cd3b0046bbf44d68e864e9a3a8e8e7b09f7e5",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/delta-text.jsonl",
+      "bytes": 3210955,
+      "sha256": "461df227bb84d539c79f20f3533099dad642f01222b87ca30cadd70dda48f58f",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/output-manifest.json",
+      "bytes": 1439,
+      "sha256": "ca26773a33e22a948d26717f164be85fe5d26c33e29dab58c2a32c995a95df88"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/packet-manifest.json",
+      "bytes": 2382,
+      "sha256": "0e01e3ed13ee0b2ff47df6194fd4ec39cd8706998995161733663b60d98a5f2b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/provider-context-bindings.jsonl",
+      "bytes": 82138,
+      "sha256": "e21ab49cde337105a5b89021f9d1c3b4ddd950448c234ec34aaeb31dde532629",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/receipt.json",
+      "bytes": 5940,
+      "sha256": "8339c7149c222d5cf1f3eba49cddc85c26b98c69bd5f6b6be84970ef470ac5de"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/action38-native-text-delta-v1/text/compact-v7/source-coverage.jsonl",
+      "bytes": 15903,
+      "sha256": "b917cac1c3c746f3f50868016d7be915fefa3e2acb3460fd5c9797e319cf166d",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/callstore-exact-five-world-children-v1/calls.jsonl",
+      "bytes": 223032,
+      "sha256": "d6c0af5bb4e1aa055fcb37c7478c9b7d5ba1678ca783cc6321299434a210fb6a",
+      "lines": 169
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/callstore-exact-five-world-children-v1/provenance.json",
+      "bytes": 129022,
+      "sha256": "7eb1240ab54d2a53d2ac389272bcedd0cfb88b7511e3d9474191a3b78f104c11"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/campaign-quality-review-v2.json",
+      "bytes": 36274,
+      "sha256": "1382e4b46f4ab1073f9b3f828ecbf0ca966e5dc37be8b6f4b85a22309c152671"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/independent-semantic-action-review-v2-overwrite-incident-v1.json",
+      "bytes": 1005,
+      "sha256": "805987b2e10e157d2c6396d1702f566e9077efeafc85cd42286d415d48d1cd7f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/independent-semantic-action-review-v2.json",
+      "bytes": 4263,
+      "sha256": "275e6ab47804406bcbef7261a6cf41a33b6f5178888af8b21f879988062be6e1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/native-sft-action-candidate-proposal-v1.jsonl",
+      "bytes": 4540887,
+      "sha256": "72ffdb3208e29933ebe5ddbfbba431414e7508729d15d784f437756b28f39fed",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/native-sft-materialized-38-held-v1.jsonl",
+      "bytes": 5411096,
+      "sha256": "6f2559d202c169a06fbebd89491086d9e4a4ffba62673a05ffade79aaa5fb1c9",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/native-sft-materialized-38-id-map-v1.json",
+      "bytes": 54443,
+      "sha256": "c9e668204de0cdef21bee8fefa1d04ce9cd1ca64f9090768e36b10be19bdf44a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/omissions-v2.jsonl",
+      "bytes": 27573,
+      "sha256": "0f743675b39dd22fa4308bae17f411522f8aa815af1150786fa0e494b7009e7e",
+      "lines": 30
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/per-action-success-selection-proposal-v1.json",
+      "bytes": 179969,
+      "sha256": "0d21809471ef6b70a49f1e54b3a2b1f6a9eaa32298f4be7486d54f95be8e783d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/root-independent-verification-v1.json",
+      "bytes": 16815,
+      "sha256": "6e0cb85dfa08ff5289e66cbfa5d32f7bb30e90f115e5cfb1ef68dbb692f2aca0"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/root-selected-child-action-admission-v1.json",
+      "bytes": 41842,
+      "sha256": "9a049c767b3fcb7bbdb02269d2b52e5f0d91d6074b645df7bcb839af15b059d9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-01/jobs/000000-8225743b2bdc8642.result.json",
+      "bytes": 3521412,
+      "sha256": "606244a5d0196809efb1c2f007f71ab9c3950e31ce2e7c09b08d5807f4c3a378"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-01/jobs/000000-8225743b2bdc8642.trace.jsonl",
+      "bytes": 709779,
+      "sha256": "b428695d2973df9ea34270bf159bdaabcc848e8f4e245dcf85415a0db1c6bb01",
+      "lines": 831
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 11831,
+      "sha256": "22500c5aecf377b53dd84a1de81ba503e974bd27391748f690f61b5a714256a8",
+      "lines": 13
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3521412,
+      "sha256": "606244a5d0196809efb1c2f007f71ab9c3950e31ce2e7c09b08d5807f4c3a378",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 11831,
+      "sha256": "22500c5aecf377b53dd84a1de81ba503e974bd27391748f690f61b5a714256a8"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-02/jobs/000001-fda483ef4d168313.result.json",
+      "bytes": 3340550,
+      "sha256": "f59f688ffc7da959dd06ed92b77564e09213e0ed15b25d52864069e2c2860a1a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-02/jobs/000001-fda483ef4d168313.trace.jsonl",
+      "bytes": 756057,
+      "sha256": "c0f85fcd1ba3407984eb5242dbc6625872e7756c302dc5392812e0c404f5e24f",
+      "lines": 816
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 9295,
+      "sha256": "5dffcf4ff6a075f3d689440f84976b07e8d6079296a9d0db1e48cda4013703c6",
+      "lines": 10
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 3340550,
+      "sha256": "f59f688ffc7da959dd06ed92b77564e09213e0ed15b25d52864069e2c2860a1a",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 9295,
+      "sha256": "5dffcf4ff6a075f3d689440f84976b07e8d6079296a9d0db1e48cda4013703c6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-03/jobs/000002-f5352165affc830e.result.json",
+      "bytes": 2810772,
+      "sha256": "6c56e3667f461e42671d8a4b6ed06add3a5a0aa8afa6dae719636c1c4fadd700"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-03/jobs/000002-f5352165affc830e.trace.jsonl",
+      "bytes": 664799,
+      "sha256": "91784eeb17a8bb18d71903fed62a4bdafce0a1e4ad50789c4bf208e4e286187f",
+      "lines": 695
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-03/journal.jsonl",
+      "bytes": 8398,
+      "sha256": "c9bd4167b4dc556044bafc3f2d356f2c04346b7feac56d131671ee5fc538c821",
+      "lines": 9
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 2810772,
+      "sha256": "6c56e3667f461e42671d8a4b6ed06add3a5a0aa8afa6dae719636c1c4fadd700",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-03/supervisor.log",
+      "bytes": 8398,
+      "sha256": "c9bd4167b4dc556044bafc3f2d356f2c04346b7feac56d131671ee5fc538c821"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-04/jobs/000003-0832dcd23f9c14e4.result.json",
+      "bytes": 2539303,
+      "sha256": "92fa4b91fc99fac8f198118111836e6fda838109bdca29c0227dacf4a11c7c0d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-04/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+      "bytes": 558681,
+      "sha256": "4891cabe8a694f0083e42f062fa6157c3f4e8f6288ce9c2afd23530b25964711",
+      "lines": 634
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-04/journal.jsonl",
+      "bytes": 7506,
+      "sha256": "d6b1823d14ee383eaf2a05a28a58bf5b07461e7c86385cd989ca2599828f150e",
+      "lines": 8
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 2539303,
+      "sha256": "92fa4b91fc99fac8f198118111836e6fda838109bdca29c0227dacf4a11c7c0d",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-04/supervisor.log",
+      "bytes": 7506,
+      "sha256": "d6b1823d14ee383eaf2a05a28a58bf5b07461e7c86385cd989ca2599828f150e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-05/jobs/000004-b530abf9c31f36d9.result.json",
+      "bytes": 2868467,
+      "sha256": "90d829356742d0019d7c7453c05f55349863fc0ce000b1483cac5aece219a7cf"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-05/jobs/000004-b530abf9c31f36d9.trace.jsonl",
+      "bytes": 586011,
+      "sha256": "a54939fe70f4a50400a40c300f2af3445f040b691ca8afebbb672f8944c08c40",
+      "lines": 678
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-05/journal.jsonl",
+      "bytes": 8407,
+      "sha256": "01a248a652ad47f9c64af876269bf4ae0b47434162ea73ac6afc7666236a5c9d",
+      "lines": 9
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 2868467,
+      "sha256": "90d829356742d0019d7c7453c05f55349863fc0ce000b1483cac5aece219a7cf",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/slot-05/supervisor.log",
+      "bytes": 8407,
+      "sha256": "01a248a652ad47f9c64af876269bf4ae0b47434162ea73ac6afc7666236a5c9d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+      "bytes": 220885,
+      "sha256": "b2c7c7659c3d355e0e7d0183873938ce3bc54341e2fabfca6e612fc50605076f",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+      "bytes": 13603,
+      "sha256": "76bd75a8b48afb5b9f3df663028f176e00e550b9b11aab6f32278e3e0bc332d1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/source.cases.jsonl",
+      "bytes": 257258,
+      "sha256": "1d723e31e992eb57a00ab734595d59611347ba1a664692a0f2699a062ca23ec1",
+      "lines": 6
+    }
+  ],
+  "bytes": 54241774
+}
