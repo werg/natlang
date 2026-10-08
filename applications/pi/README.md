@@ -62,7 +62,7 @@ natlang run --profile pi-executor applications/pi -- eval js-off-by-one --agent-
 
 The launcher's profile is the executor. The agent is any OpenAI-compatible server (`--agent-endpoint`,
 `--agent-model`, `--agent-key-env`), registered with pi-ai as provider `agent`; without them the agent uses the
-default profile's endpoint. `--session FILE` keeps the SQLite session; `--thinking LEVEL` sets the agent's thinking
+launcher's endpoint (the `--profile` it runs with), else the default profile's. `--session FILE` keeps the SQLite session; `--thinking LEVEL` sets the agent's thinking
 level; `--quiet` hides the phase log.
 
 ## Verification
