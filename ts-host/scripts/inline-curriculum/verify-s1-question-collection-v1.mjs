@@ -85,9 +85,11 @@ for (const row of cases) {
     assert.equal(item.question, question, `${row.id}/${path}: source question changed`);
     assert.equal(item.evidence, evidence, `${row.id}/${path}: visible source evidence changed`);
     assert.equal(expected[key], source.target.value, `${row.id}/${path}: gold differs from the original source target`);
-    const qaMap = ['qa_extractive', 'qa_multihop'].includes(source.family) && row.generation.generator.endsWith('/3');
+    const updatedCollection = ['/3', '/4', '/5', '/6'].some(version => row.generation.generator.endsWith(version));
+    const qaMap = ['qa_extractive', 'qa_multihop'].includes(source.family) && updatedCollection;
+    const schemaV5 = row.generation.generator.endsWith('/5') || row.generation.generator.endsWith('/6');
     assert.equal(row.generation.answer_normalization, qaMap ? 'squad-token-map/1' :
-      row.generation.generator.endsWith('/3') ? 'source-exact/1' : undefined);
+      schemaV5 ? 'json-string-record/1' : updatedCollection ? 'source-exact/1' : undefined);
     assert.equal(item.answer_format.includes('SQuAD-style canonical form'), false,
       `${row.id}/${path}: task prompts must leave the answer in natural wording`);
     assert.equal(source.outcome.label, 'gold');
@@ -117,6 +119,23 @@ for (const row of cases) {
   const code = row.curriculum.reference.root.find(call => call[0] === 'eval')?.[1]?.code ?? '';
   assert(code.includes(mode === 'soft' ? 'nl<Neuralese<string>>' : 'nl<string>'), `${row.id}: inline result mode differs from source metadata`);
   assert(code.includes(mode === 'soft' ? 'String(answer)' : 'const answerText = answer'), `${row.id}: answer handling differs from source mode`);
+  if (['/4', '/5', '/6'].some(version => row.generation.generator.endsWith(version))) {
+    const task = JSON.parse(row.semantics.folder_files['task.json']);
+    assert.equal(task.output_file, 'answers.json', `${row.id}: output filename must be a distinct path field`);
+    assert.equal(typeof task.output_contract, 'string', `${row.id}: output instructions must be a separate contract field`);
+    assert(!Object.hasOwn(task, 'output'), `${row.id}: do not overload output with prose that can be mistaken for a path`);
+    assert(code.includes('task.output_file') && code.includes('folder.file(outputFile)'), `${row.id}: root must use the declared output path`);
+    const rootInstructions = row.semantics.files[row.semantics.root];
+    assert(rootInstructions.includes('task.output_contract'), `${row.id}: root guidance must name the output contract field`);
+    if (row.generation.generator.endsWith('/5') || row.generation.generator.endsWith('/6')) {
+      assert.equal(task.answer_mode, mode, `${row.id}: task answer_mode must match the declared child-output mode`);
+      assert(task.instruction.includes('Neuralese<string>') && task.instruction.includes('String(answer)') &&
+        task.instruction.includes('nl<string>'), `${row.id}: task must explain both crisp and soft answer handling`);
+      assert(rootInstructions.includes('task.instruction'), `${row.id}: root must direct the model to the answer-mode guidance`);
+      assert.equal(row.semantics.files_oracle.compare, ['qa_extractive', 'qa_multihop'].includes(row.dataset) ?
+        'qa-string-map' : 'json-string-record', `${row.id}: answer file grading must ignore JSON whitespace only`);
+    }
+  }
   const softChildren = row.curriculum.reference.children.filter(child => child.soft_output);
   assert.equal(softChildren.length, mode === 'soft' ? row.curriculum.reference.children.length : 0,
     `${row.id}: every child output must follow its declared mode`);
