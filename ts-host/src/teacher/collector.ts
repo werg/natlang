@@ -12,7 +12,7 @@ import { NativeToolAgent } from '../native/agent.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
-import { dump } from '../native/values.js';
+import { dump, MISSING } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
@@ -562,7 +562,73 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       reasoning: retainedReasoning,
       calls: (response.calls ?? []).map(([tool, args]) => ({ tool, source_tool: tool, arguments: args, call_id: null })) },
+    ...(raw?.natlang_action_provenance && typeof raw.natlang_action_provenance === 'object' ?
+      { action_provenance: structuredClone(raw.natlang_action_provenance) } : {}),
     raw_response_sha256: raw ? sha256(canonical(raw)) : null };
+}
+
+type DeclaredTrajectoryContract = { version?: string; authored_root_eval?: boolean; authored_root_sha256?: string;
+  min_child_invocations?: number; min_state_edges_from_children?: number; min_iteration_steps?: number;
+  required_child_roles?: { role: string; min_invocations: number; instruction_contains: string; return_type_contains?: string }[] };
+function authoredRootEval(record: ProgramRecord): { code: string; sha256: string; contract: DeclaredTrajectoryContract } | undefined {
+  const curriculum = record.curriculum as { trajectory_contract?: DeclaredTrajectoryContract;
+    reference?: { root?: [string, Record<string, unknown>][] } } | undefined;
+  const contract = curriculum?.trajectory_contract;
+  if (!contract?.authored_root_eval) return undefined;
+  if (record.semantics.failure_seed) throw new Error(`${record.id}: authored root eval cannot override a seeded failure`);
+  const root = curriculum?.reference?.root?.find(([kind]) => kind === 'eval')?.[1];
+  if (typeof root?.code !== 'string' || !root.code.trim())
+    throw new Error(`${record.id}: authored root eval contract has no curriculum.reference.root eval`);
+  const codeHash = sha256(root.code);
+  if (contract.authored_root_sha256 !== codeHash)
+    throw new Error(`${record.id}: authored root eval does not match its declared source hash`);
+  return { code: root.code, sha256: codeHash, contract };
+}
+
+function observedTrajectoryContract(record: ProgramRecord, runId: string, run: ProgramRun) {
+  const root = authoredRootEval(record);
+  if (!root) return undefined;
+  const contract = root.contract;
+  const ledger = Array.isArray(run.outcome.invocation_ledger) ? run.outcome.invocation_ledger as
+    { invocation_id?: string; completion_status?: string }[] : [];
+  const childRows = ledger.filter(entry => typeof entry.invocation_id === 'string' && entry.invocation_id !== runId &&
+    entry.completion_status === 'done');
+  const childIds = new Set(childRows.map(entry => entry.invocation_id as string));
+  const roleCounts = Object.fromEntries((contract.required_child_roles ?? []).map(role => {
+    const count = childRows.filter(entry => {
+      const site = (entry as { inline_instruction_site?: { realized_instruction?: string; template_segments?: string[]; returns?: { text?: string; natlang?: string } } }).inline_instruction_site;
+      const instruction = [site?.realized_instruction, ...(site?.template_segments ?? [])].filter(Boolean).join('\n');
+      const returnType = site?.returns?.natlang ?? site?.returns?.text;
+      return instruction.includes(role.instruction_contains) && (!role.return_type_contains ||
+        (typeof returnType === 'string' && returnType.includes(role.return_type_contains)));
+    }).length;
+    return [role.role, { observed: count, required: role.min_invocations, qualified: count >= role.min_invocations }];
+  }));
+  const events = [...run.trace, ...(run.invocationTraces ?? []).flatMap(trace => trace.events)];
+  const uniqueSteps = new Map<string, Record<string, unknown>>();
+  for (const event of events) if (event.kind === 'iteration_step' && typeof event.node === 'string') {
+    const scope = typeof event.run_id === 'string' ? event.run_id : event.node.split('#', 1)[0]!;
+    uniqueSteps.set(`${scope}\0${event.node}`, event);
+  }
+  const steps = [...uniqueSteps.values()];
+  const linkedChildren = new Set<string>();
+  for (const step of steps) for (const input of Array.isArray(step.inputs) ? step.inputs : []) {
+    if (!input || typeof input !== 'object') continue;
+    const edge = input as { node?: unknown; port?: unknown };
+    if (typeof edge.node !== 'string' || typeof edge.port !== 'string' || !edge.port.startsWith('state.')) continue;
+    const source = edge.node.replace(/^call:/, '').split('#', 1)[0]!;
+    if (childIds.has(source)) linkedChildren.add(source);
+  }
+  const minChildren = contract.min_child_invocations ?? 1;
+  const minEdges = contract.min_state_edges_from_children ?? 1;
+  const minSteps = contract.min_iteration_steps ?? 1;
+  const rolesQualified = Object.values(roleCounts).every(role => role.qualified);
+  return { version: contract.version ?? 'natlang.trajectory_contract/1', answer_accepted: run.outcome.accepted,
+    observed_child_invocations: childIds.size, observed_state_edges_from_children: linkedChildren.size,
+    observed_iteration_steps: steps.length, observed_child_roles: roleCounts, requirements: { min_child_invocations: minChildren,
+      min_state_edges_from_children: minEdges, min_iteration_steps: minSteps },
+    topology_qualified: childIds.size >= minChildren && linkedChildren.size >= minEdges && steps.length >= minSteps && rolesQualified,
+    training_admission: false };
 }
 
 type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?: string;
@@ -918,6 +984,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       ...(error ? { error: error instanceof Error ? { name: error.name, message: error.message,
         ...('code' in error ? { code: (error as { code?: unknown }).code } : {}) } : { message: String(error) } } : {}),
     }]);
+    const runId = programRunId(item.index, expected);
+    const authoredRoot = authoredRootEval(item.record);
+    if (authoredRoot && (handoff || config.execution || (config.collectionRole && config.collectionRole !== 'teacher')))
+      throw new Error(`${item.record.id}: authored root eval collection requires an ordinary teacher run without handoff/replay adapters`);
+    let authoredRootUsed = false;
+    let authoredRootRejected = false;
     const driver = Object.assign(async (request: ModelTurnRequest): Promise<ModelTurn> => {
       throwIfCollectionFatal();
       const requestedAt = new Date().toISOString();
@@ -927,11 +999,16 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
+        if (authoredRoot && request.invocation_id === runId &&
+            response.raw_response?.natlang_action_provenance &&
+            (response.raw_response.natlang_action_provenance as Record<string, unknown>).kind === 'authored_reference_root_eval' &&
+            (response.raw_response.natlang_action_provenance as Record<string, unknown>).code_sha256 === authoredRoot.sha256)
+          authoredRootUsed = true;
         await appendEvidence([{ kind: 'provider_frame', source: 'journal_replay', request_sha256: requestSha256,
           invocation_id: request.invocation_id ?? null, request: structuredClone(request),
           response_frame: trajectoryTurn(request, response), saved_turn_index: partial.turns.indexOf(recorded) }]);
       } else {
-        const persist = async (turn: ModelTurn, source: 'live_provider' | 'handoff_replay' | 'seeded_failure' = 'live_provider') => {
+        const persist = async (turn: ModelTurn, source: 'live_provider' | 'handoff_replay' | 'seeded_failure' | 'authored_reference_root' = 'live_provider') => {
           const last = request.messages.at(-1) as { role?: unknown; content?: unknown } | undefined;
           const observation = last?.role === 'tool' && typeof last.content === 'string' ? {
             content_preview: last.content.slice(0, 2000), content_sha256: sha256(last.content),
@@ -949,12 +1026,20 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           response = replayed ? structuredClone(replayed) :
             { calls: [['eval', { code: item.record.semantics.failure_seed!.code }]], completion_tokens: 1 };
           await persist(response, replayed ? 'handoff_replay' : 'seeded_failure');
+        } else if (authoredRoot && !authoredRootUsed && request.invocation_id === runId) {
+          authoredRootUsed = true;
+          response = { calls: [['eval', { code: authoredRoot.code, finish: true }]],
+            raw_response: { natlang_action_provenance: { kind: 'authored_reference_root_eval', source: 'curriculum.reference.root',
+              source_program_id: item.record.id, code_sha256: authoredRoot.sha256, sampled: false } }, completion_tokens: 0 };
+          await persist(response, 'authored_reference_root');
+        } else if (authoredRoot && authoredRootUsed && request.invocation_id === runId) {
+          authoredRootRejected = true;
+          throw new AuthoredRootDidNotFinishError();
         } else response = await transport(request, persist);
       }
       trajectory.push(trajectoryTurn(request, response));
       return response;
     }, textNeuralese ? { neuralese: true } : {});
-    const runId = programRunId(item.index, expected);
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId, signal: providerParentSignal(),
@@ -963,8 +1048,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
-    const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
-      handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
+    const trajectoryReview = observedTrajectoryContract(item.record, runId, run);
+    const row = programRow(item.record, config.modelId, runId, expected, run, trajectory, {
+      ...(trajectoryReview ? { trajectory_review: trajectoryReview, collection_guidance: {
+        root_action: { kind: 'authored_reference_eval', source: 'curriculum.reference.root',
+          source_program_id: item.record.id, code_sha256: authoredRoot!.sha256, sampled: false,
+          status: authoredRootRejected ? 'did_not_finish' : 'finished',
+          ...(authoredRootRejected ? { recovery: 'stopped_before_sampled_root_continuation' } : {}) },
+        child_actions: { source: 'provider', sampled: true }, training_admission: false } } : {}),
+      ...(handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {}) });
     // The result row already carries the full graph; this sidecar also persists child traces for standalone audits.
     const traceEvents = collectedInvocationTraceEvents(runId, run.trace, run.invocationTraces ?? []);
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
@@ -1015,6 +1107,14 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
   invocationTraces?: import('../runtime/runtime.js').InvocationTrace[] };
+
+/** A guided authored root must finish itself; do not silently switch to a different sampled root policy. */
+class AuthoredRootDidNotFinishError extends Error {
+  constructor() {
+    super('The source-authored root eval did not finish; sampled root recovery is disabled for this guided route.');
+    this.name = 'AuthoredRootDidNotFinishError';
+  }
+}
 
 /**
  * Run a program's root invocation with a model driver in a fresh environment and check the result,
@@ -1081,7 +1181,9 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
           invocations: runtime.frame?.task.traces ?? [], pending_children: runtime.frame?.task.hasPendingChildren(options.runId) ?? false }); }
         catch { /* A partial evidence failure must not replace the original execution failure. */ }
       }
-      throw error;
+      if (error instanceof AuthoredRootDidNotFinishError)
+        result = { outcome: { kind: 'quiesced', detail: error.message }, value: MISSING };
+      else throw error;
     }
     const actual = dump(result.value);
     const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>

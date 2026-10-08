@@ -118,16 +118,37 @@ def publish(repo, entry):
     def selected(name):
         return name in exact_paths or any(fnmatch.fnmatch(name, pattern) or
                    (pattern.startswith('**/') and fnmatch.fnmatch(name, pattern[3:])) for pattern in wildcard_patterns)
-    for directory, children, names in os.walk(root):
-        children[:] = sorted(name for name in children if
-                             (Path(directory) != root or not entry.get('include_root_prefixes') or
-                              any(name.startswith(prefix) for prefix in entry['include_root_prefixes']))
-                             and name not in entry.get('exclude_dirs', [])
-                             and not any(name.startswith(prefix) for prefix in entry.get('exclude_dir_prefixes', [])))
-        for name in sorted(names):
-            path = Path(directory) / name
-            if path.is_file() and selected(str(path.relative_to(root))):
-                files.append(path)
+    def directory_allowed(name, at_root=False):
+        return ((not at_root or not entry.get('include_root_prefixes') or
+                 any(name.startswith(prefix) for prefix in entry['include_root_prefixes']))
+                and name not in entry.get('exclude_dirs', [])
+                and not any(name.startswith(prefix) for prefix in entry.get('exclude_dir_prefixes', [])))
+    if not wildcard_patterns:
+        # Exact evidence snapshots can be rooted at runs/, which contains many
+        # unrelated frozen dependency trees. Do not traverse them to select a
+        # short explicit file list. Preserve os.walk's directory exclusions and
+        # its refusal to descend into directory symlinks.
+        for name in sorted(exact_paths):
+            normalized = relative(name)
+            if normalized != name:
+                raise ValueError(f'noncanonical exact include path: {name}')
+            parts = PurePosixPath(name).parts
+            if any(not directory_allowed(part, at_root=index == 0)
+                   or root.joinpath(*parts[:index + 1]).is_symlink()
+                   for index, part in enumerate(parts[:-1])):
+                continue
+            path = root / name
+            if not path.is_file():
+                raise ValueError(f'missing exact include: {path}')
+            files.append(path)
+    else:
+        for directory, children, names in os.walk(root):
+            children[:] = sorted(name for name in children if
+                                 directory_allowed(name, at_root=Path(directory) == root))
+            for name in sorted(names):
+                path = Path(directory) / name
+                if path.is_file() and selected(str(path.relative_to(root))):
+                    files.append(path)
     files.sort()
     if not files:
         raise ValueError(f"empty corpus: {entry['id']} at {root}")

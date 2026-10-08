@@ -1,0 +1,440 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v17-v8-corrected-luna-evidence-20261008-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-v17-v8-corrected-action-review-20261008-v1/ordinary-action-proposal-index-v2.json",
+      "bytes": 1746,
+      "sha256": "3763019994457544170cfda3aa896833f57dd43b5e9c81da27fc9b0f26140cd3"
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-action-review-20261008-v1/ordinary-decision-and-prompt-overlay-supplement-v1.json",
+      "bytes": 26871,
+      "sha256": "2977eaa9e2f48c8ee3b235fd9237d9dc9709a2c25c008de465ffffda4ee6084d"
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-action-review-20261008-v1/ordinary-turn-proposal-v5/manifest-v1.json",
+      "bytes": 277537,
+      "sha256": "84dbaca0b9868def26d500b8899cef48b55ddc1ff45d509a9dbc33b4f6207b1f"
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-action-review-20261008-v1/ordinary-turn-proposal-v5/ordinary-native-turns.held.jsonl",
+      "bytes": 6585774,
+      "sha256": "5016be7b59ebcfdb88d721f2388984b42584269e134f8bff5ef0e0b21b19d6ae",
+      "lines": 42
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-action-review-20261008-v1/terminal-action-review-v1.json",
+      "bytes": 80395,
+      "sha256": "b4ef23fee2fb56b2e02f65982eb644cc109a05e9a970fd6677905a101101a708"
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-source-review-20261008-v1/no-gold-input-review-v1.json",
+      "bytes": 15348,
+      "sha256": "c793f03b4b03f1b98bfe50142e25500141f61de3785842e3d519138f926dcf06"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/README.md",
+      "bytes": 445,
+      "sha256": "623d52d1c69a41b405e2fd309c1c0c1486a4a55130d0a71ac740829e575dc22e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/approved-dispatch-plan.json",
+      "bytes": 10023,
+      "sha256": "8e16023c0305143a96614a38dfc1971f181b1ca68d0c1b48770e52feef2892cb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/dispatch/claims.jsonl",
+      "bytes": 25772,
+      "sha256": "09700cb3709e033a21a7187e1c4fe2affeef2961b2b05d3aaf38c1486fc39dac",
+      "lines": 20
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/dispatch/launch.json",
+      "bytes": 2281,
+      "sha256": "0a669b4e5fb0cf849dc4656a16c3b9fe455b29fb29bda6458c5488828f8d5482"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000000/queue.jsonl",
+      "bytes": 794,
+      "sha256": "871e99a1425760a34ae5bf74a04dad662f25a7b9990b31638d64db15adf8847a",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 17964,
+      "sha256": "7ac8255866729c3c8f716b0ff9a5d3ed9b0991eb108f874d3c30f4f1e0264b00"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/jobs/000000-a61d719bfec469c1.result.json",
+      "bytes": 643600,
+      "sha256": "0c9c672a0164c0136d2c4dce645efadaf27666f060c159b5cc74d56439eb38b6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/jobs/000000-a61d719bfec469c1.trace.jsonl",
+      "bytes": 133313,
+      "sha256": "6a67ab3c2ea97d344f64daf3f6d018f846412678485071b5101172f9a67837e5",
+      "lines": 56
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 3090,
+      "sha256": "0c4120e27a696db90da7d254ffba42797da6bca639cedf535ffcc8f27a03f15f",
+      "lines": 3
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 643600,
+      "sha256": "0c9c672a0164c0136d2c4dce645efadaf27666f060c159b5cc74d56439eb38b6",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "9fdbb2016bf72cbfae2b1c3fa7fc4f85384233fa53a676deed99d5b84ca14c61"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 3090,
+      "sha256": "0c4120e27a696db90da7d254ffba42797da6bca639cedf535ffcc8f27a03f15f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000001/queue.jsonl",
+      "bytes": 794,
+      "sha256": "a8075042330d4a7ae1386fdcbde77ebd6a03a0602fac1f561367631453783753",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 17972,
+      "sha256": "324b0d582951a2db31f5e9c84ca6f9ec96efda0ff557559c32d310f33ffeff79"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/jobs/000001-3ffb02e112e83ae6.result.json",
+      "bytes": 641794,
+      "sha256": "b54001110a79639311cb99dea747e01472bf7ade15d97449d82a2d6c1d7bf949"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/jobs/000001-3ffb02e112e83ae6.trace.jsonl",
+      "bytes": 135095,
+      "sha256": "8738ca3c2f8380317ac08b86d193a0b414e231c95f8637f3abedca38ef276bbb",
+      "lines": 55
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 3094,
+      "sha256": "81293ba8173eb6b3e1e96eea4dfa95375e096669debce86fd6c0cc03724afbfa",
+      "lines": 3
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 641794,
+      "sha256": "b54001110a79639311cb99dea747e01472bf7ade15d97449d82a2d6c1d7bf949",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "bfcef2270a118908df1a3bc9cc1df63e05dc049d866a454ff05a64c0953cbf0e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 3094,
+      "sha256": "81293ba8173eb6b3e1e96eea4dfa95375e096669debce86fd6c0cc03724afbfa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000002/queue.jsonl",
+      "bytes": 794,
+      "sha256": "20993781b899d2ef222bbccd7210bb0477aad52f3ae37a27310af22bae7388f5",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 23524,
+      "sha256": "e650318f7de232e06de20c892d13d7b5a11744f4f737630f95dc851cc9636b76"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/jobs/000002-37247c57784f5633.result.json",
+      "bytes": 866629,
+      "sha256": "79684c978e46df99f1988ef493ec2bfee8f761916e6ca2fc5379d9f397e32174"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/jobs/000002-37247c57784f5633.trace.jsonl",
+      "bytes": 167449,
+      "sha256": "a9d8f9b0258b43351c8d314597b3dec3876d998733484762351643f3a866b7dd",
+      "lines": 70
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/journal.jsonl",
+      "bytes": 3094,
+      "sha256": "0ef7853cabe3de4a45c78fe2127944849acd09395cfafe60a559ee61966d611c",
+      "lines": 3
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 866629,
+      "sha256": "79684c978e46df99f1988ef493ec2bfee8f761916e6ca2fc5379d9f397e32174",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "4d86e65a2e2c52beecb2eed0749ff310c232af3b3624bb123e51b71a999c05ed"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-03/supervisor.log",
+      "bytes": 3094,
+      "sha256": "0ef7853cabe3de4a45c78fe2127944849acd09395cfafe60a559ee61966d611c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000003/queue.jsonl",
+      "bytes": 794,
+      "sha256": "5ea3542478d925220110a4bcf07a82c90c7130bc93abb8d1e18e5bdb02ae89c1",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000005/queue.jsonl",
+      "bytes": 794,
+      "sha256": "ece7a281d4ee2c1e85b5e07c94d8465556c030db24a6d3a31104947e4b520fd2",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 17965,
+      "sha256": "516aee6f087c0e2786e24a8561dfc6597a7e42f33408b07b25ee639788f71b8a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000005.log",
+      "bytes": 20751,
+      "sha256": "0496895951521c8e72e0afc4737edc494a1afcbb55a61597770e50269291c4d0"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/jobs/000003-965a23dd541b25d7.result.json",
+      "bytes": 642966,
+      "sha256": "1dbf73c6d688a435b4c48fa2ab1f55b2a68a6102f502b5ceab02a0883ab003c2"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/jobs/000003-965a23dd541b25d7.trace.jsonl",
+      "bytes": 128013,
+      "sha256": "7497a1099bdf0ec88bd5d027aebd672abb0f8dad82bec209251dd05ead68bbfe",
+      "lines": 53
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/jobs/000005-2ef712b35d08f111.result.json",
+      "bytes": 758837,
+      "sha256": "ea1dcf9b395d48fb6996801411f2799709fa247070a5c9ac6014b8655478efa5"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/jobs/000005-2ef712b35d08f111.trace.jsonl",
+      "bytes": 150880,
+      "sha256": "89daec25d19475596123f2c5008965d69c463ed515f228e3174757fdc79e6a8b",
+      "lines": 63
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/journal.jsonl",
+      "bytes": 6188,
+      "sha256": "2f84e63b9b5a4ef34867b3855bd5ec1a674e34f4fd92cb84300e8653ad1e3bbe",
+      "lines": 6
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 642966,
+      "sha256": "1dbf73c6d688a435b4c48fa2ab1f55b2a68a6102f502b5ceab02a0883ab003c2",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "2bef7f2687803b77822c8ee0c5ad9012fe8744c02a925137fed3c0f01bd61454"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/results/case-000005.results.jsonl",
+      "bytes": 758837,
+      "sha256": "ea1dcf9b395d48fb6996801411f2799709fa247070a5c9ac6014b8655478efa5",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/results/case-000005.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "f0a39fa906f9b67c5449ca5b9b64e4126289843d0365f054ca4f7321bae0dd85"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-04/supervisor.log",
+      "bytes": 6188,
+      "sha256": "2f84e63b9b5a4ef34867b3855bd5ec1a674e34f4fd92cb84300e8653ad1e3bbe"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/claims/neuralese-semantic-lambda-topology-v17-v8-corrected-luna-v1-case-000004/queue.jsonl",
+      "bytes": 794,
+      "sha256": "de492790a2abf06ff2b152a98c67397dc62936f197b6dc5023e8d5eb0d68a561",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 26301,
+      "sha256": "f6aa808ad23b6c0ea6ec0ae9b6b9ccbdf520c47b09821766be41f135f36f4c02"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/jobs/000004-14ba11ebf56a937d.result.json",
+      "bytes": 990705,
+      "sha256": "27ab03b5e150d0562ebe96dc907b1efc94b0cb659345860ea820ac4fa228315e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/jobs/000004-14ba11ebf56a937d.trace.jsonl",
+      "bytes": 196038,
+      "sha256": "c00423c6367c5e904883d3174f10fbb97db12212cbe4fa79814605973b2f37fe",
+      "lines": 80
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/journal.jsonl",
+      "bytes": 3089,
+      "sha256": "fa573c9c67e7bc89b9a57e13a0d9304450eb13d4aa34d0e089f2dd0021c4059b",
+      "lines": 3
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 990705,
+      "sha256": "27ab03b5e150d0562ebe96dc907b1efc94b0cb659345860ea820ac4fa228315e",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 595,
+      "sha256": "6056f87f429a427be8f01e521c009bd7498b6356a183501768068cc2cc4e06c5"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna/campaign-v1/slot-05/supervisor.log",
+      "bytes": 3089,
+      "sha256": "fa573c9c67e7bc89b9a57e13a0d9304450eb13d4aa34d0e089f2dd0021c4059b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna-proposal-v2.json",
+      "bytes": 4887,
+      "sha256": "0d92234c0e7fda2c54c3f35560d5f563b8193e43f157d49a38d7e4a62fcc484e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna-proposal-v3.json",
+      "bytes": 4667,
+      "sha256": "7860faba9464ab0c91499ed2a899f7c72912832b49736818a74b61cd80b48755"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/luna-proposal-v4.json",
+      "bytes": 4303,
+      "sha256": "be6243503db997cf68f87e84b1048db758cd3834a5b66be4ed5881cb83e41ec9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/root-queue-approval-v1.json",
+      "bytes": 2195,
+      "sha256": "fb7babd3253288a035a0082efcd69c8aa1fecdf788b6a35875841212b97b0ea4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/root-queue-approval-v2.json",
+      "bytes": 2266,
+      "sha256": "0e48626785cb10b4c3385ba5e2107d4657f246ee8eaa977b2dd2773c94da7ac0"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/root-source-answer-exposure-v1.json",
+      "bytes": 367,
+      "sha256": "647e4995e9fc672a530e621fb42e7effb146a7687028ee9ee71067f4093d9f1e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-000.reference.json",
+      "bytes": 9928327,
+      "sha256": "3f00c63cd74ce69efe71211ad8018779a14c51b42a1d860f2b759cac26892881"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-001.reference.json",
+      "bytes": 9906384,
+      "sha256": "9c038bd29b4e97d64fdafac893dca5935a8ee213540bedd16ce387c2d7d94ba1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-002.reference.json",
+      "bytes": 9918695,
+      "sha256": "ffb96b234b838938b8ba665272387b99c573c9a0a4938b8a22966312d04d8263"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-003.reference.json",
+      "bytes": 9908911,
+      "sha256": "51dce63eda49fd4ecac99f53102a74083baa114c5ea2f3deebb451123e99d122"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-004.reference.json",
+      "bytes": 9911869,
+      "sha256": "cbe90b6ec1608ba3a036a9c90f9a0958e20c5dbd394d16ed108cb3021cda32ab"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/case-005.reference.json",
+      "bytes": 9908710,
+      "sha256": "75ea7aa52443adb1a6d9d94e1d2abd5533364763370353b59c4c6d797015b0ca"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 70668,
+      "sha256": "9b6586b94121d7f8c7376b324c6ee59ac4f32785185f8db983d5bc6a66b2adfd",
+      "lines": 156
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/native-decisions.jsonl",
+      "bytes": 19141184,
+      "sha256": "2537e29d30ed318e815ce5c7a70e09aad67f15363ca5f207b18d75ef4389dcd4",
+      "lines": 156
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/reference-trajectories.jsonl",
+      "bytes": 10357559,
+      "sha256": "6153dfd41e04b773004b86182791a8f6401c3fb77cec837b7332f0093e64d79a",
+      "lines": 6
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/review-artifact-manifest.json",
+      "bytes": 2096,
+      "sha256": "45a6d4eaebeba732471e05f91c290de3aae8ef006dd7ab5dd34eeec7996808f7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/runtime-reference-proof.json",
+      "bytes": 214643,
+      "sha256": "503c94b93c44dc0666252b30b80bfe5b4d3752b49400ed847eaf84b8d82f0b25"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/source-action-review.jsonl",
+      "bytes": 217426,
+      "sha256": "b4644a0631ed0ee314eb7f2601d5c568f06ef3ad7ec28e7ac97d702ff7c8128d",
+      "lines": 156
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/runtime-proof-v1/source.cases.jsonl",
+      "bytes": 257258,
+      "sha256": "1d723e31e992eb57a00ab734595d59611347ba1a664692a0f2699a062ca23ec1",
+      "lines": 6
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/source-audit.json",
+      "bytes": 1252,
+      "sha256": "a75426adf4b1a376985d2ae0c6658d55ee775ed1aabfa06a9782a0049d043d2e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/source-index-catalog-v1.json",
+      "bytes": 3862,
+      "sha256": "c57f3f72686726df745b03f217561e1245c9c4f3d89b5b3311f1c6a135da0441"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/source-lineage-audit-v1.json",
+      "bytes": 13221,
+      "sha256": "a26925e8ceece7cce79790965e80f49a61549928c46656154713dc4e002d8857"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/source.cases.jsonl",
+      "bytes": 257258,
+      "sha256": "1d723e31e992eb57a00ab734595d59611347ba1a664692a0f2699a062ca23ec1",
+      "lines": 6
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/topology-audit-v1.json",
+      "bytes": 11416,
+      "sha256": "ba832480aa2e2161a9090d2c7267598c292e00a2eadc653e5ba1b0e793be4d0f"
+    }
+  ],
+  "bytes": 107245387
+}

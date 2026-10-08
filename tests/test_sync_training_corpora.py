@@ -41,6 +41,46 @@ class RestoreTests(unittest.TestCase):
             run.assert_not_called()
 
 
+class PublishTests(unittest.TestCase):
+    def test_exact_paths_do_not_walk_unrelated_tree_and_match_wildcard_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            root = repo / 'runs'
+            (root / 'selected').mkdir(parents=True)
+            (root / 'selected' / 'row.jsonl').write_text('{}\n')
+            entry = {'id': 'exact', 'path': 'runs', 'owner': 'pop',
+                     'include': ['selected/row.jsonl']}
+            with patch.object(module.os, 'walk', side_effect=AssertionError('unexpected tree walk')):
+                module.publish(repo, entry)
+            exact = json.loads(module.manifest_path(repo, 'exact').read_text())
+            module.publish(repo, dict(entry, id='glob', include=['selected/*']))
+            wildcard = json.loads(module.manifest_path(repo, 'glob').read_text())
+            self.assertEqual(exact['files'], wildcard['files'])
+
+    def test_exact_selection_keeps_directory_exclusions_and_symlink_walk_semantics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            root = repo / 'runs'
+            for folder in ['allowed', 'excluded', 'cache-1']:
+                (root / folder).mkdir(parents=True)
+                (root / folder / 'data').write_text(folder)
+            (root / 'alias').symlink_to('allowed', target_is_directory=True)
+            entry = {'id': 'subset', 'path': 'runs', 'owner': 'pop',
+                     'include': [f'{name}/data' for name in ['allowed', 'excluded', 'cache-1', 'alias']],
+                     'exclude_dirs': ['excluded'], 'exclude_dir_prefixes': ['cache-']}
+            module.publish(repo, entry)
+            manifest = json.loads(module.manifest_path(repo, 'subset').read_text())
+            self.assertEqual([f['path'] for f in manifest['files']], ['allowed/data'])
+
+    def test_missing_or_unsafe_explicit_file_is_not_silently_omitted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            entry = {'id': 'missing', 'path': 'runs', 'owner': 'pop'}
+            for name in ['missing.json', '../outside.json']:
+                with self.assertRaises(ValueError):
+                    module.publish(repo, dict(entry, include=[name]))
+
+
 class OffloadTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

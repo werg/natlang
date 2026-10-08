@@ -185,6 +185,21 @@ test('text transport refuses a marker in an ordinary string return', async () =>
     marker_context: 'return-result', result_type: 'string' } }), /only in a declared Neuralese<T> result or typed eval source/);
 });
 
+test('text transport accepts declared soft final text and typed argument writes only', async () => {
+  const emulation = createTextNeuraleseEmulation();
+  const literalMarker = '<|neuralese|>literal content<|/neuralese|>';
+  for (const marker_context of ['assistant-text', 'typed-argument']) {
+    const block = await emulation.port.write(literalMarker, { producer: {
+      marker_context, result_type: 'Neuralese<string>' } });
+    assert.equal(block.producer.result_type, 'Neuralese<string>');
+    assert.equal(block.producer.text_body_sha256, sha256(literalMarker));
+  }
+  await assert.rejects(() => emulation.port.write('plain string', { producer: {
+    marker_context: 'assistant-text', result_type: 'string' } }), /only in a declared Neuralese<T> result/);
+  await assert.rejects(() => emulation.port.write('wrong tool payload', { producer: {
+    marker_context: 'other-tool-argument', result_type: 'Neuralese<string>' } }), /only in a declared Neuralese<T> result/);
+});
+
 test('typed block parts in a prior tool-call argument become provider-valid JSON text', async () => {
   const emulation = createTextNeuraleseEmulation();
   const meta = await emulation.port.write(NOTE, { producer: { marker_context: 'return-result', result_type: 'Neuralese<string>' } });
@@ -336,6 +351,24 @@ test('explicit text read source uses the declared read body, typed block context
   const readout = graphTrace.events.find(event => event.kind === 'readout');
   assert.ok(readout, 'the ordinary library readout graph edge remains present');
   assert.ok(readout.inputs.some(input => input.block === value.$neuralese.id));
+});
+
+test('inherited read template is removed from the execution-plan-only auxiliary turn', async () => {
+  const emulation = createTextNeuraleseEmulation();
+  const request = { template: { call: 'return_result', arguments: { status: 'success' }, value: 'decode', value_type: 'string' },
+    messages: [{ role: 'user', content: 'Before taking the next action, make a concise execution plan. Call execution_plan exactly once with the plan.' }],
+    tools: [{ type: 'function', function: { name: 'execution_plan', parameters: { type: 'object' } } }],
+    tool_choice: 'required', seed: 1, max_tokens: 100 };
+  let received;
+  const response = await emulation.wrap(async rendered => {
+    received = rendered;
+    return { calls: [['execution_plan', { plan: 'Read the supplied value, then return the result.' }]] };
+  })(request);
+  assert.equal(Object.hasOwn(received, 'template'), false);
+  assert.deepEqual(received.tools, request.tools);
+  assert.deepEqual(received.messages, request.messages);
+  assert.deepEqual(response.calls, [['execution_plan', { plan: 'Read the supplied value, then return the result.' }]]);
+  assert.equal(Object.hasOwn(response.transport_provenance, 'text_template_readout'), false);
 });
 
 test('text readout rejects vector-only libraries, mismatched body IDs, invalid source, and wrong result types', async () => {
