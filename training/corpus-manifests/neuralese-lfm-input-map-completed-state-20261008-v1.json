@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-completed-state-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+  "files": [
+    {
+      "path": "training-closure.json",
+      "bytes": 789,
+      "sha256": "3a110d22bebca5cdf2907ed15ada6915779b0c7bad45013dbaf55cc1931a6a7b"
+    }
+  ],
+  "bytes": 789
+}

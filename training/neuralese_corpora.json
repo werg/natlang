@@ -7985,6 +7985,53 @@
         "verified-reasoning-pools-v18-luna-launch-20261008-v1"
       ],
       "notes": "Complete immutable raw V18 Luna campaign and closeout summary: 32 claims, 31 parent result rows, 26 accepted, 5 rejected, and one zero-row transport failure. Failed actions and scope failures remain in traces. Parent acceptance is generation grading only; no semantic, quality, trace, DPO, or training admission."
+    },
+    {
+      "id": "neuralese-lfm-input-map-completed-state-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "train-continuation/**/*",
+        "training-closure.json"
+      ],
+      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-launch-preparation-20261008-v1"
+      ],
+      "notes": "Initial publication glob omitted direct train-continuation files; closure receipt only (one file). No complete-state credit. Superseded by v2; preserved explicit omission."
+    },
+    {
+      "id": "neuralese-lfm-input-map-completed-state-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "train-continuation/*",
+        "train-continuation/**/*",
+        "training-closure.json"
+      ],
+      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-launch-preparation-20261008-v1",
+        "neuralese-lfm-input-map-completed-state-20261008-v1"
+      ],
+      "notes": "Complete20992 optimizer/RNG/head state, metrics and text-alignment gate receipts. V2 fixes direct-file inclusion omission of V1. Runtime diagnostics separate; frozen b4e2e84e is not retroactively updated by bootstrap fix."
+    },
+    {
+      "id": "neuralese-lfm-input-map-qualified-runtime-ar-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "runtime-qualified-probe-v1/*",
+        "runtime-wide-probe-v1/*",
+        "runtime-probe-launch.json",
+        "runtime-wide-launch.json",
+        "held-ar-probe-v1/*"
+      ],
+      "admission": "exact-weight-runtime-and-AR-diagnostic-evidence-only; not-training-data-task-or-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-completed-state-20261008-v2"
+      ],
+      "notes": "Trained-head exact replay/wire/input adjoints at lengths8/32/128/512 pass; broader16 held AR512 windows expose5 channel-drift spans versus crisp-exact reference.11 share crisp first divergence. No post-divergence gold-CE task failure claim. Scratch inspect filename import failure and corrected drift probe preserved."
     }
   ],
   "coverage_backlog": [

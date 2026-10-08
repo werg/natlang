@@ -1,0 +1,87 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-qualified-runtime-ar-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+  "files": [
+    {
+      "path": "held-ar-probe-v1/drift-probe-launch.json",
+      "bytes": 1759,
+      "sha256": "32d4ea79c951df3276dcb4cd9fdb3f1524f6110385f34ceee3dd15cb1cf0ba50"
+    },
+    {
+      "path": "held-ar-probe-v1/drift-probe.stderr.log",
+      "bytes": 2638,
+      "sha256": "393b2452b9cc0c816bb7c45e20f12d3e41897914d6bbfcfec3266f2ab19209a2"
+    },
+    {
+      "path": "held-ar-probe-v1/drift-probe.stdout.log",
+      "bytes": 3332,
+      "sha256": "6a61414935d7a2f8aa9ad084371e9ff877799ea11376954acfd521b5b236bd8f"
+    },
+    {
+      "path": "held-ar-probe-v1/drift_probe.py",
+      "bytes": 2855,
+      "sha256": "928f61668520e3acac5968ed3f0aeb3ff94d23b49f5067358daeb859d08b1b83"
+    },
+    {
+      "path": "held-ar-probe-v1/launch.json",
+      "bytes": 1616,
+      "sha256": "4801d0b8e5a4e5701faf4a91116b7a090120eaa93c2c2a3718897188469e5679"
+    },
+    {
+      "path": "held-ar-probe-v1/probe.py",
+      "bytes": 3037,
+      "sha256": "1da95e99bde961552c040e9a6329cf94c6ecc50647f0f9ed175cc1aacacce345"
+    },
+    {
+      "path": "held-ar-probe-v1/report.json",
+      "bytes": 148765,
+      "sha256": "106921f4be1e483b31348ab44f1c463e8bde4d37f3aa5374cf17aea79daeab7c"
+    },
+    {
+      "path": "held-ar-probe-v1/root-review.json",
+      "bytes": 2954,
+      "sha256": "b52f0e2f8a38504cef37a35f9e0f24c13be1313897b184be4e9d52012eddf3bb"
+    },
+    {
+      "path": "held-ar-probe-v1/rows.jsonl",
+      "bytes": 40664,
+      "sha256": "6879d95640d39210a09b5ccec4f92a82e66b3ba19fec8c3075a87e7a7d4ec924",
+      "lines": 16
+    },
+    {
+      "path": "runtime-probe-launch.json",
+      "bytes": 2092,
+      "sha256": "8309fd13f7bd6be57aee35ac6f82c1cd734505b897d72491ac8e2d49a06d6873"
+    },
+    {
+      "path": "runtime-qualified-probe-v1/metrics.jsonl",
+      "bytes": 1770,
+      "sha256": "b2dbf7d7b36e0f39babe3feaecd98cfa41b25fed2d090ed848a83de0b91a5372",
+      "lines": 2
+    },
+    {
+      "path": "runtime-qualified-probe-v1/report.json",
+      "bytes": 3239,
+      "sha256": "51d3d2624483a4e29c0310103de268dbb62f9a69102c95581837318c9427806d"
+    },
+    {
+      "path": "runtime-wide-launch.json",
+      "bytes": 2089,
+      "sha256": "eb3f4ba9c297007e69bcd721d83f7cf05ea9039dba976a001b964c530f72a757"
+    },
+    {
+      "path": "runtime-wide-probe-v1/metrics.jsonl",
+      "bytes": 1782,
+      "sha256": "802e984a997441eb9aeb523b34b66476c2027503f3a26160a625d82e23c08375",
+      "lines": 2
+    },
+    {
+      "path": "runtime-wide-probe-v1/report.json",
+      "bytes": 3251,
+      "sha256": "c858caec38d0f6e9fa0878524d75e032134ec97ab53b19bae0366b8cc0682037"
+    }
+  ],
+  "bytes": 221843
+}

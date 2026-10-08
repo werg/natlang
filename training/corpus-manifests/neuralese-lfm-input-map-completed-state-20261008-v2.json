@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-completed-state-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+  "files": [
+    {
+      "path": "train-continuation/baseline.json",
+      "bytes": 103351,
+      "sha256": "e31b4210cb565986678c92c778fd511a2cbc3af3a0091c88129b79a54d61b70d"
+    },
+    {
+      "path": "train-continuation/best-checkpoint.json",
+      "bytes": 109090,
+      "sha256": "a75d089d8f185afaddd8cc0c9b7aef2776136ba6da20e0aa237d60f6619430d7"
+    },
+    {
+      "path": "train-continuation/best-checkpoint.pt",
+      "bytes": 1225541637,
+      "sha256": "f6547bae888a0a3f6b1826659e202f9df567fdc79ddff24afe21c44fed6a21f9"
+    },
+    {
+      "path": "train-continuation/best-heads.pt",
+      "bytes": 628874197,
+      "sha256": "da208d1ea300a5b6c09315b21f119d1a81f437f8e3041356d5c8f6a33f275886"
+    },
+    {
+      "path": "train-continuation/checkpoint.pt",
+      "bytes": 1225541829,
+      "sha256": "4b850f2e8ec3671779a7372671271abc339e5ba47844f2ef1ff4200e226bfcda"
+    },
+    {
+      "path": "train-continuation/eval.jsonl",
+      "bytes": 696130,
+      "sha256": "1188aa0d86d08c54ed45ac7aa1d2b37cbd63a895355f6294a2af74f508989a70",
+      "lines": 9
+    },
+    {
+      "path": "train-continuation/heads-export-status.json",
+      "bytes": 253,
+      "sha256": "48f125993e12d2474a56c9b54a39add0a5ce2888db80a762dcd77c4b4f874bb7"
+    },
+    {
+      "path": "train-continuation/heads.pt",
+      "bytes": 628874197,
+      "sha256": "e88c43ab5507bfab9ce5f63252aede78bf65423a3f7c9134a39944790a86bce8"
+    },
+    {
+      "path": "train-continuation/plan.json",
+      "bytes": 115406,
+      "sha256": "e609b8dae23cd3a5e77dd469b14bc5805134f530e85ad9cfe66ce7d3fc212f3f"
+    },
+    {
+      "path": "train-continuation/report.json",
+      "bytes": 103909,
+      "sha256": "5b0da4e8580e5a56e9e2ff7358c9bef3b52614a464161b9613f9da2682229112"
+    },
+    {
+      "path": "train-continuation/train.jsonl",
+      "bytes": 7388008,
+      "sha256": "643e583191ea3e960e11270fb3020cd753fc08a2d758fcbf2423b47b30b83e97",
+      "lines": 994
+    },
+    {
+      "path": "training-closure.json",
+      "bytes": 789,
+      "sha256": "3a110d22bebca5cdf2907ed15ada6915779b0c7bad45013dbaf55cc1931a6a7b"
+    }
+  ],
+  "bytes": 3717348796
+}
