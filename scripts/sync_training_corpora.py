@@ -323,13 +323,27 @@ def local_references(paths, proc_root=Path('/proc')):
         # Only explicit path operands can establish a directory reference.
         # A file operand's lexical parent is not an implicit directory use.
         operands = list(path_operands(argv, cwd, equals=True))
-        env_operands = list(path_operands((value.split('=', 1)[1] for value in environment if '=' in value), cwd))
-        directory_operands = [operand for operand in (*operands, *env_operands) if operand.is_dir()]
+        env_operands = []
+        for item in environment:
+            if '=' in item:
+                key, value = item.split('=', 1)
+                path = canonical_operand(value, cwd)
+                if path is not None:
+                    env_operands.append((key, path))
+        all_file_operands = {str(operand) for operand in operands}
+        all_file_operands.update(str(operand) for _, operand in env_operands)
+        # These describe the process/user environment, not the artifact set a
+        # worker owns. The actual cwd is checked separately below; resource
+        # variables such as CHECKPOINT or DATA_DIR remain explicit references.
+        ambient_directories = {'HOME', 'PWD', 'OLDPWD'}
+        directory_operands = [operand for operand in operands if operand.is_dir()]
+        directory_operands.extend(operand for key, operand in env_operands
+                                  if key.upper() not in ambient_directories and operand.is_dir())
         command_text = ' '.join(argv)
         environment_text = ' '.join(environment)
         for resolved in targets:
             parent = Path(resolved).parent
-            if (resolved in {str(operand) for operand in (*operands, *env_operands)} or
+            if (resolved in all_file_operands or
                     contains_exact_path(command_text, resolved) or contains_exact_path(environment_text, resolved) or
                     cwd == Path(resolved)):
                 jobs.append({'pid': int(pid), 'path': resolved, 'source': 'process-arguments-or-environment'})
