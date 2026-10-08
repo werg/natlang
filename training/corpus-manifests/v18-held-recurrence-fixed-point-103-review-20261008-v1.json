@@ -1,0 +1,296 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-held-recurrence-fixed-point-103-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/conversion/converted-native-actions.jsonl",
+      "bytes": 8704512,
+      "sha256": "dd405fa53ddaadddd06dbbcf987c09221f2072d1a57bc00e2a6344c9dac6ff13",
+      "lines": 120
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/converted-text-preview/omissions.jsonl",
+      "bytes": 1813,
+      "sha256": "5f2208a1f2ec11148cc140582c64361e592ccb70283e5898e9d0a7623ca086a3",
+      "lines": 7
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/converted-text-preview/provenance.jsonl",
+      "bytes": 289256,
+      "sha256": "7811ec2c4e757164bb2fe56c54f4d4fd0d89002457fec87972877f09dcd45e9b",
+      "lines": 89
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/converted-text-preview/receipt.json",
+      "bytes": 4155,
+      "sha256": "e07603d97dfa4fbb7bf82e8608f55a969d630fac3f7d3a43f5a26b5057f6b08c"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/converted-text-preview/text.jsonl",
+      "bytes": 5081404,
+      "sha256": "ba26bf2d661cc3ef7fd55029438ed263a5eacb652d8716998b3f21b6478ecb15",
+      "lines": 89
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-integration-review-v4.json",
+      "bytes": 8558,
+      "sha256": "451098303a9284a747acc2b9f0ebdb29a24ce418b6ec245676820ecfe3e741e2"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/action-source-support-review.json",
+      "bytes": 11798399,
+      "sha256": "425e162278a041c47f129cc19e3db93289bcad8131f41e897ae1e4b3399b0e91"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/held-103-native-actions.jsonl",
+      "bytes": 7325615,
+      "sha256": "543d0ae9a1feb69bceb10eb2c42ec07da2e7114261d5f9d6d6874052cb9c02ea",
+      "lines": 103
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/observed-output-graph-audit-held-103.json",
+      "bytes": 246819,
+      "sha256": "09fc20adb2bdcf3477863848ea26d16a1b4c2f07f254e17c0cbe48b2bf5665ef"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/original-recurrence-audit-120.json",
+      "bytes": 237678,
+      "sha256": "4286262a3d9b29c6520c291f2dad289ff6f7c765b3d7f49608bc3b71675dab7c"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/recurrence-audit-held-103.json",
+      "bytes": 216397,
+      "sha256": "a998bd690e89ab27601e5f995c47e26ebd561b4a8f4fc3f0c8f5e2a873b5bc42"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/review.json",
+      "bytes": 53275,
+      "sha256": "b010ac0be6b2e5ad600f0c1331b3cb7bfdb771b991ea1707a500bde75c59fae1"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/schema-integration-receipt.json",
+      "bytes": 3726,
+      "sha256": "5cbc61f2d2ba8d6f541bfaa8bfa8793d70f0a985621d09c20833a9ea9247f8fd"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/held-structural-fixed-point-v1/source-target-candidates.json",
+      "bytes": 560786,
+      "sha256": "5f9cd1b158a8cc704b3c628d0e792d56e66bae974ae102e8725a1a4f3c9c9669"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/held-action45-integration-proposal-v1/observed-output-graph-audit-v4.json",
+      "bytes": 269630,
+      "sha256": "84dd16b570bd8d754e599dd1fbbb5eb314cf2ffe51802e4edd0f6fac65b9bd9d"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/independent-source-action-review-v1.json",
+      "bytes": 664024,
+      "sha256": "8ecc931f057a98ab2bb894663fede60b3fefb0c5d9569824b9c1abdc98d97fcd"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/per-action-candidate-review-v1.json",
+      "bytes": 604438,
+      "sha256": "5e9ae32df3820ff88cd937b3c8e648a325a1591eba9e62112f2b94d279e465da"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-accepted-materialized-actions.jsonl",
+      "bytes": 62594943,
+      "sha256": "07fbbbf13b02a97d959ed9cf64e142c27c153bfc1f0a187b6e257a7dc909375d",
+      "lines": 651
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-writer-reader-action-facet-review.json",
+      "bytes": 1648238,
+      "sha256": "4b39a3842fc3e1107a68074a558bcfe5358ce494081dae20d7a192ed4c4fbc5d"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 856214,
+      "sha256": "f21f77ed66107ccace6ca91daf3d803700107cdefc0c148339cb1229ae0e15fd",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000007.results.jsonl",
+      "bytes": 1745350,
+      "sha256": "9b308d04438b54f47ef2bc95d35393b1319f8feb7fd0947cfdbe1d1da9aa2d8a",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000010.results.jsonl",
+      "bytes": 1142598,
+      "sha256": "61329bcf53279216f0cc4b0874330cd72b3b04ccc076dced7fc4e566330267fd",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000016.results.jsonl",
+      "bytes": 577532,
+      "sha256": "4e17c9d724696515fa72b41e13da2d9d61f58f990022812422670cafcf9d3d5c",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000019.results.jsonl",
+      "bytes": 1861651,
+      "sha256": "2c1e1dddd93262c7216ce7c623aa90bb70a66c9f88331e14d54819640c78829d",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000025.results.jsonl",
+      "bytes": 1286711,
+      "sha256": "acc73429ee576a64426ca3e2df76093734ee4a052670460148371d6c77bba9ca",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000028.results.jsonl",
+      "bytes": 573442,
+      "sha256": "841991893683a40c1529a770f65f20ee83fa186d9192c58848222e69a2d93ba6",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-01/results/case-000031.results.jsonl",
+      "bytes": 2821838,
+      "sha256": "58c0c2f2cb59d20849daf45449d493faaa410c5a16dbc3c26d55a75b068242f1",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 963430,
+      "sha256": "da49629aec1913cbeb52adc4f0eca4eb62a2e0e471d365f4446d1b3f8f4882c5",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-02/results/case-000006.results.jsonl",
+      "bytes": 1254682,
+      "sha256": "67017421602ef500d6dd190bfba0ebab8078f0e89602afa17cfac717702a59bf",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-02/results/case-000011.results.jsonl",
+      "bytes": 2335131,
+      "sha256": "65449fd6828575f217ba3e4643adf7c96b510996e8cff3272f1c879374de1ecd",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-02/results/case-000021.results.jsonl",
+      "bytes": 936071,
+      "sha256": "6d0aafd7abc13857f43fbbf5cef62ef0b3707f4875c902e1db06a3f335e42789",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-02/results/case-000023.results.jsonl",
+      "bytes": 8497464,
+      "sha256": "761625b04f023cbfa3a4667d5f905b60120f1671cc22a624e61ae2f836c46485",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 1372160,
+      "sha256": "881ee56506b0b8a57aa6172ed39fc1447774e6e751417dc3ffe76838f3de6699",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000008.results.jsonl",
+      "bytes": 748176,
+      "sha256": "b14063189517829b2ad8015ef2bbbc23686200043906cdbf291f1a8814059942",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000013.results.jsonl",
+      "bytes": 833467,
+      "sha256": "0ffcb01da9f6e9236610dcda00911baab7e48a22e3be7403998280d7e14ad69d",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000015.results.jsonl",
+      "bytes": 2033380,
+      "sha256": "c479e20841554004f47d407707fcbc9ef43c98f79bad33704098995a3043501b",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000024.results.jsonl",
+      "bytes": 969165,
+      "sha256": "2dbeff0fa9e8eda7e9a9751362b621643dbf9f01fa1c543318722b4544cd9821",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/results/case-000029.results.jsonl",
+      "bytes": 1101843,
+      "sha256": "4d93822ec20edc62811648e1f07d361e5952e2dbe437658e58e086b3e8783a02",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 6038546,
+      "sha256": "cf953d2f64621f478073e6a656863d505aac3e16a1340ec3710cf3c9291772ca",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-04/results/case-000022.results.jsonl",
+      "bytes": 1212129,
+      "sha256": "01cf617b0a35a901aa564b0dfce0f5326ead3ae3e868fa704bb67b9005f79ea9",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-04/results/case-000026.results.jsonl",
+      "bytes": 1319902,
+      "sha256": "643951c150ae13015c519a37ddcd29792065b85f9b738cf759d44eca561bd6ef",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-04/results/case-000030.results.jsonl",
+      "bytes": 1055613,
+      "sha256": "ead8a904befb0188040f8fec224b5c97c61073a42106aa797a5630e320dfcf96",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 762053,
+      "sha256": "cf0e466e35d40e79edaf5f30fba56c10a9d6343c377c6a99acf118558c7e5a5e",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl",
+      "bytes": 1093939,
+      "sha256": "77cee5ea29cf5268f69ccc39c4a0514acb373b0d25542ae9b649d6861670cc73",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000009.results.jsonl",
+      "bytes": 556154,
+      "sha256": "0e76d9cf6d45fee182b74135fbc48ac55e9b13ac24005e23534f8aa074595fec",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000012.results.jsonl",
+      "bytes": 819424,
+      "sha256": "6b63d416c40622104915146bac487c21cd73aa3ad32451911f773f9c0486dcdc",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000014.results.jsonl",
+      "bytes": 846104,
+      "sha256": "1ba0cbdf64d5d813407d308cda7a4844a1074d63650b6971545fce6c978f49bc",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000017.results.jsonl",
+      "bytes": 780060,
+      "sha256": "d1234d5d15b306a45c9aab050527a09d745cbafe520c88d27f6a2c082f28ca06",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000020.results.jsonl",
+      "bytes": 1566442,
+      "sha256": "31d8cfd0940913279c33bc07534afb41764cfc2f76357e9087abb72dbb37cd25",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-05/results/case-000027.results.jsonl",
+      "bytes": 3021641,
+      "sha256": "a8190dcba00b2c4a491a5ea89b0ed903e8b813851b6c7ad3d9097efc8378d1f5",
+      "lines": 1
+    }
+  ],
+  "bytes": 151295978
+}
