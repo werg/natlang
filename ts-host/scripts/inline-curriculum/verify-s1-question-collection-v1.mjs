@@ -85,9 +85,9 @@ for (const row of cases) {
     assert.equal(item.question, question, `${row.id}/${path}: source question changed`);
     assert.equal(item.evidence, evidence, `${row.id}/${path}: visible source evidence changed`);
     assert.equal(expected[key], source.target.value, `${row.id}/${path}: gold differs from the original source target`);
-    const updatedCollection = ['/3', '/4', '/5', '/6', '/7'].some(version => row.generation.generator.endsWith(version));
+    const updatedCollection = ['/3', '/4', '/5', '/6', '/7', '/8', '/9'].some(version => row.generation.generator.endsWith(version));
     const qaMap = ['qa_extractive', 'qa_multihop'].includes(source.family) && updatedCollection;
-    const schemaV5 = ['/5', '/6', '/7'].some(version => row.generation.generator.endsWith(version));
+    const schemaV5 = ['/5', '/6', '/7', '/8', '/9'].some(version => row.generation.generator.endsWith(version));
     assert.equal(row.generation.answer_normalization, qaMap ? 'squad-token-map/1' :
       schemaV5 ? 'json-string-record/1' : updatedCollection ? 'source-exact/1' : undefined);
     assert.equal(item.answer_format.includes('SQuAD-style canonical form'), false,
@@ -119,7 +119,7 @@ for (const row of cases) {
   const code = row.curriculum.reference.root.find(call => call[0] === 'eval')?.[1]?.code ?? '';
   assert(code.includes(mode === 'soft' ? 'nl<Neuralese<string>>' : 'nl<string>'), `${row.id}: inline result mode differs from source metadata`);
   assert(code.includes(mode === 'soft' ? 'String(answer)' : 'const answerText = answer'), `${row.id}: answer handling differs from source mode`);
-  if (['/4', '/5', '/6', '/7'].some(version => row.generation.generator.endsWith(version))) {
+  if (['/4', '/5', '/6', '/7', '/8', '/9'].some(version => row.generation.generator.endsWith(version))) {
     const task = JSON.parse(row.semantics.folder_files['task.json']);
     assert.equal(task.output_file, 'answers.json', `${row.id}: output filename must be a distinct path field`);
     assert.equal(typeof task.output_contract, 'string', `${row.id}: output instructions must be a separate contract field`);
@@ -127,13 +127,52 @@ for (const row of cases) {
     assert(code.includes('task.output_file') && code.includes('folder.file(outputFile)'), `${row.id}: root must use the declared output path`);
     const rootInstructions = row.semantics.files[row.semantics.root];
     assert(rootInstructions.includes('task.output_contract'), `${row.id}: root guidance must name the output contract field`);
-    if (['/5', '/6', '/7'].some(version => row.generation.generator.endsWith(version))) {
+    if (['/5', '/6', '/7', '/8', '/9'].some(version => row.generation.generator.endsWith(version))) {
       assert.equal(task.answer_mode, mode, `${row.id}: task answer_mode must match the declared child-output mode`);
       assert(task.instruction.includes('Neuralese<string>') && task.instruction.includes('String(answer)') &&
         task.instruction.includes('nl<string>'), `${row.id}: task must explain both crisp and soft answer handling`);
       assert(rootInstructions.includes('task.instruction'), `${row.id}: root must direct the model to the answer-mode guidance`);
+      assert(code.includes("folder.file('task.json').readText()") && code.includes('const outputFile = task.output_file'),
+        `${row.id}: reference must read the declared output path from task.json`);
       assert.equal(row.semantics.files_oracle.compare, ['qa_extractive', 'qa_multihop'].includes(row.dataset) ?
         'qa-string-map' : 'json-string-record', `${row.id}: answer file grading must ignore JSON whitespace only`);
+    }
+  }
+  if (['/9'].some(version => row.generation.generator.endsWith(version))) {
+    const numericKeys = row.generation.numeric_answer_keys ?? [];
+    assert(Array.isArray(numericKeys) && new Set(numericKeys).size === numericKeys.length,
+      `${row.id}: numeric answer keys must be a unique explicit list`);
+    const itemsByKey = new Map(Object.entries(row.semantics.folder_files)
+      .filter(([path]) => path.startsWith('items/')).map(([path, body]) => [path.slice(6, -5), JSON.parse(body)]));
+    assert(numericKeys.every(key => itemsByKey.has(key)), `${row.id}: numeric key must name a listed answer item`);
+    const numericIds = numericKeys.map(key => itemsByKey.get(key).source_record_id);
+    assert(numericIds.every(id => sourceRows.get(id)?.family === 'table_qa_stored'),
+      `${row.id}: numeric normalization is restricted to selected table answer records`);
+    for (const key of numericKeys) {
+      const item = itemsByKey.get(key);
+      assert(/^(?:[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+))$/.test(row.semantics.expected[key]),
+        `${row.id}/${key}: numeric whitelist target must be a scalar decimal`);
+      assert(/\b(?:how many|count|number of|total|average|maximum|minimum|highest|lowest)\b/i.test(item.question),
+        `${row.id}/${key}: numeric whitelist needs an explicitly numeric source question`);
+      assert(!/\b(?:id|year|when|date)\b/i.test(item.question),
+        `${row.id}/${key}: IDs and dates must not use decimal normalization`);
+      assert(item.answer_format.includes('equivalent decimal spellings are acceptable'),
+        `${row.id}/${key}: numeric normalization must be stated in the item output contract`);
+    }
+    if (numericKeys.length) {
+      assert.deepEqual(row.semantics.files_oracle.numeric_keys, numericKeys,
+        `${row.id}: file oracle whitelist must exactly match declared numeric answer keys`);
+      assert.deepEqual(row.semantics.oracle.numeric_keys, numericKeys,
+        `${row.id}: return oracle whitelist must exactly match declared numeric answer keys`);
+      assert.equal(row.semantics.oracle.normalization, 'json-string-record');
+      assert.equal(row.generation.numeric_answer_value_contract, 'exact-decimal-value/1; equivalence applies only to explicitly listed answer-map keys');
+    } else {
+      if (['qa_extractive', 'qa_multihop'].includes(row.dataset))
+        assert.deepEqual(row.semantics.oracle, { level: 'normalized', normalization: 'qa-string-map' },
+          `${row.id}: QA answers use only the declared family-scoped token map comparison`);
+      else assert.equal(row.semantics.oracle, 'exact', `${row.id}: unwhitelisted answers remain exact`);
+      assert.equal(row.semantics.files_oracle.numeric_keys, undefined,
+        `${row.id}: file oracle cannot carry a numeric whitelist without declared keys`);
     }
   }
   const softChildren = row.curriculum.reference.children.filter(child => child.soft_output);
