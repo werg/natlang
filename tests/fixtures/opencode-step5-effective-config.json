@@ -1,0 +1,37 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "zen-step5-free/step-5-preview-free",
+  "small_model": "zen-step5-free/step-5-preview-free",
+  "provider": {
+    "zen-step5-free": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "OpenCode Zen Step 5 Preview Free",
+      "options": {
+        "baseURL": "https://opencode.ai/zen/v1",
+        "apiKey": "{env:OPENCODE_API_KEY}"
+      },
+      "models": {
+        "step-5-preview-free": {
+          "name": "Step 5 Preview Free"
+        }
+      }
+    }
+  },
+  "permission": {
+    "*": "ask",
+    "natlang_action_bridge_submit_action": "allow"
+  },
+  "mcp": {
+    "natlang_action_bridge": {
+      "type": "local",
+      "command": ["/usr/bin/node", "/test/action-server.mjs"],
+      "enabled": true,
+      "environment": {
+        "NATLANG_OPENCODE_ACTION_LOG": "/test/action-calls.jsonl",
+        "NATLANG_OPENCODE_MCP_HANDSHAKE_LOG": "/test/mcp-handshake.jsonl"
+      }
+    }
+  },
+  "share": "disabled",
+  "autoupdate": false
+}

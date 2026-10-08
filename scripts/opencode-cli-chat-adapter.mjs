@@ -51,13 +51,35 @@ function validateRequest(body, modelAlias) {
   return body;
 }
 
-function parseEnvelope(text, names) {
+export function extractSessionText(messages) {
+  if (!Array.isArray(messages)) return '';
+  const latest = messages.filter(row => row?.info?.role === 'assistant').at(-1);
+  if (!Array.isArray(latest?.parts)) return '';
+  return latest.parts.filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text).join('');
+}
+
+export async function readSessionText(client, sessionID, directory) {
+  if (!client.session?.messages) return '';
+  const result = await client.session.messages({ path: { id: sessionID }, query: { directory } });
+  return !result || result.error ? '' : extractSessionText(result.data);
+}
+
+const canonicalJson = value => Array.isArray(value) ? `[${value.map(canonicalJson).join(',')}]` :
+  isObject(value) ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}` : JSON.stringify(value);
+
+export function parseOpenCodeEnvelope(text, names, recordedActions) {
   let value;
   try { value = JSON.parse(text); }
   catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
   if (!isObject(value) || Object.keys(value).sort().join(',') !== 'content,toolCalls' ||
-      typeof value.content !== 'string' || !Array.isArray(value.toolCalls) || value.toolCalls.length !== 0)
-    throw new Error('OpenCode CLI response must have exactly content and an empty toolCalls array');
+      typeof value.content !== 'string' || !Array.isArray(value.toolCalls))
+    throw new Error('OpenCode CLI response must have exactly content and toolCalls fields');
+  if (value.toolCalls.length) {
+    const echoedActions = value.toolCalls.map(call => ({ name: call?.name, arguments: call?.arguments }));
+    if (echoedActions.length !== recordedActions.length || canonicalJson(echoedActions) !== canonicalJson(recordedActions))
+      throw new Error('OpenCode CLI response toolCalls did not match audited MCP action records');
+  }
   const allowed = new Set(names);
   return { content: value.content, allowed };
 }
@@ -305,6 +327,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_event_count = events.length;
+      diagnostics.cli_session_ids = [...new Set(events.map(event => event?.sessionID).filter(id => typeof id === 'string'))];
       diagnostics.provider_step_telemetry = audit.steps;
       diagnostics.cli_tool_use_audit = audit.toolUses;
       diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge).length;
@@ -315,9 +338,18 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
-      const envelope = parseEnvelope(extractText(events), allowedNames);
       const rawLog = readFileSync(logPath);
       const actionRows = rawLog.subarray(startBytes).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+      const recordedActions = actionRows.map(row => ({ name: row.name, arguments: row.arguments }));
+      let responseText = extractText(events);
+      if (!responseText && client.session?.messages) {
+        for (const sessionID of [...diagnostics.cli_session_ids].reverse()) {
+          responseText = await readSessionText(client, sessionID, directory);
+          if (responseText) break;
+        }
+        diagnostics.response_text_source = responseText ? 'official_sdk_session_messages_fallback' : 'cli_json_events';
+      }
+      const envelope = parseOpenCodeEnvelope(responseText, allowedNames, recordedActions);
       const calls = actionRows.map((row, index) => {
         if (typeof row.name !== 'string' || !envelope.allowed.has(row.name) || !isObject(row.arguments))
           throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
