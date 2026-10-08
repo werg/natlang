@@ -50,6 +50,12 @@ and does acceptably at raw agentic coding in our harness out of the box. If adop
   - Same packet, runtime and limits as Maple/Ling.
   - The pinned source review was recovered from git (02ff4cc2) because the live file has moved on.
 
+- Harness result, thinking on (`runs/mellum-evaluation-20261008/execution-thinking-v1/report.json`): **13/23**
+  complete_success (Maple 12/23, Ling 11/23 on the same packet and limits).
+  - Other outcomes: 2 semantic failures, 3 contract failures, 5 incomplete, 1 policy-held.
+  - Semantic accuracy 0.87 on completed cases.
+  - Median 84 s per case on GB10 vLLM BF16, eager.
+
 ## Next, in order
 
 1. (done) Real-checkpoint parity.
