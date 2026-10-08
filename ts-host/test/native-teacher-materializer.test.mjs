@@ -115,6 +115,7 @@ test('status-only success requires a same-invocation linked staged typed result 
   assert.deepEqual(valid.decision.status_only_success_validation[0].proof, {
     schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
     invocation_id: 'same-invocation', staged_call_id: stageCallId, staged_action_linkage: 'tool-call-id',
+    staged_action_seq: 1, terminal_action_seq: 2,
     staged_output_sha256: createHash('sha256').update(stagedText).digest('hex'), declared_return_type: '{ answer: string }',
   });
   const legacyLinked = materializeNativeRows([make({ ledgerToolCallId: false })]).turns.at(-1);

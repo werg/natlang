@@ -105,7 +105,7 @@ function trainingTarget(assistant: Dict, calls: Dict[], decisionIndex: number): 
 type StatusOnlySuccessProof = { schema: 'natlang.status-only-success-proof/1';
   basis: 'same-invocation-staged-result' | 'declared-void-return';
   invocation_id?: string; staged_call_id?: string; staged_action_linkage?: 'tool-call-id' | 'unique-invocation-arguments-output';
-  staged_output_sha256?: string; declared_return_type?: string };
+  staged_action_seq?: number; terminal_action_seq?: number; staged_output_sha256?: string; declared_return_type?: string };
 
 function exactTranscriptText(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
@@ -168,6 +168,7 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
   if (!staged) return;
   return { schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
     invocation_id: invocationId, staged_call_id: staged.callId, staged_action_linkage: staged.linkage,
+    staged_action_seq: Number(staged.event.seq), terminal_action_seq: Number(terminalSeq),
     staged_output_sha256: hexDigest(staged.output),
     ...(returnType ? { declared_return_type: returnType } : {}) };
 }
