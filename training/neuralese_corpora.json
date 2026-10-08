@@ -12937,6 +12937,42 @@
         "v18-v19-action45-base-selected84-native-text-20261008-v1"
       ],
       "notes": "Separate authored synthetic source class. Compact native/text delta plus source/admission evidence, normalized review v3, root adoption v3, and overwritten-review incident receipt; base artifacts pinned as dependencies but not copied. No new-world credit."
+    },
+    {
+      "id": "v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/authored-synthetic-candidate-review-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/composition-review-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/decoded-supervised-suffixes.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-native-pieces.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-native-records.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-text-provenance.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-text.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/next-canonical-assembly-plan-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/omissions.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/publication-receipt-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-action-admission-37.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-action-admission-authored1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-action37.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-authored1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-base84.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-composition-adoption-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-action37.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-authored1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-base84.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/source-class-provenance.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/source-coverage.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/superseded-integration-review-incident-v1.json"
+      ],
+      "admission": "root-adopted compact union of exact37 sampled child-action delta plus separate1 authored synthetic-action delta; virtual cumulative counts only; no full cumulative input assembled and no training/runtime/recurrence/learned-writer/trajectory/DPO qualification",
+      "derived_from": [
+        "v18-v19-action45-base-selected84-native-text-20261008-v1",
+        "v18-v19-action45-plus-adopted37-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1"
+      ],
+      "notes": "Root composition adoption b94430be05278b19e9bda40b4a46e69cebbf6375baed635ed41e475a750cd72a approves the exact compact 38-action union and virtual counts native 5412 (3377 train/2035 test), text 4644 (2940/1704), recurrence 4961 unchanged. The capsule includes both root action admissions and separate source-class provenance (37 sampled child actions; 1 project-authored synthetic orchestration example), both component adoptions/manifests/reviews, and explicit superseded overwritten-review evidence. Full canonical input assembly remains required before a future next run; see next-canonical-assembly-plan-v1.json. No active training input change or training launch."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,127 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/authored-synthetic-candidate-review-v3.json",
+      "bytes": 2712,
+      "sha256": "9c5ccdb11d3fc7e6e385b221dd743e5272f7a45f4f7ffefdb7b9446024efcb45"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/composition-review-v1.json",
+      "bytes": 10841,
+      "sha256": "89118fa73609dc207f5ad858811d701838230bcf2c040f9e468fd585049e4b09"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/decoded-supervised-suffixes.jsonl",
+      "bytes": 94523,
+      "sha256": "6a082062f3eb04bc76c1b0dbb9310747f87cb3870421558789253d1197135a0d",
+      "lines": 32
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-native-pieces.jsonl",
+      "bytes": 30808,
+      "sha256": "32d1154018d9523a0b26371d22926494239846464f8ec0a7a518bc826a525b32",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-native-records.jsonl",
+      "bytes": 4129896,
+      "sha256": "5a1d4696b15c3d2fccb403d192617fe0f8dfe3401bc589adce5f34f384a955ce",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-text-provenance.jsonl",
+      "bytes": 168382,
+      "sha256": "d721c20b6d0e18b34c512973da99d21c952955ffe13eabfa3b37faa2124529dc",
+      "lines": 32
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/delta-text.jsonl",
+      "bytes": 2388657,
+      "sha256": "7a2bdb3b979c190e60f20d4bccd389e3bf1bea0dc0fc4029ddd7644e1f272143",
+      "lines": 32
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/next-canonical-assembly-plan-v1.json",
+      "bytes": 5683,
+      "sha256": "1dd35c49888715e349db5b93f7db32b04f506a9df0caaa083927a12e7e3a38fc"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/publication-receipt-v1.json",
+      "bytes": 8653,
+      "sha256": "8038213c3cbd456209789e29f1e41ec1084a9767531ab96c8fb15885512dba77"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-action-admission-37.json",
+      "bytes": 37442,
+      "sha256": "3ed873dc1afa3a2a7d327f58c8552e42c8dac97b46889787095272a6f4ec1e28"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-action-admission-authored1.json",
+      "bytes": 2679,
+      "sha256": "318b7c94789318163e32d30aea275e19ada67f5bddd2070ac80622b99866f32a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-action37.json",
+      "bytes": 1657,
+      "sha256": "884bacae555bf416372b21270f5ec24880d4c4b1d133a115a659efd58147e146"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-authored1.json",
+      "bytes": 1723,
+      "sha256": "3216cd5b04a1a7ba1c6535b136a4d5585c75404954823d0a923f116e5991f807"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-adoption-base84.json",
+      "bytes": 1424,
+      "sha256": "0d2658722bc3ea06d2cdf34f8e458cc4d9bd3c758a300ddde26d709567925feb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/root-composition-adoption-v1.json",
+      "bytes": 1597,
+      "sha256": "b94430be05278b19e9bda40b4a46e69cebbf6375baed635ed41e475a750cd72a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-action37.json",
+      "bytes": 4483,
+      "sha256": "afce55d6a04092b92180bcc69c50feda039c0706e9fc5561cfaad269419a218f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-authored1.json",
+      "bytes": 5570,
+      "sha256": "b4a392ca333d390204501e318d77249ebb15b2355332fc9a6c28769a03bbe767"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/snapshot-manifest-base84.json",
+      "bytes": 3823,
+      "sha256": "b4a9fa1f1b22935b75265fdb84db9ac73438a4081964c47b3cedba73ab7eb678"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/source-class-provenance.jsonl",
+      "bytes": 6276,
+      "sha256": "562f1d4c37e1064c2be865ae6621c831d17d79867b3b680c8aaa250c0a78a080",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/source-coverage.jsonl",
+      "bytes": 18157,
+      "sha256": "3f86ddace2f390988ab571823d0ae4f47c02323e84976ace6cbf97ff4760b9fd",
+      "lines": 38
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action38-combined-delta-proposal-v1/combined-publication-v1/superseded-integration-review-incident-v1.json",
+      "bytes": 1970,
+      "sha256": "caaa1b0d4432f754b1936672df5b3d1af4892259afe99bedcc12c32fa835ab9a"
+    }
+  ],
+  "bytes": 6926956
+}
