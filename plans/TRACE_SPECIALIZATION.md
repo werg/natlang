@@ -16,7 +16,11 @@ Where the implementation differs from the text below:
 - Offline jobs (shadow replays, audits) run in the specializer loop, with definitions reloaded from the recorded
   `program_root`, or rebuilt from the record (instructions, signature, types) when the source is unavailable.
 - Bounds: besides `maxStoreBytes`, the store keeps `minFreeBytes` (20 GiB) free on its filesystem.
-- Not built: the browser IndexedDB sink (§3.4, explicitly later).
+- Browser (§3.4): instead of an IndexedDB sink, the store itself runs in the browser, on SQLite-WASM over OPFS
+  (owner, 2026-10-09). `calls/store-core.ts` holds the SQL and logic for both. A `StoreMedium` keeps blobs and settings:
+  files under Node, rows in the same database in the browser. `browser/call-store-worker.ts` owns the database;
+  `BrowserCallStore` is the page's synchronous `CallStoreLike`, kept current by compilation snapshots. Check with
+  `node ts-host/scripts/browser-call-store-smoke.mjs`.
 - Replay answers a service call whose arguments differ from the record only in how a scalar is written (`999` and
   `"999"`); the call is observed with its own arguments, so the comparison shows the difference and the judge decides.
 - Calls left `running` by a process that ended become `interrupted` when a store opens.
@@ -151,7 +155,7 @@ the frame (`Frame.parentActionSeq`), and `runDefinition` records it. A call tree
 - Stores are machine-local and are not synchronized between machines. Compilations are content-addressed folders
   and can be copied between stores when that becomes useful.
   Records that become training data move as corpus manifests, like any other data.
-- Browser runtime: an IndexedDB sink with the same row shape (later; not needed for the specializer).
+- Browser runtime: the same store in the origin private file system (SQLite-WASM, OPFS SAH-pool VFS), one per origin.
 
 ### 3.5 Read access: the `traces` service and CLI
 

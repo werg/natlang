@@ -30,6 +30,14 @@ await build({ entryPoints: { 'neuralese-worker': resolve(root, 'src/browser/neur
     build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
     build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
   } }], legalComments: 'none' });
+// The call store's worker (src/browser/call-store-worker.ts) and SQLite's WebAssembly, which it loads from beside itself.
+await build({ entryPoints: { 'call-store-worker': resolve(root, 'src/browser/call-store-worker.ts') }, bundle: true,
+  platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
+  plugins: [{ name: 'browser-node-stubs', setup(build) {
+    build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
+    build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
+  } }], legalComments: 'none' });
+copyFileSync(fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')), resolve(root, 'dist/browser/sqlite3.wasm'));
 for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm',
   'neuralese-wasm-gpu.mjs', 'neuralese-wasm-gpu.wasm'])
   copyFileSync(resolve(root, 'vendor/neuralese-wasm', asset), resolve(root, 'dist/browser', asset));

@@ -13,6 +13,13 @@ Values are content-addressed blobs; a value above `maxValueBytes` (1 MiB) is kep
 - Store: `$NATLANG_CALL_STORE`, default `~/.local/share/natlang/calls` (SQLite in WAL mode plus `blobs/`). One per
   machine; concurrent processes write to it. `NATLANG_CALL_STORE=off`, or `createNatlangRuntime({ calls: false })`,
   records nothing. Tests that must not touch the machine store pass `calls: false` or their own `CallStore.open(dir)`.
+- Browser: one store per origin, the same SQLite schema in the origin private file system (sqlite-wasm's OPFS SAH-pool
+  VFS, in a worker; no cross-origin isolation headers needed). It is on by default where module workers and OPFS
+  exist; the page's runtimes share it. `runtime.callStore()` is a `BrowserCallStore`: `await store.query('calls',
+  { definition: 'support' })`, `query('call', id)`, `query('value', ref)`, `query('compilation', id)`, `query('hot')`.
+  `new BrowserCallStore({ name })` opens a separate store; pass it as `calls`. Only one tab can hold a store; another
+  tab runs its calls without recording (it warns once). Values, events and compilation files are rows in the same
+  database; bounds use `navigator.storage.estimate()` for the free space.
 - Bounds: the store evicts when it passes `maxStoreBytes` (50 GiB) or its filesystem has less than `minFreeBytes`
   (20 GiB) free: first the event streams of the oldest calls, then whole calls. Calls cited by a compilation, annotated,
   queued for an audit, or pinned (`natlang traces pin CALL`) are kept.

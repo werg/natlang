@@ -16,6 +16,7 @@
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:browser": "node scripts/browser-pilot.mjs",
+    "test:browser-call-store": "node scripts/browser-call-store-smoke.mjs",
     "test:playground": "node scripts/playground-smoke.mjs",
     "serve:browser": "node scripts/serve-browser-local.mjs",
     "playground": "npm run build && node scripts/serve-browser-local.mjs --playground --open-gpu",
@@ -26,6 +27,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "^0.87.1",
     "@noble/hashes": "^2.4.0",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "@types/node": "^24.0.0",
     "@wllama/wllama": "^3.6.1",
     "@wllama/wllama-compat": "^3.6.1",

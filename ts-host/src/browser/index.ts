@@ -1,6 +1,7 @@
 /** @natlang/browser: natural-language functions in browser applications. */
 import { SlotContextStore, bindAwait, markRaces, propagateSlotFrames, setContextStore } from '../runtime/context.js';
-import { setDefaultEnvironmentFactory } from '../runtime/runtime.js';
+import { setDefaultCallStoreFactory, setDefaultEnvironmentFactory } from '../runtime/runtime.js';
+import { BrowserCallStore, browserCallStoreAvailable } from './call-store.js';
 import { setModuleRealm, setModuleTarget } from '../runtime/modules.js';
 import { setDefaultLibProvider } from '../compiler/host.js';
 import { TypeScriptEnvironment } from './environment.js';
@@ -13,6 +14,9 @@ propagateSlotFrames(slot);
 // Eval code runs in the page realm: Promise.race and Promise.any record the calls they race (see markRaces).
 markRaces(Promise);
 setDefaultEnvironmentFactory(() => new TypeScriptEnvironment());
+// Recording is on by default (§3.2): one call store per origin, in its private file system, shared by the page's runtimes.
+let originStore: BrowserCallStore | undefined;
+setDefaultCallStoreFactory(() => browserCallStoreAvailable() ? originStore ??= new BrowserCallStore() : undefined);
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 setModuleTarget('browser');
 setDefaultLibProvider(name => __NATLANG_TS_LIBS__[name]);
@@ -29,6 +33,9 @@ export type { ItemRecord, NatlangRecord, SourceFiles } from '../runtime/loader.j
 export { EventLoop, EventQueue, KeyedEventLoop } from '../app/event-loop.js';
 export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions, KeyedEventLoopOptions, WakeEvent } from '../app/event-loop.js';
 export { BrowserDomRenderer } from './dom.js';
+export { BrowserCallStore, browserCallStoreAvailable, type BrowserCallStoreOptions } from './call-store.js';
+export { wasmCallStore, wasmDatabase, DatabaseMedium } from '../calls/store-wasm.js';
+export { CallStore } from '../calls/store-core.js';
 export type { UiNode, UiAction } from './dom.js';
 export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel, wllamaChatTransport } from './local-model.js';
 export { chatCompletionModelTurn, httpChatTransport, assembleChatCompletion, fetchModel, requestLimit, limitedTransport } from '../model/chat-completion.js';
