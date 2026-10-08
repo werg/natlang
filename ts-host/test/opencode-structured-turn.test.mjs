@@ -13,8 +13,8 @@ const actionPart = (name = 'read_file', args = { path: 'a.txt' }) => ({ type: 't
   state: { status: 'completed', input: { name, arguments: args }, output: 'ACTION_RECORDED' } });
 
 function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt, events = [],
-  permissionReplyData = true, toolIds = ['invalid', 'read', 'bash', 'plugin_search', ACTION_TOOL],
-  mcpInitiallyConnected = true } = {}) {
+  permissionReplyData = true, toolIds = ['invalid', 'read', 'bash', 'plugin_search'],
+  mcpInitiallyConnected = true, mcpFailure = '' } = {}) {
   const calls = [];
   const mcpCalls = [];
   let mcpConnected = mcpInitiallyConnected;
@@ -27,12 +27,13 @@ function fakeClient({ structured, text, parts = [], promptError, promptInfoError
     mcp: {
       async status(params, options) {
         mcpCalls.push({ method: 'mcp.status', params, options });
-        return { data: { natlang_action_bridge: { status: mcpConnected ? 'connected' : 'disabled' } } };
+        return { data: { natlang_action_bridge: mcpConnected ? { status: 'connected' } :
+          mcpFailure ? { status: 'failed', error: mcpFailure } : { status: 'disabled' } } };
       },
       async connect(params, options) {
         mcpCalls.push({ method: 'mcp.connect', params, options });
-        mcpConnected = true;
-        return { data: { status: 'connected' } };
+        mcpConnected = !mcpFailure;
+        return { data: { status: mcpConnected ? 'connected' : 'failed' } };
       }
     },
     tool: {
@@ -131,19 +132,20 @@ test('retains the full default inventory and builds a wildcard-ask plus exact ac
     { permission: '*', pattern: '*', action: 'ask' },
     { permission: ACTION_TOOL, pattern: '*', action: 'deny' }
   ]);
-  assert.throws(() => buildOpenCodeToolPolicy(['bash']), /omits the configured Natlang action MCP tool/);
+  assert.deepEqual(buildOpenCodeToolPolicy(['bash']).retained_default_inventory, ['bash']);
   assert.throws(() => buildOpenCodeToolPolicy(['bash', ACTION_TOOL, ACTION_TOOL]), /duplicate IDs/);
   assert.throws(() => buildOpenCodeToolPolicy(['*', ACTION_TOOL]), /reserved wildcard ID/);
   assert.throws(() => buildOpenCodeToolPolicy([null, ACTION_TOOL]), /nonempty IDs/);
 });
 
-test('fails before session creation when official tool inventory is incomplete', async () => {
-  const client = fakeClient({ toolIds: ['bash', 'mcp_new_tool'] });
+test('uses connected MCP status for dynamic action registration separate from built-in tool IDs', async () => {
+  const client = fakeClient({ toolIds: ['bash', 'read'], parts: [actionPart()] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test', eventFetchImpl: async () => new Response('data: {}\n\n',
       { headers: { 'content-type': 'text/event-stream' } }) });
-  await assert.rejects(turn(request), /omits the configured Natlang action MCP tool/);
-  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids']);
+  const result = await turn(request);
+  assert.deepEqual(result.calls, [['read_file', { path: 'a.txt' }]]);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'messages', 'delete']);
 });
 
 test('maps the isolated action-MCP record to a Natlang call and always deletes its session', async () => {
@@ -164,9 +166,10 @@ test('maps the isolated action-MCP record to a Natlang call and always deletes i
   assert.equal(result.raw_response.output_contract, 'exact JSON text parsed and validated by the bridge');
   assert.deepEqual(result.raw_response.open_code_tool_policy, {
     control: 'official SDK session.create permission rules; prompt default inventory retained',
-    action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: ACTION_TOOL },
-    inventory: 'official SDK tool.ids endpoint, queried for this request',
-    inventory_ids: ['bash', 'invalid', ACTION_TOOL, 'plugin_search', 'read'],
+    action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: ACTION_TOOL,
+      tool_verified_by_connected_MCP_tools_list: true },
+    inventory: 'official SDK tool.ids built-in inventory; connected MCP tools are resolved separately by OpenCode',
+    inventory_ids: ['bash', 'invalid', 'plugin_search', 'read'],
     wildcard_action: 'ask', allowed_tool_ids: [ACTION_TOOL], rejected_permission_requests: [],
     session_history_audited: true, non_bridge_tool_parts_observed: false,
     native_execution_prevention: 'not established by permission policy and post-turn history audit'
@@ -189,6 +192,19 @@ test('connects the configured MCP through the official SDK before checking dynam
   assert.deepEqual(client.mcpCalls.map(call => call.method), ['mcp.status', 'mcp.connect', 'mcp.status']);
   assert.deepEqual(client.mcpCalls[1].params, { name: 'natlang_action_bridge', directory: '/tmp/natlang-opencode-test' });
   assert.equal(client.calls[0].method, 'tool.ids');
+});
+
+test('preserves bounded, redacted MCP connection diagnostics before session creation', async () => {
+  const client = fakeClient({ mcpInitiallyConnected: false,
+    mcpFailure: 'spawn failed Authorization: Bearer abcdefghijklmnop OPENCODE_API_KEY=sk-secret-value' });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  await assert.rejects(turn(request), error => {
+    assert.match(error.message, /status: failed/);
+    assert.doesNotMatch(error.message, /abcdefghijklmnop|sk-secret-value/);
+    return true;
+  });
+  assert.deepEqual(client.calls, []);
 });
 
 test('rejects every asked built-in permission with the official SDK and records that audit', async () => {
@@ -598,13 +614,13 @@ test('loopback adapter enforces loopback bind, body bound, and concurrency limit
   assert.equal(oversized.status, 413);
 });
 
-test('action MCP negotiates only its implemented protocol version and records actions without executing them', t => {
+test('action MCP falls back to its supported protocol version and records actions without executing them', t => {
   const scratch = mkdtempSync(join(tmpdir(), 'natlang-opencode-mcp-protocol-test-'));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   const actionLog = join(scratch, 'actions.jsonl');
   const server = resolve('scripts/opencode-natlang-action-mcp-server.mjs');
   const input = [
-    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 'unsupported' } },
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25' } },
     { jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2024-11-05' } },
     { jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} },
     { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'submit_action', arguments: {
@@ -617,8 +633,7 @@ test('action MCP negotiates only its implemented protocol version and records ac
   assert.equal(child.status, 0, child.stderr);
   const replies = child.stdout.trim().split('\n').map(line => JSON.parse(line));
   assert.equal(replies[0].id, 1);
-  assert.equal(replies[0].error.code, -32602);
-  assert.match(replies[0].error.message, /supported: 2024-11-05/);
+  assert.equal(replies[0].result.protocolVersion, '2024-11-05');
   assert.equal(replies[1].result.protocolVersion, '2024-11-05');
   assert.deepEqual(replies[2].result.tools.map(tool => tool.name), ['submit_action']);
   assert.equal(replies[3].result.content[0].text, 'ACTION_RECORDED');

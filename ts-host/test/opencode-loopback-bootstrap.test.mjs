@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const bootstrap = resolve(repo, 'scripts/opencode-loopback-bootstrap.mjs');
 
-async function fixture(t, { blockStartup = false, maxConcurrency = 1 } = {}) {
+async function fixture(t, { blockStartup = false, maxConcurrency = 1, actionToolListed = true } = {}) {
   const root = await mkdtemp(resolve(tmpdir(), 'natlang-opencode-bootstrap-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const sdk = resolve(root, 'fake-sdk.mjs');
@@ -24,6 +24,8 @@ async function fixture(t, { blockStartup = false, maxConcurrency = 1 } = {}) {
   await chmod(binary, 0o755);
   const sdkSource = `import { writeFileSync } from 'node:fs';
 export async function createOpencode({ signal, config }) {
+  const handshakeLog = config.mcp?.natlang_action_bridge?.environment?.NATLANG_OPENCODE_MCP_HANDSHAKE_LOG;
+  writeFileSync(handshakeLog, JSON.stringify({method:'tools/list',tool_ids:${actionToolListed ? "['submit_action']" : '[]'}}) + '\\n');
   writeFileSync(${JSON.stringify(started)}, JSON.stringify({ cwd: process.cwd(), home: process.env.HOME,
     xdgConfig: process.env.XDG_CONFIG_HOME, xdgData: process.env.XDG_DATA_HOME,
     xdgCache: process.env.XDG_CACHE_HOME, xdgState: process.env.XDG_STATE_HOME,
@@ -35,7 +37,9 @@ export async function createOpencode({ signal, config }) {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   }); } finally { clearInterval(holdEventLoop); }` : ''}
   return {
-    client: { tool: { ids(){ return { data: ['invalid'] }; } },
+    client: { mcp: { status(){ return { data: { natlang_action_bridge: { status: 'connected' } } }; },
+        connect(){ return { data: { status: 'connected' } }; } },
+      tool: { ids(){ return { data: ['invalid'] }; } },
       session: { create(){}, prompt(){}, messages(){}, delete(){}, abort(){} } },
     server: { close() { writeFileSync(${JSON.stringify(stopped)}, 'closed'); } }
   };
@@ -81,6 +85,9 @@ test('bootstraps a configured concurrency limit in isolated scratch and closes o
   assert.equal(config.provider_availability, 'not-probed');
   assert.equal(config.model_id, 'exo-free');
   assert.equal(config.max_concurrency, 2);
+  assert.deepEqual(config.mcp_readiness, { server: 'connected', server_tool_names: ['submit_action'],
+    effective_session_tool_id: 'natlang_action_bridge_submit_action', tool_id_registered: true,
+    inventory_source: 'official SDK MCP status and stdio tools/list handshake; pinned OpenCode MCP catalog naming' });
   assert.equal(config.server_bind.hostname, '127.0.0.1');
   assert.equal(JSON.stringify(config).includes('test-only-placeholder'), false);
   const exited = once(fx.child, 'exit');
@@ -107,4 +114,14 @@ test('SIGTERM during SDK startup aborts startup before adapter creation', async 
   assert.equal(fx.stdout.includes('"endpoint"'), false);
   assert.equal(JSON.parse(await readFile(resolve(fx.output, 'lifecycle.json'), 'utf8')).status, 'stopped');
   assert.equal(fx.stderr.includes('test-only-placeholder'), false);
+});
+
+test('refuses to expose the collector endpoint unless the official MCP tools/list confirms submit_action', async t => {
+  const fx = await fixture(t, { actionToolListed: false });
+  const [code, signal] = await once(fx.child, 'exit');
+  assert.equal(code, 1);
+  assert.equal(signal, null);
+  assert.equal(fx.stdout.includes('"endpoint"'), false);
+  assert.match(fx.stderr, /bootstrap failed \(Error\)/);
+  assert.equal(JSON.parse(await readFile(resolve(fx.output, 'lifecycle.json'), 'utf8')).status, 'stopped');
 });

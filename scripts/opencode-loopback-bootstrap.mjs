@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Start the official OpenCode SDK server and the bounded Natlang loopback adapter. */
-import { access, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { constants as fsConstants } from 'node:fs';
 import { dirname, resolve, basename, delimiter } from 'node:path';
@@ -64,6 +64,14 @@ function raceAbort(promise, signal, label) {
   return Promise.race([Promise.resolve(promise), aborted]).finally(() => signal.removeEventListener('abort', onAbort));
 }
 
+function safeDiagnosticText(value, maxLength = 240) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;]+/gi, 'Authorization=[redacted]')
+    .replace(/\b(?:sk|pk|rk|sess|tok)[-_][A-Za-z0-9_-]{12,}\b/g, '[redacted]')
+    .replace(/(authorization|api[-_]?key|token|secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\s+/g, ' ').slice(0, maxLength);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const sdkModule = await requireFile(args['sdk-module'], 'SDK module');
@@ -89,6 +97,7 @@ async function main() {
   for (const path of [isolatedConfig, isolatedData, isolatedCache, isolatedState])
     await mkdir(path, { recursive: true, mode: 0o700 });
   const actionLog = resolve(output, 'action-mcp-calls.jsonl');
+  const handshakeLog = resolve(output, 'mcp-handshake.jsonl');
   const actionServer = resolve(dirname(fileURLToPath(import.meta.url)), 'opencode-natlang-action-mcp-server.mjs');
   process.env.PATH = `${dirname(clientBin)}${delimiter}${process.env.PATH ?? ''}`;
 
@@ -122,7 +131,8 @@ async function main() {
     native_provider_tool_calls: false,
     native_opencode_tool_policy: 'official SDK default inventory retained; session permission wildcard ask; Natlang action MCP submit_action allowed; observed other permission requests rejected and session history audited after the turn; native execution prevention is not established',
     natlang_action_mcp: { server_id: 'natlang_action_bridge', tool_id: 'submit_action', action_log: actionLog,
-      server_script: actionServer, execution: 'records action only; no Natlang tool execution or host I/O' },
+      handshake_log: handshakeLog, server_script: actionServer,
+      execution: 'records action only; no Natlang tool execution or host I/O' },
     incremental_token_streaming: false,
     provider_availability: 'not-probed',
     training_admission: false
@@ -170,7 +180,8 @@ async function main() {
       signal: startupController.signal,
       config: { provider: { opencode: { options: { apiKey: '{env:OPENCODE_API_KEY}' } } },
         mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer],
-          cwd: scratch, environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog }, enabled: true } },
+          cwd: scratch, environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog,
+            NATLANG_OPENCODE_MCP_HANDSHAKE_LOG: handshakeLog }, enabled: true } },
         share: 'disabled', autoupdate: false } });
     try {
       official = await raceAbort(startup, startupController.signal, 'OpenCode SDK startup');
@@ -180,11 +191,41 @@ async function main() {
     }
     startupController.signal.throwIfAborted();
     if (!official?.client || !official?.server?.close) throw new Error('SDK did not return a client and server handle');
+    let mcpReadiness = { status: 'unverified' };
+    try {
+      const statusResult = await official.client.mcp.status({ directory: scratch });
+      if (statusResult?.error) throw new Error('official SDK MCP status request failed');
+      let statuses = statusResult?.data;
+      if (!statuses || typeof statuses !== 'object') throw new Error('official SDK MCP status returned no map');
+      if (statuses.natlang_action_bridge?.status !== 'connected') {
+        const connectResult = await official.client.mcp.connect({ name: 'natlang_action_bridge', directory: scratch });
+        if (connectResult?.error) throw new Error('official SDK MCP connect request failed');
+        const afterConnect = await official.client.mcp.status({ directory: scratch });
+        if (afterConnect?.error) throw new Error('official SDK MCP status retry failed');
+        statuses = afterConnect?.data;
+      }
+      const handshakeRows = (await readFile(handshakeLog, 'utf8').catch(() => '')).split('\n').filter(Boolean)
+        .map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+      const toolsList = handshakeRows.filter(row => row.method === 'tools/list').flatMap(row =>
+        Array.isArray(row.tool_ids) ? row.tool_ids : []);
+      const connected = statuses?.natlang_action_bridge?.status === 'connected';
+      mcpReadiness = { server: statuses?.natlang_action_bridge?.status ?? 'missing',
+        server_tool_names: toolsList,
+        effective_session_tool_id: 'natlang_action_bridge_submit_action',
+        tool_id_registered: connected && toolsList.includes('submit_action'),
+        inventory_source: 'official SDK MCP status and stdio tools/list handshake; pinned OpenCode MCP catalog naming' };
+      if (statuses?.natlang_action_bridge?.status === 'failed')
+        mcpReadiness.error = safeDiagnosticText(statuses.natlang_action_bridge.error);
+    } catch (error) {
+      mcpReadiness = { status: 'error', error: safeDiagnosticText(error?.message) || 'SDK MCP readiness check failed' };
+    }
+    if (mcpReadiness.tool_id_registered !== true)
+      throw new Error('configured Natlang action MCP is not connected with the expected tool list');
     adapter = await createOpenCodeLoopbackChatAdapter({ client: official.client, providerID: 'opencode',
       modelID: args.model, directory: scratch, maxConcurrency: args['max-concurrency'], maxRequestMs: args['max-request-ms'] });
     startupController.signal.throwIfAborted();
     const config = Object.freeze({ ...configReceipt, adapter_bind: { host: adapter.config.host, port: adapter.config.port },
-      provider_availability: 'not-probed' });
+      provider_availability: 'not-probed', mcp_readiness: mcpReadiness });
     await writeFile(resolve(output, 'bootstrap-config.json'), JSON.stringify(config, null, 2) + '\n', { flag: 'wx' });
     await writeLifecycle('listening-provider-not-probed');
     process.stdout.write(JSON.stringify({ endpoint: adapter.url, model: config.model_alias,

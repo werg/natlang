@@ -5,6 +5,7 @@ import { appendFile } from 'node:fs/promises';
 const toolName = 'submit_action';
 const supportedProtocolVersions = ['2024-11-05'];
 const logPath = process.env.NATLANG_OPENCODE_ACTION_LOG;
+const handshakeLogPath = process.env.NATLANG_OPENCODE_MCP_HANDSHAKE_LOG;
 if (!logPath || !logPath.startsWith('/')) throw new Error('NATLANG_OPENCODE_ACTION_LOG must be an absolute path');
 let buffer = '';
 
@@ -19,17 +20,27 @@ function error(id, code, message) {
 async function handle(message) {
   const { id, method, params = {} } = message ?? {};
   if (method === 'initialize') {
-    if (!supportedProtocolVersions.includes(params.protocolVersion)) {
-      error(id, -32602, `unsupported MCP protocol version; supported: ${supportedProtocolVersions.join(', ')}`);
+    if (typeof params.protocolVersion !== 'string' || !params.protocolVersion) {
+      error(id, -32602, 'initialize requires a protocolVersion string');
       return;
     }
-    reply(id, { protocolVersion: params.protocolVersion, capabilities: { tools: {} },
+    const negotiatedVersion = supportedProtocolVersions.includes(params.protocolVersion)
+      ? params.protocolVersion : supportedProtocolVersions[0];
+    if (handshakeLogPath?.startsWith('/')) {
+      await appendFile(handshakeLogPath, `${JSON.stringify({ requested: params.protocolVersion,
+        negotiated: negotiatedVersion, supported: supportedProtocolVersions })}\n`, { flag: 'a', mode: 0o600 });
+    }
+    reply(id, { protocolVersion: negotiatedVersion, capabilities: { tools: {} },
       serverInfo: { name: 'natlang-action-bridge', version: '1.0.0' } });
     return;
   }
   if (method === 'notifications/initialized' || method === 'notifications/cancelled') return;
   if (method === 'ping') { reply(id, {}); return; }
   if (method === 'tools/list') {
+    if (handshakeLogPath?.startsWith('/')) {
+      await appendFile(handshakeLogPath, `${JSON.stringify({ method, tool_ids: [toolName] })}\n`,
+        { flag: 'a', mode: 0o600 });
+    }
     reply(id, { tools: [{ name: toolName,
       description: 'Record one declared Natlang action for the host; does not execute it.',
       inputSchema: { type: 'object', additionalProperties: false,

@@ -442,8 +442,6 @@ export function buildOpenCodeToolPolicy(ids) {
   const unique = [...new Set(ids)].sort();
   if (unique.length !== ids.length) throw new TypeError('OpenCode tool inventory contains duplicate IDs');
   if (unique.includes('*')) throw new TypeError('OpenCode tool inventory uses the reserved wildcard ID');
-  if (!unique.includes('natlang_action_bridge_submit_action'))
-    throw new TypeError('OpenCode default inventory omits the configured Natlang action MCP tool');
   return { wildcard: 'ask', action_tool: 'natlang_action_bridge_submit_action', retained_default_inventory: unique };
 }
 
@@ -521,6 +519,14 @@ function unwrapSdkResult(result, operation) {
   if (!Object.hasOwn(result, 'data'))
     throw new Error(`OpenCode ${operation} returned no data`);
   return result.data;
+}
+
+function safeDiagnosticText(value, maxLength = 240) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;]+/gi, 'Authorization=[redacted]')
+    .replace(/\b(?:sk|pk|rk|sess|tok)[-_][A-Za-z0-9_-]{12,}\b/g, '[redacted]')
+    .replace(/(authorization|api[-_]?key|token|secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\s+/g, ' ').slice(0, maxLength);
 }
 
 function parseStructuredTurn(value, allowedNames, toolChoice) {
@@ -694,13 +700,14 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     let mcp = await mcpStatus();
     if (mcp?.natlang_action_bridge?.status !== 'connected') {
       failurePhase = 'action_mcp_connect';
-      await withAbort(client.mcp.connect({ name: 'natlang_action_bridge', directory },
-        { ...(signal ? { signal } : {}) }), signal, 'OpenCode action MCP connect');
+      unwrapSdkResult(await withAbort(client.mcp.connect({ name: 'natlang_action_bridge', directory },
+        { ...(signal ? { signal } : {}) }), signal, 'OpenCode action MCP connect'), 'action MCP connect');
       mcp = await mcpStatus();
     }
     if (mcp?.natlang_action_bridge?.status !== 'connected') {
       const state = mcp?.natlang_action_bridge?.status ?? 'missing';
-      throw new Error(`configured Natlang action MCP is not connected (status: ${state})`);
+      const detail = safeDiagnosticText(mcp?.natlang_action_bridge?.error);
+      throw new Error(`configured Natlang action MCP is not connected (status: ${state}${detail ? `; ${detail}` : ''})`);
     }
     failurePhase = 'tool_inventory';
     const toolInventoryResult = await withAbort(client.tool.ids({ directory }, { ...(signal ? { signal } : {}) }),
@@ -853,8 +860,9 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           output_contract: 'exact JSON text parsed and validated by the bridge',
           open_code_tool_policy: {
             control: 'official SDK session.create permission rules; prompt default inventory retained',
-            action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: NATLANG_ACTION_TOOL },
-            inventory: 'official SDK tool.ids endpoint, queried for this request',
+            action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: NATLANG_ACTION_TOOL,
+              tool_verified_by_connected_MCP_tools_list: true },
+            inventory: 'official SDK tool.ids built-in inventory; connected MCP tools are resolved separately by OpenCode',
             inventory_ids: openCodeTools.retained_default_inventory,
             wildcard_action: 'ask',
             allowed_tool_ids: prompt.toolNames.length ? [NATLANG_ACTION_TOOL] : [],
