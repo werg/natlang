@@ -1968,7 +1968,9 @@ export class NativeSession {
           }
         }
         inferred[name] = type;
-        staged.push([name, type, coerce(value, type, this.env, `let/${name}`)]);
+        // A local holds what eval computed (a service's or a callee's value): as in TypeScript, fields its type does
+        // not list are kept, so storing a provider value never asks for a retyped copy.
+        staged.push([name, type, coerce(value, type, this.env, `let/${name}`, { preserveRecordExtras: true })]);
       }
       // A top-level return proposes the call's result; it is taken only if it has the declared type.
       let functionResult: Value | undefined, notResult = '';

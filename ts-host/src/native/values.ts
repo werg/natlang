@@ -124,9 +124,10 @@ function closestMiss(misses: Reject[], path: string): Diagnostic | undefined {
   for (const miss of misses) {
     if (miss.diagnostics.length !== 1) continue;
     const diagnostic = miss.diagnostics[0]!;
-    if (diagnostic.code !== 'type-mismatch' || depth(diagnostic.path) <= depth(path)) continue;
+    if (!['type-mismatch', 'unknown-field'].includes(diagnostic.code) || depth(diagnostic.path) <= depth(path)) continue;
     // A literal expected is a variant's tag: that member is a different variant, not a near miss.
-    if (!diagnostic.expected || /^(".*"|-?\d[\d.e+-]*|true|false|null)$/.test(diagnostic.expected)) continue;
+    if (diagnostic.code === 'type-mismatch' &&
+        (!diagnostic.expected || /^(".*"|-?\d[\d.e+-]*|true|false|null)$/.test(diagnostic.expected))) continue;
     if (!best || depth(diagnostic.path) > depth(best.path)) best = diagnostic;
   }
   return best;
@@ -168,7 +169,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     // it is not a different variant's tag (a literal) or field set. A record union ("phase": "request" | ...) then
     // reports `checkpoint/cutoff: expected number`, not the whole union.
     const closest = closestMiss(misses, path);
-    if (closest) throw new Reject([{ ...closest, expected: `${closest.expected} (in ${formatType(type)})` }]);
+    if (closest) throw new Reject([{ ...closest, expected: closest.expected ? `${closest.expected} (in ${formatType(type)})` : formatType(type) }]);
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (wanted.kind === 'prim') {

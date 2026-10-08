@@ -69,3 +69,18 @@ test('a value eval computed keeps the fields its declared record does not list; 
   const literal = await run([['return_result', { status: 'success', value: { role: 'assistant', text: 'hi', extra: 1 } }]]);
   assert.ok(literal instanceof Error, 'a return_result literal with an unknown field is refused');
 });
+
+test('an eval local keeps the fields of a computed value its type does not list', async () => {
+  const { createNatlangRuntime, loadVirtualNatlang } = await import('../dist/index.js');
+  let step = 0;
+  const calls = [['eval', { code: 'const result: { items: { type: "call"; id: string }[] } = view.view(); result.items.length' }],
+    ['eval', { code: 'return result;', finish: true }]];
+  const model = async () => ({ calls: [calls[step++] ?? ['return_result', { status: 'failed', reason: 'no more calls' }]] });
+  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
+  // The helper's declared return type lists fewer fields than the value carries, as a provider's message can.
+  const fn = loadVirtualNatlang({
+    'root.nl': '---\nargs: {}\nreturns: "{ items: { type: \\"call\\", id: string }[] }"\n---\nReturn the view.\n',
+    'root/view.ts': 'export function view(): { items: { type: "call"; id: string }[] } {\n' +
+      '  return { items: [{ type: "call", id: "c1", signature: "sig" }] } as never;\n}\n' }, 'root.nl');
+  assert.deepEqual(await runtime.run(() => fn()), { items: [{ type: 'call', id: 'c1', signature: 'sig' }] });
+});
