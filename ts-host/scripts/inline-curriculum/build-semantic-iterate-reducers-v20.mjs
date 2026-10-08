@@ -6,7 +6,7 @@ import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-gu
 import { worlds as v20Worlds } from './semantic-iterate-reducers-v20-counterfactual-data.mjs';
 import { worlds as v18Worlds } from './semantic-iterate-reducers-v18-novel-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v20/2-three-factual-counterfactuals-per-parent-group';
+export const REVISION = 'authored-semantic-iterate-reducers-v20/3-rebound-request-contracts-and-staffed-hours';
 const canonical = value => JSON.stringify(value);
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
@@ -19,6 +19,7 @@ const rows = v20Worlds.map((world, index) => {
   const parent = parentByGroup.get(world.group);
   if (!parent) throw new Error(`${world.slug}: missing V18 source group`);
   const row = makeGuidedSoftIterateCase(world, parent.index, { revision:REVISION, shapeVersion:'v16', savedWith:savedWith.has(parent.world.slug) });
+  if (JSON.stringify(row).includes(parent.world.requestId)) throw new Error(`${world.slug}: a captured row still refers to its parent's old request ID`);
   row.id = row.id.replaceAll('authored_semantic_iterate_worlds_v15','authored_semantic_iterate_reducers_v20')
     .replaceAll(`:v15-${world.slug}-`,`:v20-${world.slug}-`);
   row.family='authored_semantic_iterate_reducers_v20'; row.family_version=20;
@@ -35,11 +36,23 @@ const rows = v20Worlds.map((world, index) => {
   row.split=parent.split; row.split_group=world.group; row.source_groups=[world.group];
   row.curriculum.source_group_lineage={parent_family:'authored_semantic_iterate_reducers_v18',parent_group:world.group,inherited_split:parent.split};
   const task=JSON.parse(row.semantics.folder_files['task.json']);
+  if (JSON.stringify(task).includes(parent.world.requestId)) throw new Error(`${world.slug}: inherited parent request ID remains in task context`);
   const decisionMap=world.decision_rule.match(/Decision mapping:.*$/)?.[0];
   if (!decisionMap || !task.instruction.includes(decisionMap) || !task.output_contract.decision_rule.includes(decisionMap) || !task.output_contract.fields.decision.includes(decisionMap))
     throw new Error(`${world.slug}: complete empty/nonempty/authority mapping is not captured in all final task contexts`);
   if (task.output_contract.final_field_enums.selectedItems || task.output_contract.final_field_enums.measure)
     throw new Error(`${world.slug}: data-dependent selection or metric must not be encoded as enum values`);
+  if (parent.world.slug==='research-instrument-booking') {
+    if (!task.instruction.includes('Facility staffed hours begin at 09:00')) throw new Error(`${world.slug}: staffed-hours policy is missing`);
+    const register=world.evidence['pass-02-register.md'];
+    const audit=world.evidence['pass-03-conditions.md'];
+    for (const match of register.matchAll(/(SLOT-[A-Z]): start (\d\d:\d\d); duration (\d+) minutes; end (\d\d:\d\d); instrument (MIC-\d+)\./g)) {
+      const [,id,start,duration,end,instrument]=match;
+      const auditLine=audit.split('\n').find(line=>line.startsWith(`${id}:`));
+      if (duration!=='90' || end>='11:00' || start>='09:00' || !auditLine?.includes('after-hours=true') || !auditLine.includes(`safety permit names=${instrument}/${id}.`))
+        throw new Error(`${world.slug}: every pre-09:00 candidate must be 90 minutes, end before 11:00, and carry its exact after-hours permit`);
+    }
+  }
   if (row.split!==parent.split || world.group!==`v18:${parent.world.slug}:world`) throw new Error(`${world.slug}: inherited group/split changed`);
   const notes=row.curriculum.reference.children.slice(1,5).map(c=>c.soft_output?.text??'');
   if (notes.length!==4) throw new Error(`${world.slug}: expected four reference notes`);
