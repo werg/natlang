@@ -565,6 +565,31 @@ test('an inline child given a nested file handle receives a scoped copy-on-write
   lam.projectTransaction.abort();
 });
 
+test('a child given a snapshot-derived evidence FileHandle cannot edit it while its parent writes the decision', async () => {
+  const folder = Folder.fromFiles({ 'pass-01.md': 'complete original evidence', 'decision.json': 'old decision' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Pass read-only evidence to a child, then write the child result.' }, { agent: async child => {
+    const input = Object.values(child.lam.args)[0];
+    assert.equal(input.source.path, 'pass-01.md');
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['pass-01.md']);
+    assert.equal(await input.source.readText(), 'complete original evidence');
+    await assert.rejects(() => input.source.writeText('rewritten evidence'), /read-only/);
+    assert.throws(() => input.source.folder.writeText('pass-01.md', 'rewritten evidence'), /read-only/);
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const evidence = folder.snapshot().file("pass-01.md"); const ok: boolean = await nl<boolean>`Read the supplied evidence.`({source: evidence}); ' +
+    'await folder.file("decision.json").writeText("new decision"); return ok;' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(lam.return, true);
+  assert.equal(await lam.projectTransaction.folder.readText('pass-01.md'), 'complete original evidence');
+  assert.equal(await lam.projectTransaction.folder.readText('decision.json'), 'new decision');
+  assert.equal(await folder.readText('pass-01.md'), 'complete original evidence');
+  assert.equal(await folder.readText('decision.json'), 'old decision');
+  lam.projectTransaction.abort();
+});
+
 test('a nested inline call reuses its parent scoped FileHandle instead of waiting on its own lease', async () => {
   const folder = Folder.fromFiles({ 'records/TC-3.md': 'attendance signed' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',

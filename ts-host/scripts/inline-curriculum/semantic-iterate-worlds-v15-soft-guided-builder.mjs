@@ -124,8 +124,8 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
 
   const stepType = '(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>';
   const stepPrompt = savedWith
-    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.'
-    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.';
+    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle, which is a read-only snapshot, and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.'
+    : 'Read only the supplied current-pass FileHandle, which is a read-only snapshot, and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.';
   const stepCaptures = `{
     decisionContext, passName: current.name,
     passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
@@ -134,9 +134,9 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     ? `const current = { pass: task.passes[progress.pass], decisionContext,
     passName: task.passes[progress.pass].name, passConstraint: task.passes[progress.pass].constraint,
     allowedFields: JSON.stringify(task.passes[progress.pass].allowed_fields) };
-  const evidence = await folder.file(current.pass.evidence_path);`
+  const evidence = folder.snapshot().file(current.pass.evidence_path);`
     : `const current = task.passes[progress.pass];
-  const evidence = await folder.file(current.evidence_path);`;
+  const evidence = folder.snapshot().file(current.evidence_path);`;
   const stepDeclaration = savedWith
     ? `const stepTemplate = nl.with<${stepType}>({ current, decisionContext })\`${escapeTaggedTemplateText(stepPrompt)}\`;
   const step = stepTemplate.with({ current, decisionContext });`
@@ -158,7 +158,7 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     seed: 'one typed Neuralese<string> seed child receives initialDraft and creates a placeholder note without facts',
     iterative_children: 'four typed nl.with<Neuralese<string>> children; each receives only its current FileHandle and the prior Neuralese<string> notes',
     final_interpreter: shapeVersion === 'v16' ? 'one typed literal-union Draft interpreter decides now by applying exactly the explicit decisionRule and outputContract; it emits exact field formats and bare listed enum values, without added conditions' : 'one typed Draft interpreter decides the requested action now from supported accumulated facts by applying exactly the explicit decisionRule and outputContract; no already-executed-action prerequisite or added conditions',
-    evidence: 'root scaffold opens no evidence before the loop; each step opens only its current pass FileHandle',
+    evidence: 'root scaffold opens no evidence before the loop; each step passes only its current pass FileHandle, sourced from a read-only snapshot',
   };
   record.generation.source_quality = `${preparedWorld.justified_revision.reason} Guided soft-state topology revision; no new factual world.`;
   record.generation.soft_state_reference = 'Authored reference exercises typed Neuralese writer-to-argument-to-reader edges; scripted evidence is not teacher observation or semantic truth.';
@@ -205,7 +205,7 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   ];
   record.curriculum.reference.children.at(-2).expected_soft_input = 'priorNotes';
   record.curriculum.reference.children.at(-1).expected_soft_input = 'notes';
-  record.semantics.files['reconcile_scoped_evidence.nl'] = `---\nargs: {}\nreturns: ${JSON.stringify(finalDraftType(preparedWorld))}\nkind: directory-reducer\n---\nUse this scaffold for the task. Keep the runtime's existing Neuralese<T> type; do not redefine or alias it. Read task.json only before starting. Do not read evidence until the current iterateOn step. Each step opens exactly task.passes[progress.pass].evidence_path, passes that FileHandle and prior Neuralese<string> notes to nl.with<Neuralese<string>>, and returns the updated Neuralese<string> notes. The final nl.with<Draft> reads all accumulated notes and returns the exact final Draft.\n\n\`\`\`ts\n${code}\n\`\`\`\n`;
+  record.semantics.files['reconcile_scoped_evidence.nl'] = `---\nargs: {}\nreturns: ${JSON.stringify(finalDraftType(preparedWorld))}\nkind: directory-reducer\n---\nUse this scaffold for the task. Keep the runtime's existing Neuralese<T> type; do not redefine or alias it. Read task.json only before starting. Do not read evidence until the current iterateOn step. Each step opens exactly task.passes[progress.pass].evidence_path from a read-only snapshot, passes that FileHandle and prior Neuralese<string> notes to nl.with<Neuralese<string>>, and returns the updated Neuralese<string> notes. The final nl.with<Draft> reads all accumulated notes and returns the exact final Draft.\n\n\`\`\`ts\n${code}\n\`\`\`\n`;
   return record;
 }
 
