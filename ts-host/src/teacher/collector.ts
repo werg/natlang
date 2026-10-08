@@ -57,6 +57,14 @@ const EXECUTION_PLAN_TOOL = { type: 'function', function: { name: 'execution_pla
 
 export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
+/** Serialize the traces collected for a completed run without merging their local sequence spaces. */
+export function collectedInvocationTraceEvents(runId: string, rootEvents: Record<string, unknown>[],
+  childTraces: import('../runtime/runtime.js').InvocationTrace[]): Record<string, unknown>[] {
+  const tag = (events: Record<string, unknown>[], invocationId: string, traceRole: 'root' | 'child') =>
+    events.map(event => ({ ...event, trace_role: traceRole, invocation_id: invocationId }));
+  return [...tag(rootEvents, runId, 'root'),
+    ...childTraces.flatMap(child => tag(child.events, child.callId, 'child'))];
+}
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   /** The agent's context budget in prompt tokens (see NativeToolAgent contextTokens). */
   contextTokens: number; toolSurfaceSha256: string;
@@ -956,8 +964,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     throwIfCollectionFatal();
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
+    // The result row already carries the full graph; this sidecar also persists child traces for standalone audits.
+    const traceEvents = collectedInvocationTraceEvents(runId, run.trace, run.invocationTraces ?? []);
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
-      run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
+      traceEvents.map(event => JSON.stringify(event)).join('\n') + '\n');
     await journalWrites;
     await evidenceHandle?.close(); evidenceHandle = undefined;
     for (const snapshot of partial.evidence_snapshots ?? []) if (basename(snapshot.path) === snapshot.path)
@@ -1002,7 +1012,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>;
   /** Persist observed native trace prefixes when execution aborts; snapshots never imply a completed result. */
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
-export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
+export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
+  invocationTraces?: import('../runtime/runtime.js').InvocationTrace[] };
 
 /**
  * Run a program's root invocation with a model driver in a fresh environment and check the result,
@@ -1160,7 +1171,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         .filter(event => event.kind === 'action'),
       ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
-      host_events: trace.filter(event => event.kind === 'host') } };
+      host_events: trace.filter(event => event.kind === 'host') }, invocationTraces: childInvocationTraces };
   } finally { releaseTrace(options.runId); environment.close(); world?.close(); }
 }
 
