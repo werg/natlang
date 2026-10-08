@@ -6973,6 +6973,47 @@
         "**/*"
       ],
       "notes": "Read-only inventory and candidate shortlist for unused WorkflowEvals directory-reducer source IDs, bound to the existing source policy/release lineage. Candidate rows are for review/conversion only; reused source groups receive no independent-world credit and are not generation authorization."
+    },
+    {
+      "id": "neuralese-workflowevals-folder-iterate-v27-source-review-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs/workflowevals-folder-iterate-20261008-v3",
+      "include": [
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "review-facts.json",
+        "root-review-v1/review.json",
+        "runtime-reference-proof-v27-854789a4/**/*",
+        "generation-review-v1/luna/plan.draft.json",
+        "generation-review-v1/luna/plan.approved.json",
+        "generation-review-v1/luna/root-authorization.json",
+        "generation-review-v1/luna/source-index-catalog.json",
+        "generation-review-v1/luna/launch-binding-v1.json"
+      ],
+      "admission": "held-generation-only-approved-no-training-admission",
+      "notes": "Root-approved V27 source/proof and Luna generation binding. Thirty derived WorkflowEvals task variants from existing high-confidence labels across inherited source groups; zero independent-world credit. Source labels remain original and are excluded from model input. CPU reference proof is runtime-mechanics only, not teacher observation. Includes root review, exact approved plan, root authorization, launch binding, and full no-provider reference proof. Active mutable claim journals and model outputs are intentionally excluded; no training, trace, DPO, or action admission."
+    },
+    {
+      "id": "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v1",
+      "owner": "pop",
+      "path": "runs/workflowevals-folder-iterate-v27-runtime-20261008-854789a4",
+      "include": [
+        "frozen-runtime/**/*"
+      ],
+      "admission": "held-runtime-snapshot-no-training-or-runtime-qualification-admission",
+      "notes": "Superseded incomplete V1 runtime-tree snapshot: its glob omitted three files at frozen-runtime root. V2 below captures all 1,048 files and is the authoritative complete frozen V27 runtime snapshot. No training or runtime qualification admission."
+    },
+    {
+      "id": "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v2",
+      "owner": "pop",
+      "path": "runs/workflowevals-folder-iterate-v27-runtime-20261008-854789a4",
+      "include": [
+        "frozen-runtime/*",
+        "frozen-runtime/**/*"
+      ],
+      "admission": "held-complete-runtime-snapshot-no-training-or-runtime-qualification-admission",
+      "notes": "Complete immutable V27 runtime snapshot: all 1,048 files from frozen-runtime.json, including root metadata/prelude/package files and recursively nested runtime tree. Bound to committed source 854789a4 and the V27 fresh CPU reference proof. V1 was an incomplete recursive-only manifest and is superseded; no learned-weight, transport, gradient-replay, or training qualification is implied."
     }
   ],
   "coverage_backlog": [
