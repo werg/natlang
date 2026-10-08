@@ -7419,6 +7419,64 @@
         "s1-question-collection-v8-quality-review-20261008-v2"
       ],
       "notes": "Final 32-row terminal V8 source/action quality review. Separates outcome.value from saved answers.json, item prompt-bound child invocation values, and source split/group. V1/V2 remain immutable historical superseded reviews (V1 nested graph extraction error; V2 used ordinal child mapping and file-first answer source). No parent-level or training admission."
+    },
+    {
+      "id": "s1-question-collection-v15-generation-source-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-candidates-20261008-v15-numeric-answer-contract",
+      "include": [
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "independent-verification.json",
+        "selection.json",
+        "review-facts.json",
+        "root-generation-review-v1.json",
+        "reference-proof-v12/**",
+        "generation-review-v1/luna/plan.approved.json",
+        "generation-review-v1/luna/root-authorization.json",
+        "generation-review-v1/luna/source-index-catalog.json",
+        "generation-review-v1/luna/plan.draft.json"
+      ],
+      "admission": "held-generation-only-source-and-scripted-reference; no teacher, trace, training, or DPO admission",
+      "notes": "Root-approved generation source for 32 S1 question-collection task variants over existing source records. Preserves original groups/splits and zero independent-world credit. Includes source proof, independent verification, frozen-runtime CPU scripted reference proof, exact approved plan and execution authorization. The active mutable campaign directory is excluded; teacher outcomes are not included here and require separate closed review. Copies/proofs do not grant training admission."
+    },
+    {
+      "id": "s1-question-collection-runtime-v12-7c52a088-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-runtime-v12-7c52a088",
+      "include": [
+        "runtime/**"
+      ],
+      "admission": "held-frozen-runtime-no-teacher-or-training-admission",
+      "derived_from": [
+        "s1-question-collection-v15-generation-source-20261008"
+      ],
+      "notes": "Frozen shared runtime V12 with its exact runtime receipt and file manifest. The V15 scripted source-reference proof is separately in the V15 source snapshot. Runtime and CPU reference proof demonstrate mechanics only; no model observations, learned-vector qualification, training admission, or DPO admission."
+    },
+    {
+      "id": "s1-question-collection-v8-closed-source-and-raw-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-candidates-20261008-v8-selection-v8",
+      "include": [
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "independent-verification.json",
+        "selection.json",
+        "source-exclusion-review-v1.json",
+        "root-generation-review-v1.json",
+        "closed-review-v1/**",
+        "generation-review-v1/luna/plan.approved.json",
+        "generation-review-v1/luna/root-authorization.json",
+        "generation-review-v1/luna/source-index-catalog.json",
+        "generation-review-v1/luna/campaign-v1/**"
+      ],
+      "admission": "held-closed-teacher-raw-and-quality-review-no-training-or-DPO-admission",
+      "derived_from": [
+        "s1-question-collection-v8-quality-review-20261008-v3"
+      ],
+      "notes": "Closed V8 Luna campaign source and complete raw generation evidence, including all per-case result/partial/error/trace/manifest files, claims/journals, logs, and closeout review. The independently reviewed outcome separates parent returned values from saved answers.json. Three prose-path defects are limited to cases 0,21,27; the remaining file rejections are answers.json checks. All artifacts remain held; no whole-parent, trace, training, or DPO admission."
     }
   ],
   "coverage_backlog": [
