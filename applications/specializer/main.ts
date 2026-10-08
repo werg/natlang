@@ -9,8 +9,8 @@
  */
 import { resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
-import { CallStore, Folder, crispDecline, machineStoreRoot, renderEvidence, renderHistory, renderReport, runJobs, saveAccepted,
-  study, verifyCases, type CaseCheck, type HotDefinition } from '@natlang/node';
+import { CallStore, Folder, TRACES_DECLARATIONS, createNatlangRuntime, crispDecline, machineStoreRoot, renderEvidence, renderHistory,
+  renderReport, runJobs, saveAccepted, study, tracesService, verifyCases, type CaseCheck, type HotDefinition, type NatlangRuntime } from '@natlang/node';
 import specialize from './specialize.nl';
 import type { SpecializeResult } from './types.js';
 
@@ -43,6 +43,12 @@ export function targets(store: CallStore, options: Options, self: string | null)
   });
 }
 
+/** The runtime the reducer runs in: the launcher's model, with the store as the `traces` service. */
+function reducerRuntime(context: TargetContext, store: CallStore): NatlangRuntime {
+  return createNatlangRuntime({ model: context.model, executorIdentity: context.executorIdentity, programRoot: context.package?.root,
+    services: { traces: tracesService(store) }, serviceDeclarations: { traces: TRACES_DECLARATIONS } });
+}
+
 /** Specialize one definition revision: at most `rounds` rounds of write, verify, report. */
 export async function specializeOne(context: TargetContext, store: CallStore, key: string, options: Options): Promise<string> {
   const minCalls = options.minCalls ?? store.settings().minCalls;
@@ -61,7 +67,7 @@ export async function specializeOne(context: TargetContext, store: CallStore, ke
     const files: Record<string, string> = Object.fromEntries(Object.entries(evidence).map(([path, body]) => [`evidence/${path}`, String(body)]));
     if (text) files['cases.ts'] = text;
     const workspace = Folder.fromFiles(files);
-    const result = await context.runtime.run(() => workspace.root().apply(specialize, name)) as SpecializeResult;
+    const result = await reducerRuntime(context, store).run(() => workspace.root().apply(specialize, name)) as SpecializeResult;
     if (result.kind === 'declined') {
       if (!options.dryRun) store.decline({ definitionKey: key, definitionId: subject.definition.id, reason: result.reason, why: result.why, calls: subject.examples.length });
       return `${name}: declined (${result.reason}: ${result.why})`;

@@ -38,4 +38,6 @@ export * from '../calls/judge.js';
 export * from '../calls/mining.js';
 export * from '../calls/offline.js';
 export * from '../calls/specializer.js';
+export { tracesService, TRACES_DECLARATIONS } from '../calls/service.js';
+export type { TraceCall } from '../calls/service.js';
 export { loadNatlang, loadCallables, applicationContextRecords, nodeSourceFiles, fileTraceSink } from './node-files.js';

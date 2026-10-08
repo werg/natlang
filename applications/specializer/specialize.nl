@@ -14,6 +14,8 @@ You compile the natural-language function named definition into crisp TypeScript
 - evidence/report.md: how the cases of the last round did when they were run on the recorded calls. Fix what it reports.
 - cases.ts: the file you write. Only cases.ts is kept.
 
+The traces service has every recorded call: traces.calls({ definition }) lists them and traces.call(id) shows one with its inputs, result, service calls and code. Use it when the examples here are not enough.
+
 Work in these steps:
 1. Read evidence/function.md, evidence/conditions.md and evidence/report.md. Then read each approach and its examples.
 2. Group the calls by the conditions on their inputs that decide which approach the executor took. Use the conditions in conditions.md where they hold; you may narrow, merge or replace them. Check a condition you write yourself against the examples. When two approaches look like the same work written differently, sameApproach tells you whether they are.
