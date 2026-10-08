@@ -5,9 +5,13 @@ import { worlds as authoredWorlds } from './semantic-iterate-worlds-v15-data.mjs
 import { makeSoftIterateCase } from './semantic-iterate-worlds-v15-soft-builder.mjs';
 import { validateIterateWorlds } from './authored-iterate-source-builder.mjs';
 
-export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/17-soft-result-boundary-guidance';
+export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/18-computed-note-text-guidance';
 const canonical = value => JSON.stringify(value);
 const marker = text => `<|neuralese|>${text}<|/neuralese|>`;
+// Prompt prose is inserted into a tagged JavaScript template. Escape JavaScript
+// template syntax while preserving the literal text seen by the model.
+export const escapeTaggedTemplateText = text => String(text).replaceAll('\\', '\\\\')
+  .replaceAll('`', '\\`').replaceAll('${', '\\${');
 
 export const guidedRootTemplate = `const task = await folder.file('task.json').readJson();
 type Draft = __FIELDS__;
@@ -120,8 +124,8 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
 
   const stepType = '(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>';
   const stepPrompt = savedWith
-    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return it directly; marker bodies are literal, so ${...} inside a marker does not interpolate. This note child does not write files; the parent owns the final decision.json write.'
-    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return it directly; marker bodies are literal, so ${...} inside a marker does not interpolate. This note child does not write files; the parent owns the final decision.json write.';
+    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.'
+    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return that value directly. Marker bodies are literal text and do not interpolate JavaScript variables. This note child does not write files; the parent owns the final decision.json write.';
   const stepCaptures = `{
     decisionContext, passName: current.name,
     passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
@@ -134,15 +138,16 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     : `const current = task.passes[progress.pass];
   const evidence = await folder.file(current.evidence_path);`;
   const stepDeclaration = savedWith
-    ? `const stepTemplate = nl.with<${stepType}>({ current, decisionContext })\`${stepPrompt}\`;
+    ? `const stepTemplate = nl.with<${stepType}>({ current, decisionContext })\`${escapeTaggedTemplateText(stepPrompt)}\`;
   const step = stepTemplate.with({ current, decisionContext });`
-    : `const step: Neuralese<${stepType}> = nl.with<Neuralese<string>>(${stepCaptures})\`${stepPrompt}\`;`;
+    : `const step: Neuralese<${stepType}> = nl.with<Neuralese<string>>(${stepCaptures})\`${escapeTaggedTemplateText(stepPrompt)}\`;`;
   const code = guidedRootTemplate
     .replace('__STEP_SETUP__', stepSetup)
     .replace('__STEP_DECL__', stepDeclaration)
     .replace('__FIELDS__', finalDraftType(preparedWorld))
     .replace('__INITIAL_DRAFT_DECL__\n', `type InitialDraft = ${initialDraftType(preparedWorld)};\n`)
     .replace('__INITIAL_DRAFT_TYPE__', 'InitialDraft');
+  if (code.includes('$' + '{...}')) throw new Error(`${world.slug}: marker example contains an unescaped template interpolation`);
   const hasFinalEnums = Object.keys(finalEnums).length > 0;
   record.id = record.id.replace(':evidence-scoped-soft-state-iterative-derived-decision-v1', `:evidence-scoped-guided-soft-state-derived-decision-${hasFinalEnums ? 'v2' : 'v1'}`);
   record.source_revisions = [revision];
