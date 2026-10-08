@@ -56,6 +56,24 @@ function resolveRefs(ids: Ids, value: unknown): unknown {
   return value;
 }
 
+/** The checkpoint fields that hold numbers (entry and task IDs, counters, times) in every task kind's checkpoint. */
+const NUMBER_FIELDS = ['attempt', 'compacted', 'cutoff', 'until', 'pollAt', 'assistant', 'maxTokens', 'tail', 'firstKept'];
+
+/** A checkpoint is read back by the next phase as its declared type: its ID, counter and time fields must be numbers. */
+function checkNumbers(checkpoint: unknown, where: string): void {
+  if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint)) return;
+  const fields = checkpoint as Record<string, unknown>;
+  for (const field of NUMBER_FIELDS) {
+    const value = fields[field];
+    if (value !== undefined && typeof value !== 'number') throw new InvalidOperation(`${where}: checkpoint.${field} is ` +
+      `${JSON.stringify(value)}; it must be a number (the next phase reads the checkpoint as its declared type). ` +
+      `Use the number itself, or "$name" of an operation's as in this commit, never a string of digits or text.`);
+  }
+  if (fields.tools !== undefined && !(Array.isArray(fields.tools) && fields.tools.every(item => typeof item === 'number')))
+    throw new InvalidOperation(`${where}: checkpoint.tools is ${JSON.stringify(fields.tools)}; it must be a list of task ID numbers ` +
+      `(or "$name" of this commit's createTask).`);
+}
+
 function name(ids: Ids, as: string | undefined, value: number): void {
   if (as === undefined) return;
   if (Object.hasOwn(ids, as)) throw new InvalidOperation(`two operations are named ${JSON.stringify(as)}`);
@@ -252,6 +270,7 @@ export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<u
           on: state.on.map((member: number | string) => id(ids, member, `${where} on`) as TaskId) };
         else if (state?.status === 'terminal') next = { status: 'terminal', outcome: json(state.outcome) as never };
         else throw new InvalidOperation(`${where}: state.status is running, waiting or terminal`);
+        if (next.status !== 'terminal') checkNumbers(next.checkpoint, where);
         break;
       }
       default:
