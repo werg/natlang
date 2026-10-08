@@ -959,6 +959,38 @@ test('an external service is called and read by its declaration, and cannot be e
   assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /board is an external service/);
 });
 
+test('undeclared service openings show metadata as data and preserve callable functions', async () => {
+  const requests = [];
+  let privateGetterReads = 0, lookups = 0, turns = 0;
+  const neuralese = {
+    dialect: 'nd:test', width: 32, bodies: { read: 'block-read' },
+    textReadSource: { schema: 'natlang.text-read-source/1', export: 'read', bodyId: 'block-read',
+      type: 'Neuralese<string> => string', source: 'private implementation text', sourceSha256: 'abc', learnedVectors: false },
+  };
+  Object.defineProperty(neuralese, 'privateValue', { enumerable: true, get() { privateGetterReads++; return 'must not appear'; } });
+  const { lam, session } = open({ type: '() => number', instructions: 'Use the available service.' }, {
+    services: { neuralese, catalog: { label: 'inventory', lookup: key => { lookups++; return key; } } },
+  });
+  const agent = new NativeToolAgent(request => {
+    requests.push(structuredClone(request));
+    return turns++ === 0 ? { calls: [['eval', { code: 'const ignored: unknown = catalog.lookup("A-1"); return 1' }]] } : { text: 'done' };
+  }, { maxTurns: 3 });
+  await agent.run(session);
+  const openingCall = requests[0].messages.flatMap(message => message.tool_calls ?? []).find(call => call.id === 'scope_0');
+  assert.ok(openingCall);
+  const openingCode = JSON.parse(openingCall.function.arguments).code;
+  assert.match(openingCode, /readonly "dialect": string/);
+  assert.match(openingCode, /readonly "width": number/);
+  assert.match(openingCode, /readonly "bodies": Readonly<\{/);
+  assert.match(openingCode, /readonly "textReadSource": Readonly<\{/);
+  assert.match(openingCode, /readonly "lookup": \(\.\.\.args: unknown\[\]\) => unknown/);
+  assert.doesNotMatch(openingCode, /dialect: Function|width: Function|bodies: Function|textReadSource: Function/);
+  assert.doesNotMatch(openingCode, /private implementation text|must not appear/);
+  assert.equal(privateGetterReads, 0);
+  assert.equal(lookups, 1);
+  assert.equal(lam.return, 1);
+});
+
 test('a call made from eval is shown the services by their declarations too', async () => {
   const { externalModule } = await import('../dist/native/external.js');
   const facts = externalModule('facts', '/** The number of pages. */\nexport function pages(): number { return 2; }\n');

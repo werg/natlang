@@ -64,6 +64,29 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
     !((message.tool_calls as { id?: string }[] | undefined) ?? []).some(call => String(call.id).startsWith('scope_'))).length;
 }
 
+/** A value-only TypeScript view of an undeclared host service; never evaluate accessors or show field values. */
+function undeclaredServiceType(value: unknown, depth = 0): string {
+  if (typeof value === 'function') return '(...args: unknown[]) => unknown';
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'readonly unknown[]';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ||
+      typeof value === 'bigint' || typeof value === 'symbol' || typeof value === 'undefined') return typeof value;
+  if (typeof value !== 'object' || depth >= 2) return 'unknown';
+
+  // Read descriptors rather than properties so getters are not run while rendering an opening. If an exotic
+  // service refuses descriptor inspection, expose a read-only unknown record and let its declaration provide detail.
+  let descriptors: PropertyDescriptorMap;
+  try { descriptors = Object.getOwnPropertyDescriptors(value); }
+  catch { return 'Readonly<Record<string, unknown>>'; }
+  const entries = Object.entries(descriptors).filter(([, descriptor]) => descriptor.enumerable);
+  if (!entries.length || entries.length > 64) return 'Readonly<Record<string, unknown>>';
+  const fields = entries.map(([key, descriptor]) => {
+    const type = Object.hasOwn(descriptor, 'value') ? undeclaredServiceType(descriptor.value, depth + 1) : 'unknown';
+    return `readonly ${JSON.stringify(key)}: ${type}`;
+  });
+  return `Readonly<{ ${fields.join('; ')} }>`;
+}
+
 export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
   scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
@@ -742,7 +765,7 @@ export class NativeToolAgent {
     section('// Provided by the host:', [
       ...Object.entries(session.availableServices()).map(([name, service]) => session.runtime.declarations[name] ?
         `${session.runtime.declarations[name]}  // external service; its calls are recorded as effects` :
-        `declare const ${name}: { ${Object.keys(service as object).map(key => `${key}: Function`).join('; ')} };  // service; its calls are recorded as effects`),
+        `declare const ${name}: ${undeclaredServiceType(service)};  // service; its calls are recorded as effects`),
       ...(lam.projectTransaction ? [...FOLDER_DECLARATIONS, 'declare const folder: Folder;  // your working copy of the input folder'] : []),
       // A service scoped to other functions is named, with who can use it, so the call knows to ask them.
       ...Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)).map(name =>
