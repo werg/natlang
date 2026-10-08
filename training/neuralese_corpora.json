@@ -7144,6 +7144,20 @@
         "neuralese-v24-semantic-target-candidate-materialization-20261008-v1"
       ],
       "notes": "Three exact train-split native SFT candidates after corrected V24 role review: ARC-531 plain-string eval-composed return, BB-540 structured interpreter return, ARC-530 structured interpreter return. Exact provider-rendered prompts and selected target/raw-action binding are preserved. Shared Python context hydration validation passed for all three; two Neuralese inputs are context-only (not learned writers), ARC-530 has none. No readout copies, forwarded outputs, test rows, recurrence edges, runtime qualification, or admission."
+    },
+    {
+      "id": "neuralese-v24-root-action-admission-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-root-action-admission-20261008-v1",
+      "include": [
+        "admission.json"
+      ],
+      "admission": "root-reviewed-exact-three-native-SFT-train-actions-only-not-full-trajectories",
+      "derived_from": [
+        "neuralese-v24-root-authored-target-candidates-20261008-v2",
+        "neuralese-v24-root-semantic-review-20261008-v1"
+      ],
+      "notes": "Exact selection by immutable IDs/target hashes: ARC531 plain-string request-rule summary, BB540 structured final decision, ARC530 structured authorization update. Root rechecked original raw files, actions, contexts and decoded targets after source semantic review and shared context validation. No learned-writer, recurrence, runtime replay, foundation, autonomous-stopping or DPO qualification. Integration pending; current GPU inputs unchanged."
     }
   ],
   "coverage_backlog": [
