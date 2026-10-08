@@ -29,6 +29,7 @@ import argparse
 import contextlib
 import shutil
 import fcntl
+import mmap
 import json
 import re
 import os
@@ -100,8 +101,38 @@ def release_cache(roots=None, min_bytes=16 << 20):
                         os.close(fd)
                 except OSError:
                     pass
+    walked = mem_free()
+    ballooned = balloon_reclaim()
     lock.close()
-    return {'files': files, 'free_before_gb': round(before / GIB, 1), 'free_after_gb': round(mem_free() / GIB, 1)}
+    return {'files': files, 'free_before_gb': round(before / GIB, 1), 'free_after_walk_gb': round(walked / GIB, 1),
+            'ballooned_gb': ballooned, 'free_after_gb': round(mem_free() / GIB, 1)}
+
+
+def inactive_file():
+    with open('/proc/meminfo') as stream:
+        for line in stream:
+            if line.startswith('Inactive(file):'):
+                return int(line.split()[1]) * 1024
+    return 0
+
+
+def balloon_reclaim(keep_available=16 * GIB, limit=24 * GIB):
+    """Evict page cache the walk cannot reach (files outside the roots, container layers): touch anonymous memory
+    one GiB at a time, which makes the kernel reclaim inactive file pages, then free it. CUDA on the GB10 never
+    triggers that reclaim itself. Bounded by the inactive file cache, and stops while MemAvailable stays above
+    ``keep_available`` (twice the guard's default floor). Returns the GiB touched."""
+    size = min(limit, inactive_file() - 2 * GIB, mem_available() - keep_available)
+    chunks = []
+    try:
+        while len(chunks) * GIB < size and mem_available() > keep_available:
+            chunk = mmap.mmap(-1, GIB)
+            for offset in range(0, GIB, mmap.PAGESIZE):
+                chunk[offset] = 1
+            chunks.append(chunk)
+    finally:
+        for chunk in chunks:
+            chunk.close()
+    return len(chunks)
 
 
 def gpu_usage():
