@@ -5,6 +5,7 @@
  */
 import type { Context } from '@earendil-works/chord';
 import type { Message } from '@earendil-works/pi-ai';
+import { ONCE_EFFECTS } from '@natlang/node';
 import { getCurrentTools } from '@earendil-works/pi-ai/utils/transcript';
 import type { ConversationId, EntryId, TaskId, TaskRuntime } from '../vendor/durable/src/types.ts';
 import type { Agent as PiAgent, ContextView as PiContextView, SubmissionDraft as PiSubmissionDraft } from '../vendor/durable/src/harness/types.ts';
@@ -54,6 +55,9 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
   const conversationId = runtime.conversationId;
   const scope: ApplyScope = { taskId: runtime.taskId, conversationId, now: () => runtime.now() };
   return {
+    // A hook handler runs once per phase, as in pi: an executor that calls it again (a re-run eval) gets the earlier
+    // outcome instead of running the extension's code twice.
+    [ONCE_EFFECTS]: ['hook'],
     /** The model context of this conversation through entry `at` (default: the newest entry): pi-durable's derivation. */
     async view(at?: number): Promise<ContextView> {
       return contextView(await runtime.context(conversationId, context, at === undefined ? {} : { at: at as EntryId }));
@@ -171,7 +175,7 @@ export function commit(ops: Op[], expect?: Expect): Promise<CommitResult>;
 export function submit(draft: SubmissionDraft): Promise<number>;
 /** The handlers of hook name for this task kind, in extension order; empty when there are none. */
 export function hooks(name: string): Promise<string[]>;
-/** Call handler index of hook name with args. A throw is returned as error, not reported: report it yourself where the rule says so. */
+/** Call handler index of hook name with args. A throw is returned as error, not reported: report it yourself where the rule says so. A handler runs once per phase: the same call again returns the same outcome. */
 export function hook(name: string, index: number, args: unknown[]): Promise<{ value?: unknown; error?: string }>;
 /** Render the agent's section key given the shown sections (key to text): text, omit, or error (already reported). */
 export function renderSection(key: string, shown: Record<string, string>): Promise<{ text?: string; omit?: true; error?: string }>;
