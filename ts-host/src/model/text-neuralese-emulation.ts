@@ -195,7 +195,9 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
     async write(text, options = {}): Promise<NeuraleseBlockMeta> {
       const resultType = options.type ?? (typeof options.producer?.result_type === 'string' ? options.producer.result_type : undefined);
       const markerContext = options.producer?.marker_context;
-      const softResult = !!resultType?.startsWith('Neuralese<') && markerContext === 'return-result';
+      const declaredSoftResult = typeof resultType === 'string' && /^Neuralese<.+>$/.test(resultType);
+      const softResult = declaredSoftResult && (markerContext === 'return-result' || markerContext === 'assistant-text' ||
+        markerContext === 'typed-argument');
       const typedEvalSource = markerContext === 'eval-code';
       if (!softResult && !typedEvalSource)
         throw new Error(`text Neuralese marker is allowed only in a declared Neuralese<T> result or typed eval source ` +
@@ -217,7 +219,15 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
     const adapted = (async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
       if (request.adapters?.length || request.guidance)
         throw new Error('text Neuralese emulation supports literal text blocks only, not adapters or guidance');
-      const template = request.template;
+      // withExecutionPlans sends an auxiliary plan-only turn using the action request as a base. That turn
+      // intentionally has a different tool contract; it is not the child readout invocation described by
+      // the inherited template. Keep the plan turn intact and remove only that inherited readout directive.
+      const lastMessage = request.messages.at(-1) as { role?: unknown; content?: unknown } | undefined;
+      const soleTool = request.tools.length === 1 ? request.tools[0] as { type?: unknown; function?: { name?: unknown } } : undefined;
+      const auxiliaryPlan = soleTool?.type === 'function' && soleTool.function?.name === 'execution_plan' &&
+        lastMessage?.role === 'user' && typeof lastMessage.content === 'string' &&
+        /Call execution_plan exactly once/.test(lastMessage.content);
+      const template = auxiliaryPlan ? undefined : request.template;
       const textReadout = !!template;
       const configuredRead = standardLibrary?.textReadSource;
       if (template && (template.call !== 'return_result' || template.value !== 'decode' || template.length !== undefined ||
@@ -240,7 +250,7 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
         `The value must match the declared result type exactly. Do not use any other tool and do not return an explanation.` : undefined;
       const renderedMessages = textReadout ? [{ role: 'system', content: readInstruction! }, ...rendered] : rendered;
       const { template: _template, ...withoutTemplate } = request;
-      const renderedRequest = { ...(template ? withoutTemplate : request),
+      const renderedRequest = { ...(template || auxiliaryPlan ? withoutTemplate : request),
         ...(template ? { tools: [returnTool!], tool_choice: 'required' as const } : {}), messages: renderedMessages };
       const response = await send(renderedRequest, signal);
       if (template && (!Array.isArray(response.calls) || response.calls.length !== 1 || response.calls[0]?.[0] !== 'return_result' ||
