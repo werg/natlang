@@ -718,6 +718,9 @@ def main(argv=None):
                    help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
                         'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
                         'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--ar-control-steps',type=int,default=256,
+                   help='held autoregressive controls (crisp greedy, full-projection and sketch self-fed rollouts) '
+                        'over this many positions of the first held batch; 0 disables. Diagnostic, not a gate')
     p.add_argument('--rollout-converge-ratio',type=float,default=1.25,
                    help='also deepen the sketch-only ramp once the deepest trained pass\'s held CE delta is within '
                         'this ratio of the pass before it (the parallel rollout is settling); plateau stays the fallback')
@@ -1039,10 +1042,12 @@ def main(argv=None):
     def evaluate():
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
+        ar_batch=None
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
                 prefix,span,_=ids_for(batch)
+                if ar_batch is None:ar_batch=(prefix,span)
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
@@ -1069,6 +1074,12 @@ def main(argv=None):
                         for n,value in values.items():
                             if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
                         regional['tokens']+=values['tokens']
+            autoregressive_controls=None
+            if a.ar_control_steps and ar_batch is not None:
+                from ..eval.projected_history import autoregressive_history_metrics
+                started_ar=time.perf_counter()
+                autoregressive_controls=autoregressive_history_metrics(backbone,heads,*ar_batch,steps=a.ar_control_steps)
+                autoregressive_controls['seconds']=time.perf_counter()-started_ar
         for row in strata.values():
             for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         for key,row in strata.items():
@@ -1103,6 +1114,7 @@ def main(argv=None):
                 'sketch_history_ce_delta':rollout_ce_delta,'pass_ce_deltas':pass_ce_deltas,
                 'evaluation_passes':max(3,a.rollout_passes)}
         if rollout is not None:report['rollout']=rollout.controls()
+        if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         matched_summary={}
         for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}

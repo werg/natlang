@@ -737,6 +737,27 @@ def test_held_evaluation_records_matched_projection_and_crisp_history_without_ch
     assert projected['whole']['read_history_mse_vs_live_greedy']>=0
     assert crisp['whole']['read_history_mse_vs_live_greedy']==0
     assert 'alignment_gate_passed' in report
+    ar=report['autoregressive_controls']
+    assert ar['schema']=='natlang.autoregressive-history-controls/1'
+    assert set(ar['scores'])=={'gold','ar_greedy','ar_projection','ar_sketch'}
+    assert ar['scores']['gold']['ce_delta_from_gold']==0
+    assert ar['scores']['ar_greedy']['ce_delta_from_ar_greedy']==0
+    assert all(0<=row['argmax_agreement_with_gold']<=1 for row in ar['scores'].values())
+
+
+def test_autoregressive_sketch_rollout_matches_parallel_passes_on_early_positions():
+    import torch
+    from natlang_neuralese.eval.projected_history import autoregressive_payloads
+    from natlang_neuralese.train.text_warmup import sequence_completions
+    backbone,heads=tiny_student()
+    torch.manual_seed(0)
+    prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
+    with torch.no_grad():
+        sequential=autoregressive_payloads(backbone,heads,prefix,span.shape[1],kinds=('ar_sketch',))['ar_sketch']
+        passes=list(sequence_completions(backbone,heads,prefix,span,passes=4,group_size=1))
+    # Depth k reads pass k-1's sketches, so after 4 passes the first 3 consumed positions equal the
+    # sequential sketch rollout (the Jacobi property the rollout ramp relies on).
+    assert torch.allclose(passes[-1]['sketches'][:,:3].float(),sequential[:,:3].float(),atol=1e-4)
 
 
 def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkeypatch):
