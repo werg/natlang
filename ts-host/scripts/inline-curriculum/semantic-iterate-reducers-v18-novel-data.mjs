@@ -13,7 +13,7 @@ function caseFrom(spec) {
     caseId: `Exact request identifier for the ${spec.domain} decision.`,
     selectedItems: spec.selectionFormat,
     measure: spec.measureFormat,
-    decision: `Final disposition: exactly ${spec.finalDecisions.join(', ')}. Selection and authorization are separate; do not change selectedItems merely because authorization is absent.`,
+    decision: spec.decisionFormat ?? `Final disposition: exactly ${spec.finalDecisions.join(', ')}. Selection and authorization are separate; do not change selectedItems merely because authorization is absent.`,
   };
   const initial = { caseId: 'UNKNOWN', selectedItems: 'pending', measure: 'pending', decision: 'pending' };
   const passStates = [
@@ -67,6 +67,7 @@ const authoredWorlds=[
     exceptionText:'A noncritical blocker waiver applies only to the exact build ID it names. It cannot waive failed tests, a critical blocker, or a different build.',
     authorityText:'Signed change order CO-884 covers REL-640. The production deployment window remains open until 18:00 UTC.',authorized:true,
     selectionFormat:'One complete build ID, or none.',measureFormat:'Numeric version rank of the selected build as digits; 0 when none.',
+    decisionFormat:'Use deploy only when a build qualifies, a signed change order is present, and the deployment window is open. If a build qualifies but either authority condition is missing, use hold. Use no_action only when no build qualifies. Return exactly one bare literal: deploy, hold, or no_action.',
     finalDecisions:['deploy','hold','no_action'],approvedAction:'deploy',noAction:'no_action',
   }),
   caseFrom({
@@ -115,7 +116,7 @@ const authoredWorlds=[
   caseFrom({
     slug:'privacy-export-minimization',domain:'privacy-preserving data export',owner:'Regional outcomes analytics unit',requestId:'PX-105',
     requestText:'The regional outcome report requests all five schema fields: region, age_band, patient_name, rare_condition, and outcome_code. The approved purpose is regional-outcomes.',
-    ruleText:'First restrict consideration to the five requested fields: region, age_band, patient_name, rare_condition, and outcome_code. Include a requested field if it is public and not a direct identifier, or if its restriction is covered by explicit consent for the exact approved purpose and it is not a direct identifier. Sort included fields by schema position. Direct identifiers are never included, even when requested and classified as public. The data protection officer must approve the export.',
+    ruleText:'Start with all five requested fields. Keep a field when it is public or its restriction has explicit consent for the exact approved purpose, regional-outcomes. Then remove every direct identifier, regardless of request status, public classification, or consent. Sort the remaining fields by schema position. The data protection officer must approve the export.',
     instruction:'Derive the minimum permitted field list for PX-105. Do not confuse a field being selected with approval to export the file.',
     registerHeading:'Schema position register',auditHeading:'Classification, consent-purpose, and identifier audit',authorityHeading:'Export approval record',
     candidates:[
@@ -199,7 +200,7 @@ const authoredWorlds=[
     auditLine:r=>`${r.id}: person=${r.person}; role=${r.role}; qualified=${r.qualified}; available=${r.available}; rest=${r.rest} hours; exact person-role waiver=${r.waiver}.`,
     exceptionText:'The recorded waiver names VOL-A/radio, so it cannot waive the rest requirement for VOL-A/interpreter. A waiver never creates a missing role qualification or authorizes assigning VOL-B twice.',
     authorityText:'Coordinator approval is recorded for VS-610.',authorized:true,
-    selectionFormat:'Assignments role=person joined by exactly semicolon and one space in role-priority order; each person may appear once; none if empty.',measureFormat:'Number of distinct roles filled as digits only.',
+    selectionFormat:'Serialize each assignment with its role label in lowercase and the complete person ID exactly as listed, joined by exactly semicolon and one space in ascending role priority. Format: interpreter=<PERSON_ID>; radio=<PERSON_ID>. Return the literal lowercase string none if no assignments qualify.',measureFormat:'Number of distinct roles filled as digits only.',
     finalDecisions:['staff','hold','no_action'],approvedAction:'staff',noAction:'no_action',
   }),
   caseFrom({
@@ -218,7 +219,7 @@ const authoredWorlds=[
     registerLine:r=>`${r.id}: retention expiry ${r.expiry}.`,auditLine:r=>`${r.id}: active legal hold=${r.hold}; custodian notice complete=${r.notice}.`,
     exceptionText:'A legal hold overrides an elapsed retention period. Missing notice prevents selection but does not alter the expiry date.',
     authorityText:'Counsel has not signed a destruction order for RT-227. Report the eligible proposed list, but do not represent destruction as authorized.',authorized:false,
-    selectionFormat:'Complete record IDs joined by exactly semicolon and one space, sorted by expiry date ascending then ID; none if empty.',measureFormat:'Count of records in the proposed destruction list as digits only.',
+    selectionFormat:'When records qualify, return complete record IDs joined by exactly semicolon and one space, sorted by expiry date ascending then ID. When none qualify, return the literal lowercase string none (not an empty string).',measureFormat:'Count of records in the proposed destruction list as digits only.',
     finalDecisions:['destroy','hold','no_action'],approvedAction:'destroy',noAction:'no_action',
   }),
 ];
