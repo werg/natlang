@@ -84,6 +84,43 @@ export function parseOpenCodeEnvelope(text, names, recordedActions) {
   return { content: value.content, allowed };
 }
 
+/**
+ * Build the collector response from the action MCP audit when actions exist.
+ * OpenCode's post-tool assistant text is not authoritative for those calls;
+ * with no audited actions, retain the strict JSON envelope requirement.
+ */
+export function buildAuditedCompletion({ responseText, names, recordedActions, cliExitCode = 0, nonBridgeToolUses = 0 }) {
+  if (cliExitCode !== 0) throw new Error(`OpenCode CLI exited ${cliExitCode}`);
+  if (nonBridgeToolUses > 0) throw new Error('OpenCode CLI emitted non-bridge tool-use event(s)');
+  if (!Array.isArray(recordedActions)) throw new Error('audited MCP actions must be an array');
+  const allowed = new Set(names);
+  const calls = recordedActions.map((row, index) => {
+    if (!isObject(row) || typeof row.name !== 'string' || !allowed.has(row.name) || !isObject(row.arguments))
+      throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
+    return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
+  });
+  if (!calls.length) {
+    const envelope = parseOpenCodeEnvelope(responseText, names, recordedActions);
+    return { content: envelope.content || null, calls, finalTextStatus: 'strict_json_envelope_no_actions' };
+  }
+
+  let finalTextStatus = 'empty_final_text_ignored';
+  if (typeof responseText === 'string' && responseText.length) {
+    try {
+      const envelope = JSON.parse(responseText);
+      if (!isObject(envelope) || Object.keys(envelope).sort().join(',') !== 'content,toolCalls' ||
+          typeof envelope.content !== 'string' || !Array.isArray(envelope.toolCalls)) {
+        finalTextStatus = 'non_envelope_final_text_ignored';
+      } else {
+        const echoed = envelope.toolCalls.map(call => ({ name: call?.name, arguments: call?.arguments }));
+        finalTextStatus = echoed.length === recordedActions.length && canonicalJson(echoed) === canonicalJson(recordedActions)
+          ? 'matching_echo_ignored' : 'inconsistent_echo_ignored';
+      }
+    } catch { finalTextStatus = 'invalid_json_final_text_ignored'; }
+  }
+  return { content: null, calls, finalTextStatus };
+}
+
 function parseJsonLines(stdout) {
   const events = [];
   for (const line of stdout.split(/\r?\n/).filter(Boolean)) {
@@ -349,12 +386,12 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         }
         diagnostics.response_text_source = responseText ? 'official_sdk_session_messages_fallback' : 'cli_json_events';
       }
-      const envelope = parseOpenCodeEnvelope(responseText, allowedNames, recordedActions);
-      const calls = actionRows.map((row, index) => {
-        if (typeof row.name !== 'string' || !envelope.allowed.has(row.name) || !isObject(row.arguments))
-          throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
-        return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
-      });
+      diagnostics.final_text_sha256 = sha256(responseText);
+      diagnostics.final_text_bytes = Buffer.byteLength(responseText);
+      const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
+        cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
+      diagnostics.final_text_status = completion.finalTextStatus;
+      const calls = completion.calls;
       diagnostics.action_log_end_bytes = rawLog.length;
       diagnostics.action_record_count = calls.length;
       diagnostics.stdout_bytes = Buffer.byteLength(stdout); diagnostics.stderr_bytes = Buffer.byteLength(stderr);
@@ -366,7 +403,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       invocationWritten = true;
       jsonResponse(res, 200, {
         id: `chatcmpl-${randomUUID()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelName,
-        choices: [{ index: 0, message: { role: 'assistant', content: envelope.content || null, ...(calls.length ? { tool_calls: calls } : {}) },
+        choices: [{ index: 0, message: { role: 'assistant', content: completion.content, ...(calls.length ? { tool_calls: calls } : {}) },
           finish_reason: calls.length ? 'tool_calls' : 'stop' }],
         raw_response: { cli_exit_code: exit.code, cli_signal: exit.signal, cli_events: events.map(e => e.type ?? null),
           event_stream_errors: watcher.sessionErrors, permission_rejections: watcher.permissionRejections,
