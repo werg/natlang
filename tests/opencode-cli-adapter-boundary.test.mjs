@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { abortOpenCodeSession, createOpenCodeCliChatAdapter } from '../scripts/opencode-cli-chat-adapter.mjs';
 
-async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' } } = {}) {
+async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-opencode-boundary-'));
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
@@ -54,7 +54,8 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
         abortCalls.push(options); aborted.add(options.path.id);
         await writeFile(markerPath, 'aborted');
         for (const stream of eventClients) stream.write(`data: ${JSON.stringify({ type: 'session.error', properties: { sessionID: options.path.id, error: abortError } })}\n\n`);
-        return { data: true };
+        if (abortDelayMs) await new Promise(resolve => setTimeout(resolve, abortDelayMs));
+        return { data: abortConfirmed };
       },
       status: async options => {
         observedStatusArgs.push(options);
@@ -80,7 +81,7 @@ async function invoke(adapter) {
 }
 
 test('completed audited action stops only its session after the tool-calls step', async () => {
-  const f = await fixture();
+  const f = await fixture({ abortDelayMs: 50 });
   try {
     const response = await invoke(f.adapter); const body = await response.json();
     assert.equal(response.status, 200);
@@ -149,6 +150,19 @@ test('only the exact same-session MessageAbortedError from a confirmed terminal 
     assert.equal(body.error.code, 'SESSION_ERROR');
     const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
     assert.deepEqual(diagnostic.session_errors.map(error => error.name), ['ProviderError']);
+  } finally { await f.close(); }
+});
+
+test('unconfirmed abort never admits an audited action, even with the expected abort error event', async () => {
+  const f = await fixture({ abortDelayMs: 50, abortConfirmed: false });
+  try {
+    const response = await invoke(f.adapter); const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.equal(body.error.code, 'SESSION_ERROR');
+    assert.equal(f.abortCalls.length, 1);
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(diagnostic.terminal_action_boundary.status, 'abort_not_confirmed');
+    assert.deepEqual(diagnostic.session_errors.map(error => error.name), ['MessageAbortedError']);
   } finally { await f.close(); }
 });
 
