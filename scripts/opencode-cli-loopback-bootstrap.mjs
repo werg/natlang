@@ -28,51 +28,33 @@ const safe = value => String(value ?? '').replace(/Bearer\s+[^\s,;]+/gi, 'Bearer
   .replace(/\b(?:sk|rk|tok)[-_][A-Za-z0-9_-]{12,}\b/g, '[redacted]').slice(0, 300);
 const writeJson = (path, value, flag = 'w') => writeFile(path, JSON.stringify(value, null, 2) + '\n', { flag, mode: 0o600 });
 
-// Zen's live catalog can outpace OpenCode's bundled Models.dev catalog. Pin
-// this documented OpenAI-compatible free model explicitly, and use it for
-// OpenCode's background title task as well so no paid small-model default can
-// be selected by an otherwise isolated CLI session.
+// Use the official OpenCode Zen provider and explicit free model for both
+// primary and title work. Free-tier validation depends on the native provider
+// request shape and its normal tool schemas, so do not re-register Zen as a
+// custom OpenAI-compatible provider or remove native tools from the request.
 export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, modelID = 'step-5-preview-free') {
-  const step5 = modelID === 'step-5-preview-free';
-  const providerID = step5 ? 'zen-step5-free' : 'opencode';
+  const providerID = 'opencode';
   const modelAlias = `${providerID}/${modelID}`;
   const config = {
     '$schema': 'https://opencode.ai/config.json',
     model: modelAlias,
     small_model: modelAlias,
-    // OpenCode's supported permission rules hide denied built-ins from the
-    // model-facing tool list. The named Natlang MCP action remains available.
-    permission: { '*': 'deny', natlang_action_bridge_submit_action: 'allow' },
+    // Keep native schemas in the official free-tier request, but require an
+    // explicit permission event; the adapter auto-rejects all except Natlang.
+    permission: { '*': 'ask', natlang_action_bridge_submit_action: 'allow' },
     mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer], enabled: true,
       environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog, NATLANG_OPENCODE_MCP_HANDSHAKE_LOG: handshakeLog } } },
     share: 'disabled', autoupdate: false
   };
-  if (step5) {
-    config.provider = {
-      'zen-step5-free': {
-        npm: '@ai-sdk/openai-compatible',
-        name: 'OpenCode Zen Step 5 Preview Free',
-        options: {
-          baseURL: 'https://opencode.ai/zen/v1',
-          apiKey: '{env:OPENCODE_API_KEY}'
-        },
-        models: {
-          'step-5-preview-free': {
-            name: 'Step 5 Preview Free'
-          }
-        }
-      }
-    };
-  }
   return config;
 }
 
 export function buildToolSurfaceReceipt(installedToolIDs) {
   return {
     installed_tool_ids: [...installedToolIDs],
-    model_tool_surface: { native_tools: 'disabled and omitted from model-facing requests by wildcard deny',
+    model_tool_surface: { native_tools: 'official schemas remain model-visible; all require permission and are auto-rejected by the adapter',
       natlang_action_bridge_submit_action: 'allowed; the only enabled action tool' },
-    permission_policy: 'official wildcard deny disables and hides native built-in tools; exact Natlang action MCP tool allowed; permission requests outside this tool surface are rejected; session history is not an execution barrier'
+    permission_policy: 'official wildcard ask keeps native schemas visible but gated; adapter rejects every native tool permission; exact Natlang action MCP tool allowed; session history is not an execution barrier'
   };
 }
 
@@ -215,7 +197,7 @@ async function main() {
     if (defaultTools?.error || !Array.isArray(defaultTools?.data) || !defaultTools.data.length)
       throw new Error('official default tool inventory is missing');
     await stage('default-tool-inventory-checked', { count: defaultTools.data.length });
-    const providerID = args['--model'] === 'step-5-preview-free' ? 'zen-step5-free' : 'opencode';
+    const providerID = 'opencode';
     adapter = await createOpenCodeCliChatAdapter({ cliPath, client: sdkClient, baseUrl: serverUrl,
       directory: scratch, outputDirectory: output, actionLogPath: actionLog, providerID,
       modelAlias: `${providerID}/${args['--model']}`, modelID: args['--model'], maxCliTurns: 384, contextTokens: 32768,
@@ -225,7 +207,7 @@ async function main() {
       official_sdk_module: sdkModule, official_sdk_module_sha256: await shaFile(sdkModule), provider_id: providerID,
       model_id: args['--model'], model_alias: `${providerID}/${args['--model']}`, provider_availability: 'not-probed',
       model_endpoint: args['--model'] === 'step-5-preview-free' ? 'https://opencode.ai/zen/v1/chat/completions' : null,
-      model_config_source: args['--model'] === 'step-5-preview-free' ? 'documented Zen OpenAI-compatible provider' : 'OpenCode built-in free provider catalog',
+      model_config_source: args['--model'] === 'step-5-preview-free' ? 'official OpenCode Zen catalog provider/model alias; OPENCODE_API_KEY environment; no custom provider override' : 'OpenCode built-in provider catalog',
       main_model: `${providerID}/${args['--model']}`, small_model: `${providerID}/${args['--model']}`,
       credential_source: 'OPENCODE_API_KEY environment; value excluded', server_url: serverUrl,
       server_pid: serverChild.pid, adapter_url: adapter.url, scratch_directory: scratch, isolated_home: isolatedHome,
