@@ -7809,6 +7809,24 @@
         "s1-full-final-20261003"
       ],
       "notes": "24 deterministic source-derived task variants over 96 existing train records in eight existing source families. V17 excludes eight separate soft-carry variants because final typed readout is unproven on the pinned runtime. Zero new independent-world credit. CPU reference proof used no provider calls and grants no training admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v17-luna-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/README.md",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/plan.approved.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/root-execution-authorization.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/external-launch-binding.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/launch-ledger-snapshot.jsonl",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/authority-worker-bindings.json"
+      ],
+      "admission": "generation-only launch provenance; no teacher-quality, trace, DPO, or training admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v17"
+      ],
+      "notes": "Immutable launch-time provenance for the root-approved 24-case Luna dispatcher campaign. The ledger file is a point-in-time snapshot of campaign_open and five runner starts; live worker outputs remain in the campaign directory and will be published after closure."
     }
   ],
   "coverage_backlog": [
