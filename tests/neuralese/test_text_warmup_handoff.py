@@ -8,6 +8,7 @@ from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
 from natlang_neuralese.train.text_warmup import (
     _apply_requested_sketch_cutoff,
+    same_alignment_data,
     same_foundation_context,
 )
 
@@ -19,6 +20,8 @@ def _identity():
         "projection_patience": 3, "projection_min_evals": 2,
         "projection_min_improvement": 0.01, "backbone_ramp_evals": 4,
         "pass_ramp_evals": 2,
+        "mask_system_prompt": True, "held_documents": 16,
+        "rollout_passes": 0, "rollout_start_passes": 4,
         "records": "records.jsonl", "pieces": "pieces.jsonl", "text_data": "text.jsonl",
     }
     return {
@@ -69,6 +72,16 @@ def test_newer_text_corpus_keeps_plateau_and_ramp():
     after = _identity()
     after["inputs"].update({"text.jsonl": "different corpus"})
     assert same_foundation_context(before, after)
+
+
+def test_mask_change_remeasures_text_baseline_but_preserves_full_state_schedule():
+    before = _identity()
+    after = _identity()
+    assert same_foundation_context(before, after)
+    assert same_alignment_data(before, after)
+    after["options"]["mask_system_prompt"] = False
+    assert same_foundation_context(before, after)
+    assert not same_alignment_data(before, after)
 
 
 @pytest.mark.parametrize("change", [

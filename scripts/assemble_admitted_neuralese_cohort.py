@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,6 +42,18 @@ def rows(path: Path, key='id'):
 
 def line(row):
     return json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode() + b'\n'
+
+def target_digest(row):
+    value = row.get('target')
+    if not isinstance(value, dict):
+        raise ValueError(f"native row has no structured target: {row.get('id')}")
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+
+def receipt_artifact(receipt, name):
+    for entry in receipt.get('files', {}).values():
+        if entry.get('path') and entry.get('sha256') and entry.get('path').endswith(name):
+            return entry
+    return None
 
 def prefix_sha(path: Path, length: int) -> str:
     h=hashlib.sha256(); remaining=length
@@ -136,13 +149,49 @@ def main():
 
     approval = json.loads(paths['approval'].read_text())
     base_receipt = json.loads(paths['base-receipt'].read_text())
-    if base_receipt.get('approved') is not True:
-        raise ValueError('base root receipt does not approve the native prefix')
-    if base_receipt.get('records_sha256') != sha(paths['base-native']):
-        raise ValueError('base root receipt does not bind the native prefix hash')
-    if base_receipt.get('pieces_sha256') != sha(paths['base-native-pieces']):
-        raise ValueError('base root receipt does not bind the native piece prefix hash')
-    approved = approval.get(args.approval_id_field)
+    root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
+    if root_corpus_receipt:
+        if (not str(base_receipt.get('status', '')).startswith('admitted-')
+                or base_receipt.get('admission', {}).get('native_sft') is not True):
+            raise ValueError('base root receipt does not grant native SFT admission')
+        native_binding = receipt_artifact(base_receipt, 'native-records.jsonl')
+        recurrence_binding = receipt_artifact(base_receipt, 'recurrence-records.jsonl')
+        native_piece_binding = receipt_artifact(base_receipt, 'native-pieces.jsonl')
+        recurrence_piece_binding = receipt_artifact(base_receipt, 'recurrence-pieces.jsonl')
+        for binding, path, label in ((native_binding, paths['base-native'], 'native'),
+                                     (recurrence_binding, paths['base-recurrence'], 'recurrence'),
+                                     (native_piece_binding, paths['base-native-pieces'], 'native pieces'),
+                                     (recurrence_piece_binding, paths['base-recurrence-pieces'], 'recurrence pieces')):
+            if not binding or binding['sha256'] != sha(path):
+                raise ValueError(f'base root receipt does not bind the exact {label} prefix')
+    else:
+        if base_receipt.get('approved') is not True:
+            raise ValueError('base root receipt does not approve the native prefix')
+        if base_receipt.get('records_sha256') != sha(paths['base-native']):
+            raise ValueError('base root receipt does not bind the native prefix hash')
+        if base_receipt.get('pieces_sha256') != sha(paths['base-native-pieces']):
+            raise ValueError('base root receipt does not bind the native piece prefix hash')
+    root_action_admission = approval.get('schema') == 'natlang.root-selected-action-admission/1'
+    if root_action_admission:
+        if args.approval_id_field != 'approved_row_ids':
+            raise ValueError('root action admission uses its fixed rows schema')
+        if approval.get('qualifications', {}).get('recurrence') is True:
+            raise ValueError('native-only selected-action receipt unexpectedly claims recurrence qualification')
+        approval_rows = approval.get('rows')
+        if not isinstance(approval_rows, list) or not approval_rows:
+            raise ValueError('root action admission has no selected rows')
+        approved = [entry.get('native_id') for entry in approval_rows]
+        if any(entry.get('decision') != 'admit-exact-selected-native-action-SFT-only' for entry in approval_rows):
+            raise ValueError('root action admission contains an unsupported decision')
+        counts = approval.get('counts') or {}
+        if (counts.get('native_SFT_train_actions') != len(approval_rows)
+                or counts.get('whole_trajectories') != 0
+                or approval.get('qualifications', {}).get('learned_writer') is not False):
+            raise ValueError('root action receipt does not describe exact native SFT-only admission')
+        approval_by_id = {entry['native_id']: entry for entry in approval_rows}
+    else:
+        approved = approval.get(args.approval_id_field)
+        approval_by_id = {}
     if not isinstance(approved, list) or not approved or any(not isinstance(x, str) for x in approved):
         raise ValueError(f'approval receipt lacks nonempty {args.approval_id_field!r}')
     if len(set(approved)) != len(approved): raise ValueError('duplicate approved IDs')
@@ -152,20 +201,42 @@ def main():
         bound = (ROOT / raw).resolve()
         if not bound.is_file() or sha(bound) != expected: raise ValueError(f'approval artifact missing/hash mismatch: {raw}')
     base_n = list(rows(paths['base-native'])); base_r = list(rows(paths['base-recurrence']))
-    delta_n = list(rows(paths['delta-native'])); delta_recs = list(rows(delta_r))
+    delta_n = list(rows(paths['delta-native']))
+    delta_recs = [] if root_action_admission and args.delta_recurrence is None else list(rows(delta_r))
     ids = [r['id'] for r in delta_n]
     if set(ids) != set(approved) or len(ids) != len(approved):
         raise ValueError('delta native IDs do not equal approved IDs exactly')
+    native_only = root_action_admission
     rids = [r['id'] for r in delta_recs]
-    if set(rids) != set(approved) or len(rids) != len(approved):
+    if native_only:
+        if delta_recs:
+            raise ValueError('native-only receipt must not supply recurrence additions')
+    elif set(rids) != set(approved) or len(rids) != len(approved):
         raise ValueError('delta recurrence IDs do not equal approved IDs exactly')
     if set(ids) & {r['id'] for r in base_n} or set(rids) & {r['id'] for r in base_r}:
         raise ValueError('delta ID already occurs in base prefix')
+    admitted_delta = []
     for row in delta_n:
+        row = dict(row)
+        if root_action_admission:
+            decision = approval_by_id[row['id']]
+            if target_digest(row) != decision.get('target_sha256'):
+                raise ValueError(f'root admission target digest mismatch: {row["id"]}')
+            if row.get('split') != decision.get('split') or decision.get('source_group') not in (row.get('source_groups') or []):
+                raise ValueError(f'root admission source split/group mismatch: {row["id"]}')
+            row['training_admission'] = {
+                'approved': True, 'kind': 'root-selected-native-action-sft-only',
+                'status': 'admitted-exact-selected-native-action',
+                'root_admission_sha256': sha(paths['approval']),
+                'decision': decision['decision'], 'role': decision.get('role')}
+            row['decision'] = {**(row.get('decision') or {}), 'training_approved': True,
+                               'root_action_admission_sha256': sha(paths['approval'])}
         if row.get('training_admission', {}).get('approved') is not True:
             raise ValueError(f'delta row lacks approved admission metadata: {row["id"]}')
         if row.get('decision', {}).get('failed_action') is True:
             raise ValueError(f'failed action in approved delta: {row["id"]}')
+        admitted_delta.append(row)
+    delta_n = admitted_delta
     delta_piece_names = {piece['name'] for piece in rows(paths['delta-pieces'], 'name')}
     wanted = set().union(*(referenced_soft(r.get('messages')) | referenced_soft(r.get('target')) for r in delta_n))
     if delta_piece_names != wanted:
@@ -175,9 +246,16 @@ def main():
              'native_pieces': 'native-pieces.jsonl', 'recurrence_pieces': 'recurrence-pieces.jsonl',
              'delta': 'delta-native-records.jsonl', 'audit': 'recurrence-audit.json'}
     write_append(paths['base-native'], out / names['native'], delta_n)
-    write_append(paths['base-recurrence'], out / names['recurrence'], delta_recs)
+    if native_only:
+        shutil.copyfile(paths['base-recurrence'], out / names['recurrence'])
+    else:
+        write_append(paths['base-recurrence'], out / names['recurrence'], delta_recs)
     np = merge_pieces(paths['base-native-pieces'], paths['delta-pieces'], out / names['native_pieces'])
-    rp = merge_pieces(paths['base-recurrence-pieces'], paths['delta-pieces'], out / names['recurrence_pieces'])
+    if native_only:
+        shutil.copyfile(paths['base-recurrence-pieces'], out / names['recurrence_pieces'])
+        rp = {'added': 0, 'exact_duplicates': [], 'total': len(list(rows(paths['base-recurrence-pieces'], 'name')))}
+    else:
+        rp = merge_pieces(paths['base-recurrence-pieces'], paths['delta-pieces'], out / names['recurrence_pieces'])
     available = {piece['name'] for piece in rows(out / names['native_pieces'], 'name')}
     for row in delta_n:
         missing = referenced_soft(row.get('messages')) - available
@@ -196,6 +274,8 @@ def main():
       'status': 'proposal-only; separate root publication/admission review required',
       'approval': {'path': str(paths['approval'].resolve()), 'sha256': sha(paths['approval']),
                    'id_field': args.approval_id_field, 'approved_ids': approved},
+      'admitted_facets': {'native': True, 'recurrence': not native_only,
+                          'native_only_receipt': native_only},
       'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
                  for k,v in {**paths, 'delta-recurrence': delta_r}.items() if k != 'out'},
       'prefixes_byte_exact': {

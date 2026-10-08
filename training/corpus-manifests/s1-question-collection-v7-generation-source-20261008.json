@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s1-question-collection-v7-generation-source-20261008",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-candidates-20261008-v7",
+  "files": [
+    {
+      "path": "generation-review-v1/luna/launch-binding.json",
+      "bytes": 12565,
+      "sha256": "7faf7b8b9569e2b008c2c81b2536fec2c5bf7405b441b9c17812629306216f3a"
+    },
+    {
+      "path": "generation-review-v1/luna/plan.approved.json",
+      "bytes": 16740,
+      "sha256": "da3eaf9f40983a7aa89cfb153ef442c08d63dd01a5fe112fad5815484202f595"
+    },
+    {
+      "path": "generation-review-v1/luna/root-authorization.json",
+      "bytes": 2109,
+      "sha256": "0349d64792e7f5b911f8521eac6de9a6c61675ab4c585c2d22492bec0f5f7dd3"
+    },
+    {
+      "path": "generation-review-v1/luna/source-index-catalog.json",
+      "bytes": 7652,
+      "sha256": "a1295d47f23a209bdc4a999d02f4e0969af3739b447a0630c78824c39e031c0f"
+    },
+    {
+      "path": "review-facts.json",
+      "bytes": 35848,
+      "sha256": "8339c33da81092682ce28dc2dee872ebdcaad6a325ed92736bcf645339874aa6"
+    },
+    {
+      "path": "root-review-v1/review.json",
+      "bytes": 1140,
+      "sha256": "0fb7bc5e1b06723f311bf710efddb65dc5be06c8fef8ee4ae923c1bf80b73f63"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 809,
+      "sha256": "9e1f1649333dd63a19094e1d0c357686e202d52479e2454d5de9bbf11b2fa295"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 3071,
+      "sha256": "1913134682474d816f70896a23c4e0ecd29078c2be418b5cf54f92517d5f6a6e"
+    },
+    {
+      "path": "source-validation.json",
+      "bytes": 1127,
+      "sha256": "5064830568beb61dc19a8319c110bdc601a8e3dfd9e0fa4eda48e7203ed550e4"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1223817,
+      "sha256": "091044d6069ee1480d645ea308c2625933b2c76f8a8530a51933a20790ca020f",
+      "lines": 16
+    }
+  ],
+  "bytes": 1304878
+}

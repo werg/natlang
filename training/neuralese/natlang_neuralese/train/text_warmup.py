@@ -616,12 +616,35 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
 
 
 def same_alignment_data(previous, current):
-    """A corpus handoff remeasures the crisp baseline; path moves do not."""
+    """Whether a saved text-CE baseline measures the current held objective.
+
+    Input digests make path-only moves equivalent. The initial text CE is also
+    tied to the held window and target-mask policy, however, so reusing it
+    across those changes would make ``text_ce_delta_from_initial`` compare
+    different measurements. This check only controls that diagnostic baseline;
+    it does not discard model, optimizer, or schedule state.
+    """
     def fingerprints(identity):
         return {name: (identity['inputs'].get(identity['options'][name])
                        if identity['options'].get(name) else None)
                 for name in ('records','pieces','text_data')}
-    return fingerprints(previous) == fingerprints(current)
+    if fingerprints(previous) != fingerprints(current):
+        return False
+    # These options determine the tokens, windows, and strata contributing to
+    # the held text-CE baseline. Missing fields in legacy checkpoints are
+    # intentionally unequal: the old diagnostic's evaluation policy is not
+    # authenticated well enough to reuse its value.
+    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens',
+              'rollout_passes', 'rollout_start_passes')
+    old_options, new_options = previous.get('options', {}), current.get('options', {})
+    if any(key not in old_options or key not in new_options for key in fields):
+        return False
+    if any(old_options[key] != new_options[key] for key in fields):
+        return False
+    for field in ('target', 'text_history', 'supervision_policy'):
+        if previous.get(field) != current.get(field):
+            return False
+    return True
 
 
 _FOUNDATION_CONTEXT_OPTIONS = (
@@ -1047,6 +1070,7 @@ def main(argv=None):
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
+    remeasure_text_baseline=False
     schedule=ProjectionFirstSchedule(min_evals=a.projection_min_evals,patience=a.projection_patience,
         min_relative_improvement=a.projection_min_improvement,
         backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
@@ -1081,6 +1105,8 @@ def main(argv=None):
                 updates={'backbone':False,'sketch':False,'full_projection':False}
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
+            else:
+                remeasure_text_baseline=True
         if rollout is not None and restored.get('rollout'):
             try:rollout.load_state_dict(restored['rollout'])
             except ValueError:
@@ -1116,7 +1142,7 @@ def main(argv=None):
         print(json.dumps(value),flush=True)
     checkpoint_reserve=None
     last_report=None
-    def evaluate():
+    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
@@ -1193,7 +1219,7 @@ def main(argv=None):
             index=int(key.split('-')[1]);total_row=pass_ce_deltas.setdefault(index,[0.,0])
             total_row[0]+=row['ce_delta']*row['tokens'];total_row[1]+=row['tokens']
         pass_ce_deltas={index:value/count for index,(value,count) in pass_ce_deltas.items() if count}
-        if last_schedule_step is None or step>last_schedule_step:
+        if observe_schedule and (last_schedule_step is None or step>last_schedule_step):
             if rollout is not None and schedule.plateau_reached and rollout_ce_delta is not None:
                 rollout.observe(rollout_ce_delta,pass_ce_deltas)
             schedule.observe(errors);last_schedule_step=step
@@ -1201,10 +1227,26 @@ def main(argv=None):
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'held_probe_selection':held_selection_eval,
+                'text_ce_baseline_domain':{
+                    'schema':'natlang.text-warmup-baseline-domain/1',
+                    'metric':'held plain-text next-token CE by pass/length/region',
+                    'source_inputs_sha256':{
+                        str(path.resolve()):identity['inputs'][str(path.resolve())]
+                        for path in (a.records,a.pieces,a.text_data) if path is not None and
+                        str(path.resolve()) in identity['inputs']},
+                    'system_prompt_mask_requested':bool(a.mask_system_prompt),
+                    'system_prompt_mask_effective':bool(a.mask_system_prompt and role_start is not None),
+                    'held_selection':held_selection_eval,
+                    'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
+                    'evaluation_passes':max(3,a.rollout_passes)},
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
                 'sketch_history_ce_delta':rollout_ce_delta,'pass_ce_deltas':pass_ce_deltas,
                 'evaluation_passes':max(3,a.rollout_passes)}
+        if baseline_reason is not None:
+            report['text_ce_baseline_remeasurement']={'reason':baseline_reason,
+                'schedule_observation':False,'model_or_optimizer_update':False,
+                'training_rng_preserved':bool(baseline_rng_preserved)}
         if rollout is not None:report['rollout']=rollout.controls()
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         for roles_of_pass in role_strata.values():
@@ -1324,12 +1366,22 @@ def main(argv=None):
                 raise
         write_heads_export_status(export_error=export_error)
     if a.eval_only:
-        report=evaluate()
+        report=evaluate(observe_schedule=False)
         (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
         return None
     if not was_resumed:
-        baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
+        # A continued full state gets a fresh starting-weight evaluation on
+        # its current held domain before any update. This evaluates without
+        # advancing the restored plateau/ramp schedule or consuming its RNG.
+        continuation_rng=(capture_training_rng_state(a.device) if a.continue_from else None)
+        try:
+            baseline=evaluate(observe_schedule=not bool(a.continue_from),
+                baseline_reason='input_or_held_objective_changed' if remeasure_text_baseline else None,
+                baseline_rng_preserved=continuation_rng is not None)
+        finally:
+            if continuation_rng is not None:restore_training_rng_state(continuation_rng,a.device)
+        (a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
     checkpoint_reserve=CheckpointDiskReserve(

@@ -1,0 +1,408 @@
+{
+  "schema": "natlang.s1-semantic-answer-review/1",
+  "campaign_id": "s1-question-collection-v7-luna",
+  "source_cases_sha256": "091044d6069ee1480d645ea308c2625933b2c76f8a8530a51933a20790ca020f",
+  "closeout_review_sha256": "0deb0d43de218916a08fb1aa4d3b255914e37b4ec3b054b80bd559346b0587d1",
+  "interpretation": "Source-grounded per-field semantic equivalence review. Raw targets, source answers, and exact-match outcomes are unchanged. These receipts are candidates for a separate semantic-answer lane; they do not grant exact-target training admission. No substring-only grader is authorized.",
+  "receipts": [
+    {
+      "source_index": 0,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-dd42186e7bd4ebe1d456:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:university_of_notre_dame"
+      ],
+      "field": "item-02",
+      "question": "What is in front of the Notre Dame Main Building?",
+      "question_sha256": "2142c4226a6617db16a6dbfcb3d636f3ed25687dce23b6ee621f146ebeb70fb2",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "a copper statue of Christ",
+      "actual": "a copper statue of Christ with arms upraised with the legend \"Venite Ad Me Omnes\"",
+      "actual_sha256": "f7a0211b69ea3b9d11a22831bf1d9b3a092660c11b38352843419346979fc914",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "eb18605450e2409f9ce32fddc7fb3f3c57d18941d9a8b31fa04dc0febabbb98a",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-21c50ab9ed5f6882.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "A copper statue of Christ with arms upraised and the named inscription answers the object question; exact source span and no contradiction."
+    },
+    {
+      "source_index": 0,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-dd42186e7bd4ebe1d456:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:university_of_notre_dame"
+      ],
+      "field": "item-03",
+      "question": "Where is the headquarters of the Congregation of the Holy Cross?",
+      "question_sha256": "1efb9e8a187dd54d2583f6727240f3f65f780037fd2725370b316054b5d119c5",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "Rome",
+      "actual": "in Rome",
+      "actual_sha256": "17fb1f9bf4dea5e69683811e57fdc47f61aa49262d5b85490740bb53647353d5",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "eb18605450e2409f9ce32fddc7fb3f3c57d18941d9a8b31fa04dc0febabbb98a",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-21c50ab9ed5f6882.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“In Rome” is the exact location phrase in the source and directly answers where the headquarters are."
+    },
+    {
+      "source_index": 0,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-dd42186e7bd4ebe1d456:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:university_of_notre_dame"
+      ],
+      "field": "item-04",
+      "question": "In what year did the team lead by Knute Rockne win the Rose Bowl?",
+      "question_sha256": "8648ab66d46363b50a4e3e3964a48e895362d2a836dfe9de17e0a3865b30aee8",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "1925",
+      "actual": "won the Rose Bowl in 1925",
+      "actual_sha256": "49bf1eb640eacfe5024fbd51ddb3cdcbc1f3f03b97d44ad3905e1c0c9532dd61",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "eb18605450e2409f9ce32fddc7fb3f3c57d18941d9a8b31fa04dc0febabbb98a",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-21c50ab9ed5f6882.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "The exact source clause “won the Rose Bowl in 1925” answers the year question; added clause provides only the requested event context."
+    },
+    {
+      "source_index": 1,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-85acf2c75b797db9b8ed:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:beyoncé"
+      ],
+      "field": "item-01",
+      "question": "How much did Beyonce initially contribute to the foundation?",
+      "question_sha256": "cc8e24dda979fff475cb48867d97d28abbe80f9e0348208da3dd12716c0d7c07",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "$250,000",
+      "actual": "an initial $250,000",
+      "actual_sha256": "8e78d8ee6dba85a5818e592a05b0b921725268885b71ac911b8e99a6ebfd4686",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "f750cc0101d73c4c374c56a1913d39c126b5c1d9d1a76317e39e01905045d782",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3e40cda5c940b593.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“An initial $250,000” is the exact source amount phrase and answers the initial contribution question."
+    },
+    {
+      "source_index": 1,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-85acf2c75b797db9b8ed:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:beyoncé"
+      ],
+      "field": "item-02",
+      "question": "How has this foundation changed in recent years?",
+      "question_sha256": "d39080cc32cd0ccc14748fffe341a2df8b9a210200e621e889f7311428dc297b",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "expanded to work with other charities",
+      "actual": "The foundation has since expanded to work with other charities in the city",
+      "actual_sha256": "280e2480d04afd2eb7166400afe75aa448652640ecab981b87a6dad4934522bc",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "f750cc0101d73c4c374c56a1913d39c126b5c1d9d1a76317e39e01905045d782",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3e40cda5c940b593.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "The exact source sentence stating the foundation expanded to other charities answers how it changed; its added city detail is source-supported."
+    },
+    {
+      "source_index": 1,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-85acf2c75b797db9b8ed:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:beyoncé"
+      ],
+      "field": "item-04",
+      "question": "How much money did Beyoncé contribute at the beginning of her Hurricane Katrina foundation?",
+      "question_sha256": "bc7454d0402e298122f5653a229327de59c02ab15fc9281483538dfd49be49c9",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "$250,000.",
+      "actual": "an initial $250,000",
+      "actual_sha256": "8e78d8ee6dba85a5818e592a05b0b921725268885b71ac911b8e99a6ebfd4686",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "f750cc0101d73c4c374c56a1913d39c126b5c1d9d1a76317e39e01905045d782",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3e40cda5c940b593.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“An initial $250,000” is the exact source amount phrase and answers the contribution question; punctuation/wording differs from the gold string."
+    },
+    {
+      "source_index": 2,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-6b00ec3b89108e9e354d:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:montana"
+      ],
+      "field": "item-01",
+      "question": "Where does the state's name come from?",
+      "question_sha256": "657864ec499fb91465a086b1df326fd1db68f507031ab0f2c325c58e2adead37",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "Spanish word montaña (mountain)",
+      "actual": "derived from the Spanish word montaña (mountain)",
+      "actual_sha256": "1417f527fe3f7a9e319bd48e21486626e21192698496d8cf7a9089215c0dd846",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "b7167aa9b82d1cb50f3869a4260dae809cb9a13338913fff37649e91c45f0bc7",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-178107a356ff8bea.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“Derived from the Spanish word montaña (mountain)” directly answers the name-origin question with the source relation intact."
+    },
+    {
+      "source_index": 2,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-6b00ec3b89108e9e354d:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:montana"
+      ],
+      "field": "item-02",
+      "question": "What is the states rank in size?",
+      "question_sha256": "a9cd9d0f84b8bb6891832dd5f9603d66c83f3ee1230d462eab8a41571beedcca",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "4th",
+      "actual": "4th in size",
+      "actual_sha256": "930cf3e8828bc0e37dd55263e7eb0876ac6d9ef384cd4162c666b03cf91f7a67",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "b7167aa9b82d1cb50f3869a4260dae809cb9a13338913fff37649e91c45f0bc7",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-178107a356ff8bea.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“4th in size” is the source wording for the requested size rank."
+    },
+    {
+      "source_index": 2,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-6b00ec3b89108e9e354d:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:montana"
+      ],
+      "field": "item-03",
+      "question": "What is its rank in popularion?",
+      "question_sha256": "9cef97f89130332dc0563867c21f213e0cfbb278b0fb605e9de9ebcea1cb532b",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "44th",
+      "actual": "44th in population",
+      "actual_sha256": "e8b30a6d8929bf433da60327494923db3c74e657bbf4fde316949c549819b461",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "b7167aa9b82d1cb50f3869a4260dae809cb9a13338913fff37649e91c45f0bc7",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-178107a356ff8bea.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“44th in population” is the source wording for the requested population rank."
+    },
+    {
+      "source_index": 2,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-6b00ec3b89108e9e354d:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:montana"
+      ],
+      "field": "item-04",
+      "question": "How many ranges are part of the Rocky Mountains?",
+      "question_sha256": "a061d7df500cc00f10f89662f7de9c6c463ef085fb7e56a41df8a9bf4ee4894a",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "77",
+      "actual": "77 named ranges",
+      "actual_sha256": "de123381614ccb82e240cd7df3e7a44d95a38e31173177bcfe825ac4bdad1f51",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "b7167aa9b82d1cb50f3869a4260dae809cb9a13338913fff37649e91c45f0bc7",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-178107a356ff8bea.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“77 named ranges” is the source wording and gives the count plus its noun, directly answering how many ranges."
+    },
+    {
+      "source_index": 3,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-8e377723862a7593aca7:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:genocide"
+      ],
+      "field": "item-03",
+      "question": "Which phrase is especially contentious within international humanitarian law?",
+      "question_sha256": "ddcfafcadd10b2cd929156c32e0e8095bf2f86f79d9a7d60ddb4610da76ddfd1",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "\"in whole or in part\"",
+      "actual": "in whole or in part",
+      "actual_sha256": "d3439fa276afaaa127d45601d033006c13e8b494eeeab2788b554bf8d955018d",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "f1aa8640782f3f0151a7bccba4da4c8aa27fac831d0e4d7374e714b6c4dc384e",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-226f7d3dd1339962.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "The returned phrase matches the quoted source phrase; omission of quotation marks changes punctuation only."
+    },
+    {
+      "source_index": 3,
+      "source_id": "inline-curriculum:s1_question_collection:qa_extractive-8e377723862a7593aca7:iterate-source-questions/1",
+      "dataset": "qa_extractive",
+      "split": "test",
+      "source_groups": [
+        "wiki:genocide"
+      ],
+      "field": "item-04",
+      "question": "What 2001 case was declared genocide by the International Criminal Tribune for the Former Yugoslavia (ICTY)?",
+      "question_sha256": "4e82e47e27cf0f22296022a97178c2631b5f6db72db0c944723aba76677396ba",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "Prosecutor v. Radislav Krstic",
+      "actual": "In Prosecutor v. Radislav Krstic – Trial Chamber I – Judgment – IT-98-33 (2001) ICTY8 (2 August 2001)",
+      "actual_sha256": "6688ba059e245320ea86155df4b7d86c9f23a40354847814650bac1d4c3a9f15",
+      "gold_exact": false,
+      "actual_is_exact_source_span": false,
+      "source_row_sha256": "f1aa8640782f3f0151a7bccba4da4c8aa27fac831d0e4d7374e714b6c4dc384e",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-226f7d3dd1339962.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "The returned string names the exact 2001 Prosecutor v. Radislav Krstic Trial Chamber I judgment identified in the source as the case where genocide was found."
+    },
+    {
+      "source_index": 13,
+      "source_id": "inline-curriculum:s1_question_collection:qa_multihop-016b3178e9197fed9197:iterate-source-questions/1",
+      "dataset": "qa_multihop",
+      "split": "train",
+      "source_groups": [
+        "hotpotqa-q:5a7223a855429971e9dc92d1"
+      ],
+      "field": "item-01",
+      "question": "In regards to the ITV drama about Colin Howell, what journalist's account was used?",
+      "question_sha256": "fc26c1f1d301c76c5f9313c7175279832b63581499b3755ce3613a8f9f71a9a0",
+      "answer_format": "Return the exact source wording for the answer, with no explanation or added qualifiers.",
+      "gold": "Deric Henderson",
+      "actual": "Belfast journalist Deric Henderson's account",
+      "actual_sha256": "a81541d2f0ec5038bcce4db15c4eaabff949400b43c2ccf0d8077002544b7476",
+      "gold_exact": false,
+      "actual_is_exact_source_span": true,
+      "source_row_sha256": "b423a30adbbdb87d0462fbd1030cc8773c523237d4ae100973556b79e5f6e8ff",
+      "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-05/results/case-000013.results.jsonl",
+      "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-05/jobs/000013-28a6b390a08e4c07.trace.jsonl",
+      "review_status": "reviewed_semantic_equivalence_candidate",
+      "training_admission": false,
+      "rationale": "“Belfast journalist Deric Henderson’s account” directly identifies whose account the drama used; all extra words are supported by the source."
+    }
+  ],
+  "held_numeric_representation": {
+    "source_index": 9,
+    "field": "item-04",
+    "gold": "3977.75",
+    "actual": "3977.7500000000005",
+    "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-05/results/case-000009.results.jsonl",
+    "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1/slot-05/jobs/000009-a2930ab7dd79da88.trace.jsonl",
+    "diagnosis": "The final child eval computes (3900.1 + 4090.5 + 4198.8 + 3721.6) / 4 and returns String(avg); IEEE-754 accumulation yields 3977.7500000000005. Exact decimal arithmetic gives 3977.75; the observed difference is one ULP at this magnitude. Hold for canonical exact repair; do not accept it through generic float tolerance.",
+    "training_admission": false
+  },
+  "strict_semantic_mismatches": [
+    {
+      "source_index": 5,
+      "fields": [
+        "item-02",
+        "item-04"
+      ],
+      "reason": "Wrong multiple-choice labels; do not accept from extraction/span heuristics."
+    },
+    {
+      "source_index": 6,
+      "fields": [
+        "item-02"
+      ],
+      "reason": "Wrong multiple-choice label."
+    },
+    {
+      "source_index": 7,
+      "fields": [
+        "item-02"
+      ],
+      "reason": "Wrong multiple-choice label."
+    }
+  ],
+  "transport_error": {
+    "source_index": 15,
+    "status": "excluded_from_semantic_judgment",
+    "reason": "The original closeout attempt was a provider transport failure. Source index 15 was completed separately by infra-recovery; its answer is listed as a distinct normalization-equivalence candidate above."
+  },
+  "semantic_ambiguities": [
+    {
+      "source_index": 8,
+      "field": "item-03",
+      "gold": "11",
+      "actual": "not determinable",
+      "question": "How many departments are led by heads who are not mentioned?",
+      "review_status": "hold_for_semantic_review",
+      "reason": "The provided department table has 15 rows and the management table contains four distinct department IDs, so 11 departments lack a management row. However, no head table is supplied; “heads who are not mentioned” may instead refer to absent head records. Do not treat the model’s cautious answer as a verified equivalent or a clear contradiction until the intended relation is established."
+    },
+    {
+      "source_index": 11,
+      "field": "item-04",
+      "gold": "3",
+      "actual": "14",
+      "question": "How many distinct allergies are there?",
+      "review_status": "hold_for_semantic_review",
+      "reason": "The supplied Allergy_Type table has 14 distinct Allergy names and 3 distinct AllergyType categories. The natural wording asks for allergies (supporting 14), while the gold value counts categories (3). The question does not specify AllergyType; this is a source/label ambiguity, not safe to resolve by string or numeric tolerance."
+    }
+  ],
+  "semantic_normalization_candidate": {
+    "source_index": 15,
+    "source_id": "inline-curriculum:s1_question_collection:qa_multihop-472ded06ff339d6a77c4:iterate-source-questions/1",
+    "dataset": "qa_multihop",
+    "split": "train",
+    "source_groups": [
+      "hotpotqa-q:5ac3eafd55429919431738ae"
+    ],
+    "field": "item-01",
+    "question": "Which division does veteran Maximum Fighting Championship Jay Silva belong to?",
+    "question_sha256": "676d3fa0038f5b2de898be00c0ce4f63188d921f399e6f4440f23ad6e1a8e600",
+    "gold": "the Middleweight division",
+    "actual": "Middleweight division",
+    "gold_sha256": "6138997d97555b1fa06c47fcc4e84e63848ac4edb7d948fd73a93e24ee8fb130",
+    "actual_sha256": "b356126847201d5cb633e72726975c56184a3319f1da4d5251495e0045c2be3d",
+    "source_row_sha256": "825c099f1c6079c791232ac171935db4b53efb995438ccaacae7e80e099deac9",
+    "normalization_profile": "squad-hotpot-answer-normalization-lowercase-punctuation-articles-whitespace/1",
+    "normalized_gold": "middleweight division",
+    "normalized_actual": "middleweight division",
+    "retry_result_sha256": "61cbee0ed99cb6edd1da6427588e7eb438bf82ce59e022c88cd0256a88d12e80",
+    "trace_sha256": "69e58622b9e0497a680b8dd876dc62584a331cf1f690926693f400953f615e10",
+    "result_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/infra-recovery-v1/campaign-v1/slot-01/results/case-000015.results.jsonl",
+    "trace_path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/infra-recovery-v1/campaign-v1/slot-01/jobs/000015-a18da850fc6e1c20.trace.jsonl",
+    "origin": "infra-recovery retry after original provider transport failure",
+    "review_status": "reviewed_normalization_equivalence_candidate",
+    "training_admission": false,
+    "rationale": "The only difference is the leading article “the”; lowercasing and removing English articles produces the same answer. This is the standard extractive QA normalization case, not substring matching."
+  }
+}

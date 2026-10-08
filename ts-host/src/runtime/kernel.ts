@@ -392,10 +392,6 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
-  const node = await prepareDefinitionNode(definition, inputs, options);
-  if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
-  if (extraTransactions.length) node.extraTransactions = extraTransactions;
-
   const callId = task.nextCallId();
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
     signal: frame.signal, abort: frame.abort,
@@ -441,6 +437,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let outcome = 'failed', detail = '';
   registerTrace(callId, runtime.trace);
   try {
+    const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
+    const node = await prepareDefinitionNode(definition, normalizedInputs, options);
+    if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
+    if (extraTransactions.length) node.extraTransactions = extraTransactions;
     const result = await runInFrame(childFrame, () => runtime!.run(node));
     outcome = result.outcome.kind; detail = result.outcome.detail;
     const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
