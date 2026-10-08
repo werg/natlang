@@ -3,6 +3,47 @@
   "policy": "Every current snapshot has an owner and explicit admission. Copies and derived subsets are not additional independent training examples. Historical conversions stay archived; manifests are immutable; new output means a new id.",
   "corpora": [
     {
+      "id": "luna-clinic-river-retry-readerstate-audit-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "luna-exact-source-clinic-river-retry-proposal-20261008-v1/two-case-dispatch-root-approved-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+        "luna-exact-clinic-river-retry-20261008-v1/launch.json",
+        "luna-exact-clinic-river-retry-20261008-v1/claims.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/retry-closeout-v1.json",
+        "luna-exact-clinic-river-retry-20261008-v1/retry-closeout-v2.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/claims/luna-exact-clinic-river-retry-20261008-v1-case-000000/queue.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/collector-logs/case-000000.log",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/jobs/000000-8225743b2bdc8642.result.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/jobs/000000-8225743b2bdc8642.trace.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/results/case-000000.results.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/journal.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-01/supervisor.log",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/claims/luna-exact-clinic-river-retry-20261008-v1-case-000003/queue.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/collector-logs/case-000003.log",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.result.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/results/case-000003.results.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/results/case-000003.results.jsonl.manifest.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/journal.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/supervisor.log",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/prepare_readerstate_proposal_v1.mjs",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/readerstate-action-proposal-v1.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/readerstate-action-map-v1.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/clinic-semantics-review-v1.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/code-input-provenance-v1.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/**/*"
+      ],
+      "admission": "held-diagnostic-readerstate-proposal-not-training-admission",
+      "derived_from": [
+        "authored-root-five-world-luna-20261008-v1"
+      ],
+      "notes": "Two-case exact-source clinic/river retry, bounded under root-approved immutable plan. Includes full raw outputs, traces, journals, exact source inputs, code-input dependency closure and a native action-level held preview. Clinic remains rejected: CCR-2B eligibility false conflicts with its exact authored source/reference; the later generated nested check adds an unsupported lot-specific criterion while omitting candidateId. River passed exact source checks. Only source-matching clinic reader actions are proposed (four score facts, eligible A/C and ineligible D); B failure, authorization evidence and whole-trace rejection are retained. All rows remain train-split from one existing clinic source group, are not independent worlds, not DPO, and have no training/trajectory admission. Final hold is supported by the unsigned authorization record, but the full clinic answer is incorrect. Root review required before adoption."
+    },
+    {
       "id": "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1",
       "owner": "pop",
       "path": "runs",
