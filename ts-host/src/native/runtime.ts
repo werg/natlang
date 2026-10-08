@@ -1478,7 +1478,7 @@ export class NativeSession {
     const helperNames = [...this.persistentScopeHelpers.keys()];
     const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
       ...Object.keys(this.availableServices())])];
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read and iterateOn ` +
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read, iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 

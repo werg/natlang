@@ -41,7 +41,7 @@ test('read_code shows the authentic built-in Neuralese type declaration', async 
   assert.match(declaration, /type Neuralese<T, D extends string = DefaultDialect>/);
   assert.match(declaration, /interface NeuraleseValue<T, D extends string>/);
   assert.match(declaration, /no semantic fields to inspect/);
-  assert.match(declaration, /neuralese\.read\(value\)/);
+  assert.match(declaration, /read\(value\) in eval/);
   assert.match(declaration, /String\(value\)/);
   assert.match(declaration, /read-only provenance metadata, not a method/);
   assert.equal(declaration, BUILT_IN_DOCS.Neuralese);
@@ -61,7 +61,7 @@ test('read_code explains textReadSource as metadata and points to typed readout'
   const docs = JSON.parse(inspected.results[0]);
   assert.equal(docs, BUILT_IN_DOCS['neuralese.textReadSource']);
   assert.match(docs, /read-only standard-library metadata, not a callable API/);
-  assert.match(docs, /neuralese\.read\(value\)/);
+  assert.match(docs, /typed operation\s+read\(value\)/);
   assert.match(docs, /String\(value\) for\s+Neuralese<string>/);
   assert.match(docs, /read_code\("neuralese"\)/);
 });
@@ -93,7 +93,7 @@ test('a value of the return type shaped like a request stays a value', async () 
 
 test('reaching for what the scope lacks is answered with what it has', async () => {
   const { results } = await script([['eval', { code: 'const fs = require("fs");\nfs' }], ['eval', { code: 'missingThing + 1' }]]);
-  for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, iterateOn and transcript/);
+  for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, read, iterateOn and transcript/);
 });
 
 test('scope feedback names declared captures separately from properties of the input record', async () => {

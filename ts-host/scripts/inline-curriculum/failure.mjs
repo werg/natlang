@@ -193,14 +193,15 @@ const levels = (name: string): number => {
 levels(chart.find(p => p.manager === null)!.name)`;
   return [['shallow', build(rng.int(3, 4))], ['deep', build(rng.int(6, 8))]].map(([variant, nodes]) => {
     const expected = depthOf(nodes);
-    return curriculumCase({ family: 'recursion_rewrite', shape, variant, pairGroup: `recursion:${shape}`,
+    // Version 2: the reference's own actions all succeed; only the planted helper fails (structural recursion, 2026-10-07).
+    return curriculumCase({ family: 'recursion_rewrite', familyVersion: 2, shape, variant, pairGroup: `recursion:${shape}`,
       slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'avoid',
       // Recursing on a manager's name does not descend into a smaller argument, so the helper fails when it runs.
       evidence: { world: [`depth ${expected}`], retrieved: ['the recursion error'], background: [] },
       decisive: [{ marker: 'without a smaller argument', source: 'error', note: 'the recursive helper does not call itself on a smaller argument' }],
       plausibleActions: ['retry the recursive helper', 'rewrite it with an explicit work list', 'guess the depth'],
       minimumSequence: ['read the error', 'compute each person\'s chain length with a bounded loop'],
-      reference: { failures: 1, root: [evalCall(`const chart = org.people();
+      reference: { root: [evalCall(`const chart = org.people();
 const managerOf: Record<string, string | null> = {};
 for (const p of chart) managerOf[p.name] = p.manager;
 let deepest = 0;

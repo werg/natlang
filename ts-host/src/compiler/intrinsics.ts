@@ -40,7 +40,7 @@ type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: in
 export const NEURALESE_TYPE_DOCUMENTATION =
   `Built-in compile-time type declaration (not a runtime value):\n${NEURALESE_TYPE_DECLARATION}\n` +
   'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields. When the configured Neuralese standard library is available, ' +
-  'read(value) in eval (read<T>(value: Neuralese<T>): Promise<T>) returns the ordinary typed value; it delegates to the configured typed readout. Use String(value) or another supported text-conversion context for Neuralese<string> ' +
+  'read(value) in eval (read<T>(value: Neuralese<T>): Promise<T>) returns the ordinary typed value. Use String(value) or another supported text-conversion context for Neuralese<string> ' +
   'when ordinary text is needed. These operations run the configured typed readout; neuralese.textReadSource is read-only provenance metadata, not a method, ' +
   'and neuralese.bodies.read is only the configured reader body ID. ' +
   'A direct string argument to a declared Neuralese<string> parameter is ' +
