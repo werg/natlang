@@ -14,6 +14,8 @@
  *   --scheduler natural-language            the scheduler's policy in natural language (default crisp)
  *   --admission natural-language            admission in natural language (default crisp)
  *   --pure                                  all three in natural language
+ *   --executor-context N                    the executor's context budget in tokens (default 57344; natlang's
+ *                                           default of 16384 makes the harness functions compact constantly)
  *   --quiet                                 no phase log on stderr
  * `natlang run applications/pi -- eval [NAME...] [--out DIR] [--minutes N] [options]`: the tasks in tasks/, each on a
  * fresh git copy of its repository, judged by its check command.
@@ -26,14 +28,14 @@ import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createModels, createProvider, type AssistantMessage, type Models } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
-import type { TargetContext } from '@natlang/node';
+import { NatlangRuntime, type TargetContext } from '@natlang/node';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
 import type { EntryId } from './vendor/durable/src/types.ts';
 import { codingRegistry, createEnvs } from './extensions/index.ts';
 import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
-const VALUED = ['--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
+const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
   '--session', '--context', '--scheduler', '--admission', '--out', '--minutes'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
@@ -80,6 +82,15 @@ function implementations(args: string[]): { context: Implementation; scheduler: 
 const textOf = (message: AssistantMessage | undefined) =>
   (message?.content ?? []).flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim();
 
+/** The launcher's runtime with the executor's context budget set. */
+function executor(target: TargetContext, args: string[]): NatlangRuntime {
+  const configured = target.runtime.options.model;
+  const base = typeof configured === 'object' && configured ? configured : {};
+  const driver = typeof configured === 'function' ? configured : (configured as { driver?: unknown } | undefined)?.driver ?? target.model;
+  return new NatlangRuntime({ ...target.runtime.options,
+    model: { ...base, driver, contextTokens: Number(option(args, '--executor-context') ?? 57344) } as never });
+}
+
 export type RunResult = { status: string; answer: string; reason?: string; ms: number };
 
 /** Run one task to its answer on a session at `sessionPath`. */
@@ -89,12 +100,13 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   const quiet = args.includes('--quiet');
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);
+  const natlang = executor(target, args);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
   const harness = await openPi({
     storage: await openNodeSqliteStorage(sessionPath),
-    natlang: target.runtime,
+    natlang,
     models,
-    registry: codingRegistry(target.runtime, { cwd }),
+    registry: codingRegistry(natlang, { cwd }),
     env: envs.env,
     implementations: implementations(args),
     onReport: error => log(`  [report] ${error instanceof Error ? error.message : String(error)}`),
