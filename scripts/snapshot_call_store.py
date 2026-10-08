@@ -253,6 +253,7 @@ def snapshot(spec_path: Path, store_root: Path, out_root: Path) -> dict[str, Any
     # cannot be assigned to the selected runs.
     for table in ("iteration_statistics",):
         if table_exists(db, table): db.execute(f"DELETE FROM {table}")
+    blob_meta = {r[0]: r[1] for r in db.execute("SELECT hash,bytes FROM blobs")}
     db.commit()
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     db.execute("VACUUM")
@@ -266,13 +267,16 @@ def snapshot(spec_path: Path, store_root: Path, out_root: Path) -> dict[str, Any
         db.close()
         raise ValueError(f"snapshot SQLite integrity failure: integrity={integrity}, foreign_keys={foreign_key_violations}")
     db.close()
+    wal_path = Path(f"{out_db}-wal")
+    shm_path = Path(f"{out_db}-shm")
+    if wal_path.exists() and wal_path.stat().st_size:
+        raise ValueError(f"snapshot WAL remains nonempty after checkpoint: {wal_path.stat().st_size} bytes")
+    wal_path.unlink(missing_ok=True)
+    shm_path.unlink(missing_ok=True)
 
     blob_out = out_root / "blobs"
     missing: list[dict[str, str]] = []
     copied: list[dict[str, Any]] = []
-    src_ro = sqlite3.connect(f"file:{out_db}?mode=ro", uri=True)
-    blob_meta = {r[0]: r[1] for r in src_ro.execute("SELECT hash,bytes FROM blobs")}
-    src_ro.close()
     for digest in sorted(call_hashes):
         source = source_blobs / digest[:2] / digest[2:]
         target = blob_out / digest[:2] / digest[2:]
@@ -317,7 +321,7 @@ def snapshot(spec_path: Path, store_root: Path, out_root: Path) -> dict[str, Any
         "source_main_db_sha256_non_snapshot": sha256(source_db),
         "source_wal_present_at_capture": (store_root / "calls.sqlite-wal").exists(),
         "snapshot_database": {"path": "calls.sqlite", "sha256": db_hash, "bytes": out_db.stat().st_size,
-                               "method": "Python sqlite3 online backup API"},
+                               "method": "Python sqlite3 online backup API followed by filtering, checkpoint, VACUUM and sidecar cleanup"},
         "runs": [{**run, "selected_call_ids": sorted(run_call_ids[run["run_id"]]),
                   "selected_call_count": len(run_call_ids[run["run_id"]])} for run in run_pins],
         "cross_origin_invocation_id_collisions": cross_origin_collisions,
