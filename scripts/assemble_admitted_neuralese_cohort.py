@@ -47,7 +47,9 @@ def target_digest(row):
     value = row.get('target')
     if not isinstance(value, dict):
         raise ValueError(f"native row has no structured target: {row.get('id')}")
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    # Admission target digests use canonical key ordering so they do not depend on
+    # the insertion order used by the source converter.
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 def receipt_artifact(receipt, name):
     for entry in receipt.get('files', {}).values():
