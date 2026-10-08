@@ -508,3 +508,27 @@ without stringifying or printing their contents. Focused tests exercise both
 valid eval forms, the native tool form, and a malformed object. This is a
 convenience for matching the same read operation's two existing call shapes,
 not a namespace fallback or added read authority.
+
+## Follow-up implementation: typed key, Error, and String argument conversions — 2026-10-08
+
+The prospective candidates in §16 are now implemented in the compiler with
+typed reads at only the native conversion position. Computed element-access
+keys and computed object-literal keys use conditional `ToPropertyKey` readout;
+record receivers and values stay opaque. The default global `Error` function
+and constructor read the first argument when it is a soft union arm, capturing
+the callee and all arguments before awaiting that read. Standard `String`
+methods read only declared text positions for `includes`, `startsWith`,
+`endsWith`, `indexOf`, `lastIndexOf`, `localeCompare`, `padStart`, and `padEnd`.
+The lowering captures the receiver, method, and complete argument list in
+native order, then calls the method with its original receiver. Crisp union
+arms remain unchanged through `readNeuraleseIfReference`; custom methods with
+matching names are not treated as standard String methods.
+
+Focused scope and compiled-module regressions cover key lookup and object
+construction, symbol/crisp arms, nested finite loops, failed read propagation,
+Error options evaluation order, String search/padding argument positions, and
+receiver/argument side effects. The full isolated `neuralese.test.mjs` suite
+passed against `/tmp/natlang-json-union-check/dist`. Commits: `93ce10d8`
+(computed keys), `ecd76d99` (Error messages), and `d04874af` (String method
+arguments). These remain prospective ergonomics fixes: no recent model trace
+was found that attempted any of these exact expressions.
