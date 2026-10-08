@@ -19,8 +19,8 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion' | 'string-replace';
-  argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion' | 'string-replace' | 'array-map';
+  argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true; callback?: { start: number; end: number } };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -107,8 +107,46 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     let parent: ts.Node | undefined = node.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
     const async = parent && ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+    if (!async && parent && (ts.isArrowFunction(parent) || ts.isFunctionExpression(parent))) {
+      const map = asyncArrayMapCallback(parent);
+      const enclosing = map && enclosingAsyncFunction(map.call);
+      if (map && enclosing) {
+        const key = `${map.call.getStart(file)}:${map.call.getEnd()}`;
+        if (!asyncMapCalls.has(key)) {
+          asyncMapCalls.add(key);
+          options.readouts?.push({ ...span(map.call), kind: 'array-map',
+            callback: { start: map.callback.getStart(file), end: map.callback.getEnd() } });
+        }
+        return;
+      }
+    }
     if (!async)
       report(node, 'neuralese-readout-sync', 'Reading a Neuralese value needs async work; make this function async or move the text conversion into async code.');
+  };
+  const asyncMapCalls = new Set<string>();
+  const enclosingAsyncFunction = (call: ts.CallExpression): boolean => {
+    for (let current: ts.Node | undefined = call.parent; current; current = current.parent) {
+      if (ts.isFunctionLike(current)) return !!(ts.canHaveModifiers(current) &&
+        ts.getModifiers(current)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword));
+    }
+    return false;
+  };
+  const asyncArrayMapCallback = (callback: ts.FunctionLikeDeclaration): { call: ts.CallExpression; callback: ts.FunctionLikeDeclaration } | undefined => {
+    if (callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)) return;
+    let expression: ts.Node = callback;
+    while (ts.isParenthesizedExpression(expression.parent)) expression = expression.parent;
+    const argument = expression.parent;
+    if (!ts.isCallExpression(argument) || argument.arguments[0] !== expression || !ts.isPropertyAccessExpression(argument.expression) ||
+        argument.expression.name.text !== 'map' || !standardMethod(argument.expression, ['Array', 'ReadonlyArray'])) return;
+    const receiver = checker.getTypeAtLocation(argument.expression.expression);
+    const alternatives = receiver.isUnion() ? receiver.types : [receiver];
+    if (!alternatives.length || alternatives.some(type => !checker.isArrayType(type) && !checker.isTupleType(type))) return;
+    const signature = checker.getSignatureFromDeclaration(callback);
+    const returns = signature && checker.getReturnTypeOfSignature(signature);
+    if (!returns || returns.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return;
+    const resultTypes = returns.isUnion() ? returns.types : [returns];
+    if (resultTypes.some(type => !!checker.getPropertyOfType(type, 'then'))) return;
+    return { call: argument, callback };
   };
   const standardDeclaration = (symbol: ts.Symbol | undefined, names: readonly string[]): boolean => {
     return !!symbol?.declarations?.some(declaration => {

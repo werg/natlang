@@ -61,7 +61,9 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   for (const local of scope.locals) lines.push(`declare ${local.mutable ? 'let' : 'const'} ${local.name}: ${typeScriptText(local.type, known)};`);
   for (const capture of scope.captures) lines.push(`declare ${capture.mutable ? 'let' : 'const'} ${capture.name}: ${typeScriptText(capture.type, known)};`);
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
-  for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
+  for (const name of scope.services ?? []) lines.push(name === 'neuralese' ?
+    'declare const neuralese: Readonly<{ read<T>(value: Neuralese<T>): Promise<T> }>;':
+    `declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
@@ -144,7 +146,8 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
     templateSpan: shift(plan.templateSpan),
     interpolations: plan.interpolations.map(item => ({ ...item, sourceSpan: shift(item.sourceSpan) })),
     captures: plan.captures.map(capture => ({ ...capture, mentionSpan: capture.mentionSpan - offset })) })),
-    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(shift),
+    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(item => ({ ...shift(item),
+      ...(item.callback ? { callback: { start: item.callback.start - offset, end: item.callback.end - offset } } : {}) })),
     rebinds: rebinds.map(site => ({ ...site, start: site.start - offset, end: site.end - offset,
       templateStart: site.templateStart - offset, templateEnd: site.templateEnd - offset })) };
 }

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -263,6 +264,10 @@ def _verify_ledger_events(events, identity):
                     or row.get('queue_sha256') != claim.get('queue_sha256')):
                 raise ValueError('Unbound or duplicate terminal claim event')
             terminals.add(claim_id)
+        elif event in {'storage_paused', 'storage_resumed'}:
+            if (type(row.get('free_mib')) is not int or type(row.get('min_free_mib')) is not int
+                    or row['free_mib'] < 0 or row['min_free_mib'] < 0):
+                raise ValueError('Invalid storage pause/resume event')
         elif event not in {'campaign_stopped', 'campaign_finished', 'dispatcher_error'}:
             raise ValueError(f'Unknown claim ledger event type: {event!r}')
     open_slots = set()
@@ -384,6 +389,19 @@ def _authority_update(identity, binding=None, *, preflight=False):
 def _authority_preflight(identity):
     """Do not let a new dynamic plan silently overlap another Luna campaign."""
     _authority_update(identity, preflight=True)
+
+
+def _free_space_mib(path=ROOT):
+    """Return free filesystem space for the dispatcher pre-claim guard."""
+    return shutil.disk_usage(path).free // (1024 * 1024)
+
+
+def _set_launch_status(path, identity, status, **extra):
+    path = Path(path)
+    record = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'identity': identity}
+    record['status'] = status
+    record.update(extra)
+    atomic_json(path, record)
 
 
 def _claim_queue(plan, identity, slot, case):
@@ -528,6 +546,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
         next_case = 0
         all_children = list(active.values())
         termination_sent = set()
+        storage_paused = False
 
         def terminate_once(process):
             pid = process.pid
@@ -545,6 +564,32 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         break
                     if slot in active:
                         continue
+                    free_mib = _free_space_mib(ROOT)
+                    minimum = plan.get('min_free_mib', 1024)
+                    if free_mib < minimum:
+                        if not storage_paused:
+                            _append_event(ledger, {'event': 'storage_paused',
+                                                   'identity_sha256': identity['identity_sha256'],
+                                                   'free_mib': free_mib,
+                                                   'min_free_mib': minimum,
+                                                   'next_case_index': cases[next_case]['index'],
+                                                   'paused_at': _now(),
+                                                   'disposition': 'no case claimed; pending case list preserved'})
+                            _set_launch_status(launch_record, identity, 'storage_paused',
+                                               paused_at=_now(), free_mib=free_mib,
+                                               min_free_mib=minimum,
+                                               pending_indices=[row['index'] for row in cases[next_case:]])
+                            storage_paused = True
+                        break
+                    if storage_paused:
+                        _append_event(ledger, {'event': 'storage_resumed',
+                                               'identity_sha256': identity['identity_sha256'],
+                                               'free_mib': free_mib,
+                                               'min_free_mib': minimum,
+                                               'resumed_at': _now(),
+                                               'disposition': 'pending case list retained'})
+                        _set_launch_status(launch_record, identity, 'running', resumed_at=_now())
+                        storage_paused = False
                     case = cases[next_case]
                     next_case += 1
                     entry, queue, queue_sha, journal, supervisor_log, queue_payload = _claim_queue(plan, identity, slot, case)
@@ -590,6 +635,9 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                 if active:
                     time.sleep(1)
                 elif next_case < len(cases) and not _stop_requested:
+                    # No child can make progress while storage is low. Poll at a
+                    # short interval so SIGINT/SIGTERM and freed space are noticed.
+                    time.sleep(2)
                     continue
                 elif _stop_requested:
                     break

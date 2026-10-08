@@ -128,6 +128,7 @@ def main():
         return (manifest.is_file() and base_approval.get("output_manifest_sha256") == sha_file(manifest) and
                 json.loads(manifest.read_text())["outputs"]["text.jsonl"]["sha256"] == sha_file(text))
     root_admission = base_approval.get("schema") == "natlang.root-corpus-admission/1"
+    root_integration_admission = base_approval.get("schema") == "natlang.root-corpus-integration-admission/1"
     if root_admission and (not str(base_approval.get("status", "")).startswith("admitted-")
                            or base_approval.get("admission", {}).get("native_sft") is not True
                            or base_approval.get("admission", {}).get("derived_ordinary_gold_text") is not True):
@@ -135,9 +136,12 @@ def main():
     root_text = next((entry for entry in base_approval.get("files", {}).values()
                       if entry.get("path", "").endswith("text.jsonl")), None) if root_admission else None
     root_text_binds = bool(root_text and root_text.get("sha256") == sha_file(approved_text))
-    if ((base_approval.get("approved") is not True and not root_admission) or
+    integration_text_binds = bool(root_integration_admission and
+        base_approval.get("qualification_scope", {}).get("native_sft_only") is True and
+        base_approval.get("outputs", {}).get("text", {}).get("sha256") == sha_file(approved_text))
+    if ((base_approval.get("approved") is not True and not root_admission and not root_integration_admission) or
             (base_approval.get("text_sha256") != sha_file(approved_text) and
-             not root_text_binds and not manifest_binds(approved_text))):
+             not root_text_binds and not integration_text_binds and not manifest_binds(approved_text))):
         raise ValueError("base text root receipt does not approve/bind the exact text prefix")
     if args.twin_of_text:
         def identity(path):  # tokenizer-independent document identity: ID, split and the admitted source records
@@ -164,10 +168,12 @@ def main():
         admitted_by_id = {item["native_id"]: item for item in admission_rows}
         for row in delta_records:
             admission = admitted_by_id.get(row.get("id"))
-            digest = sha(json.dumps(row.get("target"), ensure_ascii=False, separators=(",", ":")).encode())
+            digest = sha(json.dumps(row.get("target"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
             if not admission or digest != admission.get("target_sha256"):
                 raise ValueError(f"root action admission target binding mismatch: {row.get('id')}")
-            if row.get("split") != admission.get("split") or admission.get("source_group") not in row.get("source_groups", []):
+            groups = admission.get("source_groups")
+            if groups is None and isinstance(admission.get("source_group"), str): groups = [admission["source_group"]]
+            if row.get("split") != admission.get("split") or not isinstance(groups, list) or groups != row.get("source_groups", []):
                 raise ValueError(f"root action admission split/group mismatch: {row.get('id')}")
     else:
         approved_ids = source_approval.get("approved_row_ids")

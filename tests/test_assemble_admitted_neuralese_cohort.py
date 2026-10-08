@@ -64,20 +64,20 @@ class AssemblerInvariantTests(unittest.TestCase):
                      "messages": [], "decision": {"failed_action": False, "training_approved": False},
                      "training_admission": {"approved": False}}
             delta_native = root / "delta-native.jsonl"; delta_native.write_text(json.dumps(delta) + "\n")
-            approval_row = {"native_id": "selected", "split": "train", "source_group": "selected-world",
-                            "target_sha256": hashlib.sha256(json.dumps(target, separators=(",", ":")).encode()).hexdigest(),
+            approval_row = {"native_id": "selected", "split": "train", "source_groups": ["selected-world"],
+                            "target_sha256": hashlib.sha256(json.dumps(target, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
                             "decision": "admit-exact-selected-native-action-SFT-only"}
             approval = root / "admission.json"
             approval.write_text(json.dumps({"schema": "natlang.root-selected-action-admission/1",
                 "rows": [approval_row], "counts": {"native_SFT_train_actions": 1, "whole_trajectories": 0},
                 "qualifications": {"recurrence": False, "learned_writer": False}}))
             base_receipt = root / "base-receipt.json"
-            base_receipt.write_text(json.dumps({"schema": "natlang.root-corpus-admission/1",
-                "status": "admitted-exact-source-grounded", "admission": {"native_sft": True}, "files": {
-                "native": {"path": "native-records.jsonl", "sha256": builder.sha(native)},
-                "recurrence": {"path": "recurrence-records.jsonl", "sha256": builder.sha(recurrence)},
-                "native_pieces": {"path": "native-pieces.jsonl", "sha256": builder.sha(native_pieces)},
-                "recurrence_pieces": {"path": "recurrence-pieces.jsonl", "sha256": builder.sha(recurrence_pieces)}}}))
+            base_receipt.write_text(json.dumps({"schema": "natlang.corpus-prefix-binding/1",
+                "status": "verified-exact-prefix", "training_admission": False, "files": {
+                "native-records.jsonl": {"sha256": builder.sha(native)},
+                "recurrence-records.jsonl": {"sha256": builder.sha(recurrence)},
+                "native-pieces.jsonl": {"sha256": builder.sha(native_pieces)},
+                "recurrence-pieces.jsonl": {"sha256": builder.sha(recurrence_pieces)}}}))
             out = root / "out"
             argv = ["assembler", "--base-native", str(native), "--base-recurrence", str(recurrence),
                     "--base-receipt", str(base_receipt), "--delta-native", str(delta_native),

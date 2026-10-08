@@ -1,5 +1,5 @@
 /** A value-only TypeScript view of an undeclared host service; never evaluate accessors or show field values. */
-export function undeclaredServiceType(value: unknown, depth = 0): string {
+export function undeclaredServiceType(value: unknown, depth = 0, serviceName?: string): string {
   if (typeof value === 'function') return '(...args: unknown[]) => unknown';
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'readonly unknown[]';
@@ -16,7 +16,9 @@ export function undeclaredServiceType(value: unknown, depth = 0): string {
   const entries = Object.entries(descriptors).filter(([, descriptor]) => descriptor.enumerable);
   if (!entries.length || entries.length > 64) return 'Readonly<Record<string, unknown>>';
   const fields = entries.map(([key, descriptor]) => {
-    const type = Object.hasOwn(descriptor, 'value') ? undeclaredServiceType(descriptor.value, depth + 1) : 'unknown';
+    const type = serviceName === 'neuralese' && key === 'read' && depth === 0 ?
+      '<T>(value: Neuralese<T>) => Promise<T>' :
+      Object.hasOwn(descriptor, 'value') ? undeclaredServiceType(descriptor.value, depth + 1) : 'unknown';
     return `readonly ${JSON.stringify(key)}: ${type}`;
   });
   return `Readonly<{ ${fields.join('; ')} }>`;

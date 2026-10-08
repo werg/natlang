@@ -47,7 +47,9 @@ def target_digest(row):
     value = row.get('target')
     if not isinstance(value, dict):
         raise ValueError(f"native row has no structured target: {row.get('id')}")
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    # Admission target digests use canonical key ordering so they do not depend on
+    # the insertion order used by the source converter.
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 def receipt_artifact(receipt, name):
     for entry in receipt.get('files', {}).values():
@@ -150,7 +152,18 @@ def main():
     approval = json.loads(paths['approval'].read_text())
     base_receipt = json.loads(paths['base-receipt'].read_text())
     root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
-    if root_corpus_receipt:
+    prefix_binding = base_receipt.get('schema') == 'natlang.corpus-prefix-binding/1'
+    if prefix_binding:
+        if base_receipt.get('status') != 'verified-exact-prefix' or base_receipt.get('training_admission') is not False:
+            raise ValueError('base prefix binding must be verification-only, with no training admission')
+        for name, path in (('native-records.jsonl', paths['base-native']),
+                           ('recurrence-records.jsonl', paths['base-recurrence']),
+                           ('native-pieces.jsonl', paths['base-native-pieces']),
+                           ('recurrence-pieces.jsonl', paths['base-recurrence-pieces'])):
+            binding = (base_receipt.get('files') or {}).get(name)
+            if not binding or binding.get('sha256') != sha(path):
+                raise ValueError(f'base prefix binding does not bind the exact {name}')
+    elif root_corpus_receipt:
         if (not str(base_receipt.get('status', '')).startswith('admitted-')
                 or base_receipt.get('admission', {}).get('native_sft') is not True):
             raise ValueError('base root receipt does not grant native SFT admission')
@@ -222,7 +235,11 @@ def main():
             decision = approval_by_id[row['id']]
             if target_digest(row) != decision.get('target_sha256'):
                 raise ValueError(f'root admission target digest mismatch: {row["id"]}')
-            if row.get('split') != decision.get('split') or decision.get('source_group') not in (row.get('source_groups') or []):
+            decision_groups = decision.get('source_groups')
+            if decision_groups is None and isinstance(decision.get('source_group'), str):
+                decision_groups = [decision['source_group']]
+            if (row.get('split') != decision.get('split') or not isinstance(decision_groups, list) or
+                    not decision_groups or decision_groups != (row.get('source_groups') or [])):
                 raise ValueError(f'root admission source split/group mismatch: {row["id"]}')
             row['training_admission'] = {
                 'approved': True, 'kind': 'root-selected-native-action-sft-only',

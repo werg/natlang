@@ -168,6 +168,51 @@ def test_free_slot_pulls_next_case_and_reuses_failure_cooldown_journal(reviewed_
     assert Path(by_index[0].journal) == Path(by_index[2].journal)
 
 
+def test_storage_floor_pauses_before_claim_and_resumes_pending_case(reviewed_plan, monkeypatch):
+    _mock_controls(monkeypatch)
+    plan_path, plan_sha, campaign_root, plan = reviewed_plan
+    plan['slots'] = 1
+    plan['cases'] = plan['cases'][:2]
+    plan['min_free_mib'] = 10
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    plan_sha = dispatcher.digest(plan_path)
+
+    free = iter([10, 0, 10, 10, 10])
+    monkeypatch.setattr(dispatcher, '_free_space_mib', lambda _path: next(free, 10))
+    made = []
+
+    class FakeRunner:
+        def __init__(self, command, **kwargs):
+            self.pid = 51000 + len(made)
+            self.queue, self.entry, self.journal = _entry_for_queue(command)
+            made.append(self.entry['index'])
+        def poll(self):
+            with Path(self.journal).open('a') as stream:
+                stream.write(json.dumps({'event': 'finish', 'key': self.entry['key'], 'status': 'complete',
+                                         'exit_code': 0, 'output_accounting': {'complete': True}}) + '\n')
+            return 0
+        def terminate(self): pass
+        def wait(self, timeout=None): return 0
+
+    monkeypatch.setattr(dispatcher.subprocess, 'Popen', FakeRunner)
+    assert dispatcher.run_dispatcher(plan_path, plan_sha) == 0
+    events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
+    kinds = [row.get('event') for row in events]
+    pause = kinds.index('storage_paused')
+    resume = kinds.index('storage_resumed')
+    claims = [(i, row['index']) for i, row in enumerate(events) if row.get('event') == 'claim']
+    assert claims[0][0] < pause < resume < claims[1][0]
+    assert [index for _, index in claims] == [0, 1]
+    assert events[pause]['next_case_index'] == 1
+    assert events[pause]['disposition'] == 'no case claimed; pending case list preserved'
+    assert made == [0, 1]
+    assert not any(row.get('event') == 'abandoned' for row in events)
+    _, identity = dispatcher.validate_plan(plan_path, plan_sha)
+    identity['identity_sha256'] = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    dispatcher._verify_ledger_events(events, identity)
+
+
 def test_resume_holds_uncertain_claim_and_dispatches_only_unclaimed_cases(reviewed_plan, monkeypatch):
     _mock_controls(monkeypatch)
     plan_path, plan_sha, campaign_root, plan = reviewed_plan

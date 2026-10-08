@@ -775,7 +775,28 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const stringReplaces = new Map(readouts.filter(readout => readout.kind === 'string-replace')
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const arrayMapReadouts = new Map(readouts.filter(readout => readout.kind === 'array-map')
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const asyncMapCallbacks = new Set([...arrayMapReadouts.values()].flatMap(readout => readout.callback ?
+    [`${readout.callback.start}:${readout.callback.end}`] : []));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        arrayMapReadouts.has(`${rel(node).start}:${rel(node).end}`) && node.arguments[0]) {
+      const readout = arrayMapReadouts.get(`${rel(node).start}:${rel(node).end}`)!;
+      lowerNodes(node.expression.expression);
+      for (const argument of node.arguments) lowerNodes(argument);
+      if (readout.callback) primitive.push({ start: readout.callback.start,
+        end: readout.callback.start, text: 'async ' });
+      const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const receiverName = `__natlang_map_receiver_${rel(node).start}`;
+      const methodName = `__natlang_map_method_${rel(node).start}`;
+      const argsName = `__natlang_map_args_${rel(node).start}`;
+      primitive.push({ ...rel(node), composed: true,
+        text: `(await ((${receiverName}: any) => { const ${methodName} = ${receiverName}.map; ` +
+          `const ${argsName} = [${args}]; return __live.mapNeuraleseReadout(${receiverName}, ${methodName}, ${argsName}); })(${receiver}))` });
+      return;
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         stringReplaces.has(`${rel(node).start}:${rel(node).end}`)) {
       const readout = stringReplaces.get(`${rel(node).start}:${rel(node).end}`)!;
@@ -1033,7 +1054,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const callable = authored.find(item => item.node === node);
       if (callable) {
         const id = JSON.stringify(callable.id);
-        const isAsync = !!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+        const isAsync = !!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+          asyncMapCallbacks.has(`${rel(node).start}:${rel(node).end}`);
         const body = rel(node.body), args = `[${guardArguments(node).join(', ')}]`;
         // The openings replace a token so that edits starting at the same place stay inside the guard.
         if (ts.isBlock(node.body)) {

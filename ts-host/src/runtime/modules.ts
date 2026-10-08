@@ -59,6 +59,8 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let conditionalReadouts = new Set<string>();
   let joins = new Set<string>();
   let arrayStrings = new Set<string>();
+  let arrayMaps = new Set<string>();
+  let arrayMapCallbacks = new Set<string>();
   let concats = new Set<string>();
   let jsons = new Set<string>();
   let errorReadouts = new Set<string>();
@@ -104,6 +106,9 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     conditionalReadouts = new Set(analysis.readouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`));
     joins = new Set(analysis.readouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`));
     arrayStrings = new Set(analysis.readouts.filter(item => item.kind === 'array-string').map(item => `${item.start}:${item.end}`));
+    arrayMaps = new Set(analysis.readouts.filter(item => item.kind === 'array-map').map(item => `${item.start}:${item.end}`));
+    arrayMapCallbacks = new Set(analysis.readouts.filter(item => item.kind === 'array-map' && item.callback)
+      .map(item => `${item.callback!.start}:${item.callback!.end}`));
     concats = new Set(analysis.readouts.filter(item => item.kind === 'concat').map(item => `${item.start}:${item.end}`));
     jsons = new Set(analysis.readouts.filter(item => item.kind === 'json').map(item => `${item.start}:${item.end}`));
     errorReadouts = new Set(analysis.readouts.filter(item => item.kind === 'error').map(item => `${item.start}:${item.end}`));
@@ -121,9 +126,9 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   }
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
-    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, concats, jsons,
+    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, arrayMaps, concats, jsons,
       errors: errorReadouts, stringArguments, scalarConversions, stringReplaces, runtime: '__natlang', context: '__natlang_context',
-      constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
+      arrayMapCallbacks, constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
       modulePath: record.source, browser: moduleTarget === 'browser' })] } });
   const errors = (output.diagnostics ?? []).filter(item => item.category === ts.DiagnosticCategory.Error);
   if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));

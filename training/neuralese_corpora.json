@@ -7969,6 +7969,170 @@
         "neuralese-v24-v9-three-action-native-text-20261008-v2"
       ],
       "notes": "Shared corrected causal input-map warmup: fullprojection goldembedding supervision retained; map self-consistency target separate; frozen109Pythonfiles, launch from19998weights/RNG and explicit fresh optimizer for changed trainables. Active train-continuation excluded from immutable manifest; publish only when sealed. Mapped text alignment is not autoregressive/runtime/function qualification."
+    },
+    {
+      "id": "verified-reasoning-pools-v18-luna-closed-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
+      "include": [
+        "generation-review-v1/luna/campaign-v1/*",
+        "generation-review-v1/luna/campaign-v1/**/*",
+        "closed-campaign-packet-v1/*"
+      ],
+      "admission": "closed-generation-and-parent-grading-evidence-only; no-quality-trace-DPO-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v18-answer-key-v2-20261008-v1",
+        "verified-reasoning-pools-v18-luna-launch-20261008-v1"
+      ],
+      "notes": "Complete immutable raw V18 Luna campaign and closeout summary: 32 claims, 31 parent result rows, 26 accepted, 5 rejected, and one zero-row transport failure. Failed actions and scope failures remain in traces. Parent acceptance is generation grading only; no semantic, quality, trace, DPO, or training admission."
+    },
+    {
+      "id": "neuralese-lfm-input-map-completed-state-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "train-continuation/**/*",
+        "training-closure.json"
+      ],
+      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-launch-preparation-20261008-v1"
+      ],
+      "notes": "Initial publication glob omitted direct train-continuation files; closure receipt only (one file). No complete-state credit. Superseded by v2; preserved explicit omission."
+    },
+    {
+      "id": "neuralese-lfm-input-map-completed-state-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "train-continuation/*",
+        "train-continuation/**/*",
+        "training-closure.json"
+      ],
+      "admission": "completed-training-state; not-training-data-task-or-autonomous-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-launch-preparation-20261008-v1",
+        "neuralese-lfm-input-map-completed-state-20261008-v1"
+      ],
+      "notes": "Complete20992 optimizer/RNG/head state, metrics and text-alignment gate receipts. V2 fixes direct-file inclusion omission of V1. Runtime diagnostics separate; frozen b4e2e84e is not retroactively updated by bootstrap fix."
+    },
+    {
+      "id": "neuralese-lfm-input-map-qualified-runtime-ar-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "runtime-qualified-probe-v1/*",
+        "runtime-wide-probe-v1/*",
+        "runtime-probe-launch.json",
+        "runtime-wide-launch.json",
+        "held-ar-probe-v1/*"
+      ],
+      "admission": "exact-weight-runtime-and-AR-diagnostic-evidence-only; not-training-data-task-or-stopping-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-completed-state-20261008-v2"
+      ],
+      "notes": "Trained-head exact replay/wire/input adjoints at lengths8/32/128/512 pass; broader16 held AR512 windows expose5 channel-drift spans versus crisp-exact reference.11 share crisp first divergence. No post-divergence gold-CE task failure claim. Scratch inspect filename import failure and corrected drift probe preserved."
+    },
+    {
+      "id": "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+      "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+      "include": [
+        "source-build/*",
+        "source-build/**/*",
+        "source-verification.json",
+        "review-v1/root-independent-verification.json",
+        "review-v1/prior-source-disjointness.json",
+        "review-v1/source-summary.json",
+        "review-v1/case-source-gold-summary.json",
+        "root-source-runtime-review.json"
+      ],
+      "admission": "root-approved-source-generation; teacher-and-training-held",
+      "derived_from": [
+        "s1-full-final-20261003",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2-20261008-v1"
+      ],
+      "notes": "25 derived task variants/cases over 100 unique original S1 train records (100 items total, four per case) from reasoning_gym and reasoning_synlogic. Root-expanded comparison found zero overlap with 287 prior original IDs. Independent verifier SHA bbe0bfb3c8bb7c5953991709c0c12f31d824d38c72f1ecbf07b3bb65f2584188. Constructed variants receive zero independent-world credit. Teacher outputs, quality, semantic, trace, DPO, and training admission remain held.",
+      "owner": "pop"
+    },
+    {
+      "id": "verified-reasoning-pools-v19-frozen-runtime-reference-20261008-v1",
+      "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+      "include": [
+        "runtime-build/runtime/*",
+        "runtime-build/runtime/**/*",
+        "runtime-reference-ling-v1/*",
+        "runtime-reference-ling-v1/**/*",
+        "generation-review-v2/luna/launch-packet-v2/README.md"
+      ],
+      "admission": "immutable-frozen-runtime-and-cpu-reference-proof; no-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
+      ],
+      "notes": "Frozen compiled successor runtime receipt bf7889dbf75f46e875e2bd38734f324f9c92d3a732c1c627f799d76e9f484769 includes d9340de1 map fix 5825a4c3 and read API 5cf78e01 lineage. CPU reference proof covers 25/25 cases and 211 native deterministic reference decisions with zero provider calls; not teacher output, runtime qualification, or training admission.",
+      "owner": "pop"
+    },
+    {
+      "id": "verified-reasoning-pools-v19-luna-prestart-stop-20261008-v1",
+      "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+      "include": [
+        "generation-review-v1/luna/campaign-v1/*",
+        "generation-review-v1/luna/campaign-v1/**/*"
+      ],
+      "admission": "closed-zero-call-storage-prestart-stop; no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
+      ],
+      "notes": "Original approved attempt is preserved separately: 25 claims terminalized abandoned when 7367 MiB free space was below 8192 MiB floor; zero provider calls and zero result rows. It is not resumed. Failure retained as operational provenance.",
+      "owner": "pop"
+    },
+    {
+      "id": "verified-reasoning-pools-v19-luna-launch-20261008-v1",
+      "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+      "include": [
+        "generation-review-v2/luna/launch-packet-v2/*",
+        "generation-review-v2/luna/launch-packet-v2/**/*"
+      ],
+      "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+        "verified-reasoning-pools-v19-frozen-runtime-reference-20261008-v1"
+      ],
+      "notes": "Immutable launch-time packet for root-approved five-slot Luna storage-recovery campaign. Captures approved exact plan, authorization, immutable review-time authority snapshot, initial dispatcher launch receipt, and claim ledger. Live campaign results will be published as a separate closure snapshot after completion. This packet grants no result or data admission.",
+      "owner": "pop"
+    },
+    {
+      "id": "neuralese-v22-retired-heads-best-state-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261008-v22",
+      "include": [
+        "heads.pt",
+        "best-heads.pt",
+        "best-checkpoint.pt",
+        "best-checkpoint.json",
+        "heads-export-status.json"
+      ],
+      "admission": "retired-closed-weights-and-best-state-only; not-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1"
+      ],
+      "notes": "Remaining closed V22 head/best-state artifacts were omitted by prior handoff publication. Register explicitly before verified offload. Active refinement resumes20992map and has no V22 live reference."
+    },
+    {
+      "id": "neuralese-lfm-input-map-refinement-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
+      "include": [
+        "recipe.json",
+        "train-launch.prepared.json",
+        "train-launch.json",
+        "runtime/*",
+        "runtime/**/*"
+      ],
+      "admission": "immutable-active-execution-provenance-only; no-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-completed-state-20261008-v2"
+      ],
+      "notes": "Frozen e3198f93 Python package and declared tighter-check refinement launch, exact20992 optimizer/RNG resume. Live outputs deliberately excluded; no inherited AR/runtime/task/stopping qualification."
     }
   ],
   "coverage_backlog": [

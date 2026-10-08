@@ -127,6 +127,54 @@ class OffloadTests(unittest.TestCase):
         states = [json.loads(line)['status'] for line in history.read_text().splitlines()]
         self.assertEqual(states, ['verified_not_unlinked', 'unlinked'])
 
+    def test_execute_unlinks_selected_hardlinks_after_refreshing_only_the_remaining_inode_stats(self):
+        checkpoint = self.root / 'checkpoint.pt'
+        hardlink = self.root / 'checkpoint-hardlink.pt'
+        hardlink.hardlink_to(checkpoint)
+        files = [{'path': path.name, 'bytes': len(self.body),
+                  'sha256': hashlib.sha256(self.body).hexdigest()} for path in (checkpoint, hardlink)]
+        manifest = {**self.manifest, 'files': files, 'bytes': 2 * len(self.body)}
+        self.args.files = [item['path'] for item in files]
+        selected = module.select_manifest_files(manifest, self.args.files)
+        remote = {'id': selected['id'], 'status': 'verified', 'verification_scope': 'ssh-remote',
+                  'manifest_sha256': hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest(),
+                  'verified_hostname': 'dgx-host', 'machine_boot_id': 'remote-boot',
+                  'verified_repo': '/remote/repo'}
+        self.args.execute = True
+        output = io.StringIO()
+        with patch.object(module, 'local_references', return_value={
+                'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
+             patch.object(module, 'machine_boot_id', return_value='local-boot'), \
+             patch.object(module, 'sync', return_value=remote), contextlib.redirect_stdout(output):
+            module.offload(self.repo, self.entry, manifest, self.args)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['status'], 'unlinked')
+        self.assertFalse(checkpoint.exists())
+        self.assertFalse(hardlink.exists())
+        receipt = json.loads(Path(result['receipt']).read_text())
+        self.assertEqual(receipt['removed_files'], ['checkpoint.pt', 'checkpoint-hardlink.pt'])
+        self.assertEqual(receipt['status'], 'unlinked')
+
+    def test_execute_rejects_real_content_change_after_remote_verification(self):
+        selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
+        remote = {'id': selected['id'], 'status': 'verified', 'verification_scope': 'ssh-remote',
+                  'manifest_sha256': hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest(),
+                  'verified_hostname': 'dgx-host', 'machine_boot_id': 'remote-boot',
+                  'verified_repo': '/remote/repo'}
+        self.args.execute = True
+
+        def transfer(*_args):
+            (self.root / 'checkpoint.pt').write_bytes(b'external content change')
+            return remote
+
+        with patch.object(module, 'local_references', return_value={
+                'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
+             patch.object(module, 'machine_boot_id', return_value='local-boot'), \
+             patch.object(module, 'sync', side_effect=transfer):
+            with self.assertRaisesRegex(ValueError, 'local files or references changed after remote verification'):
+                module.offload(self.repo, self.entry, self.manifest, self.args)
+        self.assertEqual((self.root / 'checkpoint.pt').read_bytes(), b'external content change')
+
     def test_execute_refuses_unwritable_resolved_parent_before_transfer(self):
         self.args.execute = True
         real_access = module.os.access

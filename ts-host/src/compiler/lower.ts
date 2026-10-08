@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic, suffixWithCallOf } from './inline.js';
-import { authoredCallables, guardArguments, loopLabel, makesCalls } from './policy.js';
+import { authoredCallables, finiteCounterComparison, guardArguments, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
@@ -24,6 +24,10 @@ export type LowerOptions = {
   joins?: ReadonlySet<string>;
   /** Call spans of Array#toString whose array element type contains Neuralese values. */
   arrayStrings?: ReadonlySet<string>;
+  /** Calls whose inline synchronous Array#map callback contains a typed async readout. */
+  arrayMaps?: ReadonlySet<string>;
+  /** Callback spans for those calls; their recursion guard must retain the generated async boundary. */
+  arrayMapCallbacks?: ReadonlySet<string>;
   /** Call spans of string concatenations whose arguments include typed Neuralese values. */
   concats?: ReadonlySet<string>;
   /** Call spans of JSON.stringify whose first value argument needs typed Neuralese readout. */
@@ -96,6 +100,47 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
+          options.arrayMaps?.has(`${source.getStart(file)}:${source.getEnd()}`) && node.arguments[0]) {
+        const receiver = f.createUniqueName('__natlang_map_receiver');
+        const method = f.createUniqueName('__natlang_map_method');
+        const args = f.createUniqueName('__natlang_map_args');
+        const callback = ts.visitNode(node.arguments[0], visit) as ts.Expression;
+        const makeAsync = (expression: ts.Expression): ts.Expression => {
+          if (ts.isParenthesizedExpression(expression)) return f.updateParenthesizedExpression(expression, makeAsync(expression.expression));
+          if (ts.isArrowFunction(expression)) {
+            const modifiers = [...(expression.modifiers ?? [])];
+            if (!modifiers.some(item => item.kind === ts.SyntaxKind.AsyncKeyword)) modifiers.unshift(f.createModifier(ts.SyntaxKind.AsyncKeyword));
+            return f.updateArrowFunction(expression, modifiers, expression.typeParameters, expression.parameters,
+              expression.type, expression.equalsGreaterThanToken, expression.body);
+          }
+          if (ts.isFunctionExpression(expression)) {
+            const modifiers = [...(expression.modifiers ?? [])];
+            if (!modifiers.some(item => item.kind === ts.SyntaxKind.AsyncKeyword)) modifiers.unshift(f.createModifier(ts.SyntaxKind.AsyncKeyword));
+            return f.updateFunctionExpression(expression, modifiers, expression.asteriskToken, expression.name,
+              expression.typeParameters, expression.parameters, expression.type, expression.body);
+          }
+          return expression;
+        };
+        const asyncCallback = makeAsync(callback);
+        const body = f.createBlock([
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(method, undefined, undefined, f.createPropertyAccessExpression(receiver, 'map'))], ts.NodeFlags.Const)),
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(args, undefined, undefined, f.createArrayLiteralExpression([
+              asyncCallback, ...node.arguments.slice(1).map(argument => ts.visitNode(argument, visit) as ts.Expression)]))], ts.NodeFlags.Const)),
+          f.createReturnStatement(f.createCallExpression(runtime('mapNeuraleseReadout'), undefined, [receiver, method, args])),
+        ], true);
+        const lower = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, body)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        if (options.browser) {
+          const bound = f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier('globalThis'), '__natlang_bindAwait'),
+            undefined, [lower]);
+          return f.createCallExpression(f.createParenthesizedExpression(f.createAwaitExpression(bound)), undefined, []);
+        }
+        return f.createAwaitExpression(lower);
+      }
       if ((ts.isCallExpression(node) || ts.isNewExpression(node)) &&
           (ts.isCallExpression(source) || ts.isNewExpression(source)) &&
           options.errors?.has(`${source.getStart(file)}:${source.getEnd()}`) && node.arguments?.length) {
@@ -358,24 +403,33 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       // A numeric loop has a fixed finite bound and a strictly advancing counter.
       if (options.constrained && ts.isForStatement(node) && node.initializer &&
           ts.isVariableDeclarationList(node.initializer) && node.initializer.declarations.length === 1 &&
-          node.condition && ts.isBinaryExpression(node.condition)) {
+          node.condition) {
         const declaration = node.initializer.declarations[0]!;
         if (ts.isIdentifier(declaration.name)) {
           const counter = declaration.name;
-          const left = ts.isIdentifier(node.condition.left) && node.condition.left.text === counter.text;
+          const boundedCondition = finiteCounterComparison(node.condition, counter.text);
+          if (!boundedCondition) return ts.visitEachChild(node, visit, context);
+          const comparison = boundedCondition.comparison;
+          const left = ts.isIdentifier(comparison.left) && comparison.left.text === counter.text;
           const bound = f.createUniqueName('__natlang_bound');
           const progress = f.createUniqueName('__natlang_progress');
-          const kind = node.condition.operatorToken.kind;
+          const kind = comparison.operatorToken.kind;
           const upward = left ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
             kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
           const initializer = f.updateVariableDeclarationList(node.initializer, [
             ts.visitNode(declaration, visit) as ts.VariableDeclaration,
-            f.createVariableDeclaration(bound, undefined, undefined, ts.visitNode(left ? node.condition.right : node.condition.left, visit) as ts.Expression),
+            f.createVariableDeclaration(bound, undefined, undefined, ts.visitNode(left ? comparison.right : comparison.left, visit) as ts.Expression),
             f.createVariableDeclaration(progress, undefined, undefined,
               f.createCallExpression(runtime('numericProgress'), undefined, [counter, bound, upward ? f.createTrue() : f.createFalse()]))]);
           const body = ts.visitNode(node.statement, visit) as ts.Statement;
+          const condition = ts.visitNode(node.condition, function replaceBoundedComparison(child: ts.Node): ts.Node {
+            if (child === comparison)
+              return f.updateBinaryExpression(comparison, left ? counter : bound, comparison.operatorToken,
+                left ? bound : counter);
+            return ts.visitEachChild(child, replaceBoundedComparison, context);
+          }) as ts.Expression;
           return f.updateForStatement(node, initializer,
-            f.updateBinaryExpression(node.condition, left ? counter : bound, node.condition.operatorToken, left ? bound : counter),
+            condition,
             ts.visitNode(node.incrementor, visit) as ts.Expression | undefined,
             f.createBlock([f.createExpressionStatement(f.createCallExpression(progress, undefined, [counter])),
               ...(ts.isBlock(body) ? body.statements : [body])], true));
@@ -395,7 +449,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) && node.body &&
           makesCalls(source as ts.SignatureDeclaration)) {
         const visited = ts.visitEachChild(node, visit, context) as typeof node;
-        const isAsync = !!visited.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+        const isAsync = !!visited.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+          options.arrayMapCallbacks?.has(`${source.getStart(source.getSourceFile())}:${source.getEnd()}`) === true;
         const body = visited.body!;
         const inner = f.createArrowFunction(isAsync ? [f.createModifier(ts.SyntaxKind.AsyncKeyword)] : undefined, undefined, [],
           undefined, undefined, ts.isBlock(body) ? body : f.createParenthesizedExpression(body as ts.Expression));
