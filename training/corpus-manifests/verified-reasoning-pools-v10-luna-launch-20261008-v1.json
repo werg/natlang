@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v10-luna-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/launch-started.json",
+      "bytes": 1409,
+      "sha256": "6083cef736ae6d0bb6fd8fff3662cda10bf2037b122b14c8178494744f1d7e2b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/plan.approved.json",
+      "bytes": 11605,
+      "sha256": "2560586ee4d70842d2b5b8b824209c2a0d44241a3c81c2921849862d6b83b9cf"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/root-execution-authorization.json",
+      "bytes": 1891,
+      "sha256": "35d84ff40b31c092628eebe3b24644a3d47c9c48b5f4b4640e4a47e80779fe96"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/source-index-catalog.json",
+      "bytes": 1725,
+      "sha256": "3874cd3c4c64af49eaba1bbf72e68d11c952a3f2aafe3cba2f9ce6d0375c6048"
+    }
+  ],
+  "bytes": 16630
+}
