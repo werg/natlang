@@ -1172,6 +1172,25 @@ test('a saved inline callable keeps its declared Neuralese scalar result for lat
   assert.equal(readCalls, 1, 'the existing typed readout ran exactly once');
 });
 
+test('a saved inline callable retains a general visible result signature', async () => {
+  const { lam, session } = open({ type: '() => number', instructions: 'Return a count.' }, {
+    agent: child => { child.lam.return = { label: 'ready' }; },
+  });
+  const declaration = await session.applyAsync('eval', {
+    code: 'const describe = nl<(item: number) => { label: string }>`Describe the item.`;',
+  });
+  assert.equal(declaration.kind, 'ok', declaration.text);
+  assert.equal(lam.letTypes.describe.kind, 'lambda');
+  assert.equal(lam.letTypes.describe.returns.kind, 'record');
+  assert.equal(lam.letTypes.describe.returns.fields[0].name, 'label');
+
+  const invocation = await session.applyAsync('eval', {
+    code: 'const rendered = await describe(3); rendered.label;',
+  });
+  assert.equal(invocation.kind, 'ok', invocation.text);
+  assert.equal(invocation.value, 'ready');
+});
+
 test('an external service is called and read by its declaration, and cannot be edited', async () => {
   const { externalModule } = await import('../dist/native/external.js');
   const board = externalModule('board', 'const REJECT = true;\n/** Move a card. */\nexport function commit_move(event: { card: string, to: string }): { revision: number } {\n' +

@@ -1632,21 +1632,15 @@ export class NativeSession {
   private inferScopeType(value: unknown): string { return inferValueType(value); }
 
   /** Preserve a source-backed callable signature when it uses types visible in this call's scope. */
-  private sourceCallableType(value: unknown, availableTypes: Record<string, Type>): Type | undefined {
+  private async sourceCallableType(value: unknown, availableTypes: Record<string, Type>): Promise<Type | undefined> {
     if (typeof value !== 'function') return;
-    const descriptor = Object.getOwnPropertyDescriptor(value, Symbol.for('natlang.callable'));
-    if (!descriptor || !('value' in descriptor)) return;
-    const meta = descriptor.value as { kind?: unknown; definition?: { params?: unknown; returns?: unknown } } | undefined;
-    if (!meta || !['inline', 'named'].includes(String(meta.kind)) || !meta.definition ||
-        typeof meta.definition.returns !== 'string' ||
-        !Array.isArray(meta.definition.params)) return;
+    const { callableMeta } = await import('../runtime/callable.js');
+    const meta = callableMeta(value);
+    if (!meta || !['inline', 'named'].includes(meta.kind)) return;
     try {
       const returns = parseType(meta.definition.returns);
-      const fields = meta.definition.params.map((parameter: unknown) => {
-        if (!parameter || typeof parameter !== 'object') throw new Error('invalid callable parameter');
-        const item = parameter as { name?: unknown; type?: unknown; optional?: unknown };
-        if (typeof item.name !== 'string' || typeof item.type !== 'string') throw new Error('invalid callable parameter');
-        return { name: item.name, type: parseType(item.type), optional: item.optional === true };
+      const fields = meta.definition.params.map(parameter => {
+        return { name: parameter.name, type: parseType(parameter.type), optional: parameter.optional === true };
       });
       const signature: Type = { kind: 'lambda', params: { kind: 'record', fields }, returns };
       this.env.child(availableTypes).checkNames(signature);
@@ -1961,7 +1955,7 @@ export class NativeSession {
         const annotation = annotations.get(name);
         if (annotation) type = inlineDeclaredTypes(parseType(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
-        if (!type) type = this.sourceCallableType(value, localTypes);
+        if (!type) type = await this.sourceCallableType(value, localTypes);
         if (!type) {
           try { type = parseType(this.inferScopeType(value)); }
           catch (error) {
