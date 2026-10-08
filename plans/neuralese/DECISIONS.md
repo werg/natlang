@@ -1060,3 +1060,32 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   boilerplate weight are needed (whole-trajectory supervision keeps prompts in, but not necessarily the same
   boilerplate thousands of times).
 - Gate M0.3 (port vs llama.cpp) is now effectively measured on perplexity; a logit-level comparison remains open.
+
+## 2026-10-08 — Owner: system prompt masked; role metrics; first real autoregressive control
+
+- Eval-only of Maple v8 step 4746 (`--eval-only`, d0bc9c27), per role, as CE delta vs gold history / gold top-1:
+
+  | Pass | System | User/tool | Assistant reasoning | Assistant reply |
+  |---|---|---|---|---|
+  | 0 (raw CE) | 0.02 / 1.00 | 0.77 / 0.86 | 0.98 / 0.77 | 0.56 / 0.90 |
+  | 1 | 0.06 | 1.99 | 1.93 | 1.66 |
+  | 2 | 0.21 | 2.91 | 2.50 | 2.27 |
+
+  The system prompt is 80% of held tokens, so pooled numbers understated the content gap about 4× (pooled pass-1
+  ΔCE was 0.40).
+- Owner decision: mask the system prompt completely (f463471b, `--mask-system-prompt`, default on).
+  - It stays crisp context in every window but is never a target, so loss, held strata, gates and plateaus cover
+    user/tool/assistant tokens only.
+  - The rollout stage resets its per-depth plateau record when the metric definition changes.
+- Autoregressive control now starts at the first assistant token (73a8cbfe). First result, 256 self-fed positions on
+  near-boilerplate held assistant text (gold CE 0.015):
+
+  | Rollout | CE | Gold top-1 |
+  |---|---|---|
+  | Crisp greedy | 0.015 | 1.00 |
+  | Full-depth projection | 13.5 | 0.17 |
+  | Sketch | 9.9 | 0.03 |
+
+  The full projection works on gold-derived history (matched control) but collapses when it reads its own outputs;
+  nothing in training exposes it to its own autoregressive drift. Relevant to the planned cutover: autoregressive
+  initialization is far from usable, and the parallel-sketch route is the near-term path.
