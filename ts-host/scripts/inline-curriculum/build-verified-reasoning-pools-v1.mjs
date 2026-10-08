@@ -181,6 +181,13 @@ function sourceTaskFamily(row) {
   }
   return null;
 }
+function targetRadix(question) {
+  const match = question.match(/base-(\d+)\s+number\s+[0-9a-z]+\s+to\s+base-(\d+)/i);
+  if (!match) throw new Error('base-conversion prompt shape is unsupported');
+  const base = Number(match[2]);
+  if (!Number.isInteger(base) || base < 2 || base > 36) throw new Error('target radix is outside 2..36');
+  return base;
+}
 function solveGymFamily(family, question) {
   if (family === 'base_conversion') {
     const match = question.match(/base-(\d+)\s+number\s+([0-9a-z]+)\s+to\s+base-(\d+)/i);
@@ -386,8 +393,10 @@ function buildBatch(family, mode, entries, solver = null) {
     evidence: entry.question, answer: entry.answer,
     source: entry.row, answer_format: family === 'reasoning_gym' ? (solver === 'token_rewrite' ?
       'Return only the terminal token sequence separated by single spaces. Return exactly empty if no tokens remain.' :
+      solver === 'base_conversion' ? `Return only a lowercase base-${targetRadix(entry.question)} numeral using digits 0-9 and lowercase letters a-z as needed. Leading zeroes are permitted and represent the same integer. Do not include a sign, spaces, or explanation.` :
       `Return only the ${solver.replaceAll('_', ' ')} result requested by the question. Preserve its exact answer type, case, and delimiter.`) :
       'Return only the output grid as a compact JSON array of integer arrays. Do not include tags, reasoning, or a code fence.' }));
+  const radixFields = solver === 'base_conversion' ? items.map(item => ({ key: item.key, base: targetRadix(item.original_question) })) : [];
   const expected = Object.fromEntries(items.map(item => [item.key, item.answer]));
   const files = {
     'task.json': canonical({ instruction: `Read every item under items/ and solve the task in its question. For each item, return only the requested result in item.answer_format. Store one string answer per item filename stem in output_file, as specified by output_contract.`,
@@ -498,8 +507,8 @@ function buildBatch(family, mode, entries, solver = null) {
     task_variant: true, independent_world_credit: 0,
     answer_payload_mode: mode, target_values_visible_to_model: false, provider_calls: 0,
     teacher_observations: 0, training_admission: false };
-  record.semantics.oracle = 'exact';
-  record.semantics.files_oracle = { compare: 'json-string-record' };
+  record.semantics.oracle = radixFields.length ? { level: 'normalized', normalization: 'json-string-record', radix_fields: radixFields } : 'exact';
+  record.semantics.files_oracle = { compare: 'json-string-record', ...(radixFields.length ? { radix_fields: radixFields } : {}) };
   taskCases.push(record);
 }
 
