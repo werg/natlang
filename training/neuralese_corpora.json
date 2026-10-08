@@ -6913,6 +6913,24 @@
       ]
     },
     {
+      "id": "neuralese-v25-pure-literal-derived-text-preview-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v25-pure-literal-derived-text-preview-20261008-v1",
+      "include": [
+        "README.md",
+        "derived-rows.jsonl",
+        "selection-receipts.jsonl",
+        "manifest.json"
+      ],
+      "admission": "held-derived-target-preview-no-training-admission",
+      "derived_from": [
+        "neuralese-v25-actual-action-preview-20261008-v3",
+        "neuralese-v25-target-output-role-audit-20261008-v1",
+        "neuralese-v25-actual-action-review-20261008-v8"
+      ],
+      "notes": "Historical held seven-row preview, superseded by v2. Six rows were pure terminal eval-finish returns; the VAX-720 eval-return stage row is retained here as provenance but is not a valid terminal equivalence because later completion actions/effects could follow. Original eval targets and request contexts are preserved; no training admission is granted."
+    },
+    {
       "id": "neuralese-v26-lang850-failure-source-review-20261008-v1",
       "owner": "pop",
       "path": "runs/neuralese-v26-lang850-failure-source-review-20261008-v1",
