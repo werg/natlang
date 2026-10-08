@@ -123,6 +123,7 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
+  'neuralese.read': 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await neuralese.read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. `neuralese.bodies.read` is only the configured reader body ID.',
   'neuralese.textReadSource': `neuralese.textReadSource is read-only standard-library metadata, not a callable API or a value to invoke.
   read_code("neuralese") shows the available host service declaration; read_code("Neuralese") shows the opaque compile-time type.
 The descriptor identifies the configured read instruction body (export: "read") and its provenance. Do not call
@@ -1485,7 +1486,8 @@ export class NativeSession {
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
       const scope = this.runtime.serviceScopes[name];
       return !scope || scope.some(path => path.endsWith('/**') ? chain.includes(`nl:${path.slice(0,-3)}`) : chain.at(-1)===`nl:${path}`);
-    }));
+    }).map(([name, service]) => [name, name === 'neuralese' && service && typeof service === 'object' ?
+      { ...service, read: (value: unknown) => readNeuraleseForCurrentTask(value) } : service]));
   }
 
   /** read_code, edit_code, diff_code over the codebase record tree. */
@@ -1551,7 +1553,7 @@ export class NativeSession {
       const availableServices = this.availableServices();
       if (name === 'read_code' && Object.hasOwn(availableServices, requested)) {
         const declaration = `Host service object declaration (type only, not implementation or field values):\n` +
-          `declare const ${requested}: ${undeclaredServiceType(availableServices[requested])};\n\n` +
+          `declare const ${requested}: ${undeclaredServiceType(availableServices[requested], 0, requested)};\n\n` +
           `These members are available to this call under its current service scope. Inspect the value in eval when needed.`;
         return { kind: 'ok', text: declaration, value: declaration };
       }

@@ -302,6 +302,24 @@ test('typed readout in an inline Array.map callback is awaited with native spars
     'callback:2:3', 'read:nz1_bbbbbbbbbbbbbbbbbbbb'],
     'receiver, one method lookup and thisArg evaluation precede native ordered callback invocation');
 
+  const nestedSource = 'return Object.fromEntries(items.map((item, index) => [item.key, String(values[index])]));';
+  const nestedScope = { ...scope, inputs: [{ name: 'items', type: '{ key: string }[]' },
+    { name: 'values', type: 'Neuralese<string>[]' }], returns: 'Record<string, string>' };
+  const nestedAnalysis = analyzeEvalSnippet(nestedSource, nestedScope);
+  assert.deepEqual(nestedAnalysis.diagnostics, [], 'typed readout also works when map creates entries for Object.fromEntries');
+  const nestedCompiled = compileScopeSnippet(nestedSource, { inputBindings: ['items', 'values'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, nestedScope) });
+  assert.equal(nestedCompiled.ok, true, JSON.stringify(nestedCompiled.diagnostics));
+  const nestedRun = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${nestedCompiled.program}; return __natlang_scope;`)(
+    value => value, value => value, async value => value, output => output.result,
+    { mapNeuraleseReadout, guard: (_id, fn) => fn(), readNeuralese: async value => value.$neuralese.id ===
+      'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'A' : 'B' });
+  assert.deepEqual(await nestedRun({ items: [{ key: 'q1' }, { key: 'q2' }], values: [
+    neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'),
+    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')],
+  }, {}, {}), { q1: 'A', q2: 'B' }, 'the enclosing native operation sees resolved entries after one map call');
+
   const unchanged = compileScopeSnippet('return values.map(value => value.toUpperCase());', {
     inputBindings: ['values'], analyze: text => analyzeEvalSnippet(text, { ...scope, inputs: [{ name: 'values', type: 'string[]' }] }),
   });

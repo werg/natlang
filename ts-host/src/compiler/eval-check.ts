@@ -61,7 +61,9 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   for (const local of scope.locals) lines.push(`declare ${local.mutable ? 'let' : 'const'} ${local.name}: ${typeScriptText(local.type, known)};`);
   for (const capture of scope.captures) lines.push(`declare ${capture.mutable ? 'let' : 'const'} ${capture.name}: ${typeScriptText(capture.type, known)};`);
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
-  for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
+  for (const name of scope.services ?? []) lines.push(name === 'neuralese' ?
+    'declare const neuralese: Readonly<{ read<T>(value: Neuralese<T>): Promise<T> }>;':
+    `declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
