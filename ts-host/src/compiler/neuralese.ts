@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' | 'json' | 'error' | 'string-argument';
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument';
   argument?: number; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
@@ -125,6 +125,11 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         !standardMethod(call.expression, ['Array', 'ReadonlyArray']) || call.arguments.length > 1) return;
     return arrayJoinKind(call.expression.expression);
   };
+  const softArrayToStringKind = (call: ts.CallExpression): 'supported' | undefined => {
+    if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== 'toString' ||
+        !standardMethod(call.expression, ['Object', 'Array', 'ReadonlyArray'])) return;
+    return arrayJoinKind(call.expression.expression);
+  };
   const stringTextArgument = (call: ts.CallExpression): number | undefined => {
     if (!ts.isPropertyAccessExpression(call.expression) || !standardMethod(call.expression, ['String']) ||
         !(checker.getTypeAtLocation(call.expression.expression).flags & ts.TypeFlags.StringLike) ||
@@ -211,6 +216,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       }
       const joinKind = softArrayJoinKind(node);
       if (joinKind === 'supported') readout(node, 'join');
+      const arrayStringKind = softArrayToStringKind(node);
+      if (arrayStringKind === 'supported') readout(node, 'array-string');
       const stringArgument = stringTextArgument(node);
       if (stringArgument !== undefined) {
         const argument = node.arguments[stringArgument]!;

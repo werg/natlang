@@ -22,6 +22,8 @@ export type LowerOptions = {
   conditionalReadouts?: ReadonlySet<string>;
   /** Call spans of array joins whose element type is Neuralese<string>. */
   joins?: ReadonlySet<string>;
+  /** Call spans of Array#toString whose array element type contains Neuralese values. */
+  arrayStrings?: ReadonlySet<string>;
   /** Call spans of string concatenations whose arguments include typed Neuralese values. */
   concats?: ReadonlySet<string>;
   /** Call spans of JSON.stringify whose first value argument needs typed Neuralese readout. */
@@ -170,6 +172,25 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
           undefined, [f.createParameterDeclaration(undefined, undefined, method), f.createParameterDeclaration(undefined, undefined, args)],
           undefined, undefined, body)), undefined, [f.createPropertyAccessExpression(receiver, 'join'),
+          f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        const lower = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, invoke)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        return f.createAwaitExpression(lower);
+      }
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.arrayStrings?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
+          ts.isPropertyAccessExpression(node.expression)) {
+        const receiver = f.createUniqueName('__natlang_array_string_receiver');
+        const method = f.createUniqueName('__natlang_array_string_method');
+        const args = f.createUniqueName('__natlang_array_string_args');
+        const value = f.createUniqueName('__natlang_array_string_value');
+        const reader = f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
+          [f.createParameterDeclaration(undefined, undefined, value)], undefined, undefined, readNeuralese(value));
+        const helper = f.createCallExpression(runtime('arrayToStringNeuralese'), undefined, [receiver, method, args, reader]);
+        const body = f.createPropertyAccessExpression(f.createAwaitExpression(helper), 'value');
+        const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, method), f.createParameterDeclaration(undefined, undefined, args)],
+          undefined, undefined, body)), undefined, [f.createPropertyAccessExpression(receiver, 'toString'),
           f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
         const lower = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
           [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, invoke)), undefined,

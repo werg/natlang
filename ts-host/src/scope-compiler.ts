@@ -690,6 +690,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
     text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${analysisSource.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
+  const arrayStrings = new Set(readouts.filter(readout => readout.kind === 'array-string').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const jsonReadouts = new Map(readouts.filter(readout => readout.kind === 'json')
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
@@ -772,6 +773,20 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       primitive.push({ ...rel(node), text: `await ((${temp}: any) => { const __method = ${temp}.concat; const __values = [${values}]; ` +
         `return __live.concatNeuralese(${temp}, __method, __values, async (__value: any) => ` +
         `await __live.readNeuralese(__value)); })(${receiver})` });
+      return;
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        arrayStrings.has(`${rel(node).start}:${rel(node).end}`)) {
+      const receiver = rel(node.expression.expression);
+      lowerNodes(node.expression.expression);
+      for (const argument of node.arguments) lowerNodes(argument);
+      const receiverName = `__natlang_array_string_receiver_${rel(node).start}`;
+      const methodName = `__natlang_array_string_method_${rel(node).start}`;
+      const argsName = `__natlang_array_string_args_${rel(node).start}`;
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
+        `(await __live.arrayToStringNeuralese(${receiverName}, ${methodName}, ${argsName}, async (__natlang_array_string_value: any) => ` +
+        `await __live.readNeuralese(__natlang_array_string_value))).value)(${receiverName}.toString, [${args}]))(${lowerSpan(receiver.start, receiver.end)}))` });
       return;
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&

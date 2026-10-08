@@ -53,6 +53,8 @@ export async function concatNeuralese(receiver: unknown, method: (...values: unk
 }
 
 const ARRAY_JOIN = Array.prototype.join;
+const ARRAY_TO_STRING = Array.prototype.toString;
+const OBJECT_TO_STRING = Object.prototype.toString;
 
 /** Preserve custom join dispatch; only the native Array join gets typed async element reads. */
 export async function joinNeuralese(receiver: unknown, method: unknown, args: readonly unknown[],
@@ -72,6 +74,17 @@ export async function joinNeuralese(receiver: unknown, method: unknown, args: re
     parts[index] = resolved === null || resolved === undefined ? '' : toStringValue(resolved);
   }
   return { value: parts.join(delimiter) };
+}
+
+/** Preserve Array#toString's dynamic join dispatch while reading direct soft elements only for intrinsic join. */
+export async function arrayToStringNeuralese(receiver: unknown, method: unknown, args: readonly unknown[],
+  read: (value: unknown) => Promise<unknown>): Promise<{ value: unknown }> {
+  if (method !== ARRAY_TO_STRING)
+    return { value: Reflect.apply(method as (...values: unknown[]) => unknown, receiver, args) };
+  const join = (receiver as { join?: unknown }).join;
+  if (typeof join !== 'function') return { value: Reflect.apply(OBJECT_TO_STRING, receiver, []) };
+  if (join !== ARRAY_JOIN) return { value: Reflect.apply(join, receiver, []) };
+  return joinNeuralese(receiver, join, [], read);
 }
 
 /** Portable natlang type text for a target descriptor; host objects become `Live<...>`. */

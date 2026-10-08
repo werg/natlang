@@ -58,6 +58,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let readouts = new Set<string>();
   let conditionalReadouts = new Set<string>();
   let joins = new Set<string>();
+  let arrayStrings = new Set<string>();
   let concats = new Set<string>();
   let jsons = new Set<string>();
   let errorReadouts = new Set<string>();
@@ -100,6 +101,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     readouts = new Set(analysis.readouts.filter(item => !item.kind).map(item => `${item.start}:${item.end}`));
     conditionalReadouts = new Set(analysis.readouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`));
     joins = new Set(analysis.readouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`));
+    arrayStrings = new Set(analysis.readouts.filter(item => item.kind === 'array-string').map(item => `${item.start}:${item.end}`));
     concats = new Set(analysis.readouts.filter(item => item.kind === 'concat').map(item => `${item.start}:${item.end}`));
     jsons = new Set(analysis.readouts.filter(item => item.kind === 'json').map(item => `${item.start}:${item.end}`));
     errorReadouts = new Set(analysis.readouts.filter(item => item.kind === 'error').map(item => `${item.start}:${item.end}`));
@@ -112,7 +114,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   }
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
-    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, concats, jsons,
+    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, concats, jsons,
       errors: errorReadouts, stringArguments, runtime: '__natlang', context: '__natlang_context',
       constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
       modulePath: record.source, browser: moduleTarget === 'browser' })] } });
