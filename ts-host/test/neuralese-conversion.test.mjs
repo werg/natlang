@@ -501,6 +501,52 @@ test('child result indexing requires authoritative order when decision indexes a
     'the suffix recovers a genuinely earlier producer despite reverse ingestion');
 });
 
+test('authenticated host-return values stay visible crisp context without a model writer or recurrence edge', () => {
+  const value = { reviewId: 'MSD-303', selectedId: 'none', eligibleIds: 'none', priorityScore: '0', decision: 'hold' };
+  const encoded = JSON.stringify(value), valueSha = cryptoCreateHash('sha256').update(encoded).digest('hex');
+  const run = 'observed-host-run';
+  const child = { id: 'child-result', decision: { index: 7 },
+    source_ref: { trajectory_id: run, invocation_id: 'child', parent_invocation_id: 'root',
+      host_result_capture: { capture: { version: 'reduction-trace/1', kind: 'host_capture',
+        capture_kind: 'invocation_output', complete: true,
+        origin: 'observed-host-result; not a model-generated writer target', call_id: 'child',
+        parent_call_id: 'root', result_type: 'Draft', value, value_sha256: valueSha } } },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } },
+    messages: [{ role: 'user', content: 'You are inside this call: decide(): Draft' }],
+    target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value }) } }] } };
+  const parent = { id: 'parent-read', decision: { index: 8 }, source_ref: { trajectory_id: run, invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): Draft' },
+      { role: 'assistant', tool_calls: [{ id: 'e', function: { name: 'eval', arguments: '{"code":"const value = await nl`decide()`(); return value;"}' } }] },
+      { role: 'tool', tool_call_id: 'e', content: `console:\n${encoded}\nnull` },
+    ], target: { role: 'assistant', content: 'done' } };
+  const index = new ChildResultIndexBuilder();
+  index.add(child); index.add(parent);
+  const indexed = index.finish().get(run);
+  assert.equal(indexed.producers.length, 0, 'host capture is not model-authored producer evidence');
+  assert.equal(indexed.readers.length, 0, 'host capture does not create a recurrence edge');
+  assert.equal(indexed.observed_host_contexts.length, 1);
+  const convertedChild = convertTrajectory(child, { childResults: index.finish() }).record;
+  assert.deepEqual(JSON.parse(convertedChild.target.tool_calls[0].function.arguments).value, value);
+  const convertedParent = convertTrajectory(parent, { childResults: index.finish() }).record;
+  assert.equal(convertedParent.messages[2].content, parent.messages[2].content,
+    'the exact already-visible tool transcript remains crisp and unchanged');
+  assert.equal(convertedParent.neuralese_conversion.sites['child-result'].exact['observed-host-result'], 1);
+  assert.deepEqual(convertedParent.neuralese_conversion.observed_host_result_contexts, [{
+    schema: 'natlang.observed-host-result-context/1', origin: 'completed-child-invocation-output',
+    invocation_id: 'root', tool_call_id: 'e', producer_record_id: 'child-result', result_type: 'Draft',
+    body_sha256: cryptoCreateHash('sha256').update(encoded).digest('hex'),
+    capture_sha256: cryptoCreateHash('sha256').update(JSON.stringify(child.source_ref.host_result_capture.capture)).digest('hex'),
+    visible_as_crisp_context: true, model_writer_target: false, recurrence_edge: false,
+  }]);
+  const tampered = structuredClone(child);
+  tampered.source_ref.host_result_capture.capture.value_sha256 = '0'.repeat(64);
+  const rejected = new ChildResultIndexBuilder(); rejected.add(tampered); rejected.add(parent);
+  assert.equal(rejected.finish().get(run).observed_host_contexts.length, 0,
+    'a mismatched host capture digest cannot authorize context provenance');
+});
+
 test('reader links use tool message IDs and choose whole-object blocks over overlapping field blocks', () => {
   const facts = 'Eighteen of twenty devices passed the receiving test at the required threshold.';
   const structured = { facts, status: 'complete' };

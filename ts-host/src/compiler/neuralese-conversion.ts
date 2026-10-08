@@ -50,7 +50,7 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/12';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/13';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -71,7 +71,9 @@ export type ConversionOptions = {
    * remain exact unless their producer can be identified. Without an index results stay exact. */
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
     producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[] }[];
-    readers?: readonly { invocation: string; tool_call_id?: string; value: string; producer_id: string }[] }>;
+    readers?: readonly { invocation: string; tool_call_id?: string; value: string; producer_id: string }[];
+    observed_host_contexts?: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string;
+      body_sha256: string; capture_sha256: string; result_type: string }[] }>;
   /** Exact runtime graph edges independently validated against the collected result. These permit typed
    * Neuralese argument reads that are not printed by an eval caller. */
   softStateEdges?: ValidatedSoftStateEdgeSet;
@@ -149,8 +151,36 @@ function stableJson(value: unknown): string | undefined {
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
   renderings: string[]; order?: number };
 type ChildResultOutput = { invocation: string; tool_call_id: string; text: string; argument: boolean; order?: number };
+type ObservedHostResult = { id: string; invocation: string; parent?: string; value: string; body_sha256: string;
+  capture_sha256: string; result_type: string; order?: number };
 type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
-  outputs: Map<string, ChildResultOutput> };
+  outputs: Map<string, ChildResultOutput>; observed_host_results: ObservedHostResult[] };
+
+function sha256Text(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+
+/** Authenticate a completed host return against the same decision's successful typed result.
+ * This is crisp context evidence, never a model-written Neuralese producer. */
+function observedHostReturn(record: Record<string, unknown>, returned: string, value: unknown):
+  Omit<ObservedHostResult, 'order'> | undefined {
+  const source = record.source_ref as Record<string, unknown> | undefined;
+  const receipt = source?.host_result_capture as Record<string, unknown> | undefined;
+  const capture = receipt?.capture as Record<string, unknown> | undefined;
+  if (!capture || capture.version !== 'reduction-trace/1' || capture.kind !== 'host_capture' ||
+      capture.capture_kind !== 'invocation_output' || capture.complete !== true ||
+      capture.origin !== 'observed-host-result; not a model-generated writer target' ||
+      typeof source?.invocation_id !== 'string' || capture.call_id !== source.invocation_id ||
+      typeof capture.result_type !== 'string' || !capture.result_type ||
+      typeof capture.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(capture.value_sha256) ||
+      stableJson(capture.value) !== stableJson(value)) return undefined;
+  const encoded = JSON.stringify(capture.value);
+  if (encoded === undefined || sha256Text(encoded) !== capture.value_sha256 || childValueText(capture.value) !== returned)
+    return undefined;
+  const parent = typeof source.parent_invocation_id === 'string' ? source.parent_invocation_id : undefined;
+  const id = typeof record.id === 'string' ? record.id : '';
+  if (!id) return undefined;
+  return { id, invocation: String(source.invocation_id), ...(parent ? { parent } : {}), value: returned,
+    body_sha256: sha256Text(returned), capture_sha256: sha256Text(JSON.stringify(capture)), result_type: capture.result_type };
+}
 
 /** One corpus-pass index for child results. It records only explicit successful return_result targets;
  * host captures and finish:true actions are observations, never synthesized model targets. */
@@ -161,7 +191,7 @@ export class ChildResultIndexBuilder {
     if (!Array.isArray(record.messages)) return;
     const runId = callOf(record);
     let run = this.runs.get(runId);
-    if (!run) this.runs.set(runId, run = { returned: new Set(), producers: [], outputs: new Map() });
+    if (!run) this.runs.set(runId, run = { returned: new Set(), producers: [], outputs: new Map(), observed_host_results: [] });
     const decision = record.decision as { index?: unknown } | undefined;
     const decisionId = /:decision:(\d+)$/.exec(String(record.id ?? ''));
     const idOrder = decisionId ? Number(decisionId[1]) : undefined;
@@ -173,17 +203,21 @@ export class ChildResultIndexBuilder {
       const call = target?.tool_calls?.find(item => item.function.name === 'return_result');
       const args = call ? parseArguments(call.function.arguments) : undefined;
       const value = args?.value;
-      run.returned.add(returned);
-      const invocation = invocationOf(record), parent = (record.source_ref as { parent_invocation_id?: unknown } | undefined)?.parent_invocation_id;
-      const id = String(record.id);
-      run.producers.push({ id, invocation, value: returned, ...(typeof parent === 'string' ? { parent } : {}),
-        renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value)])], order });
-      if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
-        if (typeof text === 'string' && text.length >= MIN_CHILD_RESULT_CHARS && text !== returned) {
-          run.returned.add(text);
-          run.producers.push({ id: `${id}#${field}`, invocation, field, value: text,
-            ...(typeof parent === 'string' ? { parent } : {}), renderings: [JSON.stringify(text).slice(1, -1)], order });
-        }
+      const hostResult = observedHostReturn(record, returned, value);
+      if (hostResult) run.observed_host_results.push({ ...hostResult, ...(order !== undefined ? { order } : {}) });
+      if (!hostResult) {
+        run.returned.add(returned);
+        const invocation = invocationOf(record), parent = (record.source_ref as { parent_invocation_id?: unknown } | undefined)?.parent_invocation_id;
+        const id = String(record.id);
+        run.producers.push({ id, invocation, value: returned, ...(typeof parent === 'string' ? { parent } : {}),
+          renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value)])], order });
+        if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
+          if (typeof text === 'string' && text.length >= MIN_CHILD_RESULT_CHARS && text !== returned) {
+            run.returned.add(text);
+            run.producers.push({ id: `${id}#${field}`, invocation, field, value: text,
+              ...(typeof parent === 'string' ? { parent } : {}), renderings: [JSON.stringify(text).slice(1, -1)], order });
+          }
+      }
     }
     const children = childCallIds(record.messages, childFunctionNames(record));
     const evalCalls = new Set(record.messages.flatMap(message => message.role === 'assistant' ?
@@ -201,11 +235,23 @@ export class ChildResultIndexBuilder {
 
   finish(): ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
     producers: readonly Omit<ChildResultProducer, 'order'>[];
-    readers: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string }[] }> {
+    readers: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string }[];
+    observed_host_contexts: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string;
+      body_sha256: string; capture_sha256: string; result_type: string }[] }> {
     const result = new Map();
     for (const [runId, run] of this.runs) {
       const readers: { invocation: string; tool_call_id: string; value: string; producer_id: string }[] = [];
+      const observed_host_contexts: { invocation: string; tool_call_id: string; value: string; producer_id: string;
+        body_sha256: string; capture_sha256: string; result_type: string }[] = [];
       for (const output of run.outputs.values()) {
+        for (const host of run.observed_host_results) {
+          if (host.parent !== output.invocation || host.order === undefined || output.order === undefined || host.order >= output.order ||
+              !output.text.includes(host.value)) continue;
+          if (!observed_host_contexts.some(item => item.invocation === output.invocation &&
+              item.tool_call_id === output.tool_call_id && item.producer_id === host.id))
+            observed_host_contexts.push({ invocation: output.invocation, tool_call_id: output.tool_call_id, value: host.value,
+              producer_id: host.id, body_sha256: host.body_sha256, capture_sha256: host.capture_sha256, result_type: host.result_type });
+        }
         const matches: { producer: ChildResultProducer; form: string }[] = [];
         for (const producer of run.producers) {
           // Ingestion order is not evidence. Without authoritative per-decision order, keep exact text.
@@ -238,7 +284,7 @@ export class ChildResultIndexBuilder {
       const wholeReads = new Set(readers.filter(reader => !reader.producer_id.includes('#')).map(reader => reader.producer_id));
       const coherentReaders = readers.filter(reader => ![...wholeReads].some(id => reader.producer_id.startsWith(`${id}#`)));
       result.set(runId, { returned: [...run.returned], read: new Set(coherentReaders.map(reader => reader.value)),
-        producers: run.producers.map(({ order: _order, ...producer }) => producer), readers: coherentReaders });
+        producers: run.producers.map(({ order: _order, ...producer }) => producer), readers: coherentReaders, observed_host_contexts });
     }
     return result;
   }
@@ -328,6 +374,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const registered = options.pieces ?? promptPieces();
   const pieces = new Map<string, SoftPiece>();
   const sites: SiteCounts = {};
+  const observedHostMetadata: { schema: string; origin: string; invocation_id: string; tool_call_id: string;
+    producer_record_id: string; result_type: string; body_sha256: string; capture_sha256: string;
+    visible_as_crisp_context: true; model_writer_target: false; recurrence_edge: false }[] = [];
   const count = (kind: string, reason?: string, n = 1) => {
     const site = sites[kind] ??= { converted: 0, exact: {} };
     if (reason) site.exact[reason] = (site.exact[reason] ?? 0) + n; else site.converted += n;
@@ -528,6 +577,16 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const forms = eligible.flatMap(value => [...new Set([value, ...(run?.producers?.find(p => p.value === value)?.renderings ?? [])])]
       .filter(whole).map(form => ({form,value})));
     const shown = forms.sort((a,b) => b.form.length-a.form.length);
+    const hostContexts = run?.observed_host_contexts?.filter(host => host.invocation === invocation &&
+      host.tool_call_id === toolCallId && text.includes(host.value)) ?? [];
+    if (hostContexts.length) {
+      count('child-result', 'observed-host-result', hostContexts.length);
+      for (const host of hostContexts) observedHostMetadata.push({ schema: 'natlang.observed-host-result-context/1',
+        origin: 'completed-child-invocation-output', invocation_id: host.invocation, tool_call_id: host.tool_call_id,
+        producer_record_id: host.producer_id, result_type: host.result_type, body_sha256: host.body_sha256,
+        capture_sha256: host.capture_sha256, visible_as_crisp_context: true, model_writer_target: false, recurrence_edge: false });
+      return parts;
+    }
     if (kind === 'argument-read' && (!shown.length || parts.some(part => part.type !== 'text'))) return parts;
     if (!shown.length || parts.some(part => part.type !== 'text')) {
       count('child-result', run?.producers?.some(p => p.value.length >= MIN_CHILD_RESULT_CHARS &&
@@ -948,6 +1007,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   }));
   return { record: { ...record, messages, ...(target ? { target } : {}),
     neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,
+      ...(observedHostMetadata.length ? { observed_host_result_contexts: observedHostMetadata } : {}),
       ...(externalContextMetadata.length ? { external_context_inputs: externalContextMetadata } : {}),
       ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
 }
