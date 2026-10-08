@@ -97,6 +97,31 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    remote exact manifest and its hashes over SSH, as well as local hashes and
    live references. A local receipt is never backup evidence. Stop if any remote
    file is missing; preserve failed verification and unresolved loss explicitly.
+   For recoverable Pop-only local storage offload, use the manifest-driven
+   command rather than manually sequencing verification and `unlink`:
+
+   ```sh
+   # Read-only preflight: exact manifest paths, local hashes, open FDs and
+   # visible live-process references; prints the matching execute command.
+   python3 scripts/sync_training_corpora.py offload --machine pop --host dgx \
+     --id ID --file checkpoint.pt
+
+   # Executes only after review: transfer the selected manifest files, verify
+   # them on the actual SSH host, recheck local bytes/references, then unlink.
+   python3 scripts/sync_training_corpora.py offload --machine pop --host dgx \
+     --id ID --file checkpoint.pt --execute
+   ```
+
+   Offload requires a committed, unchanged registry and manifest. Each selected
+   path must occur verbatim in that immutable manifest; globs and arbitrary
+   paths are rejected. The execute command reuses exact manifest sync, writes a
+   remote subset verification receipt without replacing the full-corpus receipt,
+   then writes `.coordination/artifact-evictions/` with the remote hostname/repo,
+   local checks, selected files, and a restore command. Unrelated inaccessible
+   `/proc` FD directories are recorded, not treated as global blockers; an
+   observed selected-file FD or live process reference stops before unlink.
+   Restore the selected paths with the command in the receipt. This is storage
+   management only; it changes no corpus admission or training qualification.
 6. Announce snapshot IDs, source coverage, counts and admission state in the
    receiving inbox. Update the dataset coverage/handover. Train only after the
    normal source-policy, split/protected, native replay and quality gates.

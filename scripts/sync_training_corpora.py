@@ -48,6 +48,16 @@ def manifest_path(repo, identity):
     return repo / 'training/corpus-manifests' / (identity + '.json')
 
 
+def require_committed_offload_snapshot(repo, identity):
+    """Offload only from the exact registry and immutable manifest committed at HEAD."""
+    for path in [repo / 'training/neuralese_corpora.json', manifest_path(repo, identity)]:
+        relative_path = path.relative_to(repo).as_posix()
+        result = subprocess.run(['git', 'show', f'HEAD:{relative_path}'], cwd=repo,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode or not path.is_file() or path.read_bytes() != result.stdout:
+            raise ValueError(f'offload requires committed, unchanged registry and manifest: {relative_path}')
+
+
 def publish(repo, entry):
     root = repo / relative(entry['path'])
     files = []
@@ -109,12 +119,11 @@ def file_stat(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
 
 
-def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='local'):
-    root = repo / relative(manifest['path'])
+def verify_files(root, files):
     errors, checked, stats = [], [], {}
-    for item in manifest['files']:
+    for item in files:
         p = root / relative(item['path'])
-        if not p.is_file() or p.stat().st_size != item['bytes']:
+        if p.is_symlink() or not p.is_file() or p.stat().st_size != item['bytes']:
             errors.append({'path': item['path'], 'reason': 'missing_or_size'})
         else:
             before = file_stat(p)
@@ -126,22 +135,184 @@ def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='
             else:
                 checked.append(item['path'])
                 stats[item['path']] = before
+    return errors, checked, stats
+
+
+def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='local', receipt_key=None):
+    root = repo / relative(manifest['path'])
+    errors, checked, stats = verify_files(root, manifest['files'])
     receipt = {'id': manifest['id'], 'status': 'failed' if errors else 'verified', 'checked': len(checked),
                'verification_scope': verification_scope, 'verified_hostname': socket.gethostname(),
                'verified_repo': str(repo.resolve()),
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
-    save(repo / '.coordination' / receipt_group / (manifest['id'] + '.json'), receipt)
+    receipt['verification_id'] = receipt_key or manifest['id']
+    save(repo / '.coordination' / receipt_group / (receipt['verification_id'] + '.json'), receipt)
     if errors:
         raise ValueError(json.dumps(receipt))
     print(json.dumps({k: v for k, v in receipt.items() if k != 'file_stats'}), flush=True)
 
 
-def verify_remote(manifest, args):
+def verify_remote(manifest, args, receipt_group='corpus-receipts', receipt_key=None):
     """Hash the actual SSH destination; --machine names this CLI's local role."""
-    remote_script = "import json,sys; from pathlib import Path; from sync_training_corpora import verify; verify(Path(sys.argv[1]),json.load(sys.stdin),verification_scope='ssh-remote')"
+    remote_script = "import json,sys; from pathlib import Path; from sync_training_corpora import verify; p=json.load(sys.stdin); verify(Path(sys.argv[1]),p['manifest'],receipt_group=p['receipt_group'],verification_scope='ssh-remote',receipt_key=p['receipt_key'])"
     command = f'cd {shlex.quote(args.remote_repo + "/scripts")} && python3 -c {shlex.quote(remote_script)} {shlex.quote(args.remote_repo)}'
-    subprocess.run(['ssh', args.host, command], input=json.dumps(manifest), text=True, check=True)
+    payload = {'manifest': manifest, 'receipt_group': receipt_group, 'receipt_key': receipt_key}
+    try:
+        result = subprocess.run(['ssh', args.host, command], input=json.dumps(payload), text=True, check=True,
+                                capture_output=True)
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or str(error)).strip()
+        raise RuntimeError(f'remote verification failed on {args.host}: {detail}') from error
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError('remote verification returned no receipt')
+    receipt = json.loads(lines[-1])
+    if (receipt.get('status') != 'verified' or receipt.get('verification_scope') != 'ssh-remote' or
+            receipt.get('manifest_sha256') != hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest() or
+            receipt.get('verification_id') != (receipt_key or manifest['id']) or
+            receipt.get('checked') != len(manifest['files'])):
+        raise ValueError('remote verification receipt does not bind the selected manifest')
+    return receipt
+
+
+def select_manifest_files(manifest, requested):
+    paths = [relative(path) for path in requested]
+    if not paths or len(paths) != len(set(paths)):
+        raise ValueError('offload requires distinct exact manifest file paths')
+    known = {item['path'] for item in manifest['files']}
+    missing = sorted(set(paths) - known)
+    if missing:
+        raise ValueError('paths absent from immutable manifest: ' + str(missing))
+    requested_set = set(paths)
+    files = [item for item in manifest['files'] if item['path'] in requested_set]
+    return {**manifest, 'files': files, 'bytes': sum(item['bytes'] for item in files)}
+
+
+def local_references(paths, proc_root=Path('/proc')):
+    """Return open-FD and live-process references visible from this host."""
+    targets = {str(path.resolve()) for path in paths}
+    open_fds, jobs, inaccessible = [], [], 0
+    try:
+        processes = list(proc_root.iterdir())
+    except OSError as error:
+        raise ValueError(f'cannot inspect local process references: {error}') from error
+    for process in processes:
+        if not process.name.isdigit() or int(process.name) == os.getpid():
+            continue
+        pid = process.name
+        try:
+            fd_dir = process / 'fd'
+            for fd in fd_dir.iterdir():
+                try:
+                    target = os.readlink(fd)
+                except OSError:
+                    continue
+                target = target.removesuffix(' (deleted)')
+                if target in targets:
+                    open_fds.append({'pid': int(pid), 'fd': fd.name, 'path': target})
+        except OSError:
+            inaccessible += 1
+        # Only command-line/environment/cwd references from same-user processes are
+        # considered live-job references. System processes are not job owners.
+        try:
+            if (process.stat().st_uid != os.getuid()):
+                continue
+            command = (process / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='replace')
+            environment = (process / 'environ').read_bytes().replace(b'\0', b' ').decode(errors='replace')
+            cwd = os.readlink(process / 'cwd')
+        except OSError:
+            continue
+        for resolved in targets:
+            parent = str(Path(resolved).parent)
+            if resolved in command or resolved in environment or cwd == resolved:
+                jobs.append({'pid': int(pid), 'path': resolved, 'source': 'process-arguments-or-environment'})
+            elif parent in command or parent in environment or cwd == parent:
+                jobs.append({'pid': int(pid), 'path': resolved, 'source': 'artifact-directory-reference'})
+    return {'open_fds': open_fds, 'live_job_references': jobs,
+            'inaccessible_fd_directories': inaccessible}
+
+
+def offload(repo, entry, manifest, args):
+    if args.machine != 'pop':
+        raise ValueError('offload is currently limited to selected local Pop files')
+    if entry['owner'] != args.machine:
+        raise ValueError('offload requires the local Pop machine to own the registered snapshot')
+    selected = select_manifest_files(manifest, args.files or [])
+    root = repo / relative(manifest['path'])
+    paths = [root / relative(item['path']) for item in selected['files']]
+    errors, checked, stats = verify_files(root, selected['files'])
+    if errors:
+        raise ValueError('local files do not match the immutable manifest: ' + json.dumps(errors))
+    references = local_references(paths)
+    if references['open_fds'] or references['live_job_references']:
+        raise ValueError('selected files are still referenced locally: ' + json.dumps(references))
+
+    selection_hash = hashlib.sha256(json.dumps(selected['files'], sort_keys=True).encode()).hexdigest()
+    verification_id = f"{manifest['id']}--{selection_hash[:16]}"
+    restore = f"python3 scripts/sync_training_corpora.py restore --machine pop --host {shlex.quote(args.host)} " + \
+        f"--remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " + \
+        ' '.join(f'--file {shlex.quote(item["path"])}' for item in selected['files'])
+    if not args.execute:
+        print(json.dumps({'status': 'preflight_only', 'id': manifest['id'], 'files': selected['files'],
+                          'bytes': selected['bytes'], 'local_sha256_verified': True,
+                          'local_hostname': socket.gethostname(), 'local_references': references,
+                          'remote': f'{args.host}:{args.remote_repo}/{relative(manifest["path"])}',
+                          'will_transfer_and_verify_before_unlink': True, 'restore': restore,
+                          'execute_command': f"python3 scripts/sync_training_corpora.py offload --machine pop --host {shlex.quote(args.host)} --remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " +
+                                             ' '.join(f'--file {shlex.quote(item["path"])}' for item in selected['files']) + ' --execute'}), flush=True)
+        return
+
+    transfer_args = argparse.Namespace(**vars(args))
+    transfer_args.action = 'sync'
+    transfer_args.files = [item['path'] for item in selected['files']]
+    transfer_args.remote_receipt_group = 'artifact-offload-verifications'
+    transfer_args.remote_receipt_key = verification_id
+    remote_receipt = sync(repo, entry, manifest, transfer_args)
+    if (not remote_receipt or remote_receipt.get('status') != 'verified' or
+            remote_receipt.get('manifest_sha256') != hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()):
+        raise ValueError('selected remote files were not transferred and verified against their exact manifest')
+    if not remote_receipt.get('verified_hostname') or remote_receipt['verified_hostname'] == socket.gethostname():
+        raise ValueError('remote verification resolved to this local host; refusing to unlink a local copy')
+
+    # Re-hash and re-check references after the remote operation, immediately
+    # before the optional unlink, so a changed/opened file is never removed.
+    errors, checked, final_stats = verify_files(root, selected['files'])
+    final_references = local_references(paths)
+    if errors or final_stats != stats or final_references['open_fds'] or final_references['live_job_references']:
+        raise ValueError('local files or references changed after remote verification: ' + json.dumps({
+            'errors': errors, 'stats_unchanged': final_stats == stats, 'references': final_references}))
+
+    receipt = {'schema': 'natlang.artifact-offload/1', 'id': manifest['id'], 'verification_id': verification_id,
+               'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
+               'selected_files': selected['files'], 'bytes': selected['bytes'], 'local_file_stats': final_stats,
+               'local_hostname': socket.gethostname(), 'local_references': final_references,
+               'remote_verification': remote_receipt,
+               'restore': restore, 'status': 'verified_not_unlinked',
+               'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    receipt_path = repo / '.coordination' / 'artifact-evictions' / (verification_id + '.json')
+    save(receipt_path, receipt)
+    removed = []
+    try:
+        for item, path in zip(selected['files'], paths):
+            if path.is_symlink() or not path.is_file() or file_stat(path) != final_stats[item['path']]:
+                raise ValueError(f'local file changed before unlink: {item["path"]}')
+            # Check references once more per file to narrow the check/unlink window.
+            current_refs = local_references([path])
+            if current_refs['open_fds'] or current_refs['live_job_references']:
+                raise ValueError(f'local file gained a live reference before unlink: {item["path"]}')
+            path.unlink()
+            removed.append(item['path'])
+    except Exception as error:
+        receipt.update({'status': 'partial_unlink', 'removed_files': removed,
+                        'unlink_error': str(error), 'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
+        save(receipt_path, receipt)
+        raise
+    receipt.update({'status': 'unlinked', 'removed_files': removed,
+                    'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
+    save(receipt_path, receipt)
+    print(json.dumps({'status': receipt['status'], 'receipt': str(receipt_path),
+                      'files': removed, 'restore': restore}), flush=True)
 
 
 def sync(repo, entry, manifest, args):
@@ -206,24 +377,31 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
     if pull:
         verify(repo, manifest, receipt_group='corpus-restores' if selected else 'corpus-receipts')
     else:
-        verify_remote(manifest, args)
+        return verify_remote(manifest, args,
+                             receipt_group=getattr(args, 'remote_receipt_group', 'corpus-receipts'),
+                             receipt_key=getattr(args, 'remote_receipt_key', None))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['publish', 'verify', 'verify-remote', 'sync', 'restore', 'status'],
-                        help='verify hashes local files; verify-remote hashes files on --host over SSH')
+    parser.add_argument('action', choices=['publish', 'verify', 'verify-remote', 'sync', 'restore', 'status', 'offload'],
+                        help='offload transfers and verifies exact manifest files before optional local unlink')
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--machine', choices=['pop', 'dgx'], required=True,
                         help='identity of the machine running this command, not a verification destination')
     parser.add_argument('--id', action='append', dest='ids')
-    parser.add_argument('--file', action='append', dest='files', help='restore only named manifest paths; does not grant a full-snapshot receipt')
+    parser.add_argument('--file', action='append', dest='files', help='select exact manifest paths for restore or offload')
+    parser.add_argument('--execute', action='store_true', help='for offload, transfer/verify then unlink selected local files')
     parser.add_argument('--host', default='dgx')
     parser.add_argument('--remote-repo', default='/home/werg/natlang')
     parser.add_argument('--reserve-gib', type=float, default=8)
     args = parser.parse_args()
-    if args.files and (args.action != 'restore' or not args.ids or len(args.ids) != 1):
-        parser.error('--file requires restore and exactly one --id')
+    if args.files and (args.action not in {'restore', 'offload'} or not args.ids or len(args.ids) != 1):
+        parser.error('--file requires restore/offload and exactly one --id')
+    if args.action == 'offload' and (args.machine != 'pop' or not args.files or not args.ids or len(args.ids) != 1):
+        parser.error('offload requires --machine pop, exactly one --id, and one or more --file paths')
+    if args.execute and args.action != 'offload':
+        parser.error('--execute is only valid with offload')
     registry = json.loads((args.repo / 'training/neuralese_corpora.json').read_text())
     known = {entry['id'] for entry in registry['corpora']}
     if args.ids and not set(args.ids).issubset(known):
@@ -249,9 +427,14 @@ def main():
         if args.action == 'verify':
             verify(args.repo, manifest)
         elif args.action == 'verify-remote':
-            verify_remote(manifest, args)
+            print(json.dumps(verify_remote(manifest, args)), flush=True)
         elif args.action in {'sync', 'restore'}:
-            sync(args.repo, entry, manifest, args)
+            receipt = sync(args.repo, entry, manifest, args)
+            if receipt:
+                print(json.dumps(receipt), flush=True)
+        elif args.action == 'offload':
+            require_committed_offload_snapshot(args.repo, entry['id'])
+            offload(args.repo, entry, manifest, args)
         else:
             missing = [x['path'] for x in manifest['files'] if not (args.repo / entry['path'] / x['path']).is_file()]
             print(json.dumps({'id': entry['id'], 'status': 'missing' if missing else ('verified' if current_receipt(args.repo, manifest) else 'present_unverified'),
