@@ -67,6 +67,24 @@ resuming under changed inputs. The raw-port handoff consumes this API and create
 The runtime report qualifies fixed-length transport/replay only; autonomous stop
 selection and semantic compression require subsequent training and evaluation.
 
+## Current text warm-up input policy (2026-10-08)
+
+Maple and LFM share `recipes/gold-text-input-map-v1.json` and the same
+`train.text_warmup` implementation. Launch with `--neuralese-input map
+--rollout-passes 0`. The causal training-only map starts at exact raw token
+embeddings and fits the model's detached projected output. The full projection
+still trains against **gold next-token embeddings**, independently of that map
+self-consistency target. Gold-history and detached mapped-history passes replace
+the repeated sketch-pass warm-up. This changes training inputs; it does not
+qualify autonomous neuralese rollout or function recurrence.
+
+A sketch-to-map checkpoint handoff preserves all model/head weights and RNG.
+Its changed trainable parameter groups start a declared fresh optimizer and
+projection plateau. Subsequent map resumes restore the complete optimizer state.
+The training-only map is omitted from serving heads and retained in resumable
+state. Existing frozen sketch runs and diagnostic operators remain identifiable;
+new map runs use this declaration and fresh held qualification evidence.
+
 ## Current experiments and decisions
 
 On Pop, full-depth initialization is verified bit-exact. This uncovered a real

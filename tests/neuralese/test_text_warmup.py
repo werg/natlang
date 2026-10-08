@@ -1468,19 +1468,26 @@ def test_input_map_self_consistency_does_not_replace_full_projection_gold_target
 
 
 def test_sketch_checkpoint_continues_into_input_map_with_frozen_head_preserved(tmp_path,monkeypatch):
-    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=1)
+    import json
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=4)
+    args[args.index('--eval-every')+1]='1'
+    args+=['--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10']
     module.main(args)
     parent_path=tmp_path/'run'/'checkpoint.pt'
     parent=torch.load(parent_path,weights_only=False)
     assert any(n.startswith('heads.feedback.') for n in parent['student_parameters'])
+    assert parent['schedule']['adaptation_started_eval'] is not None
     continued_args=list(args)
     continued_args[continued_args.index('--out')+1]=str(tmp_path/'mapped')
-    continued_args[continued_args.index('--steps')+1]='2'
+    continued_args[continued_args.index('--steps')+1]='5'
     continued_args+=['--continue-from',str(parent_path),'--neuralese-input','map',
                      '--input-map-kernel','2','--input-map-rank','4']
     module.main(continued_args)
     child=torch.load(tmp_path/'mapped'/'checkpoint.pt',weights_only=False)
-    assert child['step']==2
+    assert child['step']==5
+    first=json.loads((tmp_path/'mapped'/'train.jsonl').read_text().splitlines()[0])
+    assert first['phase']=='projection_only' and first['backbone_gradient_norm']==0
+    assert child['identity']['text_history']!=parent['identity']['text_history']
     for name,value in parent['heads'].items():
         if name.startswith('feedback.'):
             torch.testing.assert_close(child['heads'][name],value,atol=0,rtol=0)

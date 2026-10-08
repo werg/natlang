@@ -835,8 +835,11 @@ def main(argv=None):
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
-              'text_history':'gold seed; repeated shared shallow sequence passes with aligned predictions',
-              'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05,
+              'text_history':('gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
+                              if a.neuralese_input=='map' else
+                              'gold seed; repeated shared shallow sequence passes with aligned predictions'),
+              'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
+              'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
               'supervision_policy':TEXT_SUPERVISION_POLICY,
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'

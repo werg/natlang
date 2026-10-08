@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "gold-text-input-map-v1",
+  "status": "canonical-input-map-warmup",
+  "implementation": "natlang_neuralese.train.text_warmup",
+  "inherits": "gold-text-warmup-v1",
+  "decision": "2026-10-08 shared Maple/LFM owner course correction: replace repeated sketch passes in text warm-up with a causal token-to-Neuralese training input map. Runtime/self-generated recurrence still requires separate qualification.",
+  "cli": {
+    "neuralese_input": "map",
+    "rollout_passes": 0,
+    "input_map_kernel": 4,
+    "input_map_rank": 64
+  },
+  "sequence": "Gold-history full-stack pass, then one full-stack consumer pass over detached mapped previous-token embeddings; no future input positions.",
+  "input_map": {
+    "identity": "raw token embedding plus zero-initialized causal depthwise convolution and low-rank residual",
+    "target": "current full-depth projected output at the matching target slot, detached",
+    "consumer_gradient": "detached; map trained only through its own self-consistency objective",
+    "training_only": true
+  },
+  "full_projection": {
+    "target": "fixed raw next-token embedding table, always independent of the detached map target",
+    "training": "full-strength embedding loss from the first update; full-stack next-token CE after the projection phase"
+  },
+  "schedule": "Fresh map starts projection-first; measured held plateaus precede gentle transformer adaptation. Passing the schedule is not qualification.",
+  "continuation": {
+    "weights": "restore full backbone and all heads, including newly frozen feedback weights",
+    "rng": "restore parent Python/Torch/CUDA RNG",
+    "optimizer": "sketch-to-map changes trainable parameter groups: explicit fresh Muon/AdamW state; subsequent same-map resume restores complete state",
+    "qualification": "new objective remeasures baseline and resets projection plateau and qualification evidence"
+  },
+  "supervision": "shared TEXT_SUPERVISION_POLICY; real open/close boundaries; system prompt stays context-only",
+  "qualification": "Full projection remains measured against raw gold embeddings; mapped-history alignment is only text qualification. Actual autoregressive blocks, stopping, transport, gradient replay and function recurrence require exact-weight independent qualification.",
+  "residual_caveat": "A token-derived map cannot carry information beyond tokens. Measure projection-versus-map residual and qualify self-generated block exposure before functional recurrence training.",
+  "serving": "omit the training-only input map from serving heads; preserve it separately in exports and full resumable checkpoints"
+}
