@@ -8,7 +8,7 @@ import type { CallableDefinition } from '../runtime/kernel.js';
 import type { NatlangRuntime } from '../runtime/runtime.js';
 import { caseHashes, caseSources, loadCases } from './compilations.js';
 import { recordedBehavior, type Behavior } from './judge.js';
-import { approaches, induceRules, splitOf, type Approach, type Example, type Rule } from './mining.js';
+import { approaches, behaviorLabel, induceRules, splitOf, type Approach, type Example, type Rule } from './mining.js';
 import { definitionFor, replayCaseOn, signatureOf, verdictFor } from './offline.js';
 import { recordedArguments } from './replay.js';
 import type { CallStore } from './store.js';
@@ -29,7 +29,8 @@ export function study(store: CallStore, key: string, options: { limit?: number; 
     const args = record && recordedArguments(store, record);
     if (!record || !args) { skipped++; continue; }
     records.set(record.call_id, record);
-    examples.push({ callId: record.call_id, args, features: record.features, evals: evalsOf(record), approach: '', split: splitOf(record.call_id) });
+    examples.push({ callId: record.call_id, args, features: record.features, evals: evalsOf(record), approach: '', split: splitOf(record.call_id),
+      behavior: behaviorOf(store, record) });
   }
   if (!examples.length) return undefined;
   const found = approaches(examples);
@@ -39,6 +40,13 @@ export function study(store: CallStore, key: string, options: { limit?: number; 
   const latest = records.get(examples.at(-1)!.callId)!;
   const { definition, loaded } = definitionFor(store, latest);
   return { key, definition, loaded, records, examples, approaches: found, rules, unclassified, skipped };
+}
+
+/** What a call did: its service calls and the functions it called, with those of its children, in order. */
+function behaviorOf(store: CallStore, record: CallRecord, depth = 0): string {
+  const steps: string[] = record.effects.filter(effect => !effect.error).sort((a, b) => a.order - b.order).map(effect => `${effect.service}.${effect.method}`);
+  if (depth < 4) for (const child of store.children(record.call_id)) steps.push(child.definition_name);
+  return behaviorLabel(steps);
 }
 
 /** The successful eval programs of a recorded agent call, in order. */
@@ -89,25 +97,33 @@ export function renderEvidence(store: CallStore, subject: Study, extra: { report
         ...approach.template.map((program, index) => `// eval ${index + 1}\n${program}\n`)].join('\n');
     const outputs = new Map<string, number>();
     for (const record of calls) { const key = JSON.stringify(store.value(record.output)); outputs.set(key, (outputs.get(key) ?? 0) + 1); }
-    files[`${dir}/stats.md`] = [`# ${approach.id}`, '', `${approach.calls.length} calls (${calls.filter(record => splitOf(record.call_id) === 'held-out').length} held out).`, '',
+    const behaviorsHere = [...new Set(approach.calls.map(id => subject.examples.find(example => example.callId === id)?.behavior ?? 'none'))];
+    files[`${dir}/stats.md`] = [`# ${approach.id}`, '', `${approach.calls.length} calls (${calls.filter(record => splitOf(record.call_id) === 'held-out').length} held out).`,
+      `What they did: ${behaviorsHere.join('; ')}.`, '',
       'Most common results:', ...[...outputs].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([value, n]) => `- ${n}× ${value.slice(0, 300)}`), '',
       ...(Object.values(approach.holes)[0]?.length ? ['Hole values per call:', ...Object.entries(approach.holes).slice(0, 20)
         .map(([id, values]) => `- ${id}: ${values.join(', ')}`), ''] : [])].join('\n');
     for (const record of calls.filter(record => splitOf(record.call_id) === 'training').slice(0, 5))
       files[`${dir}/examples/${record.call_id.replace(/[^\w.-]/g, '_')}.json`] = json(exampleOf(store, record));
   }
+  const behaviors = new Map<string, Example[]>();
+  for (const example of subject.examples) behaviors.set(example.behavior ?? 'none', [...(behaviors.get(example.behavior ?? 'none') ?? []), example]);
   files['conditions.md'] = ['# Conditions', '',
-    'Conditions found by search over the training calls: each selects one approach with no exception among the training calls',
+    'What the calls did, whatever code they ran (their service calls and the functions they called):', '',
+    ...[...behaviors].sort((a, b) => b[1].length - a[1].length).map(([behavior, list]) => `- ${behavior}: ${list.length} calls, ` +
+      `approaches ${[...new Set(list.map(example => example.approach))].join(', ')}`), '',
+    'Conditions found by search over the training calls: each selects one behavior with no exception among the training calls',
     'not covered by an earlier condition. They are evaluated in order, like the cases of a cases file. `held out` shows how',
     'the condition does on calls it was not chosen on. Use, change, merge or drop them; they are evidence, not the answer.', '',
-    ...subject.rules.flatMap((rule, index) => [`## ${index + 1}. ${rule.approach} (${rule.covers.length} training calls; held out: ` +
+    ...subject.rules.flatMap((rule, index) => [`## ${index + 1}. ${rule.label} (${rule.covers.length} training calls; held out: ` +
       `${rule.heldOut.correct}/${rule.heldOut.covered} correct)`, '', fence(rule.guard, 'ts'), '']),
-    ...(subject.rules.length ? [] : ['No condition selects an approach without exception.', '']),
+    ...(subject.rules.length ? [] : ['No condition selects a behavior without exception.', '']),
     `${subject.unclassified.length} training calls are not covered by any condition (unclassified/).`, ''].join('\n');
   files['unclassified/README.md'] = `${subject.unclassified.length} training calls no condition covers. A few are listed here.\n`;
   for (const id of subject.unclassified.slice(0, 10)) {
     const record = subject.records.get(id);
-    if (record) files[`unclassified/${id.replace(/[^\w.-]/g, '_')}.json`] = json({ approach: subject.examples.find(example => example.callId === id)?.approach, ...exampleOf(store, record) });
+    const example = subject.examples.find(item => item.callId === id);
+    if (record) files[`unclassified/${id.replace(/[^\w.-]/g, '_')}.json`] = json({ approach: example?.approach, behavior: example?.behavior, ...exampleOf(store, record) });
   }
   files['history.md'] = extra.history ?? 'No earlier compilation or decline for this function.\n';
   if (extra.previousCases) files['previous-cases.ts'] = extra.previousCases;
