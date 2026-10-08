@@ -256,20 +256,36 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const outerTag = unwrapParentheses(node);
     const suffixCall = suffixWithCallOf(node);
     const suffixInvocation = suffixWithInvocation(suffixCall);
-    const call = suffixCall ? suffixInvocation : outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
+    let call = suffixCall ? suffixInvocation : outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
       outerTag.parent : undefined;
     withCall ??= suffixCall;
     const signature: Signature = { origin: 'none' };
     // Awaiting an `nl` tag creates its callable; it does not run a judgment. A saved callable may be awaited here and
     // invoked in this or a later eval, so diagnose only when the value is used as a non-callable result.
-    // items.map(r => nl`...`): the arrow hands back the function itself, one per item, and nothing ever runs it.
+    // A map may intentionally build a reusable array of callable nl functions; allow it when
+    // the array is later invoked through an indexed access. A function array that is never
+    // called is still almost always a missing `(item)` after the tag.
     const arrow = outerTag.parent;
+    const mappedNl = arrow && ts.isArrowFunction(arrow) && arrow.body === outerTag && arrow.parent &&
+      ts.isCallExpression(arrow.parent) && arrow.parent.arguments.includes(arrow) &&
+      ts.isPropertyAccessExpression(arrow.parent.expression) && arrow.parent.expression.name.text === 'map' &&
+      arrow.parent.parent && ts.isVariableDeclaration(arrow.parent.parent) && arrow.parent.parent.initializer === arrow.parent ?
+      arrow.parent.parent : undefined;
+    const indexedCalls = mappedNl ? laterUses(mappedNl).flatMap(use => {
+      const indexed = use.parent;
+      if (!indexed || !ts.isElementAccessExpression(indexed) || indexed.expression !== use) return [];
+      const invocation = indexed.parent;
+      return invocation && ts.isCallExpression(invocation) && invocation.expression === indexed ? [invocation] : [];
+    }) : [];
     if (arrow && ts.isArrowFunction(arrow) && arrow.body === outerTag && arrow.parent && ts.isCallExpression(arrow.parent) &&
         arrow.parent.arguments.includes(arrow)) {
-      report(node, 'nl-not-called', 'This arrow returns the `nl` function itself, never called: nl`...` creates a function. ' +
-        'Call it, and await the results: `await Promise.all(items.map(item => nl`Does item …?`(item)))`, or ask one ' +
-        'question at a time with `await nl(`… ${item.text}`)`.');
-      return;
+      if (indexedCalls.length) call = indexedCalls[0];
+      else {
+        report(node, 'nl-not-called', 'This arrow returns the `nl` function itself, never called: nl`...` creates a function. ' +
+          'Call it, and await the results: `await Promise.all(items.map(item => nl`Does item …?`(item)))`, or save the ' +
+          'callables and invoke them later.');
+        return;
+      }
     }
     if (outerTag.parent && ts.isAwaitExpression(outerTag.parent)) {
       const awaited = outerTag.parent;
@@ -362,6 +378,13 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
 
     // 3. Immediate-call arguments and 4. result context.
     if (call) {
+      for (const invocation of indexedCalls) if (invocation.arguments.length !== call.arguments.length ||
+          invocation.arguments.some((argument, index) => !checker.isTypeAssignableTo(widen(checker.getTypeAtLocation(argument)),
+            widen(checker.getTypeAtLocation(call!.arguments[index]!))) &&
+            !checker.isTypeAssignableTo(widen(checker.getTypeAtLocation(call!.arguments[index]!)), widen(checker.getTypeAtLocation(argument))))) {
+        report(invocation, 'nl-ambiguous-signature', 'Calls of this saved `nl` function array disagree about its parameters; annotate the function signature.');
+        return;
+      }
       const names: string[] = [];
       const types: ts.Type[] = [];
       let generated = 0;

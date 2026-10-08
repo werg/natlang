@@ -31,6 +31,28 @@ test('an unannotated nl result gets its type from how the snippet uses it', () =
   for (const [code, expected] of cases) assert.deepEqual(signatures(code), [expected], code);
 });
 
+test('nl functions returned from map can be saved in an array and called later', () => {
+  const code = [
+    'const answerFns = tickets.map(t => nl<string>`Solve this ticket.`);',
+    'const answers = await Promise.all(tickets.map((t, i) => answerFns[i](t)));',
+    'return answers;',
+  ].join('\n');
+  const { plans, diagnostics } = analyzeEvalSnippet(code, scope);
+  assert.deepEqual(diagnostics.filter(item => item.severity === 'error'), []);
+  assert.deepEqual(plans.map(plan => `(${plan.parameters.map(item => `${item.name}: ${item.type.natlang}`).join(', ')}) => ${plan.returns.natlang}`),
+    ['(t: Ticket) => string']);
+
+  const unused = analyzeEvalSnippet('const answerFns = tickets.map(t => nl<string>`Solve this ticket.`);', scope);
+  assert.ok(unused.diagnostics.some(item => item.code === 'nl-not-called'));
+
+  const conflictingUse = analyzeEvalSnippet([
+    'const answerFns = tickets.map(t => nl<string>`Solve this ticket.`);',
+    'answerFns[0](tickets[0]!);',
+    'answerFns[1](tickets[0]!.id);',
+  ].join('\n'), scope);
+  assert.ok(conflictingUse.diagnostics.some(item => item.code === 'nl-ambiguous-signature'));
+});
+
 test('an nl step of iterateOn takes the initial state\'s type, and its stopping check gets it from context', () => {
   assert.deepEqual(signatures('const final = await nl`Make plan more evil.`.iterateOn(plan).until(nl`The plan is evil enough.`);'),
     ['(plan: string) => string', '(state: string) => boolean']);
