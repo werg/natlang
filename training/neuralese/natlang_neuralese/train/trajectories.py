@@ -410,6 +410,12 @@ def main(argv=None):
     parser.add_argument("--records", required=True)
     parser.add_argument("--pieces", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--member-weight", type=float, default=0.0,
+                        help="nested-family students (MAPLE_NESTED §4a): each update also trains one member (in rotation) "
+                             "on the crisp rendering of its last record, whole trajectory: CE + KL(full || member), times "
+                             "this weight; members' private parts become trainable. 0 disables (members still evaluated)")
+    parser.add_argument("--member-tokens", type=int, default=2048, help="members train and evaluate on the last N tokens")
+    parser.add_argument("--member-eval", type=int, default=4, help="held records for the per-member evaluation")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
     parser.add_argument("--stop-supervision", choices=["generated-length", "gold-native-boundary"], default="generated-length", help="teach stop on coherent gold value states with balanced terminal/continue loss")
@@ -1117,6 +1123,25 @@ def main(argv=None):
     if args.backbone_training=='lora' and args.rank<1:
         raise ValueError('explicit LoRA policy requires --rank positive')
     backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
+    from ..maple.family import evaluate_members, family_members, member_loss, private_parameters, window_labels
+    family = family_members(engine.backbone)
+    if args.member_weight and not family:
+        raise ValueError('--member-weight needs a nested-family student')
+    if args.member_weight:
+        known = {id(p) for _, p in backbone_named}
+        for name, p in private_parameters(engine.backbone):
+            if id(p) not in known:
+                p.requires_grad_(True)
+                backbone_named.append((name, p))
+
+    def member_window(record):
+        """The crisp rendering of a record (prompt, tool output and target: whole trajectory), last --member-tokens."""
+        notes = handover_notes(record)
+        messages = crisp_messages(record["messages"], texts, notes) + render(
+            [record["target"]], lambda name: {"type": "text", "text": texts[name]}, notes)
+        text = engine.tokenizer.apply_chat_template(messages, tools=record.get("tools") or None, tokenize=False)
+        ids = torch.tensor([engine._tokens(text)[-args.member_tokens:]], device=args.device)
+        return ids, window_labels(ids, 1)
     lora = [parameter for _,parameter in backbone_named]
     lora_names = ([name for name,_ in backbone_named]
                   if args.backbone_training in ('full','qat') else None)
@@ -1164,7 +1189,11 @@ def main(argv=None):
             if not getattr(backbone, 'tied', True):
                 backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
         heads.load_state_dict(resumed['heads'])
-        optimizer.load_state_dict(resumed['optimizer'])
+        try:
+            optimizer.load_state_dict(resumed['optimizer'])
+        except ValueError as error:
+            # The trainable set grew (members' private parts joined): the optimizer starts fresh.
+            print(json.dumps({'event': 'optimizer_state_fresh', 'reason': str(error)[:200]}), flush=True)
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
         from .trajectory_state import initialize_content_residual
@@ -1386,6 +1415,8 @@ def main(argv=None):
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
+    if resumed is None and family and args.member_eval:
+        report["family-init"] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
     if resumed is None and (args.handover == "written" or args.digest == "written"):
         report["written-init"] = evaluate_written("written-init", leaves, paired_held, held_probe_accounting)
         report["written-init-train"] = evaluate_written("written-init-train", leaves, paired_train, train_probe_accounting)
@@ -1664,6 +1695,17 @@ def main(argv=None):
                 used.update(part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
                             for part in m["content"] if part["type"] == "soft")
             reader_geometry[0] = None
+            family_record = None
+            if args.member_weight and step_record_ids:
+                # The family term (MAPLE_NESTED §4a): one member per update, in rotation, on this update's last record.
+                member = family[step % len(family)]
+                member_value, parts = member_loss(backbone, member, *member_window(record))
+                if not torch.isfinite(member_value):
+                    raise RuntimeError('nonfinite member loss')
+                (args.member_weight * member_value).backward()
+                family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
+                                 'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
+                del member_value
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
@@ -1681,7 +1723,7 @@ def main(argv=None):
                      "discarded_writer_batches_this_update": discarded_writer_batches,
                      "discarded_writer_rows_this_update": discarded_writer_rows,
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
-                     "write_capacity": heads.max_length}
+                     "write_capacity": heads.max_length, **({"family": family_record} if family_record else {})}
             if args.device.startswith("cuda"):
                 entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
                 entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
@@ -1698,6 +1740,8 @@ def main(argv=None):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if family and args.member_eval:
+                        evaluation['family'] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
                     if args.crisp_weight:
                         evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
                     if args.handover == 'written' or args.digest == 'written':
@@ -1727,6 +1771,8 @@ def main(argv=None):
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
+    if family and args.member_eval:
+        report["family-trained"] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
     if args.handover == "written" or args.digest == "written":
         report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
         report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
