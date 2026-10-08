@@ -104,7 +104,8 @@ function trainingTarget(assistant: Dict, calls: Dict[], decisionIndex: number): 
 
 type StatusOnlySuccessProof = { schema: 'natlang.status-only-success-proof/1';
   basis: 'same-invocation-staged-result' | 'declared-void-return';
-  invocation_id?: string; staged_call_id?: string; staged_output_sha256?: string; declared_return_type?: string };
+  invocation_id?: string; staged_call_id?: string; staged_action_linkage?: 'tool-call-id' | 'unique-invocation-arguments-output';
+  staged_output_sha256?: string; declared_return_type?: string };
 
 function exactTranscriptText(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
@@ -128,32 +129,46 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
   declaredReturnType: unknown, actionLedger: readonly Dict[], terminalSeq: unknown): StatusOnlySuccessProof | undefined {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return;
   const result = args as Dict;
-  if (result.status !== 'success' || Object.hasOwn(result, 'value')) return;
+  if ((result.status ?? 'success') !== 'success' || Object.hasOwn(result, 'value')) return;
   const returnType = typeof declaredReturnType === 'string' ? declaredReturnType :
     declaredReturnType && typeof declaredReturnType === 'object' && !Array.isArray(declaredReturnType) ?
       String((declaredReturnType as Dict).natlang ?? '') : '';
   if (returnType.trim() === 'void') return { schema: 'natlang.status-only-success-proof/1',
     basis: 'declared-void-return', ...(invocationId ? { invocation_id: invocationId } : {}), declared_return_type: returnType };
   if (!returnType.trim() || !invocationId || context.length < 2) return;
-  const last = context.at(-1);
-  const lastText = exactTranscriptText(last?.content);
-  if (!last || last.role !== 'tool' || typeof last.tool_call_id !== 'string' || lastText === undefined) return;
-  const stage = /(?:^|\n)Staged (.+) as the result\. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result\./s.exec(lastText);
-  if (!stage || stage[1]!.includes('<<cut off') || lastText.slice(stage.index! + stage[0].length).includes('This is not a valid')) return;
-  const producer = [...context].reverse().find(message => message.role === 'assistant' && Array.isArray(message.tool_calls) &&
-    (message.tool_calls as Dict[]).some(call => call.id === last.tool_call_id));
-  const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === last.tool_call_id);
-  const fn = call?.function && typeof call.function === 'object' ? call.function as Dict : undefined;
-  if (fn?.name !== 'eval') return;
-  const stagedArgs = parseArguments(fn.arguments);
-  const stagedEvents = actionLedger.filter(event => event.call_id === invocationId && event.name === 'eval' &&
-    event.tool_call_id === last.tool_call_id && ['ok', 'completed'].includes(String(event.outcome)) &&
-    canonical(event.arguments) === canonical(stagedArgs) && event.result_text === lastText &&
-    !(event.arguments && typeof event.arguments === 'object' && (event.arguments as Dict).finish === true) &&
-    Number.isSafeInteger(event.seq) && Number.isSafeInteger(terminalSeq) && Number(event.seq) < Number(terminalSeq));
-  if (stagedEvents.length !== 1) return;
+  // The complete runtime notice is the final line of a staged result. Requiring that suffix rejects
+  // eval console output that merely imitates the notice. Earlier staged values remain in the
+  // invocation across ordinary reads and unsuccessful evals, so inspect the whole current context
+  // and bind its latest authentic staged eval to the successful action ledger.
+  const stagePattern = /(?:^|\n)Staged ([\s\S]+) as the result\. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result\. You can keep working and return a different value later\.$/;
+  const stagedCandidates: { callId: string; output: string; event: Dict; linkage: 'tool-call-id' | 'unique-invocation-arguments-output' }[] = [];
+  for (let outputIndex = 0; outputIndex < context.length; outputIndex++) {
+    const message = context[outputIndex]!;
+    if (message.role !== 'tool' || typeof message.tool_call_id !== 'string') continue;
+    const output = exactTranscriptText(message.content);
+    if (output === undefined) continue;
+    const stage = stagePattern.exec(output);
+    if (!stage || stage[1]!.includes('<<cut off')) continue;
+    const producer = context.slice(0, outputIndex).reverse().find(candidate => candidate.role === 'assistant' &&
+      Array.isArray(candidate.tool_calls) && (candidate.tool_calls as Dict[]).some(call => call.id === message.tool_call_id));
+    const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === message.tool_call_id);
+    const fn = call?.function && typeof call.function === 'object' ? call.function as Dict : undefined;
+    if (fn?.name !== 'eval') continue;
+    const stagedArgs = parseArguments(fn.arguments);
+    const stagedEvents = actionLedger.filter(event => event.call_id === invocationId && event.name === 'eval' &&
+      (event.tool_call_id === message.tool_call_id || event.tool_call_id === undefined) && ['ok', 'completed'].includes(String(event.outcome)) &&
+      canonical(event.arguments) === canonical(stagedArgs) && event.result_text === output &&
+      !(event.arguments && typeof event.arguments === 'object' && (event.arguments as Dict).finish === true) &&
+      Number.isSafeInteger(event.seq) && Number.isSafeInteger(terminalSeq) && Number(event.seq) < Number(terminalSeq));
+    if (stagedEvents.length === 1) stagedCandidates.push({ callId: message.tool_call_id, output,
+      event: stagedEvents[0]!, linkage: stagedEvents[0]!.tool_call_id === message.tool_call_id ?
+        'tool-call-id' : 'unique-invocation-arguments-output' });
+  }
+  const staged = stagedCandidates.at(-1);
+  if (!staged) return;
   return { schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
-    invocation_id: invocationId, staged_call_id: last.tool_call_id, staged_output_sha256: hexDigest(lastText),
+    invocation_id: invocationId, staged_call_id: staged.callId, staged_action_linkage: staged.linkage,
+    staged_output_sha256: hexDigest(staged.output),
     ...(returnType ? { declared_return_type: returnType } : {}) };
 }
 

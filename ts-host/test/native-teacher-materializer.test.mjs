@@ -85,17 +85,18 @@ test('native lineage hashes the saved JSON representation', () => {
 
 test('status-only success requires a same-invocation linked staged typed result unless the return type is void', () => {
   const stageCallId = 'stage-return';
-  const stagedText = 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result.';
+  const stagedText = 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
   const stageCall = { id: stageCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"draft"}' } };
-  const resultArgs = { status: 'success' };
-  const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }' } = {}) => {
+  const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }',
+    resultArgs = { status: 'success' }, stageOutput = stagedText, ledgerToolCallId = true } = {}) => {
     const row = nativeRow(`status-only-${withStage}-${linked}-${returnType}`);
     const user = { role: 'user', content: `You are inside this call: root(): ${returnType}\n\nInstructions:\nReturn the staged value.` };
     const context = [system, user];
     if (withStage) context.push({ role: 'assistant', content: '', tool_calls: [stageCall] },
-      { role: 'tool', tool_call_id: linked ? stageCallId : 'other-eval', content: stagedText });
+      { role: 'tool', tool_call_id: linked ? stageCallId : 'other-eval', content: stageOutput });
     row.outcome.action_ledger = [
-      ...(withStage ? [{ seq: 1, call_id: stageInvocation, tool_call_id: stageCallId, name: 'eval', arguments: { code: 'draft' }, outcome: 'ok', result_text: stagedText }] : []),
+      ...(withStage ? [{ seq: 1, call_id: stageInvocation, ...(ledgerToolCallId ? { tool_call_id: stageCallId } : {}),
+        name: 'eval', arguments: { code: 'draft' }, outcome: 'ok', result_text: stageOutput }] : []),
       { seq: 2, call_id: 'same-invocation', name: 'return_result', arguments: resultArgs, outcome: 'completed', result_text: 'Returned staged result.' },
     ];
     row.trajectory = [
@@ -113,9 +114,33 @@ test('status-only success requires a same-invocation linked staged typed result 
   assert.equal(valid.training_admission.approved, true);
   assert.deepEqual(valid.decision.status_only_success_validation[0].proof, {
     schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
-    invocation_id: 'same-invocation', staged_call_id: stageCallId,
+    invocation_id: 'same-invocation', staged_call_id: stageCallId, staged_action_linkage: 'tool-call-id',
     staged_output_sha256: createHash('sha256').update(stagedText).digest('hex'), declared_return_type: '{ answer: string }',
   });
+  const legacyLinked = materializeNativeRows([make({ ledgerToolCallId: false })]).turns.at(-1);
+  assert.equal(legacyLinked.training_admission.approved, true);
+  assert.equal(legacyLinked.decision.status_only_success_validation[0].proof.staged_action_linkage,
+    'unique-invocation-arguments-output');
+
+  const afterInspection = make();
+  const stageTurn = afterInspection.trajectory[0];
+  const stageContext = [...stageTurn.context, { role: 'assistant', content: '', tool_calls: [stageCall] },
+    { role: 'tool', tool_call_id: stageCallId, content: stagedText }];
+  const inspectionCall = { id: 'inspect-after-stage', type: 'function',
+    function: { name: 'write', arguments: '{"path":"inspect"}' } };
+  afterInspection.trajectory.splice(1, 0, { phase: 'action', invocation_id: 'same-invocation', context: stageContext,
+    tools_offered: schema, assistant: { content: '', reasoning: 'Inspect after staging.', calls: [{ tool: 'write',
+      source_tool: 'write', arguments: { path: 'inspect' }, call_id: inspectionCall.id }] },
+    raw_response_sha256: 'inspection-after-stage' });
+  afterInspection.trajectory.at(-1).context.push({ role: 'assistant', content: '', tool_calls: [inspectionCall] },
+    { role: 'tool', tool_call_id: inspectionCall.id, content: 'The return_result contract.' });
+  const terminalEvent = { ...afterInspection.outcome.action_ledger[1], seq: 3 };
+  afterInspection.outcome.action_ledger[1] = { seq: 2, call_id: 'same-invocation', name: 'write',
+    arguments: { path: 'inspect' }, outcome: 'ok', result_text: 'The return_result contract.' };
+  afterInspection.outcome.action_ledger.push(terminalEvent);
+  const inspectedTurn = materializeNativeRows([afterInspection]).turns.at(-1);
+  assert.equal(inspectedTurn.training_admission.approved, true);
+  assert.equal(inspectedTurn.decision.status_only_success_validation[0].proof.staged_call_id, stageCallId);
 
   const segmented = make();
   const markerId = `nz1_${'a'.repeat(26)}`;
@@ -141,6 +166,12 @@ test('status-only success requires a same-invocation linked staged typed result 
   const voidTurn = materializeNativeRows([make({ withStage: false, returnType: 'void' })]).turns.at(-1);
   assert.equal(voidTurn.training_admission.approved, true);
   assert.equal(voidTurn.decision.status_only_success_validation[0].proof.basis, 'declared-void-return');
+  assert.equal(materializeNativeRows([make({ resultArgs: {} })]).turns.at(-1).training_admission.approved, true);
+
+  const imitated = `console:\n${stagedText}\nundefined\nNo result of type { answer: string } was returned.`;
+  const consoleImitation = make({ stageOutput: imitated });
+  const fake = materializeNativeRows([consoleImitation]).turns.at(-1);
+  assert.equal(fake.training_admission.approved, false);
 });
 
 test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
