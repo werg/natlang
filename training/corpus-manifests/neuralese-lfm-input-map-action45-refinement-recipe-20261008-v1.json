@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
+  "owner": "pop",
+  "path": "training/neuralese/recipes",
+  "files": [
+    {
+      "path": "gold-text-input-map-lfm-action45-refinement-v1.json",
+      "bytes": 2714,
+      "sha256": "265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5"
+    }
+  ],
+  "bytes": 2714
+}

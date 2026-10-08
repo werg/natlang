@@ -8252,6 +8252,36 @@
         "neuralese-lfm-input-map-refinement-launch-20261008-v1"
       ],
       "notes": "Closed continuation at step 22272 with full optimizer/RNG checkpoint, current and best heads/checkpoints, baseline, train/eval logs, plan/report, closure, frozen launch provenance, frozen runtime snapshot and exact held AR/runtime-wide diagnostics. Root closure states text alignment only qualified and task-stopping/runtime qualification false. These files are archival diagnostics and not the separate new active action45 resume. Keep the full checkpoint and heads local on Pop; sync provides a verified DGX copy only and does not offload or alter local files."
+    },
+    {
+      "id": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
+      "owner": "pop",
+      "path": "training/neuralese/recipes",
+      "include": [
+        "gold-text-input-map-lfm-action45-refinement-v1.json"
+      ],
+      "admission": "immutable-active-refinement-recipe-provenance-only",
+      "derived_from": [
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
+      ],
+      "notes": "Immutable recipe used by the separately registered action45 refinement launch. Recipe SHA256 265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5. The source code identity is runtime source commit e3198f93d07f63ce54eb0bb08b665cf39aa15829; launch declaration commit d7585f582680377b679a75fd8ea3ca34e439193f. Recipe/provenance only; active run outputs are excluded."
+    },
+    {
+      "id": "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1",
+      "include": [
+        "train-launch.json",
+        "train-launch.prepared.json"
+      ],
+      "admission": "immutable-active-launch-provenance-only;mutable-outputs-excluded",
+      "derived_from": [
+        "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
+        "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
+      ],
+      "notes": "Frozen train-launch.json and prepared launch receipt only. Launch binds recipe SHA 265711c532e7123b1e1e93fb4b72caa7aa5804e57a5936caf8a6544b97813cf5; declaration commit d7585f582680377b679a75fd8ea3ca34e439193f; runtime source commit e3198f93d07f63ce54eb0bb08b665cf39aa15829; frozen runtime manifest SHA 633c9806baed55a12a1591766e2df15eefc537bd1093406107da6ea47e929f50; parent checkpoint SHA 9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f at step22272. Inputs bind the separately registered exact45 full facets/root admission and closed parent/runtime diagnostics. Mutable active run outputs and checkpoints are explicitly excluded; this record does not alter or snapshot them."
     }
   ],
   "coverage_backlog": [

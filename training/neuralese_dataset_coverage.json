@@ -98,8 +98,25 @@
       "qualification": "text alignment only; runtime and task stopping unqualified",
       "remaining": [
         "archival diagnostic only; separate from active action45 resume",
-        "Pop original checkpoint and heads remain local; not offloaded"
-      ]
+        "Pop checkpoint.pt remains local; best-checkpoint and heads were offloaded only after exact DGX verification"
+      ],
+      "availability": {
+        "pop": "partial after recorded verified offload: train-continuation/checkpoint.pt remains local; best-checkpoint.pt, heads.pt and best-heads.pt were intentionally unlinked under the bound artifact-eviction receipt",
+        "dgx": "complete 134-file immutable snapshot; verify-remote passed",
+        "pop_eviction_receipt": ".coordination/artifact-evictions/neuralese-lfm-input-map-refinement-22272-closed-20261008-v1--780ae85187fc5929.json"
+      },
+      "active_launch_provenance": "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1; immutable launch JSON and recipe only, mutable outputs excluded"
+    },
+    "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1": {
+      "status": "active-launch-provenance-only",
+      "recipe": "neuralese-lfm-input-map-action45-refinement-recipe-20261008-v1",
+      "inputs": [
+        "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+        "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1"
+      ],
+      "mutable_outputs_registered": false,
+      "runtime_source_commit": "e3198f93d07f63ce54eb0bb08b665cf39aa15829",
+      "declaration_commit": "d7585f582680377b679a75fd8ea3ca34e439193f"
     }
   },
   "teacher_outcome_coverage": {

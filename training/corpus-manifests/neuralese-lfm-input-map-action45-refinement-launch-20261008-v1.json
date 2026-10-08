@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-lfm-input-map-action45-refinement-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1",
+  "files": [
+    {
+      "path": "train-launch.json",
+      "bytes": 4036,
+      "sha256": "3d7145ee44e713b2130e2c4ddba3519c32a3255b50d5b17d40657748b177a654"
+    },
+    {
+      "path": "train-launch.prepared.json",
+      "bytes": 3909,
+      "sha256": "0915d5d20c842d52473ad73b76ed4ee6c883a399f57173fd42d1ef4fddcd907a"
+    }
+  ],
+  "bytes": 7945
+}
