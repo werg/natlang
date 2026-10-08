@@ -740,6 +740,9 @@ def main(argv=None):
                    help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
                         'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
                         'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--eval-only',action='store_true',
+                   help='run one held evaluation of the restored state (use --continue-from into a fresh --out), '
+                        'write eval-only.json and exit: no update, no checkpoint')
     p.add_argument('--ar-control-steps',type=int,default=256,
                    help='held autoregressive controls (crisp greedy, full-projection and sketch self-fed rollouts) '
                         'over this many positions of the first held batch; 0 disables. Diagnostic, not a gate')
@@ -1296,6 +1299,11 @@ def main(argv=None):
                 write_heads_export_status(export_error=export_error)
                 raise
         write_heads_export_status(export_error=export_error)
+    if a.eval_only:
+        report=evaluate()
+        (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
+        print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
+        return None
     if not was_resumed:
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
