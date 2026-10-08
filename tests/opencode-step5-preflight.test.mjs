@@ -27,3 +27,17 @@ test('Step 5 preflight rejects plan and bridge main/small model mismatches', () 
     small_model: 'opencode/another-free-model' }, collectorArgv: ['cli.js', '--model-id', alias] }),
   /immutable bridge main\/small model/);
 });
+
+test('Step 5 preflight pins the catalog-supported reasoning variant independently of model ID', () => {
+  const lowPlan = { ...plan, model: { ...plan.model, variant: 'low' },
+    command_templates: { ...plan.command_templates, bridge: `node bridge --model step-5-preview-free --variant low` } };
+  const lowBootstrap = { ...bootstrapConfig, model_variant: 'low' };
+  assert.deepEqual(verifyStep5ModelPair({ plan: lowPlan, bootstrapConfig: lowBootstrap,
+    collectorArgv: ['cli.js', '--model-id', alias] }),
+  { ok: true, model_alias: alias, collector_model_id: alias });
+  assert.throws(() => verifyStep5ModelPair({ plan: lowPlan, bootstrapConfig,
+    collectorArgv: ['cli.js', '--model-id', alias] }), /plan model variant does not match/);
+  assert.throws(() => verifyStep5ModelPair({ plan: lowPlan,
+    bootstrapConfig: { ...lowBootstrap, model_variant: 'high' }, collectorArgv: ['cli.js', '--model-id', alias] }),
+  /plan model variant does not match/);
+});

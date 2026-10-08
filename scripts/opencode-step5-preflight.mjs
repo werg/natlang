@@ -28,6 +28,14 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }) {
     throw new Error('collector command template --model-id does not match immutable bridge model_alias');
   if (bootstrapConfig.main_model !== bridgeAlias || bootstrapConfig.small_model !== bridgeAlias)
     throw new Error('immutable bridge main/small model do not match model_alias');
+  const plannedVariant = plan.model.variant ?? 'catalog_default';
+  if ((bootstrapConfig.model_variant ?? 'catalog_default') !== plannedVariant)
+    throw new Error('plan model variant does not match immutable bridge variant');
+  const bridgeTemplate = plan.command_templates?.bridge;
+  const variantFlag = typeof bridgeTemplate === 'string' && bridgeTemplate.match(/(?:^|\s)--variant\s+([^\s]+)/);
+  if ((plannedVariant === 'catalog_default' && variantFlag) ||
+      (plannedVariant !== 'catalog_default' && variantFlag?.[1] !== plannedVariant))
+    throw new Error('bridge command template variant does not match pinned model variant');
   return { ok: true, model_alias: bridgeAlias, collector_model_id: actualArgvAlias };
 }
 

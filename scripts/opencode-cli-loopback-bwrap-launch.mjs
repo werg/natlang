@@ -36,7 +36,7 @@ function parse(argv) {
   const values = {};
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (!['--sdk-module', '--client-bin', '--out', '--model', '--max-request-ms'].includes(key) ||
+    if (!['--sdk-module', '--client-bin', '--out', '--model', '--variant', '--max-request-ms'].includes(key) ||
         i + 1 >= argv.length || Object.hasOwn(values, key)) throw new Error(`invalid or duplicate option ${key}`);
     values[key] = argv[++i];
   }
@@ -44,6 +44,9 @@ function parse(argv) {
   values['--model'] ??= 'ling-3.1-flash-free';
   values['--max-request-ms'] ??= '180000';
   if (!/^[a-z0-9][a-z0-9._-]*-free$/i.test(values['--model'])) throw new Error('--model must name an explicit free OpenCode model');
+  if (values['--variant'] !== undefined && (values['--model'] !== 'step-5-preview-free' ||
+      !['low', 'medium', 'high'].includes(values['--variant'])))
+    throw new Error('--variant is supported only for step-5-preview-free with low, medium, or high');
   if (!/^\d+$/.test(values['--max-request-ms']) || Number(values['--max-request-ms']) < 1) throw new Error('--max-request-ms must be positive');
   return values;
 }
@@ -71,7 +74,7 @@ export function buildBubblewrapArgs({ sdkModule, clientBin, output, nodeModules,
   args.push('--ro-bind', resolve(scriptDir), '/home/werg/natlang/scripts', '--ro-bind', nodeModules, nodeModules,
     '--bind', output, output, '--chdir', output, process.execPath, bootstrap,
     '--sdk-module', sdkModule, '--client-bin', clientBin, '--out', output);
-  for (const key of ['--model', '--max-request-ms']) if (key in forwardedOptions) args.push(key, forwardedOptions[key]);
+  for (const key of ['--model', '--variant', '--max-request-ms']) if (key in forwardedOptions) args.push(key, forwardedOptions[key]);
   return args;
 }
 
@@ -84,7 +87,7 @@ async function main() {
   const nodeModules = await findNodeModulesRoot(await realpath(sdkModule));
   if (nodeModules !== await findNodeModulesRoot(await realpath(clientBin))) throw new Error('SDK and CLI must use the same pinned node_modules tree');
   await mkdir(output, { recursive: false, mode: 0o700 });
-  const forwarded = Object.fromEntries(['--model', '--max-request-ms'].filter(key => key in options).map(key => [key, options[key]]));
+  const forwarded = Object.fromEntries(['--model', '--variant', '--max-request-ms'].filter(key => key in options).map(key => [key, options[key]]));
   const args = buildBubblewrapArgs({ sdkModule, clientBin, output, nodeModules, forwardedOptions: forwarded });
   const child = spawn('/usr/bin/bwrap', args, { env: { PATH: '/usr/bin:/bin', HOME: output, TMPDIR: '/tmp',
     LANG: 'C.UTF-8', OPENCODE_API_KEY: await readConfiguredApiKey() }, stdio: 'inherit' });

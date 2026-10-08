@@ -18,6 +18,9 @@ function parseArgs(argv) {
   }
   for (const key of ['--sdk-module', '--client-bin', '--out']) if (!out[key]) throw new Error(`${key} is required`);
   out['--model'] ??= 'ling-3.1-flash-free';
+  if (out['--variant'] !== undefined && (out['--model'] !== 'step-5-preview-free' ||
+      !['low', 'medium', 'high'].includes(out['--variant'])))
+    throw new Error('--variant is supported only for step-5-preview-free with low, medium, or high');
   out['--max-request-ms'] = Number(out['--max-request-ms'] ?? 180_000);
   if (!Number.isSafeInteger(out['--max-request-ms']) || out['--max-request-ms'] < 1) throw new Error('--max-request-ms must be positive');
   return out;
@@ -201,7 +204,7 @@ async function main() {
     adapter = await createOpenCodeCliChatAdapter({ cliPath, client: sdkClient, baseUrl: serverUrl,
       directory: scratch, outputDirectory: output, actionLogPath: actionLog, providerID,
       modelAlias: `${providerID}/${args['--model']}`, modelID: args['--model'], maxCliTurns: 384, contextTokens: 32768,
-      maxRequestMs: args['--max-request-ms'], timeoutMs: args['--max-request-ms'], env: cliEnvironment });
+      modelVariant: args['--variant'], maxRequestMs: args['--max-request-ms'], timeoutMs: args['--max-request-ms'], env: cliEnvironment });
     const receipt = { schema: 'natlang.opencode_cli_loopback_bootstrap/1', bootstrap_id: bootstrapId,
       official_cli: cliPath, official_cli_sha256: await shaFile(cliPath), official_cli_version: cliVersion,
       official_sdk_module: sdkModule, official_sdk_module_sha256: await shaFile(sdkModule), provider_id: providerID,
@@ -209,6 +212,7 @@ async function main() {
       model_endpoint: args['--model'] === 'step-5-preview-free' ? 'https://opencode.ai/zen/v1/chat/completions' : null,
       model_config_source: args['--model'] === 'step-5-preview-free' ? 'official OpenCode Zen catalog provider/model alias; OPENCODE_API_KEY environment; no custom provider override' : 'OpenCode built-in provider catalog',
       main_model: `${providerID}/${args['--model']}`, small_model: `${providerID}/${args['--model']}`,
+      model_variant: args['--variant'] ?? 'catalog_default',
       credential_source: 'OPENCODE_API_KEY environment; value excluded', server_url: serverUrl,
       server_pid: serverChild.pid, adapter_url: adapter.url, scratch_directory: scratch, isolated_home: isolatedHome,
       ...buildToolSurfaceReceipt(defaultTools.data), mcp_status: statuses.natlang_action_bridge.status,

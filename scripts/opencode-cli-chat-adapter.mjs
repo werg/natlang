@@ -373,6 +373,9 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
     throw new RangeError('timeouts must be positive integers');
   const providerID = options.providerID ?? 'opencode';
   const modelName = modelAlias ?? `${providerID}/${modelID}`;
+  const modelVariant = options.modelVariant;
+  if (modelVariant !== undefined && !['low', 'medium', 'high'].includes(modelVariant))
+    throw new RangeError('modelVariant must be low, medium, or high');
   if (!client.mcp?.status || !client.mcp?.connect || !client.tool?.ids)
     throw new TypeError('official OpenCode SDK client must expose MCP status/connect and tool inventory');
   const unwrap = (result, operation) => {
@@ -489,6 +492,8 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         onViolation: value => { violation ??= value; diagnostics.violation = value; void stopChild(); } });
       const args = ['run', '--format', 'json', '--model', modelName, '--title', 'Natlang teacher turn', '--dir', directory,
         '--pure', '--attach', baseUrl, userText];
+      if (modelVariant) args.splice(args.indexOf('--title'), 0, '--variant', modelVariant);
+      diagnostics.cli_model_variant = modelVariant ?? 'catalog_default';
       diagnostics.stdout_path = 'cli-stdout.raw'; diagnostics.stderr_path = 'cli-stderr.raw';
       diagnostics.stdout_start_bytes = fileSize(`${outputDirectory}/cli-stdout.raw`);
       diagnostics.stderr_start_bytes = fileSize(`${outputDirectory}/cli-stderr.raw`);
