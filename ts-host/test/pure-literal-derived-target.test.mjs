@@ -22,6 +22,12 @@ test('pure-literal eval parser accepts one immutable literal and exact terminal 
   assert.deepEqual(pureLiteralEvalReturn('const note = `grounded note`; return note;'), {
     binding_name: 'note', value: 'grounded note', literal_kind: 'no-substitution-template',
   });
+  assert.deepEqual(pureLiteralEvalReturn('return "grounded note";'), {
+    binding_name: null, value: 'grounded note', literal_kind: 'direct-return-string',
+  });
+  assert.deepEqual(pureLiteralEvalReturn('return `grounded note`;'), {
+    binding_name: null, value: 'grounded note', literal_kind: 'direct-return-template',
+  });
   for (const code of [
     'const note = `value: ${source}`; return note;',
     'const note = await source.readText(); return note;',
@@ -31,9 +37,25 @@ test('pure-literal eval parser accepts one immutable literal and exact terminal 
     'const note = "first"; note = "changed"; return note;',
     'const note = "first"; if (ok) return note; return "other";',
     'const note = "first"; return other;',
+    'return `value: ${source}`;',
+    'return source;',
+    'log("before return"); return "note";',
+    'return "note"; return "other";',
     'const note: Neuralese<number> = "wrong declaration"; return note;',
     'const note = "unterminated; return note;',
   ]) assert.equal(pureLiteralEvalReturn(code), undefined, code);
+});
+
+test('direct literal return derives a versioned, held equivalent target', () => {
+  const row = sourceRow('return "Supported by the request.";');
+  const derived = derivePureLiteralTypedTextTarget(row, witness(row));
+  assert.ok(derived);
+  assert.equal(derived.derived_target.transform_revision, 'pure-terminal-eval-finish-to-typed-return/4');
+  assert.equal(derived.derived_target.parsed_binding_name, null);
+  assert.equal(derived.derived_target.parsed_literal_kind, 'direct-return-string');
+  assert.equal(derived.target.tool_calls[0].function.arguments,
+    JSON.stringify({ status: 'success', value: 'Supported by the request.' }));
+  assert.equal(derived.training_admission.approved, false);
 });
 
 function sourceRow(code = 'const note: Neuralese<string> = "Supported by the request."; return note;') {

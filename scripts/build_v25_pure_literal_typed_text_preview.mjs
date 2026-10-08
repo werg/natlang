@@ -165,7 +165,7 @@ const manifest = {
     { bytes: Buffer.byteLength(content), sha256: digest(content) }])),
   holds: [...holds, ...effectfulLiteralHolds, ...nonterminalLiteralHolds],
   supersedes: 'neuralese-v25-pure-literal-derived-text-preview-20261008-v2',
-  transform: 'pure-terminal-eval-finish-to-typed-return/3',
+  transform: 'pure-terminal-eval-finish-to-typed-return/4',
 };
 await writeFile(resolve(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(JSON.stringify({ outDir, manifest: resolve(outDir, 'manifest.json'), counts: manifest.counts,
