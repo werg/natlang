@@ -7158,6 +7158,39 @@
         "neuralese-v24-root-semantic-review-20261008-v1"
       ],
       "notes": "Exact selection by immutable IDs/target hashes: ARC531 plain-string request-rule summary, BB540 structured final decision, ARC530 structured authorization update. Root rechecked original raw files, actions, contexts and decoded targets after source semantic review and shared context validation. No learned-writer, recurrence, runtime replay, foundation, autonomous-stopping or DPO qualification. Integration pending; current GPU inputs unchanged."
+    },
+    {
+      "id": "s1-question-collection-v7-generation-source-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-candidates-20261008-v7",
+      "include": [
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "source-validation.json",
+        "review-facts.json",
+        "root-review-v1/review.json",
+        "generation-review-v1/luna/plan.approved.json",
+        "generation-review-v1/luna/root-authorization.json",
+        "generation-review-v1/luna/source-index-catalog.json",
+        "generation-review-v1/luna/launch-binding.json"
+      ],
+      "admission": "held-generation-only-no-training-trace-or-dpo-admission",
+      "notes": "Reviewed source-derived question collection variants; 16 tasks inherit existing source groups/splits and receive zero independent-world credit. Includes immutable root review, frozen-runtime reference proof linkage, approved execution plan and launch binding. The active campaign output directory and mutable logs are intentionally excluded. Copies/proofs do not grant training admission."
+    },
+    {
+      "id": "s1-question-collection-runtime-b9d884fd-v7-proof-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-runtime-b9d884fd",
+      "include": [
+        "runtime/**",
+        "reference-proof-v7/**"
+      ],
+      "admission": "held-runtime-and-cpu-reference-proof-no-teacher-or-training-admission",
+      "notes": "Frozen runtime snapshot and source-bound CPU scripted reference proof for S1 V7. Proof demonstrates runtime mechanics only: zero model/provider calls, not teacher observations or training admission. Runtime snapshot is immutable and its full file manifest is included.",
+      "derived_from": [
+        "s1-question-collection-v7-generation-source-20261008"
+      ]
     }
   ],
   "coverage_backlog": [
