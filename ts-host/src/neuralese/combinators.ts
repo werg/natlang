@@ -13,7 +13,6 @@
  * of `split` and `splitList`, whose elements are blocks the model writes as it decodes) is decoded after the forced
  * call opening. The trajectory keeps the agentic format, so the same template trains the combinators.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
@@ -87,13 +86,22 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   } : undefined;
   const bytes = await saveNz(exports, { store, dialect: info.dialects[0]!, provenance: { kind: 'natlang-standard-library',
     initialisation: 'text-embeddings', ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
-  if (options.path) writeFileSync(options.path, bytes);
+  if (options.path) {
+    const { default: fs } = await import('node:fs');
+    if (typeof fs.writeFileSync !== 'function') throw new Error('Writing a standard-library file requires Node; use the returned bytes in a browser.');
+    fs.writeFileSync(options.path, bytes);
+  }
   return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(textReadSource ? { textReadSource } : {}) }, bytes };
 }
 
 /** Read a standard-library `.nz` file, registering its blocks in `store`. */
 export async function loadStandardLibrary(source: string | Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
-  const bytes = typeof source === 'string' ? new Uint8Array(readFileSync(source)) : source;
+  let bytes: Uint8Array;
+  if (typeof source === 'string') {
+    const { default: fs } = await import('node:fs');
+    if (typeof fs.readFileSync !== 'function') throw new Error('Loading a standard-library path requires Node; pass its bytes in a browser.');
+    bytes = new Uint8Array(fs.readFileSync(source));
+  } else bytes = source;
   const { header, blocks } = decodeNz(bytes);
   if (store) for (const block of blocks.values()) if (!(await store.has(block.meta.id))) {
     const { id: _, ...rest } = block.meta;
