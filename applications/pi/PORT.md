@@ -1,6 +1,10 @@
 # pi: a port of pi-durable to natlang, unit by unit
 
-Status: for owner review. Nothing has been translated yet.
+Status: translated (2026-10-08). The layout below is built, with these differences in names: callable items must be
+identifiers, so files are camelCase (`startToolRound.nl`, `planSystem.nl`, `deriveContext.nl`, `abortTask.nl`), and
+`tool/call.nl` is `tool/beginCall.nl` because `call` is a reserved callable property. Owner decision 4 is applied as
+recommended (the scheduler's policy is crisp by default; `--scheduler natural-language` or `--pure` selects the
+functions). README.md has what runs and what has been verified.
 
 Owner review, 2026-10-07:
 
