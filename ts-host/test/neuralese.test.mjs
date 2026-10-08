@@ -571,6 +571,56 @@ test('the default Error constructor reads a typed message after evaluating its a
   assert.deepEqual(events, ['message', 'options']);
 });
 
+test('standard String text arguments read soft values after the native call arguments', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'label', type: 'string' }, { name: 'query', type: 'Neuralese<string> | string' },
+    { name: 'padding', type: 'Neuralese<string> | string' }, { name: 'events', type: 'string[]' },
+    { name: 'service', type: '{ includes(value: Neuralese<string>): boolean }' },
+  ], locals: [], captures: [], imports: [], returns: 'string' };
+  const source = `return String((events.push('receiver'), label).includes((events.push('query'), query),
+    (events.push('position'), 1)));`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => [item.kind, item.argument, item.conditional]), [['string-argument', 0, true]]);
+  const custom = analyzeEvalSnippet('return String(service.includes(query));', scope);
+  assert.deepEqual(custom.diagnostics, []);
+  assert.deepEqual(custom.readouts, [], 'a same-named user service method remains an ordinary function contract');
+  const compiled = compileScopeSnippet(source, { inputBindings: ['label', 'query', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  const events = [];
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      events.push('read'); return 'ello';
+    } });
+  assert.equal(await run({ label: 'hello', query: neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc'), events }, {}, {}), 'true');
+  assert.deepEqual(events, ['receiver', 'query', 'position', 'read']);
+  events.length = 0;
+  assert.equal(await run({ label: 'hello', query: 'ello', events }, {}, {}), 'true');
+  assert.deepEqual(events, ['receiver', 'query', 'position']);
+
+  const module = compileModule({ kind: 'module', id: 'string-soft-args', name: 'stringArgs', source: 'stringArgs.ts', revision: 'r1',
+    text: `export async function search(label: string, query: Neuralese<string> | string, events: string[]) {
+      return (events.push('receiver'), label).includes((events.push('query'), query), (events.push('position'), 1));
+    }
+    export async function pad(padding: Neuralese<string> | string, events: string[]) {
+      return 'x'.padStart((events.push('length'), 3), (events.push('padding'), padding));
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const moduleEvents = [];
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)({}, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      moduleEvents.push('read'); return value.$neuralese.id.endsWith('d') ? 'ello' : '*';
+    },
+  });
+  assert.equal(await moduleFns.search('hello', neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd'), moduleEvents), true);
+  assert.deepEqual(moduleEvents, ['receiver', 'query', 'position', 'read']);
+  moduleEvents.length = 0;
+  assert.equal(await moduleFns.pad(neuraleseRef('Neuralese<string>', 'nz1_eeeeeeeeeeeeeeeeeeee'), moduleEvents), '**x');
+  assert.deepEqual(moduleEvents, ['length', 'padding', 'read']);
+});
+
 test('scope lowering awaits the typed readout at the original coercion site', () => {
   const compiled = compileScopeSnippet('`plan=${plan};`', { inputBindings: ['plan'], neuralese: true,
     analyze: source => analyzeEvalSnippet(source, SCOPE) });

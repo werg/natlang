@@ -28,6 +28,8 @@ export type LowerOptions = {
   jsons?: ReadonlySet<string>;
   /** Call/new spans of the default Error constructor whose message needs typed Neuralese readout. */
   errors?: ReadonlySet<string>;
+  /** Standard String method calls whose listed text argument needs typed Neuralese readout. */
+  stringArguments?: ReadonlyMap<string, number>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -106,6 +108,31 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           [f.createParameterDeclaration(undefined, undefined, callee)], undefined, undefined, inner)), undefined,
           [ts.visitNode(node.expression, visit) as ts.Expression]);
         return f.createAwaitExpression(outer);
+      }
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
+          options.stringArguments?.has(`${source.getStart(file)}:${source.getEnd()}`)) {
+        const receiver = f.createUniqueName('__natlang_text_receiver');
+        const method = f.createUniqueName('__natlang_text_method');
+        const args = f.createUniqueName('__natlang_text_args');
+        const index = options.stringArguments.get(`${source.getStart(file)}:${source.getEnd()}`)!;
+        const reader = readNeuraleseValue(f.createElementAccessExpression(args, f.createNumericLiteral(index)),
+          options.conditionalReadouts?.has(`${source.getStart(file)}:${source.getEnd()}`));
+        const invoke = f.createCallExpression(f.createPropertyAccessExpression(method, 'call'), undefined,
+          [receiver, f.createSpreadElement(args)]);
+        const body = f.createBlock([
+          f.createExpressionStatement(f.createBinaryExpression(f.createElementAccessExpression(args, f.createNumericLiteral(index)),
+            f.createToken(ts.SyntaxKind.EqualsToken), reader)),
+          f.createReturnStatement(invoke),
+        ], true);
+        const withArgs = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, method), f.createParameterDeclaration(undefined, undefined, args)],
+          undefined, undefined, body)), undefined,
+          [f.createPropertyAccessExpression(receiver, node.expression.name),
+            f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        const applyReceiver = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, withArgs)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        return f.createAwaitExpression(applyReceiver);
       }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.jsons?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
           ts.isPropertyAccessExpression(node.expression) && node.arguments.length > 0) {

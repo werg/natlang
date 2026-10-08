@@ -695,6 +695,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const errorReadouts = new Map(readouts.filter(readout => readout.kind === 'error')
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const stringArguments = new Map(readouts.filter(readout => readout.kind === 'string-argument')
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
       const site = rebindAt.get(`${rel(node).start}:${rel(node).end}`);
@@ -706,6 +708,23 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           `${lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end)}, ${JSON.stringify(site.captureSources)})` });
         return;
       }
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        stringArguments.has(`${rel(node).start}:${rel(node).end}`)) {
+      const readout = stringArguments.get(`${rel(node).start}:${rel(node).end}`)!;
+      for (const argument of node.arguments) lowerNodes(argument);
+      lowerNodes(node.expression.expression);
+      const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const receiverName = `__natlang_text_receiver_${rel(node).start}`;
+      const methodName = `__natlang_text_method_${rel(node).start}`;
+      const argsName = `__natlang_text_args_${rel(node).start}`;
+      const index = readout.argument ?? 0;
+      const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => ((${methodName}: any) => (async (${argsName}: any[]) => { ` +
+        `${argsName}[${index}] = await __live.${reader}(${argsName}[${index}]); ` +
+        `return ${methodName}.call(${receiverName}, ...${argsName}); })([${args}]))(${receiverName}.${node.expression.name.text}))(${receiver}))` });
+      return;
     }
     if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && node.arguments?.length &&
         errorReadouts.has(`${rel(node).start}:${rel(node).end}`)) {
