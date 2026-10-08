@@ -1,0 +1,300 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v21-bunny-campaign-v3-raw-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v21-20261008-v3",
+  "files": [
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/events/case.jsonl",
+      "bytes": 856,
+      "sha256": "674da37e5c96f9479163d906be17d0d6cc5d16b180858093da95e72099aed747",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/jobs/000008-c91f3af298cf0835.result.json",
+      "bytes": 1127892,
+      "sha256": "88efd498a448173bece656acba1df51970bb98c3de75d7842d74b2c875202a36"
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/jobs/000008-c91f3af298cf0835.trace.jsonl",
+      "bytes": 324803,
+      "sha256": "8e222a948fcf0dea7cf0af85188ae49ed7dbc327c6da3a4f752a9c9dd33b796c",
+      "lines": 258
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/logs/case.log",
+      "bytes": 587,
+      "sha256": "2d181992379c72fdb7cd86f49b5b6ab7dce0f25b53c32f323af47a2c42d9ab3f"
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/results/case.results.jsonl",
+      "bytes": 1127892,
+      "sha256": "88efd498a448173bece656acba1df51970bb98c3de75d7842d74b2c875202a36",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000008/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "2d482e50fb9b22d917b36b1494fc4e3999dbc716ae69b7504cd009392a7b4de8"
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/events/case.jsonl",
+      "bytes": 832,
+      "sha256": "b296a4f13ade8f4edf4c690b603bf3a1c2d2f96ce326581400393fb85192add2",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/jobs/000009-3d41af28ff19229a.result.json",
+      "bytes": 976301,
+      "sha256": "8b82583de491d191993520959c91cf2fa8fd9c148c45926df5618c331f821684"
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/jobs/000009-3d41af28ff19229a.trace.jsonl",
+      "bytes": 335803,
+      "sha256": "7c78b72bac828c1b22d5526753e35f914965278160d67199cea288c65f2f191b",
+      "lines": 228
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/logs/case.log",
+      "bytes": 575,
+      "sha256": "b94ce038bf3151879de9f84180b62ab474cf9ed615d319977081997a67446e88"
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/results/case.results.jsonl",
+      "bytes": 976301,
+      "sha256": "8b82583de491d191993520959c91cf2fa8fd9c148c45926df5618c331f821684",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v5/bunny/campaign-v1/case-000009/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "3c3a65baf100ef90f6eef8d31c64a440023cffe406d63b0c70ba6d2d9fe3cee5"
+    },
+    {
+      "path": "generation-review-v5/bunny/plan.approved.json",
+      "bytes": 12076,
+      "sha256": "7d7d1e458322ea953d68b5b53da143fa14719b7e622b312fbffc3ee1a0fff35b"
+    },
+    {
+      "path": "generation-review-v5/bunny/queue.approved.jsonl",
+      "bytes": 9644,
+      "sha256": "04706d0a8a2961b94f0d86bd6006f22966f9ec09c4446a68f7d3daaf1e49135d",
+      "lines": 8
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/events/case.jsonl",
+      "bytes": 832,
+      "sha256": "2e9614611867d908bf9341f69dad7e633b49890063a8600fbca21170dbb4e91c",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/jobs/000010-f40072e8e54fb247.result.json",
+      "bytes": 1205194,
+      "sha256": "04f21343be07024a55e5d2a774bcdf80c0b288a9cf2bc100f5ee0d470bdeab11"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/jobs/000010-f40072e8e54fb247.trace.jsonl",
+      "bytes": 412010,
+      "sha256": "015de3165936cd06b6c0f6f3149ec1b71bfdb74e6d8190fffd1ee08022d660bf",
+      "lines": 279
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/logs/case.log",
+      "bytes": 575,
+      "sha256": "5e91119514f12714cfa8be70ec70cbc40fe1bdd9974968e3b884a3cc3d2ad7b6"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/results/case.results.jsonl",
+      "bytes": 1205194,
+      "sha256": "04f21343be07024a55e5d2a774bcdf80c0b288a9cf2bc100f5ee0d470bdeab11",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000010/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "c4290b73fa1591b1b4503177819093012c596cece6aaba18bda2c8fa580b2bd4"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/events/case.jsonl",
+      "bytes": 847,
+      "sha256": "03df90e516e7e39521455dc419546390467b930e2268b8ae5eb357900cea27ca",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/jobs/000011-1645c72461071efc.result.json",
+      "bytes": 937556,
+      "sha256": "692f3f0f6864df789f4b28b62606ee54aa20fe2153d52a3059c3140161eb24ab"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/jobs/000011-1645c72461071efc.trace.jsonl",
+      "bytes": 311655,
+      "sha256": "5ef285fc18885d7a6ec058a5b99f4cf1c7ef1b1d04bed932c2b17bdd63f81422",
+      "lines": 224
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/logs/case.log",
+      "bytes": 582,
+      "sha256": "3e0470a385a4327d10c5bf0d137e4363478efd9371c08c5e7945351d541b4b8b"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/results/case.results.jsonl",
+      "bytes": 937556,
+      "sha256": "692f3f0f6864df789f4b28b62606ee54aa20fe2153d52a3059c3140161eb24ab",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000011/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "478e603acbab495dc78796dbab9d86c9c5006474460c5c36dbbce2fef93b47c9"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/events/case.jsonl",
+      "bytes": 845,
+      "sha256": "8c308a0015d17edce19f1ac7db6ec478da2f1446e54f583b7c32274dac65d95d",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/jobs/000012-3eefe6986ba4db42.result.json",
+      "bytes": 1689085,
+      "sha256": "91e9c76887a1336b3b31e6c7a1ca87dfc470db609a78bf8cd396286407571363"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/jobs/000012-3eefe6986ba4db42.trace.jsonl",
+      "bytes": 508257,
+      "sha256": "9b659068d49b9dbefb0b52b6df3959bd24faeaefa4d24cb3380bb440454493ad",
+      "lines": 328
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/logs/case.log",
+      "bytes": 581,
+      "sha256": "d1c86c13209febc4cc9f23816e7bca5860b5503b1416c6938c53b1bc3b41a9d7"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/results/case.results.jsonl",
+      "bytes": 1689085,
+      "sha256": "91e9c76887a1336b3b31e6c7a1ca87dfc470db609a78bf8cd396286407571363",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000012/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "41821e3bda9480f8e6c0791e0bb03ada15811074f19b9cd9bd4e5267a6651256"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/events/case.jsonl",
+      "bytes": 845,
+      "sha256": "0e63dbf53d65064d4b901d12fc3672636170979ed3d890ff2d8aaed8f2c3d715",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/jobs/000013-05db963d4d6587c2.result.json",
+      "bytes": 1760355,
+      "sha256": "9b6a33620930e8c7b4b1b0fb201a218195193911d87d8e07612c0c8e9ca2b363"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/jobs/000013-05db963d4d6587c2.trace.jsonl",
+      "bytes": 528821,
+      "sha256": "41674e65a0547e2ba52e67616dfc273820c0279712586ee3170d405dc55050ac",
+      "lines": 373
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/logs/case.log",
+      "bytes": 581,
+      "sha256": "71ec0b6abdc08f1332b7a0f0b786694c11fd946ee5538adf51551137b62d2779"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/results/case.results.jsonl",
+      "bytes": 1760355,
+      "sha256": "9b6a33620930e8c7b4b1b0fb201a218195193911d87d8e07612c0c8e9ca2b363",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000013/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "681f26fdf3be98de207670903f7148b9079cb4a784fb33676860e26f6cd61757"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/events/case.jsonl",
+      "bytes": 841,
+      "sha256": "8b28508c2b5a209e6a4dd71bf4368e08578278d3e0c633878088f38738267007",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/jobs/000014-250ffad84a667a78.result.json",
+      "bytes": 923059,
+      "sha256": "8b45f055342ede60708a2af7bc35adddec27f7286f8492e43ba0a309e8267c09"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/jobs/000014-250ffad84a667a78.trace.jsonl",
+      "bytes": 296298,
+      "sha256": "d010dcca6053f2f523a97fab9d3b3a03f08d7770f5b67dac743cc619f1f21694",
+      "lines": 224
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/logs/case.log",
+      "bytes": 579,
+      "sha256": "4edd6461860a2d46f643c59e03a0712c4a5e86ddcf9e626aa40adace90502434"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/results/case.results.jsonl",
+      "bytes": 923059,
+      "sha256": "8b45f055342ede60708a2af7bc35adddec27f7286f8492e43ba0a309e8267c09",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000014/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "9470b2bdf9ff477414e6ed6692a953a591c38166da2d14368dd8bcd046d5b50c"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/events/case.jsonl",
+      "bytes": 861,
+      "sha256": "ca1474cb111b7c4ab1ac7c38dce17ae7b6976f39a0141fcb982d32d550a3330c",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/jobs/000015-819ba1fb602ea1ad.result.json",
+      "bytes": 1016585,
+      "sha256": "380b45b56b6f3e8717362bc48df0305d37aa202afdd08aeb2c12a1fea4fef3d1"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/jobs/000015-819ba1fb602ea1ad.trace.jsonl",
+      "bytes": 319468,
+      "sha256": "2d2d8efa02adb834926a49a13f0b9ec50f60cbb6e974036d28c6cc5ab95928a9",
+      "lines": 215
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/logs/case.log",
+      "bytes": 589,
+      "sha256": "2f1a35a54db2b7e44827339418d43d9936088481d4f3e6e4a39b0880f5ee8665"
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/results/case.results.jsonl",
+      "bytes": 1016585,
+      "sha256": "380b45b56b6f3e8717362bc48df0305d37aa202afdd08aeb2c12a1fea4fef3d1",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v6/bunny/campaign-v1/case-000015/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "bfe5270b564135f6b4a60fa9a13c241644b7f870112bd817cd825f216c71991b"
+    },
+    {
+      "path": "generation-review-v6/bunny/plan.approved.json",
+      "bytes": 11853,
+      "sha256": "09532c7212306c28ca7f47107541f1866d9a316793a7add7e2c6201c93bf356b"
+    },
+    {
+      "path": "generation-review-v6/bunny/queue.approved.jsonl",
+      "bytes": 7296,
+      "sha256": "91e0f9747261e98779b94125719bf6e966b4ec571d9717f7029535c0cd99811d",
+      "lines": 6
+    },
+    {
+      "path": "generation-review-v6/bunny/root-authorization.json",
+      "bytes": 916,
+      "sha256": "2a66a56e81a10e0ab48681425addefd8c16786e509f0af0d3c26b6e37e3e3e9f"
+    }
+  ],
+  "bytes": 22367200
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v21-bunny-campaign-closed-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v21-closed-raw-review-20261008-v1",
+  "files": [
+    {
+      "path": "evidence-manifest.json",
+      "bytes": 27339,
+      "sha256": "705db4dcd4fdc9758670369f77715242296fb9020e5b57aefa06cc9af98cb272"
+    },
+    {
+      "path": "review.json",
+      "bytes": 2762,
+      "sha256": "f17637fdf6d436cce03175ac597cfaf65bab9f7b13d81af6fda3fd51bcf03bbd"
+    }
+  ],
+  "bytes": 30101
+}

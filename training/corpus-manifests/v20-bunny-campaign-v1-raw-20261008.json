@@ -1,0 +1,415 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v20-bunny-campaign-v1-raw-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+  "files": [
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/events/case.jsonl",
+      "bytes": 859,
+      "sha256": "5b458b37aa9141ea17d52d57099b1d222fb3c2164483ed52bee1f86d42a6f4d4",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/jobs/000012-e568b6bc21bbd2db.result.json",
+      "bytes": 1431467,
+      "sha256": "c60ba9cc3c4c0ea2e9c24a92449ccd09984b250f211352b20e499f5c0758d41b"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/jobs/000012-e568b6bc21bbd2db.trace.jsonl",
+      "bytes": 372326,
+      "sha256": "64e6eb5ad4783737cdb87d4793a8f18f2372624b30e9ab33c83976aeae469f2c",
+      "lines": 266
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/logs/case.log",
+      "bytes": 612,
+      "sha256": "a84001f8b7f9551895d3a92f8c16e92ef82914dd37361836ca7462a7dd55aef2"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/results/case.results.jsonl",
+      "bytes": 1431467,
+      "sha256": "c60ba9cc3c4c0ea2e9c24a92449ccd09984b250f211352b20e499f5c0758d41b",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000012/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "0828666630c51d48b458b7e59e683460fe96af60285a557e5c175158c6b05c38"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/events/case.jsonl",
+      "bytes": 860,
+      "sha256": "c81b6de08158317c7263a2422b2391c81c00d7b281d3c85e9813fabb90ab8439",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/jobs/000013-000431ad1b41d8db.result.json",
+      "bytes": 2399076,
+      "sha256": "5fdd947d60294f1b77b6887d4dfe16b8a2b5dab8b3c3b189324e00bc11c712a5"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/jobs/000013-000431ad1b41d8db.trace.jsonl",
+      "bytes": 598065,
+      "sha256": "960c03fdcc049439d7f02b303fa88eddb152753edca6f55849738e69a69b6db6",
+      "lines": 405
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/logs/case.log",
+      "bytes": 613,
+      "sha256": "8d91a0847ec2c6232794ef5f5e01ddf87d79034484739643382fb5f754fce8a1"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/results/case.results.jsonl",
+      "bytes": 2399076,
+      "sha256": "5fdd947d60294f1b77b6887d4dfe16b8a2b5dab8b3c3b189324e00bc11c712a5",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "bc35e08380e4832c67ad72805c137d280e8106e77b3d5372884e53349e3d0f99"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/events/case.jsonl",
+      "bytes": 859,
+      "sha256": "2aba621bdba2e679ca462c3b935fda0ec8c8ec51b8379b49e83cfa31a74b20d3",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/jobs/000014-e89c2e521d2e2c2f.partial.json",
+      "bytes": 1817,
+      "sha256": "5f3ffe426699252b8ecdc168a1deb5316790fdd6959b635097c2897456735627"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/jobs/000014-e89c2e521d2e2c2f.partial.json.evidence-d87ef184-877c-420b-9548-3041e57c7d70.jsonl",
+      "bytes": 120050,
+      "sha256": "9dbbf5d3b4c7360935de50db1eaf8ad987a5e68ff667d425c2fed0e405e465d1",
+      "lines": 11
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/jobs/000014.error.json",
+      "bytes": 455,
+      "sha256": "9b06c4249a93d340ec09ea4682d9af7da4210dfa31025ca097534cbae3890bc3"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/logs/case.log",
+      "bytes": 359,
+      "sha256": "7256fc27b8cd30cf1631a886b4b4115a32ea331bb872673a03d4b6db4de4014b"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/results/case.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000014/results/case.results.jsonl.manifest.json",
+      "bytes": 607,
+      "sha256": "de5fd7edd2f6599468f04b6d539e934756e0d49fcfd01c094f90b7eaf832676f"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/events/case.jsonl",
+      "bytes": 850,
+      "sha256": "cd0afc4dd9d0c0707e354db9c81b3c6a7ae92646dfc191552fb2547492e5f745",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/jobs/000015-fc20b04ab66a27c1.result.json",
+      "bytes": 2237386,
+      "sha256": "a9c59f786bec362d41d3f7f17ffb4006c351582d4fd7f338881949b0d16f7f90"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/jobs/000015-fc20b04ab66a27c1.trace.jsonl",
+      "bytes": 556841,
+      "sha256": "74d004e15287d15ff5e4d3e579f2275c14c4ac71ec5667137069fc6867ec9b4a",
+      "lines": 410
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/logs/case.log",
+      "bytes": 608,
+      "sha256": "8453377c421662b5a57ef1b8e8ceb9f52a7df605f4cc5ab5fd233512c0385856"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/results/case.results.jsonl",
+      "bytes": 2237386,
+      "sha256": "a9c59f786bec362d41d3f7f17ffb4006c351582d4fd7f338881949b0d16f7f90",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000015/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "adbc4fc8f75ab0010dddd5ed1bdcebaa4921848d0cdb94e57bab735a6ea492a4"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/events/case.jsonl",
+      "bytes": 855,
+      "sha256": "6ef60860bf5489fe14df217f83a68b17ae6d7b47e0e9363f5d45e1cd80ed4385",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/jobs/000016-aca58a321a0f7da1.partial.json",
+      "bytes": 44032,
+      "sha256": "6034c2f43b2c4cc80b5923e19e896fe9ea96172048b44f7aa7d94f09b828d175"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/jobs/000016-aca58a321a0f7da1.partial.json.evidence-137885c7-6d18-4b0a-86fa-fa38c232f989.jsonl",
+      "bytes": 381627,
+      "sha256": "06cd22f3891b76719f9e5d67d28761187b012e2b1a56702f7bdcde4df7f073d0",
+      "lines": 22
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/jobs/000016.error.json",
+      "bytes": 453,
+      "sha256": "9f04f42902ce64edf92f11559b2b04fdf244276456e4667c09253022890adb7d"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/logs/case.log",
+      "bytes": 359,
+      "sha256": "a11be27558994b5e512fecf9a2487160e5331c9c88e6fc4845a6c3b0b7585a59"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/results/case.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000016/results/case.results.jsonl.manifest.json",
+      "bytes": 607,
+      "sha256": "4294a66082e1b6d822c4d251cd87a27e14f61dd4b8e224c420e182c1e88bd326"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/events/case.jsonl",
+      "bytes": 834,
+      "sha256": "752dfd71e7ac17fee049d98e8a21a7f6c15a7261946ba7279677cb291ef91e38",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/jobs/000017-3f37d38adfe8e984.result.json",
+      "bytes": 1141584,
+      "sha256": "18125e94219c82a432e2fe8b51cf1baaf07949756dd771b4dd88d59bfa5ac7d8"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/jobs/000017-3f37d38adfe8e984.trace.jsonl",
+      "bytes": 299907,
+      "sha256": "72b811031de61f7cc2e1bc394b56e22a33698ca82c60b7c18a2323237230d508",
+      "lines": 258
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/logs/case.log",
+      "bytes": 600,
+      "sha256": "590236dda925bd7b467b659de067c0ace3cb3711806dd0914e3f602780757502"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/results/case.results.jsonl",
+      "bytes": 1141584,
+      "sha256": "18125e94219c82a432e2fe8b51cf1baaf07949756dd771b4dd88d59bfa5ac7d8",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000017/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "54a1929a3d98224ed114c75e6dbd505850c41842ce569a48ea718911e977a6a3"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/events/case.jsonl",
+      "bytes": 853,
+      "sha256": "a0a2be2aab265c017faf24919e7dfae7f071b56a4de4d1ddc3119759ff60c7e0",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/jobs/000018-5789f23913b98b53.result.json",
+      "bytes": 3166716,
+      "sha256": "42a6bf8e40cdd2f317d8f9c2fb4bf7a3318494f81d45be45bf3d465622e8449b"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/jobs/000018-5789f23913b98b53.trace.jsonl",
+      "bytes": 837443,
+      "sha256": "231afbf2b9bd85ba2d2a1c96f2ad1d3684b3ba0acdc4ea0e49a5e347c9352d2c",
+      "lines": 605
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/logs/case.log",
+      "bytes": 609,
+      "sha256": "fa253606265b3621f768e8fca4820088a190175a659e1ffce7d9a3f55006eac4"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/results/case.results.jsonl",
+      "bytes": 3166716,
+      "sha256": "42a6bf8e40cdd2f317d8f9c2fb4bf7a3318494f81d45be45bf3d465622e8449b",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000018/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "7c7dbcc914cb142c18a092791e66139ad38139de8fd0349516e68c32e38d228c"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/events/case.jsonl",
+      "bytes": 847,
+      "sha256": "623cb14f28966b9a01ed2848d749ed5d06a0d880ed97ff285c8c6035a396b33a",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/jobs/000019-4ac9c9879135e8bb.result.json",
+      "bytes": 856042,
+      "sha256": "6f1003306d8e6a08f15274bb8e52c80517101fd9ba1b113cb321f47d7816d46f"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/jobs/000019-4ac9c9879135e8bb.trace.jsonl",
+      "bytes": 274826,
+      "sha256": "568524cec0efcaad582e1a3c549c0d383a4f0c476ffe4bcd22e9bf366538787a",
+      "lines": 204
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/logs/case.log",
+      "bytes": 606,
+      "sha256": "120cff2450aeb4a0e3a7edb1af1fc517bbb22ed3d71df7b6107fd6bc2f0ee576"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/results/case.results.jsonl",
+      "bytes": 856042,
+      "sha256": "6f1003306d8e6a08f15274bb8e52c80517101fd9ba1b113cb321f47d7816d46f",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000019/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "3e7dd9360918bbd6a851fef5a86f2d213d9ccbffdd0202df5bde9baa2328ed1d"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/events/case.jsonl",
+      "bytes": 861,
+      "sha256": "9abed24d5c5b6a34e6f4f21042d09af06c4b638a0c62788ae558f2bbec82a062",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/jobs/000020-07f5fb233184bbe1.result.json",
+      "bytes": 3537197,
+      "sha256": "e95a04a1953eaf4588c346351328125048ce79f8167efd37202e26491870c977"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/jobs/000020-07f5fb233184bbe1.trace.jsonl",
+      "bytes": 843370,
+      "sha256": "15b2bb298a456b64ba6dde6144500bc2981cd2dbfe120aad477f1185608596fc",
+      "lines": 627
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/logs/case.log",
+      "bytes": 613,
+      "sha256": "e2e6b4f6a019bbbe15adc44a2360017aed50c684f58f186efedb5ff3047bf572"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/results/case.results.jsonl",
+      "bytes": 3537197,
+      "sha256": "e95a04a1953eaf4588c346351328125048ce79f8167efd37202e26491870c977",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000020/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "6f7c4e1ed9cec20eb80048613ae31c092392a93f88c75db3eaf14381dfa9cf4c"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/events/case.jsonl",
+      "bytes": 855,
+      "sha256": "fadf1987c92786089009a52c57d34f4242ea53c873af67d15b7a7d6197598518",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/jobs/000021-c8c023c553c46548.result.json",
+      "bytes": 955090,
+      "sha256": "711995dc7e5b513f23715b7451d2f400397de1acfabbbf3faec2c752213191b0"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/jobs/000021-c8c023c553c46548.trace.jsonl",
+      "bytes": 326262,
+      "sha256": "751fbb29cecb6f7528d0b788966fb305fbedf4bc72abaeea72751187095ef5ca",
+      "lines": 230
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/logs/case.log",
+      "bytes": 610,
+      "sha256": "56d932387dd6a651f37f83c98c5f1c4dafd61f707035a6cf2a1ebf96e589de42"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/results/case.results.jsonl",
+      "bytes": 955090,
+      "sha256": "711995dc7e5b513f23715b7451d2f400397de1acfabbbf3faec2c752213191b0",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000021/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "40a3639a1a836d27de5b82b7152123bb119034c4bc2e3bfbe53ed409d17ebab0"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/events/case.jsonl",
+      "bytes": 863,
+      "sha256": "0ca7bb86da5360a7b8b7a9b7e0fe1f5bd76b4488495527202b91f11998ad1a27",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/jobs/000022-e7922ec294cc3c14.result.json",
+      "bytes": 981807,
+      "sha256": "cf1130ddcd71770a3b0291b783bfcf8f2d3b28ff4bb9e59fd18a5548d57be2b2"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/jobs/000022-e7922ec294cc3c14.trace.jsonl",
+      "bytes": 264941,
+      "sha256": "a482b823f945edbfcd59cdf8016bb6dcc7eb528cf9d768ef304f141fd5a99376",
+      "lines": 202
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/logs/case.log",
+      "bytes": 614,
+      "sha256": "92f45577ff56cd82dc6796d51edbfb2364bb09449d44c90c25ef9b2752dc0deb"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/results/case.results.jsonl",
+      "bytes": 981807,
+      "sha256": "cf1130ddcd71770a3b0291b783bfcf8f2d3b28ff4bb9e59fd18a5548d57be2b2",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000022/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "caadb9dab166057228805813d219fb5b5ab6dac0cb9780a64f87540f9a920895"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/events/case.jsonl",
+      "bytes": 849,
+      "sha256": "43adb5f864d40be5e125d0a1e5cb2fd9bc6bf3c812e6bdb7fb1d20048dcfda89",
+      "lines": 2
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/jobs/000023-205255063dc2fa74.result.json",
+      "bytes": 2374726,
+      "sha256": "1f50812035142aae5f90aa8593b87f82fdadde675f84022d2cee8509d50ede1b"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/jobs/000023-205255063dc2fa74.trace.jsonl",
+      "bytes": 629704,
+      "sha256": "272a01e4c474367b344c610db5ecd0be49667f4f6223aa4d7ddcaad0746b63e9",
+      "lines": 469
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/logs/case.log",
+      "bytes": 607,
+      "sha256": "b85f3555ee6e1d4a10f7e7ceafc77054f3a8861a73ac45a153bf68a6ab1727e7"
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/results/case.results.jsonl",
+      "bytes": 2374726,
+      "sha256": "1f50812035142aae5f90aa8593b87f82fdadde675f84022d2cee8509d50ede1b",
+      "lines": 1
+    },
+    {
+      "path": "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000023/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "a2e651d6724a7e2675f48ea014346745e04a1b102021117ce1344d615ca54e09"
+    }
+  ],
+  "bytes": 43738620
+}

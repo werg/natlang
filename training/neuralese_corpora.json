@@ -6459,6 +6459,82 @@
         "v20-luna-campaign-v1-raw-20261008"
       ],
       "notes": "Immutable budget-charged V20 Luna recovery campaign V3 for indices 0-4, preserving the prior V1 attempts as historical evidence. Five final rows exist; output/action quality and cross-attempt lineage remain held for explicit review. No automatic DPO or training admission."
+    },
+    {
+      "id": "v20-bunny-campaign-v1-raw-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+      "include": [
+        "generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/**/*"
+      ],
+      "admission": "held-closed-raw-attempt-action-review-pending-no-training-admission",
+      "derived_from": [
+        "v20-counterfactual-source-v8-20261008"
+      ],
+      "notes": "Immutable raw Bunny V20 actual attempt 02, source indices 12-23. Includes raw actions, events, results, logs and transport errors. Exact source and closed review packet are separately pinned. All model actions remain held; no training, trace, or DPO admission."
+    },
+    {
+      "id": "v20-bunny-campaign-closed-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-v20-closed-review-20261008-v1",
+      "include": [
+        "review.json",
+        "evidence-reference-manifest.json"
+      ],
+      "admission": "held-closed-review-provenance-only-no-training-admission",
+      "derived_from": [
+        "v20-counterfactual-source-v8-20261008",
+        "v20-bunny-campaign-v1-raw-20261008"
+      ],
+      "notes": "Closed review and hash-reference packet for the V20 Bunny campaign. It records accepted/rejected/infrastructure outcomes but does not admit source, actions, traces, or training examples."
+    },
+    {
+      "id": "v21-counterfactual-source-v3-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v21-20261008-v3",
+      "include": [
+        "README.md",
+        "source.cases.jsonl",
+        "source-proof.json",
+        "source-manifest.json",
+        "root-review-v1/root-review.json"
+      ],
+      "admission": "generation-source-or-scripted-reference-no-training-admission",
+      "notes": "V21 counterfactual source pool and authored reference proof. The source inherits eight parent groups/splits and provides counterfactual task variants; no independent-world or training admission is inferred from source generation or scripted proof."
+    },
+    {
+      "id": "v21-bunny-campaign-v3-raw-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v21-20261008-v3",
+      "include": [
+        "generation-review-v5/bunny/plan.approved.json",
+        "generation-review-v5/bunny/queue.approved.jsonl",
+        "generation-review-v5/bunny/campaign-v1/**/*",
+        "generation-review-v6/bunny/plan.approved.json",
+        "generation-review-v6/bunny/queue.approved.jsonl",
+        "generation-review-v6/bunny/root-authorization.json",
+        "generation-review-v6/bunny/campaign-v1/**/*"
+      ],
+      "admission": "held-closed-raw-attempt-action-review-pending-no-training-admission",
+      "derived_from": [
+        "v21-counterfactual-source-v3-20261008"
+      ],
+      "notes": "Raw V21 Bunny attempts: V5 original indices 8-9 and V6 fresh unstarted-only successor indices 10-15. The later attempt excludes prior 8-9. Preserves result/action graphs, logs, failed attempts and launch lineage. All records remain held for action/source quality review; no automatic DPO or training admission."
+    },
+    {
+      "id": "v21-bunny-campaign-closed-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-v21-closed-raw-review-20261008-v1",
+      "include": [
+        "review.json",
+        "evidence-manifest.json"
+      ],
+      "admission": "held-closed-review-provenance-only-no-training-admission",
+      "derived_from": [
+        "v21-counterfactual-source-v3-20261008",
+        "v21-bunny-campaign-v3-raw-20261008"
+      ],
+      "notes": "Closed V21 Bunny raw evidence review packet. It binds exact source, plans, runtime receipt, results, traces and logs by SHA-256; structural closure and review do not grant action, trace, DPO, or training admission."
     }
   ],
   "coverage_backlog": [
