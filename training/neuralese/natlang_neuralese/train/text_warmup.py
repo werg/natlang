@@ -324,6 +324,7 @@ def balanced_position_weights(span, suffix_starts):
     return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
+from ..maple.family import evaluate_members, member_loss, window_labels
 from ..maple.model import eager_rms_norm
 
 
@@ -879,6 +880,12 @@ def main(argv=None):
                         'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
                         'self-consistent with the model\'s own projection)')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
+    p.add_argument('--member-weight',type=float,default=0.,
+                   help='nested-family students (MAPLE_NESTED §4a): after the projection-first phase, each update '
+                        'also trains one member (in rotation) on the window: CE + KL(full || member), times this '
+                        'weight; members\' private parts become trainable. 0 disables (members still evaluated)')
+    p.add_argument('--member-tokens',type=int,default=2048,help='members train and evaluate on the last N window tokens')
+    p.add_argument('--member-eval-windows',type=int,default=4)
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
@@ -975,6 +982,13 @@ def main(argv=None):
             kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
     named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map' if input_map else 'feedback')
     secondary_prefix='heads.input_map.' if input_map else 'heads.feedback.'
+    from ..maple.family import family_members, private_parameters
+    family=family_members(backbone)
+    if a.member_weight and not family:raise ValueError('--member-weight needs a nested-family student')
+    if a.member_weight:
+        known={id(q) for _,q in named}
+        for n,q in private_parameters(backbone):
+            if id(q) not in known:q.requires_grad_(True);named.append(('backbone.'+n,q))
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
         backbone,heads,checkpointed=a.checkpoint_layers)
@@ -1094,6 +1108,12 @@ def main(argv=None):
         ids=torch.tensor([r['ids'] for r in rows],device=a.device)
         span=ids[:,rows[0]['prefix']:]
         return ids[:,:rows[0]['prefix']],span,balanced_position_weights(span,[r.get('supervised_suffix_start') for r in rows])
+    def member_window(w):
+        """The last --member-tokens of a window, labelled on its supervised (non-context) positions."""
+        prefix,span,_=ids_for(w)
+        ids=torch.cat([prefix,span],1)
+        labels=window_labels(ids,prefix.shape[1])
+        return ids[:,-a.member_tokens:],labels[:,-a.member_tokens:]
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
@@ -1200,7 +1220,8 @@ def main(argv=None):
         # A continuation may freeze a formerly trained head (e.g. feedback when
         # switching to the input map). Restore its weights independently of the
         # current optimizer's trainable set; it remains part of the same model.
-        restore_parameters={**parameters,**{'heads.'+n:q for n,q in heads.named_parameters()}}
+        restore_parameters={**parameters,**{'heads.'+n:q for n,q in heads.named_parameters()},
+                            **{'backbone.'+n:q for n,q in private_parameters(backbone)}}
         with torch.no_grad():
             for n,v in restored['student_parameters'].items():
                 restore_parameters[n].copy_(v.to(restore_parameters[n]))
@@ -1214,7 +1235,11 @@ def main(argv=None):
                 raise ValueError(f'continuation heads differ beyond the new input map: {missing} {unexpected}')
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
-            heads.load_state_dict(restored['heads']);optimizer.load_state_dict(restored['optimizer'])
+            heads.load_state_dict(restored['heads'])
+            try:optimizer.load_state_dict(restored['optimizer'])
+            except ValueError as error:
+                # The trainable set grew (members' private parts joined): the optimizer starts fresh.
+                print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
         step=restored['step'];updates=restored['updates']
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1384,6 +1409,8 @@ def main(argv=None):
                 'training_rng_preserved':bool(baseline_rng_preserved)}
         if rollout is not None:report['rollout']=rollout.controls()
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
+        if family and a.member_eval_windows:
+            report['family']=evaluate_members(backbone,[member_window(w) for w in held[:a.member_eval_windows]])
         for roles_of_pass in role_strata.values():
             for row in roles_of_pass.values():
                 for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
@@ -1583,10 +1610,20 @@ def main(argv=None):
                     if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
                     (loss/passes).backward();next_pass()
                     pass_losses.append(loss.detach());pass_metrics.append(metrics)
+                family_record=None
+                if a.member_weight and not bootstrap:
+                    # The family term (MAPLE_NESTED §4a): one member per update, in rotation.
+                    member=family[step%len(family)]
+                    member_value,parts=member_loss(backbone,member,*member_window(batch[0]))
+                    if not torch.isfinite(member_value):raise RuntimeError('nonfinite member loss')
+                    (a.member_weight*member_value).backward();next_pass()
+                    family_record={'member':member.key,'ce':parts.ce/max(parts.tokens,1),
+                                   'kl':parts.kl/max(parts.tokens,1),'tokens':parts.tokens}
         wrapped_forward_backward_seconds=time.perf_counter()-wrapped_started
         pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes,
                                                               secondary_projection=secondary_metric_name)
         metrics=dict(pass_metrics[-1])
+        if family_record is not None:metrics['family']=family_record
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         secondary_norm=gradient_norm(q for n,q in named if n.startswith(secondary_prefix))
         clip_finite_gradients(parameters.values())

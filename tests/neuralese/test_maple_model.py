@@ -394,3 +394,34 @@ def test_full_qat_policy(pair):
         dense.zero_()
     second = tracker.update()
     assert second["flipped_from_base"] == 0 and second["changed_twice_or_more"] > 0
+
+
+def test_family_term_and_member_evaluation_for_neuralese_stages(pair):
+    from types import SimpleNamespace
+
+    from natlang_neuralese.maple.family import (evaluate_members, family_members, member_loss, private_parameters,
+                                                window_labels)
+    from natlang_neuralese.maple.nested_train import Member, setup
+
+    _, ours = pair
+    members = [Member.parse("5", 4), Member.parse("2x3", 4)]
+    _, _, private = setup(ours, members, rank=2, private_rank=2, learn_scales=True, expert_scales=True)
+    ours.members = members
+    backbone = SimpleNamespace(hf=ours)
+    assert [m.key for m in family_members(backbone)] == ["4x5", "2x3"]
+    assert {id(p) for _, p in private_parameters(backbone)} == {id(p) for p in private}
+    ids = torch.randint(0, 90, (1, 2 * WINDOW))
+    labels = window_labels(ids, WINDOW)
+    assert (labels[:, :WINDOW - 1] == -100).all() and torch.equal(labels[0, WINDOW - 1:-1], ids[0, WINDOW:])
+    for p in ours.parameters():
+        p.requires_grad_(False)
+    for p in private:
+        p.requires_grad_(True)
+    loss, parts = member_loss(backbone, members[1], ids, labels, chunk=4)
+    loss.backward()
+    assert parts.tokens == WINDOW and parts.kl >= 0
+    assert ours.model.layers[0].mlp.private_gate["2x3"].grad is not None
+    assert ours.model.active_layers is None
+    report = evaluate_members(backbone, [(ids, labels)], chunk=4)
+    assert set(report) == {"full", "4x5", "2x3"} and report["full"]["kl"] < 1e-5
+    assert all(row["tokens"] == WINDOW and row["ce"] > 0 for row in report.values())
