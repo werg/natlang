@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "gold-text-warmup-lfm-cutoff8-rollout4-to8-v1",
+  "status": "prepared-not-launched-root-review-required",
+  "implementation": "natlang_neuralese.train.text_warmup",
+  "inherits": "gold-text-warmup-lfm-cutoff8-v1",
+  "decision": "Continue the existing full-state LFM warm-up at recurrent depth 4, deepen sketch-only training to 8 on held plateaus, then unfreeze the full stack at depth 8; preserve current gates and optimizer state.",
+  "model": "LFM2.5-350M",
+  "cutoff": 8,
+  "tokens": 16384,
+  "prefix_tokens": 32,
+  "batch": 1,
+  "group_size": 16,
+  "rollout": {
+    "start_passes": 4,
+    "maximum_passes": 8,
+    "sketch_only_first": true,
+    "advance": "existing held plateau/convergence criteria; one pass per qualified plateau",
+    "full_stack": "unfreeze only after sketch-only ramp reaches depth 8"
+  },
+  "gradient": "one-stage",
+  "optimizer": "Muon, restored from complete parent checkpoint",
+  "backbone_training": "full",
+  "steps_total": 32768,
+  "budget": "16K tokens per training/evaluation window; 32,768 is the absolute resumed update ceiling, not an update-count qualification",
+  "parent": {
+    "run": "runs/neuralese-native-text-warmup-20261008-v22",
+    "state": "checkpoint.pt from root-managed graceful safe handoff; bind exact checkpoint SHA, step, heads export status, optimizer and RNG receipts before launch",
+    "policy": "resume complete full state; do not initialize a new lineage or reset weights, optimizer, RNG, or compatible schedule"
+  },
+  "pretraining_diagnostic": {
+    "kind": "exact-weight eval-only",
+    "inputs": {
+      "records": "runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v5/assembled/native-records.jsonl",
+      "pieces": "runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v5/assembled/native-pieces.jsonl",
+      "text_data": "runs/neuralese-native-gold-text-corpus-20261008-v17-bunny-held-proposal-v6/text.jsonl"
+    },
+    "system_prompt_mask": true,
+    "purpose": "Measure the old V22 weights on the same V17 held corpus with current system-prompt masking before adopting the newer training corpus. This is diagnostic only and does not qualify the weights."
+  },
+  "training_inputs": {
+    "corpus_id": "neuralese-v24-v9-three-action-native-text-20261008-v2",
+    "native_records": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/native-records.jsonl",
+    "native_pieces": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/native-pieces.jsonl",
+    "text_data": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/text-append/text.jsonl",
+    "recurrence": "Preserve the admitted V9 recurrence facet unchanged; this text-warm-up command does not rewrite or synthesize recurrence records.",
+    "root_admission": "runs/neuralese-v24-v9-integration-admission-20261008-v1/admission.json"
+  },
+  "baseline_policy": "Remeasure initial held text CE when the objective, masking, held selection, depth/window geometry, or source inputs change. This only resets the diagnostic baseline; it does not discard full-state or schedule state.",
+  "qualification": "Existing complete-window, matched-crisp, last-256, stopping, and runtime gates remain unchanged. No qualification is inherited from V22 or inferred from this schedule.",
+  "handoff": {
+    "runtime": "Immutable snapshot of the latest committed shared training/neuralese/natlang_neuralese Python package, hash-bound by the accompanying preparation manifest.",
+    "container": "NGC26.09 sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de",
+    "execution": "Pop only; prepared for root review. No launch or job action is part of this declaration."
+  }
+}
