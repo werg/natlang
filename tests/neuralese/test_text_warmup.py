@@ -1370,3 +1370,14 @@ def test_sketch_cutoff_probe_collects_layer_states_and_scores_heads():
     assert states[1].shape[0]==ids.shape[1]-1 and greedy.shape==(ids.shape[1]-1,)
     scores=head_scores(CausalFeedbackProjection(backbone),states[1],ids[0,1:],greedy,'cpu')
     assert scores['tokens']==ids.shape[1]-1 and 0<=scores['gold_top1']<=1 and scores['ce']>0
+
+
+def test_chat_roles_label_system_user_reasoning_and_reply():
+    from natlang_neuralese.train.text_warmup import ROLE_CODES, chat_roles
+    S,SYS,USR,AST,TO,TC=1,2,3,4,5,6
+    ids=[S,SYS,10,11,S,USR,12,S,AST,TO,13,TC,14,15]
+    names=[ROLE_CODES[c] for c in chat_roles(ids,start_id=S,role_ids={SYS:'system',USR:'user',AST:'assistant'},
+                                             think_open=TO,think_close=TC)]
+    assert names==['other','system','system','system','other','user','user','other',
+                   'assistant_reply','assistant_reasoning','assistant_reasoning','assistant_reasoning',
+                   'assistant_reply','assistant_reply']

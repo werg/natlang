@@ -479,6 +479,28 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     return windows
 
 
+ROLE_CODES=('other','system','user','tool','assistant_reasoning','assistant_reply')
+
+
+def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None):
+    """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens
+    split into reasoning (inside the think block) and reply. Structural start tokens count as 'other'."""
+    codes=[];role='other';thinking=False;header=False
+    for token in ids:
+        if token==start_id:
+            role='other';thinking=False;header=True;codes.append(0);continue
+        if header:
+            role=role_ids.get(token,'other');header=False
+        if role=='assistant':
+            if token==think_open:thinking=True
+            name='assistant_reasoning' if thinking else 'assistant_reply'
+            if token==think_close:thinking=False
+        else:
+            name=role
+        codes.append(ROLE_CODES.index(name))
+    return codes
+
+
 def evaluation_batches(windows, limit, max_tokens=None):
     """Batch equal geometry within one held stratum; retain every held window.
 
@@ -718,6 +740,9 @@ def main(argv=None):
                    help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
                         'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
                         'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--eval-only',action='store_true',
+                   help='run one held evaluation of the restored state (use --continue-from into a fresh --out), '
+                        'write eval-only.json and exit: no update, no checkpoint')
     p.add_argument('--ar-control-steps',type=int,default=256,
                    help='held autoregressive controls (crisp greedy, full-projection and sketch self-fed rollouts) '
                         'over this many positions of the first held batch; 0 disables. Diagnostic, not a gate')
@@ -873,6 +898,29 @@ def main(argv=None):
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'groups':row['source_groups']})
     if not all(windows.values()):raise ValueError('no token windows for a split')
+    # Held per-role metrics (diagnostic): label the held windows' tokens by chat role.
+    role_tokenizer=engine.tokenizer
+    def token_id(text):
+        try:
+            value=role_tokenizer.convert_tokens_to_ids(text)
+            return value if isinstance(value,int) and value!=role_tokenizer.unk_token_id else None
+        except Exception:return None
+    role_start=token_id('<|im_start|>')
+    if role_start is not None:
+        role_ids={i:name for name in ('system','user','assistant','tool') for i in [token_id(name)] if i is not None}
+        held_documents={}
+        for row in rows:
+            if row['split']=='test':
+                held_documents[hashlib.sha256(row['text'].encode()).hexdigest()]=(
+                    [backbone.controls.open_id]+list(row['token_ids'] if 'token_ids' in row else engine._tokens(row['text']))
+                    +[backbone.controls.close_id])
+        for window in windows['test']:
+            document=held_documents.get(window['document'])
+            if document is None:continue
+            start=0 if window['offset']==0 else window['offset']-window['prefix']
+            labels=chat_roles(document,start_id=role_start,role_ids=role_ids,
+                              think_open=token_id('<think>'),think_close=token_id('</think>'))
+            window['roles']=labels[start:start+len(window['ids'])]
     held,held_selection=select_held_document_windows(windows['test'],a.held_documents)
     group_order_sha256=hashlib.sha256(json.dumps(held_selection['group_order'],ensure_ascii=False,
         sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -907,7 +955,7 @@ def main(argv=None):
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None):
+    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
         ce,training_ce,prediction,close_probability,token_losses=chunked_readout(
@@ -962,12 +1010,27 @@ def main(argv=None):
                     out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:])}
         if evaluation:
             metrics=materialize_objective_metrics([metrics])[0][0]
+            if roles is not None:
+                with torch.no_grad():
+                    by_role={}
+                    deltas=token_losses-baseline['token_losses']
+                    for code,name in enumerate(ROLE_CODES):
+                        selected=roles==code;count=int(selected.sum())
+                        if not count:continue
+                        by_role[name]={'tokens':count,'ce':float(token_losses[selected].float().mean()),
+                            'ce_delta':float(deltas[selected].float().mean()),
+                            'gold_accuracy':float((prediction==span)[selected].float().mean()),
+                            'text_argmax_agreement':float((prediction==plain_prediction)[selected].float().mean())}
+                    metrics['roles']=by_role
         return loss,metrics
 
     def objective(w,passes,bootstrap=False,readout_chunk_tokens=128,projected_observer=None):
         prefix,span,weights=ids_for(w);baseline={}
+        rows=[w] if isinstance(w,dict) else w
+        roles=(torch.tensor([r['roles'][r['prefix']:] for r in rows],device=span.device)
+               if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
         for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
-            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer)
+            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
@@ -1042,7 +1105,7 @@ def main(argv=None):
     def evaluate():
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
-        ar_batch=None
+        ar_batch=None;role_strata={}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
@@ -1064,6 +1127,11 @@ def main(argv=None):
                         if m['close_targets']:
                             boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
                             boundaries['close_top1_sum']+=m['close_top1']*m['close_targets']
+                    for name,values in m.get('roles',{}).items():
+                        row=role_strata.setdefault('pass-'+str(m['pass_index']),{}).setdefault(name,{'tokens':0})
+                        for n,value in values.items():
+                            if n!='tokens':row[n]=row.get(n,0.)+value*values['tokens']
+                        row['tokens']+=values['tokens']
                     key='pass-'+str(m['pass_index'])+'-length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
                     row=strata.setdefault(key,{'tokens':0})
                     for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
@@ -1115,6 +1183,10 @@ def main(argv=None):
                 'evaluation_passes':max(3,a.rollout_passes)}
         if rollout is not None:report['rollout']=rollout.controls()
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
+        for roles_of_pass in role_strata.values():
+            for row in roles_of_pass.values():
+                for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
+        if role_strata:report['role_strata']=role_strata  # diagnostic: chat-role breakdown, not a gate
         matched_summary={}
         for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}
@@ -1227,6 +1299,11 @@ def main(argv=None):
                 write_heads_export_status(export_error=export_error)
                 raise
         write_heads_export_status(export_error=export_error)
+    if a.eval_only:
+        report=evaluate()
+        (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
+        print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
+        return None
     if not was_resumed:
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}

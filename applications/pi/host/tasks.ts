@@ -74,6 +74,9 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
     try {
       const summary = await host.natlang.run(() => entry(facts), { services, serviceDeclarations, signal: runtime.signal,
         name: `${task.kind}#${task.id}:${phase}` });
+      // An entry must commit the task's next state. One that says it did, while the state is unchanged, failed.
+      if (stateKey(await runtime.getTask(task.id, context)) === before)
+        throw new Error(`the ${phase} phase returned "${String(summary ?? '').slice(0, 200)}" without committing the task's next state`);
       host.onPhase?.({ kind: task.kind, taskId: task.id, phase, mode, attempt, summary: String(summary ?? '') });
       return;
     } catch (error) {

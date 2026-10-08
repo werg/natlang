@@ -1,81 +1,86 @@
 # pi on natlang
 
-A port of [pi](https://github.com/earendil-works/pi)'s coding agent, as a natlang program. The agent is a
-natural-language function on the big model. Its tools are natural-language functions on a small model, and so are
-the quick judgments that help the big model do its job ("System One"). Crisp code only stands for the outside world
-(a shell, the file system, the user) and runs the command line.
+A port of [pi](https://github.com/earendil-works/pi)'s durable coding agent harness (pi-durable) to natlang, unit by
+unit (PORT.md has every decision; `port/` is the inventory). pi-durable stays the host for what is mechanism: the
+Session line and SQLite storage, the scheduler's invocations and timers, the registry and the Harness API. Everything
+that decides what happens in a run is a natural-language function, run by natlang's executor (a small, fast model):
+
+- each phase of the three durable task kinds: `generation.nl` (prepare, request, classify, answer, the tool round,
+  abort), `tool.nl` (lookup, repair, validation, hooks, intent, run, settlement, recovery) and `compaction.nl`
+  (the cut, the summary, its placement);
+- context derivation, the system prompt plan, the compaction cut and the token estimate, steering and follow-up
+  selection at turn boundaries;
+- admission (`admit.nl`) and the scheduler's policy (`scheduler/`: which task runs, step precedence, abort and its
+  cascades, finalization, idle);
+- pi's coding tools (`extensions/coding-tools`: read, write, edit, bash) and the subagent.
+
+The agent is a provider model the harness calls through pi-ai (`ai.turn`). The functions are the harness around it;
+none of them is the agent.
 
 ```
-pi.nl                 the agent (model: big): pi's system prompt and rules; calls its tools in eval
-pi/context.nl         AGENTS.md/CLAUDE.md up the tree, pi's skills (SKILL.md), files to start from
-pi/context/scout.nl     the files a task most likely needs
-pi/read.nl            pi's read: offset/limit, 2000 lines or 50 KB, continuation hint
-pi/write.nl           pi's write: parents created, bytes written
-pi/edit.nl            pi's edit: exact, unique, non-overlapping replacements against the original; then a review
-pi/edit/review.nl       does the diff do what intent says? as-intended / unintended / incomplete
-pi/bash.nl            pi's bash: a risk gate, then the run, tail truncation or a digest, full output saved
-pi/bash/risk.nl         safe / review / destructive
-pi/bash/digest.nl       long output cut to what the step needs
-pi/progress.nl        progressing / repeating / stuck, every six actions
-pi/done.nl            done / unfinished, once before answering
-services.ts           shell.run, files.*, user.confirm: the outside world
+index.ts                 openPi(): pi-durable's Harness with the natural-language task kinds
+main.ts                  print-mode CLI and eval over tasks/
+types.ts                 every record the functions read and write, with its rules in doc comments
+ops.ts                   durable.commit: the write operations, applied atomically with guards
+host/                    services: durable, ai, tools, env, resources; the task kinds; policies
+generation.nl generation/  prepare (+ planSystem), request, classify, answer, startToolRound, finishToolRound, abort
+tool.nl tool/            beginCall, run (+ exact result formats), fromSlot
+compaction.nl compaction/  select, summarize (+ pi's verbatim prompts and transcript format)
+harness/                 shared through uses:: context (pluggable), deriveContext, cut, estimate, boundary
+admit.nl scheduler/      admission; pass, step, reconcile, abortTask, abortConversation, cleanup
+extensions/              coding-tools, pi-prompt (pi's seven sections, verbatim), subagent
+vendor/durable           pi-durable at f10993b (PATCHES.md lists the changes)
+test/                    scripted wiring tests; conformance/ runs pi-durable's own suites against the port
+tasks/                   coding tasks for eval
 ```
 
-The judgments with a finite answer use `readout: decision`, which scores every allowed value in one pass. The
-functions that call them act on the probabilities with `decide(fn, ...args)` in eval. For example, bash refuses a
-command at p(destructive) ≥ 0.7 and asks the user at p(review or worse) ≥ 0.5. These thresholds are part of the
-instructions, like everything else.
+## How a function commits
 
-pi's harness loop is the natlang interpreter's own loop. The big model reads tool results, and it can make several
-calls per eval when the next steps are certain. It can also loop over many items with small-model `nl` judgments.
-That covers what pi's codemode and routing did. The runtime moves old output into `transcript` when the context
-fills up, and pi.nl asks for pi's checkpoint format in the note it keeps. The session log (`--session`, by default
-under the state directory) holds one JSON line per finished call, with its full trace.
+Natural language never runs inside a commit. A function reads committed state through `durable`, decides, and hands
+the host one list of write operations with guards on what it read: `durable.commit(ops, expect)`. The host applies the
+list atomically on the Session line with pi-durable's own helpers, so their invariants hold (every assistant entry's
+usage is counted, a stored tool result is exactly what the model sees, a run's inputs settle with the run). A failed
+guard writes nothing and rejects with "state changed"; the function reads again and decides again. The rules that
+judge a commit's own staged writes (hold or terminate, wait validation, the runtime commit gates) stay in the host.
 
-### The optimized harness
+## Variants
 
-`agent.ts` and `tools.ts` keep a TypeScript version for comparison. It has the same judgments (imported as pi.nl's
-children, `pi.bash.risk` and so on) around pi's loop and tools written in TypeScript. It adds codemode
-(`harness/codemode.nl`: the big model hands natlang a script), routing (`harness/route.nl`: routine turns go to the
-small model), and compaction into pi's checkpoint (`harness/compact.nl`). Use `--fast`.
+Context building, the scheduler's policy and admission run on every turn and every phase. Each has pi-durable's crisp
+code and the natural-language functions behind one interface:
+
+- default: the three are crisp; everything else is natural language;
+- `--context natural-language`, `--scheduler natural-language`, `--admission natural-language`: one at a time;
+- `--pure`: all three in natural language, so every function in this app runs.
 
 ## Running
 
 ```sh
-natlang run applications/pi -- -p "Fix the failing test in src/paginate.js"      # print mode, the natlang program
-natlang run applications/pi -- --big-endpoint http://host:8000 --big-model big "…"  # a separate big model
-natlang run applications/pi -- --fast "…"                                          # the optimized harness
-natlang run applications/pi -- eval [task...] --variants pure,system-one,plain
+natlang run --profile pi-executor applications/pi -- \
+  --agent-endpoint http://127.0.0.1:8083 --agent-model nvidia/Qwen3.6-35B-A3B-NVFP4 "Fix the failing test"
+natlang run --profile pi-executor applications/pi -- eval js-off-by-one --agent-endpoint … --agent-model …
 ```
 
-The launcher's model runs the tools and judgments. The big model runs pi.nl, and it is the same model unless
-`--big-*` names another endpoint. The other options are:
+The launcher's profile is the executor. The agent is any OpenAI-compatible server (`--agent-endpoint`,
+`--agent-model`, `--agent-key-env`), registered with pi-ai as provider `agent`; without them the agent uses the
+default profile's endpoint. `--session FILE` keeps the SQLite session; `--thinking LEVEL` sets the agent's thinking
+level; `--quiet` hides the phase log.
 
-- `--yes` approves commands that need review;
-- `--max-turns N` limits the big model's turns;
-- `--session FILE` sets the session log;
-- `--skills DIR` adds a skill directory; `--skills skills` offers this repository's natlang authoring skills.
+## Verification
 
-These apply with `--fast` only: `--no-system-one`, `--no-codemode` and `--route`.
-
-`eval` runs each task in `tasks/` on a fresh git copy of its repository under each variant:
-
-- `pure`: the natlang program;
-- `system-one`: the optimized harness;
-- `plain`: the TypeScript loop without judgments;
-- `codemode` and `route`: the harness's extras.
-
-A hidden check judges the result: the tests must pass, and test files must not be edited. The tasks are:
-
-- js-off-by-one;
-- py-parse-duration;
-- noisy-suite: one failure in 445 lines of output;
-- rename-api: many call sites;
-- cli-flag;
-- stale-build: deleting build output is allowed, but data must survive.
+- `npm test` in this directory: scripted wiring tests (25). The crisp helpers are compared with pi's own code on
+  thousands of random inputs (result bounding, truncation, transcript serialization, edit matching, image sniffing);
+  the coding tools run through the runtime and are compared with pi's `CodingTools` (results, files, diagnostics);
+  the policy path drives a real Harness through the scheduler and admission functions.
+- `npm run test:vendor`: pi-durable's own suite with the crisp defaults (967 tests; three files need other packages
+  of pi's monorepo and do not load). `npm run test:policy`: the same suite through the guarded read-decide-commit
+  policy path.
+- `npm run test:conformance`: pi-durable's harness suites (generation, generation-recovery, compaction, context,
+  prompt, inbox, submissions, tools, tools-recovery, structured, tasks) with the natural-language task kinds
+  substituted, against a real executor (`PI_EXECUTOR_ENDPOINT`, `PI_EXECUTOR_MODEL`; `PI_CONTEXT`, `PI_SCHEDULER`,
+  `PI_ADMISSION` select natural-language implementations). The suites check exact entries and documents, so they test
+  whether the functions are exact. Results: see Status.
+- `eval` runs the coding tasks in `tasks/` on fresh git copies, judged by their check commands.
 
 ## Status
 
-Both versions are tested with scripted models (`ts-host/test/pi.test.mjs`). The pure test checks the wiring: the big
-model runs pi.nl and nothing else, the small model runs the tools, and their judgments act through `decide`. The live
-evaluation is pending; results will be recorded here.
+See the end of this file for the latest measured results.

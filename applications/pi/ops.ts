@@ -72,6 +72,9 @@ const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<unknown, unknown, unknown>, ops: readonly Op[],
   expect: Expect | undefined): Promise<{ next: NextTaskState<unknown, unknown> | undefined; result: CommitResult }> {
   if (!Array.isArray(ops)) throw new InvalidOperation('commit takes a list of operations');
+  // Plain JSON throughout: values from eval may be proxies whose arrays do not copy into documents.
+  ops = json(ops);
+  if (expect !== undefined) expect = json(expect);
   const { conversationId } = scope;
   // Table reads first.
   if (expect?.tail !== undefined) {
