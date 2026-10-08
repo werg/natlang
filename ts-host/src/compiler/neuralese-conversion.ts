@@ -46,6 +46,7 @@
  * from a summarising call. Their texts are collected once in `pieces`.
  */
 import { createHash } from 'node:crypto';
+import * as ts from 'typescript';
 import { canonical } from '../adaptation/identity.js';
 import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
@@ -53,6 +54,48 @@ import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN 
 
 export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/13';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
+
+export type PureLiteralEvalReturn = {
+  binding_name: string;
+  value: string;
+  literal_kind: 'string' | 'no-substitution-template';
+};
+
+/**
+ * Recognize only a side-effect-free eval body whose entire program is one `const`
+ * initialized from a string literal (or a template literal with no substitutions),
+ * followed by `return` of that exact binding. This supports an explicitly derived
+ * typed-text target view; it does not claim the original eval code target was a
+ * natural-language result target. Any read, call, branch, interpolation, mutation,
+ * or extra statement is intentionally outside this grammar.
+ */
+export function pureLiteralEvalReturn(code: unknown): PureLiteralEvalReturn | undefined {
+  if (typeof code !== 'string' || !code.trim()) return undefined;
+  const source = ts.createSourceFile('pure-literal-eval.ts', code, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  if (((source as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length ?? 0) !== 0 ||
+      source.statements.length !== 2) return undefined;
+  const [declarationStatement, returnStatement] = source.statements;
+  if (!declarationStatement || !returnStatement || !ts.isVariableStatement(declarationStatement) ||
+      !ts.isReturnStatement(returnStatement) ||
+      (declarationStatement.declarationList.flags & ts.NodeFlags.Const) === 0 ||
+      declarationStatement.declarationList.declarations.length !== 1) return undefined;
+  const declaration = declarationStatement.declarationList.declarations[0];
+  if (!declaration || !ts.isIdentifier(declaration.name) || !declaration.initializer ||
+      !returnStatement.expression || !ts.isIdentifier(returnStatement.expression) ||
+      returnStatement.expression.text !== declaration.name.text)
+    return undefined;
+  if (declaration.type && (!ts.isTypeReferenceNode(declaration.type) ||
+      !ts.isIdentifier(declaration.type.typeName) || declaration.type.typeName.text !== 'Neuralese' ||
+      declaration.type.typeArguments?.length !== 1 ||
+      declaration.type.typeArguments[0]?.kind !== ts.SyntaxKind.StringKeyword))
+    return undefined;
+  if (ts.isStringLiteral(declaration.initializer))
+    return { binding_name: declaration.name.text, value: declaration.initializer.text, literal_kind: 'string' };
+  if (ts.isNoSubstitutionTemplateLiteral(declaration.initializer))
+    return { binding_name: declaration.name.text, value: declaration.initializer.text,
+      literal_kind: 'no-substitution-template' };
+  return undefined;
+}
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
   { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string };

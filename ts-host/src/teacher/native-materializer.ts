@@ -6,6 +6,7 @@ import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredF
 import type { ProgramRecord } from './program.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
+import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -30,6 +31,143 @@ function canonical(value: unknown): string {
 export function nativeRowDigest(value: unknown): string {
   // Lineage refers to the saved JSON artifact, including omitted undefined fields.
   return hexDigest(canonical(JSON.parse(JSON.stringify(value))));
+}
+
+export type PureLiteralTypedTextWitness = {
+  trajectory_id: string;
+  source_row_sha256: string;
+  source_result_row_sha256: string;
+  generation_turn: { trajectory_index: number; invocation_id: string; turn: number;
+    request_sha256: string; raw_response_sha256: string };
+  target_code_sha256: string;
+  writer_call_id: string;
+  writer_node: string;
+  block_id: string;
+  body_source: string;
+  body_sha256: string;
+  result_type: string;
+  source: string;
+  marker_context: string;
+  source_kind: string;
+};
+
+/**
+ * Make a held derived target only for an authenticated pure-literal eval return.
+ * The normal native materializer still emits the original eval action unchanged;
+ * this view is explicitly transformed to the equivalent typed return tool call.
+ */
+export function derivePureLiteralTypedTextTarget(rowValue: unknown,
+  witnessValue: PureLiteralTypedTextWitness): (NativeRow & Dict) | undefined {
+  const row = record(rowValue, 'derived typed-text source row');
+  const target = record(row.target, 'derived typed-text source target');
+  const sourceRef = record(row.source_ref, 'derived typed-text source reference');
+  const preview = record(row.preview_source_selection, 'derived typed-text preview selection');
+  const generationTurn = record(preview.target_generation_turn, 'derived typed-text generation turn');
+  const decision = record(row.decision, 'derived typed-text source decision');
+  const assistantDecision = decision.assistant && typeof decision.assistant === 'object' ?
+    decision.assistant as Dict : undefined;
+  const decisionCalls = Array.isArray(assistantDecision?.calls) ? assistantDecision.calls as Dict[] : [];
+  const writeReceipts = decisionCalls.flatMap(call => {
+    const outcome = call.outcome && typeof call.outcome === 'object' ? call.outcome as Dict : undefined;
+    return Array.isArray(outcome?.typed_result_writes) ? outcome.typed_result_writes as Dict[] : [];
+  });
+  const targetCalls = Array.isArray(target.tool_calls) ? target.tool_calls : [];
+  if (target.role !== 'assistant' || targetCalls.length !== 1 ||
+      !targetCalls[0] || typeof targetCalls[0] !== 'object') return undefined;
+  const originalCall = record(targetCalls[0], 'derived typed-text target call');
+  const fn = record(originalCall.function, 'derived typed-text target function');
+  if (fn.name !== 'eval' || typeof fn.arguments !== 'string') return undefined;
+  let originalArgs: Dict;
+  try { originalArgs = record(JSON.parse(fn.arguments), 'derived typed-text eval arguments'); }
+  catch { return undefined; }
+  const parsed = pureLiteralEvalReturn(originalArgs.code);
+  if (!parsed) return undefined;
+  const matchingWrites = writeReceipts.filter(write => write.schema === 'natlang.typed-result-write/1' &&
+    write.trajectory_id === witnessValue.trajectory_id && write.source_row_sha256 === witnessValue.source_row_sha256 &&
+    write.invocation_id === witnessValue.generation_turn.invocation_id &&
+    write.writer_call_id === witnessValue.writer_call_id && write.writer_node === witnessValue.writer_node &&
+    write.block_id === witnessValue.block_id && write.source_kind === witnessValue.source_kind &&
+    write.source === witnessValue.source && write.result_type === witnessValue.result_type &&
+    write.body_sha256 === witnessValue.body_sha256 &&
+    write.request_sha256 === witnessValue.generation_turn.request_sha256 &&
+    write.raw_response_sha256 === witnessValue.generation_turn.raw_response_sha256);
+  const sha256 = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  const stageMarker = `${witnessValue.block_id}`;
+  const stagedReturns = decisionCalls.filter(call => {
+    const callOutcome = call.outcome && typeof call.outcome === 'object' ? call.outcome as Dict : undefined;
+    const args = callOutcome?.arguments && typeof callOutcome.arguments === 'object' ? callOutcome.arguments as Dict : undefined;
+    return callOutcome?.name === 'eval' && args?.code === originalArgs.code && typeof callOutcome.result === 'string' &&
+      callOutcome.result.split(stageMarker).length === 2;
+  });
+  const authenticatedWriter = witnessValue.source === 'eval-finish'
+    ? originalArgs.finish === true && matchingWrites.length === 1 && witnessValue.marker_context === 'return-result'
+    : witnessValue.source === 'eval-return'
+      ? stagedReturns.length === 1 && matchingWrites.length === 0 && witnessValue.marker_context === 'eval-return-stage'
+      : false;
+  if (!parsed || parsed.value !== witnessValue.body_source ||
+      !sha256(witnessValue.body_sha256) || !sha256(witnessValue.source_row_sha256) ||
+      !sha256(witnessValue.source_result_row_sha256) || !sha256(witnessValue.target_code_sha256) ||
+      !sha256(witnessValue.generation_turn.request_sha256) || !sha256(witnessValue.generation_turn.raw_response_sha256) ||
+      !Number.isInteger(witnessValue.generation_turn.trajectory_index) ||
+      !Number.isInteger(witnessValue.generation_turn.turn) || witnessValue.generation_turn.turn < 0 ||
+      !witnessValue.trajectory_id || !witnessValue.generation_turn.invocation_id ||
+      !witnessValue.writer_call_id || !witnessValue.writer_node || !/^nz1_[a-z0-9]{20,}$/.test(witnessValue.block_id) ||
+      !authenticatedWriter || witnessValue.trajectory_id !== sourceRef.trajectory_id ||
+      witnessValue.source_row_sha256 !== sourceRef.source_row_sha256 ||
+      hexDigest(witnessValue.body_source) !== witnessValue.body_sha256 ||
+      witnessValue.result_type !== 'Neuralese<string>' || witnessValue.source_kind !== 'typed-text-result' ||
+      witnessValue.source_row_sha256 !== sourceRef.source_row_sha256 ||
+      witnessValue.trajectory_id !== sourceRef.trajectory_id ||
+      witnessValue.generation_turn.invocation_id !== sourceRef.invocation_id ||
+      witnessValue.writer_call_id !== sourceRef.invocation_id ||
+      !witnessValue.writer_node.startsWith(`${witnessValue.writer_call_id}#`) ||
+      witnessValue.generation_turn.raw_response_sha256 !== decision.source_raw_response_sha256 ||
+      witnessValue.generation_turn.invocation_id !== generationTurn.invocation_id ||
+      witnessValue.generation_turn.trajectory_index !== generationTurn.trajectory_index ||
+      witnessValue.generation_turn.request_sha256 !== generationTurn.request_sha256 ||
+      witnessValue.generation_turn.raw_response_sha256 !== generationTurn.raw_response_sha256 ||
+      hexDigest(originalArgs.code as string) !== witnessValue.target_code_sha256) return undefined;
+  const site = sourceRef.inline_instruction_site && typeof sourceRef.inline_instruction_site === 'object' ?
+    (sourceRef.inline_instruction_site as Dict).site as Dict | undefined : undefined;
+  const returns = site && typeof site === 'object' ? site.returns as Dict | undefined : undefined;
+  if (returns?.natlang !== witnessValue.result_type) return undefined;
+  const tools = Array.isArray(row.tools) ? row.tools as Dict[] : [];
+  if (!tools.some(tool => (tool.function as Dict | undefined)?.name === 'return_result')) return undefined;
+  if (row.training_admission && typeof row.training_admission === 'object' &&
+      (row.training_admission as Dict).approved !== false) return undefined;
+  const derivedCallId = `derived_${hexDigest(`${row.id}\u0000${witnessValue.writer_node}\u0000${witnessValue.body_sha256}`).slice(0, 24)}`;
+  const derivedTarget = { role: 'assistant', content: '', tool_calls: [{ id: derivedCallId, type: 'function',
+    function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value: witnessValue.body_source }) } }] };
+  const derived = structuredClone(row) as NativeRow & Dict;
+  derived.id = `held-neuralese-derived-typed-text:${String(row.id)}:${witnessValue.body_sha256.slice(0, 12)}`;
+  derived.target = derivedTarget;
+  derived.review_disposition = 'held_derived_equivalent_typed_text_target';
+  derived.training_admission = { approved: false, status: 'held-review-only',
+    reason: 'derived equivalent target; root review pending' };
+  derived.decision = { ...decision, training_approved: false, target_representation: 'derived-equivalent-typed-text-return' };
+  derived.derived_target = {
+    schema: 'natlang.derived-equivalent-typed-text-target/1',
+    transform_revision: 'pure-literal-eval-return-to-typed-return/1',
+    derivation_role: 'derived_target_not_original_assistant_action',
+    original_row_id: row.id,
+    original_target_sha256: nativeRowDigest(target),
+    original_code_sha256: hexDigest(originalArgs.code as string),
+    parsed_binding_name: parsed.binding_name,
+    parsed_literal_kind: parsed.literal_kind,
+    source_result_type: witnessValue.result_type,
+    source_result: { trajectory_id: witnessValue.trajectory_id, source_row_sha256: witnessValue.source_row_sha256,
+      source_result_row_sha256: witnessValue.source_result_row_sha256, generation_turn: witnessValue.generation_turn,
+      writer_call_id: witnessValue.writer_call_id, writer_node: witnessValue.writer_node,
+      block_id: witnessValue.block_id, body_sha256: witnessValue.body_sha256, source: witnessValue.source,
+      marker_context: witnessValue.marker_context, source_kind: witnessValue.source_kind },
+    derived_target_sha256: nativeRowDigest(derivedTarget),
+    target_equivalence: 'The original two-statement eval returns this exact constant string as its declared Neuralese<string> result; the derived target calls return_result with that same value.',
+    original_runtime_target_preserved_in_source_row: true,
+    runtime_gradient_qualification: false,
+    training_approved: false,
+  };
+  derived.preview_source_selection = { ...preview, derived_target: derived.derived_target };
+  return derived;
 }
 
 function record(value: unknown, label: string): Dict {
