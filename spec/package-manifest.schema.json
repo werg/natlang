@@ -100,6 +100,28 @@
           }
         }
       }
+    },
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the runtime records of this program's calls: definitions (a source glob such as auth/*.nl) or arguments (functionName.argument) recorded by type only.",
+      "properties": {
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "specialization": {
+      "enum": [
+        "off",
+        "shadow",
+        "on"
+      ],
+      "description": "How far stored compilations may serve this program's calls; the machine setting still bounds it."
     }
   },
   "$defs": {

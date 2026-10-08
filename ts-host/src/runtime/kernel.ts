@@ -506,7 +506,8 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
     const identity: DefinitionIdentity = { id: definition.id, name: definition.name, source: definition.source ?? null,
       key: definitionKey({ ...definition, body }), interface: interfaceHash(definition.codebase), site,
       ...(inlineSite?.template_segments ? { template: hexDigest(JSON.stringify(inlineSite.template_segments)).slice(0, 24) } : {}),
-      subtype: definition.subtype, params: definition.params, returns: definition.returns };
+      subtype: definition.subtype, params: definition.params, returns: definition.returns,
+      instructions: { complete: false, reason: 'excluded' }, types: definition.types, ...(definition.readout ? { readout: definition.readout } : {}) };
     const parentTrace = traceFor(frame.parentCallId);
     const view = task.programView;
     const capture = new CallCapture(store, settings, { callId, parentCallId: frame.parentCallId ?? null,
@@ -515,13 +516,15 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       programRoot: task.runtime.options.programRoot ?? null, definition: identity,
       model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null) : null, revision: model?.revision ?? null },
       exclude: task.runtime.options.recording?.exclude });
+    identity.instructions = capture.ref(body);
     if (task.auditOf && !frame.parentCallId) capture.auditOf = task.auditOf;
     const named = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, inputs[index]])
       .filter(([, value]) => value !== undefined));
     const captures = Object.fromEntries(Object.values(options.captures ?? {}).filter(cell => !cell.skill)
       .map(cell => { try { return [cell.name, cell.get()]; } catch { return [cell.name, undefined]; } })
       .filter(([, value]) => typeof value !== 'function'));
-    capture.setInputs(folder ? { folder: folder.transaction.folder.root(), ...named } : named, captures);
+    capture.setInputs(named, captures);
+    if (folder) capture.setFolderInput(folder.transaction.folder);
     return capture;
   } catch (error) {
     console.warn(`natlang: call recording failed for ${definition.name}: ${error instanceof Error ? error.message : String(error)}`);

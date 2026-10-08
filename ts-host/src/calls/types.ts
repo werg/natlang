@@ -23,7 +23,9 @@ export type SiteKind = 'named' | 'inline' | 'iterate' | 'internal';
 /** The identity of what ran: `key` is the definition revision compilations are keyed by (§7.3). */
 export type DefinitionIdentity = { id: string; name: string; source: string | null; key: string; interface: string;
   site: SiteKind; template?: string; subtype: 'function' | 'directory-reducer'; params: { name: string; type: string; optional?: boolean }[];
-  returns: string };
+  returns: string;
+  /** The instructions as run, and the type aliases in scope: enough to rebuild the definition offline when its source cannot be loaded. */
+  instructions: ValueRef; types: Record<string, string>; readout?: string };
 
 export type CallCost = { model_requests: number; tokens_in: number; tokens_out: number; wall_ms: number; turns: number; evals: number };
 

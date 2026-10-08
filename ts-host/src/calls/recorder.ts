@@ -107,6 +107,33 @@ export class CallCapture {
     try { this.features = inputFeatures(visible); } catch { this.features = {}; }
   }
 
+  /**
+   * A directory reducer's folder as it was when the call started: each file's text by hash, so a replay can rebuild it.
+   * A folder larger than sixteen value bounds is recorded by its listing only.
+   */
+  setFolderInput(folder: { listFiles(path?: string): { path: string; bytes: number }[]; readBytesSync(path: string): Uint8Array }): void {
+    try {
+      const listing = folder.listFiles('');
+      const total = listing.reduce((sum, entry) => sum + entry.bytes, 0);
+      if (total > 16 * this.settings.maxValueBytes) {
+        this.inputs.folder = { complete: false, reason: 'oversize', type: 'Folder', bytes: total,
+          preview: listing.slice(0, 20).map(entry => entry.path).join(', ') };
+        return;
+      }
+      const decoder = new TextDecoder('utf-8', { fatal: true });
+      const files: Record<string, ValueRef> = {};
+      for (const entry of listing) {
+        const bytes = folder.readBytesSync(entry.path);
+        let text: string;
+        try { text = decoder.decode(bytes); } catch { files[entry.path] = { complete: false, reason: 'nonportable', type: 'bytes', bytes: bytes.byteLength }; continue; }
+        files[entry.path] = this.ref(text);
+      }
+      this.inputs.folder = this.ref({ $folder: files });
+    } catch (error) {
+      this.inputs.folder = { complete: false, reason: 'nonportable', type: 'Folder', preview: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   /** One recording-services event (`native/effects.ts`), with its exact arguments and result. */
   effect(event: { phase: 'requested' | 'completed' | 'failed'; service: string; method: string; exact?: { args?: unknown[]; result?: unknown; async?: boolean };
     error?: string; seq?: number }, by: 'agent' | 'crisp' = 'agent'): void {

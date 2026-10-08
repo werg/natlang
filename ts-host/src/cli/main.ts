@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
-import type { NatlangTarget } from '../package/manifest.js';
+import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
@@ -57,6 +57,9 @@ Usage:
   natlang models [PROVIDER]                   List Pi providers and models.
   natlang auth login|status|logout ...        Manage Pi subscription credentials.
   natlang doctor                             Check this natlang installation.
+  natlang traces status|hot|list|show ...    Inspect the machine's record of natlang calls.
+  natlang compilations list|show|why ...     Inspect compiled cases and the calls they serve.
+  natlang specialize [--loop]                Compile recorded calls into guarded crisp cases.
 
 Run natlang help COMMAND for focused usage and options.`; }
 
@@ -107,6 +110,30 @@ changes are saved to DIR after the reducer completes.`;
 Without input, the instruction receives a read-only view of the current directory.
 Piped stdin is passed as a whole, or one line/JSON record at a time. --files calls
 once per matching file and prints path<TAB>result. --filter prints matching inputs.`;
+  if (topic === 'traces') return `The machine's record of natlang calls (NATLANG_CALL_STORE, default ~/.local/share/natlang/calls):
+  natlang traces status                      Store size, settings, pending shadow/audit jobs.
+  natlang traces hot [--program DIR] [--by calls|tokens|wall_ms]
+  natlang traces list [--definition NAME] [--executor agent|crisp|crisp-agent] [--outcome X] [--since ISO] [--all]
+  natlang traces show CALL [--events] [--json]
+  natlang traces export [--definition NAME] [--limit N]    One JSON record per line, values inlined.
+  natlang traces pin|unpin CALL              Keep a call when the store evicts.
+  natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.
+  natlang traces config [KEY=VALUE...]       maxValueBytes, maxStoreBytes, specialization (off|shadow|on),
+                                             auditRate, acceptanceBound, promotionComparisons, minCalls.
+Every runtime records each call (exact inputs, output, service calls, eval code, cost) unless
+NATLANG_CALL_STORE=off. A program's natlang.json can exclude values: "recording": { "exclude": [...] }.`;
+  if (topic === 'compilations' || topic === 'specialize') return `Compiled cases (guarded crisp TypeScript) for natural-language functions:
+  natlang compilations list [--program DIR] [--all]
+  natlang compilations show DEFINITION|ID    Cases, tiers, numbers, cases.ts and the report.
+  natlang compilations why CALL              Which case served a call, or why none did.
+  natlang compilations calls CASE [--role served|handed-off|training|held-out|shadow|audit]
+  natlang compilations history DEFINITION
+  natlang compilations export DEFINITION DIR Write the compilation and its evidence as files.
+  natlang compilations disable|enable CASE|ID
+  natlang compilations declines
+  natlang specialize [--definition NAME] [--program DIR] [--loop] [--interval SECONDS] [--dry-run]
+The runtime loads the current compilation of a function by itself: a new case starts in shadow and is
+promoted by evidence; a case that fails hands the call back to the function.`;
   if (topic === 'apps') return `Discover applications:
   natlang apps [DIRECTORY] [--json]`;
   if (topic === 'inspect') return `Resolve a source without running it:
@@ -375,6 +402,14 @@ function compileFor(root: string, entry: string, outDir: string, installed: bool
 type Launch = { root: string; target: NatlangTarget; targetName: string; installed?: boolean;
   package?: TargetContext['package']; dependencies: TargetContext['dependencies']; stateKey: string };
 
+/** The recording and specialization settings of the package at `root` (natlang.json). */
+function readManifestSettings(root: string): { recording?: { exclude?: string[] }; specialization?: 'off' | 'shadow' | 'on' } {
+  try {
+    const manifest = parsePackageManifest(JSON.parse(readFileSync(join(root, 'natlang.json'), 'utf8')));
+    return { ...(manifest.recording ? { recording: manifest.recording } : {}), ...(manifest.specialization ? { specialization: manifest.specialization } : {}) };
+  } catch { return {}; }
+}
+
 async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const stateDirectory = resolve(option(parsed, '--state') ?? join(defaultNatlangStateDirectory(),
     encodeURIComponent(spec.stateKey), spec.targetName));
@@ -396,7 +431,9 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const program = inventory.manifest.adaptation!;
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory) });
+  const manifest = spec.package ? readManifestSettings(spec.root) : {};
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
+    programRoot: spec.root, ...manifest });
   try {
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
@@ -669,6 +706,9 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv[0] === 'improve') return (await import('./improvement.js')).improvementCommand(argv.slice(1));
   if (['adapt', 'eval', 'optimize'].includes(argv[0] ?? '')) return (await import('./adaptation.js')).adaptationCommand(argv);
+  if (argv[0] === 'traces') return (await import('./calls.js')).tracesCommand(argv.slice(1));
+  if (argv[0] === 'compilations') return (await import('./calls.js')).compilationsCommand(argv.slice(1));
+  if (argv[0] === 'specialize') return main((await import('./calls.js')).specializeArguments(argv.slice(1)));
   const parsed = parseArgs(argv);
   const json = parsed.options.has('--json');
   const [command, ...words] = parsed.words;

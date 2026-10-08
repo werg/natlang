@@ -23,6 +23,10 @@ export type NatlangPackageManifest = {
   exports?: Record<string, string>;
   dependencies?: Record<string, string>;
   engines?: { natlang?: string; node?: string };
+  /** What the runtime records of this program's calls (plans/TRACE_SPECIALIZATION.md §3.2). */
+  recording?: { exclude?: string[] };
+  /** How far stored compilations may serve this program's calls; the machine setting still bounds it. */
+  specialization?: 'off' | 'shadow' | 'on';
 };
 
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
@@ -51,7 +55,8 @@ function stringMap(value: unknown, label: string): Record<string, string> | unde
 export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('package manifest must be an object');
   const raw = value as Record<string, unknown>;
-  const known = new Set(['schema', 'name', 'version', 'description', 'include', 'targets', 'exports', 'dependencies', 'engines']);
+  const known = new Set(['schema', 'name', 'version', 'description', 'include', 'targets', 'exports', 'dependencies', 'engines',
+    'recording', 'specialization']);
   for (const key of Object.keys(raw)) if (!known.has(key)) throw new TypeError(`unknown package manifest field: ${key}`);
   if (raw.schema !== PACKAGE_SCHEMA) throw new TypeError(`package schema must be ${PACKAGE_SCHEMA}`);
   if (typeof raw.name !== 'string' || !PACKAGE_NAME.test(raw.name)) throw new TypeError('invalid package name');
@@ -85,7 +90,18 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
     for (const key of Object.keys(values)) if (key !== 'natlang' && key !== 'node') throw new TypeError(`unknown engine ${key}`);
     engines = values;
   }
+  let recording: NatlangPackageManifest['recording'];
+  if (raw.recording !== undefined) {
+    if (!raw.recording || typeof raw.recording !== 'object' || Array.isArray(raw.recording)) throw new TypeError('recording must be an object');
+    const fields = raw.recording as Record<string, unknown>;
+    for (const key of Object.keys(fields)) if (key !== 'exclude') throw new TypeError(`unknown recording field: ${key}`);
+    recording = fields.exclude === undefined ? {} : { exclude: requireStrings(fields.exclude, 'recording.exclude') };
+  }
+  if (raw.specialization !== undefined && !['off', 'shadow', 'on'].includes(raw.specialization as string))
+    throw new TypeError('specialization must be "off", "shadow" or "on"');
   return { schema: PACKAGE_SCHEMA, name: raw.name, version: raw.version, include,
+    ...(recording ? { recording } : {}),
+    ...(raw.specialization !== undefined ? { specialization: raw.specialization as 'off' | 'shadow' | 'on' } : {}),
     ...(raw.description === undefined ? {} : { description: requireString(raw.description, 'description') }),
     ...(Object.keys(targets).length ? { targets } : {}), ...(exports ? { exports } : {}),
     ...(dependencies ? { dependencies } : {}), ...(engines ? { engines } : {}) };
