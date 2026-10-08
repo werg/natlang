@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -91,6 +92,96 @@ def extract_rewrite_gold(target: str) -> str:
         if parts and all(re.fullmatch(r"(?:[A-Za-z][&@#$+]|[&@#$+][A-Za-z])", part) for part in parts):
             return " ".join(parts)
     raise ValueError("source target has no parseable final sequence")
+
+
+def source_task_family(row: dict) -> str | None:
+    for source in row.get("sources", []):
+        match = re.search(r"Worked example \(([^)]+)\):", source.get("text", ""))
+        if match:
+            return match.group(1)
+    return None
+
+
+def solve_gym_family(family: str, question: str) -> str:
+    if family == "base_conversion":
+        match = re.search(r"base-(\d+)\s+number\s+([0-9a-z]+)\s+to\s+base-(\d+)", question, re.I)
+        if not match:
+            raise ValueError("unsupported base-conversion question")
+        source_base, digits, target_base = int(match[1]), match[2].lower(), int(match[3])
+        if not 2 <= source_base <= 36 or not 2 <= target_base <= 36:
+            raise ValueError("base outside exact supported range")
+        value = 0
+        for char in digits:
+            digit = "0123456789abcdefghijklmnopqrstuvwxyz".index(char)
+            if digit >= source_base:
+                raise ValueError("digit outside source base")
+            value = value * source_base + digit
+        if value == 0:
+            return "0"
+        chars, result = "0123456789abcdefghijklmnopqrstuvwxyz", ""
+        while value:
+            value, rem = divmod(value, target_base)
+            result = chars[rem] + result
+        return result
+    if family == "gcd":
+        numbers = re.findall(r"(?<![\w.])-?\d+", question)
+        if len(numbers) != 2:
+            raise ValueError("GCD question must contain exactly two integers")
+        return str(math.gcd(*(int(number) for number in numbers)))
+    if family == "fibonacci":
+        matches = list(re.finditer(r"(\d+)-?(?:st|nd|rd|th)\s+Fibonacci number", question, re.I))
+        if (len(matches) != 1 or not re.search(r"F\(0\)\s*=\s*0", question) or
+                not re.search(r"F\(1\)\s*=\s*1", question)):
+            raise ValueError("Fibonacci question lacks one index or stated base cases")
+        n = int(matches[0][1])
+        a, b = 0, 1
+        for _ in range(n):
+            a, b = b, a + b
+        return str(a)
+    if family == "count_bits":
+        match = re.search(r"binary representation of the number\s+(\d+)", question, re.I)
+        if not match:
+            raise ValueError("unsupported bit-count question")
+        return str(int(match[1]).bit_count())
+    if family == "spell_backward":
+        matches = list(re.finditer(r"Spell this word backward \(example: [^\n]+\):\s*([A-Za-z]+)", question, re.I))
+        if len(matches) != 1:
+            raise ValueError("unsupported backward-spelling question")
+        return matches[0][1][::-1]
+    if family == "word_sequence_reversal":
+        matches = list(re.finditer(r"Reverse this list of words:\s*([^\n]+)", question, re.I))
+        if len(matches) != 1 or not re.search(r"comma-separated list of words", question, re.I):
+            raise ValueError("unsupported word-sequence reversal question")
+        words = [word.strip() for word in matches[0][1].split(",")]
+        if len(words) < 2 or any(not re.fullmatch(r"[\w'-]+", word, re.UNICODE) for word in words):
+            raise ValueError("unsupported word-sequence tokens")
+        return ", ".join(reversed(words))
+    if family == "word_sorting":
+        matches = list(re.finditer(r"Words:\s*\n?([^\n]+)", question, re.I))
+        direction = re.search(r"\b(ascending|descending) order\b", question, re.I)
+        if len(matches) != 1 or not direction or not re.search(r"ASCII/Unicode ordering", question, re.I):
+            raise ValueError("unsupported word-sorting question")
+        words = [word.strip() for word in matches[0][1].split(",")]
+        if len(words) < 2 or any(not re.fullmatch(r"[\w'-]+", word, re.UNICODE) for word in words):
+            raise ValueError("unsupported word-sorting tokens")
+        return ", ".join(sorted(words, reverse=direction[1].lower() == "descending"))
+    if family == "modular_inverse":
+        match = re.search(r"integers\s+a\s*=\s*(-?\d+)\s+and\s+modulus\s+m\s*=\s*(\d+).*?smallest nonnegative", question, re.I | re.S)
+        if not match:
+            raise ValueError("unsupported modular-inverse question")
+        a, modulus = int(match[1]), int(match[2])
+        if modulus < 2 or math.gcd(a, modulus) != 1:
+            raise ValueError("modular inverse is not uniquely defined")
+        return str(pow(a, -1, modulus))
+    raise ValueError(f"unsupported Reasoning Gym family: {family}")
+
+
+def extract_gym_answer(target: str) -> str:
+    text = target.split("</think>")[-1].strip()
+    match = re.search(r"(?:final answer(?: is)?|correct answer(?: is)?|answer(?: is)?|modular inverse is)\s*:?\s*(.+?)\s*\.?$", text, re.I)
+    if not match:
+        raise ValueError("source target has no supported final answer form")
+    return match[1].strip().strip("$").removesuffix(".").strip()
 
 
 def parse_grids(question: str, label: str) -> list[list[list[int]]]:
@@ -230,10 +321,18 @@ def verify(args: argparse.Namespace) -> dict:
             if source_meta["group"] != source_groups or source_meta["split"] != source["split"]:
                 raise ValueError(f"{source['id']}: original group/split provenance changed")
             if family == "reasoning_gym":
-                predicted = solve_rewrite(prompt)
-                gold = extract_rewrite_gold(source["target"]["value"])
+                solver = case["curriculum"].get("world_semantics", {}).get("solver")
+                if solver == "leftmost-token-rewrite/1":
+                    predicted = solve_rewrite(prompt)
+                    gold = extract_rewrite_gold(source["target"]["value"])
+                else:
+                    source_family = source_task_family(source)
+                    if source_family != solver:
+                        raise ValueError(f"{source['id']}: solver metadata does not match the source worked-example family")
+                    predicted = solve_gym_family(solver, prompt)
+                    gold = extract_gym_answer(source["target"]["value"])
                 if predicted != gold:
-                    raise ValueError(f"{source['id']}: independent rewrite solver disagrees with source label")
+                    raise ValueError(f"{source['id']}: independent {solver} solver disagrees with source label")
             else:
                 predicted, _ = solve_grid(prompt)
                 answer_tag = re.search(r"<answer>\s*(\[.*?\])\s*</answer>", source["target"]["value"], re.S)
@@ -259,7 +358,7 @@ def verify(args: argparse.Namespace) -> dict:
     return {"schema": "verified-reasoning-pool-independent-check/1", "source_sha256": digest(source_path.read_bytes()),
         "case_count": len(cases), "source_record_count": len(all_ids), "cases": verified,
         "families": ["reasoning_gym", "reasoning_synlogic"], "original_corpus_manifest_sha256": digest((corpus / "manifest.json").read_bytes()),
-        "solver": {"reasoning_gym": "parse visible directed rewrite rules, apply leftmost rule until stable, compare terminal sequence to original labeled final state",
+        "solver": {"reasoning_gym": "parse visible task family from the source demonstration, apply its family-specific deterministic solver, and compare to the separately extracted original labeled answer",
             "reasoning_synlogic": "within the declared D4-orientation plus demonstration-derived global-color-function hypothesis class, require known test colors and one predicted grid, then compare to the original labeled grid; this does not establish global ARC-rule uniqueness"},
         "model_calls": 0, "provider_calls": 0, "training_admission": False, "generation_admission": "pending root review"}
 

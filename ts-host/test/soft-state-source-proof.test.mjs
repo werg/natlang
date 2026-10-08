@@ -115,6 +115,23 @@ test('validates nested argument path, exact writer, body digest, and matching re
   assert.throws(() => validate(graph, { writerNode: 'different#1' }), /no actual block_write/);
 });
 
+test('validates a typed nested argument without inventing an explicit capture edge', () => {
+  const graph = [
+    { kind: 'block_write', call_id: writerCallId, block, node: writerNode, text_body_sha256: 'a'.repeat(64) },
+    { kind: 'invocation', call_id: consumerCallId, phase: 'start',
+      signature: '(input: { item: Item, priorAnswers: Neuralese<string> }) => Promise<Neuralese<string>>',
+      inputs: [{ node: writerNode, block, port: 'arg:input.priorAnswers' }] },
+    { kind: 'block_read', call_id: consumerCallId, block, node: `${consumerCallId}#5`,
+      inputs: [{ node: writerNode, block, port: 'block' }] }
+  ];
+  const receipt = validateSoftStateEdge({ graph, actualValue: neuraleseRef('Neuralese<string>', block),
+    expectedType: 'Neuralese<string>', writerCallId, consumerCallId, consumerArgument: 'input.priorAnswers',
+    argumentMode: 'typed_argument', writerNode, expectedBodySha256: 'a'.repeat(64) });
+  assert.equal(receipt.invocation_input_port, 'arg:input.priorAnswers');
+  assert.equal(receipt.argument_mode, 'typed_argument');
+  assert.equal('capture_input_port' in receipt, false);
+});
+
 test('rejects a mismatched block, declared type, writer, reader, argument port, or absent graph node', () => {
   const actualValue = neuraleseRef('Neuralese<string>', block);
   const validate = (graph, options = {}) => validateSoftStateEdge({ graph, actualValue, expectedType: 'Neuralese<string>',

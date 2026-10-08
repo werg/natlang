@@ -301,7 +301,10 @@ for (const [index, record] of rows.entries()) {
           complete_source_item_bound_to_child: true };
         return true;
       });
-    } else childTarget = candidates.find(candidate =>
+    }
+    // Some typed children initialize a genuinely empty carried value and therefore have no source file binding.
+    // Keep those references explicit; every item-reading child above still requires its exact file binding.
+    if (!childTarget) childTarget = candidates.filter(candidate => !candidate.source_binding).find(candidate =>
       (Array.isArray(candidate.match) ? candidate.match : [candidate.match]).every(fragment => childOpening.includes(fragment)));
     if (!childTarget) throw new Error(`${record.id}: no exact source-reference child for ${child.invocation_id}`);
     if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
@@ -332,7 +335,8 @@ for (const [index, record] of rows.entries()) {
       const write = (run.outcome.execution_graph ?? []).find(event => event.kind === 'block_write' &&
         event.call_id === child.invocation_id && event.block === actualAnswer.$neuralese.id);
       if (!write) throw new Error(`${record.id}: no actual block_write event produced ${actualAnswer.$neuralese.id} in ${child.invocation_id}`);
-      softOutput = { kind: softType, text_sha256: createHash('sha256').update(marker[1]).digest('hex'),
+      softOutput = { kind: softType, argument_mode: childTarget.soft_output.argument_mode,
+        text_sha256: createHash('sha256').update(marker[1]).digest('hex'),
         block: actualAnswer.$neuralese.id, writer_node: write.node, writer_call_id: child.invocation_id,
         next_argument: childTarget.soft_output.next_argument, readout_by_parent: childTarget.soft_output.readout_by_parent };
     } else if (canonical(actualAnswer) !== canonical(expectedAnswer)) {
@@ -356,7 +360,7 @@ for (const [index, record] of rows.entries()) {
   for (let childIndex = 0; childIndex < childReads.length; childIndex++) {
     const producer = childReads[childIndex].soft_output;
     if (!producer) continue;
-    if (producer.readout_by_parent === 'String(answer)') {
+    if (producer.readout_by_parent === 'String(answer)' || producer.readout_by_parent === 'String(final.notes)') {
       const graph = run.outcome.execution_graph ?? [];
       const writer = graph.find(event => event.kind === 'block_write' && event.call_id === producer.writer_call_id &&
         event.block === producer.block && event.node === producer.writer_node);
@@ -385,7 +389,8 @@ for (const [index, record] of rows.entries()) {
     const graph = run.outcome.execution_graph ?? [];
     const edge = validateSoftStateEdge({ graph, actualValue: childReads[childIndex].observed_answer,
       expectedType: producer.kind, writerCallId: producer.writer_call_id,
-      consumerCallId: consumer.invocation_id, consumerArgument: expectedArgument });
+      consumerCallId: consumer.invocation_id, consumerArgument: expectedArgument,
+      argumentMode: producer.argument_mode ?? 'capture' });
     if (edge.writer_node !== producer.writer_node || edge.block !== producer.block)
       throw new Error(`${record.id}: recorded soft writer differs from exact graph edge`);
     if (consumerReceipt.source_reads?.length && !signatureHasExactParameter(edge.consumer_signature, 'source', 'FileHandle'))
