@@ -497,7 +497,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
   const rebindAt = new Map(rebinds.map(site => [`${site.start}:${site.end}`, site]));
   for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
-    text: `(await __live.readNeuralese((${source.slice(readout.start, readout.end)})))` });
+    text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${source.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const lowerNodes = (node: ts.Node): void => {

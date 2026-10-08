@@ -18,6 +18,8 @@ export type LowerOptions = {
   checker?: ts.TypeChecker;
   /** Source spans of typed Neuralese values in JavaScript text-coercion positions. */
   readouts?: ReadonlySet<string>;
+  /** Readout spans whose declared union also permits crisp values. */
+  conditionalReadouts?: ReadonlySet<string>;
   /** Call spans of array joins whose element type is Neuralese<string>. */
   joins?: ReadonlySet<string>;
   /** Call spans of string concatenations whose arguments include typed Neuralese values. */
@@ -67,7 +69,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
     const original = (node: ts.Node) => ts.getOriginalNode(node);
     const readNeuralese = (expression: ts.Expression): ts.Expression => {
       const lowered = ts.visitEachChild(expression, visit, context) as ts.Expression;
-      const result = f.createCallExpression(runtime('readNeuralese'), undefined, [lowered]);
+      const conditional = options.conditionalReadouts?.has(`${original(expression).getStart(file)}:${original(expression).getEnd()}`);
+      const result = f.createCallExpression(runtime(conditional ? 'readNeuraleseIfReference' : 'readNeuralese'), undefined, [lowered]);
       if (options.browser) {
         const bound = f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier('globalThis'), '__natlang_bindAwait'),
           undefined, [result]);

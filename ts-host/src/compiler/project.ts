@@ -475,6 +475,7 @@ export function compileProject(options: BuildOptions): BuildResult {
       const rewriteFor = new Map([...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)]));
       return natlangTransformer({ plans: new Map(filePlans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])),
         readouts: new Set(fileReadouts.filter(item => !item.kind).map(item => `${item.start}:${item.end}`)),
+        conditionalReadouts: new Set(fileReadouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`)),
         joins: new Set(fileReadouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`)),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,

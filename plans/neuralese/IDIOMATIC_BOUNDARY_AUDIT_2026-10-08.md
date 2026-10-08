@@ -190,7 +190,8 @@ materializes the argument list (including spread expansion), then calls
 read and applies JavaScript string coercion in order. The spread array is fully
 expanded before any async read, matching JavaScript call evaluation order. The
 checker now marks a spread as needing that readout only when its static array or
-tuple element type includes Neuralese. It does not accept an arbitrary
+tuple element type includes a Neuralese arm, including a union of soft and crisp
+element types. It does not accept an arbitrary
 iterable, change native spread behavior, or grant a new capability.
 
 Regressions in `ts-host/test/neuralese.test.mjs` check the diagnostics,
@@ -214,7 +215,7 @@ runtime mismatch.
 
 The checker now distributes over a union only if every alternative is an
 array or tuple, then requests the existing async `joinNeuralese` readout when
-any element alternative is Neuralese. The runtime helper already preserves
+any element alternative has a Neuralese arm. The runtime helper already preserves
 array index order, holes, nullish elements, and typed read order. Tests cover
 mutable and readonly array unions, readonly tuple unions, no-soft array unions,
 the corresponding concat spread, and a generated module returning readable
@@ -222,7 +223,36 @@ text for a soft element (`ts-host/test/neuralese.test.mjs:163-179,235-244`).
 Other union members such as `undefined` or a non-array are left to normal type
 checking and are not lowered as arrays.
 
-### 9. Eval exposes a read-only tool facade; other tool actions stay direct
+### 9. Text coercion of Neuralese unions should read only actual references
+
+**Priority: medium; fixed with local, conditional lowering.** Before this change,
+`neuraleseParts()` returned no result for a union, so text coercion did not
+request a readout for `Neuralese<string> | Neuralese<number>`. TypeScript
+accepted `String(value)` and template interpolation, but isolated generated code
+kept the reference opaque and produced `[object Object]`. A mixed union such as
+`Neuralese<string> | string` had the same issue. No reviewed Luna generation
+trace attempted these exact union forms; this is a prospective fix based on a
+reproduced generated-runtime mismatch, not a claimed historical failure.
+
+The local `hasSoftAlternative()` check in
+`ts-host/src/compiler/neuralese.ts` now detects a Neuralese arm only at string
+coercion sites: `String(value)`, template interpolation, `toString()`, string
+`+`, plus the existing `concat` and array `join` paths. It deliberately leaves
+global `neuraleseParts()` unchanged because that function also drives type text,
+callable inference, and target classification. For the direct readouts the
+compiler calls `readNeuraleseIfReference()`; it asynchronously reads actual
+typed references and returns crisp union arms untouched, so native coercion and
+evaluation order still apply. The established `concatNeuralese` and
+`joinNeuralese` helpers already use the same runtime brand check for their
+elements.
+
+Generated module regressions exercise all-soft and mixed unions with actual
+references and ordinary strings. Eval analysis and lowering regressions verify
+the conditional helper is selected for mixed values. The implementation does
+not change JSON serialization or reinterpret structural objects as typed
+values.
+
+### 10. Eval exposes a read-only tool facade; other tool actions stay direct
 
 The prompt says to invoke native tools directly but explicitly makes
 `read_code(name)` available in eval when unshadowed (`ts-host/src/native/prompt.ts:6`).

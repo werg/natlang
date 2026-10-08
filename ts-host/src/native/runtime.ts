@@ -6,7 +6,7 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { COMPACTED_RESULT } from './prompt.js';
-import { concatNeuralese, joinNeuralese, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
+import { concatNeuralese, joinNeuralese, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
@@ -1699,6 +1699,7 @@ export class NativeSession {
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
+      readNeuraleseIfReference,
       readCode: (name: string) => {
         try {
           const result = this.functionTool('read_code', { name });

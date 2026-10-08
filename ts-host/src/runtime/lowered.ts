@@ -34,6 +34,11 @@ export function rebindInlineCallable(value: unknown, captures: Record<string, un
 /** Compiler target for automatic JavaScript string coercion of a Neuralese reference. */
 export const readNeuralese = readNeuraleseForCurrentTask;
 
+/** Read a declared soft-or-crisp union while preserving ordinary JavaScript coercion for crisp arms. */
+export async function readNeuraleseIfReference(value: unknown): Promise<unknown> {
+  return isNeuraleseRef(value) ? readNeuraleseForCurrentTask(value) : value;
+}
+
 const toStringValue = (value: unknown): string => {
   if (typeof value === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string');
   return String(value);

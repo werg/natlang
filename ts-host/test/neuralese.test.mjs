@@ -10,7 +10,7 @@ import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { createVirtualProgram } from '../dist/compiler/host.js';
 import { compileScopeSnippet } from '../dist/scope-compiler.js';
 import { compileModule } from '../dist/runtime/modules.js';
-import { concatNeuralese, joinNeuralese } from '../dist/runtime/lowered.js';
+import { concatNeuralese, joinNeuralese, readNeuraleseIfReference } from '../dist/runtime/lowered.js';
 import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
@@ -114,6 +114,7 @@ const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string
   { name: 'values', type: '(Neuralese<string> | Neuralese<null> | string | number | { toString(): string } | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
 const analyzeText = source => analyzeEvalSnippet(source, TEXT_SCOPE);
 const textReadouts = source => analyzeText(source).readouts.map(item => source.slice(item.start, item.end));
+const SOFT_STRING_UNION_SCOPE = { ...SCOPE, inputs: [{ name: 'value', type: 'Neuralese<string> | Neuralese<number> | string' }] };
 
 test('eval code cannot inspect or branch on a soft value, while text conversions request typed readout', () => {
   assert.deepEqual(codes('plan.steps'), ['neuralese-opaque-access']);
@@ -126,6 +127,18 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(readouts('const t = "plan: " + plan;'), ['plan']);
   assert.deepEqual(codes('const t = String(plan);'), []);
   assert.deepEqual(readouts('const t = String(plan);'), ['plan']);
+  const allSoftUnion = analyzeEvalSnippet('return `value=${String(value)}`;', {
+    ...SCOPE, inputs: [{ name: 'value', type: 'Neuralese<string> | Neuralese<number>' }], returns: 'string',
+  });
+  assert.deepEqual(allSoftUnion.diagnostics, []);
+  assert.deepEqual(allSoftUnion.readouts.map(item => ['return `value=${String(value)}`;'.slice(item.start, item.end), item.conditional]),
+    [['value', true]]);
+  const mixedUnion = analyzeEvalSnippet('return `value=${String(value)}`;', { ...SOFT_STRING_UNION_SCOPE, returns: 'string' });
+  assert.deepEqual(mixedUnion.diagnostics, []);
+  assert.equal(mixedUnion.readouts.length, 1);
+  assert.equal(mixedUnion.readouts[0].conditional, true);
+  assert.deepEqual(analyzeEvalSnippet('return value.toString();', { ...SOFT_STRING_UNION_SCOPE, returns: 'string' }).diagnostics, []);
+  assert.deepEqual(analyzeEvalSnippet('return "" + value;', { ...SOFT_STRING_UNION_SCOPE, returns: 'string' }).readouts.map(item => item.conditional), [true]);
   assert.deepEqual(codes('let text = ""; text += plan;'), []);
   assert.deepEqual(readouts('let text = ""; text += plan;'), ['plan']);
   assert.deepEqual(codes('function show() { return String(plan); }'), ['neuralese-readout-sync']);
@@ -203,6 +216,11 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(spreadCompiled.ok, true, JSON.stringify(spreadCompiled.diagnostics));
   assert.match(spreadCompiled.program, /concatNeuralese/);
   assert.match(spreadCompiled.program, /__values = \[\.\.\.values\]/);
+  const unionCompiled = compileScopeSnippet('return String(value);', { inputBindings: ['value'], neuralese: true,
+    analyze: source => analyzeEvalSnippet(source, { ...SOFT_STRING_UNION_SCOPE, returns: 'string' }) });
+  assert.equal(unionCompiled.ok, true, JSON.stringify(unionCompiled.diagnostics));
+  assert.match(unionCompiled.program, /readNeuraleseIfReference/);
+  assert.equal(await readNeuraleseIfReference('plain'), 'plain');
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {
@@ -211,6 +229,26 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.match(module, /\(await __natlang\.readNeuralese\(text\)\)\.toString\(\)/);
   assert.match(module, /concatNeuralese/);
   assert.match(module, /await __natlang\.joinNeuralese\(values, ['"]\|['"], async/);
+
+  const unionStringModule = compileModule({ kind: 'module', id: 'soft-union-string', name: 'unionString', source: 'unionString.ts', revision: 'r1',
+    text: `export async function showAllSoft(value: Neuralese<string> | Neuralese<number>) {
+      return \`value=\${value}\`;
+    }
+    export async function showMixed(value: Neuralese<string> | Neuralese<number> | string) {
+      return \`value=\${String(value)}\`;
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(unionStringModule, /readNeuraleseIfReference/);
+  const unionStringExports = {};
+  const unionStringModuleExports = new Function('exports', '__natlang', `${unionStringModule}; return exports;`)(unionStringExports, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => isNeuraleseRef(value) ? `read:${value.$neuralese.id}` : value,
+  });
+  const showAllSoft = unionStringModuleExports.showAllSoft;
+  const showMixed = unionStringModuleExports.showMixed;
+  assert.equal(await showAllSoft(neuraleseRef('Neuralese<string>', 'nz1_kkkkkkkkkkkkkkkkkkkk')),
+    'value=read:nz1_kkkkkkkkkkkkkkkkkkkk');
+  assert.equal(await showMixed('ordinary'), 'value=ordinary');
+  assert.equal(await showMixed(neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll')),
+    'value=read:nz1_llllllllllllllllllll');
 
   const orderedModule = compileModule({ kind: 'module', id: 'concat-order', name: 'ordered', source: 'ordered.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, events: string[], receiver: () => string, later: () => Promise<string>) {

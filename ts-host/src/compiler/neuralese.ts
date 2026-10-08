@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat'; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -39,6 +39,13 @@ export function neuraleseParts(checker: ts.TypeChecker, type: ts.Type): { elemen
 
 const isNeuralese = (checker: ts.TypeChecker, type: ts.Type | undefined): boolean =>
   !!type && !!neuraleseParts(checker, checker.getNonNullableType(type));
+
+/** Whether any union arm is a typed Neuralese value; intentionally local to coercion lowering. */
+const hasSoftAlternative = (checker: ts.TypeChecker, type: ts.Type | undefined): boolean => {
+  if (!type) return false;
+  const alternatives = type.isUnion() ? type.types : [type];
+  return alternatives.some(alternative => isNeuralese(checker, alternative));
+};
 
 const ARITHMETIC = new Set([ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
   ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.AsteriskAsteriskToken,
@@ -70,8 +77,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     `A Neuralese value is opaque: ${what}. Read it with read(value) to get an ordinary value, or pass it to a function that takes it.`);
   const condition = (node: ts.Node) => report(node, 'neuralese-condition',
     'A Neuralese value cannot decide a branch. Read it with read(value), or ask a natural-language function about it.');
-  const readout = (node: ts.Expression, kind?: NeuraleseReadout['kind']) => {
-    options.readouts?.push({ ...span(node), ...(kind ? { kind } : {}) });
+  const readout = (node: ts.Expression, kind?: NeuraleseReadout['kind'], conditional = false) => {
+    options.readouts?.push({ ...span(node), ...(kind ? { kind } : {}), ...(conditional ? { conditional: true } : {}) });
     let parent: ts.Node | undefined = node.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
     const async = parent && ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
@@ -90,7 +97,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
   const stringToString = (property: ts.PropertyAccessExpression): boolean => {
     const parent = property.parent;
     return ts.isCallExpression(parent) && parent.expression === property && parent.arguments.length === 0 &&
-      property.name.text === 'toString' && standardMethod(property, ['Object']) && soft(property.expression);
+      property.name.text === 'toString' && standardMethod(property, ['Object']) &&
+      (soft(property.expression) || hasSoftAlternative(checker, checker.getTypeAtLocation(property.expression)));
   };
   const arrayJoinKind = (expression: ts.Expression): 'supported' | undefined => {
     const array = checker.getTypeAtLocation(expression);
@@ -105,7 +113,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       for (const member of members) {
         if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) continue;
         const value = checker.getNonNullableType(member);
-        if (neuraleseParts(checker, value)) { containsSoft = true; continue; }
+        if (hasSoftAlternative(checker, value)) { containsSoft = true; continue; }
       }
     }
     return containsSoft ? 'supported' : undefined;
@@ -119,19 +127,25 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
         isNeuralese(checker, checker.getTypeFromTypeNode(node.typeArguments[0])))
       report(node, 'neuralese-nested', 'Neuralese<Neuralese<T>> is not a type: a view of a view means nothing a view does not.');
-    else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) && soft(node.expression)) {
-      if (ts.isPropertyAccessExpression(node) && stringToString(node)) readout(node.expression);
+    else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+        hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression))) {
+      if (ts.isPropertyAccessExpression(node) && stringToString(node))
+        readout(node.expression, undefined, !soft(node.expression));
       else opaque(node, 'it has no fields or elements to read');
     }
-    else if (ts.isBinaryExpression(node) && (soft(node.left) || soft(node.right))) {
+    else if (ts.isBinaryExpression(node) &&
+        (hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)) ||
+          hasSoftAlternative(checker, checker.getTypeAtLocation(node.right)))) {
       const kind = node.operatorToken.kind;
       if (CONDITIONAL.has(kind) && soft(node.left)) condition(node.left);
       else if ((kind === ts.SyntaxKind.PlusToken || kind === ts.SyntaxKind.PlusEqualsToken) &&
           [node.left, node.right].some(side => checker.getTypeAtLocation(side).flags & ts.TypeFlags.StringLike)) {
         // `text += soft` coerces the right-hand value. A soft left side is not
         // a writable string accumulator and remains an ordinary type error.
-        if (kind === ts.SyntaxKind.PlusToken && soft(node.left)) readout(node.left);
-        if (soft(node.right)) readout(node.right);
+        if (kind === ts.SyntaxKind.PlusToken && hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)))
+          readout(node.left, undefined, !soft(node.left));
+        if (hasSoftAlternative(checker, checker.getTypeAtLocation(node.right)))
+          readout(node.right, undefined, !soft(node.right));
       }
       else if (ARITHMETIC.has(kind)) opaque(node, 'it cannot be computed with or compared');
     } else if (ts.isPrefixUnaryExpression(node) && soft(node.operand)) {
@@ -140,7 +154,9 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       condition(node.expression);
     else if (ts.isForStatement(node) && soft(node.condition)) condition(node.condition!);
     else if (ts.isConditionalExpression(node) && soft(node.condition)) condition(node.condition);
-    else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) && soft(node.expression)) readout(node.expression);
+    else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) &&
+        hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
+      readout(node.expression, undefined, !soft(node.expression));
     else if ((ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) && soft(node.expression)) opaque(node, 'it cannot be spread');
     else if ((ts.isForOfStatement(node) || ts.isForInStatement(node)) && soft(node.expression))
       opaque(node.expression, 'it cannot be iterated');
@@ -148,7 +164,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       const callee = node.expression;
       if (ts.isIdentifier(callee) && callee.text === 'String' && isDefaultString(checker, callee)) {
         const first = node.arguments[0];
-        if (first && soft(first)) readout(first);
+        if (first && hasSoftAlternative(checker, checker.getTypeAtLocation(first)))
+          readout(first, undefined, !soft(first));
       }
       if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'JSON' &&
           callee.name.text === 'stringify' && isDefaultGlobal(checker, callee.expression)) {
@@ -163,7 +180,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
           // The call's existing concat readout lowering materializes argument spreads
           // before any awaited reads, then coerces each expanded argument in order.
           if (ts.isSpreadElement(argument) && arrayJoinKind(argument.expression)) softArgument = true;
-          else if (soft(argument)) softArgument = true;
+          else if (hasSoftAlternative(checker, checker.getTypeAtLocation(argument))) softArgument = true;
         }
         if (softArgument) readout(node, 'concat');
       }
