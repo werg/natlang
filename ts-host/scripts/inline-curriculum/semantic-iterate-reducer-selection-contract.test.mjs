@@ -9,6 +9,7 @@ test('singleton contract selects one deterministic tie winner and excludes other
   assert.deepEqual(contract.select(sorted), [{ id: 'ID-A', metric: 9 }]);
   assert.match(contract.selectionFormat, /Exactly one/);
   assert.match(contract.instruction, /Do not add further tied items/);
+  assert.deepEqual(contract.select([]), []);
   assert.equal(contract.format([]), 'none');
   assert.equal(contract.formatMeasure([]), 'none');
 });
@@ -23,6 +24,7 @@ test('multi-item contract preserves rank and gives one measure per selected ID w
   assert.equal(contract.formatMeasure(selected), '8; 8');
   assert.match(contract.selectionFormat, /Up to 2/);
   assert.match(contract.measureFormat, /do not sum them/);
+  assert.deepEqual(contract.select([]), []);
   assert.equal(contract.format([]), 'none');
 });
 
