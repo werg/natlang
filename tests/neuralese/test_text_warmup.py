@@ -1330,6 +1330,11 @@ def test_rollout_stage_unfreezes_after_sketch_plateau_and_restores():
     assert converging.controls()['deepened'][0]['reason']=='converged'
     legacy={'schema':'natlang.sketch-rollout-stage/1','config':{'passes':6,'sketch_first':True},'phase':'sketch_only',
             'history':[3.0],'best':3.0,'last_significant':1,'unfrozen_at_eval':None}
+    pooled=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=5)
+    for v in (2.,1.):pooled.observe(v)
+    remeasured=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=5,metric='non_system_targets')
+    remeasured.load_state_dict(pooled.state_dict())
+    assert remeasured.controls()['best_ce_delta'] is None and remeasured.controls()['passes']==4
     restarted=RolloutStage(passes=6,start_passes=4);restarted.load_state_dict(legacy)
     assert restarted.controls()['passes']==4 and restarted.controls()['sketch_only']
 
@@ -1381,3 +1386,15 @@ def test_chat_roles_label_system_user_reasoning_and_reply():
     assert names==['other','system','system','system','other','user','user','other',
                    'assistant_reply','assistant_reasoning','assistant_reasoning','assistant_reasoning',
                    'assistant_reply','assistant_reply']
+
+
+def test_document_windows_keep_context_tokens_out_of_targets():
+    from natlang_neuralese.train.text_warmup import document_windows
+    tokens=list(range(10,40))
+    plain=document_windows(tokens,open_id=1,close_id=2,tokens=16,prefix_tokens=4)
+    masked=document_windows(tokens,open_id=1,close_id=2,tokens=16,prefix_tokens=4,context_tokens=20)
+    def targets(windows):
+        return [w['ids'][i] for w in windows for i in range(w['prefix'],len(w['ids']))]
+    assert targets(plain)==tokens+[2]
+    assert targets(masked)==tokens[20:]+[2]
+    for w in masked:assert w['ids'][:w['prefix']]==([1]+tokens+[2])[w['start']:w['start']+w['prefix']]
