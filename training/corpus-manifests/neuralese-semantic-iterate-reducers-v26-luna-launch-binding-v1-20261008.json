@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v26-luna-launch-binding-v1-20261008",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-semantic-iterate-reducers-v25-20261008-v1/readiness-probe-45c15184/receipt.json",
+      "bytes": 2004,
+      "sha256": "5adafd043847e46d7d067ba1c61ff7ccd2e2d3b3d2729290d3808ead41114337"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launch-registration-v1.json",
+      "bytes": 10836,
+      "sha256": "c7b823b3689c65c805d00ce62eb3c31a85a60035725499a69b39a6b9d8d86e5b"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/dispatcher-launch-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/dispatcher-launch-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/dispatcher-process-v1.json",
+      "bytes": 466,
+      "sha256": "5667f3207cc52a6397299a9712188e88b1e6f0355ba71d880b0e1c55fbff9057"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/launcher-attempts.jsonl",
+      "bytes": 728,
+      "sha256": "c3173662d7cfa2d0af09c915361744007bdc461c16e9490dd93d3632ac0535b7",
+      "lines": 2
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.approved.json",
+      "bytes": 9363,
+      "sha256": "2c2a4abe9135097d3c618c91409efa2478d0ed16e58f93dbf1840632cbde212e"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/root-authorization.json",
+      "bytes": 2261,
+      "sha256": "c9c40df7bb1fd962ddc38995cb486bc0bed50df330a16b4868014d7e8a7a0b36"
+    }
+  ],
+  "bytes": 25658
+}

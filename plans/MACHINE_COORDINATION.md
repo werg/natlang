@@ -94,6 +94,27 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    receiving inbox. Update the dataset coverage/handover. Train only after the
    normal source-policy, split/protected, native replay and quality gates.
 
+### Long-lived local dispatchers
+
+When a reviewed queue needs to outlive a shell command, do not assume that
+`nohup ... &` or an `&`-terminated shell command leaves a durable worker behind.
+In the Pop Codex shell environment, a dispatcher started that way exited before
+recording `campaign_open`; its launch log was empty and no claim, case runner or
+provider request was observed. A bounded marker probe showed the same pattern:
+an immediate marker could be written, but a delayed marker and a SIGTERM-handler
+marker were absent after the command returned. This establishes that the
+background child did not survive the tool invocation, but does not establish
+whether it received a signal or what its exit status was.
+
+For an authorized long-lived dispatcher, use `subprocess.Popen` with
+`start_new_session=True`, a persistent log file, and immediately record the
+actual PID, argv, working directory, plan hash and process-group/session IDs.
+Wait for the dispatcher’s durable `campaign_open`/claim handshake before
+reporting it as active. At each monitoring cycle, reconcile those records with
+the live PID/argv and claim ledger; a launcher PID by itself is not evidence of
+an active campaign. Preserve failed launch-attempt logs and status uncertainty
+instead of replacing them with a later successful attempt.
+
 There is no broad mutable two-way rsync. The former
 `natlang-dgx-development-data-sync.service` on Pop was stopped and disabled
 because it pulled only one DGX namespace and could miss new outputs elsewhere.

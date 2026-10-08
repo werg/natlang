@@ -6764,6 +6764,23 @@
         "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008"
       ],
       "notes": "Small held proof of two exact selected direct typed-text return_result events and three authenticated same-parent reader links. Recurrence audit retains three unresolved upstream context roots and is not structurally closed. RAIL-741 is only a source-grounded candidate for separate review; TREE-710 remains a semantic hold because its final target adds an unsupported item-specific authority requirement. No training or DPO admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v26-luna-launch-binding-v1-20261008",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.approved.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/root-authorization.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launch-registration-v1.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/*",
+        "neuralese-semantic-iterate-reducers-v25-20261008-v1/readiness-probe-45c15184/receipt.json"
+      ],
+      "admission": "held-generation-only-approved-launch-binding-no-action-trace-or-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008"
+      ],
+      "notes": "Root-approved V26 generation-only Luna plan and actual launch binding. The recorded reused READY receipt is for the unchanged provider route from V25 runtime 45c15184; V26 runtime behavior is supported separately by the pinned CPU reference proof. Initial actual worker bindings cover source indices 0-4 under five slots, with zero collector transport retries. Mutable claims, live journals, job traces, and partials are excluded until closure. No action, trace, DPO, or training admission is granted."
     }
   ],
   "coverage_backlog": [
