@@ -875,6 +875,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const appendEvidence = (records: Iterable<Record<string, unknown>>, status?: PartialEvidenceSnapshot['status']) => {
       journalWrites = journalWrites.then(async () => {
         if (!evidenceHandle) {
+          await mkdir(config.jobs, { recursive: true });
           evidenceHandle = await open(evidencePath, 'wx');
           evidenceManifest = { schema: 'natlang.teacher_partial_evidence/1', path: basename(evidencePath),
             attempt_id: evidenceAttemptId, status: 'in_progress', records: 0, bytes: 0,
