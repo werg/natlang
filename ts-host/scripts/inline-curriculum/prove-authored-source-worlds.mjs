@@ -237,10 +237,37 @@ for (const [index, record] of rows.entries()) {
     const childTurn = trajectory.find(turn => turn.invocation_id === child.invocation_id);
     if (!childTurn) throw new Error(`${record.id}: missing child opening ${child.invocation_id}`);
     const childOpening = openingPlainText(childTurn.context ?? []);
-    const childTarget = record.curriculum.reference.children?.find(candidate =>
+    const childEvents = events.filter(event => event.call_id === child.invocation_id);
+    const candidates = record.curriculum.reference.children ?? [];
+    const readBound = candidates.filter(candidate => candidate.source_binding);
+    let childTarget, sourceBindingAudit = null;
+    if (readBound.length) {
+      childTarget = readBound.find(candidate => {
+        const binding = candidate.source_binding;
+        const declaredPath = candidate.calls?.find(call => call[0] === 'read_file')?.[1]?.path;
+        const sourceText = record.semantics.folder_files?.[binding?.path];
+        if (!binding || (declaredPath !== undefined && binding.path !== declaredPath) || typeof binding.sha256 !== 'string' ||
+            typeof binding.source_record_id !== 'string') return false;
+        if (typeof sourceText !== 'string' || createHash('sha256').update(sourceText).digest('hex') !== binding.sha256) return false;
+        let item;
+        try { item = JSON.parse(sourceText); } catch { return false; }
+        if (item.source_record_id !== binding.source_record_id) return false;
+        const fields = ['source_record_id', 'question', 'answer_format'];
+        if (!fields.every(key => typeof item[key] === 'string' && childOpening.includes(`${key}: ${JSON.stringify(item[key])}`))) return false;
+        if (typeof item.evidence !== 'string') return false;
+        const fullEvidenceVisible = childOpening.includes(`evidence: ${JSON.stringify(item.evidence)}`);
+        const clippedEvidenceDeclared = childOpening.includes(`of ${item.evidence.length} characters not shown; item.evidence holds all of it>>`);
+        if (!fullEvidenceVisible && !clippedEvidenceDeclared) return false;
+        sourceBindingAudit = { source_path: binding.path, source_text_sha256: binding.sha256,
+          source_record_id: binding.source_record_id, exact_source_argument_fields: fields,
+          evidence_argument_length: item.evidence.length,
+          evidence_visibility: fullEvidenceVisible ? 'complete-value-visible' : 'complete-typed-value-declared-with-preview-clipping',
+          complete_source_item_bound_to_child: true };
+        return true;
+      });
+    } else childTarget = candidates.find(candidate =>
       (Array.isArray(candidate.match) ? candidate.match : [candidate.match]).every(fragment => childOpening.includes(fragment)));
     if (!childTarget) throw new Error(`${record.id}: no exact source-reference child for ${child.invocation_id}`);
-    const childEvents = events.filter(event => event.call_id === child.invocation_id);
     if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
       throw new Error(`${record.id}: child ${child.invocation_id} has an unsuccessful action`);
     const reads = childEvents.filter(event => event.name === 'read_file');
@@ -278,6 +305,7 @@ for (const [index, record] of rows.entries()) {
     return { invocation_id: child.invocation_id,
       source_reads: matchedReads.map(matched => ({ source_path: matched.source_path, source_text_sha256:
         createHash('sha256').update(matched.source_text).digest('hex'), exact_complete_source_read: true })),
+      ...(sourceBindingAudit ? { source_binding: sourceBindingAudit } : {}),
       ...(matchedReads.length === 1 ? { source_path: matchedReads[0].source_path, source_text_sha256:
         createHash('sha256').update(matchedReads[0].source_text).digest('hex'), exact_complete_source_read: true } :
         matchedReads.length === 0 ? { source_path: null, exact_complete_source_read: false, no_source_read_expected: true } : {}),
