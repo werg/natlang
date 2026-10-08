@@ -140,3 +140,52 @@ process.stdout.write(JSON.stringify({type:'text',part:{text:JSON.stringify({cont
     await new Promise(resolveClose => eventServer.close(resolveClose));
   }
 });
+
+test('CLI adapter keeps step and bridge-tool telemetry when a provider retry aborts the turn', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'natlang-opencode-cli-retry-audit-'));
+  const scratch = join(temp, 'scratch'), output = join(temp, 'out');
+  await mkdir(scratch); await mkdir(output);
+  const log = join(output, 'action-mcp-calls.jsonl'); await writeFile(log, '');
+  const fakeCli = join(temp, 'fake-opencode');
+  await writeFile(fakeCli, `#!/usr/bin/env node
+process.on('SIGINT',()=>process.exit(0));
+for (const e of [
+ {type:'step_start',part:{type:'step-start'}},
+ {type:'tool_use',part:{type:'tool',tool:'natlang_action_bridge_submit_action',callID:'call-bridge'}},
+ {type:'step_finish',part:{type:'step-finish',tokens:{total:17,input:12,output:4,reasoning:1,cache:{read:0,write:0}}}}
+]) process.stdout.write(JSON.stringify(e)+'\\n');
+setInterval(()=>{},1000);
+`);
+  const { chmod } = await import('node:fs/promises'); await chmod(fakeCli, 0o755);
+  const client = { mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }), connect: async () => ({ data: true }) },
+    tool: { ids: async () => ({ data: ['read', 'bash'] }) }, permission: { reply: async () => ({ data: true }) },
+    session: { permission: { reply: async () => ({}) }, abort: async () => ({ data: true }) } };
+  const eventServer = createServer((req, res) => {
+    if (req.url.startsWith('/event')) {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      setTimeout(() => res.write(`data: ${JSON.stringify({ type: 'session.status', properties: { sessionID: 'fake-session', status: { type: 'retry', attempt: 1, message: 'endpoint unavailable' } } })}\n\n`), 40);
+      return;
+    }
+    res.writeHead(404); res.end();
+  });
+  await new Promise(resolveListen => eventServer.listen(0, '127.0.0.1', resolveListen));
+  const adapter = await createOpenCodeCliChatAdapter({ cliPath: fakeCli, client,
+    baseUrl: `http://127.0.0.1:${eventServer.address().port}`, directory: scratch, outputDirectory: output,
+    actionLogPath: log, modelID: 'ling-3.1-flash-free', env: process.env, maxRequestMs: 3000, timeoutMs: 3000 });
+  try {
+    const response = await fetch(`${adapter.url}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'opencode/ling-3.1-flash-free', messages: [{ role: 'user', content: 'return one tool action' }], tools: [] }) });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, 'provider_retry');
+    const attempt = JSON.parse((await readFile(join(output, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(attempt.provider_step_telemetry.started, 1);
+    assert.equal(attempt.provider_step_telemetry.finished, 1);
+    assert.equal(attempt.provider_step_telemetry.tokens.total, 17);
+    assert.equal(attempt.cli_tool_use_audit[0].name, 'natlang_action_bridge_submit_action');
+    assert.equal(attempt.cli_tool_use_audit[0].bridge, true);
+    assert.equal(attempt.provider_retries[0].message, 'endpoint unavailable');
+  } finally {
+    await adapter.close(); eventServer.closeAllConnections();
+    await new Promise(resolveClose => eventServer.close(resolveClose));
+  }
+});

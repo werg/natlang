@@ -301,16 +301,17 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         child.once('close', (code, signal) => resolve({ code, signal }));
       });
       diagnostics.stdout_end_bytes = fileSize(stdoutPath); diagnostics.stderr_end_bytes = fileSize(stderrPath);
-      if (timedOut) throw Object.assign(new Error(`OpenCode CLI request exceeded ${timeoutMs} ms`), { code: 'REQUEST_TIMEOUT' });
-      if (violation) throw Object.assign(new Error(`OpenCode CLI stopped after ${violation.kind}`), { code: violation.kind });
-      if (exit.code !== 0) throw Object.assign(new Error(`OpenCode CLI exited ${exit.code ?? exit.signal}`), { code: 'CLI_EXIT' });
-      diagnostics.cli_exit_code = exit.code; diagnostics.cli_signal = exit.signal;
       const events = parseJsonLines(stdout);
       const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_event_count = events.length;
       diagnostics.provider_step_telemetry = audit.steps;
       diagnostics.cli_tool_use_audit = audit.toolUses;
+      diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge).length;
+      if (timedOut) throw Object.assign(new Error(`OpenCode CLI request exceeded ${timeoutMs} ms`), { code: 'REQUEST_TIMEOUT' });
+      if (violation) throw Object.assign(new Error(`OpenCode CLI stopped after ${violation.kind}`), { code: violation.kind });
+      if (exit.code !== 0) throw Object.assign(new Error(`OpenCode CLI exited ${exit.code ?? exit.signal}`), { code: 'CLI_EXIT' });
+      diagnostics.cli_exit_code = exit.code; diagnostics.cli_signal = exit.signal;
       const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
