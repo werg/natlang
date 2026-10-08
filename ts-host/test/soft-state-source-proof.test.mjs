@@ -36,13 +36,14 @@ test('resolves soft-state ports from matching producer and consumer declarations
     /producer declares next argument prior, but consumer declares notes/);
 });
 
-test('counts FileHandle openings separately from source-read actions', () => {
+test('counts observed source-read actions without claiming untraced FileHandle openings', () => {
   const summary = summarizeSourceEvidence([{ clean_child_reads: [
     { exact_complete_filehandle_opening: true },
     { source_reads: [{ source_path: 'folder/item.md' }], exact_complete_source_read: true },
     { source_reads: [], exact_complete_filehandle_opening: false }
   ] }]);
-  assert.deepEqual(summary, { successful_source_reads: 1, complete_filehandle_openings: 1 });
+  assert.deepEqual(summary, { successful_source_reads: 1 });
+  assert.equal('complete_filehandle_openings' in summary, false);
 });
 
 test('requires exact FileHandle parameter types without accepting unions', () => {

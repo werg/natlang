@@ -15,16 +15,15 @@ export function resolveSoftStateArgument({ producerNextArgument, consumerExpecte
   return consumerExpectedArgument ?? producerNextArgument ?? fallback;
 }
 
-/** Count observed tool reads separately from complete files supplied through FileHandle openings. */
+/** Count exact source reads observed in child actions. FileHandle openings are not currently traced. */
 export function summarizeSourceEvidence(proofCases) {
   if (!Array.isArray(proofCases)) throw new Error('source evidence summary requires a proof-case list');
   return proofCases.reduce((summary, proofCase) => {
     for (const child of proofCase.clean_child_reads ?? []) {
       summary.successful_source_reads += Array.isArray(child.source_reads) ? child.source_reads.length : 0;
-      summary.complete_filehandle_openings += child.exact_complete_filehandle_opening === true ? 1 : 0;
     }
     return summary;
-  }, { successful_source_reads: 0, complete_filehandle_openings: 0 });
+  }, { successful_source_reads: 0 });
 }
 
 /** Match a complete parameter declaration, rejecting unions and substring lookalikes. */

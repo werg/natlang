@@ -388,7 +388,7 @@ const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', sou
   decisions_with_successful_runtime_outcomes: nativeTurns.filter(turn => turn.outcome.accepted).length,
   runtime_cases: rows.length, completed_proof_cases: proofCases.length,
   successful_source_reads: sourceEvidenceCounts.successful_source_reads,
-  complete_filehandle_openings: sourceEvidenceCounts.complete_filehandle_openings,
+  filehandle_openings_traced: false,
   unsuccessful_actions: nativeRows.reduce((sum, row) => sum + (row.outcome?.action_ledger ?? []).filter(event =>
     !['ok', 'completed'].includes(String(event.outcome ?? ''))).length, 0),
   materializer_unlinked_outcomes: proofCases.reduce((sum, item) => sum + item.materializer_audit.unlinked.reduce((n, entry) => n + entry.outcomes, 0), 0),
@@ -405,14 +405,14 @@ await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natla
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, source_action_reviews: actionReviews.length,
   case_artifacts: caseArtifacts,
   direct_answer_decisions: proof.direct_answer_decisions, successful_source_reads: proof.successful_source_reads,
-  complete_filehandle_openings: proof.complete_filehandle_openings,
+  filehandle_openings_traced: proof.filehandle_openings_traced,
   unsuccessful_actions: proof.unsuccessful_actions, unlinked_materializer_outcomes: proof.materializer_unlinked_outcomes,
   status: proof.status, failed_cases: proof.failed_cases, case_errors: caseErrors,
   model_calls: 0, provider_calls: 0, admission_granted: false,
   review_status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
 console.log(JSON.stringify({ out: outPath, source_sha256: sourceSha, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, clean_reads: proof.successful_source_reads,
-  complete_filehandle_openings: proof.complete_filehandle_openings,
+  filehandle_openings_traced: proof.filehandle_openings_traced,
   training_approved: proof.decisions_approved_for_training,
   successful_runtime_outcomes: proof.decisions_with_successful_runtime_outcomes,
   admission_granted: false, status: proof.status, case_errors: caseErrors }, null, 2));
