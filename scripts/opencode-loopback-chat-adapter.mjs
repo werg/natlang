@@ -111,7 +111,8 @@ function statusFor(error) {
   if (error?.code === 'MODEL_MISMATCH') return 409;
   if (error?.code === 'OVERLOADED') return 429;
   if (error?.code === 'REQUEST_TIMEOUT') return 504;
-  if (error?.code === 'OPENCODE_PROVIDER_ERROR' && [429, 503].includes(error.providerStatusCode))
+  if (error?.code === 'OPENCODE_PROVIDER_ERROR' && Number.isInteger(error.providerStatusCode) &&
+      error.providerStatusCode >= 400 && error.providerStatusCode <= 599)
     return error.providerStatusCode;
   if (error instanceof TypeError) return 400;
   return 502;
@@ -181,7 +182,8 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
               error?.code === 'OPENCODE_PROVIDER_ERROR' ? 'provider_error' : 'opencode_bridge_error';
         const providerError = error?.code === 'OPENCODE_PROVIDER_ERROR' ? {
           provider_status_code: Number.isSafeInteger(error.providerStatusCode) ? error.providerStatusCode : null,
-          provider_retryable: typeof error.providerRetryable === 'boolean' ? error.providerRetryable : null
+          provider_retryable: typeof error.providerRetryable === 'boolean' ? error.providerRetryable : null,
+          ...(Number.isSafeInteger(error.providerRetryAfterMs) ? { retry_after_ms: error.providerRetryAfterMs } : {})
         } : {};
         const diagnostics = error?.transportDiagnostic && typeof error.transportDiagnostic === 'object' ?
           { transport_diagnostic: error.transportDiagnostic } : {};

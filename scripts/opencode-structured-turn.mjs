@@ -88,14 +88,21 @@ function safeSessionApiError(event, context) {
   const rawBody = typeof data.responseBody === 'string' ? data.responseBody : '';
   const redactedBody = redactCredentialLikeText(rawBody);
   const preview = Buffer.from(redactedBody, 'utf8').subarray(0, 4096).toString('utf8');
+  const retryHeader = Object.entries(data.responseHeaders ?? {}).find(([name]) => name.toLowerCase() === 'retry-after')?.[1];
+  const retrySeconds = typeof retryHeader === 'string' ? Number(retryHeader) : NaN;
+  const retryDate = typeof retryHeader === 'string' ? Date.parse(retryHeader) : NaN;
+  const retryAfterMs = Number.isFinite(retrySeconds) && retrySeconds >= 0 ? Math.ceil(retrySeconds * 1000) :
+    Number.isFinite(retryDate) ? Math.max(0, retryDate - Date.now()) : undefined;
   const error = new Error(`OpenCode provider request failed${Number.isSafeInteger(data.statusCode) ? ` (HTTP ${data.statusCode})` : ''}: ${message}`);
   error.code = 'OPENCODE_PROVIDER_ERROR';
   if (Number.isSafeInteger(data.statusCode)) error.providerStatusCode = data.statusCode;
   if (typeof data.isRetryable === 'boolean') error.providerRetryable = data.isRetryable;
+  if (Number.isSafeInteger(retryAfterMs)) error.providerRetryAfterMs = retryAfterMs;
   error.transportUpstreamError = {
     name: 'APIError',
     ...(Number.isSafeInteger(data.statusCode) ? { status_code: data.statusCode } : {}),
     ...(typeof data.isRetryable === 'boolean' ? { retryable: data.isRetryable } : {}),
+    ...(Number.isSafeInteger(retryAfterMs) ? { retry_after_ms: retryAfterMs } : {}),
     message,
     ...(rawBody ? { response_body: {
       sha256: sha256(rawBody), bytes: Buffer.byteLength(rawBody), redacted_preview: preview,
@@ -110,10 +117,16 @@ function watchSessionErrors(client, sessionID) {
   const controller = new AbortController();
   let resolveMatch;
   const matchingError = new Promise(resolve => { resolveMatch = resolve; });
+  let resolveReady;
+  const ready = new Promise(resolve => { resolveReady = resolve; });
   const task = (async () => {
     try {
       const subscription = await client.event.subscribe({ signal: controller.signal });
-      if (!subscription?.stream || typeof subscription.stream[Symbol.asyncIterator] !== 'function') return;
+      if (!subscription?.stream || typeof subscription.stream[Symbol.asyncIterator] !== 'function') {
+        resolveReady({ available: false, reason: 'event subscription returned no async stream' });
+        return;
+      }
+      resolveReady({ available: true });
       for await (const event of subscription.stream) {
         if (controller.signal.aborted) return;
         const error = safeSessionApiError(event, { sessionID });
@@ -122,10 +135,12 @@ function watchSessionErrors(client, sessionID) {
     } catch (error) {
       // The prompt response remains authoritative if the optional diagnostic
       // stream disconnects. It must not turn an SSE problem into a model error.
+      resolveReady({ available: false, reason: error instanceof Error ? error.message.slice(0, 160) : 'event subscription failed' });
     }
   })();
   return {
     matchingError,
+    ready,
     async stop() {
       controller.abort();
       await withTimeout(task.catch(() => {}), 500, 'OpenCode event stream stop').catch(() => {});
@@ -493,10 +508,28 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     let errorWatch;
     let promptController;
     let removeExternalAbort;
+    let errorEventMode = 'SDK event subscription unavailable';
     let failurePhase = 'session_prompt';
     try {
       signal?.throwIfAborted();
-      if (typeof client.event?.subscribe === 'function') errorWatch = watchSessionErrors(client, session.id);
+      if (typeof client.event?.subscribe === 'function') {
+        errorWatch = watchSessionErrors(client, session.id);
+        try {
+          const ready = await withAbort(withTimeout(errorWatch.ready, cleanupTimeoutMs,
+            'OpenCode event stream bootstrap'), signal, 'OpenCode event stream bootstrap');
+          if (ready.available) errorEventMode = 'official SDK SSE stream established before prompt; matching-session session.error observed concurrently';
+          else {
+            errorEventMode = `prompt-authoritative fallback; event stream unavailable (${ready.reason})`;
+            await errorWatch.stop();
+            errorWatch = undefined;
+          }
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          errorEventMode = 'prompt-authoritative fallback; event stream bootstrap timed out';
+          await errorWatch.stop();
+          errorWatch = undefined;
+        }
+      }
       promptController = new AbortController();
       if (signal) {
         const forwardAbort = () => promptController.abort(signal.reason);
@@ -567,7 +600,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           provider_id: providerID,
           model_id: modelID,
           session_id: session.id,
-          provider_error_events: errorWatch ? 'official SDK SSE matching-session session.error observed concurrently with prompt' : 'SDK event subscription unavailable',
+          provider_error_events: errorEventMode,
           fidelity: 'prompt-directed-strict-json-text; not provider-enforced JSON Schema or native provider tool-call output',
           output_contract: 'exact JSON text parsed and validated by the bridge',
           open_code_tool_policy: {

@@ -39,3 +39,11 @@ test('supplied retry delays are minimums, including dates and flattened SDK erro
   assert.equal(retryAfterMs({ headers: { 'retry-after': 'nonsense' } }), 0);
   assert.equal(retryWaitMs({ status: 429, retry_after: 180 }, 0, 15000, () => 0), 180000);
 });
+test('loopback OpenCode JSON provider errors preserve status and retry-after for collection', () => {
+  const body = JSON.stringify({ error: { message: 'Rate limit exceeded', provider_status_code: 429,
+    provider_retryable: true, retry_after_ms: 7000 } });
+  const error = Object.assign(new Error(`model HTTP 429: ${body}`), { status: 429 });
+  assert.equal(rateLimited(error), true);
+  assert.equal(transportFailure(error), true);
+  assert.equal(retryAfterMs(error), 7000);
+});
