@@ -43,6 +43,8 @@ export type Frame = Readonly<{
   abort?: AbortController;
   /** Services seen by code running in this frame instead of the task's (a compiled case's journaled services). */
   services?: Readonly<Record<string, object>>;
+  /** Skill files bound to this invocation; inline `nl` children inherit this exact scope. */
+  skillFiles?: Readonly<Record<string, string | Uint8Array>>;
 }>;
 
 /** One active call of an authored TypeScript function, linked to the calls active above it. */

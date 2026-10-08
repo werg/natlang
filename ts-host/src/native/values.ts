@@ -34,6 +34,8 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
    * document by its `read_code` target (`skills.<name>`, `skills.<name>/<path>`).
    */
   skills?: { listing: string; documents: Record<string, string>; declarations: string;
+    /** Exact bound project skill files; propagated only to inline children of this invocation. */
+    files?: Record<string, string | Uint8Array>;
     inventory?: { name: string; revision: string }[] };
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function>;
