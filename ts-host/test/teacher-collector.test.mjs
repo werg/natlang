@@ -239,7 +239,7 @@ test('native collector journals model replies and replays them after an interrup
     assert.equal(output.trajectory.length, 2);
     assert.equal(output.request_telemetry.starts.length, 3, 'the failed transport start remains in the successful retry row');
     assert.equal(output.request_telemetry.starts.filter(start => start.status === 'failed').length, 1);
-    assert.equal(output.request_telemetry.starts.reduce((sum, start) => sum + start.http_transport_starts, 0), 3);
+    assert.equal(output.request_telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), 3);
     assert.equal(output.request_telemetry.attempt_ids.length, 2);
     await assert.rejects(readFile(join(options.jobs, `${jobKey(item)}.partial.json`)), /ENOENT/);
   } finally { await new Promise(resolve => server.close(resolve)); }
@@ -473,8 +473,8 @@ test('terminal rows retain exact admitted sender starts and distinguish planner 
     assert.equal(telemetry.sampled_logical_turns, 1);
     assert.equal(telemetry.planned_action_turns, 1);
     assert.equal(telemetry.planner_fallback_turns, 0);
-    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.http_transport_starts, 0), 4);
-    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.http_transport_retry_starts, 0), 1);
+    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), 4);
+    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.chat_transport_retry_starts, 0), 1);
     assert.deepEqual(telemetry.starts.map(start => [start.purpose, start.planner_attempt, start.plan_status, start.status]), [
       ['planner', 1, null, 'completed'], ['planner', 2, null, 'completed'], ['action', null, 'planned', 'completed'],
     ]);

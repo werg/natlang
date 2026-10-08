@@ -175,8 +175,8 @@ async function main(): Promise<void> {
   for await (const line of requestStream) {
     if (!line.trim()) continue;
     const row = JSON.parse(line) as { request_telemetry?: { attempt_ids?: string[]; starts?: Array<{ attempt_id?: string; purpose?: string; role?: string;
-      planner_attempt?: number | null; plan_status?: string | null; status?: string; http_transport_starts?: number;
-      http_transport_retry_starts?: number; provider_sdk_turn_starts?: number }>;
+      planner_attempt?: number | null; plan_status?: string | null; status?: string; chat_transport_starts?: number;
+      chat_transport_retry_starts?: number; provider_sdk_turn_starts?: number }>;
       authored_synthetic_root_actions?: number } };
     const telemetry = row.request_telemetry;
     if (!telemetry) { requestTotals.rows_without_telemetry++; continue; }
@@ -188,11 +188,11 @@ async function main(): Promise<void> {
     requestTotals.collector_retry_attempts += Math.max(0, attempts.size - 1);
     for (const start of telemetry.starts ?? []) {
       requestTotals.collector_sender_starts++;
-      requestTotals.chat_transport_starts += start.http_transport_starts ?? 0;
-      requestTotals.chat_transport_retry_starts += start.http_transport_retry_starts ?? 0;
+      requestTotals.chat_transport_starts += start.chat_transport_starts ?? 0;
+      requestTotals.chat_transport_retry_starts += start.chat_transport_retry_starts ?? 0;
       requestTotals.provider_sdk_turn_starts += start.provider_sdk_turn_starts ?? 0;
       const purpose = start.purpose === 'planner' ? 'planner' : start.purpose === 'judge' || start.role === 'judge' ? 'judge' : 'action';
-      requestTotals[`${purpose}_chat_transport_starts`] += start.http_transport_starts ?? 0;
+      requestTotals[`${purpose}_chat_transport_starts`] += start.chat_transport_starts ?? 0;
       requestTotals[`${purpose}_provider_sdk_turn_starts`] += start.provider_sdk_turn_starts ?? 0;
       if (start.purpose === 'planner') {
         requestTotals.planner_starts++;

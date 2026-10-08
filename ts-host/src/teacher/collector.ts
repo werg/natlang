@@ -637,7 +637,7 @@ type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?
 type CollectorRequestStart = { attempt_id: string; case_sequence: number; request_ordinal: number;
   role: 'teacher' | 'judge'; purpose: 'planner' | 'action' | 'judge'; logical_turn: number | null;
   planner_attempt: number | null; plan_status: 'planned' | 'fallback' | 'not_configured' | null;
-  http_transport_starts: number; http_transport_retry_starts: number; provider_sdk_turn_starts: number;
+  chat_transport_starts: number; chat_transport_retry_starts: number; provider_sdk_turn_starts: number;
   status: 'started' | 'completed' | 'failed' };
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
@@ -833,8 +833,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const recordHttpTransportStart = async (request: ModelTurnRequest, retryIndex: number) => {
       const entry = entryForRequest(request);
       if (!entry) return;
-      entry.http_transport_starts++;
-      if (retryIndex > 0) entry.http_transport_retry_starts++;
+      entry.chat_transport_starts++;
+      if (retryIndex > 0) entry.chat_transport_retry_starts++;
       await persistTransportStart(entry, 'chat_transport', retryIndex);
     };
     let persistProviderExchange: (request: ModelTurnRequest, response: ModelTurn | undefined,
@@ -913,7 +913,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             purpose: sendContext?.purpose ?? (role === 'judge' ? 'judge' as const : 'action' as const),
             logical_turn: sendContext?.logicalTurn ?? null, planner_attempt: sendContext?.plannerAttempt ?? null,
             plan_status: sendContext?.planStatus ?? null,
-            http_transport_starts: 0, http_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+            chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
             status: 'started' };
           requestTelemetry.starts.push(entry);
           await persistRequestStart(entry);
