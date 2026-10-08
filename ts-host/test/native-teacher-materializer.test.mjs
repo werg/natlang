@@ -982,6 +982,33 @@ test('materialization preserves same-call provider-expanded read provenance with
   wrongEvalReturnType.outcome.invocation_ledger.at(-1).host_result.value.$neuralese.type = 'Neuralese<number>';
   assert.equal(materializeNativeRows([wrongEvalReturnType]).turns[0].source_ref.provider_expanded_read_contexts
     .find(item => item.block.id === noteId), undefined, 'eval-return host type must match the written block');
+
+  const returnReemission = withLegacyResult('return_result', false);
+  const writes = returnReemission.outcome.execution_graph.filter(event => event.kind === 'block_write' && event.block === noteId);
+  const upstreamEvalOutput = structuredClone(writes[0]);
+  Object.assign(upstreamEvalOutput, { seq: 2, node: 'producer-call#5', source: 'eval-return' });
+  Object.assign(writes[0], { seq: 8, node: 'producer-call#9', source: 'return_result' });
+  const consumerRead = returnReemission.outcome.execution_graph.find(event => event.kind === 'block_read' && event.block === noteId);
+  consumerRead.inputs = [{ node: 'producer-call#9', block: noteId, port: 'block' }];
+  returnReemission.outcome.execution_graph.push(upstreamEvalOutput);
+  const reemissionReceipt = materializeNativeRows([returnReemission]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(reemissionReceipt.writer_source_class, 'legacy-text-marker-standin-return-result-host-reference');
+  assert.equal(reemissionReceipt.producer_write.node, 'producer-call#9',
+    'context is bound to the exact re-emission node consumed by the read');
+  assert.equal(reemissionReceipt.writer_witness.kind, 'completed-return-result-host-reference-reemission');
+  assert.equal(reemissionReceipt.writer_witness.upstream_typed_output_node, 'producer-call#5');
+  const failedReemission = structuredClone(returnReemission);
+  failedReemission.outcome.invocation_ledger.at(-1).completion_status = 'failed';
+  assert.equal(materializeNativeRows([failedReemission]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'failed host completion cannot authenticate a re-emission');
+  const mismatchedUpstream = structuredClone(returnReemission);
+  const upstreamWrite = mismatchedUpstream.outcome.execution_graph.find(event => event.kind === 'block_write' &&
+    event.node === 'producer-call#5');
+  upstreamWrite.text_body_sha256 = sha('different body');
+  assert.equal(materializeNativeRows([mismatchedUpstream]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'upstream typed output must match the exact expanded body digest');
+
   const wrongEvalReturnBody = withLegacyResult('eval-return', false);
   wrongEvalReturnBody.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body = 'other note';
   wrongEvalReturnBody.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body_sha256 = sha('other note');

@@ -299,7 +299,7 @@ def test_selected_direct_typed_return_links_only_to_exact_authenticated_reader_e
             'body_source_basis': 'exact-raw-model-result-string'}]}}
 
     hashes = {key: hashlib.sha256(key.encode()).hexdigest()
-              for key in ('reader-source', 'trace', 'transport', 'raw', 'rendered')}
+              for key in ('reader-source', 'trace', 'transport', 'raw', 'rendered', 'source-request', 'source-response')}
     reader_call, read_node, turn_node = 'reader-call', 'reader-call#4', 'reader-call#turn2'
     provider_receipt = {'schema': 'natlang.provider-expanded-read-context/2',
         'origin': 'same-run-producer', 'writer_target_selected': False,
@@ -307,6 +307,7 @@ def test_selected_direct_typed_return_links_only_to_exact_authenticated_reader_e
         'parent_invocation_id': 'root-call', 'source_row_sha256': hashes['reader-source'],
         'trace_sha256': hashes['trace'], 'transport_provenance_sha256': hashes['transport'],
         'raw_request_sha256': hashes['raw'], 'rendered_request_sha256': hashes['rendered'],
+        'source_request_sha256': hashes['source-request'], 'source_response_sha256': hashes['source-response'],
         'block': {'id': block, 'type': 'Neuralese<string>', 'body': body, 'body_sha256': body_sha},
         'producer_write': {'kind': 'block_write', 'producer': 'text-marker-emulation',
             'source_kind': 'typed-text-result', 'source': 'return_result', 'block': block, 'result_type': 'Neuralese<string>',
@@ -354,6 +355,35 @@ def test_selected_direct_typed_return_links_only_to_exact_authenticated_reader_e
     # valid with reader-local read/turn sequence 1/2 because the node inputs bind them.
     assert not audit.semantic_writer_matches_reader(
         {**writer['neuralese_conversion']['selected_runtime_result_writes'][0], 'writer_node': 'writer-call#8'}, reader)
+
+    # Native materialized rows do not retain the complete execution_graph. A
+    # downstream provider receipt can still authenticate the selected write
+    # when it carries the exact event and read/turn graph links for the same
+    # source row. This preserves the context as a read, not a second writer.
+    no_graph = json.loads(json.dumps(writer))
+    no_graph.pop('outcome')
+    bound_reader = json.loads(json.dumps(reader))
+    bound_reader['source_ref']['source_row_sha256'] = source_sha
+    bound_receipt = bound_reader['source_ref']['provider_expanded_read_contexts'][0]
+    bound_receipt['source_row_sha256'] = source_sha
+    bound_receipt['writer_source_class'] = 'legacy-text-marker-standin-return-result'
+    bound_receipt['writer_witness'] = {'kind': 'raw-return-result-value-equals-expanded-body',
+        'source': 'return_result', 'host_result_call_id': 'writer-call', 'host_result_type': 'Neuralese<string>',
+        'host_result_value_sha256': hashlib.sha256(b'host-ref').hexdigest(),
+        'raw_response_sha256': hashlib.sha256(b'raw-response').hexdigest()}
+    producer = bound_receipt['producer_write']
+    producer.update({'marker_context': 'return-result', 'seq': 9,
+        'inputs': [{'node': 'writer-call#3', 'port': 'result-source'}]})
+    bound_reader['neuralese_conversion']['external_context_inputs'][0]['source_row_sha256'] = source_sha
+    bound_reader['neuralese_conversion']['external_context_inputs'][0]['writer_source_class'] = \
+        'legacy-text-marker-standin-return-result'
+    bound_reader['neuralese_conversion']['external_context_inputs'][0]['writer_witness'] = \
+        bound_receipt['writer_witness']
+    valid_receipts, receipt_failures = audit.validate_selected_direct_return_receipts(no_graph, [bound_receipt])
+    assert valid_receipts, receipt_failures
+    no_graph_audit = run(no_graph, bound_reader)
+    assert no_graph_audit['linked_edges'] == 1 and no_graph_audit['structurally_closed']
+
     bad_writer = json.loads(json.dumps(writer))
     bad_writer['neuralese_conversion']['selected_runtime_result_writes'][0]['writer_node'] = 'writer-call#8'
     bad = run(bad_writer, reader)

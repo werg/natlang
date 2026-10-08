@@ -83,7 +83,7 @@ def direct_typed_result_event_name(block_id, trajectory_id, call_id, node):
     return f'soft-state:{block_id}@{event}'
 
 
-def validate_selected_direct_return_receipts(row):
+def validate_selected_direct_return_receipts(row, provider_contexts=()):
     import re
     conversion = row.get('neuralese_conversion')
     receipts = conversion.get('selected_runtime_result_writes', []) if isinstance(conversion, dict) else []
@@ -192,6 +192,69 @@ def validate_selected_direct_return_receipts(row):
                     and any(isinstance(edge, dict) and edge.get('node') == graph_turns[0].get('node')
                             and edge.get('port') == 'result-source'
                             for edge in graph_writers[0].get('inputs', [])))
+                if not event_ordered and not graph:
+                    # Materialized decision rows omit the raw execution graph.
+                    # An authenticated same-run provider read receipt can carry
+                    # the exact producer event and both causal graph edges; join
+                    # it only to this selected target's full source-row and
+                    # event identity. It remains context evidence, not a new
+                    # writer target.
+                    matching_context_events = {}
+                    for context in provider_contexts:
+                        if not isinstance(context, dict) or context.get('schema') != 'natlang.provider-expanded-read-context/2':
+                            continue
+                        block_context = context.get('block')
+                        producer = context.get('producer_write')
+                        read, turn = context.get('block_read'), context.get('model_turn')
+                        witness = context.get('writer_witness')
+                        if not all(isinstance(value, dict) for value in (block_context, producer, read, turn)):
+                            continue
+                        body = block_context.get('body')
+                        if (context.get('origin') != 'same-run-producer' or context.get('writer_target_selected') is not False
+                                or context.get('source_row_sha256') != receipt.get('source_row_sha256')
+                                or context.get('invocation_id') == receipt.get('writer_call_id')
+                                or block_context.get('id') != block or block_context.get('type') != 'Neuralese<string>'
+                                or not isinstance(body, str) or hashlib.sha256(body.encode()).hexdigest() != body_sha
+                                or block_context.get('body_sha256') != body_sha
+                                or producer.get('kind') != 'block_write' or producer.get('block') != block
+                                or producer.get('call_id') != receipt.get('writer_call_id')
+                                or producer.get('node') != receipt.get('writer_node')
+                                or producer.get('producer') != 'text-marker-emulation'
+                                or producer.get('source_kind') != 'typed-text-result'
+                                or producer.get('source') != 'return_result'
+                                or producer.get('marker_context') != 'return-result'
+                                or producer.get('result_type') != 'Neuralese<string>'
+                                or producer.get('text_body_sha256') != body_sha or producer.get('truncated') is not False
+                                or not any(isinstance(edge, dict) and edge.get('node') == matched_typed_receipts[0].get('model_turn_node')
+                                           and edge.get('port') == 'result-source' for edge in producer.get('inputs', []))
+                                or not isinstance(read.get('node'), str) or not read.get('node')
+                                or read.get('kind') != 'block_read' or read.get('block') != block
+                                or read.get('call_id') != context.get('invocation_id')
+                                or not any(isinstance(edge, dict) and edge.get('node') == receipt.get('writer_node')
+                                           and edge.get('block') == block for edge in read.get('inputs', []))
+                                or turn.get('kind') != 'model_turn' or turn.get('call_id') != context.get('invocation_id')
+                                or turn.get('node') != read.get('turn')
+                                or not any(isinstance(edge, dict) and edge.get('node') == read.get('node')
+                                           and edge.get('block') == block for edge in turn.get('inputs', []))
+                                or context.get('writer_source_class') != 'legacy-text-marker-standin-return-result'
+                                or not isinstance(witness, dict)
+                                or witness.get('kind') != 'raw-return-result-value-equals-expanded-body'
+                                or witness.get('source') != 'return_result'
+                                or witness.get('host_result_call_id') != producer.get('call_id')
+                                or witness.get('host_result_type') != producer.get('result_type')
+                                or any(not isinstance(context.get(key), str) or re.fullmatch(r'[0-9a-f]{64}', context[key]) is None
+                                       for key in ('trace_sha256', 'transport_provenance_sha256', 'raw_request_sha256',
+                                                   'rendered_request_sha256', 'source_request_sha256', 'source_response_sha256'))
+                                or any(not isinstance(witness.get(key), str) or re.fullmatch(r'[0-9a-f]{64}', witness[key]) is None
+                                       for key in ('host_result_value_sha256', 'raw_response_sha256'))):
+                            continue
+                        event_name = direct_typed_result_event_name(block, receipt.get('trajectory_id'),
+                                                                   receipt.get('writer_call_id'), receipt.get('writer_node'))
+                        if event_name == name:
+                            event_key = (producer.get('call_id'), producer.get('node'), producer.get('block'),
+                                         producer.get('text_body_sha256'), matched_typed_receipts[0].get('model_turn_node'))
+                            matching_context_events[event_key] = (producer, matched_typed_receipts[0])
+                    event_ordered = len(matching_context_events) == 1
                 if len(target_matches) != 1 or len(source_matches) != 1 or not event_ordered:
                     reason = 'raw-action-or-target-write-not-uniquely-bound'
                 else:
@@ -358,6 +421,17 @@ def main():
     p.add_argument('inputs', nargs='+', type=Path)
     p.add_argument('--out', required=True, type=Path)
     a = p.parse_args()
+    provider_contexts_by_source = collections.defaultdict(list)
+    for path in a.inputs:
+        with path.open() as f:
+            for line in f:
+                if not line.strip(): continue
+                candidate = json.loads(line)
+                source = candidate.get('source_ref', {})
+                if not isinstance(source, dict): continue
+                key = (source.get('trajectory_id'), source.get('source_row_sha256'))
+                contexts = source.get('provider_expanded_read_contexts', [])
+                if isinstance(contexts, list): provider_contexts_by_source[key].extend(contexts)
     rows, producers = {}, collections.defaultdict(list)
     semantic_producers = collections.defaultdict(list)
     invalid_semantic_receipts = []
@@ -370,7 +444,10 @@ def main():
                 target = names(row.get('target'), 'write')
                 reads = names(row.get('messages'), 'read') - target
                 external_candidates = reads & authenticated_external_context_names(row)
-                semantic_writes, semantic_failures = validate_selected_direct_return_receipts(row)
+                source = row.get('source_ref', {})
+                context_key = (source.get('trajectory_id'), source.get('source_row_sha256')) if isinstance(source, dict) else (None, None)
+                semantic_writes, semantic_failures = validate_selected_direct_return_receipts(
+                    row, provider_contexts_by_source[context_key])
                 invalid_semantic_receipts.extend(semantic_failures)
                 rows[row['id']] = {'reads': reads, 'external_candidates': external_candidates,
                     'external_context_roots': [],

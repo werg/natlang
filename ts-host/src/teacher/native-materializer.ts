@@ -536,6 +536,14 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
           host.name !== 'return' || !ref || typeof ref !== 'object' || (ref as Dict).id !== blockId ||
           (ref as Dict).type !== block.type || host.result_type !== block.type ||
           typeof host.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(host.value_sha256)) return;
+      const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
+      const resultSourceInputs = Array.isArray(event.inputs) ? (event.inputs as Dict[]).filter(input =>
+        input.port === 'result-source' && typeof input.node === 'string') : [];
+      const sourceTurns = resultSourceInputs.length === 1 ? graph.filter(candidate =>
+        candidate.kind === 'model_turn' && candidate.call_id === event.call_id &&
+        candidate.node === resultSourceInputs[0]!.node && Number.isSafeInteger(candidate.turn)) : [];
+      const sourceStep = sourceTurns.length === 1 ? steps[Number(sourceTurns[0]!.turn) - 1] :
+        steps.length === 1 ? steps[0] : undefined;
       if (event.source === 'eval-finish') return { writerSourceClass: 'legacy-text-marker-standin-eval-finish',
         witness: { kind: 'completed-eval-finish-host-reference', source: 'eval-finish',
           host_result_call_id: event.call_id, host_result_type: block.type,
@@ -547,10 +555,8 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
           completion_status: entry.completion_status, completion_source: entry.completion_source,
           completion_detail: entry.completion_detail } };
       if (event.source !== 'return_result' || block.type !== 'Neuralese<string>') return;
-      const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
-      if (steps.length !== 1) return;
-      const response = steps[0]!.model_response && typeof steps[0]!.model_response === 'object' ?
-        steps[0]!.model_response as Dict : {};
+      const response = sourceStep?.model_response && typeof sourceStep.model_response === 'object' ?
+        sourceStep.model_response as Dict : {};
       const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
       const exact = rawCalls.filter(raw => {
         if (!raw || typeof raw !== 'object') return false;
@@ -562,12 +568,37 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
           return (args.status === undefined || args.status === 'success') && args.value === block.body;
         } catch { return false; }
       });
-      if (exact.length !== 1) return;
-      return { writerSourceClass: 'legacy-text-marker-standin-return-result',
+      if (exact.length === 1) return { writerSourceClass: 'legacy-text-marker-standin-return-result',
         witness: { kind: 'raw-return-result-value-equals-expanded-body', source: 'return_result',
           host_result_call_id: event.call_id, host_result_type: block.type,
           host_result_value_sha256: host.value_sha256,
-          raw_response_sha256: steps[0]!.raw_response_sha256 ?? null } };
+          source_model_turn: sourceTurns[0]?.turn ?? null,
+          raw_response_sha256: sourceStep?.raw_response_sha256 ?? null } };
+      // Some legacy runs returned an opaque typed handle from a completed eval.
+      // The runtime then emitted a second return-result write for the same
+      // successful host result. Authenticate that read context only when the
+      // completed host capture names this exact typed block and an earlier
+      // typed eval-return/eval-finish write in the same invocation carries the
+      // exact expanded-body digest. This records the observed re-emission; it
+      // does not create another semantic target or recurrence writer.
+      const upstream = graph.filter(candidate => candidate.kind === 'block_write' &&
+        candidate.call_id === event.call_id && candidate.block === blockId && candidate.node !== event.node &&
+        candidate.truncated === false && candidate.producer === 'text-marker-emulation' &&
+        candidate.source_kind === 'typed-text-result' && ['eval-return', 'eval-finish'].includes(String(candidate.source)) &&
+        candidate.result_type === block.type && candidate.text_body_sha256 === block.body_sha256 &&
+        Number.isSafeInteger(candidate.seq) && Number.isSafeInteger(event.seq) && Number(candidate.seq) < Number(event.seq));
+      if (upstream.length !== 1) return;
+      return { writerSourceClass: 'legacy-text-marker-standin-return-result-host-reference',
+        witness: { kind: 'completed-return-result-host-reference-reemission', source: 'return_result',
+          host_result_call_id: event.call_id, host_result_type: block.type,
+          host_result_value_sha256: host.value_sha256,
+          completion_status: entry.completion_status, completion_source: entry.completion_source,
+          completion_detail: entry.completion_detail, upstream_typed_output_node: upstream[0]!.node,
+          upstream_typed_output_source: upstream[0]!.source,
+          upstream_typed_output_seq: upstream[0]!.seq,
+          upstream_typed_output_body_sha256: upstream[0]!.text_body_sha256,
+          source_model_turn: sourceTurns[0]?.turn ?? null,
+          raw_response_sha256: sourceStep?.raw_response_sha256 ?? null } };
     };
     const writerSourceClass = (event: Dict): string | undefined => {
       const legacy = legacyResultWitness(event);
