@@ -28,6 +28,10 @@ State at the end of the first implementation session. Read [README.md](README.md
 
 ## DGX live update — 2026-10-07 21:05 CEST
 
+- Maple warm-up v9 (`runs/maple-native-text-warmup-20261008-v9.sh`, PID in job tmp `maple-warmup.pid`): v8's state
+  (step 4746, sketch-only rollout ramp at 4 of 8 passes) on the Maple V9 twin (`neuralese-maple-native-gold-text-corpus-20261008-v7`),
+  system prompt masked. Queued in the ledger behind another session's pi-executor (36 GB claim); the supervisor now
+  retries a refused admission instead of treating it as a finish. Eval-only: `--eval-only` into a fresh --out.
 - Maple warm-up v8 (`runs/maple-native-text-warmup-20261008-v8.sh`): v7 + `--rollout-passes 8`; sketch-only rollout
   training first, then whole stack at depth 8 (DECISIONS 2026-10-08). The V9 twin is blocked on unregistered Pop
   artifacts (asked).
