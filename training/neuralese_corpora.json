@@ -7624,6 +7624,22 @@
         "s1-full-final-20261003"
       ],
       "notes": "Six generation task variants over 23 existing S1 train records: 16 Reasoning Gym and 7 demonstration-checkable SynLogic. Nine unsupported SynLogic candidates are documented as omissions. Original source groups/splits/licenses are preserved; zero independent-world credit. V7 source-group correction history and both root-reviewed/current CPU runtime proof dependencies are included. Provider generation is a separate pending execution-plan review; scripted references are not teacher data or training qualification."
+    },
+    {
+      "id": "verified-reasoning-pools-v9-luna-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/plan.approved.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/root-execution-authorization.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/launch-packet-v1/README.md",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/launch-packet-v1/launch-binding.json"
+      ],
+      "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v9"
+      ],
+      "notes": "Supplemental immutable launch packet for the V9 Luna generation campaign. Binds root-reviewed execution plan and authorization to launch-time dispatcher/slot process IDs, the initial six claims and authority observation. Mutable live results/journals are excluded and will be separately snapshotted after closure. No training, trace, DPO, or semantic admission."
     }
   ],
   "coverage_backlog": [
