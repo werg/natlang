@@ -133,13 +133,29 @@ test('file transactions expose only their file and reject stale commits', async 
   child.abort();
 });
 
-test('file transactions reject writes to siblings and release their lease after failure', async () => {
+test('file transactions reject out-of-scope writes before overlay mutation and retain valid writes', async () => {
   const folder = Folder.fromFiles({ 'packet.md': 'evidence', 'selection.json': 'existing output' });
   const tx = await folder.beginFileTransaction('packet.md', false);
-  tx.folder.writeText('selection.json', 'overwrite attempt');
-  await assert.rejects(() => tx.commit(), FolderScopeError);
-  assert.equal(tx.open, false, 'failed scope validation aborts and closes the transaction');
+  assert.throws(() => tx.folder.writeText('selection.json', 'overwrite attempt'), FolderScopeError);
+  assert.equal(await tx.folder.readText('selection.json').catch(() => null), null);
+  tx.folder.writeText('packet.md', 'revised evidence');
+  await tx.commit();
   assert.equal(await folder.file('selection.json').readText(), 'existing output');
+  assert.equal(await folder.file('packet.md').readText(), 'revised evidence');
+
   const next = await folder.beginFileTransaction('packet.md', false);
   next.abort();
+});
+
+test('file scope fences remove and both move endpoints before mutating the overlay', async () => {
+  const folder = Folder.fromFiles({ 'records/packet.md': 'evidence', 'records/result.json': 'existing' });
+  const tx = await folder.beginFileTransaction('records/packet.md', false);
+  assert.throws(() => tx.folder.remove('result.json'), FolderScopeError);
+  assert.throws(() => tx.folder.move('packet.md', 'result.json'), FolderScopeError);
+  assert.throws(() => tx.folder.move('result.json', 'packet.md'), FolderScopeError);
+  assert.deepEqual(tx.folder.diffSync(), { changes: [], moves: [] });
+  tx.folder.writeText('packet.md', 'allowed');
+  await tx.commit();
+  assert.equal(await folder.file('records/result.json').readText(), 'existing');
+  assert.equal(await folder.file('records/packet.md').readText(), 'allowed');
 });

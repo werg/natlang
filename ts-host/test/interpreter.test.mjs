@@ -771,6 +771,33 @@ test('a failed nested-handle child rolls back its file writes', async () => {
   lam.projectTransaction.abort();
 });
 
+test('a denied child file write stays auditable and a later eval returns successfully', async () => {
+  const folder = Folder.fromFiles({ 'records/packet.md': 'approved evidence', 'records/decision.json': 'parent-owned result' });
+  let denied, recovered, deniedTrace;
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Inspect the supplied record and report whether it has content.' }, { agent: async child => {
+    denied = await child.applyAsync('eval', { code:
+      'await folder.file("decision.json").writeText("unauthorized child output"); return true;' });
+    deniedTrace = child.runtime.trace.events.filter(event => event.kind === 'scope_failure');
+    recovered = await child.applyAsync('eval', { code:
+      'const packet = await folder.file("packet.md").readText(); console.log(packet); return packet.length > 0;' });
+    assert.equal(recovered.kind, 'ok', recovered.text);
+    child.apply('return_result', { status: 'success', value: recovered.value });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const file = folder.file("records/packet.md"); const found: boolean = await nl<boolean>`Inspect this record.`(file); found' });
+  assert.equal(denied.kind, 'error', denied.text);
+  assert.match(denied.text, /outside the supplied FileHandle scope/);
+  assert.equal(recovered.value, true);
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, true);
+  assert.equal(await lam.projectTransaction.folder.file('records/decision.json').readText(), 'parent-owned result');
+  assert.ok(deniedTrace.some(event => String(event.message ?? '').includes('outside the supplied FileHandle scope')),
+    'the denied attempt remains in the failure trace');
+  lam.projectTransaction.abort();
+});
+
 test('a child given two file handles receives two disjoint roots', async () => {
   const folder = Folder.fromFiles({ 'a/one.txt': 'one', 'b/two.txt': 'two' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',

@@ -128,7 +128,51 @@ in V93–V97. V17's `input.source.readText()` was a wrong nested path; missing
 names such as `extracted`/`contract` were absent from scope. Those are not
 coercion opportunities. Keep suggesting explicit handles and `folder.apply`.
 
-### 6. Eval exposes a read-only tool facade; other tool actions stay direct
+### 6. A denied child write used to poison later clean evals in the same call
+
+**Priority: high; fixed in this review.** V19 Luna case 3 provides direct
+evidence. Its preserved partial is
+`runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v1/luna/luna-campaign-v1/slot-04/jobs/000003-64f57198009df9e9.partial.json`;
+the corresponding evidence stream is the adjacent
+`000003-64f57198009df9e9.partial.json.evidence-2e150bcc-87c8-46b7-8351-195f35250e1c.jsonl`.
+It records 192 saved turns and ends with the 384-request whole-case budget
+error. The evidence stream contains 58 `scope_failure` events repeating the
+same denial, from 01:42:06Z through 01:54:19Z: writing `decision.json` was
+outside the supplied `FileHandle` scope. At event 278 the child still returned
+the supported eligible fields and a typed prose answer; subsequent clean
+console/read/return attempts also failed at result completion with that same
+write-scope error. This was not missing evidence or a reason to widen child
+authority.
+
+The scope decision itself was correct: a note child given one pass `FileHandle`
+must not write the parent's `decision.json`. The incidental failure was late
+enforcement. `Folder.beginFileTransaction()` created a one-file private folder,
+but `FolderTransaction.rootedChanges()` detected extra paths only when the
+whole child transaction committed. An out-of-scope write therefore mutated
+the still-open overlay. Every later eval retried the same failing commit, even
+after it returned a valid typed result.
+
+**Implemented fix:** `ts-host/src/native/scoped-fs.ts:304-314,418-423,474-495,529-549`
+places a one-path write fence on the private folder and checks it before
+`writeBytes`, `remove`, `move`, and install mutate the overlay. Forks and
+nested transactions retain the fence; the existing final transaction scope
+check remains as defense in depth. The denied path and `FolderScopeError`
+remain visible to the eval failure capture. The child can then read the
+supplied file and return a typed result in a later eval of the same invocation.
+No additional authority, timeout, or permanent per-call taint was added.
+
+Regressions are in `ts-host/test/scoped-fs.test.mjs:136-161` and
+`ts-host/test/interpreter.test.mjs:774-799`: they check rejected writes,
+remove, and both move endpoints leave no out-of-scope overlay changes; a later
+child eval still logs/reads its supplied file, returns a boolean, and preserves
+the parent's existing result file. The scope failure remains in the trace.
+The current builder also makes the note-child boundary explicit at
+`ts-host/scripts/inline-curriculum/semantic-iterate-worlds-v15-soft-guided-builder.mjs:121-155`:
+the child returns `Neuralese<string>` to its caller, while the parent owns the
+final file write. Its captures pass decision context and the current pass
+constraints, not the parent's artifact-writing instruction.
+
+### 7. Eval exposes a read-only tool facade; other tool actions stay direct
 
 The prompt says to invoke native tools directly but explicitly makes
 `read_code(name)` available in eval when unshadowed (`ts-host/src/native/prompt.ts:6`).
@@ -165,12 +209,13 @@ other recent trace reviewed here supports one.
 
 ## Recommendation
 
-Native `for...in` is now accepted unchanged, with compiler/runtime regressions
-for ordinary property order and inherited enumerable keys versus `Object.keys`.
+Native `for...in` is accepted unchanged, with compiler/runtime regressions for
+ordinary property order and inherited enumerable keys versus `Object.keys`.
 The focused compiler and interpreter tests passed 99/99 in an isolated build
-copy. The isolated TypeScript build excluded `src/browser/**` because the
-workspace's installed dependencies do not include
-`@wllama/wllama/esm/index.js`; no dependencies or shared `dist` were changed.
+copy. The denied-child-write regressions passed 94/94 focused file-system and
+interpreter tests in an isolated build. The updated TypeScript source compiled
+to a temporary isolated output directory. No dependencies or shared `dist`
+were changed.
 Cross-eval capture-free helper persistence remains a useful but larger
 source-backed design candidate, grounded in the cited V97 error and requiring
 a separate lifetime/provenance design.

@@ -7,6 +7,7 @@ import { folderFromData, type FolderDataLayout } from './data-layout.js';
 
 export type FolderAccess = 'read' | 'write' | 'overlay';
 export type FileContents = string | Uint8Array;
+type WriteFence = { path: string | null; displayPrefix: string };
 
 const TOMBSTONE = Symbol('natlang-folder-tombstone');
 
@@ -298,9 +299,10 @@ export class Folder {
   private readonly lineage: object;
   private readonly scope: string;
   private readonly computed: Map<string, (folder: Folder) => Uint8Array>;
+  private readonly writeFence?: WriteFence;
 
   constructor(files: Record<string, FileContents> | FolderSource = {}, readonly access: FolderAccess = 'write',
-              options: { writer?: WriterLock; computed?: Map<string, (folder: Folder) => Uint8Array>; lineage?: object; scope?: string } = {}) {
+              options: { writer?: WriterLock; computed?: Map<string, (folder: Folder) => Uint8Array>; lineage?: object; scope?: string; writeFence?: WriteFence } = {}) {
     if (!['read', 'write', 'overlay'].includes(access)) throw new RangeError('invalid folder access');
     this.source = isSource(files) ? files :
       new MapSource(new Map(Object.entries(files).map(([path, value]) => [cleanPath(path, false), bytes(value)])));
@@ -308,7 +310,8 @@ export class Folder {
     this.computed = new Map(options.computed);
     this.lineage = options.lineage ?? {};
     this.scope = options.scope ?? '';
-    for (const field of ['source', 'overlay', 'moves', 'writerLock', 'revisionNumber', 'computed', 'lineage', 'scope']) Object.defineProperty(this, field, { enumerable: false });
+    this.writeFence = options.writeFence;
+    for (const field of ['source', 'overlay', 'moves', 'writerLock', 'revisionNumber', 'computed', 'lineage', 'scope', 'writeFence']) Object.defineProperty(this, field, { enumerable: false });
   }
 
   static fromFiles(files: Record<string, FileContents>, access: FolderAccess = 'write'): Folder {
@@ -415,6 +418,7 @@ export class Folder {
   private checkWrite(): void { if (this.access === 'read') throw new Error('folder is read-only'); }
   private checkWritablePath(path: string): void {
     this.checkWrite();
+    if (this.writeFence && this.writeFence.path !== path) throw new FolderScopeError(this.writeFence.displayPrefix ? `${this.writeFence.displayPrefix}/${path}` : path);
     if (this.computed.has(path)) throw new Error(`computed file is read-only: ${path}`);
   }
   private read(path: string): Uint8Array {
@@ -474,14 +478,15 @@ export class Folder {
   writeText(path: string, content: string): void { this.writeBytes(path, content); }
   async writeJson(path: string, value: unknown): Promise<void> { this.writeText(path, `${JSON.stringify(value, null, 2)}\n`); }
   remove(path: string): void {
-    this.checkWrite(); const clean = cleanPath(path, false);
+    const clean = cleanPath(path, false); this.checkWritablePath(clean);
     if ([...this.computed.keys()].some(item => under(item, clean))) throw new Error(`computed file is read-only: ${clean}`);
     if (!this.isFile(clean) && !this.isFolder(clean)) throw new Error(`entry not found: ${clean}`);
     for (const item of this.allPaths()) if (item === clean || item.startsWith(`${clean}/`)) this.overlay.set(item, TOMBSTONE);
     this.revisionNumber++;
   }
   move(source: string, destination: string): void {
-    this.checkWrite(); const from = cleanPath(source, false), to = cleanPath(destination, false);
+    const from = cleanPath(source, false), to = cleanPath(destination, false);
+    this.checkWritablePath(from); this.checkWritablePath(to);
     if ([...this.computed.keys()].some(item => under(item, from) || under(item, to)))
       throw new Error(`computed file is read-only: ${from}`);
     if (from === to || to.startsWith(`${from}/`)) throw new Error('cannot move an entry into itself');
@@ -518,7 +523,7 @@ export class Folder {
   }
   async diff(path = ''): Promise<ChangeSet> { return this.diffSync(path); }
   /** A copy-on-write fork of the current contents, sharing this folder's writer lock. */
-  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshotSource(), access, { writer: this.writerLock, computed: this.computed, lineage: this.lineage, scope: this.scope }); }
+  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshotSource(), access, { writer: this.writerLock, computed: this.computed, lineage: this.lineage, scope: this.scope, writeFence: this.writeFence }); }
   private snapshotSource(prefix = ''): FolderSource { return new LayeredSource(this.source, new Map(this.overlay), prefix); }
   writer(): WriterLock { return this.writerLock; }
   async beginTransaction(blocking = true, path = ''): Promise<FolderTransaction> {
@@ -526,7 +531,13 @@ export class Folder {
     const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, prefix);
     const computed = new Map([...this.computed].filter(([item]) => under(item, prefix)).map(([item, render]) =>
       [prefix ? item.slice(prefix.length + 1) : item, render] as [string, (folder: Folder) => Uint8Array]));
-    return new FolderTransaction(this, new Folder(this.snapshotSource(prefix), this.access === 'read' ? 'read' : 'overlay', { computed, lineage: this.lineage, scope: this.join(this.scope, prefix) }), prefix, release);
+    const writeFence = this.writeFence ? {
+      path: this.writeFence.path === null ? null : this.writeFence.path === prefix ? null :
+        prefix && this.writeFence.path.startsWith(`${prefix}/`) ? this.writeFence.path.slice(prefix.length + 1) :
+          !prefix && this.writeFence.path ? this.writeFence.path : null,
+      displayPrefix: this.writeFence.displayPrefix,
+    } : undefined;
+    return new FolderTransaction(this, new Folder(this.snapshotSource(prefix), this.access === 'read' ? 'read' : 'overlay', { computed, lineage: this.lineage, scope: this.join(this.scope, prefix), writeFence }), prefix, release);
   }
   /** A one-file capability for a child call. Reads and writes are limited to this file; pass another FileHandle for an output. */
   async beginFileTransaction(path: string, blocking = true): Promise<FolderTransaction> {
@@ -535,7 +546,9 @@ export class Folder {
     const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, clean);
     try {
       const content = this.readBytesSync(clean);
-      return new FolderTransaction(this, Folder.fromFiles({ [name]: content }, this.access === 'read' ? 'read' : 'overlay'), parent, release, name);
+      return new FolderTransaction(this, new Folder({ [name]: content }, this.access === 'read' ? 'read' : 'overlay', {
+        writeFence: { path: name, displayPrefix: parent },
+      }), parent, release, name);
     } catch (error) { release(); throw error; }
   }
   installLocked(changes: ChangeSet, include?: string[], exclude?: string[]): ChangeSet {
