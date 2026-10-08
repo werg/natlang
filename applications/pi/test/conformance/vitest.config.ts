@@ -3,9 +3,22 @@ import { defineConfig } from 'vitest/config';
 
 const shim = fileURLToPath(new URL('./harness-shim.ts', import.meta.url));
 const testing = fileURLToPath(new URL('../../vendor/durable/src/testing/index.ts', import.meta.url));
+const app = fileURLToPath(new URL('../../', import.meta.url));
+const host = fileURLToPath(new URL('../../../../ts-host/dist/index.js', import.meta.url));
+
+/** `.nl` imports (host/policies.ts) as the runtime loads them: the callable from `loadNatlang`. */
+const natlangFunctions = {
+  name: 'natlang-functions',
+  enforce: 'pre' as const,
+  load(id: string) {
+    if (!id.endsWith('.nl')) return null;
+    return `import { loadNatlang } from ${JSON.stringify(host)};\nexport default loadNatlang(${JSON.stringify(id)}, ${JSON.stringify(app)});\n`;
+  },
+};
 
 /** pi-durable's harness suites against the port: `npx vitest --run --config test/conformance/vitest.config.ts`. */
 export default defineConfig({
+  plugins: [natlangFunctions],
   test: {
     environment: 'node',
     // pi's waitFor helper allows 5 s, sized for crisp tasks; the port's phases are model calls.
