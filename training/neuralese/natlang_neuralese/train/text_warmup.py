@@ -252,7 +252,7 @@ def restore_training_rng_state(state, device):
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
 # Activation checkpointing trades memory for recomputation with identical math, so it is operational too.
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device',
-                                      'checkpoint_layers'})
+                                      'checkpoint_layers','cuda_reserved_cap_gb'})
 
 
 TEXT_SUPERVISION_POLICY={
@@ -706,6 +706,9 @@ def main(argv=None):
                    help='also save full resumable state when this much wall time passed since the last save')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
+    p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
+                   help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
+                        'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
@@ -771,6 +774,9 @@ def main(argv=None):
         if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
             raise ValueError('continuation optimizer/parameter policy differs')
     a.out.mkdir(parents=True,exist_ok=True)
+    if a.cuda_reserved_cap_gb and a.device.startswith('cuda'):
+        total=torch.cuda.get_device_properties(a.device).total_memory
+        torch.cuda.set_per_process_memory_fraction(min(1.,a.cuda_reserved_cap_gb*2**30/total),a.device)
     engine,parent=load_initial(a.heads,a.student_checkpoint,a.device,a.cutoff)
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import resolve_backbone_policy
