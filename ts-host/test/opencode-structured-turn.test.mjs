@@ -361,9 +361,12 @@ test('preserves safe OpenCode provider status and retryability for supervisor ba
 test('forwards abort signals and aborts then deletes the isolated session', async () => {
   const controller = new AbortController();
   const client = fakeClient({ onPrompt: async (_params, options) => {
-    assert.equal(options.signal, controller.signal);
+    // The prompt runs under its own controller, which the caller's abort is forwarded to.
+    assert.ok(options.signal instanceof AbortSignal);
     controller.abort(new Error('stop requested'));
-    throw controller.signal.reason;
+    assert.equal(options.signal.aborted, true);
+    assert.equal(options.signal.reason, controller.signal.reason);
+    throw options.signal.reason;
   } });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });

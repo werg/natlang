@@ -44,7 +44,7 @@ test('V15 builder emits 12 independent four-pass worlds with scoped evidence and
       const task = JSON.parse(row.semantics.folder_files['task.json']);
       const outputFields = Object.keys(task.output_contract.fields);
       assert.ok(outputFields.length >= 4);
-      assert.match(task.output_contract.format, new RegExp(`exactly these ${outputFields.length} string fields`));
+      assert.match(task.output_contract.format, new RegExp(`exactly these ${outputFields.length} typed fields`));
       assert.deepEqual(Object.keys(row.semantics.expected).sort(), [...outputFields].sort());
       assert.deepEqual(Object.keys(row.semantics.expected_files), Object.keys(row.semantics.folder_files));
       assert.equal(task.passes.length, 4);

@@ -5,12 +5,12 @@ import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, TOOLS_PROMPT } from '
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
-  .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
+  .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
   .map(item => item.function.name);
 
 test('a directory reducer offers the file tools of its surface, and its prompt names only those', () => {
   const tools = new NativeToolAgent(async () => ({ calls: [] }))
-    .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } });
+    .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } });
   const delegate = tools.find(item => item.function.name === 'delegate').function;
   assert.match(delegate.parameters.properties.returns.description, /Natlang result type expression/);
   assert.match(delegate.parameters.properties.returns.description, /boolean, string, number/);
@@ -73,8 +73,8 @@ test('ordered repairs keep the current pass and the declared carried-value shape
 test('nl help distinguishes result annotations, capture snapshots and changing inputs', () => {
   assert.match(BUILT_IN_DOCS.nl, /nl\.with<T>\(\{ policy \}\)/);
   assert.match(BUILT_IN_DOCS.nl, /nl<T>`instructions`\.with\(\{ policy \}\)\(item\)/);
-  assert.match(BUILT_IN_DOCS.nl, /applies directly to the preceding\s+inline nl template/);
+  assert.match(BUILT_IN_DOCS.nl, /can apply directly to an inline\s+nl template/);
   assert.match(BUILT_IN_DOCS.nl, /T describes the result, not the capture object/);
   assert.match(BUILT_IN_DOCS.nl, /parameter shadows the capture inside the child/);
-  assert.match(BUILT_IN_DOCS.nl, /pass changing state as an argument/);
+  assert.match(BUILT_IN_DOCS.nl, /Pass changing iteration state as an argument/);
 });

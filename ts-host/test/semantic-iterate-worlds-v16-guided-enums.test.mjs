@@ -37,9 +37,10 @@ test('V16 guided source reuses authored final enums as literal Draft types witho
       assert.match(code, /nl\.with<Draft>/);
       assert.match(code, /type InitialDraft = \{/);
       assert.match(code, /initialDraft: InitialDraft/);
-      assert.match(code, /Follow every declared field format exactly/);
-      assert.match(code, /one bare listed literal only/);
-      assert.match(code, /do not add a prose explanation, unit label/);
+      // Enum formats travel in decisionContext (the final interpreter reads them there), as in V17.
+      assert.match(code, /decisionContext/);
+      assert.match(code, /final_field_enums/);
+      assert.match(code, /Return exactly the declared final Draft fields and formats in decisionContext/);
       assert.match(row.semantics.files['reconcile_scoped_evidence.nl'], /returns: "\{/);
       for (const [field, values] of Object.entries(contract.final_field_enums)) {
         const union = values.map(value => JSON.stringify(value)).join(' | ');

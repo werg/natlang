@@ -43,5 +43,6 @@ test('read_code documents the built-ins of eval, which cannot be edited', async 
 
 test('read_code says when a name is one of the tools, not a function of the program', async () => {
   const { results } = await script([['read_code', { name: 'read_page' }]]);
-  assert.match(results[0], /none of its own\. read_page is one of your tools, not a function of this program; call it directly/);
+  assert.match(results[0], /^Native tool definition \(not program function source\): read_page/);
+  assert.match(results[0], /Invoke this as a separate tool action; it is not callable from eval\./);
 });

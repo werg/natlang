@@ -158,9 +158,9 @@ test('inline children below the depth limit have delegation available in their o
   const { trajectory } = await replayReference(record, TOOLS_PROMPT);
   const openings = trajectory.map(turn => String(turn.context[1].content));
   const child = openings.find(text => text.includes('Is priority of ticket at least 3?'));
-  assert.match(child, /built-ins nl, iterateOn and transcript/);
+  assert.match(child, /built-ins nl, iterateOn, transcript and decide/);
   assert.doesNotMatch(child, /nl is not available/);
-  assert.match(openings[0], /Eval also has the built-ins nl, iterateOn and transcript/);
+  assert.match(openings[0], /Eval also has the built-ins nl, iterateOn, transcript and decide/);
 });
 
 test('child evidence is attributed by arguments, not another item in captured collections', () => {
