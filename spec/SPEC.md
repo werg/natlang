@@ -543,6 +543,24 @@ uncompiled code). A call with no task fails. Tasks run concurrently. Each
 invocation produces a trace of messages, tools, actions, observations, effects,
 and its outcome.
 
+## Call records and compilations
+
+The runtime records every call: the definition and its revision, the parent call
+and the eval that started it, exact inputs and captures, the result, each service
+call with its arguments and result, folder changes, the eval programs run, and
+cost. Values beyond a bound are recorded by hash and type; a program may exclude
+definitions or arguments, which are then recorded by type only.
+
+A call may be served by a compilation of its definition's revision: an ordered
+list of crisp cases, each a guard over the call's arguments and a body with the
+function's signature, run with the function's context and services. The first
+active case whose guard admits the arguments serves the call. A case that fails
+or returns a value of the wrong type does not fail the call: the agent runs it,
+told which effects the case already performed. A compilation never changes the
+program's source, applies only while the definition's context interface is the
+one it was compiled against, and is promoted or demoted by measured comparison
+with the agent (plans/TRACE_SPECIALIZATION.md).
+
 ## Continuations
 
 A long invocation may continue in a fresh model conversation. The runtime
