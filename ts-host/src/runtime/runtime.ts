@@ -9,6 +9,12 @@ import type { NativeReviewOptions } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
+import type { CallStoreLike } from '../calls/recorder.js';
+import { CompilationCache } from '../calls/compilations.js';
+
+/** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
+export type SpecializationMode = 'off' | 'shadow' | 'on';
+const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2 };
 
 export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver;
@@ -92,12 +98,30 @@ export type NatlangRuntimeOptions = {
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   /** Law-based combinator rewrites and their measurements (spec/NEURALESE_REWRITES.md); every rule is off without it. */
   rewrites?: import('../compiler/rewrites.js').RewriteGate;
+  /**
+   * The call record store (plans/TRACE_SPECIALIZATION.md): every call is recorded there and served from its
+   * compilations. Default: the machine's store on Node (`$NATLANG_CALL_STORE`); `false` records nothing.
+   */
+  calls?: CallStoreLike | false;
+  /** The program's directory on this machine, recorded with each call so offline work can reload its definitions. */
+  programRoot?: string;
+  /** The program's `recording` settings (`natlang.json`): definitions (`dir/*.nl`) or arguments (`name.arg`) recorded by type only. */
+  recording?: { exclude?: string[] };
+  /** How far compilations may serve this runtime's calls; the machine setting bounds it (default: the machine setting). */
+  specialization?: SpecializationMode;
 };
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
-  serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string };
+  serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
+  /** Compilations for this task's calls (an audit or replay runs with `off`). */
+  specialization?: SpecializationMode;
+  /** Set on an audit run: the call whose inputs it re-runs through the agent. */
+  auditOf?: string };
 
 let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
+let defaultCallStore: (() => CallStoreLike | undefined) | undefined;
+/** Installed by the Node entry point: the machine's call record store. */
+export function setDefaultCallStoreFactory(factory: () => CallStoreLike | undefined): void { defaultCallStore = factory; }
 /** Installed by the Node and browser entry points. */
 export function setDefaultEnvironmentFactory(factory: (options: NatlangRuntimeOptions) => EvalEnvironment): void { defaultEnvironment = factory; }
 
@@ -114,6 +138,8 @@ export class NatlangTask {
   readonly episodeBudget: { limit?: number; used: number };
   readonly traces: InvocationTrace[] = [];
   readonly programView: ProgramView;
+  readonly specialization?: SpecializationMode;
+  readonly auditOf?: string;
   readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
   private readonly pending = new Set<Promise<unknown>>();
   private readonly pendingChildren = new Map<string, Set<Promise<unknown>>>();
@@ -206,8 +232,20 @@ export class NatlangTask {
     const timeout = runtime.options.limits?.timeoutMs;
     if (timeout !== undefined) this.timer = setTimeout(() => this.cancel(new Error('natlang task timed out')), timeout);
     this.traceSink = options.trace;
+    this.specialization = options.specialization;
+    this.auditOf = options.auditOf;
   }
   private readonly traceSink?: TraceSink;
+  /** How far compilations may serve this task's calls: the machine, runtime and task settings, whichever is lowest. */
+  specializationMode(): SpecializationMode {
+    const store = this.runtime.callStore();
+    if (!store) return 'off';
+    let mode: SpecializationMode = 'on';
+    try { mode = store.settings().specialization; } catch { return 'off'; }
+    for (const limit of [this.runtime.options.specialization, this.specialization])
+      if (limit && MODE_RANK[limit] < MODE_RANK[mode]) mode = limit;
+    return mode;
+  }
 
   get frame(): Frame { return { task: this, chain: [], signal: this.signal }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
@@ -250,6 +288,28 @@ export class NatlangTask {
 /** Project-level natlang runtime: model, services, trace sink, limits. Create tasks with `run`. */
 export class NatlangRuntime {
   private closed = false;
+  private store?: CallStoreLike | null;
+  private compiled?: CompilationCache;
+  /** The call record store this runtime records to, if any. */
+  callStore(): CallStoreLike | undefined {
+    if (this.store === undefined) {
+      if (this.options.calls === false) this.store = null;
+      else if (this.options.calls) this.store = this.options.calls;
+      else {
+        try { this.store = defaultCallStore?.() ?? null; }
+        catch (error) {
+          console.warn(`natlang: the call record store could not be opened; calls are not recorded: ${error instanceof Error ? error.message : String(error)}`);
+          this.store = null;
+        }
+      }
+    }
+    return this.store ?? undefined;
+  }
+  /** Loaded compilations of this runtime's store. */
+  compilations(): CompilationCache | undefined {
+    const store = this.callStore();
+    return store ? this.compiled ??= new CompilationCache(store) : undefined;
+  }
   constructor(readonly options: NatlangRuntimeOptions = {}) {
     const capture = options.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||

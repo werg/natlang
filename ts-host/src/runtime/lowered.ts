@@ -518,7 +518,8 @@ export function site<T>(id: string, iteration: T): T {
 /** `import { wiki } from 'natlang:services'` resolves each access against the current task. */
 export function service(name: string): object {
   const resolve = () => {
-    const found = resolveFrame().task.services[name];
+    const frame = resolveFrame();
+    const found = (frame.services ?? frame.task.services)[name];
     if (!found) throw new Error(`the natlang service ${JSON.stringify(name)} is not provided to this task`);
     return found as Record<PropertyKey, unknown>;
   };

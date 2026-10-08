@@ -43,7 +43,10 @@ export function contextView(view: PiContextView): ContextView {
   }) as unknown as ContextView;
 }
 
-export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent) {
+/** What one phase invocation shares between its services: a failure after which it may commit nothing more. */
+export type PhaseState = { failed?: string };
+
+export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent, phase: PhaseState = {}) {
   const conversationId = runtime.conversationId;
   const scope: ApplyScope = { taskId: runtime.taskId, conversationId, now: () => runtime.now() };
   return {
@@ -62,6 +65,8 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
     async inbox(): Promise<InboxItem[]> { return plain((await runtime.snapshot(InboxDoc, conversationId, context))?.items ?? []) as unknown as InboxItem[]; },
     async submission(id: number): Promise<SubmissionRecord | null> { return plain(await host.submission(id, context)) ?? null; },
     async commit(ops: Op[], expect?: Expect): Promise<CommitResult> {
+      if (phase.failed) throw new Error(`This phase already failed (${phase.failed}); it commits nothing more. ` +
+        'End this call with return_result status "failed" and that reason.');
       let result: CommitResult | undefined;
       await runtime.commit(async (tx, current) => {
         const applied = await applyOps(tx, scope, current as never, ops, expect);

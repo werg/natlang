@@ -16,7 +16,7 @@ import type { Agent as PiAgent, AnyTask, Settings as PiSettings } from '../vendo
 import { ensureProviderSessionId } from '../vendor/durable/src/harness/provider.ts';
 import type { Agent, PhaseFacts, Settings } from '../types.ts';
 import { AI_DECLARATION, aiService } from './ai.ts';
-import { DURABLE_DECLARATION, durableService, plain, type DurableHost } from './durable.ts';
+import { DURABLE_DECLARATION, durableService, type PhaseState, plain, type DurableHost } from './durable.ts';
 import { TOOLS_DECLARATION, toolsService } from './tools.ts';
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
@@ -61,8 +61,10 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
     mode, agent: agentFacts(agent), settings: settingsFacts(runtime.settings),
     sessionId: await ensureProviderSessionId(runtime, context), now: runtime.now(),
   };
-  const services: Record<string, object> = { durable: durableService(runtime, context, host, agent), ai: aiService(runtime, context,
-    task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined) };
+  // One phase state per attempt: a failure the ai service sees ends what durable may still commit.
+  const phaseState: PhaseState = {};
+  const services: Record<string, object> = { durable: durableService(runtime, context, host, agent, phaseState), ai: aiService(runtime, context,
+    task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined, phaseState) };
   const serviceDeclarations: Record<string, string> = { durable: DURABLE_DECLARATION, ai: AI_DECLARATION };
   if (task.kind === 'pi.tool') {
     services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId);
@@ -74,6 +76,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
   let previousAttempt = '';
   for (let attempt = 1; ; attempt++) {
     try {
+      phaseState.failed = undefined;
       const summary = await host.natlang.run(() => entry(attempt === 1 ? facts : { ...facts, previousAttempt }), { services, serviceDeclarations, signal: runtime.signal,
         name: `${task.kind}#${task.id}:${phase}` });
       // An entry must commit the task's next state. One that says it did, while the state is unchanged, failed.

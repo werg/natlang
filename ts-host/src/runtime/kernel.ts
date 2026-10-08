@@ -13,7 +13,11 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
-import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace } from '../native/graph.js';
+import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
+import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
+import { admit, handoffNote, isDeopt } from '../calls/dispatch.js';
+import type { LoadedCase } from '../calls/compilations.js';
+import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
@@ -398,12 +402,31 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model(definition.model);
+  const store = task.runtime.callStore();
+  const capture = store ? openCapture(store, task, frame, callId, definition, options, inputs, folder, model) : undefined;
+  let handoff: string | undefined;
+  let shadows: LoadedCase[] = [];
+  const mode = capture && !options.manifest?.internal && !task.auditOf ? task.specializationMode() : 'off';
+  if (capture && mode !== 'off') {
+    const compilation = task.runtime.compilations()?.get(capture.base.definition.key, capture.base.definition.interface,
+      definition.codebase, definition.types);
+    if (compilation) {
+      const admitted = admit(compilation, caseArguments(capture, folder), mode);
+      shadows = admitted.shadows;
+      if (admitted.active) {
+        const crisp = await runCrispCase({ task, frame, childFrame, callId, definition, options, inputs, folder, extraTransactions,
+          capture, store: store!, item: admitted.active });
+        if (crisp.served) return crisp.value;
+        handoff = crisp.note;
+      }
+    }
+  }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(task.services, event => event.phase === 'requested' ?
+  const services = recordingServices(task.services, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
-      [{ node: invocationNodeId(callId), port: 'caller' }]));
+      [{ node: invocationNodeId(callId), port: 'caller' }])));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = frame.systemAddendum;
   const agent = model ? new NativeToolAgent(model.driver, {
@@ -435,10 +458,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         ...(options.manifest.inline_instruction_site as Record<string, unknown>),
         realized_instruction: options.instructions ?? definition.body } } : {}) } });
   let outcome = 'failed', detail = '';
+  let hostValue: unknown, hasValue = false;
   registerTrace(callId, runtime.trace);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
     const node = await prepareDefinitionNode(definition, normalizedInputs, options);
+    if (handoff) node.handoff = handoff;
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;
     const result = await runInFrame(childFrame, () => runtime!.run(node));
@@ -446,7 +471,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
     if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[] });
     if (outcome !== 'done') throw new NatlangCallError(definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
-    return toHost(result.value);
+    hostValue = toHost(result.value); hasValue = true;
+    return hostValue;
   } catch (error) {
     if (!(error instanceof NatlangCallError)) detail = error instanceof Error ? error.message : String(error);
     // A failed call stops the calls it started that are still running.
@@ -460,5 +486,115 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();
+    if (capture) {
+      capture.finish({ outcome, detail, output: hostValue, hasOutput: hasValue, events: runtime.trace.events as Record<string, unknown>[] });
+      if (outcome === 'done' && capture.executor.kind === 'agent')
+        for (const item of shadows) { try { store!.enqueue('shadow', item.hash, callId); } catch { /* recording never fails a call */ } }
+    }
   }
+}
+
+/** Open the record of a call (§3.1); recording never fails the call. */
+function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, callId: string, definition: CallableDefinition,
+  options: InvokeOptions, inputs: unknown[], folder: InvokeOptions['folder'], model: ReturnType<Frame['task']['model']>): CallCapture | undefined {
+  try {
+    const settings = store.settings();
+    const site = options.manifest?.internal ? 'internal' : options.manifest?.inline || options.manifest?.delegate ? 'inline' :
+      frame.systemAddendum !== undefined ? 'iterate' : 'named';
+    const inlineSite = options.manifest?.inline_instruction_site as { template_segments?: unknown } | undefined;
+    const body = options.instructions ?? definition.body;
+    const identity: DefinitionIdentity = { id: definition.id, name: definition.name, source: definition.source ?? null,
+      key: definitionKey({ ...definition, body }), interface: interfaceHash(definition.codebase), site,
+      ...(inlineSite?.template_segments ? { template: hexDigest(JSON.stringify(inlineSite.template_segments)).slice(0, 24) } : {}),
+      subtype: definition.subtype, params: definition.params, returns: definition.returns };
+    const parentTrace = traceFor(frame.parentCallId);
+    const view = task.programView;
+    const capture = new CallCapture(store, settings, { callId, parentCallId: frame.parentCallId ?? null,
+      parentActionIndex: parentTrace ? parentTrace.events.filter(event => event.kind === 'action').length : null,
+      taskId: task.id, programId: view.program?.id ?? null, buildHash: view.program?.buildHash ?? null,
+      programRoot: task.runtime.options.programRoot ?? null, definition: identity,
+      model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null) : null, revision: model?.revision ?? null },
+      exclude: task.runtime.options.recording?.exclude });
+    if (task.auditOf && !frame.parentCallId) capture.auditOf = task.auditOf;
+    const named = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, inputs[index]])
+      .filter(([, value]) => value !== undefined));
+    const captures = Object.fromEntries(Object.values(options.captures ?? {}).filter(cell => !cell.skill)
+      .map(cell => { try { return [cell.name, cell.get()]; } catch { return [cell.name, undefined]; } })
+      .filter(([, value]) => typeof value !== 'function'));
+    capture.setInputs(folder ? { folder: folder.transaction.folder.root(), ...named } : named, captures);
+    return capture;
+  } catch (error) {
+    console.warn(`natlang: call recording failed for ${definition.name}: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+}
+
+/** The one argument a case's guard and body receive: the call's parameters and captures by name (and `folder`). */
+function caseArguments(capture: CallCapture, folder: InvokeOptions['folder']): Record<string, unknown> {
+  return { ...capture.hostInputs, ...(folder ? { folder: folder.transaction.folder.root() } : {}) };
+}
+
+/**
+ * Run an admitted case (§6.4). Served: its value, after the type check, folder commit and capture writes. Otherwise
+ * (it threw, or returned a value of the wrong type) the call goes to the agent with a note of what already happened (§6.5).
+ */
+async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFrame: Frame; callId: string; definition: CallableDefinition;
+  options: InvokeOptions; inputs: unknown[]; folder: InvokeOptions['folder']; extraTransactions: FolderTransaction[];
+  capture: CallCapture; store: CallStoreLike; item: LoadedCase }): Promise<{ served: true; value: unknown } | { served: false; note?: string }> {
+  const { task, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
+  const args = caseArguments(capture, folder);
+  const original = { ...args };
+  const services = recordingServices(task.services, event => capture.effect(event, 'crisp'));
+  let error: unknown;
+  try {
+    const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
+    await task.drainChildren(callId);
+    const node = definitionNode(definition, inputs, options);
+    if (node.type.kind !== 'lambda') throw new Error('not a function');
+    const env = new TypeEnv(node.types);
+    env.classes = options.classes;
+    const value = toHost(coerce(raw as Value, node.type.returns, env, 'return'));
+    if (folder?.transaction.open) {
+      const changes = folder.transaction.folder.diffSync().changes;
+      if (folder.mode === 'apply') {
+        folder.transaction.validateSync();
+        for (const transaction of input.extraTransactions) transaction.validateSync();
+        folder.transaction.commitSync();
+        for (const transaction of input.extraTransactions) if (transaction.open) transaction.commitSync();
+      } else {
+        folder.transaction.abort();
+        for (const transaction of input.extraTransactions) if (transaction.open) transaction.abort();
+      }
+      capture.folder = { mode: folder.mode, changes: changes.map(change => ({ path: change.path, kind: change.kind,
+        ...(change.after ? { after: capture.ref(new TextDecoder().decode(change.after)) } : {}) })) };
+    }
+    for (const cell of Object.values(options.captures ?? {})) {
+      if (!cell.mutable || !cell.set || cell.skill || !(cell.name in args) || Object.is(args[cell.name], original[cell.name])) continue;
+      cell.set(args[cell.name]);
+      capture.captureWrites.push({ name: cell.name, after: capture.ref(args[cell.name]) });
+    }
+    capture.executor = { ...capture.executor, kind: 'crisp', case_hash: item.hash };
+    task.record({ callId, parentCallId: input.frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id, name: definition.name,
+      outcome: 'done', detail: `served by compiled case ${item.hash}`, events: [] });
+    capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: [] });
+    try {
+      store.caseServed(item.hash, callId, false);
+      if (Math.random() < capture.settings.auditRate) store.enqueue('audit', item.hash, callId);
+    } catch { /* recording never fails a call */ }
+    return { served: true, value };
+  } catch (caught) { error = caught; }
+  await task.drainChildren(callId);
+  const effects = capture.completedEffects('crisp');
+  const files = folder?.transaction.open ? folder.transaction.folder.diffSync().changes.map(change => ({ path: change.path, kind: change.kind })) : [];
+  const calls = task.traces.filter(trace => trace.parentCallId === callId).map(trace => ({ name: trace.name, outcome: trace.outcome }));
+  // A case that declines before doing anything is a guard that did not apply: the agent runs as if it had not admitted.
+  if (isDeopt(error) && !effects.length && !files.length && !calls.length) return { served: false };
+  const message = error instanceof Error ? `${error.name === 'Error' ? '' : `${error.name}: `}${error.message}` : String(error);
+  capture.executor = { ...capture.executor, kind: 'crisp-agent', case_hash: item.hash, case_error: message.slice(0, 2000) };
+  try { store.caseServed(item.hash, callId, true); } catch { /* recording never fails a call */ }
+  const valueOf = (ref: { complete: boolean; hash?: string }) => ref.complete && ref.hash ? JSON.parse(capture.blobs.get(ref.hash) ?? 'null') : undefined;
+  if (!effects.length && !files.length && !calls.length)
+    return { served: false, note: handoffNote({ error: message, effects: [], files: [], calls: [] }) };
+  return { served: false, note: handoffNote({ error: message, files, calls,
+    effects: effects.map(effect => ({ effect, args: valueOf(effect.args), result: effect.result ? valueOf(effect.result) : undefined })) }) };
 }

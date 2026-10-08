@@ -7,7 +7,11 @@ import { hostCopy } from './values.js';
 
 /** One service call, as recorded: requested, then completed or failed. */
 export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service: string; method: string;
-  args?: unknown; result?: unknown; error?: string };
+  args?: unknown; result?: unknown; error?: string;
+  /** Pairs a request with its completion. */
+  seq?: number;
+  /** The exact arguments and result, for call records (§3.1). Traces keep only the previews above. */
+  exact?: { args?: unknown[]; result?: unknown; async?: boolean } };
 
 /** Marks services that are already wrapped, so they are never recorded twice. */
 const RECORDED = Symbol('natlang.recorded-services');
@@ -48,20 +52,22 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
       return text === undefined ? String(value) : text.length > 400 ? `${text.slice(0, 400)} … (${text.length} chars)` : JSON.parse(text);
     } catch { return String(value); }
   };
+  let sequence = 0;
   const wrap = (target: object, label: string): object => new Proxy(target, {
     get(object, property, receiver) {
       const value = Reflect.get(object, property, receiver);
       if (typeof property === 'symbol') return value;
       if (typeof value === 'function') return (...given: unknown[]) => {
         const args = given.map(item => hostCopy(item));
-        emit({ phase: 'requested', service: label, method: property, args: preview(args) });
+        const seq = sequence++;
+        emit({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
         const once = (object as Record<symbol, unknown>)[ONCE_EFFECTS];
         const key = Array.isArray(once) && once.includes(property) ? argumentsKey(property, args) : undefined;
         let results = key === undefined ? undefined : onceResults.get(object);
         if (key !== undefined && !results) onceResults.set(object, results = new Map());
         if (key !== undefined && results!.has(key)) {
           const earlier = results!.get(key);
-          emit({ phase: 'completed', service: label, method: property, result: 'the result of the earlier identical call (this effect happens once)' });
+          emit({ phase: 'completed', service: label, method: property, result: 'the result of the earlier identical call (this effect happens once)', seq });
           return earlier;
         }
         try {
@@ -72,12 +78,13 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
             results!.set(key, result);
           }
           if (result && typeof (result as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(result).then(resolved => { emit({ phase: 'completed', service: label, method: property, result: preview(resolved) }); return resolved; },
-              error => { emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error) }); throw error; });
-          emit({ phase: 'completed', service: label, method: property, result: preview(result) });
+            return Promise.resolve(result).then(resolved => { emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+              exact: { result: resolved, async: true } }); return resolved; },
+              error => { emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq }); throw error; });
+          emit({ phase: 'completed', service: label, method: property, result: preview(result), seq, exact: { result, async: false } });
           return result;
         } catch (error) {
-          emit({ phase: 'failed', service: label, method: property, error: String((error as Error)?.message ?? error) });
+          emit({ phase: 'failed', service: label, method: property, error: String((error as Error)?.message ?? error), seq });
           throw error;
         }
       };

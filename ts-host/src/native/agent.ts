@@ -639,6 +639,7 @@ export class NativeToolAgent {
       ...Object.entries(lam.captures ?? {}).filter(([, cell]) => !isAdapterValue(capturedValue(cell))).map(([name]) => name),
       ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
+      ...(lam.handoff ? ['', lam.handoff] : []),
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
