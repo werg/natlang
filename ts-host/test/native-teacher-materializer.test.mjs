@@ -883,4 +883,18 @@ test('materialization preserves same-call provider-expanded read provenance with
     .find(item => item.block.id === noteId);
   assert.equal(repeatedReceipt.additional_read_turn_pairs.length, 1,
     'repeated reads in one invocation retain separate per-turn graph bindings');
+
+  const legacy = structuredClone(row);
+  const legacyWrite = legacy.outcome.execution_graph.find(event => event.kind === 'block_write' && event.block === noteId);
+  delete legacyWrite.producer;
+  delete legacyWrite.source_kind;
+  legacyWrite.emulation_version = 'text-marker-standin/2';
+  legacyWrite.marker_context = 'eval-code';
+  legacyWrite.learned_vectors = false;
+  const legacyReceipt = materializeNativeRows([legacy]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(legacyReceipt.writer_source_class, 'legacy-text-marker-standin-eval-code');
+  assert.equal(legacyReceipt.producer_write.producer, undefined,
+    'legacy source events are classified in the receipt without rewriting raw graph fields');
+  assert.equal(legacyReceipt.producer_write.source_kind, undefined);
 });

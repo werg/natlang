@@ -492,10 +492,17 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     const readInputs = Array.isArray(primaryPair.read.inputs) ? primaryPair.read.inputs as Dict[] : [];
     // Sequence numbers are scoped to each invocation. The exact block input edge into this read is the causal
     // proof across invocations; comparing writer/read seq values from different calls would reject valid links.
+    const writerSourceClass = (event: Dict): string | undefined => {
+      if (event.producer === 'text-marker-emulation' && event.source_kind === 'typed-text-result')
+        return 'modern-typed-text-result';
+      if (event.emulation_version === 'text-marker-standin/2' && event.marker_context === 'eval-code' &&
+          event.learned_vectors === false)
+        return 'legacy-text-marker-standin-eval-code';
+      return undefined;
+    };
     const writers = graph.filter(event => event.kind === 'block_write' && event.block === blockId &&
       typeof event.node === 'string' && readInputs.some(input => input.node === event.node && input.block === blockId) &&
-      event.truncated === false && event.producer === 'text-marker-emulation' &&
-      event.source_kind === 'typed-text-result' && event.result_type === block.type &&
+      event.truncated === false && writerSourceClass(event) !== undefined && event.result_type === block.type &&
       event.text_body_sha256 === block.body_sha256);
     const origin = readoutMatch && definition.length === 1 && visibleCount <= 1 ? 'configured-function-definition' :
       writers.length === 1 && visibleCount === 1 ? 'same-run-producer' : undefined;
@@ -517,7 +524,8 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
         block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn) })) } : {}),
       context_occurrences: visibleCount,
       producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
-      ...(origin === 'same-run-producer' ? { writer_target_selected: false } : {}),
+      ...(origin === 'same-run-producer' ? { writer_target_selected: false,
+        writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null } : {}),
       learned_vectors: false, qualification_certificate: false, training_admission: false });
   }
   return receipts;

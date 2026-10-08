@@ -161,7 +161,8 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
                   "body_sha256": body_sha, "learned_vectors": False},
         "block_read": read, "model_turn": turn,
         "additional_read_turn_pairs": [{"block_read": read2, "model_turn": turn2}], "context_occurrences": 1,
-        "producer_write": write, "writer_target_selected": False, "learned_vectors": False,
+        "producer_write": write, "writer_source_class": "modern-typed-text-result",
+        "writer_target_selected": False, "learned_vectors": False,
         "qualification_certificate": False, "training_admission": False}
     common = {"split": "test", "source_groups": ["case:context-only"],
               "training_admission": {"approved": True},
@@ -178,7 +179,8 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
             "source_row_sha256": row_sha, "trace_sha256": trace_sha,
             "read_node": read_node, "model_turn_node": turn_node, "producer_write_node": write_node,
             "additional_read_nodes": [read2["node"]], "additional_model_turn_nodes": [turn2["node"]],
-            "producer_call_id": writer_invocation, "writer_target_selected": False,
+            "producer_call_id": writer_invocation, "writer_source_class": "modern-typed-text-result",
+            "writer_target_selected": False,
             "transport_provenance_sha256": transport_sha, "raw_request_sha256": raw_sha,
             "rendered_request_sha256": rendered_sha, "learned_vectors": False,
             "qualification_certificate": False, "training_admission": False}]},
@@ -200,6 +202,22 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     assert attest["source_kind"] == "provider-expanded-context-only-same-run-read"
     assert attest["writer_record_id"] is None
     assert attest["writer_target_selected"] is False
+
+    legacy = json.loads(json.dumps(reader))
+    legacy_receipt = legacy["source_ref"]["provider_expanded_read_contexts"][0]
+    legacy_receipt["writer_source_class"] = "legacy-text-marker-standin-eval-code"
+    legacy_write = legacy_receipt["producer_write"]
+    legacy_write.pop("producer")
+    legacy_write.pop("source_kind")
+    legacy_write.update({"emulation_version": "text-marker-standin/2", "marker_context": "eval-code",
+                         "learned_vectors": False})
+    legacy["neuralese_conversion"]["external_context_inputs"][0]["writer_source_class"] = \
+        "legacy-text-marker-standin-eval-code"
+    legacy_rows, _, legacy_omissions, legacy_provenance = gold_text_rows([legacy, anchor], [], tokenizer=_Tokenizer())
+    assert not legacy_omissions
+    legacy_attest = next(row for row in legacy_provenance if row["id"] == reader["id"])[
+        "neuralese_context_attestations"][0]
+    assert legacy_attest["source_kind"] == "provider-expanded-context-only-same-run-read"
 
     corrupt = json.loads(json.dumps(reader))
     corrupt["source_ref"]["provider_expanded_read_contexts"][0]["block"]["body_sha256"] = "f" * 64

@@ -343,6 +343,17 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         write = receipt.get("producer_write") or {}
         read = receipt.get("block_read") or {}
         turn = receipt.get("model_turn") or {}
+        writer_source_class = receipt.get("writer_source_class")
+        writer_source_valid = (
+            writer_source_class == "modern-typed-text-result"
+            and write.get("producer") == "text-marker-emulation"
+            and write.get("source_kind") == "typed-text-result"
+        ) or (
+            writer_source_class == "legacy-text-marker-standin-eval-code"
+            and write.get("emulation_version") == "text-marker-standin/2"
+            and write.get("marker_context") == "eval-code"
+            and write.get("learned_vectors") is False
+        )
         repeated_pairs = receipt.get("additional_read_turn_pairs") or []
         body = matches[0].get("source")
         required_hashes = (body_sha256, item.get("source_row_sha256"), item.get("trace_sha256"),
@@ -377,6 +388,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or receipt.get("qualification_certificate") is not False
                 or receipt.get("training_admission") is not False
                 or receipt.get("parent_invocation_id") != item.get("parent_invocation_id")
+                or item.get("writer_source_class") != writer_source_class
                 or block.get("type") != item.get("type") or block.get("body") != body
                 or block.get("body_sha256") != body_sha256 or _sha(body.encode("utf-8")) != body_sha256
                 or read.get("kind") != "block_read" or turn.get("kind") != "model_turn"
@@ -395,8 +407,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or write.get("call_id") != item.get("producer_call_id")
                 or write.get("node") != item.get("producer_write_node")
                 or write.get("result_type") != block.get("type") or write.get("truncated") is not False
-                or write.get("producer") != "text-marker-emulation"
-                or write.get("source_kind") != "typed-text-result"
+                or not writer_source_valid
                 or write.get("text_body_sha256") != body_sha256
                 or not any(inp.get("node") == write.get("node") and inp.get("block") == block_id
                            for inp in read.get("inputs", []))

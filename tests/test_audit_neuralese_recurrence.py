@@ -35,6 +35,7 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
     receipt = {
         'schema': 'natlang.provider-expanded-read-context/2',
         'origin': 'same-run-producer', 'writer_target_selected': False,
+        'writer_source_class': 'modern-typed-text-result',
         'invocation_id': 'reader/1', 'parent_invocation_id': 'parent/1',
         'source_row_sha256': hashes['row'], 'trace_sha256': hashes['trace'],
         'transport_provenance_sha256': hashes['transport'], 'raw_request_sha256': hashes['raw'],
@@ -60,6 +61,7 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
         'rendered_request_sha256': hashes['rendered'], 'producer_call_id': 'writer/1',
         'producer_write_node': 'writer/1#4', 'read_node': 'reader/1#2',
         'model_turn_node': 'reader/1#turn1', 'writer_target_selected': False,
+        'writer_source_class': 'modern-typed-text-result',
         'learner_representation': 'typed-read-from-authenticated-runtime-writer-event-context-only',
     }
     row = {'id': 'reader', 'split': 'train', 'source_groups': ['one-world'],
@@ -68,6 +70,24 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
            'messages': [{'type': 'read', 'name': 'soft-state:block-1'}], 'target': []}
     source, out = tmp_path/'rows.jsonl', tmp_path/'audit.json'
     source.write_text(json.dumps(row) + '\n')
+    subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
+                    str(source), '--out', str(out)], check=True, capture_output=True)
+    audit = json.loads(out.read_text())
+    assert audit['authenticated_external_context_roots'] == [
+        {'reader': 'reader', 'name': 'soft-state:block-1'}]
+    assert audit['failures']['missing_producers'] == []
+    assert audit['structurally_closed']
+
+    legacy = json.loads(json.dumps(row))
+    legacy_receipt = legacy['source_ref']['provider_expanded_read_contexts'][0]
+    legacy_receipt['writer_source_class'] = 'legacy-text-marker-standin-eval-code'
+    legacy_receipt['producer_write'].pop('producer')
+    legacy_receipt['producer_write'].pop('source_kind')
+    legacy_receipt['producer_write'].update({'emulation_version': 'text-marker-standin/2',
+                                              'marker_context': 'eval-code', 'learned_vectors': False})
+    legacy['neuralese_conversion']['external_context_inputs'][0]['writer_source_class'] = \
+        'legacy-text-marker-standin-eval-code'
+    source.write_text(json.dumps(legacy) + '\n')
     subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
                     str(source), '--out', str(out)], check=True, capture_output=True)
     audit = json.loads(out.read_text())

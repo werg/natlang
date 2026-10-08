@@ -43,12 +43,20 @@ def authenticated_external_context_names(row):
         producer = ref.get('producer_write')
         read = ref.get('block_read')
         turn = ref.get('model_turn')
+        writer_source_class = ref.get('writer_source_class')
+        producer_source_valid = (
+            (writer_source_class == 'modern-typed-text-result'
+             and producer.get('producer') == 'text-marker-emulation'
+             and producer.get('source_kind') == 'typed-text-result') if isinstance(producer, dict) else False)
+        if isinstance(producer, dict) and writer_source_class == 'legacy-text-marker-standin-eval-code':
+            producer_source_valid = (producer.get('emulation_version') == 'text-marker-standin/2'
+                                     and producer.get('marker_context') == 'eval-code'
+                                     and producer.get('learned_vectors') is False)
         if (ref.get('origin') != 'same-run-producer' or ref.get('writer_target_selected') is not False
                 or not isinstance(block, dict) or not isinstance(block.get('id'), str)
                 or not isinstance(block.get('body'), str) or not block.get('type')
                 or not isinstance(producer, dict) or producer.get('kind') != 'block_write'
-                or producer.get('producer') != 'text-marker-emulation'
-                or producer.get('source_kind') != 'typed-text-result'
+                or not producer_source_valid
                 or producer.get('block') != block.get('id')
                 or producer.get('result_type') != block.get('type')
                 or not isinstance(producer.get('call_id'), str) or not producer.get('call_id')
@@ -106,6 +114,7 @@ def authenticated_external_context_names(row):
                  (item.get('raw_request_sha256'), ref.get('raw_request_sha256')),
                  (item.get('rendered_request_sha256'), ref.get('rendered_request_sha256')),
                  (item.get('producer_call_id'), producer.get('call_id')),
+                 (item.get('writer_source_class'), writer_source_class),
                  (item.get('producer_write_node'), producer.get('node')),
                  (item.get('read_node'), read.get('node')),
                  (item.get('model_turn_node'), turn.get('node'))]

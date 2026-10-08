@@ -422,6 +422,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (receipt.schema === 'natlang.provider-expanded-read-context/2' &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
+           !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code'].includes(String(receipt.writer_source_class)) ||
            (receipt.parent_invocation_id !== null && typeof receipt.parent_invocation_id !== 'string')))
         throw new Error(`provider-expanded context-only writer receipt is incomplete for ${id}`);
       if (receipt.origin === 'configured-function-definition') {
@@ -437,8 +438,13 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         const writer = receipt.producer_write as Record<string, unknown> | null;
         const readInputs = Array.isArray(read.inputs) ? read.inputs as Record<string, unknown>[] : [];
         // Trace seq is invocation-local. The explicit writer node on this read's input is the cross-call causal link.
-        const writerSourceValid = receipt.schema === 'natlang.provider-expanded-read-context/2' ?
+        const writerSourceValid = receipt.schema === 'natlang.provider-expanded-read-context/2' &&
+          receipt.writer_source_class === 'modern-typed-text-result' ?
           writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
+          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
+          receipt.writer_source_class === 'legacy-text-marker-standin-eval-code' ?
+            writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
+              writer.learned_vectors === false :
           writer?.learned_vectors === false;
         if (!writer || writer.kind !== 'block_write' || writer.block !== id ||
             writer.call_id === invocation || typeof writer.node !== 'string' ||
@@ -1036,6 +1042,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     ...(value.receipt.origin === 'same-run-producer' ? { producer_write_node:
       (value.receipt.producer_write as Record<string, unknown>).node,
       producer_call_id: (value.receipt.producer_write as Record<string, unknown>).call_id,
+      writer_source_class: value.receipt.writer_source_class,
       writer_target_selected: value.receipt.writer_target_selected === false ? false : null,
       learner_representation: value.receipt.writer_target_selected === false ?
         'typed-read-from-authenticated-runtime-writer-event-context-only' : 'typed-read-linked-to-existing-writer' } :

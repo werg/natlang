@@ -680,13 +680,15 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
     block_read: read, model_turn: turn,
     additional_read_turn_pairs: [{ block_read: read2, model_turn: turn2 }],
     context_occurrences: 1, producer_write: write,
-    writer_target_selected: false, learned_vectors: false, qualification_certificate: false, training_admission: false,
+    writer_target_selected: false, writer_source_class: 'modern-typed-text-result',
+    learned_vectors: false, qualification_certificate: false, training_admission: false,
   }];
   const converted = convertTrajectory(row).record;
   assert.deepEqual(converted.messages[0].content[1], { type: 'read', name: `soft-state:${id}`, source: body });
   const context = converted.neuralese_conversion.external_context_inputs[0];
   assert.equal(context.learner_representation, 'typed-read-from-authenticated-runtime-writer-event-context-only');
   assert.equal(context.writer_target_selected, false);
+  assert.equal(context.writer_source_class, 'modern-typed-text-result');
   assert.deepEqual(context.additional_read_nodes, [read2.node]);
   assert.deepEqual(context.additional_model_turn_nodes, [turn2.node]);
   assert.equal(converted.neuralese_conversion.sites['typed-result-write'], undefined,
@@ -697,4 +699,17 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   const badGraph = structuredClone(row);
   badGraph.source_ref.provider_expanded_read_contexts[0].additional_read_turn_pairs[0].model_turn.inputs = [];
   assert.throws(() => convertTrajectory(badGraph), /invalid repeated read\/turn binding/);
+
+  const legacy = structuredClone(row);
+  const legacyReceipt = legacy.source_ref.provider_expanded_read_contexts[0];
+  legacyReceipt.writer_source_class = 'legacy-text-marker-standin-eval-code';
+  delete legacyReceipt.producer_write.producer;
+  delete legacyReceipt.producer_write.source_kind;
+  legacyReceipt.producer_write.emulation_version = 'text-marker-standin/2';
+  legacyReceipt.producer_write.marker_context = 'eval-code';
+  legacyReceipt.producer_write.learned_vectors = false;
+  const legacyConverted = convertTrajectory(legacy).record;
+  assert.equal(legacyConverted.messages[0].content[1].source, body);
+  assert.equal(legacyConverted.neuralese_conversion.external_context_inputs[0].writer_source_class,
+    'legacy-text-marker-standin-eval-code');
 });
