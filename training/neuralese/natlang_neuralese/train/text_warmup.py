@@ -1142,7 +1142,7 @@ def main(argv=None):
         print(json.dumps(value),flush=True)
     checkpoint_reserve=None
     last_report=None
-    def evaluate(*,observe_schedule=True,baseline_reason=None):
+    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
@@ -1245,7 +1245,8 @@ def main(argv=None):
                 'evaluation_passes':max(3,a.rollout_passes)}
         if baseline_reason is not None:
             report['text_ce_baseline_remeasurement']={'reason':baseline_reason,
-                'schedule_observation':False,'model_or_optimizer_update':False}
+                'schedule_observation':False,'model_or_optimizer_update':False,
+                'training_rng_preserved':bool(baseline_rng_preserved)}
         if rollout is not None:report['rollout']=rollout.controls()
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         for roles_of_pass in role_strata.values():
@@ -1372,9 +1373,14 @@ def main(argv=None):
     if not was_resumed:
         # A continued full state gets a fresh starting-weight evaluation on
         # its current held domain before any update. This evaluates without
-        # advancing the restored plateau/ramp schedule.
-        baseline=evaluate(observe_schedule=not bool(a.continue_from),
-            baseline_reason='input_or_held_objective_changed' if remeasure_text_baseline else None)
+        # advancing the restored plateau/ramp schedule or consuming its RNG.
+        continuation_rng=(capture_training_rng_state(a.device) if a.continue_from else None)
+        try:
+            baseline=evaluate(observe_schedule=not bool(a.continue_from),
+                baseline_reason='input_or_held_objective_changed' if remeasure_text_baseline else None,
+                baseline_rng_preserved=continuation_rng is not None)
+        finally:
+            if continuation_rng is not None:restore_training_rng_state(continuation_rng,a.device)
         (a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
