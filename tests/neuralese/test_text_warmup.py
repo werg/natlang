@@ -1358,3 +1358,15 @@ def test_sketch_rollout_trains_only_the_sketch_at_depth_then_evaluates_every_pas
     assert 'rollout' in evals[-1]
     assert {r['schedule']['sequence_passes'] for r in sketch_rows}=={3,4}
     assert any(r['schedule'].get('rollout',{}).get('phase')=='whole_stack' and r['backbone_gradient_norm']>0 for r in rows)
+
+
+def test_sketch_cutoff_probe_collects_layer_states_and_scores_heads():
+    import torch
+    from natlang_neuralese.eval.sketch_cutoff_probe import head_scores, layer_states
+    from natlang_neuralese.model.causal_feedback import CausalFeedbackProjection
+    backbone,heads=tiny_student()
+    ids=torch.tensor([[9,3,5,8,4,7]])
+    states,greedy=layer_states(backbone,ids,[1])
+    assert states[1].shape[0]==ids.shape[1]-1 and greedy.shape==(ids.shape[1]-1,)
+    scores=head_scores(CausalFeedbackProjection(backbone),states[1],ids[0,1:],greedy,'cpu')
+    assert scores['tokens']==ids.shape[1]-1 and 0<=scores['gold_top1']<=1 and scores['ce']>0

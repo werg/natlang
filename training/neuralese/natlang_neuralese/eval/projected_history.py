@@ -182,9 +182,6 @@ def main(argv=None):
     (args.out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
 
 
-if __name__ == '__main__':
-    main()
-
 
 AUTOREGRESSIVE_KINDS = ('ar_greedy', 'ar_projection', 'ar_sketch')
 
@@ -268,3 +265,7 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
         rows[name] = row
     return {'schema': 'natlang.autoregressive-history-controls/1', 'steps': steps, 'windows': span.shape[0],
             'consumer': 'full stack over prefix + history, scored on gold targets', 'scores': rows}
+
+
+if __name__ == '__main__':
+    main()
