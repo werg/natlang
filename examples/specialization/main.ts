@@ -19,6 +19,13 @@ export function orderService() {
   } };
 }
 
+/** What the executor is shown of the order service. */
+export const ORDERS = { orders: `/** Refund an order. number is the order number: its digits, as a string. */
+export function refund(number: string): Promise<{ ok: boolean; number: string }>;
+/** An order's shipping status. number is the order number: its digits, as a string. */
+export function lookup(number: string): { number: string; status: 'packed' | 'shipped' | 'delivered' };
+` };
+
 const TEMPLATES = [
   (n: number) => `refund ${n}`, (n: number) => `Please refund order ${n}`, (n: number) => `status ${n}`,
   (n: number) => `Where is order ${n}?`, (n: number) => `What is the status of order ${n}?`,
@@ -28,7 +35,7 @@ const TEMPLATES = [
 export async function main(context: TargetContext): Promise<number> {
   const [command = 'workload', value = '20'] = context.args;
   const service = orderService();
-  const runtime = createNatlangRuntime({ model: context.model, services: { orders: service.orders },
+  const runtime = createNatlangRuntime({ model: context.model, services: { orders: service.orders }, serviceDeclarations: ORDERS,
     executorIdentity: context.executorIdentity, programRoot: context.package?.root ?? context.workspace });
   const requests = command === 'ask' ? [context.args.slice(1).join(' ')] :
     Array.from({ length: Number(value) }, (_, index) => TEMPLATES[index % TEMPLATES.length]!(100 + index));
