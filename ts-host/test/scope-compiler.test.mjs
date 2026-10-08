@@ -176,3 +176,10 @@ test('a saved helper may use undefined and other intrinsics', () => {
   assert.deepEqual(result.diagnostics.filter(item => item.code === 'invalid-binding'), []);
   assert.deepEqual(result.persistentHelpers?.map(helper => helper.name), ['same']);
 });
+
+test('a helper that calls itself, or names a property in a type query, persists', () => {
+  const compiled = compileScopeSnippet('const count = (n: any): number => 1 + n.c.map(count).reduce((a: number, b: number) => a + b, 0);\n' +
+    'const xs = [1];\nconst next = (p: typeof xs.length) => p + 1;\ncount({ c: [] })');
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.deepEqual(compiled.persistentHelpers.map(helper => helper.name), ['count', 'next']);
+});

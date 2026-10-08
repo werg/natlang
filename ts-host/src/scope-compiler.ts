@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { createNatlangCompilerHost } from './compiler/host.js';
 import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './compiler/inline.js';
 import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
@@ -275,6 +276,8 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
 function isPropertyName(node: ts.Identifier): boolean {
   const parent = node.parent;
   return (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+    // `typeof task.passes`: the right side of a qualified name in a type query is a property, not a variable.
+    (ts.isQualifiedName(parent) && parent.right === node) ||
     ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent) ||
       ts.isPropertySignature(parent) || ts.isMethodSignature(parent) || ts.isBindingElement(parent)) &&
       parent.name === node) ||
@@ -332,15 +335,18 @@ function persistentHelperFreeNames(fn: ts.FunctionDeclaration | ts.ArrowFunction
   return { names: [...names].sort(), nested };
 }
 
+/**
+ * A checker over one eval source and the standard library. The host works without `ts.sys` (browsers read the
+ * embedded library declarations), and hands back this exact SourceFile, so declarations compare by identity.
+ */
 function checkerFor(sourceFile: ts.SourceFile): ts.TypeChecker {
   const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, noEmit: true, skipLibCheck: true };
-  const host = ts.createCompilerHost(compilerOptions);
+  const path = `/__natlang__/eval/${sourceFile.fileName.replace(/\\/g, '/').replace(/^\.?\//, '')}`;
+  const host = createNatlangCompilerHost({ options: compilerOptions, virtual: new Map([[path, sourceFile.text]]), currentDirectory: '/' });
   const getSourceFile = host.getSourceFile.bind(host);
-  const wanted = sourceFile.fileName.replace(/\\/g, '/').replace(/^\.\//, '');
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
-    (fileName.replace(/\\/g, '/').replace(/^\.\//, '') === wanted ||
-      fileName.replace(/\\/g, '/').endsWith(`/${wanted}`)) ? sourceFile : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-  return ts.createProgram([sourceFile.fileName], compilerOptions, host).getTypeChecker();
+    fileName === path ? sourceFile : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  return ts.createProgram([path], compilerOptions, host).getTypeChecker();
 }
 
 function persistentHelperTypeNames(node: ts.Node): string[] {
@@ -469,11 +475,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const rawEnd = Math.max(rawStart, Math.min(source.length,
       typeof nodeOrStart === 'number' ? rawStart + (length ?? 1) : nodeOrStart.getEnd() - userStart));
     const location = sourceFile.getLineAndCharacterOfPosition(rawStart);
-    return { start: rawStart, end: rawEnd, line: Math.max(1, location.line), column: location.character + 1 };
+    return { start: rawStart, end: rawEnd, line: location.line + 1, column: location.character + 1 };
   };
   const rawSpan = (start: number, end = start): ScopeSourceSpan => {
     const location = sourceFile.getLineAndCharacterOfPosition(start);
-    return { start, end, line: Math.max(1, location.line), column: location.character + 1 };
+    return { start, end, line: location.line + 1, column: location.character + 1 };
   };
   const add = (code: ScopeCompileDiagnostic['code'], message: string, node: ts.Node): void => {
     diagnostics.push({ code, message, ...span(node) });
@@ -550,7 +556,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const shadowedLocals = new Set(bindings.map(binding => binding.name).filter(name => localNames.includes(name)));
 
   const knownHelperNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames,
-    ...serviceNames, ...bindings.map(binding => binding.name), ...(options.persistentHelperNames ?? []), 'nl', 'iterateOn']);
+    ...serviceNames, ...bindings.map(binding => binding.name), ...(options.persistentHelperNames ?? []),
+    // Eval built-ins present in every call, and the binding model-written Neuralese literals lower to.
+    'nl', 'iterateOn', 'transcript', 'decide', '__neuralese']);
   const transientNames = new Set(bindings.filter(binding => binding.transient).map(binding => binding.name));
   const persistentTypeNames = new Set(options.persistentTypeNames ?? []);
   const helperChecker = helperCandidates.length ? checkerFor(file) : undefined;
@@ -563,7 +571,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const savedHelpers: PersistentScopeHelper[] = [];
   const transientHelpers: { name: string; reason: string }[] = [];
   for (const { statement, helper } of helperCandidates) {
-    const free = persistentHelperFreeNames(helper.fn, helperChecker!, file);
+    // A helper that calls itself refers to its own binding, which persists with it.
+    const found = persistentHelperFreeNames(helper.fn, helperChecker!, file);
+    const free = { ...found, names: found.names.filter(name => name !== helper.name) };
     const spanOfDeclaration = span(statement);
     const hidden = free.names.filter(name => !knownHelperNames.has(name) && !bindings.some(binding => binding.name === name));
     const ephemeral = free.names.filter(name => transientNames.has(name));

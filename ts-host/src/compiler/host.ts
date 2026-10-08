@@ -77,7 +77,7 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
     getDefaultLibFileName: options => `${libDir}/${ts.getDefaultLibFileName(options)}`,
     getDefaultLibLocation: () => libDir,
     writeFile: () => { throw new Error('natlang compiler hosts do not write through TypeScript emit'); },
-    getCurrentDirectory: () => config.currentDirectory ?? (files === ts.sys ? ts.sys.getCurrentDirectory() : '/'),
+    getCurrentDirectory: () => config.currentDirectory ?? (ts.sys && files === ts.sys ? ts.sys.getCurrentDirectory() : '/'),
     getDirectories: path => files?.getDirectories?.(path) ?? [],
     getCanonicalFileName: name => name,
     useCaseSensitiveFileNames: () => true,
