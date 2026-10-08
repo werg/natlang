@@ -257,14 +257,21 @@ def local_references(paths, proc_root=Path('/proc')):
     def canonical_operand(value, cwd):
         # argv has already had shell quoting removed; environment values may not.
         value = value.strip().strip('"\'')
-        if not value or '\x00' in value or value.startswith(('http://', 'https://', 'file://')):
+        if (not value or '\x00' in value or len(os.fsencode(value)) > 4096 or
+                value.startswith(('http://', 'https://', 'file://'))):
             return None
-        candidate = Path(value)
-        if not candidate.is_absolute():
-            candidate = cwd / candidate
         try:
+            candidate = Path(value).expanduser()
+            explicit = candidate.is_absolute() or value.startswith(('./', '../', '~/'))
+            if not candidate.is_absolute():
+                candidate = cwd / candidate
+            # Bare argv/env strings are paths only when they name an existing
+            # entry relative to that process's working directory. This avoids
+            # resolving arbitrary environment data such as LS_COLORS.
+            if not explicit and not candidate.exists():
+                return None
             return candidate.resolve()
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
             return None
 
     def path_operands(values, cwd, *, equals=False):

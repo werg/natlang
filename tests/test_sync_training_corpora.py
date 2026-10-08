@@ -305,6 +305,21 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(refs['live_job_references'], [
             {'pid': 12345, 'path': str(target.resolve()), 'source': 'artifact-directory-reference'}])
 
+    def test_local_reference_scan_ignores_long_nonpath_environment_data_without_echoing_it(self):
+        target = self.root / 'checkpoint.pt'
+        secret = 'PRIVATE_ENV_SENTINEL_' + ('x' * 10000)
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(b'worker\0')
+            (process / 'environ').write_bytes(('LS_COLORS=' + secret + '\0').encode())
+            (process / 'cwd').symlink_to(self.repo)
+            refs = module.local_references([target], proc_root=proc)
+        self.assertEqual(refs['open_fds'], [])
+        self.assertEqual(refs['live_job_references'], [])
+        self.assertNotIn('PRIVATE_ENV_SENTINEL', repr(refs))
+
     def test_remote_verification_receipt_is_bound_to_selected_manifest_and_not_full_receipt(self):
         selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
         expected_hash = hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()
