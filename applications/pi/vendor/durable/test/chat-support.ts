@@ -81,7 +81,7 @@ export function textOf(message: Message | undefined): string | undefined {
 }
 
 /** Poll `check` in real time until it holds; for waits that span throttle windows and timers. */
-export async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 5000): Promise<void> {
+export async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = Number(process.env.PI_WAIT_MS ?? 5000)): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (!(await check())) {
 		if (Date.now() > deadline) throw new Error("Condition was not reached");

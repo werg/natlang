@@ -45,3 +45,7 @@ Changes, each kept minimal:
      (committed reads on the line, commits, Storage) instead of `admitSubmission` when it is given.
      `Conversation.reset()` and bound handles go through the same `submit`. pi's own `CompactionTask` still calls
      `admitSubmission` inside its commit; the port's compaction places background summaries through `durable.submit`.
+
+3. Test support only: `test/chat-support.ts` `waitFor` reads its default timeout from `PI_WAIT_MS` (default 5000 as
+   before). The conformance config (applications/pi/test/conformance) raises it, since the port's phases are model
+   calls rather than microtasks.
