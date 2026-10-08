@@ -897,4 +897,40 @@ test('materialization preserves same-call provider-expanded read provenance with
   assert.equal(legacyReceipt.producer_write.producer, undefined,
     'legacy source events are classified in the receipt without rewriting raw graph fields');
   assert.equal(legacyReceipt.producer_write.source_kind, undefined);
+
+  const withLegacyResult = (source, rawBody) => {
+    const candidate = structuredClone(row);
+    candidate.provenance.text_neuralese_transport = { mode: 'text-marker-standin/2' };
+    const writer = candidate.outcome.execution_graph.find(event => event.kind === 'block_write' && event.block === noteId);
+    Object.assign(writer, { source, marker_context: 'return-result' });
+    const value = { $neuralese: { id: noteId, type: noteBlock.type } };
+    candidate.outcome.invocation_ledger.push({ invocation_id: 'producer-call', completion_status: 'done',
+      completion_source: 'execution_graph', completion_detail: `\uE000${noteId}\uE001`, host_result: {
+        kind: 'host_capture', capture_kind: 'invocation_output', call_id: 'producer-call', complete: true,
+        name: 'return', value, result_type: noteBlock.type, value_sha256: '8'.repeat(64) } });
+    candidate.trajectory.push({ ...structuredClone(row.trajectory[0]), invocation_id: 'producer-call',
+      raw_response_sha256: '7'.repeat(64),
+      model_response: { raw_calls: rawBody ? [{ function: { name: 'return_result', arguments:
+        JSON.stringify({ status: 'success', value: noteBody }) } }] : [] } });
+    return candidate;
+  };
+  const rawReturn = withLegacyResult('return_result', true);
+  const rawReturnReceipt = materializeNativeRows([rawReturn]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(rawReturnReceipt.writer_source_class, 'legacy-text-marker-standin-return-result');
+  assert.equal(rawReturnReceipt.writer_witness.kind, 'raw-return-result-value-equals-expanded-body');
+  const badRawReturn = withLegacyResult('return_result', false);
+  const badRawReturnReceipt = materializeNativeRows([badRawReturn]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(badRawReturnReceipt, undefined, 'a result marker without exact raw return body is held');
+  const evalFinish = withLegacyResult('eval-finish', false);
+  const evalFinishReceipt = materializeNativeRows([evalFinish]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(evalFinishReceipt.writer_source_class, 'legacy-text-marker-standin-eval-finish');
+  assert.equal(evalFinishReceipt.writer_witness.kind, 'completed-eval-finish-host-reference');
+  const unfinished = withLegacyResult('eval-finish', false);
+  unfinished.outcome.invocation_ledger.at(-1).completion_status = 'failed';
+  const unfinishedReceipt = materializeNativeRows([unfinished]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(unfinishedReceipt, undefined, 'failed finish cannot authenticate a legacy context root');
 });

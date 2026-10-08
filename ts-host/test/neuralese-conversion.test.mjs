@@ -712,4 +712,32 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   assert.equal(legacyConverted.messages[0].content[1].source, body);
   assert.equal(legacyConverted.neuralese_conversion.external_context_inputs[0].writer_source_class,
     'legacy-text-marker-standin-eval-code');
+
+  const legacyReturn = structuredClone(row);
+  const returnReceipt = legacyReturn.source_ref.provider_expanded_read_contexts[0];
+  Object.assign(returnReceipt.producer_write, { producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+    source: 'return_result', marker_context: 'return-result' });
+  returnReceipt.writer_source_class = 'legacy-text-marker-standin-return-result';
+  returnReceipt.writer_witness = { kind: 'raw-return-result-value-equals-expanded-body', source: 'return_result',
+    host_result_call_id: write.call_id, host_result_type: 'Neuralese<string>',
+    host_result_value_sha256: '6'.repeat(64), raw_response_sha256: '7'.repeat(64) };
+  const returnConverted = convertTrajectory(legacyReturn).record;
+  assert.equal(returnConverted.neuralese_conversion.external_context_inputs[0].writer_witness.kind,
+    'raw-return-result-value-equals-expanded-body');
+  const missingRawWitness = structuredClone(legacyReturn);
+  missingRawWitness.source_ref.provider_expanded_read_contexts[0].writer_witness.raw_response_sha256 = null;
+  assert.throws(() => convertTrajectory(missingRawWitness), /provider-expanded producer context lacks an earlier writer/);
+
+  const legacyFinish = structuredClone(row);
+  const finishReceipt = legacyFinish.source_ref.provider_expanded_read_contexts[0];
+  Object.assign(finishReceipt.producer_write, { producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+    source: 'eval-finish', marker_context: 'return-result' });
+  finishReceipt.writer_source_class = 'legacy-text-marker-standin-eval-finish';
+  finishReceipt.writer_witness = { kind: 'completed-eval-finish-host-reference', source: 'eval-finish',
+    host_result_call_id: write.call_id, host_result_type: 'Neuralese<string>', host_result_value_sha256: '8'.repeat(64) };
+  assert.equal(convertTrajectory(legacyFinish).record.neuralese_conversion.external_context_inputs[0].writer_witness.kind,
+    'completed-eval-finish-host-reference');
+  const mismatchedFinish = structuredClone(legacyFinish);
+  mismatchedFinish.source_ref.provider_expanded_read_contexts[0].writer_witness.host_result_call_id = 'other-call';
+  assert.throws(() => convertTrajectory(mismatchedFinish), /provider-expanded producer context lacks an earlier writer/);
 });

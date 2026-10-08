@@ -492,7 +492,59 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     const readInputs = Array.isArray(primaryPair.read.inputs) ? primaryPair.read.inputs as Dict[] : [];
     // Sequence numbers are scoped to each invocation. The exact block input edge into this read is the causal
     // proof across invocations; comparing writer/read seq values from different calls would reject valid links.
+    const legacyResultWitness = (event: Dict): { writerSourceClass: string; witness: Dict } | undefined => {
+      const transportConfig = row.provenance.text_neuralese_transport;
+      if (!transportConfig || typeof transportConfig !== 'object' ||
+          (transportConfig as Dict).mode !== 'text-marker-standin/2' ||
+          event.producer !== 'text-marker-emulation' || event.source_kind !== 'typed-text-result' ||
+          event.marker_context !== 'return-result' || event.result_type !== block.type ||
+          typeof event.call_id !== 'string') return;
+      const ledger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+      const entries = ledger.filter(item => item.invocation_id === event.call_id);
+      if (entries.length !== 1) return;
+      const entry = entries[0]!;
+      const host = entry.host_result && typeof entry.host_result === 'object' ? entry.host_result as Dict : undefined;
+      const ref = host?.value && typeof host.value === 'object' ? (host.value as Dict).$neuralese : undefined;
+      if (entry.completion_status !== 'done' || entry.completion_source !== 'execution_graph' ||
+          entry.completion_detail !== `\uE000${blockId}\uE001` || host?.kind !== 'host_capture' ||
+          host.capture_kind !== 'invocation_output' || host.call_id !== event.call_id || host.complete !== true ||
+          host.name !== 'return' || !ref || typeof ref !== 'object' || (ref as Dict).id !== blockId ||
+          (ref as Dict).type !== block.type || host.result_type !== block.type ||
+          typeof host.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(host.value_sha256)) return;
+      if (event.source === 'eval-finish') return { writerSourceClass: 'legacy-text-marker-standin-eval-finish',
+        witness: { kind: 'completed-eval-finish-host-reference', source: 'eval-finish',
+          host_result_call_id: event.call_id, host_result_type: block.type,
+          host_result_value_sha256: host.value_sha256 } };
+      if (event.source !== 'return_result' || block.type !== 'Neuralese<string>') return;
+      const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
+      if (steps.length !== 1) return;
+      const response = steps[0]!.model_response && typeof steps[0]!.model_response === 'object' ?
+        steps[0]!.model_response as Dict : {};
+      const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
+      const exact = rawCalls.filter(raw => {
+        if (!raw || typeof raw !== 'object') return false;
+        const fn = (raw as Dict).function;
+        if (!fn || typeof fn !== 'object' || (fn as Dict).name !== 'return_result' ||
+            typeof (fn as Dict).arguments !== 'string') return false;
+        try {
+          const args = JSON.parse((fn as Dict).arguments as string) as Dict;
+          return (args.status === undefined || args.status === 'success') && args.value === block.body;
+        } catch { return false; }
+      });
+      if (exact.length !== 1) return;
+      return { writerSourceClass: 'legacy-text-marker-standin-return-result',
+        witness: { kind: 'raw-return-result-value-equals-expanded-body', source: 'return_result',
+          host_result_call_id: event.call_id, host_result_type: block.type,
+          host_result_value_sha256: host.value_sha256,
+          raw_response_sha256: steps[0]!.raw_response_sha256 ?? null } };
+    };
     const writerSourceClass = (event: Dict): string | undefined => {
+      const legacy = legacyResultWitness(event);
+      if (legacy) return legacy.writerSourceClass;
+      const transportConfig = row.provenance.text_neuralese_transport;
+      if (transportConfig && typeof transportConfig === 'object' &&
+          (transportConfig as Dict).mode === 'text-marker-standin/2' &&
+          event.marker_context === 'return-result') return undefined;
       if (event.producer === 'text-marker-emulation' && event.source_kind === 'typed-text-result')
         return 'modern-typed-text-result';
       if (event.emulation_version === 'text-marker-standin/2' && event.marker_context === 'eval-code' &&
@@ -525,7 +577,8 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       context_occurrences: visibleCount,
       producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
       ...(origin === 'same-run-producer' ? { writer_target_selected: false,
-        writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null } : {}),
+        writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null,
+        ...(writers.length === 1 ? { writer_witness: legacyResultWitness(writers[0]!)?.witness ?? null } : {}) } : {}),
       learned_vectors: false, qualification_certificate: false, training_admission: false });
   }
   return receipts;

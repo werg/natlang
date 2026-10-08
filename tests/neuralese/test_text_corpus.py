@@ -219,6 +219,33 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
         "neuralese_context_attestations"][0]
     assert legacy_attest["source_kind"] == "provider-expanded-context-only-same-run-read"
 
+    for source_kind, writer_class, witness in [
+        ("return_result", "legacy-text-marker-standin-return-result", {
+            "kind": "raw-return-result-value-equals-expanded-body", "source": "return_result",
+            "host_result_call_id": writer_invocation, "host_result_type": "Neuralese<string>",
+            "host_result_value_sha256": "6" * 64, "raw_response_sha256": "7" * 64}),
+        ("eval-finish", "legacy-text-marker-standin-eval-finish", {
+            "kind": "completed-eval-finish-host-reference", "source": "eval-finish",
+            "host_result_call_id": writer_invocation, "host_result_type": "Neuralese<string>",
+            "host_result_value_sha256": "8" * 64}),
+    ]:
+        old_result = json.loads(json.dumps(reader))
+        old_receipt = old_result["source_ref"]["provider_expanded_read_contexts"][0]
+        old_receipt["writer_source_class"] = writer_class
+        old_receipt["writer_witness"] = witness
+        old_receipt["producer_write"].update({"producer": "text-marker-emulation",
+            "source_kind": "typed-text-result", "source": source_kind, "marker_context": "return-result"})
+        old_result["neuralese_conversion"]["external_context_inputs"][0].update(
+            {"writer_source_class": writer_class, "writer_witness": witness})
+        old_rows, _, old_omissions, _ = gold_text_rows([old_result, anchor], [], tokenizer=_Tokenizer())
+        assert not old_omissions
+        assert any(item["id"] == reader["id"] for item in old_rows)
+        bad_witness = json.loads(json.dumps(old_result))
+        bad_witness["source_ref"]["provider_expanded_read_contexts"][0]["writer_witness"][
+            "host_result_call_id"] = "other-call"
+        _, _, bad_omissions, _ = gold_text_rows([bad_witness, anchor, held_anchor], [], tokenizer=_Tokenizer())
+        assert any(item["id"] == reader["id"] for item in bad_omissions)
+
     corrupt = json.loads(json.dumps(reader))
     corrupt["source_ref"]["provider_expanded_read_contexts"][0]["block"]["body_sha256"] = "f" * 64
     _, _, rejected, _ = gold_text_rows([corrupt, anchor, held_anchor], [], tokenizer=_Tokenizer())

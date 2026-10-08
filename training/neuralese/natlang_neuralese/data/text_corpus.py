@@ -353,6 +353,31 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             and write.get("emulation_version") == "text-marker-standin/2"
             and write.get("marker_context") == "eval-code"
             and write.get("learned_vectors") is False
+        ) or (
+            writer_source_class == "legacy-text-marker-standin-return-result"
+            and write.get("producer") == "text-marker-emulation"
+            and write.get("source_kind") == "typed-text-result"
+            and write.get("source") == "return_result"
+            and write.get("marker_context") == "return-result"
+            and isinstance(receipt.get("writer_witness"), dict)
+            and receipt["writer_witness"].get("kind") == "raw-return-result-value-equals-expanded-body"
+            and receipt["writer_witness"].get("source") == "return_result"
+            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
+            and receipt["writer_witness"].get("host_result_type") == block.get("type")
+            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
+            and _sha256_hex(receipt["writer_witness"].get("raw_response_sha256"))
+        ) or (
+            writer_source_class == "legacy-text-marker-standin-eval-finish"
+            and write.get("producer") == "text-marker-emulation"
+            and write.get("source_kind") == "typed-text-result"
+            and write.get("source") == "eval-finish"
+            and write.get("marker_context") == "return-result"
+            and isinstance(receipt.get("writer_witness"), dict)
+            and receipt["writer_witness"].get("kind") == "completed-eval-finish-host-reference"
+            and receipt["writer_witness"].get("source") == "eval-finish"
+            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
+            and receipt["writer_witness"].get("host_result_type") == block.get("type")
+            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
         )
         repeated_pairs = receipt.get("additional_read_turn_pairs") or []
         body = matches[0].get("source")
@@ -389,6 +414,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or receipt.get("training_admission") is not False
                 or receipt.get("parent_invocation_id") != item.get("parent_invocation_id")
                 or item.get("writer_source_class") != writer_source_class
+                or item.get("writer_witness") != receipt.get("writer_witness")
                 or block.get("type") != item.get("type") or block.get("body") != body
                 or block.get("body_sha256") != body_sha256 or _sha(body.encode("utf-8")) != body_sha256
                 or read.get("kind") != "block_read" or turn.get("kind") != "model_turn"

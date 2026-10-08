@@ -52,6 +52,33 @@ def authenticated_external_context_names(row):
             producer_source_valid = (producer.get('emulation_version') == 'text-marker-standin/2'
                                      and producer.get('marker_context') == 'eval-code'
                                      and producer.get('learned_vectors') is False)
+        witness = ref.get('writer_witness')
+        if isinstance(producer, dict) and writer_source_class == 'legacy-text-marker-standin-return-result':
+            producer_source_valid = (producer.get('producer') == 'text-marker-emulation'
+                                     and producer.get('source_kind') == 'typed-text-result'
+                                     and producer.get('source') == 'return_result'
+                                     and producer.get('marker_context') == 'return-result'
+                                     and isinstance(witness, dict)
+                                     and witness.get('kind') == 'raw-return-result-value-equals-expanded-body'
+                                     and witness.get('source') == 'return_result'
+                                     and witness.get('host_result_call_id') == producer.get('call_id')
+                                     and witness.get('host_result_type') == block.get('type')
+                                     and all(isinstance(witness.get(key), str) and len(witness[key]) == 64
+                                             and all(char in '0123456789abcdef' for char in witness[key])
+                                             for key in ('host_result_value_sha256', 'raw_response_sha256')))
+        if isinstance(producer, dict) and writer_source_class == 'legacy-text-marker-standin-eval-finish':
+            producer_source_valid = (producer.get('producer') == 'text-marker-emulation'
+                                     and producer.get('source_kind') == 'typed-text-result'
+                                     and producer.get('source') == 'eval-finish'
+                                     and producer.get('marker_context') == 'return-result'
+                                     and isinstance(witness, dict)
+                                     and witness.get('kind') == 'completed-eval-finish-host-reference'
+                                     and witness.get('source') == 'eval-finish'
+                                     and witness.get('host_result_call_id') == producer.get('call_id')
+                                     and witness.get('host_result_type') == block.get('type')
+                                     and isinstance(witness.get('host_result_value_sha256'), str)
+                                     and len(witness['host_result_value_sha256']) == 64
+                                     and all(char in '0123456789abcdef' for char in witness['host_result_value_sha256']))
         if (ref.get('origin') != 'same-run-producer' or ref.get('writer_target_selected') is not False
                 or not isinstance(block, dict) or not isinstance(block.get('id'), str)
                 or not isinstance(block.get('body'), str) or not block.get('type')
@@ -115,6 +142,7 @@ def authenticated_external_context_names(row):
                  (item.get('rendered_request_sha256'), ref.get('rendered_request_sha256')),
                  (item.get('producer_call_id'), producer.get('call_id')),
                  (item.get('writer_source_class'), writer_source_class),
+                 (item.get('writer_witness'), witness),
                  (item.get('producer_write_node'), producer.get('node')),
                  (item.get('read_node'), read.get('node')),
                  (item.get('model_turn_node'), turn.get('node'))]
