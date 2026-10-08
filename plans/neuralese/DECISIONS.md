@@ -928,3 +928,9 @@ Guided note children receive semantic decision context and their current pass, r
   resume accepts it) caps the CUDA allocator so it frees cache and retries instead of growing. Maple runs with 88:
   reserved 76 GB, run peak 98 GB, 3.69 ms/token unchanged.
 - The supervisor retries 5 min after a guard stop when a periodic checkpoint exists (it was 30 min).
+
+## 2026-10-08 — Intuitive typed string conversions use existing readout
+
+The Luna audit admitted typed soft-array spread into String.concat through its existing async readout, preserving receiver/argument evaluation and coercion order (5185274d). Union-of-array join/concat classification previously missed the soft arm and generated `[object Object]`; 9f0b8837 distributes classification only over array/tuple alternatives and reuses the same readout. Isolated generated-module regressions pass. No historical generation occurrence is claimed. Keep opaque authority/target typing intact rather than globally treating every union as one Neuralese type.
+
+V20 launch review also found the dispatcher/queue hardcoded retry allowance1 while its reviewed plan specified0. Stop and retain those interrupted attempts; c4568c56 explicitly carries the reviewed budget. Relaunch only unattempted cases5–11 under a newly pinned plan. Configuration mismatch is infrastructure evidence, not a model/source negative.
