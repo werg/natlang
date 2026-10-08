@@ -66,6 +66,7 @@ def validate_input_bindings(recipe):
             raise ValueError('each input binding requires only path and sha256')
         if not isinstance(binding['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', binding['sha256']):
             raise ValueError('input binding sha256 must be lowercase hex')
+    referenced = set()
     for stage in recipe['stages']:
         if 'inputs' not in stage:
             continue
@@ -78,8 +79,9 @@ def validate_input_bindings(recipe):
             raise ValueError('stage input roles do not satisfy handler contract: ' + stage['id'])
         if any(not isinstance(name, str) or name not in catalog for name in selected.values()):
             raise ValueError('stage refers to an unknown named input binding')
-    if catalog and not any(stage.get('inputs') for stage in recipe['stages']):
-        raise ValueError('input_bindings catalog is unused')
+        referenced.update(selected.values())
+    if set(catalog) - referenced:
+        raise ValueError('unused named input binding(s): ' + ', '.join(sorted(set(catalog) - referenced)))
 
 
 def parse_input_binding_overrides(values):

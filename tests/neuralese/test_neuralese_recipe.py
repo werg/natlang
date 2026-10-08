@@ -193,6 +193,16 @@ def test_named_input_bindings_reject_incomplete_stage_roles(tmp_path):
         load_recipe(path)
 
 
+def test_named_input_catalog_rejects_unreferenced_artifacts(tmp_path):
+    recipe = declared()
+    recipe['input_bindings'] = {
+        'unused.records': {'path': 'records.jsonl', 'sha256': '0' * 64}}
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='unused named input'):
+        load_recipe(path)
+
+
 def test_foundation_certificate_survives_verified_directory_relocation(tmp_path):
     from natlang_neuralese.train.recipe import require_foundation
     from natlang_neuralese.train.output_embedding_projection import sha
