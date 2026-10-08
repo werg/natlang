@@ -516,7 +516,8 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       await watcher.close();
       const sessionErrors = watcher.sessionErrors.filter(error =>
         !(terminalActionBoundary?.status === 'aborted' &&
-          error.sessionID === terminalActionBoundary.session_id && /^aborted$/i.test(String(error.message ?? ''))));
+          error.sessionID === terminalActionBoundary.session_id &&
+          error.name === 'MessageAbortedError' && error.message === ''));
       diagnostics.session_errors = watcher.sessionErrors;
       if (sessionErrors.length) throw Object.assign(new Error('OpenCode CLI emitted session error event(s)'), {
         code: 'SESSION_ERROR', sessionErrors });

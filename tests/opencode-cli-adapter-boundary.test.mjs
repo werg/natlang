@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { abortOpenCodeSession, createOpenCodeCliChatAdapter } from '../scripts/opencode-cli-chat-adapter.mjs';
 
-async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], exitCode = 0, timeoutMs = 1500 } = {}) {
+async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' } } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-opencode-boundary-'));
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
@@ -37,9 +37,10 @@ if (fs.existsSync(process.env.FAKE_ABORT_MARKER)) {
 process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
 `;
   await writeFile(cliPath, script, { mode: 0o700 }); await chmod(cliPath, 0o700);
+  const eventClients = new Set();
   const eventServer = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
-    res.write(': connected\n\n');
+    res.write(': connected\n\n'); eventClients.add(res); res.on('close', () => eventClients.delete(res));
   });
   await new Promise(resolve => eventServer.listen(0, '127.0.0.1', resolve));
   const eventAddress = eventServer.address();
@@ -52,6 +53,7 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
       abort: async options => {
         abortCalls.push(options); aborted.add(options.path.id);
         await writeFile(markerPath, 'aborted');
+        for (const stream of eventClients) stream.write(`data: ${JSON.stringify({ type: 'session.error', properties: { sessionID: options.path.id, error: abortError } })}\n\n`);
         return { data: true };
       },
       status: async options => {
@@ -136,6 +138,17 @@ test('audited action does not hide a provider error event from the official CLI'
     assert.equal(response.status, 502);
     assert.equal(body.error.code, 'CLI_EVENT_ERROR');
     assert.equal(f.abortCalls.length, 1);
+  } finally { await f.close(); }
+});
+
+test('only the exact same-session MessageAbortedError from a confirmed terminal abort is suppressed', async () => {
+  const f = await fixture({ abortError: { name: 'ProviderError', message: 'upstream failed' } });
+  try {
+    const response = await invoke(f.adapter); const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.equal(body.error.code, 'SESSION_ERROR');
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.deepEqual(diagnostic.session_errors.map(error => error.name), ['ProviderError']);
   } finally { await f.close(); }
 });
 
