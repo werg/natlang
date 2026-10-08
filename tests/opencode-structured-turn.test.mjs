@@ -7,6 +7,70 @@ import test from 'node:test';
 import { createOpenCodeStructuredTurnBackend } from '../scripts/opencode-structured-turn.mjs';
 import { createOpenCodeLoopbackChatAdapter } from '../scripts/opencode-loopback-chat-adapter.mjs';
 
+function mockAuditedToolTurn(parts) {
+  const assistant = { info: { id: 'assistant-tool-turn', role: 'assistant' }, parts: [
+    { type: 'text', text: '{"content":"done","toolCalls":[]}' }, ...parts
+  ] };
+  const client = {
+    tool: { ids: async () => ({ data: ['invalid', 'bash'] }) },
+    mcp: {
+      status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true })
+    },
+    session: {
+      create: async () => ({ data: { id: 'session-tool-turn' } }),
+      prompt: async () => ({ data: assistant }),
+      messages: async () => ({ data: [assistant] }),
+      delete: async () => ({ data: true })
+    }
+  };
+  const backend = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode',
+    modelID: 'step-5-preview-free', directory: '/tmp/opencode-tool-turn-test' });
+  return backend;
+}
+
+function rejectedNatlangEvalPart() {
+  const error = "Model tried to call unavailable tool 'eval'. Available tools: bash, invalid.";
+  return { type: 'tool', tool: 'invalid', state: { status: 'completed', title: 'Invalid Tool',
+    input: { tool: 'eval', error }, output: `The arguments provided to the tool are invalid: ${error}`, metadata: {} } };
+}
+
+function recordedEvalPart() {
+  return { type: 'tool', tool: 'natlang_action_bridge_submit_action', state: { status: 'completed',
+    input: { name: 'eval', arguments: { code: 'return 7;' } }, output: 'ACTION_RECORDED' } };
+}
+
+test('completed no-effect invalid Natlang attempt is retained alongside an audited MCP action', async () => {
+  const backend = mockAuditedToolTurn([rejectedNatlangEvalPart(), recordedEvalPart()]);
+  const result = await backend({ messages: [], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] }
+  } }], tool_choice: 'required' });
+  assert.deepEqual(result.calls, [['eval', { code: 'return 7;' }]]);
+  assert.equal(result.raw_response.rejected_native_tool_attempts.length, 1);
+  assert.equal(result.raw_response.rejected_native_tool_attempts[0].rejected_tool_name, 'eval');
+  assert.equal(result.raw_response.rejected_native_tool_attempts[0].handler, 'OpenCode InvalidTool');
+  assert.equal(result.raw_response.open_code_tool_parts.length, 2);
+});
+
+test('no-effect invalid Natlang attempt alone does not satisfy required tool completion', async () => {
+  const backend = mockAuditedToolTurn([rejectedNatlangEvalPart()]);
+  await assert.rejects(backend({ messages: [], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] }
+  } }], tool_choice: 'required' }), /did not record one/);
+});
+
+test('actual native OpenCode tool execution remains rejected even beside an audited MCP action', async () => {
+  const native = { type: 'tool', tool: 'bash', state: { status: 'completed', title: 'Bash',
+    input: { command: 'echo unsafe' }, output: 'unsafe' } };
+  const backend = mockAuditedToolTurn([recordedEvalPart(), native]);
+  await assert.rejects(backend({ messages: [], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] }
+  } }], tool_choice: 'required' }), error => {
+    assert.equal(error.transportDiagnostic.classification, 'native_tool_refusal');
+    return true;
+  });
+});
+
 test('matching OpenCode session.error surfaces provider 429 before the prompt deadline', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'opencode-event-error-'));
   const calls = [];
@@ -23,6 +87,8 @@ test('matching OpenCode session.error surfaces provider 429 before the prompt de
   };
   const client = {
     tool: { ids: async () => ({ data: ['bash', 'invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch, sseMaxRetryAttempts }) => {
       assert.equal(eventDirectory, directory);
       assert.equal(sseMaxRetryAttempts, 1);
@@ -84,6 +150,8 @@ test('request timeout diagnostics are classified as infrastructure timeouts', as
   const timeout = Object.assign(new Error('OpenCode turn timed out'), { code: 'REQUEST_TIMEOUT' });
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     session: {
       create: async () => ({ data: { id: 'session-timeout' } }),
       prompt: async () => { throw timeout; },
@@ -112,6 +180,8 @@ test('failure evidence retains matching-session retry status without inferring H
   const timeout = Object.assign(new Error('OpenCode turn timed out'), { code: 'REQUEST_TIMEOUT' });
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.status', properties: { sessionID: 'session-retry', status: {
@@ -152,6 +222,8 @@ test('a matching retry schedule cancels OpenCode internal retry and surfaces bri
   const promptStarted = new Promise(resolve => { promptStartedResolve = resolve; });
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       await promptStarted;
@@ -214,6 +286,8 @@ test('scheduled retry is not reported suppressed when the session abort endpoint
   const promptStarted = new Promise(resolve => { promptStartedResolve = resolve; });
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       await promptStarted;
@@ -257,6 +331,8 @@ test('OpenCode session.error from another session does not replace the prompt re
   ] };
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.error', properties: { sessionID: 'other', error: {
@@ -286,6 +362,8 @@ test('loopback preserves provider 429 and Retry-After for the collector retry po
   const directory = await mkdtemp(join(tmpdir(), 'opencode-http-retry-'));
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
+    mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
+      connect: async () => ({ data: true }) },
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.error', properties: { sessionID: 'session-http', error: {
