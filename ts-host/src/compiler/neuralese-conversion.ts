@@ -149,6 +149,10 @@ function stableJson(value: unknown): string | undefined {
   return fields.some(item => item === undefined) ? undefined : `{${fields.join(',')}}`;
 }
 
+function directTypedResultEventName(blockId: string, trajectoryId: string, writerCallId: string, writerNode: string): string {
+  return `soft-state:${blockId}@${sha12(JSON.stringify([trajectoryId, writerCallId, writerNode]))}`;
+}
+
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
   renderings: string[]; order?: number };
 type ChildResultOutput = { invocation: string; tool_call_id: string; text: string; argument: boolean; order?: number };
@@ -463,6 +467,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const observedHostMetadata: { schema: string; origin: string; invocation_id: string; tool_call_id: string;
     producer_record_id: string; result_type: string; body_sha256: string; capture_sha256: string;
     visible_as_crisp_context: true; model_writer_target: false; recurrence_edge: false }[] = [];
+  const selectedRuntimeResultWrites: Record<string, unknown>[] = [];
+  const runtimeResultForwardings: Record<string, unknown>[] = [];
   const count = (kind: string, reason?: string, n = 1) => {
     const site = sites[kind] ??= { converted: 0, exact: {} };
     if (reason) site.exact[reason] = (site.exact[reason] ?? 0) + n; else site.converted += n;
@@ -1005,6 +1011,27 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
           const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&
             candidate.writer_call_id === invocationOf(record as Record<string, unknown>));
+          const returnedReference = args.value && typeof args.value === 'object' && !Array.isArray(args.value) ?
+            (args.value as Record<string, unknown>).$neuralese as Record<string, unknown> | undefined : undefined;
+          const exactOpaqueReference = returnedReference && typeof returnedReference.id === 'string' &&
+            typeof returnedReference.type === 'string' && Object.keys(args.value as Record<string, unknown>).length === 1;
+          const rawForwardingAction = exactOpaqueReference &&
+            ((((decision?.assistant as Record<string, unknown> | undefined)?.calls as Record<string, unknown>[] | undefined) ?? [])
+              .some(action => action.source_tool === 'return_result' &&
+                (action.outcome as Record<string, unknown> | undefined)?.name === 'return_result' &&
+                stableJson((action.outcome as Record<string, unknown>).arguments) === stableJson(args)));
+          if (rawForwardingAction && returnedReference) {
+            runtimeResultForwardings.push({ schema: 'natlang.runtime-result-forwarding/1',
+              role: 'identity-forwarding-existing-neuralese-reference', trajectory_id: trajectoryId,
+              source_row_sha256: sourceRef?.source_row_sha256, invocation_id: invocation,
+              action_target_call_id: call.id, block_id: returnedReference.id, result_type: returnedReference.type,
+              action_arguments_sha256: createHash('sha256').update(stableJson(args) ?? '').digest('hex'),
+              creates_model_writer_target: false, recurrence_edge: false, learned_vectors: false,
+              qualification_certificate: false, training_admission: false });
+            // Keep the opaque reference intact. A forwarded handle is a transport
+            // observation, not a semantic text writer or a new block target.
+            return call;
+          }
           const sourceSha = sourceRef?.source_row_sha256;
           const typedReceipts = typedResultReceipts.filter(({ action, outcome: actionOutcome, receipt }) => {
             if (receipt.schema !== 'natlang.typed-result-write/1' || receipt.invocation_id !== invocation ||
@@ -1038,10 +1065,38 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               const resultPath = receipt.result_path as (string | number)[];
               const tail = resultPath.slice(1);
               const selectedEdge = edge && edge.writer_node === receipt.writer_node && edge.block_id === receipt.block_id;
-              const name = selectedEdge ? blockName(edge!) :
+              // An exact plain-text Neuralese<string> produced directly by a
+              // successful return_result is a semantic result write. Reuse its
+              // event-qualified block identity so an authenticated downstream
+              // read can close the real recurrence edge. Computed eval results,
+              // structured fields, JSON normalization, and opaque ref forwarding
+              // keep their existing nonsemantic typed-result representation.
+              const directSemanticText = receipt.source_kind === 'typed-text-result' &&
+                receipt.source === 'return_result' && receipt.result_type === 'Neuralese<string>' &&
+                resultPath.length === 1 && receipt.body_source_basis === 'exact-raw-model-result-string' &&
+                typeof args.value === 'string' && args.value === receipt.body_source;
+              const name = directSemanticText ?
+                directTypedResultEventName(receipt.block_id as string, trajectoryId, receipt.writer_call_id as string,
+                  receipt.writer_node as string) : selectedEdge ? blockName(edge!) :
                 `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
               const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
                 source: receipt.body_source, ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
+              if (directSemanticText) selectedRuntimeResultWrites.push({
+                schema: 'natlang.selected-runtime-result-write/1',
+                role: 'selected-direct-typed-text-semantic-writer',
+                trajectory_id: trajectoryId, source_row_sha256: sourceSha,
+                invocation_id: invocation, writer_call_id: receipt.writer_call_id,
+                writer_node: receipt.writer_node, block_id: receipt.block_id,
+                result_type: receipt.result_type, body_sha256: receipt.body_sha256,
+                typed_result_receipt_sha256: createHash('sha256').update(stableJson(receipt) ?? '').digest('hex'),
+                result_path: resultPath, action_seq: receipt.action_seq,
+                action_target_call_id: call.id,
+                action_arguments_sha256: createHash('sha256').update(stableJson(args) ?? '').digest('hex'),
+                target_write_name: name,
+                target_write_sha256: createHash('sha256').update(stableJson(write) ?? '').digest('hex'),
+                body_source_basis: receipt.body_source_basis,
+                learned_vectors: false, qualification_certificate: false, training_admission: false,
+              });
               return { ...current, value: exactPathSet(current.value, tail, write) };
             }, args);
             if (changedArgs !== args) {
@@ -1107,8 +1162,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       // that edge under the same name used by the earlier $write. Configured
       // function definitions remain ordinary external context: they have no
       // same-run writer and must not become synthetic reads or targets.
+      const producer = external.receipt.producer_write as Record<string, unknown> | undefined;
+      const directTypedReturn = producer?.kind === 'block_write' && producer.source === 'return_result' &&
+        producer.source_kind === 'typed-text-result' && producer.result_type === 'Neuralese<string>' &&
+        typeof producer.call_id === 'string' && typeof producer.node === 'string';
+      const name = directTypedReturn ? directTypedResultEventName(part.id, trajectoryId,
+        producer!.call_id as string, producer!.node as string) : `soft-state:${part.id}`;
       return external.receipt.origin === 'same-run-producer' ?
-        { type: 'read', name: `soft-state:${part.id}`, source: external.body } :
+        { type: 'read', name, source: external.body } :
         { type: 'text', text: external.body };
     }) };
   });
@@ -1189,6 +1250,13 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     ...(value.receipt.origin === 'same-run-producer' ? { producer_write_node:
       (value.receipt.producer_write as Record<string, unknown>).node,
       producer_call_id: (value.receipt.producer_write as Record<string, unknown>).call_id,
+      target_write_name: (() => {
+        const producer = value.receipt.producer_write as Record<string, unknown>;
+        return producer.source === 'return_result' && producer.source_kind === 'typed-text-result' &&
+          producer.result_type === 'Neuralese<string>' && typeof producer.call_id === 'string' &&
+          typeof producer.node === 'string' ? directTypedResultEventName(String((value.receipt.block as Record<string, unknown>).id),
+            trajectoryId, producer.call_id, producer.node) : `soft-state:${String((value.receipt.block as Record<string, unknown>).id)}`;
+      })(),
       writer_source_class: value.receipt.writer_source_class,
       context_occurrences: value.receipt.context_occurrences,
       ...(value.receipt.writer_witness ? { writer_witness: value.receipt.writer_witness } : {}),
@@ -1202,6 +1270,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,
       ...(observedHostMetadata.length ? { observed_host_result_contexts: observedHostMetadata } : {}),
       ...(externalContextMetadata.length ? { external_context_inputs: externalContextMetadata } : {}),
+      ...(selectedRuntimeResultWrites.length ? { selected_runtime_result_writes: selectedRuntimeResultWrites } : {}),
+      ...(runtimeResultForwardings.length ? { runtime_result_forwardings: runtimeResultForwardings } : {}),
       ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
 }
 

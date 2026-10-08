@@ -161,6 +161,105 @@ test('typed final-result receipts become exact nested native/R write leaves', ()
   assert.equal(evalConverted.neuralese_conversion.sites['typed-result-write'].exact['eval-result-kept-without-source-span'], 1);
 });
 
+test('an exact direct typed prose return is event-qualified as a semantic recurrence writer', () => {
+  const body = 'The approved note preserves the verified deadline and keeps the hold.';
+  const block = `nz1_${'f'.repeat(52)}`;
+  const eventName = `soft-state:${block}@${createHash(JSON.stringify(['semantic-run', 'semantic-call', 'semantic-call#9']))}`;
+  const args = { status: 'success', value: body };
+  const receipt = { schema: 'natlang.typed-result-write/1', trajectory_id: 'semantic-run',
+    source_row_sha256: 'semantic-row-sha', invocation_id: 'semantic-call', writer_call_id: 'semantic-call',
+    writer_node: 'semantic-call#9', block_id: block, source_kind: 'typed-text-result',
+    source: 'return_result', result_type: 'Neuralese<string>', result_path: ['return'],
+    model_turn_node: 'semantic-call#3', action_seq: 11,
+    body_sha256: cryptoCreateHash('sha256').update(body).digest('hex'), body_source: body,
+    body_source_basis: 'exact-raw-model-result-string' };
+  const input = record();
+  input.id = 'semantic-row';
+  input.source_ref = { trajectory_id: 'semantic-run', invocation_id: 'semantic-call', source_row_sha256: 'semantic-row-sha' };
+  input.decision = { index: 0, assistant: { calls: [{ source_tool: 'return_result', arguments: args,
+    outcome: { name: 'return_result', arguments: args, typed_result_writes: [receipt] } }] } };
+  input.target = { role: 'assistant', tool_calls: [{ id: 'semantic-return', type: 'function',
+    function: { name: 'return_result', arguments: JSON.stringify(args) } }] };
+  const converted = convertTrajectory(input).record;
+  const value = JSON.parse(converted.target.tool_calls[0].function.arguments).value.$write;
+  assert.deepEqual(value, { name: eventName, block_id: block, type: 'Neuralese<string>', source: body });
+  assert.deepEqual(converted.neuralese_conversion.selected_runtime_result_writes, [{
+    schema: 'natlang.selected-runtime-result-write/1',
+    role: 'selected-direct-typed-text-semantic-writer', trajectory_id: 'semantic-run',
+    source_row_sha256: 'semantic-row-sha', invocation_id: 'semantic-call', writer_call_id: 'semantic-call',
+    writer_node: 'semantic-call#9', block_id: block, result_type: 'Neuralese<string>',
+    body_sha256: receipt.body_sha256, result_path: ['return'], action_seq: 11,
+    typed_result_receipt_sha256: cryptoCreateHash('sha256').update(canonical(receipt)).digest('hex'),
+    action_target_call_id: 'semantic-return',
+    action_arguments_sha256: cryptoCreateHash('sha256').update(JSON.stringify(args)).digest('hex'),
+    target_write_name: eventName,
+    target_write_sha256: cryptoCreateHash('sha256').update(JSON.stringify({
+      $write: { block_id: block, name: eventName, source: body, type: 'Neuralese<string>' },
+    })).digest('hex'),
+    body_source_basis: 'exact-raw-model-result-string', learned_vectors: false,
+    qualification_certificate: false, training_admission: false,
+  }]);
+  const reader = record();
+  reader.id = 'semantic-reader';
+  reader.source_ref = { trajectory_id: 'semantic-run', invocation_id: 'semantic-reader-call',
+    source_row_sha256: 'reader-row-sha', provider_expanded_read_contexts: [{
+      schema: 'natlang.provider-expanded-read-context/2', origin: 'same-run-producer',
+      invocation_id: 'semantic-reader-call', parent_invocation_id: null, source_row_sha256: 'reader-row-sha',
+      trace_sha256: '1'.repeat(64), transport_provenance_sha256: '2'.repeat(64),
+      raw_request_sha256: '3'.repeat(64), rendered_request_sha256: '4'.repeat(64),
+      block: { id: block, type: 'Neuralese<string>', body, body_sha256: receipt.body_sha256 },
+      producer_write: { kind: 'block_write', producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+        source: 'return_result', marker_context: 'return-result', block, result_type: 'Neuralese<string>',
+        text_body_sha256: receipt.body_sha256, call_id: 'semantic-call', node: 'semantic-call#9', truncated: false },
+      block_read: { kind: 'block_read', block, call_id: 'semantic-reader-call', turn: 'semantic-reader-call#turn1',
+        node: 'semantic-reader-call#4', seq: 1, inputs: [{ node: 'semantic-call#9', block }] },
+      model_turn: { kind: 'model_turn', call_id: 'semantic-reader-call', node: 'semantic-reader-call#turn1', seq: 2,
+        inputs: [{ node: 'semantic-reader-call#4', port: 'read', block }] },
+      writer_target_selected: false, writer_source_class: 'modern-typed-text-result',
+      context_occurrences: 1,
+      learned_vectors: false, qualification_certificate: false, training_admission: false,
+    }] };
+  reader.provenance = { trace_sha256: '1'.repeat(64) };
+  reader.messages = [{ role: 'user', content: [{ type: 'neuralese', id: block }] }];
+  reader.target = { role: 'assistant', content: 'A grounded follow-up.' };
+  const convertedReader = convertTrajectory(reader).record;
+  assert.deepEqual(convertedReader.messages[0].content[0], { type: 'read', name: eventName, source: body });
+  assert.equal(convertedReader.neuralese_conversion.external_context_inputs[0].target_write_name, eventName);
+  const computed = structuredClone(input);
+  computed.decision.assistant.calls[0].outcome.typed_result_writes[0].source = 'eval-finish';
+  computed.decision.assistant.calls[0].outcome.typed_result_writes[0].body_source_basis = 'authenticated-final-host-output-reference';
+  computed.decision.assistant.calls[0].source_tool = 'eval';
+  computed.target.tool_calls[0].function.name = 'eval';
+  const notSemantic = convertTrajectory(computed).record;
+  assert.equal(notSemantic.neuralese_conversion.selected_runtime_result_writes, undefined,
+    'computed eval output does not inherit semantic direct-return status');
+});
+
+test('an opaque Neuralese handle return is recorded as identity forwarding only', () => {
+  const block = `nz1_${'a'.repeat(52)}`;
+  const args = { status: 'success', value: { $neuralese: { id: block, type: 'Neuralese<string>' } } };
+  const input = record();
+  input.id = 'forward-row';
+  input.source_ref = { trajectory_id: 'forward-run', invocation_id: 'forward-call', source_row_sha256: 'forward-row-sha' };
+  input.decision = { index: 1, assistant: { calls: [{ source_tool: 'return_result', arguments: args,
+    outcome: { name: 'return_result', arguments: args } }] } };
+  input.target = { role: 'assistant', tool_calls: [{ id: 'forward-return', type: 'function',
+    function: { name: 'return_result', arguments: JSON.stringify(args) } }] };
+
+  const converted = convertTrajectory(input).record;
+  assert.equal(converted.target.tool_calls[0].function.arguments, JSON.stringify(args),
+    'the existing opaque reference remains unchanged');
+  assert.deepEqual(converted.neuralese_conversion.runtime_result_forwardings, [{
+    schema: 'natlang.runtime-result-forwarding/1', role: 'identity-forwarding-existing-neuralese-reference',
+    trajectory_id: 'forward-run', source_row_sha256: 'forward-row-sha', invocation_id: 'forward-call',
+    action_target_call_id: 'forward-return', block_id: block, result_type: 'Neuralese<string>',
+    action_arguments_sha256: cryptoCreateHash('sha256').update(JSON.stringify(args)).digest('hex'),
+    creates_model_writer_target: false, recurrence_edge: false, learned_vectors: false,
+    qualification_certificate: false, training_admission: false,
+  }]);
+  assert.equal(converted.neuralese_conversion.selected_runtime_result_writes, undefined);
+});
+
 const createHash = text => {
   // Match the converter's stable 12-hex content identity without depending on implementation exports.
   return cryptoCreateHash('sha256').update(text).digest('hex').slice(0, 12);

@@ -15,6 +15,11 @@ def _sha256_hex(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(ch in "0123456789abcdef" for ch in value)
 
 
+def _direct_result_event_name(block_id: str, trajectory_id: str, call_id: str, node: str) -> str:
+    event = _sha(json.dumps([trajectory_id, call_id, node], ensure_ascii=False, separators=(",", ":")).encode("utf-8"))[:12]
+    return f"soft-state:{block_id}@{event}"
+
+
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
 
@@ -243,7 +248,13 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False):
                     "writer_split": record.get("split"),
                     "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
                                                          if isinstance(g, str) and g)),
-                    "write_name": "soft-state:" + receipt["block_id"], "body_sha256": receipt["body_sha256"],
+                    "write_name": (_direct_result_event_name(receipt["block_id"], source_ref.get("trajectory_id"),
+                                                              receipt["writer_call_id"], receipt["writer_node"])
+                                   if receipt.get("source_kind") == "typed-text-result"
+                                   and receipt.get("source") == "return_result"
+                                   and receipt.get("body_source_basis") == "exact-raw-model-result-string"
+                                   else "soft-state:" + receipt["block_id"]),
+                    "body_sha256": receipt["body_sha256"],
                     "writer_invocation_id": receipt["invocation_id"], "writer_write_node": receipt["writer_node"],
                     "result_path": receipt["result_path"], "source_kind": "runtime-typed-result-write"})
 
@@ -351,9 +362,10 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
     def context_ref_count(value, block_id):
+        expected_name = item.get("target_write_name") or "soft-state:" + block_id
         if isinstance(value, dict):
             own = ((value.get("type") == "neuralese" and value.get("id") == block_id) or
-                   (value.get("type") == "read" and value.get("name") == "soft-state:" + block_id))
+                   (value.get("type") == "read" and value.get("name") == expected_name))
             count = int(own)
             for key, child in value.items():
                 if key == "arguments" and isinstance(child, str):
@@ -401,7 +413,27 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or not isinstance(item.get("producer_write_node"), str)
                 or not isinstance(item.get("transport_provenance_sha256"), str)):
             raise ValueError("provider-expanded read context metadata is incomplete")
-        name = "soft-state:" + block_id
+        name = item.get("target_write_name") or "soft-state:" + block_id
+        context_refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
+            "provider_expanded_read_contexts") or [])
+                        if isinstance(receipt, dict)
+                        and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                        and receipt.get("origin") == "same-run-producer"
+                        and (receipt.get("block") or {}).get("id") == block_id]
+        if len(context_refs) > 1 or (item.get("target_write_name") is not None and len(context_refs) != 1):
+            raise ValueError("provider-expanded context lacks one exact source receipt")
+        producer = context_refs[0].get("producer_write") or {} if context_refs else {}
+        direct_return = (producer.get("source") == "return_result"
+                         and producer.get("source_kind") == "typed-text-result"
+                         and producer.get("result_type") == "Neuralese<string>"
+                         and isinstance(producer.get("call_id"), str)
+                         and isinstance(producer.get("node"), str))
+        expected_name = (_direct_result_event_name(block_id, (record.get("source_ref") or {}).get("trajectory_id"),
+                                                   producer["call_id"], producer["node"])
+                         if direct_return and item.get("target_write_name") is not None
+                         else "soft-state:" + block_id)
+        if name != expected_name:
+            raise ValueError("provider-expanded read name does not match its exact producer event")
         matches = [part for part in reads if part.get("name") == name]
         if matches:
             if any(not isinstance(part.get("source"), str) for part in matches):
