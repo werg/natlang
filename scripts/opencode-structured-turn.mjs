@@ -684,6 +684,25 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     signal?.throwIfAborted();
     const prompt = buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent });
     let failurePhase = 'tool_inventory';
+    // MCP tools are registered separately from OpenCode's built-in inventory.
+    // A configured local server may be present but not yet connected when the
+    // SDK server starts, so explicitly connect it before asking for tool IDs.
+    if (!client?.mcp?.status || !client?.mcp?.connect)
+      throw new TypeError('OpenCode SDK client must expose official MCP status and connect endpoints');
+    const mcpStatus = async () => unwrapSdkResult(await withAbort(
+      client.mcp.status({ directory }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode MCP status'), 'MCP status');
+    let mcp = await mcpStatus();
+    if (mcp?.natlang_action_bridge?.status !== 'connected') {
+      failurePhase = 'action_mcp_connect';
+      await withAbort(client.mcp.connect({ name: 'natlang_action_bridge', directory },
+        { ...(signal ? { signal } : {}) }), signal, 'OpenCode action MCP connect');
+      mcp = await mcpStatus();
+    }
+    if (mcp?.natlang_action_bridge?.status !== 'connected') {
+      const state = mcp?.natlang_action_bridge?.status ?? 'missing';
+      throw new Error(`configured Natlang action MCP is not connected (status: ${state})`);
+    }
+    failurePhase = 'tool_inventory';
     const toolInventoryResult = await withAbort(client.tool.ids({ directory }, { ...(signal ? { signal } : {}) }),
       signal, 'OpenCode tool inventory');
     const openCodeToolIds = unwrapSdkResult(toolInventoryResult, 'tool inventory');
@@ -834,6 +853,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           output_contract: 'exact JSON text parsed and validated by the bridge',
           open_code_tool_policy: {
             control: 'official SDK session.create permission rules; prompt default inventory retained',
+            action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: NATLANG_ACTION_TOOL },
             inventory: 'official SDK tool.ids endpoint, queried for this request',
             inventory_ids: openCodeTools.retained_default_inventory,
             wildcard_action: 'ask',

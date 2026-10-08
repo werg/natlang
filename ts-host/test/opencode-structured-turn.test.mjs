@@ -13,13 +13,28 @@ const actionPart = (name = 'read_file', args = { path: 'a.txt' }) => ({ type: 't
   state: { status: 'completed', input: { name, arguments: args }, output: 'ACTION_RECORDED' } });
 
 function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt, events = [],
-  permissionReplyData = true, toolIds = ['invalid', 'read', 'bash', 'plugin_search', ACTION_TOOL] } = {}) {
+  permissionReplyData = true, toolIds = ['invalid', 'read', 'bash', 'plugin_search', ACTION_TOOL],
+  mcpInitiallyConnected = true } = {}) {
   const calls = [];
+  const mcpCalls = [];
+  let mcpConnected = mcpInitiallyConnected;
   let sequence = 0;
   const assistantText = text ?? JSON.stringify(structured ?? { content: 'ok', toolCalls: [] });
   const assistantParts = [...parts, { type: 'text', text: assistantText }];
   return {
     calls,
+    mcpCalls,
+    mcp: {
+      async status(params, options) {
+        mcpCalls.push({ method: 'mcp.status', params, options });
+        return { data: { natlang_action_bridge: { status: mcpConnected ? 'connected' : 'disabled' } } };
+      },
+      async connect(params, options) {
+        mcpCalls.push({ method: 'mcp.connect', params, options });
+        mcpConnected = true;
+        return { data: { status: 'connected' } };
+      }
+    },
     tool: {
       async ids(params, options) {
         calls.push({ method: 'tool.ids', params, options });
@@ -149,6 +164,7 @@ test('maps the isolated action-MCP record to a Natlang call and always deletes i
   assert.equal(result.raw_response.output_contract, 'exact JSON text parsed and validated by the bridge');
   assert.deepEqual(result.raw_response.open_code_tool_policy, {
     control: 'official SDK session.create permission rules; prompt default inventory retained',
+    action_mcp: { name: 'natlang_action_bridge', status: 'connected', tool_id: ACTION_TOOL },
     inventory: 'official SDK tool.ids endpoint, queried for this request',
     inventory_ids: ['bash', 'invalid', ACTION_TOOL, 'plugin_search', 'read'],
     wildcard_action: 'ask', allowed_tool_ids: [ACTION_TOOL], rejected_permission_requests: [],
@@ -162,6 +178,17 @@ test('maps the isolated action-MCP record to a Natlang call and always deletes i
   assert.deepEqual(client.calls.find(call => call.method === 'create').params.permission, buildOpenCodeSessionPermissions(['read_file']));
   assert.equal(Object.hasOwn(promptCall.params, 'format'), false);
   assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'messages', 'delete']);
+  assert.deepEqual(client.mcpCalls.map(call => call.method), ['mcp.status']);
+});
+
+test('connects the configured MCP through the official SDK before checking dynamic tool IDs', async () => {
+  const client = fakeClient({ structured: { content: 'No action.', toolCalls: [] }, mcpInitiallyConnected: false });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  await turn({ ...request, tool_choice: 'auto' });
+  assert.deepEqual(client.mcpCalls.map(call => call.method), ['mcp.status', 'mcp.connect', 'mcp.status']);
+  assert.deepEqual(client.mcpCalls[1].params, { name: 'natlang_action_bridge', directory: '/tmp/natlang-opencode-test' });
+  assert.equal(client.calls[0].method, 'tool.ids');
 });
 
 test('rejects every asked built-in permission with the official SDK and records that audit', async () => {
