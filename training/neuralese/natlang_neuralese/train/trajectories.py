@@ -133,7 +133,8 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                                 return [{"type": "neuralese", "id": blocks[name],
                                          "value_type": "string" if site.get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"}]
                             source = site["source"]
-                            return json.loads(source) if site.get("type") == "Neuralese<unknown>" else source
+                            json_body = site.get("source_encoding") == "json" or site.get("type") == "Neuralese<unknown>"
+                            return json.loads(source) if json_body else source
                         if isinstance(value, dict):
                             return {key: crisp_value(item) for key, item in value.items()}
                         if isinstance(value, list):
@@ -310,7 +311,7 @@ def write_value_type(record: dict) -> str:
             if write['name']==name:
                 kind=write.get('type','Neuralese<string>')
                 if kind=='Neuralese<string>':return 'string'
-                if kind=='Neuralese<unknown>':return 'unknown'
+                if kind=='Neuralese<unknown>' or write.get('source_encoding')=='json':return 'unknown'
                 raise ValueError('nested writer has unsupported declared value type')
     raise ValueError('selected writer contract is missing')
 

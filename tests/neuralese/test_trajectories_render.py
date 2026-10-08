@@ -51,6 +51,26 @@ def test_structured_child_returns_keep_their_type_in_crisp_replay():
     assert json.loads(rendered['tool_calls'][0]['function']['arguments'])['value']==json.dumps(value)
 
 
+def test_concrete_typed_json_result_replays_as_json_without_parsing_json_strings():
+    from natlang_neuralese.train.trajectories import write_value_type
+    body = '{"count":4,"flag":true}'
+    marker = {"$write": {"name": "typed-result:object", "block_id": "nz1_" + "a" * 32,
+                         "type": "Neuralese<{ count: number, flag: boolean }>",
+                         "source": body, "source_encoding": "json"}}
+    message = {"role": "assistant", "tool_calls": [{"id": "r", "function": {
+        "name": "return_result", "arguments": json.dumps({"status": "success", "value": marker})}}]}
+    record = {"messages": [], "target": message}
+    crisp = render([message], lambda _: None, {})[0]
+    assert json.loads(crisp["tool_calls"][0]["function"]["arguments"])["value"] == {"count": 4, "flag": True}
+    assert write_value_type(record) == "unknown"
+
+    literal = {"$write": {"name": "typed-result:string", "type": "Neuralese<string>", "source": body}}
+    literal_message = {"role": "assistant", "tool_calls": [{"id": "r", "function": {
+        "name": "return_result", "arguments": json.dumps({"status": "success", "value": literal})}}]}
+    crisp_literal = render([literal_message], lambda _: None, {})[0]
+    assert json.loads(crisp_literal["tool_calls"][0]["function"]["arguments"])["value"] == body
+
+
 def test_nested_structured_child_writes_expand_recursively_in_crisp_replay():
     payload = {"access": "open", "items": ["OH-9", {"speaker": "Aroha Lane"}]}
     nested = {"status": "success", "value": {

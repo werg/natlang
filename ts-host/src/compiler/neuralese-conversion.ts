@@ -821,7 +821,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               const name = selectedEdge ? blockName(edge!) :
                 `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
               const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
-                source: receipt.body_source } };
+                source: receipt.body_source, ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
               return { ...current, value: exactPathSet(current.value, tail, write) };
             }, args);
             if (changedArgs !== args) {
