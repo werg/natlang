@@ -12,7 +12,7 @@ import { approaches, behaviorLabel, induceRules, splitOf, type Approach, type Ex
 import { definitionFor, replayCaseOn, signatureOf, verdictFor } from './offline.js';
 import { recordedArguments } from './replay.js';
 import type { CallStore } from './store.js';
-import type { CallRecord, CaseRole, DeclineReason, Verdict } from './types.js';
+import { isModelEvidence, type CallRecord, type CaseRole, type DeclineReason, type Verdict } from './types.js';
 
 /** Everything the specializer knows about one definition revision. */
 export type Study = { key: string; definition: CallableDefinition; loaded: boolean; records: Map<string, CallRecord>; examples: Example[];
@@ -28,6 +28,8 @@ export function study(store: CallStore, key: string, options: { limit?: number; 
     const record = store.call(summary.call_id);
     const args = record && recordedArguments(store, record);
     if (!record || !args) { skipped++; continue; }
+    // A scripted test agent's calls are fixtures, not what a model does (§6.2: cases follow the evidence's executor).
+    if (!isModelEvidence(record)) { skipped++; continue; }
     records.set(record.call_id, record);
     examples.push({ callId: record.call_id, args, features: record.features, evals: evalsOf(record), approach: '', split: splitOf(record.call_id),
       behavior: behaviorOf(store, record) });

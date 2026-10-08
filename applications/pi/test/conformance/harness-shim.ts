@@ -25,6 +25,8 @@ const natlang = createNatlangRuntime({
     // The context budget follows the window the executor's server reports unless PI_EXECUTOR_CONTEXT sets it.
     ...(process.env.PI_EXECUTOR_CONTEXT ? { contextTokens: Number(process.env.PI_EXECUTOR_CONTEXT) } : {}) },
   codeEdits: 'deny',
+  // Calls are recorded in the machine's call store under the port's directory, where offline work reloads them.
+  programRoot: root.replace(/\/$/, ''),
   ...(process.env.PI_TRACE_DIR ? { trace: fileTraceSink(process.env.PI_TRACE_DIR) } : {}),
 });
 const entry = (name: string) => loadNatlang(`${root}${name}.nl`, root) as unknown as Entry;

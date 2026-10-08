@@ -29,6 +29,15 @@ export type DefinitionIdentity = { id: string; name: string; source: string | nu
 
 export type CallCost = { model_requests: number; tokens_in: number; tokens_out: number; wall_ms: number; turns: number; evals: number };
 
+/**
+ * Whether a recorded agent call shows what a model did: it spent model tokens, and its executor declared a model
+ * (scripted test agents and other undeclared drivers are recorded as `undeclared:<name>`). Only such calls are
+ * evidence for compilations, shadow comparisons and audits.
+ */
+export function isModelEvidence(record: { executor: { model_id: string | null }; cost: CallCost }): boolean {
+  return !record.executor.model_id?.startsWith('undeclared:') && record.cost.tokens_in > 0;
+}
+
 export type FolderRecord = { mode: 'apply' | 'direct'; changes: { path: string; kind: string; after?: ValueRef }[] };
 
 export type CallRecord = {

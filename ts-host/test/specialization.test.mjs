@@ -78,18 +78,21 @@ const orderService = () => {
   const log = [];
   return { log, orders: { async refund(id) { log.push(`refund ${id}`); return { ok: true }; }, lookup(id) { log.push(`lookup ${id}`); return { status: `shipped ${id}` }; } } };
 };
-/** A scripted executor: it reads the request, then runs the refund or the status approach. */
+/**
+ * A scripted executor standing in for a model: it reads the request, then runs the refund or the status approach. It
+ * declares a model and reports token use, as a model driver does; only such calls are evidence (isModelEvidence).
+ */
 function executor() {
-  return async request => {
+  return Object.assign(async request => {
     const tools = request.messages.filter(message => message.role === 'tool').map(message => String(message.content));
     const opening = String(request.messages.find(message => message.role === 'user')?.content ?? '');
-    if (opening.includes('Two executions')) return { calls: [['return_result', { status: 'success', value: 'equal' }]] };
+    if (opening.includes('Two executions')) return { prompt_tokens: 10, calls: [['return_result', { status: 'success', value: 'equal' }]] };
     const seen = tools.map(text => /(refund|status) (\d+)/.exec(text)).find(Boolean);
-    if (tools.length <= 1) return { calls: [['eval', { code: 'return request' }]] };
-    if (tools.length === 2) return { calls: [['eval', { code: seen[1] === 'refund' ? "const id = request.split(' ')[1];\nawait orders.refund(id);\nreturn 'refunded ' + id" :
+    if (tools.length <= 1) return { prompt_tokens: 10, calls: [['eval', { code: 'return request' }]] };
+    if (tools.length === 2) return { prompt_tokens: 10, calls: [['eval', { code: seen[1] === 'refund' ? "const id = request.split(' ')[1];\nawait orders.refund(id);\nreturn 'refunded ' + id" :
       "return orders.lookup(request.split(' ')[1]).status" }]] };
-    return { calls: [['return_result', { status: 'success', value: seen[1] === 'refund' ? `refunded ${seen[2]}` : `shipped ${seen[2]}` }]] };
-  };
+    return { prompt_tokens: 10, calls: [['return_result', { status: 'success', value: seen[1] === 'refund' ? `refunded ${seen[2]}` : `shipped ${seen[2]}` }]] };
+  }, { model: 'test-model' });
 }
 const CASES = `import { orders } from 'natlang:services';
 export const cases = [
@@ -100,15 +103,28 @@ export const cases = [
 ];
 `;
 
-async function recordCalls(store, count) {
+async function recordCalls(store, count, model = executor()) {
   const handle = loadVirtualNatlang({ 'handle.nl': HANDLE }, 'handle.nl');
   for (let index = 0; index < count; index++) {
     const service = orderService();
-    const runtime = createNatlangRuntime({ model: executor(), calls: store, services: { orders: service.orders } });
+    const runtime = createNatlangRuntime({ model, calls: store, services: { orders: service.orders } });
     await runtime.run(() => handle(`${index % 2 ? 'refund' : 'status'} ${100 + index}`));
   }
   return handle;
 }
+
+test('calls of a scripted executor that declares no model are recorded but are never evidence', async () => {
+  const store = freshStore();
+  try {
+    const scripted = executor();
+    delete scripted.model;
+    await recordCalls(store, 12, async request => ({ ...(await scripted(request)), prompt_tokens: undefined }));
+    const key = store.hot()[0].definition_key;
+    const record = store.call(store.calls({ key, limit: 1 })[0].call_id);
+    assert.match(record.executor.model_id, /^undeclared:/);
+    assert.equal(study(store, key), undefined);
+  } finally { done(store); }
+});
 
 test('study, verify and save: recorded calls become a compilation whose cases are promoted by held-out evidence', async () => {
   const store = freshStore();
