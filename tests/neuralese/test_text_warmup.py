@@ -1489,11 +1489,23 @@ def test_input_map_reports_name_the_actual_secondary_projection():
 
 
 def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_map():
+    from types import SimpleNamespace
     from natlang_neuralese.model.input_map import NeuraleseInputMap
     from natlang_neuralese.train.text_warmup import (
         mapped_completions, matched_history_completion, text_supervision_policy)
-    backbone,heads=tiny_student()
-    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    class TinyBackbone:
+        embedding_weight=torch.zeros(4,4)
+        def embed(self, ids):
+            return torch.nn.functional.one_hot(ids.remainder(4),num_classes=4).float()
+        def forward_ids(self, ids, *, cutoff, logits):
+            del cutoff,logits
+            embedded=self.embed(ids)
+            return {'h_cut':embedded+.25,'h_final':embedded+.5}
+    torch.manual_seed(23)
+    backbone=TinyBackbone()
+    heads=SimpleNamespace(cutoff=2,content=lambda _embedded,top: top+.75,
+        feedback=torch.nn.Linear(4,4,bias=False),
+        input_map=NeuraleseInputMap(4,kernel=3,rank=4))
     prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
     objective_completion=next(mapped_completions(backbone,heads,prefix,span))
     matched=matched_history_completion(backbone,heads,prefix,span,objective_completion,input_map=True)
@@ -1503,8 +1515,11 @@ def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_ma
     torch.testing.assert_close(matched['sketches'],expected,atol=0,rtol=0)
     assert not torch.equal(matched['sketches'],objective_completion['sketches'])
     policy=text_supervision_policy('map')
-    assert policy['trainable_secondary_head']=='heads.input_map'
-    assert policy['objectives'][1]=='neuralese_input_map_self_consistency'
+    assert policy['objectives'][1]=='sketch_projection'
+    labels=warmup_display_labels('map')
+    assert labels['secondary_objective']=='neuralese_input_map_self_consistency'
+    assert labels['secondary_head']=='heads.input_map'
+    assert labels['schedule_head']=='input_map'
 
 
 def test_input_map_self_consistency_does_not_replace_full_projection_gold_target():
