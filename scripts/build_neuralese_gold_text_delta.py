@@ -127,8 +127,17 @@ def main():
         manifest = text.parent / "output-manifest.json"
         return (manifest.is_file() and base_approval.get("output_manifest_sha256") == sha_file(manifest) and
                 json.loads(manifest.read_text())["outputs"]["text.jsonl"]["sha256"] == sha_file(text))
-    if base_approval.get("approved") is not True or (base_approval.get("text_sha256") != sha_file(approved_text)
-                                                     and not manifest_binds(approved_text)):
+    root_admission = base_approval.get("schema") == "natlang.root-corpus-admission/1"
+    if root_admission and (not str(base_approval.get("status", "")).startswith("admitted-")
+                           or base_approval.get("admission", {}).get("native_sft") is not True
+                           or base_approval.get("admission", {}).get("derived_ordinary_gold_text") is not True):
+        raise ValueError("base root receipt does not admit its native and derived-text facets")
+    root_text = next((entry for entry in base_approval.get("files", {}).values()
+                      if entry.get("path", "").endswith("text.jsonl")), None) if root_admission else None
+    root_text_binds = bool(root_text and root_text.get("sha256") == sha_file(approved_text))
+    if ((base_approval.get("approved") is not True and not root_admission) or
+            (base_approval.get("text_sha256") != sha_file(approved_text) and
+             not root_text_binds and not manifest_binds(approved_text))):
         raise ValueError("base text root receipt does not approve/bind the exact text prefix")
     if args.twin_of_text:
         def identity(path):  # tokenizer-independent document identity: ID, split and the admitted source records
@@ -139,7 +148,29 @@ def main():
             raise ValueError("tokenizer twin does not carry the approved text's document IDs, splits, source groups "
                              "and source record IDs in order")
     source_approval = json.loads(args.source_approval.read_text())
-    approved_ids = source_approval.get("approved_row_ids")
+    root_action_admission = source_approval.get("schema") == "natlang.root-selected-action-admission/1"
+    admission_rows = source_approval.get("rows", []) if root_action_admission else []
+    if root_action_admission:
+        approved_ids = [item.get("native_id") for item in admission_rows]
+        if not approved_ids or any(item.get("decision") != "admit-exact-selected-native-action-SFT-only"
+                                   for item in admission_rows):
+            raise ValueError("root action receipt has no exact native SFT-only admission rows")
+        counts = source_approval.get("counts") or {}
+        if (counts.get("native_SFT_train_actions") != len(admission_rows)
+                or counts.get("whole_trajectories") != 0
+                or source_approval.get("qualifications", {}).get("learned_writer") is not False
+                or source_approval.get("qualifications", {}).get("recurrence") is not False):
+            raise ValueError("root action receipt includes unsupported non-native admission facets")
+        admitted_by_id = {item["native_id"]: item for item in admission_rows}
+        for row in delta_records:
+            admission = admitted_by_id.get(row.get("id"))
+            digest = sha(json.dumps(row.get("target"), ensure_ascii=False, separators=(",", ":")).encode())
+            if not admission or digest != admission.get("target_sha256"):
+                raise ValueError(f"root action admission target binding mismatch: {row.get('id')}")
+            if row.get("split") != admission.get("split") or admission.get("source_group") not in row.get("source_groups", []):
+                raise ValueError(f"root action admission split/group mismatch: {row.get('id')}")
+    else:
+        approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
     if not isinstance(approved_ids, list) or set(approved_ids) != delta_ids or len(approved_ids) != len(delta_ids):
         raise ValueError("delta records do not equal source approval IDs")
