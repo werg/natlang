@@ -324,6 +324,9 @@ def balanced_position_weights(span, suffix_starts):
     return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
+from ..maple.model import eager_rms_norm
+
+
 def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
                     gradients=True, position_weights=None):
     """Exact token-mean CE and readout metrics without retaining T x vocab logits.
@@ -348,7 +351,8 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
         target_chunk=targets[:,start:stop]
         weight_chunk=position_weights[:,start:stop]
         def readout(chunk, gold, weights):
-            logits=backbone.logits(chunk).float()
+            with eager_rms_norm():  # the checkpoint recompute must replay the forward's exact graph
+                logits=backbone.logits(chunk).float()
             per_token=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),gold.reshape(-1),reduction='none').reshape_as(gold)
             ce=per_token.sum()
             training_ce=(per_token*weights).sum()

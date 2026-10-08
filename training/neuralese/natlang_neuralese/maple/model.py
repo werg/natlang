@@ -20,6 +20,7 @@ exactly the nested model (MAPLE_NESTED §2: renormalisation over the top 8 cance
 from __future__ import annotations
 
 import json
+import contextlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,7 +82,7 @@ class RMSNorm(nn.Module):
         member = STATE["size"]
         if member is not None and STATE["enabled"] and str(member) in self.private:
             weight = weight + self.private[str(member)].to(weight.dtype)
-        if x.is_cuda and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0":
+        if x.is_cuda and not _eager_depth and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0":
             global _rms_norm_compiled
             if _rms_norm_compiled is None:
                 _rms_norm_compiled = torch.compile(_rms_norm, dynamic=True)
@@ -90,6 +91,20 @@ class RMSNorm(nn.Module):
 
 
 _rms_norm_compiled = None
+_eager_depth = 0
+
+
+@contextlib.contextmanager
+def eager_rms_norm():
+    """Run RMSNorm eagerly inside this block. A checkpointed region must recompute exactly the graph it saved:
+    the dynamic-shape compiled norm can select a different graph on recompute for an odd chunk length (seen: a
+    39-position readout chunk saved bf16 inputs but recomputed float32 ones), which breaks the saved-tensor match."""
+    global _eager_depth
+    _eager_depth += 1
+    try:
+        yield
+    finally:
+        _eager_depth -= 1
 
 
 def _rms_norm(x, weight, eps):
