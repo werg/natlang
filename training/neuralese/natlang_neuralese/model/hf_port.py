@@ -28,6 +28,23 @@ def qwen_controls(tokenizer=None) -> ControlTokens:
     return ControlTokens(open_id=QWEN_OPEN_ID, close_id=QWEN_CLOSE_ID)
 
 
+# Mellum 2.x has no unused vocabulary rows: its markers are two spare added tokens (never produced by its tokenizer
+# from ordinary text, so they cannot collide with content).
+MELLUM_MARKERS = ("<|extra_token_7|>", "<|extra_token_8|>")
+
+
+def family_controls(model, tokenizer=None) -> ControlTokens:
+    """The Neuralese markers of a Maple-family backbone: Qwen/Maple unused rows, or Mellum's spare added tokens."""
+    if getattr(model.config, "model_type", "maple") == "mellum":
+        if tokenizer is None:
+            raise ValueError("Mellum markers are resolved through its tokenizer")
+        vocab = tokenizer.get_vocab()
+        if any(m not in vocab for m in MELLUM_MARKERS):
+            raise ValueError("tokenizer lacks the Mellum Neuralese marker tokens")
+        return ControlTokens(open_id=vocab[MELLUM_MARKERS[0]], close_id=vocab[MELLUM_MARKERS[1]])
+    return qwen_controls(tokenizer)
+
+
 def load_qwen_backbone(path: str, dtype=torch.bfloat16, device="cpu"):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
