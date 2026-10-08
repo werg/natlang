@@ -1,0 +1,220 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v8-closed-raw-generation-evidence-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v8",
+  "files": [
+    {
+      "path": "generation-recovery-review-v2/bunny/launch.json",
+      "bytes": 8861,
+      "sha256": "058dc37163c1f102f2bfd691df4bcdf7c564f306934bfca242103e558918b84f"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny/plan.draft.json",
+      "bytes": 10900,
+      "sha256": "1c00efec8ac50c1ae034585f19ca03f500d034c5ed7db5c758fc2f654dda7181"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny/queue.jsonl",
+      "bytes": 2380,
+      "sha256": "71633b46606f32abf1b1895fe8cd769cc569e21bbfca3f41a6f60ac0b7b72bef",
+      "lines": 2
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny/root-approval.json",
+      "bytes": 796,
+      "sha256": "6bed33aa6d4ba845a39addbcb780265b236bbf93217d1a876532a344014bf3ec"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/events/case.jsonl",
+      "bytes": 763,
+      "sha256": "eed4aed6c26e91b3371bbb1189ff09b33017f6d1467678b35aeaca87eaa89a31",
+      "lines": 2
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/jobs/000000-7c7e4d3b3eb55fa2.result.json",
+      "bytes": 935362,
+      "sha256": "d9d356bdb1eca25c5a8f4d624f9c77df5ac7c06090aaaafe261e283b60c293ab"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/jobs/000000-7c7e4d3b3eb55fa2.trace.jsonl",
+      "bytes": 49852,
+      "sha256": "197b3eea28a3a46bdbed10c4967d3087b2074a5508c70a4ec3fe91f0dbe9d8da",
+      "lines": 23
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/logs/case.log",
+      "bytes": 549,
+      "sha256": "71441ac58245f4240b6ffac6a7d50738eafb72d775b1ee280e02b0f0cca8af41"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/results/case.results.jsonl",
+      "bytes": 935362,
+      "sha256": "d9d356bdb1eca25c5a8f4d624f9c77df5ac7c06090aaaafe261e283b60c293ab",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000000/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "577724de71733213e59d036b8e89d098660b9112c79988d667026de4aa018d45"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/events/case.jsonl",
+      "bytes": 775,
+      "sha256": "fefc274a180c0a27518d2a6a941a19141fd86315b208218ff1a39d751d47af15",
+      "lines": 2
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/jobs/000003-880ac88ee0a7f7e8.result.json",
+      "bytes": 1524993,
+      "sha256": "d1c8f308517df42bd39f50b565f687d3b0f625a4e7f82dc2c41c8858418be8b7"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/jobs/000003-880ac88ee0a7f7e8.trace.jsonl",
+      "bytes": 51307,
+      "sha256": "8a7b188fb0c38e13ab91db7fa1fb6201caf459acaa1be3a766e236539ce7b7ba",
+      "lines": 23
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/logs/case.log",
+      "bytes": 555,
+      "sha256": "d60e917289cdf3ba67dee59cf3c2f2e7240c86fc0a8b532af895982140ab068d"
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/results/case.results.jsonl",
+      "bytes": 1524993,
+      "sha256": "d1c8f308517df42bd39f50b565f687d3b0f625a4e7f82dc2c41c8858418be8b7",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/bunny-campaign-v1/case-000003/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "8fe0e1f88627ca307aab83a7f30fed1acb1d9c8761e9af873ace6baa2e2782a5"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna/dispatcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna/launcher-binding.json",
+      "bytes": 1650,
+      "sha256": "1838ef6fc7aef15311f014fa7c93f6ee961835a241ac49cf4a58b03d7e7377cd"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna/plan.draft.json",
+      "bytes": 5848,
+      "sha256": "950d9ace81ac76a680226ef28e2b189ab7d721af1ab1710c1f1ce3d1beaa3c51"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna/plan.root-approved.json",
+      "bytes": 5838,
+      "sha256": "2204ac63b3cb8b5d6ff7fba70d75ea6f408ac8f2150c21a7652c600cf2c1180b"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna/root-approval.json",
+      "bytes": 1332,
+      "sha256": "bb1181b97f10da9614e2c6ce6560f9ce71f46d3f03512ff27a5736083689e143"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/dispatch/claims.jsonl",
+      "bytes": 9349,
+      "sha256": "c8f61f0ee7177e7aa9ce71d027ba53c1457e78e833d4330a71ea105b38c95901",
+      "lines": 8
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/dispatch/launch.json",
+      "bytes": 2029,
+      "sha256": "e140636d1fdde820d52b8cd7400ba8e5218c5c2514b3331236a701cd5b084cd9"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/claims/luna-v18-contract-recovery-v2-case-000006/queue.jsonl",
+      "bytes": 824,
+      "sha256": "d476b97b368b8073fcb0d3723471a1ec048098a6482823356dfa1665911210b8",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/collector-logs/case-000006.log",
+      "bytes": 258449,
+      "sha256": "8da28d9a1d150133f1ad56eaf642c2c369dfced413ad53e8eb11fe14cb697dc9"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/jobs/000006-6a3a448ebe214cec.result.json",
+      "bytes": 8012594,
+      "sha256": "0551e75fda342a621af93a9edd8f15068d8d06c1e9d9699896ed588fbb183274"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/jobs/000006-6a3a448ebe214cec.trace.jsonl",
+      "bytes": 567620,
+      "sha256": "e0bdcf13b5d7567cbbf29732865bb2161bd3bd3a4a4a8d57d6335087971d4c24",
+      "lines": 203
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/journal.jsonl",
+      "bytes": 16123,
+      "sha256": "d52ef103d9c3c713d82e7ddb6e7bc65325d6961b8907d2cd994fd85c1b3e1d55",
+      "lines": 18
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/results/case-000006.results.jsonl",
+      "bytes": 8012594,
+      "sha256": "0551e75fda342a621af93a9edd8f15068d8d06c1e9d9699896ed588fbb183274",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/results/case-000006.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "12c7002e47c038b47cd7c90a9d964629b970856657b830677a1c993d7f295c61"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-01/supervisor.log",
+      "bytes": 16123,
+      "sha256": "d52ef103d9c3c713d82e7ddb6e7bc65325d6961b8907d2cd994fd85c1b3e1d55"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/claims/luna-v18-contract-recovery-v2-case-000007/queue.jsonl",
+      "bytes": 824,
+      "sha256": "f3344f56b3dfad8dd4a623cdcbfc9c6dcbe6516a78c29990fca637be389169f3",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/collector-logs/case-000007.log",
+      "bytes": 446526,
+      "sha256": "163ec0ee8842cb7dbbc01b34213613fc226044b206b683cf9d786b7b7b9ad560"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/jobs/000007-d8fa041b3ba357eb.result.json",
+      "bytes": 14200140,
+      "sha256": "5fd9633db1835440e15dd9acea0e037af15c192e6dadb7a180e189a76cc84aa6"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/jobs/000007-d8fa041b3ba357eb.trace.jsonl",
+      "bytes": 117760,
+      "sha256": "a55ea391fce63a214f737f1e5b1b6262b90a8989a2c98fcc1d96ab878230882f",
+      "lines": 66
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/journal.jsonl",
+      "bytes": 27618,
+      "sha256": "f9d0a064131f9f882984a2cb4b8bebb973437d2d634608a8b7f0145a83612b19",
+      "lines": 31
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/results/case-000007.results.jsonl",
+      "bytes": 14200140,
+      "sha256": "5fd9633db1835440e15dd9acea0e037af15c192e6dadb7a180e189a76cc84aa6",
+      "lines": 1
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/results/case-000007.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "d6e107529f0c2a662aa8ff18c2439553c265559b20a3ca970acfadd5cccf4997"
+    },
+    {
+      "path": "generation-recovery-review-v2/luna-campaign-v1/slot-02/supervisor.log",
+      "bytes": 27618,
+      "sha256": "f9d0a064131f9f882984a2cb4b8bebb973437d2d634608a8b7f0145a83612b19"
+    }
+  ],
+  "bytes": 50980833
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-closed-evidence-publication-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-closed-evidence-proposal-20261008-v1",
+  "files": [
+    {
+      "path": "proposal.json",
+      "bytes": 49097,
+      "sha256": "37153abb951dada16cde89441892d78420f7e4a0c504c89bd22db1834105bc82"
+    }
+  ],
+  "bytes": 49097
+}
