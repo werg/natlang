@@ -28,6 +28,9 @@ State at the end of the first implementation session. Read [README.md](README.md
 
 ## DGX live update — 2026-10-07 21:05 CEST
 
+- Maple warm-up v8 (`runs/maple-native-text-warmup-20261008-v8.sh`): v7 + `--rollout-passes 8`; sketch-only rollout
+  training first, then whole stack at depth 8 (DECISIONS 2026-10-08). The V9 twin is blocked on unregistered Pop
+  artifacts (asked).
 - Maple warm-up v7 (`runs/maple-native-text-warmup-20261008-v7.sh`, supervisor PID in the job tmp `maple-warmup.pid`).
   - Live checkout code; restarts gracefully when the committed package tree changes. On Maple packet v6
     (`neuralese-maple-native-gold-text-corpus-20261008-v6`, V17 twin), continued from v6's step 3790; 3 passes,
