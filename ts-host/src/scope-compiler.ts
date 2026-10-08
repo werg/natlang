@@ -758,7 +758,24 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const stringArguments = new Map(readouts.filter(readout => readout.kind === 'string-argument')
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const scalarConversions = new Map(readouts.filter(readout => readout.kind === 'scalar-conversion' && readout.conversion)
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && scalarConversions.has(`${rel(node).start}:${rel(node).end}`) && node.arguments.length) {
+      const readout = scalarConversions.get(`${rel(node).start}:${rel(node).end}`)!;
+      for (const argument of node.arguments) lowerNodes(argument);
+      lowerNodes(node.expression);
+      const callee = lowerSpan(rel(node.expression).start, rel(node.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const calleeName = `__natlang_scalar_constructor_${rel(node).start}`;
+      const argsName = `__natlang_scalar_args_${rel(node).start}`;
+      const index = readout.argument ?? 0;
+      const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+      primitive.push({ ...rel(node), text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => { ` +
+        `${argsName}[${index}] = await __live.${reader}(${argsName}[${index}]); ` +
+        `return ${calleeName}(...${argsName}); })([${args}]))(${callee}))` });
+      return;
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
       const site = rebindAt.get(`${rel(node).start}:${rel(node).end}`);
       if (site && node.arguments[0]) {

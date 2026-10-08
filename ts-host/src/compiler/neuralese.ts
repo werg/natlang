@@ -19,8 +19,8 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument';
-  argument?: number; conditional?: true };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion';
+  argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -78,8 +78,10 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     `A Neuralese value is opaque: ${what}. Read it with read(value) to get an ordinary value, or pass it to a function that takes it.`);
   const condition = (node: ts.Node) => report(node, 'neuralese-condition',
     'A Neuralese value cannot decide a branch. Read it with read(value), or ask a natural-language function about it.');
-  const readout = (node: ts.Expression, kind?: NeuraleseReadout['kind'], conditional = false, argument?: number) => {
+  const readout = (node: ts.Expression, kind?: NeuraleseReadout['kind'], conditional = false, argument?: number,
+    conversion?: NeuraleseReadout['conversion']) => {
     options.readouts?.push({ ...span(node), ...(kind ? { kind } : {}), ...(argument === undefined ? {} : { argument }),
+      ...(conversion ? { conversion } : {}),
       ...(conditional ? { conditional: true } : {}) });
     let parent: ts.Node | undefined = node.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
@@ -130,6 +132,20 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         !standardMethod(call.expression, ['Object', 'Array', 'ReadonlyArray'])) return;
     return arrayJoinKind(call.expression.expression);
   };
+  const scalarSoftAlternatives = (type: ts.Type | undefined): boolean => {
+    if (!type) return false;
+    const alternatives = type.isUnion() ? type.types : [type];
+    let found = false;
+    for (const alternative of alternatives) {
+      const parts = neuraleseParts(checker, alternative);
+      if (!parts) continue;
+      found = true;
+      const members = parts.element.isUnion() ? parts.element.types : [parts.element];
+      if (members.some(member => !(member.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike))))
+        return false;
+    }
+    return found;
+  };
   const stringTextArgument = (call: ts.CallExpression): number | undefined => {
     if (!ts.isPropertyAccessExpression(call.expression) || !standardMethod(call.expression, ['String']) ||
         !(checker.getTypeAtLocation(call.expression.expression).flags & ts.TypeFlags.StringLike) ||
@@ -159,7 +175,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         (hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)) ||
           hasSoftAlternative(checker, checker.getTypeAtLocation(node.right)))) {
       const kind = node.operatorToken.kind;
-      if (CONDITIONAL.has(kind) && soft(node.left)) condition(node.left);
+      if (CONDITIONAL.has(kind) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.left))) condition(node.left);
       else if ((kind === ts.SyntaxKind.PlusToken || kind === ts.SyntaxKind.PlusEqualsToken) &&
           [node.left, node.right].some(side => checker.getTypeAtLocation(side).flags & ts.TypeFlags.StringLike)) {
         // `text += soft` coerces the right-hand value. A soft left side is not
@@ -170,12 +186,15 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
           readout(node.right, undefined, !soft(node.right));
       }
       else if (ARITHMETIC.has(kind)) opaque(node, 'it cannot be computed with or compared');
-    } else if (ts.isPrefixUnaryExpression(node) && soft(node.operand)) {
+    } else if (ts.isPrefixUnaryExpression(node) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.operand))) {
       if (node.operator === ts.SyntaxKind.ExclamationToken) condition(node.operand); else opaque(node, 'it cannot be computed with');
-    } else if ((ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)) && soft(node.expression))
+    } else if ((ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)) &&
+        hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
       condition(node.expression);
-    else if (ts.isForStatement(node) && soft(node.condition)) condition(node.condition!);
-    else if (ts.isConditionalExpression(node) && soft(node.condition)) condition(node.condition);
+    else if (ts.isForStatement(node) && node.condition && hasSoftAlternative(checker, checker.getTypeAtLocation(node.condition)))
+      condition(node.condition);
+    else if (ts.isConditionalExpression(node) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.condition)))
+      condition(node.condition);
     else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) &&
         hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
       readout(node.expression, undefined, !soft(node.expression));
@@ -195,6 +214,16 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         const first = node.arguments[0];
         if (first && hasSoftAlternative(checker, checker.getTypeAtLocation(first)))
           readout(first, undefined, !soft(first));
+      }
+      if (ts.isIdentifier(callee) && (callee.text === 'Number' || callee.text === 'Boolean') &&
+          isDefaultGlobal(checker, callee) && node.arguments.length > 0) {
+        const first = node.arguments[0]!;
+        const type = checker.getTypeAtLocation(first);
+        if (hasSoftAlternative(checker, type)) {
+          if (scalarSoftAlternatives(type))
+            readout(node, 'scalar-conversion', !soft(first), 0, callee.text as 'Number' | 'Boolean');
+          else opaque(node, `${callee.text}() cannot convert an opaque Neuralese value; read a scalar value explicitly`);
+        }
       }
       if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'JSON' &&
           callee.name.text === 'stringify' && isDefaultGlobal(checker, callee.expression)) {

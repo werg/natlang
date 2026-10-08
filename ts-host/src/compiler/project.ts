@@ -478,6 +478,9 @@ export function compileProject(options: BuildOptions): BuildResult {
         conditionalReadouts: new Set(fileReadouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`)),
         joins: new Set(fileReadouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`)),
         jsons: new Set(fileReadouts.filter(item => item.kind === 'json').map(item => `${item.start}:${item.end}`)),
+        scalarConversions: new Map(fileReadouts.filter(item => item.kind === 'scalar-conversion' && item.conversion)
+          .map(item => [`${item.start}:${item.end}`, { argument: item.argument ?? 0, conversion: item.conversion!,
+            ...(item.conditional ? { conditional: true as const } : {}) }])),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',

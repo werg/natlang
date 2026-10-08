@@ -280,6 +280,74 @@ test('computed member and object keys read soft values at the key position', asy
     { alpha: 2, beta: 1, symbol: 1 });
 });
 
+test('explicit Number and Boolean read only scalar Neuralese alternatives after native arguments evaluate', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'numberValue', type: 'Neuralese<number> | number' },
+    { name: 'textValue', type: 'Neuralese<string> | string' },
+    { name: 'events', type: 'string[]' },
+  ], locals: [], captures: [], imports: [], returns: 'number' };
+  const source = `return Number((events.push('number'), numberValue), (events.push('extra'), 9)) +
+    (Boolean((events.push('boolean'), textValue)) ? 100 : 0);`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => [item.kind, item.argument, item.conversion, item.conditional]), [
+    ['scalar-conversion', 0, 'Number', true], ['scalar-conversion', 0, 'Boolean', true],
+  ]);
+  const compiled = compileScopeSnippet(source, { inputBindings: ['numberValue', 'textValue', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  const events = [];
+  let failReads = false;
+  const readNeuraleseIfReference = async value => {
+    if (!isNeuraleseRef(value)) return value;
+    events.push(`read:${value.$neuralese.id}`);
+    if (failReads) throw new Error('scalar read failed');
+    return value.$neuralese.id === 'nz1_nnnnnnnnnnnnnnnnnnnn' ? 17 : 'false';
+  };
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference });
+  const softResult = await run({ numberValue: neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+    textValue: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events }, {}, {});
+  assert.equal(softResult, 117, 'Boolean uses native truthiness of the exact read text');
+  assert.deepEqual(events, ['number', 'extra', 'read:nz1_nnnnnnnnnnnnnnnnnnnn', 'boolean', 'read:nz1_tttttttttttttttttttt']);
+
+  events.length = 0;
+  const crispResult = await run({ numberValue: 3, textValue: '', events }, {}, {});
+  assert.equal(crispResult, 3);
+  assert.deepEqual(events, ['number', 'extra', 'boolean'], 'crisp alternatives go directly to native constructors');
+
+  events.length = 0;
+  failReads = true;
+  await assert.rejects(() => run({ numberValue: neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+    textValue: 'unused', events }, {}, {}), /scalar read failed/);
+  assert.deepEqual(events, ['number', 'extra', 'read:nz1_nnnnnnnnnnnnnnnnnnnn'],
+    'a failed trained read propagates after native argument evaluation and before later expressions');
+  failReads = false;
+
+  const module = compileModule({ kind: 'module', id: 'scalar-readout', name: 'scalarReadout', source: 'scalarReadout.ts', revision: 'r1',
+    text: `export async function convert(numberValue: Neuralese<number> | number, textValue: Neuralese<string> | string) {
+      return Number(numberValue) + (Boolean(textValue) ? 100 : 0);
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const exports = {};
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)(exports, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value =>
+      isNeuraleseRef(value) ? (value.$neuralese.id === 'nz1_nnnnnnnnnnnnnnnnnnnn' ? 17 : 'false') : value,
+  });
+  assert.equal(await moduleFns.convert(neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+    neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt')), 117);
+
+  const opaque = analyzeEvalSnippet('Number(value);', { ...scope,
+    inputs: [{ name: 'value', type: 'Neuralese<{ amount: number }>' }], returns: 'number' });
+  assert.ok(opaque.diagnostics.some(item => item.code === 'neuralese-opaque-access'));
+  const condition = analyzeEvalSnippet('if (flag) return 1;', { ...scope,
+    inputs: [{ name: 'flag', type: 'Neuralese<boolean> | boolean' }], returns: 'number' });
+  assert.ok(condition.diagnostics.some(item => item.code === 'neuralese-condition'),
+    'mixed soft/crisp conditionals cannot branch on wrapper truthiness');
+  const shadowed = analyzeEvalSnippet('function f(Number: (x: unknown) => number) { return Number(value); }', {
+    ...scope, inputs: [{ name: 'value', type: 'Neuralese<number>' }], returns: 'number' });
+  assert.deepEqual(shadowed.readouts, [], 'shadowed constructors keep their declared call semantics');
+});
+
 test('string conversions read typed Neuralese values with native method ordering', async () => {
   const toString = analyzeText('return text.toString();');
   assert.deepEqual(toString.diagnostics, []);

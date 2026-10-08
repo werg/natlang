@@ -32,6 +32,8 @@ export type LowerOptions = {
   errors?: ReadonlySet<string>;
   /** Standard String method calls whose listed text argument needs typed Neuralese readout. */
   stringArguments?: ReadonlyMap<string, number>;
+  /** Explicit scalar constructors that need a conditional typed Neuralese readout of argument zero. */
+  scalarConversions?: ReadonlyMap<string, { argument: number; conversion: 'Number' | 'Boolean'; conditional?: true }>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -110,6 +112,24 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           [f.createParameterDeclaration(undefined, undefined, callee)], undefined, undefined, inner)), undefined,
           [ts.visitNode(node.expression, visit) as ts.Expression]);
         return f.createAwaitExpression(outer);
+      }
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) &&
+          options.scalarConversions?.has(`${source.getStart(file)}:${source.getEnd()}`) && node.arguments.length) {
+        const site = options.scalarConversions.get(`${source.getStart(file)}:${source.getEnd()}`)!;
+        const callee = f.createUniqueName('__natlang_scalar_constructor');
+        const args = f.createUniqueName('__natlang_scalar_args');
+        const reader = site.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+        const convert = f.createBinaryExpression(f.createElementAccessExpression(args, f.createNumericLiteral(site.argument)),
+          f.createToken(ts.SyntaxKind.EqualsToken), f.createAwaitExpression(f.createCallExpression(runtime(reader), undefined,
+            [f.createElementAccessExpression(args, f.createNumericLiteral(site.argument))])));
+        const invoke = f.createCallExpression(callee, undefined, [f.createSpreadElement(args)]);
+        const inner = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, args)], undefined, undefined,
+          f.createBlock([f.createExpressionStatement(convert), f.createReturnStatement(invoke)], true))), undefined,
+          [f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        return f.createAwaitExpression(f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, callee)], undefined, undefined, inner)), undefined,
+          [ts.visitNode(node.expression, visit) as ts.Expression]));
       }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
           options.stringArguments?.has(`${source.getStart(file)}:${source.getEnd()}`)) {
