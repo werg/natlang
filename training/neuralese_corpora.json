@@ -7114,6 +7114,20 @@
         "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v2"
       ],
       "notes": "Closed raw V27 Luna campaign with all 30 distinct source variants claimed and terminal, all 30 parent results accepted with exact oracle, zero transport retries. Preserves the full campaign tree including raw per-invocation result/trace files, collector logs, result manifests, journals, queues, dispatch claim ledger, launch record, and per-case closure index. Indices 1 and 5 each have one scope failure despite accepted exact parent results; keep these two trajectories held for action/trace review. The remaining 28 have no scope failures. Thirty are derived task variants across inherited WorkflowEvals groups, with zero independent-world credit. No training, trace, DPO, or action admission."
+    },
+    {
+      "id": "neuralese-v24-root-semantic-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-root-semantic-review-20261008-v1",
+      "include": [
+        "review.json"
+      ],
+      "admission": "held-semantic-review-only-no-training-admission",
+      "derived_from": [
+        "neuralese-v24-actual-action-review-20261008-v1",
+        "neuralese-v24-semantic-target-candidate-proposal-20261008-v1"
+      ],
+      "notes": "Root manually reviewed27train note texts and3typed final targets for source-grounded semantics. Caught readout-copy versus author-target role mismatch. Does not review33testtargets or certify writer identity/runtime replay/foundation/DPO. Preserve alongside subsequent exhaustive role correction; correctness does not grant admission."
     }
   ],
   "coverage_backlog": [
