@@ -181,6 +181,13 @@ function sourceTaskFamily(row) {
   }
   return null;
 }
+function targetRadix(question) {
+  const match = question.match(/base-(\d+)\s+number\s+[0-9a-z]+\s+to\s+base-(\d+)/i);
+  if (!match) throw new Error('base-conversion prompt shape is unsupported');
+  const base = Number(match[2]);
+  if (!Number.isInteger(base) || base < 2 || base > 36) throw new Error('target radix is outside 2..36');
+  return base;
+}
 function solveGymFamily(family, question) {
   if (family === 'base_conversion') {
     const match = question.match(/base-(\d+)\s+number\s+([0-9a-z]+)\s+to\s+base-(\d+)/i);
@@ -379,32 +386,37 @@ const taskCases = [];
 function buildBatch(family, mode, entries, solver = null) {
   const label = solver === 'token_rewrite' ? 'token-rewrite' : solver ?? 'arc-grid';
   const caseId = solver && solver !== 'token_rewrite' ?
-    `${family}-${label}-${mode}-${sha(entries.map(entry => entry.row.id).join('\n')).slice(0, 16)}` :
-    `${family}-${mode}-${sha(entries.map(entry => entry.row.id).join('\n')).slice(0, 16)}`;
+    `${family}-${label}-${mode}-${sha(entries.map(entry => entry.row.id).join('\n')).slice(0, 16)}-answer-key-v2` :
+    `${family}-${mode}-${sha(entries.map(entry => entry.row.id).join('\n')).slice(0, 16)}-answer-key-v2`;
   const items = entries.map((entry, index) => ({ key: `item-${String(index + 1).padStart(2, '0')}`,
     source_id: entry.row.id, question: 'Solve the task described in the complete evidence.', original_question: entry.question,
     evidence: entry.question, answer: entry.answer,
     source: entry.row, answer_format: family === 'reasoning_gym' ? (solver === 'token_rewrite' ?
       'Return only the terminal token sequence separated by single spaces. Return exactly empty if no tokens remain.' :
+      solver === 'base_conversion' ? `Return only a lowercase base-${targetRadix(entry.question)} numeral using digits 0-9 and lowercase letters a-z as needed. Leading zeroes are permitted and represent the same integer. Do not include a sign, spaces, or explanation.` :
       `Return only the ${solver.replaceAll('_', ' ')} result requested by the question. Preserve its exact answer type, case, and delimiter.`) :
       'Return only the output grid as a compact JSON array of integer arrays. Do not include tags, reasoning, or a code fence.' }));
+  for (const item of items) {
+    if (!item.key || item.key === item.source_id) throw new Error(`${item.source_id}: output key must be explicit and distinct from source provenance`);
+  }
+  const radixFields = solver === 'base_conversion' ? items.map(item => ({ key: item.key, base: targetRadix(item.original_question) })) : [];
   const expected = Object.fromEntries(items.map(item => [item.key, item.answer]));
   const files = {
-    'task.json': canonical({ instruction: `Read every item under items/ and solve the task in its question. For each item, return only the requested result in item.answer_format. Store one string answer per item filename stem in output_file, as specified by output_contract.`,
+    'task.json': canonical({ instruction: `Read every item under items/ and solve the task in its question. For each item, return only the requested result in item.answer_format. Store one string answer under item.answer_key in output_file, as specified by output_contract. source_record_id is provenance only; do not use it as the output key.`,
       answer_mode: mode, output_file: 'answers.json', items: items.map(item => `items/${item.key}.json`),
-      output_contract: 'Write one JSON object with exactly one listed item filename stem as each key and the requested result string as its value.' }) + '\n',
-    ...Object.fromEntries(items.map(item => [`items/${item.key}.json`, canonical({ source_record_id: item.source_id,
+      output_contract: 'Write one JSON object with exactly one item.answer_key from each listed item file as each key and the requested result string as its value.' }) + '\n',
+    ...Object.fromEntries(items.map(item => [`items/${item.key}.json`, canonical({ answer_key: item.key, source_record_id: item.source_id,
       question: item.question, evidence: item.evidence, answer_format: item.answer_format }) + '\n'])),
     'answers.json': '{}\n',
   };
   const expectedFiles = { ...files, 'answers.json': canonical(expected) + '\n' };
   const carryMode = mode === 'soft_carry';
-  const setupCode = `type Item = { source_record_id: string; question: string; evidence: string; answer_format: string };\n` +
+  const setupCode = `type Item = { answer_key: string; source_record_id: string; question: string; evidence: string; answer_format: string };\n` +
     (carryMode ? `type State = { cursor: number; notes: Neuralese<string> };\n` : `type State = { cursor: number; answers: Record<string, string> };\n`) +
     `const files = await folder.files('items/*.json');\n` +
     (carryMode ?
       `const seedNotes: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`Create the initial carried answer map. Return exactly the empty JSON object {} as text.\`;\n` +
-      `const updateItem: Neuralese<(input: { item: Item; priorAnswers: Neuralese<string> }) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`You receive item and priorAnswers. Read priorAnswers as String(input.priorAnswers), parse that JSON object, and keep every existing key and value unchanged. Use only item.question and the complete item.evidence to solve this item. Add exactly this item's filename stem as a new key with its requested answer string. Return the complete updated JSON object as text.\`;\n` :
+      `const updateItem: Neuralese<(input: { item: Item; priorAnswers: Neuralese<string> }) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`You receive item and priorAnswers. Read priorAnswers as String(input.priorAnswers), parse that JSON object, and keep every existing key and value unchanged. Use only item.question and the complete item.evidence to solve this item. Add exactly item.answer_key as a new key with its requested answer string. source_record_id is provenance only, not an output key. Return the complete updated JSON object as text.\`;\n` :
       `const solveItem = nl<${mode === 'crisp' ? 'string' : 'Neuralese<string>'}>\`Use only item.question and the complete item.evidence. Follow item.answer_format exactly and return only the result.\`;\n`) +
     `const task = JSON.parse(await folder.file('task.json').readText()) as { output_file: string };\n` +
     `files.length;`;
@@ -429,7 +441,7 @@ function buildBatch(family, mode, entries, solver = null) {
     `  const item = JSON.parse(await file.readText()) as Item;\n` +
     `  const answer = await solveItem(item);\n` +
     (mode !== 'crisp' ? `  const answerText = String(answer);\n` : `  const answerText = answer;\n`) +
-    `  const key = file.name.slice(0, -5);\n` +
+    `  const key = item.answer_key;\n` +
     `  return { cursor: state.cursor + 1, answers: { ...state.answers, [key]: answerText } };\n` +
     `};\n` +
     `const final = await step.iterateOn({ cursor: 0, answers: {} } as State).withLimit({ maxSteps: files.length }).until(state => state.cursor >= files.length);\n` +
@@ -467,7 +479,7 @@ function buildBatch(family, mode, entries, solver = null) {
     prompt_sha256: sha(item.original_question), original_target_sha256: sha(item.source.target.value),
     independent_solution: item.answer }));
   const record = curriculumCase({
-    family: `verified_reasoning_${family}`, familyVersion: 1, shape: caseId, variant: `${label}-iterate/1-${mode}`,
+    family: `verified_reasoning_${family}`, familyVersion: 2, shape: caseId, variant: `${label}-iterate/2-${mode}`,
     splitGroup: sourceBundleGroup, split, slice: 'iterate', domain: family, mode: 'single_call', inline: 'required',
     iterate: 'required', evidence: { retrieved: items.map(item => item.source_id),
       background: [`S1 snapshot source family ${family}; original source groups are retained in dataset_records.`] },
@@ -477,8 +489,8 @@ function buildBatch(family, mode, entries, solver = null) {
       'carry answers in iterateOn state', 'write and read back answers.json'],
     reference: { root: [evalCall(setupCode), evalCall(code), returnCall(expected)], children: childCalls },
     root: { name: 'collect_answers', args: {}, returns: 'Record<string, string>', kind: 'directory-reducer',
-      instructions: `Read task.json and each listed item file. Each item includes its question, complete evidence and answer_format; pass the full item to one inline child and solve only from those fields. ${carryMode ? 'For each item after the first, pass the prior typed Neuralese<string> answer map as an argument to the child. The child must preserve all earlier entries and add only the current item. Keep that typed map in iterateOn state. Read it as a string only after the last item, then write and read back the saved map.' : mode !== 'crisp' ? 'Each child returns Neuralese<string>; convert it with String(answer) after the direct typed child call.' : 'Each child returns a crisp string.'} ${carryMode ? '' : 'Carry each completed answer forward with iterateOn. After all items are solved, write the exact answer map to task.output_file and read it back. Return the saved map.'}` },
-    files: { 'types.ts': `export type Item = { source_record_id: string; question: string; answer_format: string };\n` },
+      instructions: `Read task.json and each listed item file. Each item includes answer_key, source_record_id, question, complete evidence and answer_format; pass the full item to one inline child and solve only from the question, evidence and format. Use item.answer_key as the output key; source_record_id is provenance only. ${carryMode ? 'For each item after the first, pass the prior typed Neuralese<string> answer map as an argument to the child. The child must preserve all earlier entries and add only the current item.answer_key. Keep that typed map in iterateOn state. Read it as a string only after the last item, then write and read back the saved map.' : mode !== 'crisp' ? 'Each child returns Neuralese<string>; convert it with String(answer) after the direct typed child call.' : 'Each child returns a crisp string.'} ${carryMode ? '' : 'Carry each completed answer forward with iterateOn. After all items are solved, write the exact answer map to task.output_file and read it back. Return the saved map.'}` },
+    files: { 'types.ts': `export type Item = { answer_key: string; source_record_id: string; question: string; answer_format: string };\n` },
     inputs: {}, expected, expectedFiles, operation: 'verified-s1-reasoning-collection',
     folderFiles: Object.fromEntries(Object.entries(files).map(([path, body]) => [path, body])),
     worldSemantics: { family, answer_mode: mode, independent_world_credit: 0,
@@ -496,10 +508,11 @@ function buildBatch(family, mode, entries, solver = null) {
       manifest_sha256: sha(corpusManifestBytes), family_file: familyFiles[family], file_sha256: familyDigests[family].sha256 },
     original_source_groups: groupNames, source_bundle_group: sourceBundleGroup,
     task_variant: true, independent_world_credit: 0,
+    task_input_schema_version: 2,
     answer_payload_mode: mode, target_values_visible_to_model: false, provider_calls: 0,
     teacher_observations: 0, training_admission: false };
-  record.semantics.oracle = 'exact';
-  record.semantics.files_oracle = { compare: 'json-string-record' };
+  record.semantics.oracle = radixFields.length ? { level: 'normalized', normalization: 'json-string-record', radix_fields: radixFields } : 'exact';
+  record.semantics.files_oracle = { compare: 'json-string-record', ...(radixFields.length ? { radix_fields: radixFields } : {}) };
   taskCases.push(record);
 }
 

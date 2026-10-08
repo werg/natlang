@@ -1440,6 +1440,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     run=tmp_path/'run'
     rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
     assert any(r['sketch_gradient_norm']>0 for r in rows)
+    assert any(r['supervised_embedding_mse']>0 for r in rows)
     assert all(r['schedule']['sequence_passes']<=3 for r in rows)
     evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
     assert {str(k) for k in evals[-1]['pass_ce_deltas']}=={'0','1'}
@@ -1447,3 +1448,20 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     assert exported['neuralese_input_map'] and not any(k.startswith('input_map.') for k in exported['heads'])
     state=torch.load(run/'checkpoint.pt',weights_only=False)
     assert any(k.startswith('input_map.') for k in state['heads'])
+    assert state['updates']['full_projection']
+
+
+def test_input_map_self_consistency_does_not_replace_full_projection_gold_target():
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    from natlang_neuralese.train.text_warmup import mapped_completions,projection_errors
+    backbone,heads=tiny_student()
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
+    out=next(mapped_completions(backbone,heads,prefix,span))
+    full,mapped=projection_errors(heads,out['top'],out['sketches'],backbone.embed(span).detach(),
+                                  sketch_target=out['sketch_target'])
+    assert full.mean()>0
+    (full.mean()+mapped.mean()).backward()
+    assert heads.content.proj.weight.grad.abs().sum()>0
+    assert heads.input_map.up.weight.grad.abs().sum()>0
+    assert all(p.grad is None for p in backbone.hf.parameters())

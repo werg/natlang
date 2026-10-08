@@ -329,9 +329,10 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
             torch.cat(close_probabilities,dim=1),torch.cat(token_losses,dim=1))
 
 
-def projection_errors(heads, top, sketches, target):
+def projection_errors(heads, top, sketches, target, *, sketch_target=None):
+    """Full projection stays anchored to gold; an input map may have a separate detached target."""
     return (relative_mse_positions(heads.content(torch.zeros_like(top),top),target),
-            relative_mse_positions(sketches,target))
+            relative_mse_positions(sketches,target if sketch_target is None else sketch_target))
 
 
 def projection_losses(heads, top, sketches, target):
@@ -1038,8 +1039,8 @@ def main(argv=None):
         if evaluation and out['pass_index']==0 and projected_observer is not None:
             projected_observer(out,prediction)
         target=backbone.embed(span).detach()
-        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],
-                                                               out.get('sketch_target',target))
+        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target,
+                                                               sketch_target=out.get('sketch_target'))
         embedding,sketch=embedding_positions.mean(),sketch_positions.mean()
         if out['pass_index']==0:
             with torch.no_grad():
