@@ -6579,6 +6579,28 @@
         "luna-v17-v9-portable-context-proposal-20261008"
       ],
       "notes": "Immutable independent root prefix/target/alignment checks and exact final admission decision; source/body proof and validator parity explicit."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v24-v3-static-generation-packet-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v24-20261008-v3",
+      "include": [
+        "README.md",
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "source-quality-review.json",
+        "root-review-v1/root-review.json",
+        "runtime-reference-proof-a6d4d5a5/**",
+        "readiness-probe-a6d4d5a5/**",
+        "generation-review-v1/luna/plan.approved.json",
+        "generation-review-v1/luna/root-authorization.json",
+        "generation-review-v1/luna/source-index-catalog.json",
+        "generation-review-v1/luna/dispatcher-v1-process.json",
+        "generation-review-v1/luna/launch-registration-v1.json"
+      ],
+      "admission": "generation-source-reference-readiness-and-launch-provenance-no-training-or-action-admission",
+      "notes": "Immutable V24 v3 authored source, source/root review, frozen runtime reference proof, one READY provider-probe receipt, approved generation plan and launch-time binding. The launch binding is a static snapshot; mutable campaign ledger, job partials, raw results and logs are deliberately excluded while generation is active. Reference proof and provider readiness do not grant action, trace, DPO, or training admission."
     }
   ],
   "coverage_backlog": [
