@@ -266,10 +266,9 @@ test('inline provenance keeps distinct identical sites and empty static bindings
 });
 
 
-test('invalid multiple nl type arguments are rejected before any child schema is lowered', () => {
+test('two nl.with type arguments check captures separately from the child result and inputs', () => {
   const declarations = DECLS + '\ntype Context = { policy: string };';
   for (const expression of [
-    'nl.with<Context, Verdict>({ policy })`Judge note.`(note)',
     'nl<Context, Verdict>`Judge note.`(note)',
     'nl.with({ policy })<Context, Verdict>`Judge note.`(note)',
   ]) {
@@ -277,11 +276,49 @@ test('invalid multiple nl type arguments are rejected before any child schema is
     assert.equal(result.plans.length, 0);
     assert.equal(result.diagnostics.length, 1);
     assert.equal(result.diagnostics[0].code, 'nl-type-arguments');
-    assert.match(result.diagnostics[0].message, /child result type or full callable signature/);
-    assert.match(result.diagnostics[0].message, /capture names and types come from the capture record/);
+    assert.match(result.diagnostics[0].message, /one result\/signature type, or two types as/);
   }
   const valid = analyze('async function f() { const value = await nl.with<Verdict>({ policy })`Judge note.`(note); }', declarations);
   assert.deepEqual(valid.diagnostics, []);
   assert.equal(valid.plans.length, 1);
   assert.equal(valid.plans[0].returns.natlang, 'Verdict');
+
+  const literal = analyze(`async function f(note: string) {
+    const label = 'x' as const;
+    const value = await nl.with<{ label: string }, Verdict>({ label })\`Judge note.\`(note);
+  }`, declarations);
+  assert.deepEqual(literal.diagnostics, []);
+  assert.equal(literal.plans[0].returns.natlang, 'Verdict');
+  assert.deepEqual(literal.plans[0].parameters.map(parameter => parameter.name), ['note']);
+  assert.deepEqual(literal.plans[0].captures.map(capture => [capture.name, capture.shadowedByParameter]), [['label', undefined]]);
+
+  const shadowed = analyze(`async function f(policy: string) {
+    const value = await nl.with<{ policy: string }, Verdict>({ policy })\`Judge note.\`(policy);
+  }`, declarations);
+  assert.deepEqual(shadowed.diagnostics, []);
+  assert.deepEqual(shadowed.plans[0].parameters.map(parameter => parameter.name), ['policy']);
+  assert.deepEqual(shadowed.plans[0].captures.map(capture => [capture.name, capture.shadowedByParameter]), [['policy', true]]);
+
+  for (const [record, schema] of [
+    ['{ policy }', '{ policy: string; required: number }'],
+    ['({ policy, extra: 1 })', '{ policy: string }'],
+    ['({ policy: 42 })', '{ policy: string }'],
+  ]) {
+    const invalid = analyze(`async function f() { const value = await nl.with<${schema}, Verdict>(${record})\`Judge note.\`(note); }`, declarations);
+    assert.equal(invalid.plans.length, 0);
+    assert.equal(invalid.diagnostics[0].code, 'nl-explicit-captures');
+  }
+
+  const repro = analyze(`type CaptureRecord = { notes: Neuralese<string>; text: string; context: string; pass: string; constraint: string };
+    type InputRecord = { priorNotes: Neuralese<string>; text: string; decisionContext: string; passName: string; passConstraint: string };
+    async function f(input: InputRecord) {
+      const integration = nl.with<CaptureRecord, string>({ notes: input.priorNotes, text: input.text,
+        context: input.decisionContext, pass: input.passName, constraint: input.passConstraint })\`Integrate.\`;
+      return await integration({ notes: input.priorNotes, text: input.text, context: input.decisionContext,
+        pass: input.passName, constraint: input.passConstraint });
+    }`, declarations);
+  assert.deepEqual(repro.diagnostics, []);
+  assert.equal(repro.plans.length, 1);
+  assert.deepEqual(repro.plans[0].parameters.map(parameter => parameter.name), ['input']);
+  assert.deepEqual(repro.plans[0].captures.map(capture => capture.name), ['notes', 'text', 'context', 'pass', 'constraint']);
 });

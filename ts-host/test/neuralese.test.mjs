@@ -48,6 +48,37 @@ test('nested Neuralese types and recursive function types are rejected; recursiv
   assert.doesNotThrow(() => new TypeEnv({ Tree: parseType('{ label: string, children: Tree[] }') }));
 });
 
+test('two-generic nl.with schemas compile through eval and module paths without typing child inputs', () => {
+  const source = `const integration = nl.with<CaptureRecord, string>({ notes: input.priorNotes, text: input.text,
+    context: input.decisionContext, pass: input.passName, constraint: input.passConstraint })\`Integrate.\`;
+    return integration({ notes: input.priorNotes, text: input.text, context: input.decisionContext,
+      pass: input.passName, constraint: input.passConstraint });`;
+  const inputType = '{ priorNotes: Neuralese<string>; text: string; decisionContext: string; passName: string; passConstraint: string }';
+  const captureType = '{ notes: Neuralese<string>; text: string; context: string; pass: string; constraint: string }';
+  const scope = { types: { CaptureRecord: captureType }, inputs: [{ name: 'input', type: inputType }],
+    locals: [], captures: [], imports: [], returns: 'Promise<string>' };
+  const evalAnalysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(evalAnalysis.diagnostics, []);
+  assert.equal(evalAnalysis.plans.length, 1);
+  assert.deepEqual(evalAnalysis.plans[0].parameters.map(parameter => parameter.name), ['input']);
+  assert.deepEqual(evalAnalysis.plans[0].captures.map(capture => capture.name), ['notes', 'text', 'context', 'pass', 'constraint']);
+  const compiledEval = compileScopeSnippet(source, { inputBindings: ['input'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  assert.equal(compiledEval.ok, true, JSON.stringify(compiledEval.diagnostics));
+  assert.match(compiledEval.program, /integration/);
+
+  const module = compileModule({ kind: 'module', id: 'two-generic-nl-with', name: 'captureSchema', source: 'captureSchema.ts', revision: 'r1',
+    text: `type CaptureRecord = ${captureType};
+      export async function integrate(input: ${inputType}) {
+        const integration = nl.with<CaptureRecord, string>({ notes: input.priorNotes, text: input.text,
+          context: input.decisionContext, pass: input.passName, constraint: input.passConstraint })\`Integrate.\`;
+        return integration({ notes: input.priorNotes, text: input.text, context: input.decisionContext,
+          pass: input.passName, constraint: input.passConstraint });
+      }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(module, /integration/);
+  assert.match(module, /priorNotes/);
+});
+
 test('reference values check against Neuralese types without touching the payload', () => {
   const env = new TypeEnv({ Plan: parseType('{ steps: string[] }') });
   const id = neuraleseContentId({ dialect: 'd', length: 0, width: 4, dtype: 'f32', data: new Uint8Array() });

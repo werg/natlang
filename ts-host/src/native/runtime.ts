@@ -110,7 +110,7 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   'The child takes the Draft argument, not the capture object or the outer progress state; its result is the complete Draft. ' +
   'Capture the applicable output contract, including exact-copy and field-format rules, and pass the current full draft as the child argument. ' +
   'After each pass, build from the returned draft; do not reconstruct later state from an outer initial draft. ' +
-  'nl.with accepts one type argument, the result type or a full callable signature. For example:\n' +
+  'nl.with accepts one type argument (result type or full callable signature), or two as <CaptureRecord, Result>; the first checks listed captures and does not type the child input. For example:\n' +
   '  type Progress = { pass: number; draft: Draft };\n' +
   '  const step = async (state: Progress): Promise<Progress> => {\n' +
   '    const nextDraft = await nl.with<Draft>({ policy, pass: passes[state.pass] })`Apply this pass to the current draft.`(state.draft);\n' +
@@ -124,6 +124,7 @@ instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
   nl<T>\`instructions\`               the same with its result type T written out
   nl.with<T>({ policy })\`instructions\`(item)   explicit context snapshots, result type T
+  nl.with<C, T>({ policy })\`instructions\`(item)   C checks the capture record; T is the result type
   nl<T>\`instructions\`.with({ policy })(item)   the same capture binding on this inline tag
   const f: (item: Item) => Promise<T> = nl\`instructions\`   a named function with a signature, to call many times
   await nl(\`instructions with \${values}\`)   a one-shot question: the same as nl\`...\`(), its result is the answer
@@ -131,7 +132,9 @@ Parameters take their names from the call (nl\`Is item urgent?\`(item) names it 
 without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
 instructions also see variables in scope that they mention by exact name. The result type comes from how the result
 is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
-In nl.with<T>, T describes the result, not the capture object. A suffix .with(...) can apply directly to an inline
+In nl.with<T>, T describes the result, not the capture object. In nl.with<C, T>, C is a finite capture-record schema
+and T is the result; the callable's input is passed separately and inferred from the call (or declared with one full
+callable signature). A suffix .with(...) can apply directly to an inline
 nl template, or to a saved inline nl function created earlier in the same eval. On a saved function, .with(record)
 creates a fresh callable with the same instructions and already-evaluated interpolations, taking a snapshot of the
 same named captures from the new finite record; a const alias of that function can be rebound too. For example,

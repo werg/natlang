@@ -773,3 +773,26 @@ these direct receiver forms; this is prospective ergonomics support, not a
 claimed generation recovery. The `.replace` implementation remains separate
 because it also validates its current literal-string argument overload and
 preserves complete call evaluation order.
+
+### Separate `nl.with` capture and child types — 2026-10-08
+
+Luna V24 slot 05 provides an actual refusal in
+`runs/neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-d386e4a2238dcc2b.trace.jsonl`,
+action sequence 20. The authored call used
+`nl.with<{notes: Neuralese<string>; text: string; context: string; pass: string; constraint: string}, string>(captures)`
+and then invoked the returned child with a separate record. The compiler returned `nl-type-arguments`, saying
+`nl.with` accepted one type argument. The child input was a distinct single `input` parameter shape, so the two
+schemas had been conflated by the diagnostic rather than describing an authority issue.
+
+The direct `nl.with<CaptureRecord, Result>(record)` form is now accepted by the same inline capture analysis and
+validation path as other explicit captures. `C` checks the finite listed record (unknown fields, missing required
+fields, and nonassignable values are diagnosed); `Result` is the child result type. Invocation arguments still
+determine the child parameter shape and are not inferred from or granted by the capture schema. Existing one-type
+argument forms retain their result/full-callable meaning. A literal capture such as `'x'` is assignable to a
+declared `string`; validation is one-way assignability from actual value to declared field type, not mutual
+assignability. Shadowed capture handling remains unchanged, including evaluation of the listed initializer.
+
+Eval-scope, compiler, and module regressions exercise the separate input and capture records, literal widening,
+parameter shadowing, and missing/unknown/wrongly typed fields (`ts-host/test/compiler.test.mjs` and
+`ts-host/test/neuralese.test.mjs`). This implementation addresses the observed refusal; no claim is made about
+whether it changes generation success rates.

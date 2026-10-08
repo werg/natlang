@@ -46,8 +46,11 @@ export interface NlTag {
   /**
    * An `nl` function whose captures are exactly these: plain entries are snapshots taken now; `live(x)` entries
    * are read at each call and written back. No other names are captured.
+   * `nl.with<CaptureRecord, Result>(captures)` can check the finite capture schema separately from the child result;
+   * child arguments remain the values passed when the returned callable is invoked.
    * @natlangIntrinsic nl.with
    */
+  with<CaptureRecord extends object, Result>(captures: CaptureRecord): NlWithTag<Result>;
   with<F = NlUnspecified>(captures: { readonly [name: string]: unknown }): NlWithTag<F>;
 }
 

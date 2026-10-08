@@ -284,18 +284,19 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
     }
 
-    // A capture object is a value argument, never a separate type argument.
-    // Do not silently lower an invalid two-generic tag to its first schema.
-    if ((node.typeArguments?.length ?? 0) > 1 || (withCall?.typeArguments?.length ?? 0) > 1) {
-      report(node, 'nl-type-arguments', '`nl` and `nl.with` accept one type argument: the child result type or full callable signature. ' +
-        'For `nl.with`, this type argument is the child result type; capture names and types come from the capture record. ' +
-        'Put fixed context in `nl.with<Result>({ context })`, then call the function with its current input. ' +
-        'Do not use `nl.with<CaptureObject, Result>` or pass the capture object in place of the child input.');
+    // `nl.with<CaptureRecord, Result>` types the listed capture record and the child result separately;
+    // the callable's argument type still comes from its later invocation (or one full callable signature).
+    const twoArgumentWith = withCall === node.tag && (withCall?.typeArguments?.length ?? 0) === 2;
+    if ((node.typeArguments?.length ?? 0) > 1 || ((withCall?.typeArguments?.length ?? 0) > 1 && !twoArgumentWith)) {
+      report(node, 'nl-type-arguments', '`nl` accepts one type argument: the child result type or full callable signature. ' +
+        '`nl.with` accepts one result/signature type, or two types as `<CaptureRecord, Result>`. The first type checks only ' +
+        'the listed capture record; child arguments are passed separately and inferred from the call. ' +
+        'Use one full callable signature when you need to declare child parameter types.');
       return;
     }
 
     // 1. Explicit annotation (`nl<F>`, or `nl.with<F>({ … })`).
-    const annotation = node.typeArguments?.[0] ?? withCall?.typeArguments?.[0];
+    const annotation = node.typeArguments?.[0] ?? (twoArgumentWith ? withCall?.typeArguments?.[1] : withCall?.typeArguments?.[0]);
     if (annotation) {
       if (ts.isFunctionTypeNode(annotation)) {
         signature.parameters = [];
@@ -430,8 +431,10 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         '`nl.with({ rubric })` or `nl.with(context)`, where context has known fields.');
       return;
     }
+    const captureSchemaNode = withCall === node.tag && withCall.typeArguments?.length === 2 ? withCall.typeArguments[0] : undefined;
     const fromRecord = !ts.isObjectLiteralExpression(argument);
     const properties: { name: string; declaration?: ts.Declaration }[] = [];
+    const actualTypes = new Map<string, ts.Type>();
     if (fromRecord) {
       const recordType = checker.getTypeAtLocation(argument);
       const finite = !!(recordType.flags & ts.TypeFlags.Object) && !checker.getSignaturesOfType(recordType, ts.SignatureKind.Call).length &&
@@ -450,6 +453,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
           return;
         }
         properties.push({ name, declaration: member.valueDeclaration ?? member.declarations?.[0] });
+        actualTypes.set(name, checker.getTypeOfSymbolAtLocation(member, argument));
       }
     }
     const captures: CapturePlan[] = [];
@@ -509,6 +513,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
       }
       const type = checker.getTypeAtLocation(expression);
+      actualTypes.set(name, type);
       let described: TargetDescriptor;
       try { described = describeTarget(program, checker, type, { allowHost: true, location: node }); }
       catch (error) {
@@ -518,6 +523,41 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       const source = (declaration && options.classify?.(declaration)) ?? (described.host ? 'handle' :
         declaration && ts.isParameter(declaration) ? 'input' : declaration && isTopLevel(declaration) ? 'local' : 'block');
       captures.push({ name, type: described, mutable, source, mentionSpan: property.getStart(), mode });
+    }
+    if (captureSchemaNode) {
+      const schema = checker.getTypeFromTypeNode(captureSchemaNode);
+      const schemaMembers = checker.getPropertiesOfType(schema);
+      const schemaFinite = !schema.isUnion() && !!(schema.flags & ts.TypeFlags.Object) &&
+        !checker.getIndexTypeOfType(schema, ts.IndexKind.String) && !checker.getIndexTypeOfType(schema, ts.IndexKind.Number) &&
+        schemaMembers.every(member => (member.declarations ?? []).some(declaration => ts.isPropertySignature(declaration) ||
+          ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration)));
+      if (!schemaFinite) {
+        report(captureSchemaNode, 'nl-explicit-captures', 'The first `nl.with` type argument must be a finite record schema with named data fields.');
+        return;
+      }
+      const expectedByName = new Map(schemaMembers.map(member => [member.getName(), member]));
+      const unknown = [...actualTypes.keys()].find(name => !expectedByName.has(name));
+      if (unknown) {
+        report(withCall, 'nl-explicit-captures', `Capture ${JSON.stringify(unknown)} is not declared by the ` +
+          '`nl.with` capture schema.');
+        return;
+      }
+      const missing = schemaMembers.find(member => !(member.flags & ts.SymbolFlags.Optional) && !actualTypes.has(member.getName()));
+      if (missing) {
+        report(withCall, 'nl-explicit-captures', `Required capture ${JSON.stringify(missing.getName())} is missing from the ` +
+          "`nl.with` capture record.");
+        return;
+      }
+      for (const [name, actual] of actualTypes) {
+        const expectedMember = expectedByName.get(name)!;
+        const expected = checker.getTypeOfSymbolAtLocation(expectedMember, captureSchemaNode);
+        if (!checker.isTypeAssignableTo(actual, expected)) {
+          report(withCall, 'nl-explicit-captures', `Capture ${JSON.stringify(name)} has type ` +
+            `\`${checker.typeToString(actual, withCall)}\`, which is not assignable to the declared capture type ` +
+            `\`${checker.typeToString(expected, captureSchemaNode)}\`.`);
+          return;
+        }
+      }
     }
     return captures;
   };
