@@ -5,6 +5,7 @@
  * order of checks and hooks, intent, the error-to-result rules, assembly, bounding and settlement — is `tool/call` and
  * `tool/run`.
  */
+import { ONCE_EFFECTS } from '@natlang/node';
 import { type Context, copyJson } from '@earendil-works/chord';
 import { awaitWithContext } from '@earendil-works/chord/context';
 import type { ToolCall } from '@earendil-works/pi-ai';
@@ -40,6 +41,9 @@ export function toolsService(runtime: Runtime, context: Context, agent: Agent, c
     return tool;
   };
   return {
+    // Running the tool is the call's external effect: an executor that runs it again within the phase (a retried eval)
+    // gets the earlier execution, not a second run (pi runs a tool once per execute phase).
+    [ONCE_EFFECTS]: ['execute'],
     /** The tool's argument repair, if it has one: the repaired arguments, or the error its repair threw. */
     prepare(name: string, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string } {
       const tool = find(name);
