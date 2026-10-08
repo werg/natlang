@@ -12910,6 +12910,33 @@
         "v18-v19-action45-base-selected84-native-text-20261008-v1"
       ],
       "notes": "Compact delta capsule only; exact action37 native/text facets are added to the adopted84 base. Delta files are accompanied by v2 integration review, root integration adoption v2, v1 compact delta manifest, and explicit superseded-overwritten-review incident receipt. Base artifacts are dependencies and are not recopied."
+    },
+    {
+      "id": "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/00-root-authored-synthetic-action-admission-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/01-authored-root-native-synthetic-candidate-review-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/02-authored-root-native-synthetic-candidate-v2.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/capsule-receipt-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/decoded-supervised-suffixes.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-manifest-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-native-pieces.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-native-records.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-text-provenance.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-text.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/integration-review-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/omissions.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/root-integration-adoption-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/source-coverage.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/superseded-integration-review-receipts-v1.json"
+      ],
+      "admission": "root-adopted exact project-authored synthetic native-action and faithful ordinary-text facets only; explicitly not provider-sampled/model-synthesis; no recurrence/runtime/learned-writer/trajectory/DPO/training qualification",
+      "derived_from": [
+        "v18-v19-action45-base-selected84-native-text-20261008-v1"
+      ],
+      "notes": "Separate authored synthetic source class. Compact native/text delta plus source/admission evidence, normalized review v3, root adoption v3, and overwritten-review incident receipt; base artifacts pinned as dependencies but not copied. No new-world credit."
     }
   ],
   "coverage_backlog": [
