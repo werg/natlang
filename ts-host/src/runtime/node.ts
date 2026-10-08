@@ -3,7 +3,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { TypeScriptEnvironment } from '../environment.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
 import { currentFrame, setContextStore, type Frame } from './context.js';
-import { setDefaultEnvironmentFactory } from './runtime.js';
+import { setDefaultCallStoreFactory, setDefaultEnvironmentFactory } from './runtime.js';
+import { CallStore, machineStoreRoot } from '../calls/store.js';
 import { registerBuiltinModule, setModuleRealm, setPackageLoader } from './modules.js';
 import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
@@ -12,6 +13,8 @@ const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
 setDefaultEnvironmentFactory(options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }));
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
+// Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
+setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
 
 registerBuiltinModule('natlang:learning', () => learningModule);
 registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
@@ -27,4 +30,7 @@ setPackageLoader(specifier => {
 });
 
 export * from './index.js';
+export * from '../calls/index.js';
+export { CallStore, machineStoreRoot } from '../calls/store.js';
+export type { CallSummary, CallFilter, HotDefinition, AuditJob } from '../calls/store.js';
 export { loadNatlang, loadCallables, applicationContextRecords, nodeSourceFiles, fileTraceSink } from './node-files.js';

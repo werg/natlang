@@ -41,6 +41,8 @@ export type Frame = Readonly<{
   signal?: AbortSignal;
   /** The controller of the natural-language call this frame belongs to (aborts its remaining children when it fails). */
   abort?: AbortController;
+  /** Services seen by code running in this frame instead of the task's (a compiled case's journaled services). */
+  services?: Readonly<Record<string, object>>;
 }>;
 
 /** One active call of an authored TypeScript function, linked to the calls active above it. */

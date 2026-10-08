@@ -19,9 +19,10 @@ import { plain } from './durable.ts';
  * A provider's message as the Session line stores it: strict JSON, or a rejection as pi-durable's commit would give
  * (a message that is not JSON faults the generation; it is never cleaned into a valid-looking one).
  */
-function storable(message: AssistantMessage): AssistantMessage {
+function storable(message: AssistantMessage, phase: { failed?: string }): AssistantMessage {
   try { return copyJson(message, { omitUndefinedProperties: true }) as unknown as AssistantMessage; }
   catch (error) {
+    phase.failed = `the provider returned a message that cannot be stored`;
     throw new Error(`The provider returned a message that cannot be stored (${error instanceof Error ? error.message : String(error)}), ` +
       'so this request failed. Do not work around it, retry it, or build a message yourself: end this call with ' +
       'return_result status "failed" and this reason. The harness faults the generation.');
@@ -37,7 +38,7 @@ export type TurnOptions = StreamOptions & { thinkingLevel: ThinkingLevel; sessio
  * `streamAttempt`: for a generation task, the attempt its request streams into pi.live (pi-durable's generation
  * request always streams; compaction never does), so a turn the executor sends without `live` still streams.
  */
-export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number) {
+export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number, phase: { failed?: string } = {}) {
   const resolve = (ref: ModelRef): Model<Api> => {
     const model = ref && runtime.models.getModel(ref.provider, ref.modelId);
     if (!model) throw new Error(`Model ${ref?.provider}/${ref?.modelId} is not available`);
@@ -61,10 +62,10 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
       const resolved = resolve(model);
       const attempt = live?.attempt ?? streamAttempt?.();
       return (attempt !== undefined ? streamResponse(runtime as never, resolved, messages, options(turn), attempt, context) :
-        runtime.models.completeSimple(resolved, { messages }, options(turn))).then(storable);
+        runtime.models.completeSimple(resolved, { messages }, options(turn))).then(message => storable(message, phase));
     },
     poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {
-      return runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal }).then(storable);
+      return runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal }).then(message => storable(message, phase));
     },
     async cancel(model: ModelRef, handle: DeferredHandle): Promise<void> {
       await runtime.models.cancelDeferred(resolve(model), handle as never);

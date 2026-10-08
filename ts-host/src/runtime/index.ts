@@ -1,9 +1,9 @@
 /** Platform-neutral natlang runtime API. Platform entry points install a context store and evaluator. */
 import * as lowered from './lowered.js';
 export { createNatlangRuntime, NatlangRuntime, NatlangTask, recordingServices, resolveFrame,
-  setDefaultEnvironmentFactory } from './runtime.js';
+  setDefaultEnvironmentFactory, setDefaultCallStoreFactory } from './runtime.js';
 export type { ModelDriver, ModelConfig, NatlangRuntimeOptions, NatlangLimits, TaskOptions, TraceSink, Decision,
-  InvocationTrace, Services } from './runtime.js';
+  InvocationTrace, Services, SpecializationMode } from './runtime.js';
 export { modelTurnsSoFar } from '../native/agent.js';
 export { NatlangContextError, NatlangRecursionError, SlotContextStore, setContextStore, currentFrame } from './context.js';
 export type { ContextStore, Frame } from './context.js';

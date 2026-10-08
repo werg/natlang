@@ -556,7 +556,7 @@ export class NativeRuntime {
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
     const services = options.services ?? {};
-    this.services = isRecording(services) ? services : recordingServices(services, event => event.phase === 'requested' ?
+    this.services = isRecording(services) ? services : recordingServices(services, ({ exact: _exact, ...event }) => event.phase === 'requested' ?
       this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }) :
       graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
         [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));

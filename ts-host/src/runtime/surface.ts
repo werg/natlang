@@ -4,6 +4,7 @@
  */
 import { Iteration, iterateOn as iterate, type IterationEvent, type IterationTrajectory, type ProgressVerdict } from './iterate.js';
 import { inline, uncompiled } from './lowered.js';
+export { Deopt } from '../calls/dispatch.js';
 
 export type { IterationEvent, IterationTrajectory, ProgressVerdict };
 export type { Iteration };
