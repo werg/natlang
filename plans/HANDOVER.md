@@ -1,3 +1,9 @@
+## Pop storage pause and recovery — 2026-10-08 03:24 UTC
+
+- V21v3 Luna indices5–7 paused unstarted at8156MiBfree below8192floor. Indices2and4 accepted;0 rejected wrongnumericmeasure (BUILD-51 actualrank52, returned51);1 rejected after a child emitted literal `${next}` as markerbody;3 continues. Preserve originals, no blindretry of0/1.
+- Freed1,860,613,981bytes by evicting closedV21 `best-checkpoint.pt` and `heads.pt` only after exact local/immutablemanifest/DGX SHA checks and zeroopenFD verification. DGX canonical copies remain verified; local `best-heads.pt` retained. Receipt `.coordination/artifact-evictions/v21-closed-additional-20261008.json`; restore selected files via registered `neuralese-native-text-warmup-v21-closed-20261008` snapshot. ActiveV22 checkpoint/optimizer/RNG/inputstate untouched. Root approves fresh plan only for unstarted5–7 once floor/authority verified.
+- Idiom audit is reviewing computed crisptext→Neuralese marker syntax after the literal interpolation failure. No marker semantics change yet. Corpus audit is fixing modern receipt-class validation drift and stale per-receipt variables before admitting any repaired V6 data.
+
 ## Pop fresh Luna generation — 2026-10-08 03:17 UTC
 
 - Reviewed V21 immutable sourcev3 SHA `71a523d6200db7581b7de1d1851fc624305183b4d3a035a85f0753de0103c608`;16 factual variants under inherited8groups, zero independent-world credit. Root reviewed all facts/golds and repaired tie-break/request precedence/undefined field descriptions. Frozen f707f973 reference16/16,192 actions64reads. `root-review-v1/root-review.json` approves generation only, not training/trace/DPO admission.
