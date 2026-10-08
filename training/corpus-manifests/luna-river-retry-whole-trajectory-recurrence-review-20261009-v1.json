@@ -1,0 +1,1326 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-input-provenance-v1.json",
+      "bytes": 37787,
+      "sha256": "57e499962c09487103f10237098f59f706471407929322436ad78dc98d7faeda"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/compatibility.js",
+      "bytes": 4799,
+      "sha256": "d761c4da22464f94ebfabf2186b494885cdcc68aa07a5c8295ef06c5ace5c5de"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/identity.js",
+      "bytes": 1420,
+      "sha256": "13d48cbc54240a1a9b1084e7f345b637161dc58d51872db17eaaada3c8702627"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/inventory.js",
+      "bytes": 4070,
+      "sha256": "f981dcbcd94bfa96faac14ec6a38028b541564af41471099454cadf5c3a8ee83"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/program-view.js",
+      "bytes": 7875,
+      "sha256": "d2623c18be7a696bc35d586541cf05340e05e9e8b13e1682ac2a3c207f93980a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/prompts.js",
+      "bytes": 234,
+      "sha256": "460cca52ae66e46e5cf2a52c979a9a12d78621d8aa8ff5e61ae49f1dac9a4961"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/schema.js",
+      "bytes": 8944,
+      "sha256": "8d7292292f09dc07c294f93911e9094cedcebcfc2c7dc862caf45caf80ee41da"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/adaptation/types.js",
+      "bytes": 119,
+      "sha256": "8d3d1b62c2d9519b3a71358bf7adb63e82d8d2a6f8cd7709a4749c01039955af"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/compilations.js",
+      "bytes": 5051,
+      "sha256": "0b78d1393beb8fca79b4c73d78a57daa750bfd31bef9da4e05bcc636cd23a70e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/dispatch.js",
+      "bytes": 3001,
+      "sha256": "c34072175bdf3c0e500536277baf2f1d481faf5ea2a4030a92922cbb1cfcb51c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/index.js",
+      "bytes": 545,
+      "sha256": "fd777a2c8007cea170b43553d1049e5f0cfcbfcee54ae80d490b9d253c1b8fb1"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/judge.js",
+      "bytes": 6019,
+      "sha256": "a0e05d8e651d30261fc88e854f20c6792e1f9b7ab45ce013543806106d9a7177"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/mining.js",
+      "bytes": 10429,
+      "sha256": "848e208d8b7e45575553705c41d5332191b7ec9b6e778b75f8202bccec123bc8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/normalize.js",
+      "bytes": 7289,
+      "sha256": "bb718376f9da049cd7f3c3a9327cc1af14c4c1a7067446052d34657b86da6ec8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/offline.js",
+      "bytes": 7723,
+      "sha256": "0f91cb186106e0378e2da735434ab0dde20de834269615c959f1bbff73e91e3a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/recorder.js",
+      "bytes": 10088,
+      "sha256": "49129905585bb3d9345f15a6c336aa712cd95360571bc40a25d13bb3e78d6dd1"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/replay.js",
+      "bytes": 6448,
+      "sha256": "bc827c2f214413889e25198cf7b3c009b66a11814395ccd95f58a0c79963891f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/snapshot.js",
+      "bytes": 5517,
+      "sha256": "961e23dc22203862496389dacf3a7ce4ff6f53730fd3fb60912567502664edf0"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/specializer.js",
+      "bytes": 19579,
+      "sha256": "90b4f45859f3e6cf11d5f4b7e127c97512a1bd8fb6ab0f1d6de67147caa25a3f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/store.js",
+      "bytes": 32555,
+      "sha256": "aaccfae7f4139173281ddecccbf7be587ccee52e0875b8641c0d5de3a1ce4518"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/calls/types.js",
+      "bytes": 557,
+      "sha256": "049bcd0a6628a2a0219e096c1917ff8a63021acafea4b13042f2c5d1462c7a12"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/eval-check.js",
+      "bytes": 10164,
+      "sha256": "2e1b0ad7e4e34065cbd477394361e7331f0a604fbe99b4baa97f736dff5b436a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/holes.js",
+      "bytes": 19729,
+      "sha256": "fb2a254b2262119701301a054c405e455d740ba1b3a65016633db13b5acc809d"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/host.js",
+      "bytes": 4908,
+      "sha256": "51f18bba5acfee999d77390515fa6561acc93891cdd26a3baabc39e89590bb48"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/inline.js",
+      "bytes": 60540,
+      "sha256": "0a816e84cb859ad6eed8de705633622310c819ecabad482ad92a2043585e7508"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/intrinsics.js",
+      "bytes": 12444,
+      "sha256": "629ca93f40dffa8499567d72479cb9e6ad5ebdb914ec75a718254880b8ae89dc"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/lower.js",
+      "bytes": 37661,
+      "sha256": "07285d43fd708534dc191f933922dff4f0ce03a468c4a122934c931271bb0d84"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/neuralese-conversion.js",
+      "bytes": 105282,
+      "sha256": "7c94a95cb4feb06edee9c4580f990451f2c2981f6aa5697c2b96440abc78f153"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/neuralese.js",
+      "bytes": 35766,
+      "sha256": "11fac8e1d885a042a55da1118031f8876fc31b8335ab37770020172e0ae8a258"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/nl-call.js",
+      "bytes": 1757,
+      "sha256": "11b481fdf3ff85685aa8982a0c71590096fa39e210ffbea2fcbe2d2fa25154fb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/policy.js",
+      "bytes": 18933,
+      "sha256": "a44c8c9aee9f821c4845af259eb21bf4c19f5d0a945260bb66d3cb8e2d876e56"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/project.js",
+      "bytes": 35584,
+      "sha256": "b518c3ee302c777ade056313a884e05be913da2df1f389a9a316f83ceb476757"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/rewrites.js",
+      "bytes": 18655,
+      "sha256": "73f1c87c81da62e5b54058118f7e06f1439d2a843879d29ce4252924ee2266cb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/compiler/targets.js",
+      "bytes": 12495,
+      "sha256": "de5fc50fa56712357b3b23e811a25802528c93e22ec9e3da1b3b0d0c94933ba5"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/environment.js",
+      "bytes": 19178,
+      "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/evaluation/constraints.js",
+      "bytes": 4797,
+      "sha256": "0ab5d3f2ca03a863b376d4dc65de7c6371498c45c7db433c1b0b34e32231c04c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/evaluation/oracles.js",
+      "bytes": 43132,
+      "sha256": "42178a85f629541ce7562f27b7c92bed11d04f04395420f7b754c3d129585076"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/llama-runtime-release.js",
+      "bytes": 2826,
+      "sha256": "24ab2d30cb631e85724c8c07f5ffb3886780967f50126390212d433dba200688"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/chat-completion.js",
+      "bytes": 21068,
+      "sha256": "317fae16ac32b6e2e5f766e8b046bf6e91d1a46afa66522e532929a0b98304e0"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/config.js",
+      "bytes": 7113,
+      "sha256": "eb1562c7904c2be59f5db031fbd32a0aa2f5fee5f317e9c93e76ead920a8c582"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/llama-runtime.js",
+      "bytes": 10812,
+      "sha256": "68ead035871b22663c7b42536c10ff49a524d69356758510b88250b8eb352516"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/local-server.js",
+      "bytes": 14246,
+      "sha256": "4edaf0cd171f864eba3a50d6d04002519a7dcc2135c27b0bbb1e513b4e66bef7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/neuralese-server.js",
+      "bytes": 13456,
+      "sha256": "b0d73bd1a502507dfb82ddcacfecf1c0371e6b0f6e064bd13b4df70c2a6a442e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/openai-compatible.js",
+      "bytes": 2636,
+      "sha256": "290dac4d1e9eacb5021d4e387812ad9b1ac1507587ed29e88b264e9a38fdf5cd"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model/text-neuralese-emulation.js",
+      "bytes": 19781,
+      "sha256": "74634ef9173ffdc18942de8337ae12d4b0a8a53cb37bf1090762a5a247f6678d"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/model-default.js",
+      "bytes": 554,
+      "sha256": "e4b6f6d2c5aed166f559cc7c73b29b3b06e56bd511b58e668846b092b6f206d4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/agent.js",
+      "bytes": 87900,
+      "sha256": "b1591375368843ecf692b66968eabbe5f2b6aeafb810416ba04fd7a30031d6b3"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/cutoff.js",
+      "bytes": 2205,
+      "sha256": "90b78084b59e35ebb09b54fb35828e5d9acb38e46ddf479751a70f42acad830b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/data-layout.js",
+      "bytes": 10945,
+      "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/decision-review.js",
+      "bytes": 1161,
+      "sha256": "c940c27195ce7af1f2f6a9c130b2f0c76a7b605279d4e89d67dae9dba88437d9"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/decision.js",
+      "bytes": 2241,
+      "sha256": "fb27e7e1b38a14da9edfd6e89262448f9986f19144fabfc4254a974777c436f2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/effects.js",
+      "bytes": 5420,
+      "sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/eval-types.js",
+      "bytes": 3805,
+      "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/evaluator.js",
+      "bytes": 1159,
+      "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/external.js",
+      "bytes": 2131,
+      "sha256": "7abe4557e8703cd7da988cc35215a41c26526a841f73a153329410b7982d2fd1"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/file-diff-preview.js",
+      "bytes": 2459,
+      "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/graph.js",
+      "bytes": 8439,
+      "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/introspection.js",
+      "bytes": 1732,
+      "sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/neuralese-preview.js",
+      "bytes": 5032,
+      "sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/neuralese-store.js",
+      "bytes": 6256,
+      "sha256": "8559886cc940134595c1e92be9bd252e5ad4766d09acdb622fd0548de2153392"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/neuralese.js",
+      "bytes": 7590,
+      "sha256": "87736a0e786b84d4892ea4b0f2d4ab672c4c07dd4f92d0bbc9627c46ad834d90"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/nz-file.js",
+      "bytes": 20388,
+      "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/pages.js",
+      "bytes": 2551,
+      "sha256": "71503c4ee9a1e94cd1b321e9d90869194d46b9feb6b78ecc782a072938673533"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/prompt.js",
+      "bytes": 33405,
+      "sha256": "aedc43d0b94793c57d29f027cbd142d5cb432fa24a5abf43357f750c74eec778"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/runtime.js",
+      "bytes": 150088,
+      "sha256": "4c7ab464783a8dfa097879e172a30732033d1d62f9a7b1c84829e1ddd217e1c8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/scoped-fs.js",
+      "bytes": 34376,
+      "sha256": "b01dbd28d2ffd629d0af46944df501c55f547be523023dcb53680b33fb2a2847"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/system-prompts.js",
+      "bytes": 6232,
+      "sha256": "3307a9dd583d86b3ab36873a2c63b250fa311a4da9c21342903ab91d60163b48"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/trace.js",
+      "bytes": 5616,
+      "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/type-aliases.js",
+      "bytes": 944,
+      "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/types.js",
+      "bytes": 18335,
+      "sha256": "343d98809acb08a255547cd460ba6cd3e6d780ed3bf0bf660d784c1a6cba1284"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/native/values.js",
+      "bytes": 18664,
+      "sha256": "e6124ba2aa93e35f9f7ac5db63efe5d3c774c28558607fda5c716bdae1e932ad"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/neuralese/combinators.js",
+      "bytes": 12964,
+      "sha256": "be364752add70824b7f02d91e32718ed3fb6d7fae0d0c5c29f99391e9e590f1a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/neuralese/deltas.js",
+      "bytes": 8971,
+      "sha256": "4f3265c2349688a8cd53be603bb8d28aded984ca4bb29c96c40affc5d64ebb38"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/neuralese/learning.js",
+      "bytes": 40316,
+      "sha256": "af8fbe5c644af33b59a33638f91bc95e1c1a010074fb0bff4534852e43c17e3f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/neuralese/recording.js",
+      "bytes": 663,
+      "sha256": "29c83031f3b88be782a37293360696b3a332eceb1f57955dd0fb0aafd1e29f20"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/node-runtime.js",
+      "bytes": 1522,
+      "sha256": "3576c9dedff0d6c778c76d6bc90669b9c25ad922ba6b37e3421e2cb7e71bf5e9"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/package/archive.js",
+      "bytes": 5887,
+      "sha256": "09f7c16040bf4c58aab50387ce1ae4ff4df8929dda2143457e397bb4c85c5d48"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/package/manifest.js",
+      "bytes": 6226,
+      "sha256": "8fb9cff17fa352e628073ef86991e5f73dac249ceaa2c681b9c7191cb005e9ae"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/package/store.js",
+      "bytes": 14668,
+      "sha256": "52d7ad585e55525f9c0d2d814a4fb233ece1f66b3d5c395e2e8f0109c5e04aed"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/package-specifier.js",
+      "bytes": 843,
+      "sha256": "75904e74fba16047baee656fc4344ba07baa406ba28e60c773cfc9733ad0d5dc"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/callable.js",
+      "bytes": 10981,
+      "sha256": "8373d97b2ad27b810646302724d2c9b6a5d7700f45705597dc9160611fda68fc"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/context.js",
+      "bytes": 9666,
+      "sha256": "4e1cfea3e7a563fc40338b4557c678860e176c5cf9fb6849e2f036e2532308ef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/contexts.js",
+      "bytes": 30272,
+      "sha256": "a74d06d8f2b95191143a0e29db88ad3fc4aca4c2f435116d62d5f3d46672209d"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/folder-iteration.js",
+      "bytes": 2610,
+      "sha256": "aa067d95a6526f466e3bffa6879804fe04aa5576584271893bfa95f24f5f720f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/hooks.js",
+      "bytes": 4525,
+      "sha256": "33a19dac911a31b8e67c067a99896b66a37f768a4726b6bbc83b27e34720b074"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/index.js",
+      "bytes": 1440,
+      "sha256": "1a15724f68ea653c3a8ef5e83a096e75284a2550ed9f74be207c2ea5e7ac468d"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/iterate.js",
+      "bytes": 22594,
+      "sha256": "f4f635d8a0e7a0808149fc9efffc6b00ccb50d4d36981a70be3a39a389dffd7e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/kernel.js",
+      "bytes": 39403,
+      "sha256": "087d841aac436f5b31771bc790399e3baf21e1222695501c367df213a36bd20e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/loader.js",
+      "bytes": 32843,
+      "sha256": "e7cb402c66f8545c6d8aac2608123176b32fae2b3de1ec320c270f88e4c90df7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/lowered.js",
+      "bytes": 30544,
+      "sha256": "99c87694afcc11c764516c0faee24d4cee4405841bb732420ef31c501383b107"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/modules.js",
+      "bytes": 14388,
+      "sha256": "eb3ec37e851e81740ead5ea758789c51501b7bd2ffa65bcf44888eead39a6727"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/node-files.js",
+      "bytes": 2239,
+      "sha256": "1bcaf063c4cc7231916264e68859e901caa2b49f146a346916e399763aa73060"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/node.js",
+      "bytes": 2397,
+      "sha256": "c945613fbfb94d569bc43e955a53ce68447dda35bf85fffb2fee8a446afe3959"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/runtime.js",
+      "bytes": 15347,
+      "sha256": "d4cf244edd55ab76d82f6a549600629cbd2cd0f6573cfc4b08b9f1e58bd3a9b7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/surface.js",
+      "bytes": 1075,
+      "sha256": "ec08e7fe6329aae7dc3dc936ce15fef2291ad53fb49dc0d3cb350fc22ae7269f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/runtime/virtual-project.js",
+      "bytes": 5921,
+      "sha256": "d42fbca6e6585f8b58d611e4d8526d4bc47caf71ef57d22aeab9c17e27a107dc"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/scope-compiler.js",
+      "bytes": 75898,
+      "sha256": "2797422ccb25dae883bc47385cbd036c096b3f44307ffb4effc2c40b0f82dd9a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/skills/disclosure.js",
+      "bytes": 7816,
+      "sha256": "213346e30e5fe97905dcaa818321eef3e18e40e38a9692b42a57692b28e525b0"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/skills/registry.js",
+      "bytes": 13440,
+      "sha256": "a6b8430c23015ae853e94f10f407ebc533e76680580930f0cdba1f631ebefcba"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/skills/skill.js",
+      "bytes": 15147,
+      "sha256": "8069c0fdc7b4bca9824a321101d38df835a1ba1236ced804b6e670a22d990502"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/authoring.js",
+      "bytes": 4155,
+      "sha256": "d1225c7ea6056b10fa143c3f3e6238fba57378dc652101f804effcacef840b1c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/collector.js",
+      "bytes": 79047,
+      "sha256": "2f38be48596afa29700d6ffee2980c3b9a71565655e04b473a45de95d21c3a95"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/curriculum-policy.js",
+      "bytes": 10096,
+      "sha256": "2ff0dafb6724bcd790f14e805b1374ee2bf43b9d00d13510af30f07e4470701f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/model-judge.js",
+      "bytes": 2039,
+      "sha256": "b8b7d6cd2e84260f84feb7acb5865902ac013cd834a2e7f119f7b8f278338dc0"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/musique-oklahoma-event-contract.js",
+      "bytes": 4687,
+      "sha256": "49a042d098f992aa41be5c11fe9c578db86599200ac21c6895e3e96c00868871"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/native-materializer.js",
+      "bytes": 94669,
+      "sha256": "1f0631935c79e5bbb1e52552a0dc9ea8afd4935ff3950e6af4724336d21602cf"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/opening.js",
+      "bytes": 865,
+      "sha256": "57cb49d6d2d8cbcfaa32bad8c7f67c44c45204880b2631328016d120ed30d4e3"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/oracle.js",
+      "bytes": 128,
+      "sha256": "e9d7234ad2c19bc12737d00ec955a7357c634e35aea50b0ec73c509830f34d83"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/provider-deadline.js",
+      "bytes": 9050,
+      "sha256": "b3f8b67577fafc5048ede35473b12ce40f20a51c508a54bba15476ce27d4cddb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/provider-request-controls.js",
+      "bytes": 1859,
+      "sha256": "e2c970e79704ef4addf6a8576c48f9fada04fd639e591f7ae64051df8999fe0c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/replay.js",
+      "bytes": 6249,
+      "sha256": "722a1c07aa531372c4c747291a0a5a510ddbb733376aca1497085269acf4d7ba"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/retry.js",
+      "bytes": 3163,
+      "sha256": "305ce1c57be7d7ac52d910be10356d15d74af1eb5f0b3470075acb7420950f26"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/seeded-failure.js",
+      "bytes": 438,
+      "sha256": "be3ed0bbb335d7b732ac3e4fa8445701aa1e47e4f62acfccf8f434a7f9f3d39f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/source-conversion.js",
+      "bytes": 13321,
+      "sha256": "d963f19e79f978fb243501cd0c0f641391e3da91b62051cd85a823f48478c008"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/source-review.js",
+      "bytes": 112565,
+      "sha256": "b573d9e7120afa115bc5506d33cbd0a706f99f2d790e432e1aec03a0b2f08bb2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/tatqa-unit-contract.js",
+      "bytes": 8100,
+      "sha256": "c2eafeaa8dca291ed566be4125ec42321fcc1e717d51c836d315325f69870ada"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/tree-contract.js",
+      "bytes": 1356,
+      "sha256": "7cdd59e6ae14309e3e76cccf4ab27fd68441dfcaaf8c232cac0e54cbcdda2945"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/teacher/world-bridge.js",
+      "bytes": 4425,
+      "sha256": "90dbb00fce6312f65796ba29dbc7209a48cb500ccdbfce3fd35a40cb673281dd"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/ts-host/dist/workspace-modules.js",
+      "bytes": 4153,
+      "sha256": "89f05be2ec2fbed1264cf9dd13a9950b3501a9885788128dc331ef9a7935ebdd"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/scripts/assemble_neuralese_recurrence.py",
+      "bytes": 21007,
+      "sha256": "bb1959fff6019eec1a095ff1f4018a712dbc21c8f4c33ebb63e6d022e4506573"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/scripts/audit_neuralese_recurrence.py",
+      "bytes": 49169,
+      "sha256": "4b487d85b1444d0cd9c112fc7859f2e7da62362bca1dc740fdebd2649b80e1fa"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/scripts/audit_observed_neuralese_outputs.py",
+      "bytes": 22063,
+      "sha256": "1fbec3e234ae81506185a5abdc4e131f91f35b90bcbfc543d844d9a03115ce20"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/scripts/snapshot_call_store.py",
+      "bytes": 22223,
+      "sha256": "89e6eb679aa74e89a211d66aa3583d24f6e7619091eb202f5e87eb65ab095c03"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-snapshot-spec-v3.json",
+      "bytes": 985,
+      "sha256": "bc3d158c6a75dcd1f58b9a76cc4bdaa66a53fef6b40afbf39630448b3da2b991"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/07/5065794954336ecd93c6d72207ed328f13b362a8955660bbcf71c375158dea",
+      "bytes": 2950,
+      "sha256": "075065794954336ecd93c6d72207ed328f13b362a8955660bbcf71c375158dea"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/07/cc92613235b891d49a6d26eb5aa041d3ca65312af16599075c2ba28ea9c573",
+      "bytes": 13646,
+      "sha256": "07cc92613235b891d49a6d26eb5aa041d3ca65312af16599075c2ba28ea9c573"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/08/c7be5d961f6537ff47a79bf0119a97dd7f694d9854152ce0eefe9284969869",
+      "bytes": 22909,
+      "sha256": "08c7be5d961f6537ff47a79bf0119a97dd7f694d9854152ce0eefe9284969869"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/09/19476664fb5e247e0bf26a8b6c2ac6be7148ace42d6f86f166dfed8d129a82",
+      "bytes": 10155,
+      "sha256": "0919476664fb5e247e0bf26a8b6c2ac6be7148ace42d6f86f166dfed8d129a82"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/09/477c77bbfc25f07c6bf1b6e9b5bec666baba8ff4b420d2874732503c20cee4",
+      "bytes": 137,
+      "sha256": "09477c77bbfc25f07c6bf1b6e9b5bec666baba8ff4b420d2874732503c20cee4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/0b/26409ae8235ae1f81fceaf71c0a5b4be082954f75567a97f6692cd050d07ff",
+      "bytes": 1550,
+      "sha256": "0b26409ae8235ae1f81fceaf71c0a5b4be082954f75567a97f6692cd050d07ff"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/0b/6f619f0e916c2377eda3748d7f7e5d9f7a5943ea3ae18892df3d037661dddf",
+      "bytes": 1265,
+      "sha256": "0b6f619f0e916c2377eda3748d7f7e5d9f7a5943ea3ae18892df3d037661dddf"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/0e/29502b98b9245f8b7f5be46821fba6e010010869a20f068e141bde109cfb2f",
+      "bytes": 122,
+      "sha256": "0e29502b98b9245f8b7f5be46821fba6e010010869a20f068e141bde109cfb2f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/0f/17c8e4560be560006018b7bebbe29a18b89bc134ad2b274656f11f063da2dc",
+      "bytes": 1785,
+      "sha256": "0f17c8e4560be560006018b7bebbe29a18b89bc134ad2b274656f11f063da2dc"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/16/d2a5d46ff2410ca2503674f4ae6648393937ecfe58f336d1805c7d1435d5e9",
+      "bytes": 8,
+      "sha256": "16d2a5d46ff2410ca2503674f4ae6648393937ecfe58f336d1805c7d1435d5e9"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/16/e3428247989d885091ceacbd317222ead131f99589eb4f4cc724638d849278",
+      "bytes": 34992,
+      "sha256": "16e3428247989d885091ceacbd317222ead131f99589eb4f4cc724638d849278"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/18/fd7d80d1ad501d2d4e9a03c62b21fc6ed8407f31a5bb4d664fffa250d14fbf",
+      "bytes": 8259,
+      "sha256": "18fd7d80d1ad501d2d4e9a03c62b21fc6ed8407f31a5bb4d664fffa250d14fbf"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/1c/b91a961ac89bff269c605700d2ef05b7ed4d4d3a40ec0740cf6161ddf1c026",
+      "bytes": 35,
+      "sha256": "1cb91a961ac89bff269c605700d2ef05b7ed4d4d3a40ec0740cf6161ddf1c026"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/1d/3077db98a5ce3c231f3ee596160c0011327f3a13e5a142bf4e68abd80983ad",
+      "bytes": 5253,
+      "sha256": "1d3077db98a5ce3c231f3ee596160c0011327f3a13e5a142bf4e68abd80983ad"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/22/48468e3cb66b680b550f19bfe9ac05f118995fa49601ce3891d7af97db7c53",
+      "bytes": 15583,
+      "sha256": "2248468e3cb66b680b550f19bfe9ac05f118995fa49601ce3891d7af97db7c53"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/25/4b338f8da7e509c41d6f9975b9ba3ab0ac7bcea90123e4521330a47a772c0a",
+      "bytes": 4121,
+      "sha256": "254b338f8da7e509c41d6f9975b9ba3ab0ac7bcea90123e4521330a47a772c0a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/28/4727b2c83d5e7409e03a84e324adcd70e2468966468e9230d37a55193a025a",
+      "bytes": 10835,
+      "sha256": "284727b2c83d5e7409e03a84e324adcd70e2468966468e9230d37a55193a025a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2a/59b63c8a0cf8ab0d279e14ec60dafb9f0a6ffbac5dd41ec89e9c8143888e82",
+      "bytes": 7919,
+      "sha256": "2a59b63c8a0cf8ab0d279e14ec60dafb9f0a6ffbac5dd41ec89e9c8143888e82"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2a/a2e6117408950b424a301392e843e58f0039241ab4e41ed0922391fa9a05cb",
+      "bytes": 17954,
+      "sha256": "2aa2e6117408950b424a301392e843e58f0039241ab4e41ed0922391fa9a05cb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2c/495fcf963c446426807c080b3c4d11cf80988c85766ef69c81686329fbf49c",
+      "bytes": 579,
+      "sha256": "2c495fcf963c446426807c080b3c4d11cf80988c85766ef69c81686329fbf49c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2e/018778d63a9459eb9bd396153610bab636a2163a2b9a33e09cbbd97771e7e7",
+      "bytes": 139,
+      "sha256": "2e018778d63a9459eb9bd396153610bab636a2163a2b9a33e09cbbd97771e7e7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2e/74a1f377a3ceae83cfda40bb4a43a9b92732c6e233d97742169af5c2fcde2f",
+      "bytes": 6282,
+      "sha256": "2e74a1f377a3ceae83cfda40bb4a43a9b92732c6e233d97742169af5c2fcde2f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/2f/bd3ae5df9b805af59af9e25aec7996d29ddc44b5fcb1405467522d73ddd291",
+      "bytes": 121,
+      "sha256": "2fbd3ae5df9b805af59af9e25aec7996d29ddc44b5fcb1405467522d73ddd291"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/33/54899b3acec015ec44a28cc74651bdbe2eba3f70c79dc55c74917e22d1c962",
+      "bytes": 15511,
+      "sha256": "3354899b3acec015ec44a28cc74651bdbe2eba3f70c79dc55c74917e22d1c962"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/33/b0c8640f0b8cbd69fb360a71da659ac98b166a8661f3511867d60933ec45d9",
+      "bytes": 35,
+      "sha256": "33b0c8640f0b8cbd69fb360a71da659ac98b166a8661f3511867d60933ec45d9"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/35/15fcb37dd63332a1411888a61d33863c32c84090cc635c120977edfe88f08a",
+      "bytes": 2608,
+      "sha256": "3515fcb37dd63332a1411888a61d33863c32c84090cc635c120977edfe88f08a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/37/e987dd8fe3213a27a4a7f8f4008cdfa2531ed74a2f7f5b4272525e7b2a664b",
+      "bytes": 3683,
+      "sha256": "37e987dd8fe3213a27a4a7f8f4008cdfa2531ed74a2f7f5b4272525e7b2a664b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/3a/2260a38236f38671607c23b91401f02603e0f5d9ee3d0a73b5c55a9177cc7f",
+      "bytes": 98,
+      "sha256": "3a2260a38236f38671607c23b91401f02603e0f5d9ee3d0a73b5c55a9177cc7f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/3b/ed748f7c78d8b49362be1196dc41476c790c4224e60d8fc98cb8b8a5230c62",
+      "bytes": 490,
+      "sha256": "3bed748f7c78d8b49362be1196dc41476c790c4224e60d8fc98cb8b8a5230c62"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/40/8be0b583490e3fe10692ea5f37cb329861f6d07ee31195059f2770846d03db",
+      "bytes": 16773,
+      "sha256": "408be0b583490e3fe10692ea5f37cb329861f6d07ee31195059f2770846d03db"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/44/3a5c233267f97adec7456e3f049721a243133d4086b7804e9f3b01ac1767be",
+      "bytes": 9457,
+      "sha256": "443a5c233267f97adec7456e3f049721a243133d4086b7804e9f3b01ac1767be"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/46/ed9fe3d6e9c93ebcf4122a376ae49f91cc063b704e1420581eb7bd3963b9a2",
+      "bytes": 2707,
+      "sha256": "46ed9fe3d6e9c93ebcf4122a376ae49f91cc063b704e1420581eb7bd3963b9a2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/57/bb9e29660e4f39995c649ea3f079bef51292351a1da62ec60f5e4353089614",
+      "bytes": 121,
+      "sha256": "57bb9e29660e4f39995c649ea3f079bef51292351a1da62ec60f5e4353089614"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/58/730d93ed52c11efc4073fe9138993c57f8f2eed4ade0da1f7efa6f3ec6d9c5",
+      "bytes": 10854,
+      "sha256": "58730d93ed52c11efc4073fe9138993c57f8f2eed4ade0da1f7efa6f3ec6d9c5"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/5a/00c003d827267ebf71d763dd464a9b0c33602139c62f6ab6b1abdc6fc4f7ef",
+      "bytes": 2697,
+      "sha256": "5a00c003d827267ebf71d763dd464a9b0c33602139c62f6ab6b1abdc6fc4f7ef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/5d/4c0f9debbd0042b4561da11b6e2aa83f70b522d26c026be3c32714f038883a",
+      "bytes": 107,
+      "sha256": "5d4c0f9debbd0042b4561da11b6e2aa83f70b522d26c026be3c32714f038883a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/5d/709d36dc62819559c418b1379a1d4a8542aab2076c0c1c8f1a1cacccd64d65",
+      "bytes": 2945,
+      "sha256": "5d709d36dc62819559c418b1379a1d4a8542aab2076c0c1c8f1a1cacccd64d65"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/5e/3880cba708ff5b91bf0835bbbfc62b23b9379b03db33a280defdf38d988397",
+      "bytes": 1488,
+      "sha256": "5e3880cba708ff5b91bf0835bbbfc62b23b9379b03db33a280defdf38d988397"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/63/5cb668f46723f18f885cdcb4b70b8b03f2cb808b44291de9aa53ca7b8e3deb",
+      "bytes": 1813,
+      "sha256": "635cb668f46723f18f885cdcb4b70b8b03f2cb808b44291de9aa53ca7b8e3deb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/65/23eefb51ef3a8b05033b8165f01b50e8d3ffc8e532dba93a10cb428ae2a793",
+      "bytes": 143,
+      "sha256": "6523eefb51ef3a8b05033b8165f01b50e8d3ffc8e532dba93a10cb428ae2a793"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/67/1e71c06980d34297e18a35320e571eca4c3927b776a56013ef173e481d97d8",
+      "bytes": 13546,
+      "sha256": "671e71c06980d34297e18a35320e571eca4c3927b776a56013ef173e481d97d8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/67/52e795198bd79945cf750b9f63bf4074715f9af8ff9c961925ee76957455af",
+      "bytes": 11562,
+      "sha256": "6752e795198bd79945cf750b9f63bf4074715f9af8ff9c961925ee76957455af"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/67/920ce96984f11500c170b0f169cdeeb0c5259b3bfa6708027534818930bc91",
+      "bytes": 11399,
+      "sha256": "67920ce96984f11500c170b0f169cdeeb0c5259b3bfa6708027534818930bc91"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/69/15af9def160972abf8e840730cea6464624eb1091a262714bfa2051bdfe0b4",
+      "bytes": 11560,
+      "sha256": "6915af9def160972abf8e840730cea6464624eb1091a262714bfa2051bdfe0b4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/6c/c427dc3b1eeb050c9ebf4d729c3ce7c8b4d9517f86d306f842ee91395595e3",
+      "bytes": 7170,
+      "sha256": "6cc427dc3b1eeb050c9ebf4d729c3ce7c8b4d9517f86d306f842ee91395595e3"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/6d/6cfd7b672f0cabf6efdd5693099422d0a02248c8d7cf4f04465c5a1d719937",
+      "bytes": 9070,
+      "sha256": "6d6cfd7b672f0cabf6efdd5693099422d0a02248c8d7cf4f04465c5a1d719937"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/6e/ec5919b61d76680618924b741952c0e5f156c3559f4823944438f91c02f344",
+      "bytes": 15603,
+      "sha256": "6eec5919b61d76680618924b741952c0e5f156c3559f4823944438f91c02f344"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/79/0d0f866af19217470c182d0282d3a0e96f7544d997b13f211c68c747c5f550",
+      "bytes": 11547,
+      "sha256": "790d0f866af19217470c182d0282d3a0e96f7544d997b13f211c68c747c5f550"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/7e/9dd63321edbe6d6ad7427bbd18c2fe5bb34aca25fda8057acb936a93890b34",
+      "bytes": 8,
+      "sha256": "7e9dd63321edbe6d6ad7427bbd18c2fe5bb34aca25fda8057acb936a93890b34"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/7f/0aed1ab1e04874a5653fc3e2ab1f9b37db3d1f14b8e3fda1b71933dbcf2f17",
+      "bytes": 13693,
+      "sha256": "7f0aed1ab1e04874a5653fc3e2ab1f9b37db3d1f14b8e3fda1b71933dbcf2f17"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/80/629ef3820d7d4ca5a68851b1fa5ac0447f556dfe64090fcdd1dfe533c9608f",
+      "bytes": 143,
+      "sha256": "80629ef3820d7d4ca5a68851b1fa5ac0447f556dfe64090fcdd1dfe533c9608f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/81/2803ede5b8e815f0b00026c77bb7aebd6ee306aadd8e22920d0fdaa2ea5f14",
+      "bytes": 145,
+      "sha256": "812803ede5b8e815f0b00026c77bb7aebd6ee306aadd8e22920d0fdaa2ea5f14"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/81/af8e01edcaa26d42ab1a1a147214e6395b70ce5e0a6715e976925215dac416",
+      "bytes": 390,
+      "sha256": "81af8e01edcaa26d42ab1a1a147214e6395b70ce5e0a6715e976925215dac416"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/83/aa0aa94d5f71c23f4b582592bb7e1cb040768725093600e5990cda97643c0b",
+      "bytes": 125,
+      "sha256": "83aa0aa94d5f71c23f4b582592bb7e1cb040768725093600e5990cda97643c0b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/84/604c37a3ca8add7fb5176f64a5573f570a39ac2ebcc7a21ea2363bb19e90fd",
+      "bytes": 16723,
+      "sha256": "84604c37a3ca8add7fb5176f64a5573f570a39ac2ebcc7a21ea2363bb19e90fd"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/84/d7782cf446c0cf25a05062d9a8e96fdea8f833a52390c805bc8383af514929",
+      "bytes": 107,
+      "sha256": "84d7782cf446c0cf25a05062d9a8e96fdea8f833a52390c805bc8383af514929"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/85/3d407d0e9aaabfc7430a453e14193a9afb41383c45721261106a6905fa283e",
+      "bytes": 3898,
+      "sha256": "853d407d0e9aaabfc7430a453e14193a9afb41383c45721261106a6905fa283e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/85/6323ec3efb46752d47e4a02d7b80268de96e5cfde9de75fb174a4ce21cd819",
+      "bytes": 8125,
+      "sha256": "856323ec3efb46752d47e4a02d7b80268de96e5cfde9de75fb174a4ce21cd819"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/89/4ca18210e766fafd7404723a2e075da0fd8b3549787b08f2ec6c35b1d0788c",
+      "bytes": 11561,
+      "sha256": "894ca18210e766fafd7404723a2e075da0fd8b3549787b08f2ec6c35b1d0788c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/8a/32081b93888ac8c3534f76f02736a12cf5eac37a10555842b20258f536f3af",
+      "bytes": 13778,
+      "sha256": "8a32081b93888ac8c3534f76f02736a12cf5eac37a10555842b20258f536f3af"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/8c/97ebb8d95d98c2a1e2cb5133cf0a8f6dc539db753f1a6177c71a1f69e21eef",
+      "bytes": 8,
+      "sha256": "8c97ebb8d95d98c2a1e2cb5133cf0a8f6dc539db753f1a6177c71a1f69e21eef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/8d/7769fbc7e3cea9421b2c0e4be8d0b1535de61fb73f201f7eb1a901336b8def",
+      "bytes": 11561,
+      "sha256": "8d7769fbc7e3cea9421b2c0e4be8d0b1535de61fb73f201f7eb1a901336b8def"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/90/e57e6bc0f588b07c2cba6a5563d3ea278eeb307558e256c6a1c1f25ec53efe",
+      "bytes": 11059,
+      "sha256": "90e57e6bc0f588b07c2cba6a5563d3ea278eeb307558e256c6a1c1f25ec53efe"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/93/8fd44db06e592642223471a3cc3cf0367d64052405a82d93c972d6c7ec32ec",
+      "bytes": 3093,
+      "sha256": "938fd44db06e592642223471a3cc3cf0367d64052405a82d93c972d6c7ec32ec"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/93/a85eac110043fd52e1605389124898686e3dd741a08eb80126bd9ae7993460",
+      "bytes": 139,
+      "sha256": "93a85eac110043fd52e1605389124898686e3dd741a08eb80126bd9ae7993460"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/93/fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871",
+      "bytes": 110,
+      "sha256": "93fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/95/e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003",
+      "bytes": 15,
+      "sha256": "95e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/98/4347b4b4d89598d140c1fdad91405e60dcc0f7f0ce887a36a518d5a993f784",
+      "bytes": 7467,
+      "sha256": "984347b4b4d89598d140c1fdad91405e60dcc0f7f0ce887a36a518d5a993f784"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/9b/92672237968ce1c3ad1660f5929b31625fed52e69c3d414603efade996d00b",
+      "bytes": 2615,
+      "sha256": "9b92672237968ce1c3ad1660f5929b31625fed52e69c3d414603efade996d00b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/9d/03df94f898ab992f81a22ac7c19e1801096feaa53b97c36515b68f0ae182ef",
+      "bytes": 17912,
+      "sha256": "9d03df94f898ab992f81a22ac7c19e1801096feaa53b97c36515b68f0ae182ef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/9d/395d5db636e8786eddd6cecb9d5bb70c1c215b7f1d1bf3fdb4486381bc74a7",
+      "bytes": 107,
+      "sha256": "9d395d5db636e8786eddd6cecb9d5bb70c1c215b7f1d1bf3fdb4486381bc74a7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a2/e68db9c45ff3c6d2abae31ecd310be899f8fb98f3d0377354ee9a5fed4618b",
+      "bytes": 144,
+      "sha256": "a2e68db9c45ff3c6d2abae31ecd310be899f8fb98f3d0377354ee9a5fed4618b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a2/f2e1bb06cc2aada2a758464050a19f6960116b7a9ef87ec8b43a9b954d20ef",
+      "bytes": 2611,
+      "sha256": "a2f2e1bb06cc2aada2a758464050a19f6960116b7a9ef87ec8b43a9b954d20ef"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a3/4827a5b8fdfebf0f84afc47b29b59cb083aa14f808d158a4e5046b4844a0ab",
+      "bytes": 1550,
+      "sha256": "a34827a5b8fdfebf0f84afc47b29b59cb083aa14f808d158a4e5046b4844a0ab"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a5/f1ee5d4c8d35ba61cfd08ba3b4902c6d4ef64573e719ec2a0ccca6b37e583a",
+      "bytes": 107,
+      "sha256": "a5f1ee5d4c8d35ba61cfd08ba3b4902c6d4ef64573e719ec2a0ccca6b37e583a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a6/31a0489e7f4c855621538ef3a0eca3cf8624a6eebba7c4a8c7e38f1d3c945a",
+      "bytes": 35,
+      "sha256": "a631a0489e7f4c855621538ef3a0eca3cf8624a6eebba7c4a8c7e38f1d3c945a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/a6/d3a097953e675ea8097c4e374e0cccae05c3a821e1050a144bae8330c34f2a",
+      "bytes": 31210,
+      "sha256": "a6d3a097953e675ea8097c4e374e0cccae05c3a821e1050a144bae8330c34f2a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/af/c8246958aec7f7591e3b85dbb38d58fdde90304dcfdc6a9a6711174098cde6",
+      "bytes": 143,
+      "sha256": "afc8246958aec7f7591e3b85dbb38d58fdde90304dcfdc6a9a6711174098cde6"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b0/0a986435540d95f2cc010ac9ae4e9fb4f20d3499d7111687a3b7f3f3096616",
+      "bytes": 1550,
+      "sha256": "b00a986435540d95f2cc010ac9ae4e9fb4f20d3499d7111687a3b7f3f3096616"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b0/220848ceb293302f6cdd603bbb20a96d8385946f02b7ac41e941b28c4d3eeb",
+      "bytes": 107,
+      "sha256": "b0220848ceb293302f6cdd603bbb20a96d8385946f02b7ac41e941b28c4d3eeb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b3/cce40a2795f8692565f13fc35e780c7fdf9fa9b2f72454b327bec5dc69accb",
+      "bytes": 486,
+      "sha256": "b3cce40a2795f8692565f13fc35e780c7fdf9fa9b2f72454b327bec5dc69accb"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b4/18fa279a753d3044bae50d3bb1088f3c451a7384546a62c92ea16238123a59",
+      "bytes": 7261,
+      "sha256": "b418fa279a753d3044bae50d3bb1088f3c451a7384546a62c92ea16238123a59"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b5/316b43fe40403d013629e802cf41334a24c3a088ea990100b9c985b84600ab",
+      "bytes": 1550,
+      "sha256": "b5316b43fe40403d013629e802cf41334a24c3a088ea990100b9c985b84600ab"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b5/bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+      "bytes": 4,
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b7/9fcf2ad3ff943b2ca0c43237f2dd9c1d0eba0023cc72741c669b04032a041f",
+      "bytes": 16354,
+      "sha256": "b79fcf2ad3ff943b2ca0c43237f2dd9c1d0eba0023cc72741c669b04032a041f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/b9/92eb4d044aa7001a2b58864eb884ad791d3afe2c30300948f2a55f646f4217",
+      "bytes": 10526,
+      "sha256": "b992eb4d044aa7001a2b58864eb884ad791d3afe2c30300948f2a55f646f4217"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/bb/7767809f2358e7a90ec07ba6c9173a1197775d0e653ef9e8d00a75b3fc1570",
+      "bytes": 1552,
+      "sha256": "bb7767809f2358e7a90ec07ba6c9173a1197775d0e653ef9e8d00a75b3fc1570"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/bc/14a3ac75daabf71d084ec0f7295026211aa9087b175252d127fc26dcd9f41e",
+      "bytes": 1549,
+      "sha256": "bc14a3ac75daabf71d084ec0f7295026211aa9087b175252d127fc26dcd9f41e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/bc/5e93fbb82248973e0804f336c5de062507d05a95f1fe3d7388c22fed8e1095",
+      "bytes": 2126,
+      "sha256": "bc5e93fbb82248973e0804f336c5de062507d05a95f1fe3d7388c22fed8e1095"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/be/4ce71dce733e6731ef0ed466a74d4ddb74b3d2461c411762a8116c1ebf2fc4",
+      "bytes": 14075,
+      "sha256": "be4ce71dce733e6731ef0ed466a74d4ddb74b3d2461c411762a8116c1ebf2fc4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/bf/432d98f92b73c7e5eefda74db33c05be6ca6bb013a70d211020fe88e1544d4",
+      "bytes": 1547,
+      "sha256": "bf432d98f92b73c7e5eefda74db33c05be6ca6bb013a70d211020fe88e1544d4"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/c4/7f163b8da668bc862027cf2f2fb1a6f68d33f81191310f3f5f23276d41e9b7",
+      "bytes": 139,
+      "sha256": "c47f163b8da668bc862027cf2f2fb1a6f68d33f81191310f3f5f23276d41e9b7"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/ca/02316fb553730d7f53bf4d96ec010b60f8586602283b86f808b34bf1263662",
+      "bytes": 12665,
+      "sha256": "ca02316fb553730d7f53bf4d96ec010b60f8586602283b86f808b34bf1263662"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cb/6ecaf4b76752836d1a04a560d07e3fb8d313f69dfd40c85f77dbb9286d17ac",
+      "bytes": 11546,
+      "sha256": "cb6ecaf4b76752836d1a04a560d07e3fb8d313f69dfd40c85f77dbb9286d17ac"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cb/e871168b0c9b3a8360b5d9e0874c3825742bb162c5e6b39a47564fde274474",
+      "bytes": 1549,
+      "sha256": "cbe871168b0c9b3a8360b5d9e0874c3825742bb162c5e6b39a47564fde274474"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cd/f88d270f64d99ff2a8c5ca8b27cb6949c56c5e80dfe7030344c5a163cf3433",
+      "bytes": 1410,
+      "sha256": "cdf88d270f64d99ff2a8c5ca8b27cb6949c56c5e80dfe7030344c5a163cf3433"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cf/275c80e5680089cf11d0599278573fff95c5fa578bc47c9562c15f1c4eb4f2",
+      "bytes": 139,
+      "sha256": "cf275c80e5680089cf11d0599278573fff95c5fa578bc47c9562c15f1c4eb4f2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cf/3fd418e4411fa20193f9f8f7ec2fff2a203b5fd0b079c3304342bb05667c9c",
+      "bytes": 2273,
+      "sha256": "cf3fd418e4411fa20193f9f8f7ec2fff2a203b5fd0b079c3304342bb05667c9c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/cf/aa92177aba8b997bb8902f3a283228cb93e7863a4262965eb33b683f2a3344",
+      "bytes": 7142,
+      "sha256": "cfaa92177aba8b997bb8902f3a283228cb93e7863a4262965eb33b683f2a3344"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/d0/6a24b2e3ec2aacd4d482f3305385aac650ee6116e78b069eac243ea4dffde8",
+      "bytes": 1550,
+      "sha256": "d06a24b2e3ec2aacd4d482f3305385aac650ee6116e78b069eac243ea4dffde8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/d5/f296ac1b22640d881b77dc629f617ccd1001b80cf0107b72ef918172fc320a",
+      "bytes": 3672,
+      "sha256": "d5f296ac1b22640d881b77dc629f617ccd1001b80cf0107b72ef918172fc320a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/d6/c251e96fcf9ec4d76509f1609086829197aea28338d20f22a946ff88c73405",
+      "bytes": 17368,
+      "sha256": "d6c251e96fcf9ec4d76509f1609086829197aea28338d20f22a946ff88c73405"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/d8/9affbfdc02a9a8d789df87eb8ed8d44fb5c0206e7d822336e0d15faba1bbc8",
+      "bytes": 2671,
+      "sha256": "d89affbfdc02a9a8d789df87eb8ed8d44fb5c0206e7d822336e0d15faba1bbc8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/db/3a71bb54c30b2252fc2e237645e1f31c79fd8dbda38b4b1ab020ed901b38ee",
+      "bytes": 2934,
+      "sha256": "db3a71bb54c30b2252fc2e237645e1f31c79fd8dbda38b4b1ab020ed901b38ee"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/dd/68c86ce85307ef1e215d78f12c2ded47ccddc78e298505bffc4fedb9a96e79",
+      "bytes": 121,
+      "sha256": "dd68c86ce85307ef1e215d78f12c2ded47ccddc78e298505bffc4fedb9a96e79"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/df/0f54c29f7b622422076f9291771cd881de8f12736f480d6aec2a978dec9445",
+      "bytes": 7175,
+      "sha256": "df0f54c29f7b622422076f9291771cd881de8f12736f480d6aec2a978dec9445"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/e1/13738cbeb4b4154f64b85a984d2e8be796422c43a12639b18644c33893a9a0",
+      "bytes": 27121,
+      "sha256": "e113738cbeb4b4154f64b85a984d2e8be796422c43a12639b18644c33893a9a0"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/e5/ff151adeea148979b30c0197b2738717aabd3fd7ea0ed3c4445adee3876e79",
+      "bytes": 8,
+      "sha256": "e5ff151adeea148979b30c0197b2738717aabd3fd7ea0ed3c4445adee3876e79"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/e7/45e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851",
+      "bytes": 261,
+      "sha256": "e745e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/ea/b9e881caaf9f2d888cd1a381451e71336309c16bfe9951bb0afc274bc552bf",
+      "bytes": 10071,
+      "sha256": "eab9e881caaf9f2d888cd1a381451e71336309c16bfe9951bb0afc274bc552bf"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f0/91dbdc0a125b407a3762ce8a61eeb312a87f052badab974e1805fb1eb9f65a",
+      "bytes": 11562,
+      "sha256": "f091dbdc0a125b407a3762ce8a61eeb312a87f052badab974e1805fb1eb9f65a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f1/326838435adcdd7b7fc4782157d64a0de0ea9e6401458174659b4af094ee92",
+      "bytes": 3284,
+      "sha256": "f1326838435adcdd7b7fc4782157d64a0de0ea9e6401458174659b4af094ee92"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f1/6266895da74b71efa5d9781e65f32203f01fdc5ce257beae4e7acf2bdcbc18",
+      "bytes": 20211,
+      "sha256": "f16266895da74b71efa5d9781e65f32203f01fdc5ce257beae4e7acf2bdcbc18"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f2/4236e22afdcf537bb8e0b5de84a033be633a4fff58e20d2222ee25c5fd8653",
+      "bytes": 10696,
+      "sha256": "f24236e22afdcf537bb8e0b5de84a033be633a4fff58e20d2222ee25c5fd8653"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f6/174b1b77b3a95ba0f596147ef960d5f4c69853f25f4c54f1cc670e6625e0b2",
+      "bytes": 2428,
+      "sha256": "f6174b1b77b3a95ba0f596147ef960d5f4c69853f25f4c54f1cc670e6625e0b2"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f6/30e487f61fccf1a96483c1b8a03d51bbb5a52cc6bee09deebdc6b8244a317c",
+      "bytes": 2581,
+      "sha256": "f630e487f61fccf1a96483c1b8a03d51bbb5a52cc6bee09deebdc6b8244a317c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/f6/54a5f518ddc38b8957c515d2dfe0c0b466a6aa59e3a9b1761f40704871d347",
+      "bytes": 35,
+      "sha256": "f654a5f518ddc38b8957c515d2dfe0c0b466a6aa59e3a9b1761f40704871d347"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fa/343c94cf4ecdc01bc27ce14768199aab2df7e0d824ba3f1d4421a51866499a",
+      "bytes": 1563,
+      "sha256": "fa343c94cf4ecdc01bc27ce14768199aab2df7e0d824ba3f1d4421a51866499a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fa/e3b85fbfd4d7010d53e96356ebe51944360dd1db7a834b3cc8b9e3e197562a",
+      "bytes": 4560,
+      "sha256": "fae3b85fbfd4d7010d53e96356ebe51944360dd1db7a834b3cc8b9e3e197562a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fb/94894607527435c61693a99195314650f9bbac8e2c08b3cc3e2303aee9f56e",
+      "bytes": 23642,
+      "sha256": "fb94894607527435c61693a99195314650f9bbac8e2c08b3cc3e2303aee9f56e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fc/1dd758347188f47773d11b7416a045fc7490be23f8c8cd9856bd938a0d6393",
+      "bytes": 1552,
+      "sha256": "fc1dd758347188f47773d11b7416a045fc7490be23f8c8cd9856bd938a0d6393"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fc/3f04d75debf6dba485281a525bd97ee45edc2a58687184457549e989ca456e",
+      "bytes": 143,
+      "sha256": "fc3f04d75debf6dba485281a525bd97ee45edc2a58687184457549e989ca456e"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fc/86368c270f8a5f1815e3529ff18d79a5d68bac32fe49ff6056f4b9b47ee24a",
+      "bytes": 2625,
+      "sha256": "fc86368c270f8a5f1815e3529ff18d79a5d68bac32fe49ff6056f4b9b47ee24a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fd/80d15082f58bd982276700b298dd8f0fb034c65fad4cc2b8ba890b2d3f962a",
+      "bytes": 73,
+      "sha256": "fd80d15082f58bd982276700b298dd8f0fb034c65fad4cc2b8ba890b2d3f962a"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fe/4816d080b33eaabaa1b048912007829bf2e15a4f76af9ba6472e02379c0984",
+      "bytes": 10199,
+      "sha256": "fe4816d080b33eaabaa1b048912007829bf2e15a4f76af9ba6472e02379c0984"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/fe/bec232c6ad20ce572f5b6913095161eac26e09f77ebae31307ac4ab7606427",
+      "bytes": 43452,
+      "sha256": "febec232c6ad20ce572f5b6913095161eac26e09f77ebae31307ac4ab7606427"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/blobs/ff/a9a4692e8d120cee76c199f199792a772fa54b91a9aaeea46500b1843f018b",
+      "bytes": 69,
+      "sha256": "ffa9a4692e8d120cee76c199f199792a772fa54b91a9aaeea46500b1843f018b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/review_river_recurrence_v1.py",
+      "bytes": 15529,
+      "sha256": "22f896e85a27e0bf990f9132c5f570e3c3d3e12386605f2b57bd2973256cb38f"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/selected-invocation-ids-v3.json",
+      "bytes": 908,
+      "sha256": "ea3e028568c46160a4477d3aefe2b16e8f722646b424d817b7bf388eb7c3495c"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/whole-trajectory-review-v3.json",
+      "bytes": 98088,
+      "sha256": "a27945143bf73b86eb22ca1790f73b4d7704edb1a3068cf3e191052999916c4b"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/launch.json",
+      "bytes": 1853,
+      "sha256": "31ec8fc5d6157070b59c929b5a7d9fb687b1a7da2cab5d12e23fd3089cce90d8"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/retry-closeout-v2.json",
+      "bytes": 5807,
+      "sha256": "bca71c07faa5cbc39121416b66a29bfbc115a44d203d0e00b3b0ccfbedc86157"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.result.json",
+      "bytes": 3101679,
+      "sha256": "3fc010875b4aa88cb545f28c6560f18f562446e6460e69e25e6172f47d127c11"
+    },
+    {
+      "path": "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+      "bytes": 676918,
+      "sha256": "dc77f0df91a61e861e6abbb8d57820909d3b023197549dde161d38564a5d7389",
+      "lines": 767
+    },
+    {
+      "path": "luna-exact-source-clinic-river-retry-proposal-20261008-v1/two-case-dispatch-root-approved-v1.json",
+      "bytes": 10578,
+      "sha256": "cfc34c04abd7f4f4c32ed9d7872d3ed728bebfa204d47de6d54c2098e3befb99"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+      "bytes": 220885,
+      "sha256": "b2c7c7659c3d355e0e7d0183873938ce3bc54341e2fabfca6e612fc50605076f",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+      "bytes": 13603,
+      "sha256": "76bd75a8b48afb5b9f3df663028f176e00e550b9b11aab6f32278e3e0bc332d1"
+    }
+  ],
+  "bytes": 7006277
+}

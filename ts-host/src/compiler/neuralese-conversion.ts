@@ -52,19 +52,20 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/13';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/14';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type PureLiteralEvalReturn = {
-  binding_name: string;
+  binding_name: string | null;
   value: string;
-  literal_kind: 'string' | 'no-substitution-template';
+  literal_kind: 'string' | 'no-substitution-template' | 'direct-return-string' | 'direct-return-template';
 };
 
 /**
- * Recognize only a side-effect-free eval body whose entire program is one `const`
- * initialized from a string literal (or a template literal with no substitutions),
- * followed by `return` of that exact binding. This supports an explicitly derived
+ * Recognize only a side-effect-free eval body whose entire program is either one
+ * direct string-literal return or one `const` initialized from a string literal
+ * (or a template literal with no substitutions), followed by `return` of that exact
+ * binding. This supports an explicitly derived
  * typed-text target view; it does not claim the original eval code target was a
  * natural-language result target. Any read, call, branch, interpolation, mutation,
  * or extra statement is intentionally outside this grammar.
@@ -72,8 +73,17 @@ export type PureLiteralEvalReturn = {
 export function pureLiteralEvalReturn(code: unknown): PureLiteralEvalReturn | undefined {
   if (typeof code !== 'string' || !code.trim()) return undefined;
   const source = ts.createSourceFile('pure-literal-eval.ts', code, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
-  if (((source as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length ?? 0) !== 0 ||
-      source.statements.length !== 2) return undefined;
+  if (((source as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length ?? 0) !== 0)
+    return undefined;
+  if (source.statements.length === 1 && ts.isReturnStatement(source.statements[0]!)) {
+    const expression = source.statements[0]!.expression;
+    if (expression && ts.isStringLiteral(expression))
+      return { binding_name: null, value: expression.text, literal_kind: 'direct-return-string' };
+    if (expression && ts.isNoSubstitutionTemplateLiteral(expression))
+      return { binding_name: null, value: expression.text, literal_kind: 'direct-return-template' };
+    return undefined;
+  }
+  if (source.statements.length !== 2) return undefined;
   const [declarationStatement, returnStatement] = source.statements;
   if (!declarationStatement || !returnStatement || !ts.isVariableStatement(declarationStatement) ||
       !ts.isReturnStatement(returnStatement) ||
@@ -539,7 +549,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const derivedTarget = (record as Record<string, unknown>).derived_target as Record<string, unknown> | undefined;
       const derivedOriginalTarget = derivedTarget?.original_target;
       const derivedSourceActionMatches = derivedTarget?.schema === 'natlang.derived-equivalent-typed-text-target/1' &&
-        derivedTarget.transform_revision === 'pure-terminal-eval-finish-to-typed-return/3' &&
+        ['pure-terminal-eval-finish-to-typed-return/3', 'pure-terminal-eval-finish-to-typed-return/4'].includes(String(derivedTarget.transform_revision)) &&
         derivedTarget.original_target_sha256 === createHash('sha256').update(canonical(derivedOriginalTarget)).digest('hex') &&
         derivedTarget.derived_target_sha256 === sourceActionDigest &&
         derivedTarget.original_messages_sha256 === createHash('sha256').update(canonical(record.messages)).digest('hex');
@@ -797,7 +807,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const expectedId = `held-neuralese-derived-typed-text:${String(derived.original_row_id ?? '')}:${String(source?.body_sha256 ?? '').slice(0, 12)}`;
     const failures: string[] = [];
     if (derived.schema !== 'natlang.derived-equivalent-typed-text-target/1' ||
-        derived.transform_revision !== 'pure-terminal-eval-finish-to-typed-return/3' ||
+        !['pure-terminal-eval-finish-to-typed-return/3', 'pure-terminal-eval-finish-to-typed-return/4'].includes(String(derived.transform_revision)) ||
         derived.derivation_role !== 'derived_target_not_original_assistant_action') failures.push('schema/revision/role');
     if (typeof derived.original_row_id !== 'string' || !derived.original_row_id || targetId !== expectedId) failures.push('row identity');
     if (derived.original_target_sha256 !== hash(originalTarget) ||
@@ -840,7 +850,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         receipt.request_sha256 === turn?.request_sha256 && receipt.raw_response_sha256 === turn?.raw_response_sha256;
     });
     if (matching.length !== 1) throw new Error(`derived typed-text target lacks one exact terminal output receipt for ${targetId}`);
-    return { source, turn, originalTarget, originalCode, body: parsed.value,
+    return { source, turn, originalTarget, originalCode, body: parsed.value, transformRevision: derived.transform_revision,
       receipt: matching[0]!.receipt as Record<string, unknown> };
   };
 
@@ -1137,14 +1147,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             const source = derived.source;
             const callArgs = args as Record<string, unknown>;
             const event = sha12(JSON.stringify([derived.originalTarget, call.id, source.writer_call_id,
-              source.writer_node, source.body_sha256, 'pure-terminal-eval-finish-to-typed-return/3']));
+              source.writer_node, source.body_sha256, derived.transformRevision]));
             const name = `soft-state:${String(source.block_id)}@derived:${event}`;
             const write = { $write: { name, block_id: source.block_id, type: 'Neuralese<string>',
               source: derived.body } };
             const derivedArguments = { ...callArgs, value: write };
             derivedTextWrites.push({ schema: 'natlang.derived-semantic-text-write/1',
               role: 'derived-equivalent-pure-terminal-eval-finish-target', derivation_role: 'derived_sft_target',
-              transform_revision: 'pure-terminal-eval-finish-to-typed-return/3', trajectory_id: trajectoryId,
+              transform_revision: derived.transformRevision, trajectory_id: trajectoryId,
               source_row_sha256: source.source_row_sha256, invocation_id: derived.turn.invocation_id,
               original_row_id: (record as Record<string, unknown>).id,
               original_target_sha256: createHash('sha256').update(canonical(derived.originalTarget)).digest('hex'),

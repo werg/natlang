@@ -99,7 +99,8 @@ def _authenticated_derived_semantic_text_write(record):
     if not isinstance(attestation, dict) or not isinstance(source, dict) or not isinstance(turn, dict):
         return None
     if (derived.get("schema") != "natlang.derived-equivalent-typed-text-target/1"
-            or derived.get("transform_revision") != "pure-terminal-eval-finish-to-typed-return/3"
+            or derived.get("transform_revision") not in ("pure-terminal-eval-finish-to-typed-return/3",
+                                                           "pure-terminal-eval-finish-to-typed-return/4")
             or derived.get("derivation_role") != "derived_target_not_original_assistant_action"
             or attestation.get("schema") != "natlang.derived-semantic-text-write/1"
             or attestation.get("role") != "derived-equivalent-pure-terminal-eval-finish-target"
