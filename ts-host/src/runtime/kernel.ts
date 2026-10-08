@@ -187,7 +187,8 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
   if (node.type.kind === 'lambda') node.type.params.fields.forEach((field, index) => {
-    if (inputs[index] !== undefined) node.args[field.name] = coerce(inputs[index], field.type, env, `${definition.name}/${field.name}`);
+    if (inputs[index] !== undefined) node.args[field.name] = coerce(inputs[index], field.type, env,
+      `${definition.name}/${field.name}`, { preserveRecordExtras: true });
   });
   if (options.captures && Object.keys(options.captures).length) node.captures = options.captures;
   return node;

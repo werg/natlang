@@ -665,6 +665,46 @@ test('a child given a snapshot-derived evidence FileHandle cannot edit it while 
   lam.projectTransaction.abort();
 });
 
+test('typed child arguments preserve structurally extra source fields and their existing handle scope', async () => {
+  const folder = Folder.fromFiles({ 'pass-01.md': 'complete original evidence', 'private.md': 'sibling evidence' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Pass the complete selected source record to a child.' }, { agent: async child => {
+    const input = Object.values(child.lam.args)[0];
+    assert.equal(input.question.type, 'noul');
+    assert.equal(input.question.id, 'Q-17');
+    assert.equal(input.state.account_summary.active, true);
+    assert.equal(input.source_path, 'jobs/question.json');
+    assert.equal(input.evidence.path, 'pass-01.md');
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['pass-01.md']);
+    assert.equal(await input.evidence.readText(), 'complete original evidence');
+    await assert.rejects(() => input.evidence.writeText('changed'), /read-only/);
+    await assert.rejects(() => input.evidence.folder.readText('private.md'));
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code: `
+    let sourcePathReads = 0;
+    const full = {
+      get source_path() { sourcePathReads++; return 'jobs/question.json'; },
+      question: { instructions: 'Is the request satisfied?', criteria: { true: 'yes', false: 'no' }, type: 'noul', id: 'Q-17' },
+      state: { conversation: [{ speaker: 'customer', text: 'Please help.' }], account_summary: { active: true } },
+      evidence: folder.snapshot().file('pass-01.md')
+    };
+    type QuestionView = { instructions: string; criteria: { true: string; false: string } };
+    type InputView = { question: QuestionView; state: { conversation: { speaker: string; text: string }[] } };
+    const partial = full as InputView;
+    const okay: boolean = await nl<boolean>\`Inspect the supplied question and state.\`(partial);
+    await folder.file('decision.json').writeText('parent result');
+    return okay && sourcePathReads === 1;
+  ` });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.equal(lam.return, true);
+  assert.equal(await lam.projectTransaction.folder.readText('decision.json'), 'parent result');
+  assert.equal(await lam.projectTransaction.folder.readText('pass-01.md'), 'complete original evidence');
+  assert.equal(await folder.readText('pass-01.md'), 'complete original evidence');
+  lam.projectTransaction.abort();
+});
+
 test('a nested inline call reuses its parent scoped FileHandle instead of waiting on its own lease', async () => {
   const folder = Folder.fromFiles({ 'records/TC-3.md': 'attendance signed' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',

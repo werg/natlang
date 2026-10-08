@@ -48,6 +48,31 @@ test('nested Neuralese types and recursive function types are rejected; recursiv
   assert.doesNotThrow(() => new TypeEnv({ Tree: parseType('{ label: string, children: Tree[] }') }));
 });
 
+test('callable input records use structural views while result and capture records stay closed', () => {
+  const env = new TypeEnv();
+  const view = parseType('{ question: { instructions: string }, state: { conversation: { speaker: string; text: string }[] } }');
+  const supplied = { question: { instructions: 'Judge.', type: 'noul' },
+    state: { conversation: [{ speaker: 'customer', text: 'Help.' }], account_summary: { open: true } }, source_path: 'jobs/question.json' };
+  assert.deepEqual(coerce(supplied, view, env, 'input', { preserveRecordExtras: true }), supplied,
+    'a callable receives the complete object value the caller passed');
+  assert.throws(() => coerce(supplied, view, env, 'input'), /unknown-field/,
+    'closed output/capture coercion remains the default');
+  assert.throws(() => coerce({ question: { instructions: 'Judge.' } }, view, env, 'input', { preserveRecordExtras: true }), /type-mismatch/,
+    'required declared nested fields are still checked');
+  assert.throws(() => coerce({ question: { instructions: 7, type: 'noul' },
+    state: { conversation: [] } }, view, env, 'input', { preserveRecordExtras: true }), /type-mismatch/,
+  'declared field types are still checked');
+  assert.equal(coerce(5, parseType('number'), env, 'input', { preserveRecordExtras: true }), 5,
+    'the input policy does not alter primitive arguments');
+  let getterCalls = 0;
+  const withGetter = { question: { instructions: 'Judge.' }, state: { conversation: [] } };
+  Object.defineProperty(withGetter, 'source_path', { enumerable: true, get() { getterCalls++; return 'jobs/question.json'; } });
+  const copied = coerce(withGetter, view, env, 'input', { preserveRecordExtras: true });
+  assert.equal(getterCalls, 1, 'each enumerable input property is read once during coercion');
+  assert.equal(copied.source_path, 'jobs/question.json');
+  assert.equal(getterCalls, 1, 'the copied extra is a value, not the original getter');
+});
+
 test('two-generic nl.with schemas compile through eval and module paths without typing child inputs', () => {
   const source = `const integration = nl.with<CaptureRecord, string>({ notes: input.priorNotes, text: input.text,
     context: input.decisionContext, pass: input.passName, constraint: input.passConstraint })\`Integrate.\`;

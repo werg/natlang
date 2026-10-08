@@ -105,7 +105,10 @@ function preview(value: unknown): string {
   return (text ?? String(value)).slice(0, 45);
 }
 
-export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): Value {
+export type CoerceOptions = { /** Keep structurally compatible extra record properties (used for callable inputs only). */
+  preserveRecordExtras?: boolean };
+
+export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', options: CoerceOptions = {}): Value {
   const wanted = env.resolve(type);
   if (wanted.kind === 'host') {
     if (checkHost(raw, wanted.contract, env.classes)) return raw as Value;
@@ -131,7 +134,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
   }
   if (wanted.kind === 'union') {
     for (const member of wanted.members) {
-      try { return coerce(raw, member, env, path); } catch (error) { if (!(error instanceof Reject)) throw error; }
+      try { return coerce(raw, member, env, path, options); } catch (error) { if (!(error instanceof Reject)) throw error; }
     }
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
@@ -154,23 +157,32 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
   if (wanted.kind === 'list') {
     if (!Array.isArray(raw)) return reject(path, 'type-mismatch', formatType(type), preview(raw));
     // Array.from builds the array in this realm even when eval produced it in its sandbox realm.
-    return Array.from(raw as unknown[], (item, i) => coerce(item, wanted.element, env, `${path}/${i}`));
+    return Array.from(raw as unknown[], (item, i) => coerce(item, wanted.element, env, `${path}/${i}`, options));
   }
   if (wanted.kind === 'dict' || wanted.kind === 'record') {
     if (!plain(raw)) return reject(path, 'type-mismatch', formatType(type), preview(raw));
     const out: Record<string, Value> = Object.create(null);
     for (const [key, value] of Object.entries(raw)) {
       if (key.startsWith('$')) return reject(`${path}/${key}`, 'reserved-key');
-      if (wanted.kind === 'dict') out[key] = coerce(value, wanted.element, env, `${path}/${key}`);
+      if (wanted.kind === 'dict') out[key] = coerce(value, wanted.element, env, `${path}/${key}`, options);
       else {
         const field = wanted.fields.find(f => f.name === key);
-        if (!field) return reject(`${path}/${key}`, 'unknown-field', formatType(wanted));
+        if (!field) {
+          if (options.preserveRecordExtras) { out[key] = value as Value; continue; }
+          return reject(`${path}/${key}`, 'unknown-field', formatType(wanted));
+        }
         if (value === undefined && field.optional) continue;
         if (value === null && field.optional && !fitsType(parseType('null'), field.type, env)) continue;
-        out[key] = coerce(value, field.type, env, `${path}/${key}`);
+        out[key] = coerce(value, field.type, env, `${path}/${key}`, options);
       }
     }
-    return wanted.kind === 'record' ? Object.fromEntries(wanted.fields.filter(f => Object.hasOwn(out, f.name)).map(f => [f.name, out[f.name]!])) : Object.fromEntries(Object.entries(out));
+    if (wanted.kind === 'record' && options.preserveRecordExtras) {
+      const missing = wanted.fields.find(field => !field.optional && !Object.hasOwn(out, field.name));
+      if (missing) return reject(`${path}/${missing.name}`, 'type-mismatch', formatType(missing.type), 'missing');
+    }
+    return wanted.kind === 'record' && !options.preserveRecordExtras ?
+      Object.fromEntries(wanted.fields.filter(f => Object.hasOwn(out, f.name)).map(f => [f.name, out[f.name]!])) :
+      Object.fromEntries(Object.entries(out));
   }
   return reject(path, 'type-mismatch', formatType(type), preview(raw));
 }
