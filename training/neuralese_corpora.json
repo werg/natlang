@@ -7282,6 +7282,49 @@
       "derived_from": [
         "s1-question-collection-v7-generation-source-20261008"
       ]
+    },
+    {
+      "id": "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include_root_prefixes": [
+        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
+        "neuralese-native-text-warmup-20261008-v22",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v1",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v2",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v3",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4"
+      ],
+      "include": [
+        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1/**",
+        "neuralese-native-text-warmup-20261008-v22/checkpoint.pt",
+        "neuralese-native-text-warmup-20261008-v22/train.jsonl",
+        "neuralese-native-text-warmup-20261008-v22/eval.jsonl",
+        "neuralese-native-text-warmup-20261008-v22/plan.json",
+        "neuralese-native-text-warmup-20261008-v22/baseline.json",
+        "neuralese-native-text-warmup-20261008-v22/report.json",
+        "neuralese-native-text-warmup-20261008-v22/heads-export-status.json",
+        "neuralese-native-text-warmup-20261008-v22/code-handoffs.jsonl",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v1/**",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v2/**",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v3/**",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/handoff-plan.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/root-handoff-review.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-launch.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-launch.prepared.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/train-launch.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/train-launch.prepared.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/recipe.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/runtime/manifest.json",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/runtime/natlang_neuralese/**",
+        "neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/eval-v22-v17-masked/**"
+      ],
+      "admission": "closed-unqualified-full-state-and-masked-eval-diagnostic; no-training-examples-or-channel-qualification",
+      "notes": "Root-confirmed V22 graceful full-state checkpoint at step 17739 is authoritative and contains model, full MuonAdamW optimizer, Python/Torch/CUDA RNG, and schedule state. The paired serving heads are stale at step 16768 and intentionally excluded. Preserves closed V22 logs, exact-weight masked V17 eval-only diagnostics, the V4 immutable Python runtime/recipe/launch receipts, and superseded preparation snapshots V1-V3 unchanged. The next V9+3 continuation has launched; its live output directory/checkpoint/logs are deliberately excluded. The startup image-banner parse failure and metadata-only retry are recorded with no model or optimizer update. Alignment gates failed; this corpus does not qualify the model or admit training data.",
+      "derived_from": [
+        "neuralese-native-text-warmup-v21-closed-20261008",
+        "neuralese-v24-v9-three-action-native-text-20261008-v2"
+      ]
     }
   ],
   "coverage_backlog": [
