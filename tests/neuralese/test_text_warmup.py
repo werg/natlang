@@ -746,6 +746,8 @@ def test_held_evaluation_records_matched_projection_and_crisp_history_without_ch
     survival=ar['scores']['ar_greedy']['gold_reference_after_divergence']
     assert survival['exact_prefix_survival_tokens']>=1
     assert survival['first_token_ce']>=0
+    projection_survival=ar['scores']['ar_projection']['gold_reference_after_divergence']
+    assert 1<=projection_survival['exact_prefix_survival_tokens']<=ar['steps']
     assert 'after a rollout diverges' in ar['gold_reference_interpretation']
 
 
