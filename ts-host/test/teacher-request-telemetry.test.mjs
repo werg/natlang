@@ -31,9 +31,20 @@ test('batch telemetry separates fresh/resumed rows, reused lineage, and missing 
     collector_sender_starts: 4, fresh_or_resumed_sender_starts: 3, reused_lineage_sender_starts: 1,
     planner_starts: 1, planner_retry_starts: 0, action_starts: 2, judge_starts: 1,
     chat_transport_starts: 4, chat_transport_retry_starts: 1, provider_sdk_turn_starts: 4,
+    upstream_model_steps_unknown: 0,
     planner_chat_transport_starts: 1, action_chat_transport_starts: 2, judge_chat_transport_starts: 1,
     planner_provider_sdk_turn_starts: 1, action_provider_sdk_turn_starts: 2, judge_provider_sdk_turn_starts: 1,
     planned_action_turns: 1, planner_fallback_turns: 1,
     sender_completed: 4, sender_failed: 0, authored_synthetic_root_actions: 1,
   });
+});
+
+test('opaque HTTP adapter model steps are unknown, not inferred from SDK zero', () => {
+  const accumulator = new CollectorRequestTelemetryAccumulator();
+  accumulator.add({ request_telemetry: { starts: [start('http-a', 'action', {
+    chat_transport_starts: 1, provider_sdk_turn_starts: 0, upstream_model_steps_unknown: 1,
+  })] } });
+  assert.equal(accumulator.totals.chat_transport_starts, 1);
+  assert.equal(accumulator.totals.provider_sdk_turn_starts, 0);
+  assert.equal(accumulator.totals.upstream_model_steps_unknown, 1);
 });

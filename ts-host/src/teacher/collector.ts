@@ -638,6 +638,7 @@ type CollectorRequestStart = { attempt_id: string; case_sequence: number; reques
   role: 'teacher' | 'judge'; purpose: 'planner' | 'action' | 'judge'; logical_turn: number | null;
   planner_attempt: number | null; plan_status: 'planned' | 'fallback' | 'not_configured' | null;
   chat_transport_starts: number; chat_transport_retry_starts: number; provider_sdk_turn_starts: number;
+  upstream_model_steps_unknown: number;
   status: 'started' | 'completed' | 'failed' };
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
@@ -814,11 +815,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let judgeSent = 0;
     let sent = 0;
     const evidenceAttemptId = randomUUID();
-    // Counts collector sender invocations after every local admission gate. This is exact at
-    // the adapter boundary, but cannot see retries hidden inside a provider SDK or server.
+    // Counts collector sender invocations after every local admission gate. It cannot see
+    // model steps behind an HTTP adapter, or physical network retries hidden by an SDK/server.
     const requestTelemetry = {
       schema: 'natlang.collector_request_telemetry/1',
-      scope: 'admitted sender(request) invocations plus ChatTransport calls; excludes provider preparation and opaque provider SDK/server network retries',
+      scope: 'admitted sender(request) invocations plus ChatTransport calls; opaque HTTP-adapter upstream model steps are explicitly unknown',
       attempt_ids: [] as string[], starts: [] as CollectorRequestStart[], authored_synthetic_root_actions: 0,
     };
     type SendContext = { purpose: 'planner' | 'action' | 'judge'; logicalTurn: number | null;
@@ -834,6 +835,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       const entry = entryForRequest(request);
       if (!entry) return;
       entry.chat_transport_starts++;
+      // Collector-side HTTP starts cannot count model steps behind an adapter endpoint.
+      entry.upstream_model_steps_unknown = 1;
       if (retryIndex > 0) entry.chat_transport_retry_starts++;
       await persistTransportStart(entry, 'chat_transport', retryIndex);
     };
@@ -914,6 +917,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             logical_turn: sendContext?.logicalTurn ?? null, planner_attempt: sendContext?.plannerAttempt ?? null,
             plan_status: sendContext?.planStatus ?? null,
             chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+            upstream_model_steps_unknown: 0,
             status: 'started' };
           requestTelemetry.starts.push(entry);
           await persistRequestStart(entry);
