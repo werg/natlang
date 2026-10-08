@@ -12,7 +12,7 @@ import { NativeToolAgent } from '../native/agent.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
-import { dump } from '../native/values.js';
+import { dump, MISSING } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
@@ -589,8 +589,10 @@ function observedTrajectoryContract(record: ProgramRecord, runId: string, run: P
   const root = authoredRootEval(record);
   if (!root) return undefined;
   const contract = root.contract;
-  const ledger = Array.isArray(run.outcome.invocation_ledger) ? run.outcome.invocation_ledger as { invocation_id?: string }[] : [];
-  const childRows = ledger.filter(entry => typeof entry.invocation_id === 'string' && entry.invocation_id !== runId);
+  const ledger = Array.isArray(run.outcome.invocation_ledger) ? run.outcome.invocation_ledger as
+    { invocation_id?: string; completion_status?: string }[] : [];
+  const childRows = ledger.filter(entry => typeof entry.invocation_id === 'string' && entry.invocation_id !== runId &&
+    entry.completion_status === 'done');
   const childIds = new Set(childRows.map(entry => entry.invocation_id as string));
   const roleCounts = Object.fromEntries((contract.required_child_roles ?? []).map(role => {
     const count = childRows.filter(entry => {
@@ -603,7 +605,12 @@ function observedTrajectoryContract(record: ProgramRecord, runId: string, run: P
     return [role.role, { observed: count, required: role.min_invocations, qualified: count >= role.min_invocations }];
   }));
   const events = [...run.trace, ...(run.invocationTraces ?? []).flatMap(trace => trace.events)];
-  const steps = events.filter(event => event.kind === 'iteration_step');
+  const uniqueSteps = new Map<string, Record<string, unknown>>();
+  for (const event of events) if (event.kind === 'iteration_step' && typeof event.node === 'string') {
+    const scope = typeof event.run_id === 'string' ? event.run_id : event.node.split('#', 1)[0]!;
+    uniqueSteps.set(`${scope}\0${event.node}`, event);
+  }
+  const steps = [...uniqueSteps.values()];
   const linkedChildren = new Set<string>();
   for (const step of steps) for (const input of Array.isArray(step.inputs) ? step.inputs : []) {
     if (!input || typeof input !== 'object') continue;
@@ -982,6 +989,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     if (authoredRoot && (handoff || config.execution || (config.collectionRole && config.collectionRole !== 'teacher')))
       throw new Error(`${item.record.id}: authored root eval collection requires an ordinary teacher run without handoff/replay adapters`);
     let authoredRootUsed = false;
+    let authoredRootRejected = false;
     const driver = Object.assign(async (request: ModelTurnRequest): Promise<ModelTurn> => {
       throwIfCollectionFatal();
       const requestedAt = new Date().toISOString();
@@ -991,6 +999,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
+        if (authoredRoot && request.invocation_id === runId &&
+            response.raw_response?.natlang_action_provenance &&
+            (response.raw_response.natlang_action_provenance as Record<string, unknown>).kind === 'authored_reference_root_eval' &&
+            (response.raw_response.natlang_action_provenance as Record<string, unknown>).code_sha256 === authoredRoot.sha256)
+          authoredRootUsed = true;
         await appendEvidence([{ kind: 'provider_frame', source: 'journal_replay', request_sha256: requestSha256,
           invocation_id: request.invocation_id ?? null, request: structuredClone(request),
           response_frame: trajectoryTurn(request, response), saved_turn_index: partial.turns.indexOf(recorded) }]);
@@ -1019,6 +1032,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             raw_response: { natlang_action_provenance: { kind: 'authored_reference_root_eval', source: 'curriculum.reference.root',
               source_program_id: item.record.id, code_sha256: authoredRoot.sha256, sampled: false } }, completion_tokens: 0 };
           await persist(response, 'authored_reference_root');
+        } else if (authoredRoot && authoredRootUsed && request.invocation_id === runId) {
+          authoredRootRejected = true;
+          throw new AuthoredRootDidNotFinishError();
         } else response = await transport(request, persist);
       }
       trajectory.push(trajectoryTurn(request, response));
@@ -1036,7 +1052,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory, {
       ...(trajectoryReview ? { trajectory_review: trajectoryReview, collection_guidance: {
         root_action: { kind: 'authored_reference_eval', source: 'curriculum.reference.root',
-          source_program_id: item.record.id, code_sha256: authoredRoot!.sha256, sampled: false },
+          source_program_id: item.record.id, code_sha256: authoredRoot!.sha256, sampled: false,
+          status: authoredRootRejected ? 'did_not_finish' : 'finished',
+          ...(authoredRootRejected ? { recovery: 'stopped_before_sampled_root_continuation' } : {}) },
         child_actions: { source: 'provider', sampled: true }, training_admission: false } } : {}),
       ...(handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {}) });
     // The result row already carries the full graph; this sidecar also persists child traces for standalone audits.
@@ -1089,6 +1107,14 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[];
   invocationTraces?: import('../runtime/runtime.js').InvocationTrace[] };
+
+/** A guided authored root must finish itself; do not silently switch to a different sampled root policy. */
+class AuthoredRootDidNotFinishError extends Error {
+  constructor() {
+    super('The source-authored root eval did not finish; sampled root recovery is disabled for this guided route.');
+    this.name = 'AuthoredRootDidNotFinishError';
+  }
+}
 
 /**
  * Run a program's root invocation with a model driver in a fresh environment and check the result,
@@ -1155,7 +1181,9 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
           invocations: runtime.frame?.task.traces ?? [], pending_children: runtime.frame?.task.hasPendingChildren(options.runId) ?? false }); }
         catch { /* A partial evidence failure must not replace the original execution failure. */ }
       }
-      throw error;
+      if (error instanceof AuthoredRootDidNotFinishError)
+        result = { outcome: { kind: 'quiesced', detail: error.message }, value: MISSING };
+      else throw error;
     }
     const actual = dump(result.value);
     const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
