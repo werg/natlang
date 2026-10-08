@@ -1,0 +1,162 @@
+/**
+ * The `durable` service: one task invocation's reads of committed state, its commit of write operations, admission,
+ * hooks, section rendering, memos and the durable clock. Bound to pi-durable's `TaskRuntime` for the invocation, so
+ * every operation rejects once the invocation has ended.
+ */
+import type { Context } from '@earendil-works/chord';
+import type { Message } from '@earendil-works/pi-ai';
+import { getCurrentTools } from '@earendil-works/pi-ai/utils/transcript';
+import type { ConversationId, EntryId, TaskId, TaskRuntime } from '../vendor/durable/src/types.ts';
+import type { Agent as PiAgent, ContextView as PiContextView, SubmissionDraft as PiSubmissionDraft } from '../vendor/durable/src/harness/types.ts';
+import { InboxDoc } from '../vendor/durable/src/harness/inbox.ts';
+import { LiveDoc } from '../vendor/durable/src/harness/live.ts';
+import { replaySections } from '../vendor/durable/src/harness/prompt.ts';
+import { applyOps, type ApplyScope } from '../ops.ts';
+import type { CommitResult, ContextView, EntryRecord, Expect, InboxItem, LiveState, Op, SubmissionDraft, SubmissionRecord, TaskOutcome, TaskRecord } from '../types.ts';
+
+/** What a host hands the durable service besides the runtime: admission, and which implementations are selected. */
+export type DurableHost = {
+  /** Admit a submission to `conversationId` (the selected admission: crisp or the natural-language `admit`). */
+  submit(conversationId: ConversationId, draft: SubmissionDraft, context: Context): Promise<number>;
+  submission(id: number, context: Context): Promise<SubmissionRecord | undefined>;
+  /** The raw active range through `at` (default: the newest entry): the newest head marker and every entry from its head on. */
+  scan(conversationId: ConversationId, at: number | undefined, context: Context): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;
+  /** "crisp" or "natural-language", per pluggable point. */
+  implementation(point: 'context' | 'scheduler' | 'admission'): 'crisp' | 'natural-language';
+};
+
+type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
+
+/** Strict JSON copy: what a natural-language call receives, never a live draft. */
+export const plain = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value)) as T;
+
+/** pi-durable's ContextView plus the prompt state it has shown: the sections and the offered tools, replayed. */
+export function contextView(view: PiContextView): ContextView {
+  const messages = view.messages as Message[];
+  return plain({
+    head: view.head ?? null,
+    entries: view.entries,
+    contributions: view.contributions,
+    messages,
+    sections: [...replaySections(messages)].map(([key, text]) => ({ key, text })),
+    tools: getCurrentTools(messages),
+  }) as unknown as ContextView;
+}
+
+export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent) {
+  const conversationId = runtime.conversationId;
+  const scope: ApplyScope = { taskId: runtime.taskId, conversationId, now: () => runtime.now() };
+  return {
+    /** The model context of this conversation through entry `at` (default: the newest entry): pi-durable's derivation. */
+    async view(at?: number): Promise<ContextView> {
+      return contextView(await runtime.context(conversationId, context, at === undefined ? {} : { at: at as EntryId }));
+    },
+    async scan(at?: number) { return plain(await host.scan(conversationId, at, context)); },
+    implementation(point: 'context' | 'scheduler' | 'admission') { return host.implementation(point); },
+    async entry(id: number): Promise<EntryRecord | null> { return plain(await runtime.entry(id as EntryId, context)) as EntryRecord ?? null; },
+    async task(id: number): Promise<TaskRecord | null> { return plain(await runtime.getTask(id as TaskId, context)) as unknown as TaskRecord ?? null; },
+    async outcomes(ids: number[]): Promise<TaskOutcome[]> {
+      return plain((await runtime.outcomes(ids as TaskId[], context))) as unknown as TaskOutcome[];
+    },
+    async live(): Promise<LiveState> { return plain(await runtime.snapshot(LiveDoc, conversationId, context) ?? {}) as unknown as LiveState; },
+    async inbox(): Promise<InboxItem[]> { return plain((await runtime.snapshot(InboxDoc, conversationId, context))?.items ?? []) as unknown as InboxItem[]; },
+    async submission(id: number): Promise<SubmissionRecord | null> { return plain(await host.submission(id, context)) ?? null; },
+    async commit(ops: Op[], expect?: Expect): Promise<CommitResult> {
+      let result: CommitResult | undefined;
+      await runtime.commit(async (tx, current) => {
+        const applied = await applyOps(tx, scope, current as never, ops, expect);
+        result = applied.result;
+        return applied.next;
+      }, context);
+      return result!;
+    },
+    async submit(draft: SubmissionDraft): Promise<number> { return host.submit(conversationId, draft, context); },
+    /** The extensions that handle hook `name` for this task kind, in order. */
+    async hooks(name: string): Promise<string[]> {
+      const names: string[] = [];
+      await runtime.hooks.each(name, () => { names.push(name); });
+      return names.map((_, index) => `${name}#${index}`);
+    },
+    /** Call handler `index` of hook `name` with `args`; a throw comes back as `error`. */
+    async hook(name: string, index: number, args: unknown[]): Promise<{ value?: unknown, error?: string }> {
+      let position = 0, outcome: { value?: unknown, error?: string } = { error: `hook ${name} has no handler ${index}` };
+      await runtime.hooks.each(name, async handler => {
+        if (position++ !== index) return;
+        try { outcome = { value: plain(await (handler as (...a: unknown[]) => unknown)(...args, runtime, context)) }; }
+        catch (error) {
+          if (runtime.signal.aborted) throw error;
+          outcome = { error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+      return outcome;
+    },
+    /**
+     * Render section `key` of the agent with the shown sections: its text, `omit` when the section has nothing to show,
+     * or `error` when its renderer threw (reported already).
+     */
+    async renderSection(key: string, shown: Record<string, string>): Promise<{ text?: string, omit?: true, error?: string }> {
+      const section = agent.sections.find(item => item.key === key);
+      if (!section) return { error: `the agent has no section ${key}` };
+      try {
+        const env = await runtime.env(context).catch(error => { if (runtime.signal.aborted) throw error; runtime.report(error); return undefined; });
+        const text = await section.render({ conversationId, agent, env, shown, read: runtime }, context);
+        return text === undefined ? { omit: true } : { text };
+      } catch (error) {
+        if (runtime.signal.aborted) throw error;
+        runtime.report(error);
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    report(message: string): void { runtime.report(new Error(message)); },
+    async sleep(until: number): Promise<void> { await runtime.sleep(until, context); },
+    now(): number { return runtime.now(); },
+    async memo(name: string, candidate?: unknown): Promise<unknown> {
+      return candidate === undefined ? plain(await runtime.memo(name, context)) ?? null : plain(await runtime.memo(name, candidate as never, context));
+    },
+  };
+}
+
+export type DurableService = ReturnType<typeof durableService>;
+
+/** What the model reads of the durable service. */
+export const DURABLE_DECLARATION = `/**
+ * The task's durable state, bound to this task invocation. Types are those of types.ts. Every read is committed state.
+ * Writes go through commit(), all or nothing.
+ */
+/** The model context of this conversation through entry at (default: the newest entry), as pi-durable derives it. */
+export function view(at?: number): Promise<ContextView>;
+/** The raw active range through at: the newest head marker (null when none) and every entry from its head through at. */
+export function scan(at?: number): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;
+/** Which implementation the host selected for a pluggable point. */
+export function implementation(point: "context" | "scheduler" | "admission"): "crisp" | "natural-language";
+export function entry(id: number): Promise<EntryRecord | null>;
+export function task(id: number): Promise<TaskRecord | null>;
+/** Outcomes of terminal tasks, in the order given. */
+export function outcomes(ids: number[]): Promise<TaskOutcome[]>;
+/** This conversation's pi.live document. */
+export function live(): Promise<LiveState>;
+/** This conversation's queued submissions, in ID order. */
+export function inbox(): Promise<InboxItem[]>;
+export function submission(id: number): Promise<SubmissionRecord | null>;
+/**
+ * Apply ops atomically, in order (see Op), after checking expect (see Expect). Rejects with "state changed: …" when a
+ * guard fails (nothing is written: read again and decide again), and when this task was aborted or the invocation
+ * ended (stop: someone else owns the state now).
+ */
+export function commit(ops: Op[], expect?: Expect): Promise<CommitResult>;
+/** Admit a submission to this conversation and return its ID. A requestId seen before returns the earlier ID. */
+export function submit(draft: SubmissionDraft): Promise<number>;
+/** The handlers of hook name for this task kind, in extension order; empty when there are none. */
+export function hooks(name: string): Promise<string[]>;
+/** Call handler index of hook name with args. A throw is reported and returned as error. */
+export function hook(name: string, index: number, args: unknown[]): Promise<{ value?: unknown; error?: string }>;
+/** Render the agent's section key given the shown sections (key to text): text, omit, or error (already reported). */
+export function renderSection(key: string, shown: Record<string, string>): Promise<{ text?: string; omit?: true; error?: string }>;
+/** Report a non-fatal failure to the host. */
+export function report(message: string): void;
+/** Wait until the durable clock reaches until (milliseconds). */
+export function sleep(until: number): Promise<void>;
+/** The durable clock, in milliseconds. */
+export function now(): number;
+/** Read a memo of this task (null when absent), or store candidate unless one exists and return the winner. */
+export function memo(name: string, candidate?: unknown): Promise<unknown>;`;
