@@ -179,6 +179,14 @@ def content_signature(row):
     value = [row["text"], row["token_ids"], row["supervised_suffix_start"]]
     return sha(canonical(value).encode())
 
+def accumulate_known(base_value, increment):
+    """Accumulate a tracked count, preserving None when the base inventory is unknown."""
+    return None if base_value is None else base_value + increment
+
+def extend_known(base_value, additions):
+    """Extend a tracked list, preserving None when the base inventory is unknown."""
+    return None if base_value is None else [*base_value, *additions]
+
 def anchor_qualification(anchor, rendered, omissions, helper_receipt):
     """Qualify the held base anchor independently from selected delta rows."""
     anchor_id = anchor.get("id")
@@ -247,8 +255,8 @@ def adopted_text_prefix_metadata(binding, *, root: Path = ROOT):
         # historical omission inventory. Keep that distinction explicit.
         "renderer_code": {}, "omitted_records": None, "unresolved_omissions": None,
         "adopted_delta_omissions": text_counts.get("omissions_for_delta"),
-        "duplicate_same_split_documents_deduplicated": 0,
-        "excluded_train_exact_held_complete_documents": 0,
+        "duplicate_same_split_documents_deduplicated": None,
+        "excluded_train_exact_held_complete_documents": None,
         "source_assembly_manifest": {"path": str(manifest_path), "sha256": expected},
     }
 
@@ -620,12 +628,16 @@ def main():
                     "delta_typed_eval_finish_marker_calls": sum(
                         call.get("neuralese_code", {}).get("schema") == "natlang.neuralese-code/1"
                         for record in delta_records for call in (record.get("target") or {}).get("tool_calls", [])),
-                    "omitted_records": old_receipt.get("omitted_records", 0) + len(delta_omissions),
-                    "unresolved_omissions": old_receipt.get("unresolved_omissions", []) + delta_omissions,
-                    "duplicate_same_split_documents_deduplicated": old_receipt.get("duplicate_same_split_documents_deduplicated", 0) +
-                        helper_receipt["duplicate_same_split_documents_deduplicated"] + base_same_split,
-                    "excluded_train_exact_held_complete_documents": old_receipt.get("excluded_train_exact_held_complete_documents", 0) +
-                        helper_receipt["excluded_train_exact_held_complete_documents"] + base_held,
+                    "omitted_records": accumulate_known(old_receipt.get("omitted_records"), len(delta_omissions)),
+                    "unresolved_omissions": extend_known(old_receipt.get("unresolved_omissions"), delta_omissions),
+                    "delta_omitted_records": len(delta_omissions),
+                    "delta_unresolved_omissions": delta_omissions,
+                    "duplicate_same_split_documents_deduplicated": accumulate_known(
+                        old_receipt.get("duplicate_same_split_documents_deduplicated"),
+                        helper_receipt["duplicate_same_split_documents_deduplicated"] + base_same_split),
+                    "excluded_train_exact_held_complete_documents": accumulate_known(
+                        old_receipt.get("excluded_train_exact_held_complete_documents"),
+                        helper_receipt["excluded_train_exact_held_complete_documents"] + base_held),
                     "delta_source_coverage_sha256": sha(coverage_bytes),
                     "anchor_selection": anchor_selection,
                     "text_jsonl_sha256": sha_file(args.out / "text.jsonl") if not args.compact_only else None,

@@ -198,6 +198,23 @@ def test_legacy_root_adoption_without_assembly_manifest_keeps_receipt_path(tmp_p
     assert metadata == receipt
 
 
+def test_unknown_assembled_base_omission_inventory_stays_unknown_when_composed():
+    assert MODULE.accumulate_known(None, 2) is None
+    assert MODULE.extend_known(None, [{"id": "delta-omission"}]) is None
+    assert MODULE.accumulate_known(5, 2) == 7
+    assert MODULE.extend_known([{"id": "base-omission"}], [{"id": "delta-omission"}]) == [
+        {"id": "base-omission"}, {"id": "delta-omission"}]
+
+
+def test_root_adopted_assembly_does_not_claim_unreviewed_prefix_dedup_or_exclusion_counts(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    metadata = MODULE.adopted_text_prefix_metadata(binding, root=tmp_path)
+    assert metadata["omitted_records"] is None
+    assert metadata["duplicate_same_split_documents_deduplicated"] is None
+    assert metadata["excluded_train_exact_held_complete_documents"] is None
+
+
 def test_tokenizers_backend_snapshot_fallback_preserves_serialized_fast_tokenizer(tmp_path):
     from tokenizers import Tokenizer, models, pre_tokenizers
     from transformers import PreTrainedTokenizerFast
