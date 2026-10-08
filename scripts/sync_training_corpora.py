@@ -111,9 +111,13 @@ def publish(repo, entry):
     root = repo / relative(entry['path'])
     files = []
     patterns = entry.get('include', ['**/*'])
+    # Closed snapshots often list thousands of exact paths. Testing every path
+    # against every entry churns fnmatch's pattern cache and recompiles them.
+    exact_paths = {pattern for pattern in patterns if not any(c in pattern for c in '*?[')}
+    wildcard_patterns = [pattern for pattern in patterns if pattern not in exact_paths]
     def selected(name):
-        return any(fnmatch.fnmatch(name, pattern) or
-                   (pattern.startswith('**/') and fnmatch.fnmatch(name, pattern[3:])) for pattern in patterns)
+        return name in exact_paths or any(fnmatch.fnmatch(name, pattern) or
+                   (pattern.startswith('**/') and fnmatch.fnmatch(name, pattern[3:])) for pattern in wildcard_patterns)
     for directory, children, names in os.walk(root):
         children[:] = sorted(name for name in children if
                              (Path(directory) != root or not entry.get('include_root_prefixes') or

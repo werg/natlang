@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v20-duplicate-proposal-held-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v1",
+  "files": [
+    {
+      "path": "independent-verification.json",
+      "bytes": 12916,
+      "sha256": "8bc4183268fbb31b4ee1a50044b9a0241eae5182a11b4f3f99db0072c47d3ea8"
+    },
+    {
+      "path": "root-global-dedup-review.json",
+      "bytes": 9493,
+      "sha256": "680231b674ba3c19ce9810c47d999f3d7560f72643787365bc7eda3817ecf600"
+    },
+    {
+      "path": "selection-input.json",
+      "bytes": 5877,
+      "sha256": "5e100ea22432b5e22826c11f69b66194e72884a6ba19189ca884d3da69c2b6ed"
+    },
+    {
+      "path": "source-build/selection.json",
+      "bytes": 6206,
+      "sha256": "47b27fc663a66f884a209541192cae6e3e03396e10289ad1e9aa74a5a83631bc"
+    },
+    {
+      "path": "source-build/source-manifest.json",
+      "bytes": 854,
+      "sha256": "e2b35f214d636819f491fb0cc3cf40359c85f4103b86766c660039c36cb73d2e"
+    },
+    {
+      "path": "source-build/source-proof.json",
+      "bytes": 51242,
+      "sha256": "5c04ba666cf29464cfb028435a7cbe78e8b5814107e9ea4de088145ecd79007a"
+    },
+    {
+      "path": "source-build/source.cases.jsonl",
+      "bytes": 379358,
+      "sha256": "1cb67e6a9a233b7697538a179bb37ae5f0d090315cba6a6d5adb5dbe12c3926d",
+      "lines": 24
+    }
+  ],
+  "bytes": 465946
+}

@@ -1,4 +1,4 @@
-## Pop continuation, shared fixes and generation closure — 2026-10-08 17:15 UTC
+## Pop continuation, shared fixes and generation closure — 2026-10-08 16:45 UTC
 
 - Inbox checked/acknowledged and origin/main pulled. Active local GPU container `natlang-lfm-input-map-action45-refinement` continues from the full optimizer/RNG checkpoint22272; sampled step23635, held23552 gate false. GPU100%, about4.5GiB VRAM. A clean150-second throughput measurement averaged99.3% GPU utilization (minimum93%); an extra window overlapped storage copying and is excluded from performance conclusions. No speculative hotpatch to the running frozen trainer.
 - Shared declared recipe dispatch now accepts and records input-map parameters (595cf3b1); raw recurrence recipe explicitly selects map/k4/r64/zero rollout. Reports distinguish training input-map metrics from the separate serving sketch projection (afb0df7c). Follow-up5aebf4f2 preserves internal checkpoint/schedule identities so cosmetic labels do not break full resumes or reset plateau history. Actual22272 same-context resume was checked with its original baselines and update flags. Active frozen runtime remains unchanged.
