@@ -15,8 +15,12 @@ from pathlib import Path
 import subprocess
 import sys
 import shutil
+import errno
+import os
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from root_integration_adoption import root_integration_adoption_bindings
 
 
 def sha(path: Path) -> str:
@@ -89,6 +93,26 @@ def write_append(prefix: Path, output: Path, additions):
         raise ValueError(f'prefix changed while appending: {prefix}')
 
 
+def link_or_copy_unchanged(source: Path, output: Path):
+    """Expose an immutable unchanged artifact without duplicating same-device bytes."""
+    if output.exists(): raise ValueError(f'output already exists: {output}')
+    if source.stat().st_dev == output.parent.stat().st_dev:
+        try:
+            os.link(source, output)
+            method = 'hardlink'
+        except OSError as exc:
+            if exc.errno != errno.EXDEV: raise
+            shutil.copyfile(source, output)
+            method = 'copy-cross-device'
+    else:
+        shutil.copyfile(source, output)
+        method = 'copy-cross-device'
+    if sha(source) != sha(output):
+        raise ValueError(f'unchanged artifact hash mismatch after {method}: {source}')
+    return {'method': method, 'sha256': sha(output), 'bytes': output.stat().st_size,
+            'same_inode': os.path.samefile(source, output)}
+
+
 def merge_pieces(prefix: Path, delta: Path, output: Path):
     prior = {p['name']: p for p in rows(prefix, 'name')}
     additions, duplicates = [], []
@@ -153,6 +177,7 @@ def main():
     base_receipt = json.loads(paths['base-receipt'].read_text())
     root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
     prefix_binding = base_receipt.get('schema') == 'natlang.corpus-prefix-binding/1'
+    adoption_bindings = root_integration_adoption_bindings(base_receipt, root=ROOT)
     if prefix_binding:
         if base_receipt.get('status') != 'verified-exact-prefix' or base_receipt.get('training_admission') is not False:
             raise ValueError('base prefix binding must be verification-only, with no training admission')
@@ -163,6 +188,13 @@ def main():
             binding = (base_receipt.get('files') or {}).get(name)
             if not binding or binding.get('sha256') != sha(path):
                 raise ValueError(f'base prefix binding does not bind the exact {name}')
+    elif adoption_bindings is not None:
+        for name, artifact_key in (('base-native', 'native'), ('base-recurrence', 'recurrence'),
+                                   ('base-native-pieces', 'native_pieces'),
+                                   ('base-recurrence-pieces', 'recurrence_pieces')):
+            binding = adoption_bindings['artifacts'][artifact_key]
+            if binding['sha256'] != sha(paths[name]):
+                raise ValueError(f'root integration adoption does not bind the exact {name} prefix')
     elif root_corpus_receipt:
         if (not str(base_receipt.get('status', '')).startswith('admitted-')
                 or base_receipt.get('admission', {}).get('native_sft') is not True):
@@ -197,9 +229,20 @@ def main():
         if any(entry.get('decision') != 'admit-exact-selected-native-action-SFT-only' for entry in approval_rows):
             raise ValueError('root action admission contains an unsupported decision')
         counts = approval.get('counts') or {}
-        if (counts.get('native_SFT_train_actions') != len(approval_rows)
-                or counts.get('whole_trajectories') != 0
-                or approval.get('qualifications', {}).get('learned_writer') is not False):
+        old_counts = (counts.get('native_SFT_train_actions') == len(approval_rows)
+                      and counts.get('whole_trajectories') == 0)
+        selected_counts = (counts.get('selected_native_actions') == len(approval_rows)
+                           and counts.get('train_actions') == len(approval_rows)
+                           and counts.get('test_actions') == 0
+                           and counts.get('whole_trajectories') == 0
+                           and counts.get('new_worlds') == 0)
+        qualifications = approval.get('qualifications', {})
+        if (not (old_counts or selected_counts)
+                or qualifications.get('learned_writer') is not False
+                or qualifications.get('recurrence') is not False
+                or approval.get('integration', {}).get('active_GPU_inputs_changed') is True
+                or (selected_counts and
+                    approval.get('integration', {}).get('active_GPU_inputs_changed') is not False)):
             raise ValueError('root action receipt does not describe exact native SFT-only admission')
         approval_by_id = {entry['native_id']: entry for entry in approval_rows}
     else:
@@ -263,13 +306,16 @@ def main():
              'native_pieces': 'native-pieces.jsonl', 'recurrence_pieces': 'recurrence-pieces.jsonl',
              'delta': 'delta-native-records.jsonl', 'audit': 'recurrence-audit.json'}
     write_append(paths['base-native'], out / names['native'], delta_n)
+    unchanged_transport = {}
     if native_only:
-        shutil.copyfile(paths['base-recurrence'], out / names['recurrence'])
+        unchanged_transport['recurrence'] = link_or_copy_unchanged(
+            paths['base-recurrence'], out / names['recurrence'])
     else:
         write_append(paths['base-recurrence'], out / names['recurrence'], delta_recs)
     np = merge_pieces(paths['base-native-pieces'], paths['delta-pieces'], out / names['native_pieces'])
     if native_only:
-        shutil.copyfile(paths['base-recurrence-pieces'], out / names['recurrence_pieces'])
+        unchanged_transport['recurrence_pieces'] = link_or_copy_unchanged(
+            paths['base-recurrence-pieces'], out / names['recurrence_pieces'])
         rp = {'added': 0, 'exact_duplicates': [], 'total': len(list(rows(paths['base-recurrence-pieces'], 'name')))}
     else:
         rp = merge_pieces(paths['base-recurrence-pieces'], paths['delta-pieces'], out / names['recurrence_pieces'])
@@ -301,6 +347,7 @@ def main():
         'native_pieces': prefix_sha(out/names['native_pieces'], paths['base-native-pieces'].stat().st_size) == sha(paths['base-native-pieces']),
         'recurrence_pieces': prefix_sha(out/names['recurrence_pieces'], paths['base-recurrence-pieces'].stat().st_size) == sha(paths['base-recurrence-pieces'])},
       'native_split_group_audit': split_audit, 'piece_merge': {'native': np, 'recurrence': rp},
+      'unchanged_artifact_transport': unchanged_transport,
       'recurrence_audit': recurrence_audit,
       'outputs': {name: {'sha256': sha(out/name), 'bytes': (out/name).stat().st_size}
                   for name in names.values()},

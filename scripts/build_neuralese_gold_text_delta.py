@@ -14,6 +14,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from root_integration_adoption import root_integration_adoption_bindings
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -122,6 +124,7 @@ def main():
     base_records = read_records(args.base_records)
     delta_records = read_records(args.delta_records)
     base_approval = json.loads(args.base_root_receipt.read_text())
+    adoption_bindings = root_integration_adoption_bindings(base_approval)
     approved_text = args.twin_of_text or args.base_text
     def manifest_binds(text):  # a root admission that binds the packet's output manifest, which binds the text
         manifest = text.parent / "output-manifest.json"
@@ -129,6 +132,7 @@ def main():
                 json.loads(manifest.read_text())["outputs"]["text.jsonl"]["sha256"] == sha_file(text))
     root_admission = base_approval.get("schema") == "natlang.root-corpus-admission/1"
     root_integration_admission = base_approval.get("schema") == "natlang.root-corpus-integration-admission/1"
+    root_integration_adoption = adoption_bindings is not None
     if root_admission and (not str(base_approval.get("status", "")).startswith("admitted-")
                            or base_approval.get("admission", {}).get("native_sft") is not True
                            or base_approval.get("admission", {}).get("derived_ordinary_gold_text") is not True):
@@ -139,9 +143,16 @@ def main():
     integration_text_binds = bool(root_integration_admission and
         base_approval.get("qualification_scope", {}).get("native_sft_only") is True and
         base_approval.get("outputs", {}).get("text", {}).get("sha256") == sha_file(approved_text))
-    if ((base_approval.get("approved") is not True and not root_admission and not root_integration_admission) or
-            (base_approval.get("text_sha256") != sha_file(approved_text) and
-             not root_text_binds and not integration_text_binds and not manifest_binds(approved_text))):
+    adoption_text_binds = bool(root_integration_adoption and
+        adoption_bindings["artifacts"]["text"]["sha256"] == sha_file(approved_text) and
+        adoption_bindings["artifacts"]["provenance"]["sha256"] == sha_file(args.base_provenance) and
+        adoption_bindings["artifacts"]["native"]["sha256"] == sha_file(args.base_records))
+    receipt_approves_base = (base_approval.get("approved") is True or root_admission or
+                             root_integration_admission or root_integration_adoption)
+    receipt_binds_text = (base_approval.get("text_sha256") == sha_file(approved_text) or
+                          root_text_binds or integration_text_binds or adoption_text_binds or
+                          manifest_binds(approved_text))
+    if not receipt_approves_base or not receipt_binds_text:
         raise ValueError("base text root receipt does not approve/bind the exact text prefix")
     if args.twin_of_text:
         def identity(path):  # tokenizer-independent document identity: ID, split and the admitted source records
@@ -160,10 +171,18 @@ def main():
                                    for item in admission_rows):
             raise ValueError("root action receipt has no exact native SFT-only admission rows")
         counts = source_approval.get("counts") or {}
-        if (counts.get("native_SFT_train_actions") != len(admission_rows)
-                or counts.get("whole_trajectories") != 0
-                or source_approval.get("qualifications", {}).get("learned_writer") is not False
-                or source_approval.get("qualifications", {}).get("recurrence") is not False):
+        legacy_counts = (counts.get("native_SFT_train_actions") == len(admission_rows)
+                         and counts.get("whole_trajectories") == 0)
+        selected_counts = (counts.get("selected_native_actions") == len(admission_rows)
+                           and counts.get("train_actions") == len(admission_rows)
+                           and counts.get("test_actions") == 0
+                           and counts.get("whole_trajectories") == 0
+                           and counts.get("new_worlds") == 0)
+        qualifications = source_approval.get("qualifications", {})
+        if (not (legacy_counts or selected_counts)
+                or qualifications.get("learned_writer") is not False
+                or qualifications.get("recurrence") is not False
+                or source_approval.get("integration", {}).get("active_GPU_inputs_changed") is not False):
             raise ValueError("root action receipt includes unsupported non-native admission facets")
         admitted_by_id = {item["native_id"]: item for item in admission_rows}
         for row in delta_records:
@@ -175,6 +194,15 @@ def main():
             if groups is None and isinstance(admission.get("source_group"), str): groups = [admission["source_group"]]
             if row.get("split") != admission.get("split") or not isinstance(groups, list) or groups != row.get("source_groups", []):
                 raise ValueError(f"root action admission split/group mismatch: {row.get('id')}")
+            # The source conversion can predate root admission and therefore carry
+            # an explicit pending marker. Apply the exact root decision in memory
+            # only after ID/target/split/group bindings pass; raw source bytes stay
+            # pinned and unchanged.
+            row["training_admission"] = {
+                "kind": "root-selected-action-admission",
+                "approved": True,
+                "receipt_sha256": sha_file(args.source_approval),
+            }
     else:
         approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
@@ -298,6 +326,7 @@ def main():
                     "source_text_prefix_bytes": args.base_text.stat().st_size,
                     "delta_source_run": str(args.delta_records.parent),
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
+                    "delta_root_action_admission_overlay_records": len(admission_rows) if root_action_admission else 0,
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "delta_capture_context_augmentation_records": sum(
                         bool(row.get("capture_context_augmentation_attestations")) for row in provenance

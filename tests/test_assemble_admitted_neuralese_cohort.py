@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import hashlib
+import os
 import sys
 import tempfile
 import unittest
@@ -94,7 +95,11 @@ class AssemblerInvariantTests(unittest.TestCase):
             self.assertTrue(admitted[0]["training_admission"]["approved"])
             self.assertEqual((out / "recurrence-records.jsonl").read_bytes(), recurrence.read_bytes())
             self.assertEqual((out / "recurrence-pieces.jsonl").read_bytes(), recurrence_pieces.read_bytes())
+            self.assertTrue(os.path.samefile(out / "recurrence-records.jsonl", recurrence))
+            self.assertTrue(os.path.samefile(out / "recurrence-pieces.jsonl", recurrence_pieces))
             manifest = json.loads((out / "proposal-manifest.json").read_text())
+            self.assertEqual(manifest["unchanged_artifact_transport"]["recurrence"]["method"], "hardlink")
+            self.assertEqual(manifest["unchanged_artifact_transport"]["recurrence_pieces"]["method"], "hardlink")
             self.assertEqual(manifest["admitted_facets"],
                              {"native": True, "recurrence": False, "native_only_receipt": True})
 
