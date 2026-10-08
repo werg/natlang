@@ -1,0 +1,87 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-text-warmup-v21-closed-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-warmup-20261007-v21",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 18594,
+      "sha256": "68e67e7579683b41f76f6024652adfa49026bfc665fd5661a195e3619c355a65"
+    },
+    {
+      "path": "best-checkpoint.json",
+      "bytes": 20467,
+      "sha256": "ac775a38257341a9283e7ba93640f4ab5b6be03495b576ece463937223663c1b"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1232281794,
+      "sha256": "7c3cc626b9ed932a5e7a11825d767628bff00e4d86e7757021151354fd18e625"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628332059,
+      "sha256": "3f95ac36970afae92350a255811f8fbf87831c9ffdbd9354268d0e054828a468"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232305858,
+      "sha256": "f2f903cf399e326e1f8a92c6c9d0e8b8440831fdb269464e2dabfd5954d9cef4"
+    },
+    {
+      "path": "code-handoffs.jsonl",
+      "bytes": 758,
+      "sha256": "9540f605c623bdb3c2bafe72e0bc6b498031ec707d5ede8262a00a9c083baf6b",
+      "lines": 3
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 1024215,
+      "sha256": "060b2448987dd725f2e0f0ff10ec7730218108fc8c06105bfc0bbbe1c80a91ba",
+      "lines": 66
+    },
+    {
+      "path": "heads-export-status.json",
+      "bytes": 253,
+      "sha256": "1c4527d7102717cbe8d0aed3e280df422091cd755d4a07b7be586cc1b76c6c3c"
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628332187,
+      "sha256": "08b982cfd80d28c99afd74f654f1d0e1865d30d05d44fd67ebb3ed28ff47b544"
+    },
+    {
+      "path": "plan.json",
+      "bytes": 109116,
+      "sha256": "7bee6cf1ae3dfd06ca74b35956c78d2e0d59dfb469a60008efa3a02b5b297f95"
+    },
+    {
+      "path": "profile-step13896.txt",
+      "bytes": 19668,
+      "sha256": "584d3b5494fa20703bbab94d56fe914b785904a0da60c12a2101ea6f6d667727"
+    },
+    {
+      "path": "profile-step13988-module-counts.json",
+      "bytes": 148583,
+      "sha256": "a6bf0768e56aae0d8d79f03d2af345b27cec75c9345d2dc3795a8e08719ba9be"
+    },
+    {
+      "path": "profile-step14141-module-counts.json",
+      "bytes": 148874,
+      "sha256": "ab74d2a707e440b952e195538c9c44262336bd1cfa42162c4a1788784cce138f"
+    },
+    {
+      "path": "report.json",
+      "bytes": 19219,
+      "sha256": "490a62c95ea81c87093ac5b9d60960afbcf9dd9742c8c3af81a164c95056b0be"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 42169188,
+      "sha256": "c68307c81d4fde6859a0e238b43261239171ba8b85ad76f6d8bc35bae4c7c98b",
+      "lines": 8192
+    }
+  ],
+  "bytes": 3764930833
+}
