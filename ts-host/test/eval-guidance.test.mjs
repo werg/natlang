@@ -47,6 +47,18 @@ test('read_code shows the authentic built-in Neuralese type declaration', async 
   assert.doesNotMatch(prompt, /do not redefine it or use read_code\("Neuralese"\)/);
 });
 
+test('read_code documents the injected decide helper instead of asking for program source', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  const inspected = await script([['eval', { code: 'read_code("decide")' }],
+    ['return_result', { status: 'success', value: 'done' }]]);
+  const docs = JSON.parse(inspected.results[0]);
+  assert.equal(docs, BUILT_IN_DOCS.decide);
+  assert.match(docs, /decide\(fn, \.\.\.args\)/);
+  assert.match(docs, /first argument must be a callable function in scope/);
+  assert.match(docs, /one probability-1 answer with scored=false/);
+  assert.match(READ_CODE_DESCRIPTION, /eval built-ins \(nl, iterateOn, transcript, decide\)/);
+});
+
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {
   const { results } = await script([['eval', { code: 'return_result({ status: "success", value: "Hello, " + name })' }]]);
   assert.match(results[0], /Staged "Hello, Ada" as the result/);

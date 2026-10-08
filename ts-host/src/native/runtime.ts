@@ -122,6 +122,15 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
+  decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
+  const decision = await decide(verdict, statement);
+  decision.value                    the function's answer
+  decision.probabilities            { value, probability }[] for its finite result choices
+  decision.confidence               probability of the returned answer
+  decision.scored                   whether the model supplied a scored distribution
+The first argument must be a callable function in scope, such as a natural-language function with a finite result
+type; the remaining arguments are passed to it in order. When the model driver has no decision scorer, the function
+still runs normally and the result has one probability-1 answer with scored=false.`,
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
 instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
