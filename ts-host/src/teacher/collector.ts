@@ -1265,7 +1265,10 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     services.neuralese = options.neuraleseService;
   }
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
+  // The run is recorded in the machine's call store under its run ID, with the driver's model when it names one.
+  const driverModel = (driver as { model?: unknown }).model;
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
+    modelId: typeof driverModel === 'string' && driverModel ? driverModel : `undeclared:${driver.name || 'teacher-driver'}`,
     ...(serviceScopes ? { serviceScopes } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     // Host-only provenance: exact portable values, bounded and explicitly incomplete otherwise.

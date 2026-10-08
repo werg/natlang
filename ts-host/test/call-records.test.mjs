@@ -251,6 +251,26 @@ test('eviction drops unpinned calls first and keeps calls cited by a case', asyn
   } finally { done(store); }
 });
 
+test('a case that uses a service the task does not provide is not admitted: the agent runs, nothing is handed off', async () => {
+  const store = freshStore();
+  try {
+    const ORACLE_CASES = `import { oracle } from 'natlang:services';
+export const cases = [
+  { when: (args: { id: string }) => true, run: async (args: { id: string }) => oracle.price(args.id) },
+];
+`;
+    const { price, hashes } = await compile(store, ORACLE_CASES, ['active']);
+    const { model } = scripted([['return_result', { status: 'success', value: 7 }]]);
+    const service = orders();
+    assert.equal(await createNatlangRuntime({ model, calls: store, services: { orders: service.orders } }).run(() => price('abc')), 7);
+    assert.equal(store.calls()[0].executor, 'agent');
+    const stats = store.caseStats(hashes[0]);
+    assert.deepEqual([stats.served, stats.handed_off, stats.tier], [0, 0, 'active']);
+    const withOracle = { orders: service.orders, oracle: { price: () => 99 } };
+    assert.equal(await createNatlangRuntime({ model: async () => { throw new Error('not asked'); }, calls: store, services: withOracle }).run(() => price('abc')), 99);
+  } finally { done(store); }
+});
+
 test('a call shows as running in the store until its record arrives', async () => {
   const store = freshStore();
   try {

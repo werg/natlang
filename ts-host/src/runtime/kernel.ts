@@ -411,7 +411,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     const compilation = task.runtime.compilations()?.get(capture.base.definition.key, capture.base.definition.interface,
       definition.codebase, definition.types);
     if (compilation) {
-      const admitted = admit(compilation, caseArguments(capture, folder), mode);
+      const available = frame.services ?? task.services;
+      const admitted = admit(compilation, caseArguments(capture, folder), mode, name => Object.hasOwn(available, name) && !!available[name]);
       shadows = admitted.shadows;
       if (admitted.active) {
         const crisp = await runCrispCase({ task, frame, childFrame, callId, definition, options, inputs, folder, extraTransactions,

@@ -11,8 +11,15 @@ Where the implementation differs from the text below:
 
 - The reducer's folder holds the evidence beside `cases.ts` (`evidence/...`), so the model reads it with ordinary file
   tools; only `cases.ts` is kept. The program is read through `evidence/function.md` and the function's context.
-- §4: `iterateOn` site statistics moved into the store. The teacher collector keeps `exactHostTraceCapture` (its data
-  contract is unchanged) and the improver keeps its evaluation traces; both can read the store, neither was rewritten.
+- §4: `iterateOn` site statistics moved into the store. Standalone native runs (`NodeNativeRuntime`, the teacher
+  collector's roots) are now recorded like kernel calls, under their run ID and the driver's model, so a collection's
+  whole call tree is in the store. Exact host capture is a filter over it: `hostCaptures(store, callId, spec)`
+  (calls/host-capture.ts) rebuilds the collector's `host_capture` records field for field, `value_sha256` included;
+  `test/teacher-store-capture.test.mjs` checks parity. The inline `host_capture` events stay in the trace, because
+  published teacher corpora are built from those traces (sequence numbers included). Retiring them is the corpus
+  builders' change to make, not this one. The improver's evidence pages stay behind its blind view
+  (improvement/blind-view.ts): validation evidence is scores only by design, and a store query would bypass that gate.
+  Its runs and the evaluation calls (annotated with their scores) are in the store.
 - Offline jobs (shadow replays, audits) run in the specializer loop, with definitions reloaded from the recorded
   `program_root`, or rebuilt from the record (instructions, signature, types) when the source is unavailable.
 - Bounds: besides `maxStoreBytes`, the store keeps `minFreeBytes` (20 GiB) free on its filesystem.

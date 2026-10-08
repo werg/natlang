@@ -11,13 +11,18 @@ export class Deopt extends Error {
 }
 export const isDeopt = (error: unknown): boolean => error instanceof Error && error.name === 'Deopt';
 
-/** The first active case whose guard admits `args` (in `on` mode), and every shadow case whose guard admits them. */
-export function admit(compilation: LoadedCompilation, args: Record<string, unknown>, mode: 'on' | 'shadow'):
+/**
+ * The first active case whose guard admits `args` (in `on` mode), and every shadow case whose guard admits them. A case
+ * that uses a service the task does not provide (`provided`) is not considered: it could only fail and hand off.
+ */
+export function admit(compilation: LoadedCompilation, args: Record<string, unknown>, mode: 'on' | 'shadow',
+  provided: (service: string) => boolean = () => true):
   { active?: LoadedCase; shadows: LoadedCase[]; guardErrors: { hash: string; error: string }[] } {
   const shadows: LoadedCase[] = [], guardErrors: { hash: string; error: string }[] = [];
   let active: LoadedCase | undefined;
   for (const item of compilation.cases) {
     if (item.tier !== 'active' && item.tier !== 'shadow') continue;
+    if (!(item.services ?? []).every(provided)) continue;
     let admitted = false;
     try {
       const verdict = item.when(args);

@@ -9,7 +9,7 @@ import { COMPACTED_RESULT } from './prompt.js';
 import { arrayToStringNeuralese, concatNeuralese, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
-import { isRecording, recordingServices } from './effects.js';
+import { isRecording, recordingServices, type EffectEvent } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
@@ -52,6 +52,8 @@ export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?:
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[]; entry?: number };
 export type NativeAgent = (session: NativeSession) => Promise<string | void> | string | void;
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
+  /** Sees each service call this runtime wraps, with its exact arguments and result (a standalone run's call record). */
+  observeEffect?: (event: EffectEvent) => void;
   maxActions?: number; maxToolCalls?: number;
   runId?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
   exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
@@ -557,7 +559,8 @@ export class NativeRuntime {
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
     const services = options.services ?? {};
-    this.services = isRecording(services) ? services : recordingServices(services, ({ exact: _exact, ...event }) => event.phase === 'requested' ?
+    const observe = options.observeEffect;
+    this.services = isRecording(services) ? services : recordingServices(services, ({ exact, ...event }) => (observe?.({ ...event, exact }), event.phase === 'requested') ?
       this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }) :
       graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
         [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));

@@ -12,7 +12,9 @@ import type { CaseTier } from './types.js';
 
 /** One crisp case of a compilation, ready to run. */
 export type LoadedCase = { hash: string; position: number; tier: CaseTier;
-  when: (args: Record<string, unknown>) => unknown; run: (args: Record<string, unknown>) => unknown };
+  when: (args: Record<string, unknown>) => unknown; run: (args: Record<string, unknown>) => unknown;
+  /** The `natlang:services` imports the case's own text uses; it is admitted only where the task provides them all. */
+  services: string[] };
 export type LoadedCompilation = { id: string; cases: LoadedCase[] };
 
 /** The source text of each element of `export const cases = [...]`, in order. */
@@ -32,6 +34,20 @@ export function caseSources(text: string): string[] {
   throw new Error('cases.ts must export `const cases = [{ when, run }, ...]`');
 }
 
+/** The services each case of a cases file uses: names imported from `natlang:services` that its text mentions. */
+export function caseServices(text: string): string[][] {
+  const file = ts.createSourceFile('cases.ts', text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const imported = new Map<string, string>();
+  for (const statement of file.statements)
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === 'natlang:services') {
+      const bindings = statement.importClause?.namedBindings;
+      if (bindings && ts.isNamedImports(bindings))
+        for (const element of bindings.elements) imported.set(element.name.text, (element.propertyName ?? element.name).text);
+    }
+  return caseSources(text).map(source => [...imported].filter(([local]) => new RegExp(`(?<![\\w$.])${local.replace(/\$/g, '\\$')}(?![\\w$])`).test(source))
+    .map(([, name]) => name));
+}
+
 /** Content hashes of a cases file's cases: a case keeps its tier and counts while its text is unchanged. */
 export function caseHashes(text: string): string[] {
   return caseSources(text).map(source => hexDigest(source.replace(/\s+/g, ' ').trim()).slice(0, 24));
@@ -43,12 +59,12 @@ export function loadCases(id: string, text: string, codebase: Record<string, unk
   const exports = moduleInstance(record, codebase as Record<string, ItemRecord>);
   const cases = exports.cases;
   if (!Array.isArray(cases)) throw new Error(`compilation ${id}: cases.ts does not export an array named cases`);
-  const hashes = caseHashes(text);
+  const hashes = caseHashes(text), services = caseServices(text);
   if (hashes.length !== cases.length) throw new Error(`compilation ${id}: cases array has ${cases.length} entries, source has ${hashes.length}`);
   return cases.map((item, position) => {
     if (!item || typeof item.when !== 'function' || typeof item.run !== 'function')
       throw new Error(`compilation ${id}: case ${position} needs a when(args) guard and a run(args) body`);
-    return { hash: hashes[position]!, position, tier: 'shadow' as CaseTier, when: item.when, run: item.run };
+    return { hash: hashes[position]!, position, tier: 'shadow' as CaseTier, when: item.when, run: item.run, services: services[position] ?? [] };
   });
 }
 
