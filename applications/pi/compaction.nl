@@ -4,6 +4,8 @@ args:
   facts: PhaseFacts
 returns: string
 ---
+When facts.previousAttempt is set, this phase already ran once and failed for that reason: read it first and do not
+repeat the mistake.
 You carry out one phase of a compaction task. facts.task.id is this task; facts.task.input is a CompactionInput
 ({ reason, instructions? }); facts.task.checkpoint is a CompactionPhase. Every branch ends with this task's next
 state committed through durable.commit, by you or by the function you call. Return one line saying what was

@@ -129,6 +129,8 @@ test('dependency locks choose a stable version and cycles are rejected', () => {
 async function modelServer(t, respond) {
   const wire = [];
   const server = createServer(async (request, response) => {
+    // Only chat completions are served; the runtime's model-info probe (GET /v1/models) finds nothing.
+    if (request.method !== 'POST') { response.writeHead(404); response.end(); return; }
     let text = ''; for await (const chunk of request) text += chunk;
     const body = JSON.parse(text); wire.push(body);
     const call = respond(body);

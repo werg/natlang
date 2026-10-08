@@ -217,9 +217,16 @@ export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<u
       case 'startRun':
         await startRun(tx, conversationId, live, op.inputs.map((input: number | string) => id(ids, input, `${where} inputs`) as SubmissionId));
         break;
-      case 'endRun':
-        endRun(tx, live, self, resolveRefs(ids, json(op.settlement)) as never);
+      case 'endRun': {
+        const settlement = resolveRefs(ids, json(op.settlement)) as { status?: unknown; answer?: unknown; reason?: unknown };
+        const valid = settlement?.status === 'done' ? typeof settlement.answer === 'number' :
+          settlement?.status === 'unanswered' && typeof settlement.reason === 'string';
+        if (!valid) throw new InvalidOperation(`${where}: settlement is ${JSON.stringify(settlement)}; a Settlement is ` +
+          `{ status: "done", answer: <entry ID> } or { status: "unanswered", reason, detail? }. There is no other status; ` +
+          `a failure the instructions do not name is not settled by you: end the call failed and the harness faults the task.`);
+        endRun(tx, live, self, settlement as never);
         break;
+      }
       case 'handOver':
         handOver(live, self, id(ids, op.to, `${where} to`) as TaskId);
         break;

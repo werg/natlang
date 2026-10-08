@@ -70,9 +70,10 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
   const before = stateKey(task);
   const attempts = Math.max(1, host.attempts ?? 2);
   const phase = mode === 'abort' ? 'abort' : String(checkpoint.phase);
+  let previousAttempt = '';
   for (let attempt = 1; ; attempt++) {
     try {
-      const summary = await host.natlang.run(() => entry(facts), { services, serviceDeclarations, signal: runtime.signal,
+      const summary = await host.natlang.run(() => entry(attempt === 1 ? facts : { ...facts, previousAttempt }), { services, serviceDeclarations, signal: runtime.signal,
         name: `${task.kind}#${task.id}:${phase}` });
       // An entry must commit the task's next state. One that says it did, while the state is unchanged, failed.
       if (stateKey(await runtime.getTask(task.id, context)) === before)
@@ -86,6 +87,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
       // A phase that committed its next state before failing made progress; the step rules judge it.
       if (stateKey(await runtime.getTask(task.id, context)) !== before) return;
       if (attempt >= attempts) throw new Error(`${task.kind} ${phase}: the executor failed: ${message}`);
+      previousAttempt = message.slice(0, 2000);
     }
   }
 }

@@ -402,6 +402,8 @@ export type PhaseFacts = {
   settings: Settings;
   sessionId: string;
   now: number;
+  /** Set when this phase runs again: why the earlier attempt failed (an error, or a return without a commit). */
+  previousAttempt?: string;
 };
 
 // ---------------------------------------------------------------------------------------------------------------
