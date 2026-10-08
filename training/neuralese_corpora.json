@@ -6322,6 +6322,59 @@
       ],
       "admission": "held-closed-raw-action-review-no-training-admission",
       "notes": "Closed Bunny LAB accepted and old incomplete-map RT rejection preserved. Do not relabel historical source gold; successor RT227 uses separately reviewed complete final decision map. Actual actions and attempts require independent source/quality review."
+    },
+    {
+      "id": "v20-counterfactual-source-v8-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+      "include": [
+        "README.md",
+        "source.cases.jsonl",
+        "source-proof.json",
+        "source-manifest.json"
+      ],
+      "admission": "generation-source-or-scripted-reference-no-training-admission",
+      "notes": "Constructed 24 source variants inheriting eight V18 groups and splits,12train12test; zero independent-world credit. V8 corrects matching saved template capture set. Source approved for generation only; authored scripted references are separate, not observed teacher examples."
+    },
+    {
+      "id": "v20-counterfactual-reference-v8-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8-runtime-proof",
+      "include": [
+        "case-000.reference.json",
+        "case-001.reference.json",
+        "case-002.reference.json",
+        "case-003.reference.json",
+        "case-004.reference.json",
+        "case-005.reference.json",
+        "case-006.reference.json",
+        "case-007.reference.json",
+        "case-008.reference.json",
+        "case-009.reference.json",
+        "case-010.reference.json",
+        "case-011.reference.json",
+        "case-012.reference.json",
+        "case-013.reference.json",
+        "case-014.reference.json",
+        "case-015.reference.json",
+        "case-016.reference.json",
+        "case-017.reference.json",
+        "case-018.reference.json",
+        "case-019.reference.json",
+        "case-020.reference.json",
+        "case-021.reference.json",
+        "case-022.reference.json",
+        "case-023.reference.json",
+        "materializer-runtime-flags-attestation.jsonl",
+        "native-decisions.jsonl",
+        "reference-trajectories.jsonl",
+        "review-artifact-manifest.json",
+        "runtime-reference-proof.json",
+        "source-action-review.jsonl",
+        "source.cases.jsonl"
+      ],
+      "admission": "generation-source-or-scripted-reference-no-training-admission",
+      "notes": "Closed isolated frozen6f55d503 authored reference proof24/24,288successfulactions,96reads. Scripted StandIn port, zero provider calls; no automatic training/trace admission."
     }
   ],
   "coverage_backlog": [

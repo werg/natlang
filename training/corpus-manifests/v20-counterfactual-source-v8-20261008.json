@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v20-counterfactual-source-v8-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v20-20261008-v8",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1097,
+      "sha256": "342f23555f37cd74af2f54596a037a823aa213cfc13177499a495d59d05cdc87"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2055,
+      "sha256": "0a2ac124a1ebb299e9319f5ae4ae0af9fbb559b9f678c16045bd7525d5764b83"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 25129,
+      "sha256": "4ae17fbfdea483121714b909e5d82fa6d18202175c5a0e78fc7695f9fece4713"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1025580,
+      "sha256": "78fff8c8c73c644edd3bc0525270a4be56c3db5a43ed03129d0fbc8458ee1004",
+      "lines": 24
+    }
+  ],
+  "bytes": 1053861
+}
