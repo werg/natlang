@@ -12,7 +12,7 @@ import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
-import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
+import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
@@ -425,16 +425,6 @@ export function inferValueType(value: unknown): string {
   throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);
 }
 
-/** Rebuild plain data in this realm (eval values come from the sandbox realm); live values keep identity. */
-function hostCopy(value: unknown, seen = new Map<object, unknown>()): unknown {
-  if (!value || typeof value !== 'object' || isLive(value) || isHandle(value)) return value;
-  if (seen.has(value)) return seen.get(value);
-  if (Array.isArray(value)) { const out: unknown[] = []; seen.set(value, out); for (const item of value) out.push(hostCopy(item, seen)); return out; }
-  const out: Record<string, unknown> = {}; seen.set(value, out);
-  for (const [key, item] of Object.entries(value)) Object.defineProperty(out, key,
-    { value: hostCopy(item, seen), enumerable: true, writable: true, configurable: true });
-  return out;
-}
 const itemRef = (container: Record<string, Value>, key: string, type: Type, env: TypeEnv, path: string, deny = ''): Ref =>
   ({ path, type, env, deny,
     get: () => Object.hasOwn(container, key) ? container[key]! : MISSING,
@@ -1200,7 +1190,10 @@ export class NativeSession {
       return this.writeNeuraleseResult(value, wanted, source, 'typed-text-result');
     }
     const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null');
-    try { return coerce(value, resultType, this.env, 'return'); }
+    // A value eval computed (a service's or a callee's result) is assignable as in TypeScript: fields the declared
+    // record does not list are kept, not refused, so returning it never asks for a retyped copy. A literal written
+    // into return_result is still checked exactly.
+    try { return coerce(value, resultType, this.env, 'return', source === 'return_result' ? {} : { preserveRecordExtras: true }); }
     catch (first) {
       if (!(first instanceof Reject)) throw first;
       if (wanted.kind === 'neuralese' && element && !(element.kind === 'prim' && element.name === 'string') &&
@@ -2057,7 +2050,8 @@ export class NativeSession {
             : '\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.';
           return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:['missing-fresh-result']};
         }
-        const done=this.scopeTool('return_result',{status:'success',value:functionResult});
+        // Finish with the staged value as checked above (computed values keep their extra fields), not a re-check.
+        const done=this.scopeTool('return_result',{status:'success'});
         return {...done,text:logStatus+rendered+storedStatus+unsetStatus+'\n'+done.text};
       }
       return { kind: 'ok', text: logStatus + rendered + storedStatus + unsetStatus + status, value: (output.result ?? null) as Value,
