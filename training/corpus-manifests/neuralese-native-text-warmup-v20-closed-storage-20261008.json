@@ -1,0 +1,66 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-text-warmup-v20-closed-storage-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-warmup-20261007-v20",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 18805,
+      "sha256": "0e1c75f201c140a5a2769c13c92086552111b66279e05e824c0c9445793f348d"
+    },
+    {
+      "path": "best-checkpoint.json",
+      "bytes": 20316,
+      "sha256": "06b969904c34ee5761dd56de32f591e542bdb698647017ad7c661141b810a554"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1232271554,
+      "sha256": "6e70dd3c2009130c8f56f78ae6b0407b57cd7000aa9b2ca060eae13652e167fc"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628331867,
+      "sha256": "1e4d5c0f40bdf535534e1e48c6d3a2002b39f0fc6709b3ff35d13bb1dc11342e"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232273218,
+      "sha256": "3f2d271ac07c70fbfa54953958e7e436c9fe567c0f5cad81758339502e4cb13e"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 278101,
+      "sha256": "045a78d8d3f1a63a61f4fdad176f425f22526235ffb87867cf343b3f11ad22aa",
+      "lines": 18
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628331867,
+      "sha256": "f26de83b15c422cb05e84ccea9d31d8c8c1649ef5a4df0872ccbf099a25f0adc"
+    },
+    {
+      "path": "plan.json",
+      "bytes": 103335,
+      "sha256": "c9a950c4c36aff335515ee4e1a6a2bac2da408e86992cb0ec04f417e5c857036"
+    },
+    {
+      "path": "report.json",
+      "bytes": 19063,
+      "sha256": "c700b45bfe07f1fab0f9c4b45afeb8df33d5e51589c113e568771eb3fd555ebb"
+    },
+    {
+      "path": "root-boundary-checkpoint.json",
+      "bytes": 433,
+      "sha256": "49510f95561280a9c1bbd16afc4bb39f5b8b43b028ef9e41e47be2fe0f186c59"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 9165798,
+      "sha256": "43a3d7f649e2e1e7f4b2682ddda40fdafafe9b8a268c4109f45fe8c64a7551f1",
+      "lines": 2102
+    }
+  ],
+  "bytes": 3730814357
+}

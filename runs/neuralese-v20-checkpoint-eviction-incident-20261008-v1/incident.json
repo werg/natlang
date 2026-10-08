@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.v20-checkpoint-eviction-incident/1",
+  "status": "incomplete-unrecovered",
+  "observed_utc": "2026-10-08T10:28:23Z",
+  "original_full_snapshot": {
+    "id": "neuralese-native-text-warmup-v20-closed-storage-20261008",
+    "path": "runs/neuralese-native-text-warmup-20261007-v20",
+    "manifest_path": "training/corpus-manifests/neuralese-native-text-warmup-v20-closed-storage-20261008.json",
+    "manifest_identity_sha256": "964ef45d5424b62ca1ee6b4a2110f00d83ba62f6e6425167a83c5765784dda29",
+    "manifest_file_sha256": "1cf7f59f3a1dc3dca41e9669f511abe35df5f1698ce61246aa6754c4185a2714",
+    "expected_file_count": 11,
+    "expected_bytes": 3730814357,
+    "manifest_entries_preserved_unchanged": true
+  },
+  "missing_full_state_files": [
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232273218,
+      "sha256": "3f2d271ac07c70fbfa54953958e7e436c9fe567c0f5cad81758339502e4cb13e",
+      "role": "V20 full-state checkpoint, step 8192"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1232271554,
+      "sha256": "6e70dd3c2009130c8f56f78ae6b0407b57cd7000aa9b2ca060eae13652e167fc",
+      "role": "best full-state checkpoint, step 8064"
+    }
+  ],
+  "remote_verification": {
+    "status": "failed-missing-both",
+    "method": "explicit read-only SSH exact-path check after guarded restore failed before transfer",
+    "checked_utc_approx": "2026-10-08T10:26Z",
+    "machine": "DGX",
+    "results": {
+      "checkpoint.pt": "absent",
+      "best-checkpoint.pt": "absent"
+    },
+    "restore_attempt": "failed before transfer: source guard reported best-checkpoint.pt missing",
+    "old_verify_semantics_note": "The prior sync_training_corpora.py verify --machine dgx call checked Pop-local files only and is not evidence of a DGX mirror."
+  },
+  "searches": {
+    "Pop runs exact-size/hash candidate search": "none found",
+    "DGX runs exact-size/hash candidate search": "none found",
+    "Pop repository excluding .git exact-size search": "none found",
+    "manifest/hash search": "only original full snapshot manifest contains expected hashes"
+  },
+  "surviving_artifacts": {
+    "corpus_id": "neuralese-native-text-warmup-v20-surviving-artifacts-20261008",
+    "paths": [
+      "baseline.json",
+      "best-checkpoint.json",
+      "best-heads.pt",
+      "eval.jsonl",
+      "heads.pt",
+      "plan.json",
+      "report.json",
+      "root-boundary-checkpoint.json",
+      "train.jsonl"
+    ],
+    "count": 9,
+    "status": "remain on Pop; registered separately for exact synchronization"
+  },
+  "impact": {
+    "historical_v20_optimizer_state": "lost-unless-independent-byte-exact-copy-is-later-found",
+    "active_v22_checkpoint_or_job_touched": false,
+    "active_v4_continuation_touched": false,
+    "local_student_scaffolding_touched": false,
+    "training_admission": false,
+    "channel_qualification": false
+  },
+  "local_eviction": {
+    "bytes_unlinked": 2464544772,
+    "receipt_path": ".coordination/artifact-evictions/v20-closed-checkpoints-20261008.json",
+    "scope": "Pop local paths removed; this is not a safe/recoverable eviction claim"
+  }
+}

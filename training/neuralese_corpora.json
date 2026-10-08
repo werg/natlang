@@ -7325,6 +7325,54 @@
         "neuralese-native-text-warmup-v21-closed-20261008",
         "neuralese-v24-v9-three-action-native-text-20261008-v2"
       ]
+    },
+    {
+      "id": "neuralese-native-text-warmup-v20-closed-storage-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v20",
+      "include": [
+        "**/*"
+      ],
+      "admission": "incomplete-closed-run-evidence-two-full-state-checkpoints-missing-unresolved; no-training-admission",
+      "notes": "Historical full V20 expected snapshot. The immutable manifest lists 11 files, but Pop and DGX currently lack checkpoint.pt (1232273218 bytes, SHA256 3f2d271ac07c70fbfa54953958e7e436c9fe567c0f5cad81758339502e4cb13e) and best-checkpoint.pt (1232271554 bytes, SHA256 6e70dd3c2009130c8f56f78ae6b0407b57cd7000aa9b2ca060eae13652e167fc). Exact-path DGX SSH verification and exact-size copy searches found no copies; do not claim this full snapshot is mirrored or recoverable. Its original manifest remains unchanged as the expected-byte record. Surviving files are published separately under neuralese-native-text-warmup-v20-surviving-artifacts-20261008. V20 full-state optimizer recovery is unresolved; no training admission or channel qualification.",
+      "derived_from": [
+        "neuralese-v19-preservation-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-native-text-warmup-v20-surviving-artifacts-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v20",
+      "include": [
+        "baseline.json",
+        "best-checkpoint.json",
+        "best-heads.pt",
+        "eval.jsonl",
+        "heads.pt",
+        "plan.json",
+        "report.json",
+        "root-boundary-checkpoint.json",
+        "train.jsonl"
+      ],
+      "admission": "surviving-closed-run-diagnostics-and-heads-only; full-state-checkpoints-missing; no-training-admission",
+      "notes": "Separate exact snapshot of the nine V20 artifacts that remain. Does not satisfy the original 11-file full-state manifest; the two missing full-state optimizer checkpoints are explicitly preserved as omissions in the original manifest and incident record. Heads are not a substitute for optimizer/full-state recovery. No model/channel qualification or training-data admission.",
+      "derived_from": [
+        "neuralese-native-text-warmup-v20-closed-storage-20261008"
+      ]
+    },
+    {
+      "id": "neuralese-v20-checkpoint-eviction-incident-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v20-checkpoint-eviction-incident-20261008-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "integrity-incident-incomplete-unrecovered-no-training-admission",
+      "notes": "Incident record for two V20 full-state checkpoint paths removed from Pop before remote mirroring was confirmed. Exact DGX SSH checks and size searches found no byte-exact copies. Original full-state manifest remains unchanged but incomplete; see incident.json for hashes, sizes, failed verification, surviving artifacts and impact.",
+      "derived_from": [
+        "neuralese-native-text-warmup-v20-closed-storage-20261008",
+        "neuralese-native-text-warmup-v20-surviving-artifacts-20261008"
+      ]
     }
   ],
   "coverage_backlog": [
