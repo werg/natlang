@@ -462,17 +462,22 @@ def retain_best_checkpoint(out, report):
     pending.replace(out/'best-checkpoint.json')
 
 
-def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None):
-    """Prime with real open; supervise each text token and the real close once."""
+def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None,
+                     context_tokens=0):
+    """Prime with real open; supervise each text token and the real close once.
+
+    The first ``context_tokens`` document tokens (the system prompt) are context only: they stay in the
+    window as its crisp prefix, but are never targets, so they carry no loss and no held metric."""
     ids=[open_id]+list(token_ids)+[close_id]
     stride=tokens-prefix_tokens
+    context_end=1+max(0,int(context_tokens))
     windows=[]
     for offset in range(0,len(ids),stride):
         start=max(0,offset-prefix_tokens)
         chunk=ids[start:offset+stride]
-        width=1 if offset==0 else offset-start
+        width=max(1 if offset==0 else offset-start,context_end-start)
         if len(chunk)<=width:continue
-        window={'ids':chunk,'prefix':width,'offset':offset}
+        window={'ids':chunk,'prefix':width,'offset':offset,'start':start}
         if supervised_suffix_start is not None:
             window['supervised_suffix_start']=max(0,supervised_suffix_start+1-(start+width))
         windows.append(window)
@@ -740,6 +745,8 @@ def main(argv=None):
                    help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
                         'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
                         'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--mask-system-prompt',action=argparse.BooleanOptionalAction,default=True,
+                   help='the leading system prompt of each chat document is context only: no loss, no held metric')
     p.add_argument('--eval-only',action='store_true',
                    help='run one held evaluation of the restored state (use --continue-from into a fresh --out), '
                         'write eval-only.json and exit: no update, no checkpoint')
@@ -888,17 +895,9 @@ def main(argv=None):
         optimizer=torch.optim.AdamW([{'params':[q for n,q in named if n.startswith('backbone.')],'lr':a.lr},
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
     rows,receipt=load_text_rows(a.records,a.pieces,a.text_data,tokenizer=engine.tokenizer)
-    windows={'train':[],'test':[]}
-    for row in rows:
-        for window in document_windows(row['token_ids'] if 'token_ids' in row else engine._tokens(row['text']),
-                open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
-                tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                supervised_suffix_start=row.get('supervised_suffix_start')):
-            windows[row['split']].append({**window,
-                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
-                'groups':row['source_groups']})
-    if not all(windows.values()):raise ValueError('no token windows for a split')
-    # Held per-role metrics (diagnostic): label the held windows' tokens by chat role.
+    # Chat roles per document (system, user, tool, assistant reasoning/reply): the leading system prompt is
+    # context only (owner 2026-10-08: memorized boilerplate, masked from loss and held metrics), and held windows
+    # carry per-token roles for role_strata.
     role_tokenizer=engine.tokenizer
     def token_id(text):
         try:
@@ -906,21 +905,35 @@ def main(argv=None):
             return value if isinstance(value,int) and value!=role_tokenizer.unk_token_id else None
         except Exception:return None
     role_start=token_id('<|im_start|>')
-    if role_start is not None:
-        role_ids={i:name for name in ('system','user','assistant','tool') for i in [token_id(name)] if i is not None}
-        held_documents={}
-        for row in rows:
-            if row['split']=='test':
-                held_documents[hashlib.sha256(row['text'].encode()).hexdigest()]=(
-                    [backbone.controls.open_id]+list(row['token_ids'] if 'token_ids' in row else engine._tokens(row['text']))
-                    +[backbone.controls.close_id])
-        for window in windows['test']:
-            document=held_documents.get(window['document'])
-            if document is None:continue
-            start=0 if window['offset']==0 else window['offset']-window['prefix']
-            labels=chat_roles(document,start_id=role_start,role_ids=role_ids,
-                              think_open=token_id('<think>'),think_close=token_id('</think>'))
-            window['roles']=labels[start:start+len(window['ids'])]
+    role_ids=({i:name for name in ('system','user','assistant','tool') for i in [token_id(name)] if i is not None}
+              if role_start is not None else {})
+    system_code=ROLE_CODES.index('system')
+    windows={'train':[],'test':[]};masked_system_tokens=0
+    for row in rows:
+        tokens=row['token_ids'] if 'token_ids' in row else engine._tokens(row['text'])
+        labels=None;context=0
+        if role_start is not None:
+            labels=chat_roles([backbone.controls.open_id]+list(tokens)+[backbone.controls.close_id],start_id=role_start,
+                              role_ids=role_ids,think_open=token_id('<think>'),think_close=token_id('</think>'))
+            if a.mask_system_prompt:
+                index=1  # labels[0] is the window's open token
+                while index<len(labels) and labels[index]==0:index+=1
+                while index<len(labels) and labels[index]==system_code:index+=1
+                context=index-1 if any(c==system_code for c in labels[1:index]) else 0
+                masked_system_tokens+=context
+        for window in document_windows(tokens,
+                open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
+                tokens=a.tokens, prefix_tokens=a.prefix_tokens,
+                supervised_suffix_start=row.get('supervised_suffix_start'),context_tokens=context):
+            if labels is not None and row['split']=='test':
+                window['roles']=labels[window['start']:window['start']+len(window['ids'])]
+            windows[row['split']].append({**window,
+                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'groups':row['source_groups']})
+    if not all(windows.values()):raise ValueError('no token windows for a split')
+    print(json.dumps({'event':'system_prompt_masking','enabled':bool(a.mask_system_prompt and role_start is not None),
+                      'masked_system_tokens':masked_system_tokens,
+                      'documents':len(rows)}),flush=True)
     held,held_selection=select_held_document_windows(windows['test'],a.held_documents)
     group_order_sha256=hashlib.sha256(json.dumps(held_selection['group_order'],ensure_ascii=False,
         sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -1042,6 +1055,7 @@ def main(argv=None):
     rollout=(RolloutStage(passes=a.rollout_passes,start_passes=a.rollout_start_passes,
                           sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
                           converge_ratio=a.rollout_converge_ratio,
+                          metric='non_system_targets' if a.mask_system_prompt else 'pooled',
                           patience=a.projection_patience,min_relative_improvement=a.projection_min_improvement)
              if a.rollout_passes else None)
     restored=resumed or continuation

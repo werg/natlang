@@ -187,7 +187,7 @@ class RolloutStage:
     SCHEMA = "natlang.sketch-rollout-stage/2"
 
     def __init__(self, *, passes, start_passes=None, sketch_first=True, min_evals=2, patience=3,
-                 min_relative_improvement=0.01, converge_ratio=None):
+                 min_relative_improvement=0.01, converge_ratio=None, metric="pooled"):
         start_passes = passes if start_passes is None or not sketch_first else min(int(start_passes), int(passes))
         if passes < 2 or start_passes < 2:
             raise ValueError("a sketch rollout needs at least two sequence passes")
@@ -197,6 +197,7 @@ class RolloutStage:
             raise ValueError("converge_ratio must be a finite ratio of at least 1")
         self.config = {"passes": int(passes), "start_passes": int(start_passes), "sketch_first": bool(sketch_first),
                        "converge_ratio": None if converge_ratio is None else float(converge_ratio),
+                       "metric": str(metric),
                        "min_evals": int(min_evals), "patience": int(patience),
                        "min_relative_improvement": float(min_relative_improvement)}
         self.phase = "sketch_only" if sketch_first else "whole_stack"
@@ -289,3 +290,7 @@ class RolloutStage:
         self.last_significant = state["last_significant"]
         self.unfrozen_at_eval = state["unfrozen_at_eval"]
         self.deepened = list(state["deepened"])
+        if state["config"].get("metric", "pooled") != self.config["metric"]:
+            # The held metric changed definition (e.g. system prompt masked): keep depth and phase, but this
+            # depth's plateau record restarts on the new scale.
+            self._reset_depth()
