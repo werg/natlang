@@ -2051,7 +2051,12 @@ export class NativeSession {
         }
       }
       if (complete) {
-        if (functionResult === undefined) return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+'\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.',codes:['missing-fresh-result']};
+        if (functionResult === undefined) {
+          const finishHint = notResult
+            ? "\nCorrect this eval's value to match the declared result type; a previously staged value cannot finish this action."
+            : '\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.';
+          return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:['missing-fresh-result']};
+        }
         const done=this.scopeTool('return_result',{status:'success',value:functionResult});
         return {...done,text:logStatus+rendered+storedStatus+unsetStatus+'\n'+done.text};
       }
