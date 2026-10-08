@@ -9,17 +9,19 @@ test('completed collector trace export tags root and child events without mergin
   const children = [
     { callId: 'root-run/1', events: [{ kind: 'invocation', seq: 0, call_id: 'root-run/1' },
       { kind: 'block_write', seq: 3, call_id: 'root-run/1', block: 'nz1_example' }] },
-    { callId: 'root-run/2', events: [{ kind: 'invocation', seq: 0, call_id: 'root-run/2' }] },
+    { callId: 'root-run/2', events: [{ kind: 'invocation', seq: 0, call_id: 'root-run/2', invocation_id: 'event-owned-id' }] },
   ];
 
   const output = collectedInvocationTraceEvents('root-run', root, children);
 
-  assert.deepEqual(output.map(({ trace_role, invocation_id, seq }) => [trace_role, invocation_id, seq]), [
+  assert.deepEqual(output.map(({ trace_role, trace_invocation_id, seq }) => [trace_role, trace_invocation_id, seq]), [
     ['root', 'root-run', 0], ['root', 'root-run', 1],
     ['child', 'root-run/1', 0], ['child', 'root-run/1', 3], ['child', 'root-run/2', 0],
   ]);
   assert.deepEqual(output[3], { kind: 'block_write', seq: 3, call_id: 'root-run/1', block: 'nz1_example',
-    trace_role: 'child', invocation_id: 'root-run/1' });
+    trace_role: 'child', trace_invocation_id: 'root-run/1' });
+  assert.equal(output[4].invocation_id, 'event-owned-id');
+  assert.equal(output[4].trace_invocation_id, 'root-run/2');
   assert.equal(root[0].trace_role, undefined);
-  assert.equal(children[0].events[0].invocation_id, undefined);
+  assert.equal(children[1].events[0].invocation_id, 'event-owned-id');
 });

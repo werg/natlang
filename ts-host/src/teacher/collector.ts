@@ -57,11 +57,11 @@ const EXECUTION_PLAN_TOOL = { type: 'function', function: { name: 'execution_pla
 
 export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
-/** Serialize the traces collected for a completed run without merging their local sequence spaces. */
+/** Add container attribution without changing event fields or merging per-invocation sequence spaces. */
 export function collectedInvocationTraceEvents(runId: string, rootEvents: Record<string, unknown>[],
   childTraces: import('../runtime/runtime.js').InvocationTrace[]): Record<string, unknown>[] {
   const tag = (events: Record<string, unknown>[], invocationId: string, traceRole: 'root' | 'child') =>
-    events.map(event => ({ ...event, trace_role: traceRole, invocation_id: invocationId }));
+    events.map(event => ({ ...event, trace_role: traceRole, trace_invocation_id: invocationId }));
   return [...tag(rootEvents, runId, 'root'),
     ...childTraces.flatMap(child => tag(child.events, child.callId, 'child'))];
 }
