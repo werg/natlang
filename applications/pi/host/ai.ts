@@ -33,7 +33,11 @@ type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
 /** Options of one turn: the pinned stream options plus the thinking level, the provider session and a token cap. */
 export type TurnOptions = StreamOptions & { thinkingLevel: ThinkingLevel; sessionId: string; maxTokens?: number };
 
-export function aiService(runtime: Runtime, context: Context) {
+/**
+ * `streamAttempt`: for a generation task, the attempt its request streams into pi.live (pi-durable's generation
+ * request always streams; compaction never does), so a turn the executor sends without `live` still streams.
+ */
+export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number) {
   const resolve = (ref: ModelRef): Model<Api> => {
     const model = ref && runtime.models.getModel(ref.provider, ref.modelId);
     if (!model) throw new Error(`Model ${ref?.provider}/${ref?.modelId} is not available`);
@@ -55,7 +59,8 @@ export function aiService(runtime: Runtime, context: Context) {
     },
     turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
       const resolved = resolve(model);
-      return (live ? streamResponse(runtime as never, resolved, messages, options(turn), live.attempt, context) :
+      const attempt = live?.attempt ?? streamAttempt?.();
+      return (attempt !== undefined ? streamResponse(runtime as never, resolved, messages, options(turn), attempt, context) :
         runtime.models.completeSimple(resolved, { messages }, options(turn))).then(storable);
     },
     poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {

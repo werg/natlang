@@ -61,7 +61,8 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
     mode, agent: agentFacts(agent), settings: settingsFacts(runtime.settings),
     sessionId: await ensureProviderSessionId(runtime, context), now: runtime.now(),
   };
-  const services: Record<string, object> = { durable: durableService(runtime, context, host, agent), ai: aiService(runtime, context) };
+  const services: Record<string, object> = { durable: durableService(runtime, context, host, agent), ai: aiService(runtime, context,
+    task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined) };
   const serviceDeclarations: Record<string, string> = { durable: DURABLE_DECLARATION, ai: AI_DECLARATION };
   if (task.kind === 'pi.tool') {
     services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId);
