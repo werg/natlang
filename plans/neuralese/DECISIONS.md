@@ -920,3 +920,11 @@ V19 INC-904's first scaffold eval explicitly requested timeout_ms=200000. Its ch
 V19 PX-106 performed its first three passes, then a notes-only child tried the parent artifact write. The private one-file folder applied that unauthorized write to its overlay before rejecting it at commit; every later clean return retried the same dirty overlay validation. This caused repeated scope errors and exhausted 384 requests. Commit 6f55d503 checks scoped write/remove/move/install paths before mutation, propagates the exact fence through forks/nested transactions, and retains commit validation. Denial remains auditable and the outside file remains unchanged; later clean evals in that same invocation can recover. Focused isolated suites passed 94/94.
 
 Guided note children receive semantic decision context and their current pass, rather than raw parent task instructions containing artifact writes. They return accumulated notes; the final interpreter returns Draft, and the parent owns persistence. Shared builder 1aa6701c fixes that role conflict; current published source attempts remain immutable. V20 source contracts also rebind inherited request IDs and state coherent facility hours instead of mixing old IDs or unexplained morning after-hours flags. These are source/scaffold corrections, not new independent worlds or permission to widen child file authority.
+## 2026-10-08 — Maple warm-up memory: eval token cap and CUDA reserved cap
+
+- V17's long held windows pushed Maple's v7 warm-up over its guard line (110–111 GB vs 109) four times, at eval
+  (four 4k windows per batch) and in training (allocator cache 87 GB reserved for a 75 GB allocated peak).
+- Held-eval batches are capped at `--tokens` (8800689e). `--cuda-reserved-cap-gb` (0b5d9573, bc0517a1; operational,
+  resume accepts it) caps the CUDA allocator so it frees cache and retries instead of growing. Maple runs with 88:
+  reserved 76 GB, run peak 98 GB, 3.69 ms/token unchanged.
+- The supervisor retries 5 min after a guard stop when a periodic checkpoint exists (it was 30 min).
