@@ -1,6 +1,6 @@
 # Trace-guided specialization: a tracing JIT for natural-language functions
 
-Status: design, 2026-10-08, revised twice the same day with the owner's decisions (section 9). Nothing below is
+Status: design, 2026-10-08, revised three times the same day with the owner's decisions (section 9). Nothing below is
 implemented.
 
 ## 1. Idea
@@ -18,16 +18,16 @@ program and looks for invocation patterns that are already crisp in practice:
 - *"When `format` is `'csv'`, the model always writes an equivalent split/join program."*
 
 For each such pattern it writes a **case**: a crisp **guard** (`when`, a predicate over the call's typed inputs) and a
-crisp **body** (`run`, a TypeScript function with the definition's signature). A function's cases live in a
-`foo.cases.ts` file beside `foo.nl` (section 7). At call time the runtime checks the guards.
+crisp **body** (`run`, a TypeScript function with the definition's signature). The cases for one definition form a
+**compilation**, stored centrally beside the traces and loaded by the runtime without changing the program (section 7). At call time the runtime checks the guards.
 When one holds, the body runs instead of the agent. If no guard holds, the agent runs as before. If the body fails,
 the failure goes back to the agent, which finishes the call (section 6.5). The `.nl` function remains the
 specification and the fallback.
 
 Specialization is part of the runtime: recording, dispatch, the background specializer run, tier promotion and
 auditing all happen without an application asking for them (section 7). The compiler itself is a natlang program
-(`applications/specializer`): a directory reducer from the program's context and its recorded evidence to a new
-context revision that contains cases files. The runtime runs it offline over the machine's record store. Natural-language
+(`applications/specializer`): a directory reducer that writes a compilation folder from the program and its
+recorded evidence. The runtime runs it offline over the machine's record store. Natural-language
 functions make the judgments (which executions show the same approach, which conditions separate them, whether to
 compile at all, how to write the body). Crisp code handles counting, verification, hashing and storage.
 
@@ -123,7 +123,8 @@ the frame (`Frame.parentActionSeq`), and `runDefinition` records it. A call tree
   and tests. A runtime option or `NATLANG_CALL_STORE=off` disables it. `--trace DIR` stays as a JSONL export.
 - Writes happen in the existing end-of-call hook (`task.record`), so recording adds no latency to model turns. A
   failed write is reported once per task and never fails the call.
-- Stores are machine-local and are not synchronized between machines. Cases files are portable source.
+- Stores are machine-local and are not synchronized between machines. Compilations are content-addressed folders
+  and can be copied between stores when that becomes useful.
   Records that become training data move as corpus manifests, like any other data.
 - Browser runtime: an IndexedDB sink with the same row shape (later; not needed for the specializer).
 
@@ -286,8 +287,8 @@ training data for those patterns keeps growing. They are marked so dataset build
 
 ### 6.4 Runtime dispatch
 
-In `runDefinition`, before the agent is built: look up the cases attached to the definition in the program's bound
-context revision (7.4). Evaluate the guards of shadow and active cases in order, and run the first active case
+In `runDefinition`, before the agent is built: look up the definition revision's current compilation in the machine store
+(7.3). Evaluate the guards of shadow and active cases in order, and run the first active case
 whose guard admits. A guard that throws counts
 as not admitting and is recorded. Body calls are recorded in the same store with `executor.kind = 'crisp'`. Nested
 natlang calls from a body go through the kernel as usual and can be specialized in turn.
@@ -314,21 +315,29 @@ its guard admitted but it cannot handle), the runtime hands the call to the agen
 A body that returns a value of the wrong type is handled the same way: the type check fails, and the agent takes
 over.
 
-## 7. Shape in natlang: a reducer from context and evidence to a new context
+## 7. Compilations: stored centrally, loaded transparently
 
-The spec already names this operation: "Self-improvement is a function from a context and evidence to a new
-context revision; promotion binds a program to that revision" (SPEC.md, Directory reducers). Specialization is one
-such function. It needs no new execution concept. Its parts are a cases file, a directory reducer, an evidence folder
-and context promotion.
+The program's source is never changed. Its `.nl` functions stay the specification and the fallback, and its folder
+gains no files. A **compilation** is the specializer's output for one definition revision. It is stored in the
+machine's record store, beside the calls it was derived from, and the runtime loads it at call time without the
+program knowing.
 
-### 7.1 The cases file
+### 7.1 What a compilation is
 
-A function's crisp cases are an ordinary callable-folder TypeScript module beside its `.nl` file:
+A compilation is a small content-addressed folder in the store:
+
+```
+<store>/compilations/<definition revision>/<compilation id>/
+  cases.ts        the crisp cases (below)
+  meta.json       definition id and source, program and build seen, context interface hashes,
+                  executor identity of the evidence, parent compilation, created, specializer revision
+  report.md       the specializer's account: groups found, cases written, calls left to the agent, declines
+```
+
+`cases.ts` is ordinary TypeScript written by the compiler:
 
 ```ts
-// database/classify.cases.ts: crisp cases for classify.nl. Inputs no case takes go to classify.nl.
-import type { Classification } from '../types';
-
+// Crisp cases for database/classify.nl. Inputs no case takes go to classify.nl.
 export const cases = [
   { when: (request: string) => /^\s*(create|define)\s+table\b/i.test(request),
     run: async (request: string): Promise<Classification> => ({ kind: 'schema' }) },
@@ -338,40 +347,83 @@ export const cases = [
 ```
 
 - `when` takes the function's parameters and returns a boolean. It must not cause effects.
-- `run` has the function's signature. It may call what the function itself may call (the items of its context and
-  its services) and nothing more, so a case never has more authority than its function. Calling a natlang item is
-  how a case keeps a semantic judgment natural (5.3).
+- `run` has the function's signature. It runs with the function's own context and services, and nothing more, so a
+  case never has more authority than its function. Calling a natlang item from the context is how a case keeps a
+  semantic judgment natural (5.3).
 - A `throw` in `run` (or `Deopt`, for an input a guard admitted but the case cannot handle) hands the call to the
   agent (6.5).
-- The runtime keys tier state by each case's content hash, not by its position. The compiler writes a comment line
-  with the case's evidence (`// 412 calls, 0 worse, a1`).
+- Each case has a content hash. Tier state and all statistics are keyed by it.
 
-The loader attaches `foo.cases.ts` to `foo.nl`. It is not an item that callers of the folder can call, and the agent
-executing `foo` does not see it. Authors can write cases files by hand. The specializer reads and edits existing
-ones like any other source, and hand-written cases go through the same acceptance and tiers.
+Nobody writes these files by hand and no program imports them, so there is no new authoring concept and nothing
+changes for program authors or for executing models.
 
-This is the one new authoring concept in the design. It is ordinary TypeScript with two fields, so small models can
-write it, and executing models never see it. `skills/natlang-authoring` gains a short section on it.
+### 7.2 Stored in relation to the traces
 
-### 7.2 The specializer: a directory reducer
+The store's tables link compilations, cases and calls in both directions:
+
+```
+compilations(id, definition_revision, definition_id, folder_hash, parent_id, created, status)
+cases(hash, compilation_id, position, tier, admitted, served, handed_off, audited, worse, demoted_at)
+case_calls(case_hash, call_id, role)   -- role: group | training | held-out | counterexample | shadow | audit
+declines(definition_revision, reason, why, evidence_calls, revisit_after)
+calls.case_hash                        -- set on every call a case served or shadowed (3.1)
+```
+
+So from a case one can reach every call it was learned from, checked against, served, handed back or was audited on.
+From a call one can reach the case that served it. Calls cited by a case are pinned against eviction (3.2).
+
+### 7.3 Loading at runtime
+
+When a call starts, `runDefinition` looks up the current compilation for the definition's revision in the machine
+store (cached in memory, refreshed when the store changes). A compilation applies only when its recorded context
+interface matches the call's: the callees a case may call have the same signatures and revisions. Otherwise it is
+not used, and the specializer is asked to recompile. The cases module is loaded through the callable-folder module
+loader, bound to the definition's context and services. No program configuration is needed. The machine setting
+(`specialization: off | shadow | on`) and a per-program override decide whether compilations are used.
+
+Because the key is the definition revision, a compilation serves every program and build that contains the same
+definition and context interface.
+
+### 7.4 Inspecting compilations
+
+A standard view comes with the store, at three levels:
+
+- **CLI**: `natlang compilations list [--program P]` (definitions with compilations, tiers, coverage, saved time,
+  hand-offs, declines); `natlang compilations show DEFINITION` (the cases source, each case's guard in words from
+  the report, its numbers, and links to example calls); `natlang compilations why CALL` (which case served or
+  declined a call, and why); `natlang compilations calls CASE --role held-out|served|audit|…`;
+  `natlang compilations history DEFINITION` (compilations over time, demotions, declines); and
+  `natlang compilations export DEFINITION DIR` (the folder plus a rendered evidence folder, for reading or review).
+- **`traces` service**: the same queries for natlang programs (`traces.compilation(definition)`,
+  `traces.caseCalls(hash, role)`), so the specializer and the improver read compilations the way they read calls.
+- **`natlang traces show CALL`** shows the case that served the call next to its inputs and output.
+
+A developer can also disable a case or a compilation from the CLI (`natlang compilations disable CASE`). This is
+recorded like a demotion.
+
+### 7.5 The specializer: a directory reducer over the compilation folder
+
+The specializer edits a compilation folder, not the program:
 
 ```
 applications/specializer/
-  specialize.nl            directory reducer over the program context; reads evidence; for one definition,
-                           writes or edits foo.cases.ts, or declines
+  specialize.nl            directory reducer over a compilation folder; reads the program and the evidence;
+                           writes or edits cases.ts and report.md, or declines
   specialize/
     sameApproach.nl        decision: do two eval programs do the same thing
     semanticCheck.nl       decision: is a condition how the agent really decides, or does it need meaning
-  index.ts                 crisp: hot list, evidence folder rendering (7.3), replay verification, decline records
+  index.ts                 crisp: hot list, evidence folder rendering (7.6), replay verification, store writes
 ```
 
-The program context comes first, so it is a directory reducer. Evidence is a second, read-only folder:
-
 ```ts
-specialize(program: Folder, evidence: Folder, definition: string): Promise<
+specialize(compilation: Folder, program: Folder, evidence: Folder, definition: string): Promise<
   | { kind: 'specialized'; cases: number; unclassified: number }
   | { kind: 'declined'; reason: 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it'; why: string }>
 ```
+
+The compilation folder is the writable one; it starts as a copy of the current compilation, or empty. The program
+and the evidence are read-only. On success the crisp top level stores the committed folder as a new compilation whose
+cases start in shadow, and records the case-call links. On a decline it records the decline.
 
 Its instructions say, in plain words:
 - Group the recorded calls by the conditions that select each approach.
@@ -381,55 +433,41 @@ Its instructions say, in plain words:
 - Decline, with a reason, when there are no groups or when the choice depends on meaning. Writing no cases is a good
   result when that is the truth.
 
-Each definition is one `iterateOn` loop over the reducer's folder. The step writes or edits the cases file. Crisp code
+Each definition is one `iterateOn` loop over the compilation folder. The step writes or edits `cases.ts`. Crisp code
 then replays it (3.7, 6.1) and writes the report into the evidence folder: counterexamples per case, judge verdicts,
 calls the guard wrongly admitted. The loop ends when every remaining case is accepted, or with a decline. A case that
 cannot be made acceptable is removed, and its calls count as unclassified.
 
 The top level is ordinary TypeScript in the application: take `traces.hot()`, skip definitions with a standing
-decline (5.3), and call `specialize` for each remaining one on the same staged folder.
+decline (5.3), and call `specialize` for each remaining one.
 
-### 7.3 The evidence folder
+### 7.6 The evidence folder
 
 The model does not have to query the store. After the crisp mining steps of section 5, crisp code renders the
 evidence as files:
 
 ```
-evidence/database/classify/
+evidence/
   function.md                 instructions, signature, callees, call volume and cost
   approaches/a1/approach.ts   anti-unified template with holes named by input path
   approaches/a1/examples/     a few exact records: inputs.json, output.json, effects.json, evals.ts
   approaches/a1/stats.md      calls, outcomes, recorded-behavior agreement
   conditions.md               crisp rule-induction candidates per approach, with precision and coverage
   unclassified/               calls in no approach or matching no condition
-  history.md                  earlier declines, hand-offs, demotions, audit divergences
-  report.md                   written by each replay round (7.2)
+  history.md                  earlier compilations, declines, hand-offs, demotions, audit divergences
+  report.md                   written by each replay round (7.5)
 ```
 
-The model then does what it is good at with ordinary file tools: it reads the examples, compares approaches and
-writes TypeScript. It can still query `traces` when it wants more examples.
+Every example names its call id, so whatever the compiler cites can be traced back. The model then does what it is
+good at with ordinary file tools: it reads the examples, compares approaches and writes TypeScript. It can still
+query `traces` when it wants more examples. The same rendering is what `natlang compilations export` writes.
 
-### 7.4 Promotion and export
-
-The runtime's background loop (7.5) calls `specialize` on a staged copy of the program's current context and keeps the
-staged tree. Compiled, that tree is a new context revision of the program. The runtime binds the program to it on this
-machine, and the new cases start in shadow. Tiers are runtime state per case hash; the revision only says which cases
-exist.
-
-Applying the same reducer with `folder.apply` writes the cases files into the source tree, where they are reviewed and
-committed like any other change. That is the export. It is also the pluggable-hot-paths form: crisp cases beside the
-natural-language function, chosen per call by their guards. A machine whose program source already contains cases
-files starts from them.
-
-The adaptation machinery (`adaptation/compatibility.ts`, `optimization/promotion.ts`) is reused for revision
-bookkeeping and rollback. There is no separate artifact format.
-
-### 7.5 Runtime loop
+### 7.7 Runtime loop
 
 A machine-level background service runs the specializer when the store has enough new calls for a hot definition. It
 runs the shadow replays and audits when executor capacity is idle. On DGX the loop goes through the memory ledger like
 every other model-loading job, and it yields to training. It uses the newest code and data each time it starts, and it
-can be interrupted and resumed at any step: its progress is records in the store and staged revisions.
+can be interrupted and resumed at any step: its progress is records in the store.
 
 Per the port-granularity rule, each part gets an explicit decision (NL function / instruction / crisp helper) in a
 short DECOMPOSITION.md before implementation.
@@ -441,8 +479,8 @@ short DECOMPOSITION.md before implementation.
    round trip, dedupe, bounds and eviction, pins, parent-action links, opt-out, concurrent writers.
 2. `traces` service and `natlang traces` CLI. Migrate `iterate` statistics and the improver's evidence reads.
 3. Replay harness with recorded-effect serving, folder copies, effect-sequence comparison and divergence reports.
-4. Cases files: loader attachment to `foo.nl`, runtime dispatch, the error hand-off to the agent (6.5), the
-   comparison judge (6.1), shadow replay, the audit queue, automatic tiers, revision binding per machine.
+4. Compilations in the store (tables of 7.2), runtime loading (7.3), dispatch, the error hand-off to the agent (6.5), the
+   comparison judge (6.1), shadow replay, the audit queue, automatic tiers, and `natlang compilations` (7.4).
 5. Specializer application: crisp mining and evidence-folder rendering first (normalization, anti-unification,
    features, rule induction, the crisp `no-clusters` decline), then the `specialize` reducer, its replay loop and the
    `.nl` decisions.
@@ -451,8 +489,8 @@ short DECOMPOSITION.md before implementation.
    `classify` and `filter/meets`, pi's per-message policies and the compilers' pattern-heavy passes. Report
    coverage, declines with reasons, hand-offs, divergence and saved model time per target.
 8. Skills and docs: `skills/natlang-integration` covers recording, opt-outs, `traces`, specialization settings and
-   the hand-off note. `skills/natlang-authoring` covers cases files and the recording opt-out in `natlang.json`.
-   SPEC.md gains cases files under Natural-language functions.
+   the hand-off note. `skills/natlang-authoring` covers the recording opt-out in `natlang.json`.
+   SPEC.md states that the runtime may serve a call from a compilation and hands failures to the agent.
 
 ## 9. Decisions
 
@@ -467,11 +505,11 @@ Owner decisions, 2026-10-08:
 5. Specialization is integrated into the runtime, and body errors go back to agent execution (6.2, 6.4, 6.5).
 6. A sample of guarded calls keeps running through the agent, offline so live latency does not change (6.3).
 
-7. Shape: a directory reducer from the program context and an evidence folder to a new context revision with
-   `foo.cases.ts` files (section 7).
+7. Compilations are stored centrally in the machine store, linked to the calls they derive from and serve, loaded
+   transparently at runtime, and inspectable through a standard CLI and service. Program source is never changed.
+   The specializer is a directory reducer over a compilation folder (section 7).
 
 Still open:
 
 - Default bounds: 1 MiB per value, 50 GB per store, 5% audit rate. These are starting points to adjust when
   measurements arrive.
-- The `foo.cases.ts` name and its `when`/`run` fields (7.1), the one new authoring concept.
