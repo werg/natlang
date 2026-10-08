@@ -262,6 +262,17 @@ RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_min
                                       'checkpoint_layers','cuda_reserved_cap_gb'})
 
 
+def same_resume_identity(previous, current):
+    """Whether an in-place code handoff preserves the saved recipe identity."""
+    old_options, new_options = previous.get('options', {}), current.get('options', {})
+    changed = {k for k in old_options.keys() & new_options.keys()
+               if old_options[k] != new_options[k]}
+    old_recipe = {k: v for k, v in previous.items() if k not in {'code', 'options', 'display'}}
+    new_recipe = {k: v for k, v in current.items() if k not in {'code', 'options', 'display'}}
+    return (old_recipe == new_recipe and not (changed - RESUME_OPERATIONAL_OPTIONS)
+            and not (old_options.keys() - new_options.keys()))
+
+
 TEXT_POSITION_WEIGHT_POLICY={
     "all_positions_fraction": .5, "observed_suffix_fraction": .5,
     "unannotated_or_no_suffix_window": "uniform-all-positions",
@@ -272,12 +283,29 @@ TEXT_POSITION_WEIGHT_POLICY={
 def text_supervision_policy(neuralese_input):
     if neuralese_input not in {'map', 'sketch'}:
         raise ValueError('unknown Neuralese text input mode')
-    second = ('neuralese_input_map_self_consistency' if neuralese_input == 'map'
-              else 'shallow_feedback_projection')
+    # These are stable checkpoint IDs. The map's self-consistency objective
+    # occupies the historical secondary/sketch slot; report labels below carry
+    # the concrete implementation name without changing resume identity.
     return {**TEXT_POSITION_WEIGHT_POLICY,
-            'objectives':['full_projection', second, 'next_token_ce'],
-            'secondary_projection':second,
-            'trainable_secondary_head':'heads.input_map' if neuralese_input == 'map' else 'heads.feedback'}
+            'objectives':['full_projection', 'sketch_projection', 'next_token_ce']}
+
+
+def warmup_display_labels(neuralese_input):
+    if neuralese_input not in {'map', 'sketch'}:
+        raise ValueError('unknown Neuralese text input mode')
+    return {
+        'secondary_objective': ('neuralese_input_map_self_consistency' if neuralese_input == 'map'
+                                else 'shallow_feedback_projection'),
+        'secondary_head': 'heads.input_map' if neuralese_input == 'map' else 'heads.feedback',
+        'secondary_metric': 'input_map' if neuralese_input == 'map' else 'sketch',
+        'schedule_head': 'input_map' if neuralese_input == 'map' else 'shallow',
+    }
+
+
+def display_update_flags(updates, neuralese_input):
+    labels = warmup_display_labels(neuralese_input)
+    return {(labels['secondary_metric'] if key == 'sketch' else key): value
+            for key, value in updates.items()}
 
 
 def balanced_position_weights(span, suffix_starts):
@@ -725,8 +753,8 @@ def same_foundation_context(previous, current):
     (owner: adopt new data at once): its crisp baseline is re-measured and
     qualification still needs consecutive passing evaluations on its held set.
     """
-    fields = ('target', 'text_history', 'secondary_projection',
-              'secondary_gradient_policy', 'secondary_target_backbone_gradient_scale', 'supervision_policy')
+    fields = ('target', 'text_history', 'sketch_gradient',
+              'sketch_target_backbone_scale', 'supervision_policy')
     if any(field not in previous or field not in current for field in fields):
         return False
     if any(previous[field] != current[field] for field in fields):
@@ -868,10 +896,10 @@ def main(argv=None):
               'text_history':('gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
                               if a.neuralese_input=='map' else
                               'gold seed; repeated shared shallow sequence passes with aligned predictions'),
-              'secondary_projection':'neuralese_input_map' if a.neuralese_input=='map' else 'shallow_feedback',
-              'secondary_gradient_policy':'self_consistency_with_detached_consumer' if a.neuralese_input=='map' else 'local_stage',
-              'secondary_target_backbone_gradient_scale':0. if a.neuralese_input=='map' else .05,
+              'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
+              'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
               'supervision_policy':text_supervision_policy(a.neuralese_input),
+              'display':warmup_display_labels(a.neuralese_input),
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
@@ -885,9 +913,7 @@ def main(argv=None):
         old_options,new_options=resumed['identity'].get('options',{}),identity['options']
         option_changes=sorted(k for k in old_options.keys()&new_options.keys() if old_options[k]!=new_options[k])
         recipe_changes=[k for k in option_changes if k not in RESUME_OPERATIONAL_OPTIONS]
-        before={k:v for k,v in resumed['identity'].items() if k not in ('code','options')}
-        if (before!={k:v for k,v in identity.items() if k not in ('code','options')} or recipe_changes
-                or old_options.keys()-new_options.keys()):
+        if not same_resume_identity(resumed['identity'], identity):
             raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else ''))
         code_handoffs=list(resumed.get('code_handoffs',[]))
         old_code,new_code=resumed['identity'].get('code',{}),identity['code']
@@ -938,7 +964,7 @@ def main(argv=None):
     backbone.ffn_chunk_tokens=default_ffn_chunk_tokens
     input_map=a.neuralese_input=='map'
     secondary_metric_name='input_map' if input_map else 'sketch'
-    projection_schedule_name='input_map' if input_map else 'shallow'
+    projection_schedule_name='shallow'
     if input_map:
         from ..model.input_map import NeuraleseInputMap
         heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
@@ -1150,7 +1176,7 @@ def main(argv=None):
         for out in completions:
             yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
-    step=0;streak=0;best=None;updates={'backbone':False,secondary_metric_name:False,'full_projection':False}
+    step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
     remeasure_text_baseline=False
     schedule=ProjectionFirstSchedule(heads=(projection_schedule_name,'full_depth'),
@@ -1200,7 +1226,7 @@ def main(argv=None):
             else:
                 # A changed depth/supervision objective starts a new plateau
                 # and must earn its own update and qualification evidence.
-                updates={'backbone':False,secondary_metric_name:False,'full_projection':False}
+                updates={'backbone':False,'sketch':False,'full_projection':False}
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
             else:
@@ -1341,7 +1367,11 @@ def main(argv=None):
                     'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
                     'evaluation_passes':evaluation_passes},
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
-                'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
+                'updates':display_update_flags(updates,a.neuralese_input),
+                'update_state_ids':dict(updates), 'display_labels':identity['display'],
+                'schedule':schedule.controls(),'schedule_display_labels':identity['display'],
+                'projection_held_errors':({'input_map':errors['shallow'],'full_depth':errors['full_depth']}
+                                           if input_map else errors),
                 ('input_map_history_ce_delta' if input_map else 'sketch_history_ce_delta'):rollout_ce_delta,
                 'pass_ce_deltas':pass_ce_deltas,'evaluation_passes':evaluation_passes}
         if baseline_reason is not None:
@@ -1557,7 +1587,7 @@ def main(argv=None):
         secondary_norm=gradient_norm(q for n,q in named if n.startswith(secondary_prefix))
         clip_finite_gradients(parameters.values())
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
-                 for k,prefix in [('backbone','backbone.'),(secondary_metric_name,secondary_prefix),
+                 for k,prefix in [('backbone','backbone.'),('sketch',secondary_prefix),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
@@ -1797,7 +1827,8 @@ def main(argv=None):
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
                  phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
-                 updates=dict(updates))
+                 updates=display_update_flags(updates,a.neuralese_input),
+                 update_state_ids=dict(updates),display_labels=identity['display'])
         m[secondary_metric_name+'_gradient_norm']=float(prepared['secondary_norm'])
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])
@@ -1938,7 +1969,7 @@ def main(argv=None):
     try:
         report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
         report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-          updates=updates,status='checkpointed_on_signal' if stop[0] else 'complete',
+          updates=display_update_flags(updates,a.neuralese_input),status='checkpointed_on_signal' if stop[0] else 'complete',
           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
         score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         improved=best is None or score<best['score']

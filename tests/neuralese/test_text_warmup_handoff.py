@@ -10,6 +10,9 @@ from natlang_neuralese.train.text_warmup import (
     _apply_requested_sketch_cutoff,
     same_alignment_data,
     same_foundation_context,
+    same_resume_identity,
+    text_supervision_policy,
+    warmup_display_labels,
 )
 
 
@@ -64,6 +67,30 @@ def test_unchanged_foundation_context_preserves_continuation_schedule():
     before = _identity()
     after = _identity()
     assert same_foundation_context(before, after)
+
+
+def test_cosmetic_map_report_labels_preserve_saved_resume_semantics():
+    before = _identity()
+    before.update(
+        text_history="gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass",
+        sketch_gradient="detached_consumer",
+        sketch_target_backbone_scale=0.0,
+        supervision_policy={
+            "all_positions_fraction": 0.5,
+            "observed_suffix_fraction": 0.5,
+            "unannotated_or_no_suffix_window": "uniform-all-positions",
+            "objectives": ["full_projection", "sketch_projection", "next_token_ce"],
+            "qualification": "unweighted full-history complete-window and last256 strata",
+        },
+    )
+    after = {**before, "display": warmup_display_labels("map"),
+             "supervision_policy": text_supervision_policy("map")}
+    assert same_resume_identity(before, after)
+    assert same_foundation_context(before, after)
+    assert same_alignment_data(before, after)
+    assert after["display"]["secondary_head"] == "heads.input_map"
+    changed = {**after, "sketch_gradient": "changed-gradient-policy"}
+    assert not same_resume_identity(before, changed)
 
 
 def test_newer_text_corpus_keeps_plateau_and_ramp():

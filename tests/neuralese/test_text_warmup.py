@@ -14,6 +14,8 @@ from natlang_neuralese.train.text_warmup import (
     alignment_region_metrics,
     objective_metric_scalars,
     text_supervision_policy,
+    warmup_display_labels,
+    display_update_flags,
 )
 from natlang_neuralese.train.checkpoint_safety import (
     CheckpointDiskReserve,
@@ -1455,7 +1457,11 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     assert 'shallow' not in evals[-1]['projection_held_errors']
     identity=json.loads((run/'plan.json').read_text())['identity']
     assert identity['supervision_policy']['objectives']==[
-        'full_projection','neuralese_input_map_self_consistency','next_token_ce']
+        'full_projection','sketch_projection','next_token_ce']
+    assert identity['display']['secondary_objective']=='neuralese_input_map_self_consistency'
+    assert identity['display']['secondary_head']=='heads.input_map'
+    assert all(r['updates'].get('input_map') for r in rows)
+    assert all(r['update_state_ids'].get('sketch') for r in rows)
     report=evals[-1]['matched_projected_history']
     assert 'independent serving heads.feedback projection' in report['pass_correspondence']['sketch_projection']
     assert 'input map is not used here' in report['pass_correspondence']['sketch_projection']
@@ -1464,7 +1470,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     state=torch.load(run/'checkpoint.pt',weights_only=False)
     assert any(k.startswith('input_map.') for k in state['heads'])
     assert state['updates']['full_projection']
-    assert state['updates']['input_map']
+    assert state['updates']['sketch']
 
 
 def test_input_map_reports_name_the_actual_secondary_projection():
@@ -1476,9 +1482,10 @@ def test_input_map_reports_name_the_actual_secondary_projection():
     assert metrics[0]['supervised_input_map_mse']==1.
     assert 'sketch_mse' not in metrics[0]
     policy=text_supervision_policy('map')
-    assert policy['objectives']==[
-        'full_projection','neuralese_input_map_self_consistency','next_token_ce']
-    assert policy['trainable_secondary_head']=='heads.input_map'
+    assert policy['objectives']==['full_projection','sketch_projection','next_token_ce']
+    assert warmup_display_labels('map')['secondary_head']=='heads.input_map'
+    assert display_update_flags({'backbone': True, 'sketch': True}, 'map') == {
+        'backbone': True, 'input_map': True}
 
 
 def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_map():
