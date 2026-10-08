@@ -1,0 +1,126 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/root-selected-child-action-admission-v1.json",
+      "bytes": 37442,
+      "sha256": "3ed873dc1afa3a2a7d327f58c8552e42c8dac97b46889787095272a6f4ec1e28"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/root-authored-synthetic-action-admission-v1.json",
+      "bytes": 2679,
+      "sha256": "318b7c94789318163e32d30aea275e19ada67f5bddd2070ac80622b99866f32a"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/action45-root-admitted84-integration-v1/root-integration-adoption-v1.json",
+      "bytes": 1424,
+      "sha256": "0d2658722bc3ea06d2cdf34f8e458cc4d9bd3c758a300ddde26d709567925feb"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/assembly-manifest-v1.json",
+      "bytes": 13354,
+      "sha256": "42418c47f49c2f604fe9698b040311d1b8fdba1f413996e5b93a1d569873a66e"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-reconstruction-results-v2.json",
+      "bytes": 81390,
+      "sha256": "3e04b9421217f05597ab9e363365dcae46c24a75d629c2378bb228026407e495"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v1.json",
+      "bytes": 162396,
+      "sha256": "2965ae43f365252cdb45cc5cfdc0669c00196e847ac4035310dafc0b2f1dc443"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v2.json",
+      "bytes": 163623,
+      "sha256": "3f3c861b1f53f0611cddfbf8d8cbd0a1f2565dc2347a3c27505a3f1ccfb50e36"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v3.json",
+      "bytes": 174555,
+      "sha256": "172e0243cab9b126782f777ba8b60a58d9d2fa155d12c6c769207d0caf99dc1e"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/independent-verification-supplement-v1.json",
+      "bytes": 76329,
+      "sha256": "7d7755836940cbe33f907039ad1e894a24bb31a1a60f48e0de9ede29d888e4d4"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-pieces.jsonl",
+      "bytes": 291109,
+      "sha256": "b3a30bae2767cbeb7fa5dd4ebd7b8bd062f5eb82449c48d13b9de6a6965592f0",
+      "lines": 182
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-records.jsonl",
+      "bytes": 340218429,
+      "sha256": "eeb6510955af3538f778fc970c5e6c2c3ac52c7c98f05a0babda786fcd2bbe12",
+      "lines": 5450
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "lines": 4961
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-structural-audit-v1.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-adoption-v1.json",
+      "bytes": 9421,
+      "sha256": "adadf8a62b8ee12df11716e2788efade43ec81cf3be4ca03d1943693283a87cc"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-review-v2.json",
+      "bytes": 17748,
+      "sha256": "ee763ee9a6108c3b71483bc69a6237ba13fec6bf25514e2edc1331a6de92e10d"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-review-proposal-v1.json",
+      "bytes": 7199,
+      "sha256": "c4c688ed95874e766e3daa44347b77beb58618fa1ec6310d36e9873c441e9085"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-provenance.jsonl",
+      "bytes": 4448075,
+      "sha256": "1dd8664595719b1be8b526e52cbc28717fd837b2a87756d01a86a29e94148448",
+      "lines": 4682
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-target-bindings.jsonl",
+      "bytes": 3597515,
+      "sha256": "dad8203f066b98a2e6c74c0edad8ff9a6af4c2b137291bdb8c0fde90ecf51e35",
+      "lines": 4682
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text.jsonl",
+      "bytes": 228631213,
+      "sha256": "cafee95945ec82a9a790b1d77ded6323a3cd43ce1c4b232335f6cf0fc78dd2a5",
+      "lines": 4682
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v1.py",
+      "bytes": 9697,
+      "sha256": "f4b89f6641fabc693308b3277860bd82483b73b1c1398abe0abbcb024de9f6bc"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v2.py",
+      "bytes": 9976,
+      "sha256": "a9cb6fa450aec05733fe16010076328564fadb2a8b1764b0ac6bbd6f9471330d"
+    }
+  ],
+  "bytes": 849657540
+}

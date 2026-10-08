@@ -13491,6 +13491,44 @@
         "v17-river_water_allocation-scenario-1"
       ],
       "notes": "Immutable held package for the River retry evidence, exact selected CallStore descendants/blobs, semantic review, proposed generic student-skill refinement, shared-evaluator versioned source, and local fake-provider compatibility/matrix proofs. Source group is train split; diagnostic fixtures are diagnostic split. The provider result remains semantically rejected because eligible RWA-1C was omitted. Fake provider outputs prove runner integration only. No training rows, activation, model-quality claim, or training admission."
+    },
+    {
+      "id": "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/root-selected-child-action-admission-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/root-authored-synthetic-action-admission-v1.json",
+        "v18-v19-native-soft-edge-review-20261008-v2/action45-root-admitted84-integration-v1/root-integration-adoption-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/assembly-manifest-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-reconstruction-results-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v3.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/independent-verification-supplement-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-pieces.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-records.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-pieces.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-records.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-structural-audit-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-adoption-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-review-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-review-proposal-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-provenance.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-target-bindings.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v1.py",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v2.py"
+      ],
+      "admission": "root-approved-full-consolidation-of-previously-admitted-native-and-text-sources; no new recurrence admission or qualification; not an active training input change",
+      "derived_from": [
+        "v18-v19-action45-base-selected84-native-text-20261008-v1",
+        "v18-v19-action45-plus-adopted37-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1",
+        "v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1"
+      ],
+      "notes": "Exact root-approved cumulative assembly: 5450 native rows (3415 train/2035 test), 4682 faithful ordinary-text documents (2978 train/1704 test), and unchanged 4961 recurrence rows. Includes all seven immutable data outputs, assembly manifest, root integration review v2 and adoption receipt, context reverse-normalization supplements/verifiers/results, plus source/admission/conversion evidence not already carried by derived corpus manifests. Earlier v1/v2 normalization proof artifacts are retained with the v3 corrected proof explicitly documenting their audit gap. Consolidation only: source admissions unchanged, no active-input change, no Step 3 training launch, no writer/runtime/trajectory/DPO qualification."
     }
   ],
   "coverage_backlog": [
