@@ -64,6 +64,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let errorReadouts = new Set<string>();
   let stringArguments = new Map<string, number>();
   let scalarConversions = new Map<string, { argument: number; conversion: 'Number' | 'Boolean'; conditional?: true }>();
+  let stringReplaces = new Map<string, { conditional?: true }>();
   let checker: ts.TypeChecker | undefined;
   const path = `${FOLDER}/${record.name}.ts`;
   const softTypes = JSON.stringify(record.types);
@@ -111,6 +112,8 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     scalarConversions = new Map(analysis.readouts.filter(item => item.kind === 'scalar-conversion' && item.conversion)
       .map(item => [`${item.start}:${item.end}`, { argument: item.argument ?? 0, conversion: item.conversion!,
         ...(item.conditional ? { conditional: true as const } : {}) }]));
+    stringReplaces = new Map(analysis.readouts.filter(item => item.kind === 'string-replace')
+      .map(item => [`${item.start}:${item.end}`, { ...(item.conditional ? { conditional: true as const } : {}) }]));
     analysis.plans.forEach(plan => { if (record.programId) plan.programId = record.programId; });
     inventory?.(analysis.plans);
     plans = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
@@ -119,7 +122,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
     transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, concats, jsons,
-      errors: errorReadouts, stringArguments, scalarConversions, runtime: '__natlang', context: '__natlang_context',
+      errors: errorReadouts, stringArguments, scalarConversions, stringReplaces, runtime: '__natlang', context: '__natlang_context',
       constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
       modulePath: record.source, browser: moduleTarget === 'browser' })] } });
   const errors = (output.diagnostics ?? []).filter(item => item.category === ts.DiagnosticCategory.Error);

@@ -970,6 +970,117 @@ test('standard String text arguments read soft values after the native call argu
   assert.deepEqual(moduleEvents, ['length', 'padding', 'read']);
 });
 
+test('soft string replace reads the receiver before native method lookup and string arguments', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'priorNotes', type: 'Neuralese<string> | string' }, { name: 'events', type: 'string[]' },
+  ], locals: [], captures: [], imports: [], returns: 'string' };
+  const source = `return ((events.push('receiver'), priorNotes)).replace(
+    (events.push('search'), 'old'), (events.push('replacement'), 'new'));`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => [item.kind, item.conditional]), [['string-replace', true]]);
+  const compiled = compileScopeSnippet(source, { inputBindings: ['priorNotes', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+
+  const events = [];
+  let failRead = false;
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      events.push('read');
+      if (failRead) throw new Error('replace read failed');
+      return 'old old';
+    }, invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args) });
+
+  const original = Object.getOwnPropertyDescriptor(String.prototype, 'replace');
+  try {
+    Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
+      events.push('lookup');
+      return function (...args) {
+        events.push('invoke');
+        return Reflect.apply(original.value, this, args);
+      };
+    } });
+    const softResult = await run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {});
+    assert.equal(softResult, 'new old');
+    assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement', 'invoke']);
+
+    events.length = 0;
+    const crispResult = await run({ priorNotes: 'old old', events }, {}, {});
+    assert.equal(crispResult, 'new old');
+    assert.deepEqual(events, ['receiver', 'lookup', 'search', 'replacement', 'invoke']);
+
+    events.length = 0;
+    failRead = true;
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+      /replace read failed/);
+    assert.deepEqual(events, ['receiver', 'read'], 'a failed read occurs before native lookup or argument evaluation');
+    failRead = false;
+
+    events.length = 0;
+    Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
+      events.push('lookup'); throw new Error('replace getter failed');
+    } });
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+      /replace getter failed/);
+    assert.deepEqual(events, ['receiver', 'read', 'lookup'], 'a throwing prototype getter prevents argument evaluation');
+
+    events.length = 0;
+    Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
+      events.push('lookup'); return 17;
+    } });
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}), TypeError);
+    assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement'],
+      'native non-callable method failure occurs after arguments evaluate');
+
+    events.length = 0;
+    Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
+      events.push('lookup'); return function () { events.push('invoke'); throw new Error('replace method failed'); };
+    } });
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+      /replace method failed/);
+    assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement', 'invoke']);
+  } finally {
+    Object.defineProperty(String.prototype, 'replace', original);
+  }
+
+  const pureScope = { ...scope, inputs: [{ name: 'priorNotes', type: 'Neuralese<string>' }] };
+  const pureSource = `return priorNotes.replace('old', 'new');`;
+  const pureAnalysis = analyzeEvalSnippet(pureSource, pureScope);
+  assert.deepEqual(pureAnalysis.diagnostics, []);
+  assert.deepEqual(pureAnalysis.readouts.map(item => [item.kind, item.conditional]), [['string-replace', undefined]]);
+  const pureCompiled = compileScopeSnippet(pureSource, { inputBindings: ['priorNotes'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, pureScope) });
+  const pureRun = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${pureCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuralese: async () => 'old notes',
+      invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args) });
+  assert.equal(await pureRun({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr') }, {}, {}), 'new notes');
+
+  const module = compileModule({ kind: 'module', id: 'soft-string-replace', name: 'replaceNotes', source: 'replaceNotes.ts', revision: 'r1',
+    text: `export async function replaceNotes(priorNotes: Neuralese<string> | string) {
+      return priorNotes.replace('old', 'new');
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)({}, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => isNeuraleseRef(value) ? 'old notes' : value,
+    invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args),
+  });
+  assert.equal(await moduleFns.replaceNotes(neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr')), 'new notes');
+
+  const sync = analyzeEvalSnippet('function syncReplace(priorNotes: Neuralese<string>) { return priorNotes.replace("old", "new"); }',
+    { ...scope, returns: 'string' });
+  assert.ok(sync.diagnostics.some(item => item.code === 'neuralese-readout-sync'),
+    'a synchronous function cannot receive an injected asynchronous read');
+  const regex = analyzeEvalSnippet('priorNotes.replace(/old/, "new");', scope);
+  assert.ok(regex.diagnostics.some(item => item.code === 'neuralese-opaque-access'),
+    'RegExp search overloads remain outside the string-only path');
+  const callback = analyzeEvalSnippet('priorNotes.replace("old", value => value);', scope);
+  assert.ok(callback.diagnostics.some(item => item.code === 'neuralese-opaque-access'),
+    'callback replacement overloads remain outside the string-only path');
+});
+
 test('scope lowering awaits the typed readout at the original coercion site', () => {
   const compiled = compileScopeSnippet('`plan=${plan};`', { inputBindings: ['plan'], neuralese: true,
     analyze: source => analyzeEvalSnippet(source, SCOPE) });

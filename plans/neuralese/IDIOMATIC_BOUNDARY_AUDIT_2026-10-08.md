@@ -728,13 +728,21 @@ seq 19 calls `priorNotes.replace("Recomputing ...", "The selectedItems field ...
 with `priorNotes: Neuralese<string>` and receives `neuralese-opaque-access`.
 The nearby workaround explicitly uses `String(priorNotes).replace(...)`.
 The trace supports only the literal string/string overload; it does not support
-coercing RegExp search values or callback replacements. A narrow future
-lowering could recognize the standard String `replace` declaration and require
-string-like search/replacement arms, preserve crisp arms and captured method
-dispatch, and read only a soft receiver/search/replacement. This still needs
-review of prototype lookup versus asynchronous receiver read order before
-implementation. `replaceAll`, `split`, `match`, and `search` remain deferred
-until a trace establishes a concrete typed argument case and their RegExp,
-callback, and `Symbol.match` behavior can be preserved exactly. This actual
-`replace` trace supersedes the earlier statement that no recent trace had
-attempted it; no RegExp/callback overload failure is claimed.
+coercing RegExp search values or callback replacements. The compiler now
+recognizes only the standard String `replace` declaration on a declared
+`Neuralese<string>` receiver (or a union with crisp strings), with crisp
+string-like search and replacement arguments. It reads the receiver first,
+then looks up the actual `replace` method on the materialized string, evaluates
+arguments, and invokes the captured method. This preserves a customized
+`String.prototype.replace` getter/method, including getter/method errors and a
+non-callable property. Tests cover the actual trace form through eval and a
+compiled module, plus mixed crisp receivers and method/argument/read failure
+order (`ts-host/test/neuralese.test.mjs`; source lowering in
+`ts-host/src/compiler/neuralese.ts` and `ts-host/src/compiler/lower.ts`).
+Soft search/replacement arguments remain unsupported in this specific path;
+the standard string argument lowering can be considered separately. `replaceAll`,
+`split`, `match`, and `search` remain deferred until a trace establishes a
+concrete typed argument case and their RegExp, callback, and `Symbol.match`
+behavior can be preserved exactly. This actual `replace` trace supersedes the
+earlier statement that no recent trace had attempted it; no RegExp/callback
+overload failure is claimed.

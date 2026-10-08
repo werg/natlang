@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion';
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion' | 'string-replace';
   argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
@@ -89,8 +89,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (!async)
       report(node, 'neuralese-readout-sync', 'Reading a Neuralese value needs async work; make this function async or move the text conversion into async code.');
   };
-  const standardMethod = (property: ts.PropertyAccessExpression, names: readonly string[]): boolean => {
-    const symbol = checker.getSymbolAtLocation(property.name);
+  const standardDeclaration = (symbol: ts.Symbol | undefined, names: readonly string[]): boolean => {
     return !!symbol?.declarations?.some(declaration => {
       const source = declaration.getSourceFile();
       const owner = declaration.parent;
@@ -98,6 +97,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         ts.isInterfaceDeclaration(owner) && names.includes(owner.name.text);
     });
   };
+  const standardMethod = (property: ts.PropertyAccessExpression, names: readonly string[]): boolean =>
+    standardDeclaration(checker.getSymbolAtLocation(property.name), names);
   const stringToString = (property: ts.PropertyAccessExpression): boolean => {
     const parent = property.parent;
     return ts.isCallExpression(parent) && parent.expression === property && parent.arguments.length === 0 &&
@@ -155,6 +156,37 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     return index !== undefined && call.arguments[index] &&
       hasSoftAlternative(checker, checker.getTypeAtLocation(call.arguments[index]!)) ? index : undefined;
   };
+  const stringOperand = (type: ts.Type, allowSoft: boolean): boolean => {
+    const alternatives = type.isUnion() ? type.types : [type];
+    return alternatives.length > 0 && alternatives.every(alternative => {
+      const parts = neuraleseParts(checker, alternative);
+      if (!parts) return !!(alternative.flags & ts.TypeFlags.StringLike);
+      if (!allowSoft) return false;
+      const elements = parts.element.isUnion() ? parts.element.types : [parts.element];
+      return elements.length > 0 && elements.every(element => !!(element.flags & ts.TypeFlags.StringLike));
+    });
+  };
+  const stringReplaceKind = (property: ts.PropertyAccessExpression): { conditional: boolean } | undefined => {
+    if (property.name.text !== 'replace' || !ts.isCallExpression(property.parent) || property.parent.expression !== property ||
+        property.parent.arguments.length < 1 || property.parent.arguments.length > 2 ||
+        property.parent.arguments.some(ts.isSpreadElement)) return;
+    const receiverType = checker.getTypeAtLocation(property.expression);
+    const receivers = receiverType.isUnion() ? receiverType.types : [receiverType];
+    let containsSoftReceiver = false;
+    for (const receiver of receivers) {
+      const parts = neuraleseParts(checker, receiver);
+      if (parts) {
+        containsSoftReceiver = true;
+        const elements = parts.element.isUnion() ? parts.element.types : [parts.element];
+        if (!elements.length || elements.some(element => !(element.flags & ts.TypeFlags.StringLike)) ||
+            elements.some(element => !standardDeclaration(checker.getPropertyOfType(element, 'replace'), ['String']))) return;
+      } else if (!(receiver.flags & ts.TypeFlags.StringLike) ||
+          !standardDeclaration(checker.getPropertyOfType(receiver, 'replace'), ['String'])) return;
+    }
+    if (!containsSoftReceiver || !property.parent.arguments.every(argument =>
+      stringOperand(checker.getTypeAtLocation(argument), false))) return;
+    return { conditional: !soft(property.expression) };
+  };
   const visit = (node: ts.Node): void => {
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
         isNeuralese(checker, checker.getTypeFromTypeNode(node.typeArguments[0])))
@@ -166,6 +198,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       if (hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression))) {
         if (ts.isPropertyAccessExpression(node) && stringToString(node))
           readout(node.expression, undefined, !soft(node.expression));
+        else if (ts.isPropertyAccessExpression(node) && stringReplaceKind(node)) { /* Lower the standard typed string call. */ }
         else opaque(node, 'it has no fields or elements to read');
       } else if (ts.isElementAccessExpression(node) && node.argumentExpression &&
           hasSoftAlternative(checker, checker.getTypeAtLocation(node.argumentExpression)))
@@ -251,6 +284,10 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       if (stringArgument !== undefined) {
         const argument = node.arguments[stringArgument]!;
         readout(node, 'string-argument', !soft(argument), stringArgument);
+      }
+      if (ts.isPropertyAccessExpression(callee)) {
+        const replace = stringReplaceKind(callee);
+        if (replace) readout(node, 'string-replace', replace.conditional);
       }
       if (ts.isIdentifier(callee) && callee.text === NEURALESE_LITERAL_INTRINSIC) literal(node);
     }

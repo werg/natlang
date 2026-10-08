@@ -55,6 +55,12 @@ export async function concatNeuralese(receiver: unknown, method: (...values: unk
 const ARRAY_JOIN = Array.prototype.join;
 const ARRAY_TO_STRING = Array.prototype.toString;
 const OBJECT_TO_STRING = Object.prototype.toString;
+const REFLECT_APPLY = Reflect.apply;
+
+/** Invoke a captured native or custom method without consulting a mutable `.call` property. */
+export function invokeWithReceiver(method: unknown, receiver: unknown, args: readonly unknown[]): unknown {
+  return REFLECT_APPLY(method as (...values: unknown[]) => unknown, receiver, args);
+}
 
 /** ECMAScript ToLength for the array-like length read by Array#join. */
 function toLength(value: unknown): number {

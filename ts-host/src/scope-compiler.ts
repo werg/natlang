@@ -760,7 +760,27 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const scalarConversions = new Map(readouts.filter(readout => readout.kind === 'scalar-conversion' && readout.conversion)
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const stringReplaces = new Map(readouts.filter(readout => readout.kind === 'string-replace')
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        stringReplaces.has(`${rel(node).start}:${rel(node).end}`)) {
+      const readout = stringReplaces.get(`${rel(node).start}:${rel(node).end}`)!;
+      lowerNodes(node.expression.expression);
+      for (const argument of node.arguments) lowerNodes(argument);
+      const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const receiverName = `__natlang_replace_receiver_${rel(node).start}`;
+      const textName = `__natlang_replace_text_${rel(node).start}`;
+      const methodName = `__natlang_replace_method_${rel(node).start}`;
+      const argsName = `__natlang_replace_args_${rel(node).start}`;
+      const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+      primitive.push({ ...rel(node), text: `(await (async (${receiverName}: any) => { ` +
+        `const ${textName} = await __live.${reader}(${receiverName}); ` +
+        `const ${methodName} = ${textName}.replace; const ${argsName} = [${args}]; ` +
+        `return { value: __live.invokeWithReceiver(${methodName}, ${textName}, ${argsName}) }; })(${receiver})).value` });
+      return;
+    }
     if (ts.isCallExpression(node) && scalarConversions.has(`${rel(node).start}:${rel(node).end}`) && node.arguments.length) {
       const readout = scalarConversions.get(`${rel(node).start}:${rel(node).end}`)!;
       for (const argument of node.arguments) lowerNodes(argument);

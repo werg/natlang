@@ -6,7 +6,7 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { COMPACTED_RESULT } from './prompt.js';
-import { arrayToStringNeuralese, concatNeuralese, joinNeuralese, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
+import { arrayToStringNeuralese, concatNeuralese, invokeWithReceiver, joinNeuralese, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
@@ -1743,6 +1743,7 @@ export class NativeSession {
       concatNeuralese,
       joinNeuralese,
       arrayToStringNeuralese,
+      invokeWithReceiver,
       rebindInline: (value: unknown, captures: Record<string, unknown>, sources: Record<string, 'input' | 'local' | 'block' | 'handle'>) =>
         rebindInlineCallable(value, captures, origin, sources),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,

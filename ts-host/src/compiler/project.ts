@@ -481,6 +481,8 @@ export function compileProject(options: BuildOptions): BuildResult {
         scalarConversions: new Map(fileReadouts.filter(item => item.kind === 'scalar-conversion' && item.conversion)
           .map(item => [`${item.start}:${item.end}`, { argument: item.argument ?? 0, conversion: item.conversion!,
             ...(item.conditional ? { conditional: true as const } : {}) }])),
+        stringReplaces: new Map(fileReadouts.filter(item => item.kind === 'string-replace')
+          .map(item => [`${item.start}:${item.end}`, { ...(item.conditional ? { conditional: true as const } : {}) }])),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',

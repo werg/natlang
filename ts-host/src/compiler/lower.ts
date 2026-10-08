@@ -34,6 +34,8 @@ export type LowerOptions = {
   stringArguments?: ReadonlyMap<string, number>;
   /** Explicit scalar constructors that need a conditional typed Neuralese readout of argument zero. */
   scalarConversions?: ReadonlyMap<string, { argument: number; conversion: 'Number' | 'Boolean'; conditional?: true }>;
+  /** Standard String#replace calls whose Neuralese string receiver is materialized before lookup. */
+  stringReplaces?: ReadonlyMap<string, { conditional?: true }>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -130,6 +132,32 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         return f.createAwaitExpression(f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
           [f.createParameterDeclaration(undefined, undefined, callee)], undefined, undefined, inner)), undefined,
           [ts.visitNode(node.expression, visit) as ts.Expression]));
+      }
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
+          options.stringReplaces?.has(`${source.getStart(file)}:${source.getEnd()}`)) {
+        const site = options.stringReplaces.get(`${source.getStart(file)}:${source.getEnd()}`)!;
+        const receiver = f.createUniqueName('__natlang_replace_receiver');
+        const text = f.createUniqueName('__natlang_replace_text');
+        const method = f.createUniqueName('__natlang_replace_method');
+        const args = f.createUniqueName('__natlang_replace_args');
+        const read = readNeuraleseValue(receiver, site.conditional);
+        const result = f.createObjectLiteralExpression([f.createPropertyAssignment('value', f.createCallExpression(
+          runtime('invokeWithReceiver'), undefined, [method, text, args]))]);
+        const body = f.createBlock([
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(text, undefined, undefined, read)], ts.NodeFlags.Const)),
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(method, undefined, undefined, f.createPropertyAccessExpression(text, 'replace'))], ts.NodeFlags.Const)),
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(args, undefined, undefined, f.createArrayLiteralExpression(
+              node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression)))], ts.NodeFlags.Const)),
+          f.createReturnStatement(result),
+        ], true);
+        const invocation = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(
+          [f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, body)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        return f.createPropertyAccessExpression(f.createAwaitExpression(invocation), 'value');
       }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
           options.stringArguments?.has(`${source.getStart(file)}:${source.getEnd()}`)) {
