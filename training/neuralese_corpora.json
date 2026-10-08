@@ -6419,6 +6419,46 @@
         "luna-v17-actual-quality-proposal-20261008-v3"
       ],
       "notes": "Authoritative final3 native/R candidate27additionalactualtargets/8context-onlyroots, textv5 candidate13appendeddocs12train1test and14explicitportablebodyomissions; allprefixesunchanged. Superseded assembly/text preview directories explicitly excluded as obsolete in README. No new learned edges fabricated. Raw availability audit now finds14omissions repairable via historical eval-code writer provenance; separate V5repair underway, V4unchanged. Structural closure/sync do not grantadmission."
+    },
+    {
+      "id": "v20-luna-campaign-v1-raw-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-closed-raw-snapshot-20261008-v1/campaign-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-raw-attempt-action-review-pending-no-training-admission",
+      "derived_from": [
+        "v20-counterfactual-source-v8-20261008"
+      ],
+      "notes": "Immutable raw V20 Luna campaign V1, indices 0-4. Operator-stopped with five partial attempts and no final result rows. Preserves original action/evidence sidecars; no source-negative relabel, action admission, or training admission."
+    },
+    {
+      "id": "v20-luna-campaign-v2-raw-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-closed-raw-snapshot-20261008-v1/campaign-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-raw-action-review-pending-no-training-admission",
+      "derived_from": [
+        "v20-counterfactual-source-v8-20261008"
+      ],
+      "notes": "Immutable raw V20 Luna campaign V2, indices 5-11. Finished with five final result rows and retained partial/error evidence for indices 6 and 9. All actions remain held for explicit review; no automatic DPO or training admission."
+    },
+    {
+      "id": "v20-luna-campaign-v3-recovery-raw-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v20-closed-raw-snapshot-20261008-v1/campaign-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-recovery-action-review-pending-no-training-admission",
+      "derived_from": [
+        "v20-counterfactual-source-v8-20261008",
+        "v20-luna-campaign-v1-raw-20261008"
+      ],
+      "notes": "Immutable budget-charged V20 Luna recovery campaign V3 for indices 0-4, preserving the prior V1 attempts as historical evidence. Five final rows exist; output/action quality and cross-attempt lineage remain held for explicit review. No automatic DPO or training admission."
     }
   ],
   "coverage_backlog": [
