@@ -114,14 +114,14 @@ const authoredWorlds=[
   }),
   caseFrom({
     slug:'privacy-export-minimization',domain:'privacy-preserving data export',owner:'Regional outcomes analytics unit',requestId:'PX-105',
-    requestText:'The regional outcome report needs exactly the schema fields region, age_band, rare_condition, and outcome_code. patient_name is not requested. The approved purpose is regional-outcomes.',
-    ruleText:'First restrict consideration to the four requested fields: region, age_band, rare_condition, and outcome_code. Include a requested field if it is public and not a direct identifier, or if its restriction is covered by explicit consent for the exact approved purpose and it is not a direct identifier. Sort included fields by schema position. Direct identifiers are never included. The data protection officer must approve the export.',
+    requestText:'The regional outcome report requests all five schema fields: region, age_band, patient_name, rare_condition, and outcome_code. The approved purpose is regional-outcomes.',
+    ruleText:'First restrict consideration to the five requested fields: region, age_band, patient_name, rare_condition, and outcome_code. Include a requested field if it is public and not a direct identifier, or if its restriction is covered by explicit consent for the exact approved purpose and it is not a direct identifier. Sort included fields by schema position. Direct identifiers are never included, even when requested and classified as public. The data protection officer must approve the export.',
     instruction:'Derive the minimum permitted field list for PX-105. Do not confuse a field being selected with approval to export the file.',
     registerHeading:'Schema position register',auditHeading:'Classification, consent-purpose, and identifier audit',authorityHeading:'Export approval record',
     candidates:[
       {id:'region',position:1,requested:true,classification:'public',consentedPurposes:[],directIdentifier:false},
       {id:'age_band',position:2,requested:true,classification:'restricted',consentedPurposes:['regional-outcomes'],directIdentifier:false},
-      {id:'patient_name',position:3,requested:false,classification:'public',consentedPurposes:['regional-outcomes'],directIdentifier:true},
+      {id:'patient_name',position:3,requested:true,classification:'public',consentedPurposes:['regional-outcomes'],directIdentifier:true},
       {id:'rare_condition',position:4,requested:true,classification:'restricted',consentedPurposes:['care-quality'],directIdentifier:false},
       {id:'outcome_code',position:5,requested:true,classification:'public',consentedPurposes:[],directIdentifier:false},
     ],
