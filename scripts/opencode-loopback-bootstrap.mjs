@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /** Start the official OpenCode SDK server and the bounded Natlang loopback adapter. */
-import { access, mkdir, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { constants as fsConstants } from 'node:fs';
 import { dirname, resolve, basename, delimiter } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { createOpenCodeLoopbackChatAdapter } from './opencode-loopback-chat-adapter.mjs';
@@ -72,9 +73,23 @@ async function main() {
   if (!process.env.OPENCODE_API_KEY) throw new Error('OPENCODE_API_KEY must be present in the environment');
 
   const output = resolve(args.out);
-  await mkdir(output, { recursive: false });
+  try { await mkdir(output, { recursive: false }); }
+  catch (error) {
+    if (error?.code !== 'EEXIST' || !(await stat(output).catch(() => null))?.isDirectory() ||
+        (await readdir(output)).length !== 0)
+      throw new Error('--out must be a new directory or an existing empty directory');
+  }
   const scratch = resolve(output, 'scratch');
   await mkdir(scratch, { recursive: false });
+  const isolatedHome = resolve(output, 'opencode-home');
+  const isolatedConfig = resolve(isolatedHome, 'config');
+  const isolatedData = resolve(isolatedHome, 'data');
+  const isolatedCache = resolve(isolatedHome, 'cache');
+  const isolatedState = resolve(isolatedHome, 'state');
+  for (const path of [isolatedConfig, isolatedData, isolatedCache, isolatedState])
+    await mkdir(path, { recursive: true, mode: 0o700 });
+  const actionLog = resolve(output, 'action-mcp-calls.jsonl');
+  const actionServer = resolve(dirname(fileURLToPath(import.meta.url)), 'opencode-natlang-action-mcp-server.mjs');
   process.env.PATH = `${dirname(clientBin)}${delimiter}${process.env.PATH ?? ''}`;
 
   let official;
@@ -98,12 +113,16 @@ async function main() {
     server_bind: { hostname: '127.0.0.1', port: 0 },
     adapter_bind: { host: '127.0.0.1', port: 'ephemeral' },
     scratch_directory: scratch,
+    isolated_opencode_home: isolatedHome,
+    user_config_and_plugins: 'isolated XDG and OPENCODE_CONFIG_DIR paths; project config disabled',
     output_directory: output,
     max_concurrency: args['max-concurrency'],
     max_request_ms: args['max-request-ms'],
     response_mode: 'buffered JSON, including when stream=true',
     native_provider_tool_calls: false,
-    native_opencode_tool_policy: 'official SDK tool.ids inventory plus session.prompt wildcard deny; only pure invalid rejection is enabled',
+    native_opencode_tool_policy: 'official SDK default inventory retained; session permission wildcard ask; Natlang action MCP submit_action allowed; observed other permission requests rejected and session history audited after the turn; native execution prevention is not established',
+    natlang_action_mcp: { server_id: 'natlang_action_bridge', tool_id: 'submit_action', action_log: actionLog,
+      server_script: actionServer, execution: 'records action only; no Natlang tool execution or host I/O' },
     incremental_token_streaming: false,
     provider_availability: 'not-probed',
     training_admission: false
@@ -132,12 +151,26 @@ async function main() {
 
   try {
     process.chdir(scratch);
+    // OpenCode derives global config/data paths from the process environment
+    // during module initialization. Point all of them at this run and disable
+    // upward project config discovery so user plugins and MCP servers cannot
+    // silently enter the SDK tool registry.
+    process.env.HOME = isolatedHome;
+    process.env.OPENCODE_TEST_HOME = isolatedHome;
+    process.env.XDG_CONFIG_HOME = isolatedConfig;
+    process.env.XDG_DATA_HOME = isolatedData;
+    process.env.XDG_CACHE_HOME = isolatedCache;
+    process.env.XDG_STATE_HOME = isolatedState;
+    process.env.OPENCODE_CONFIG_DIR = resolve(isolatedConfig, 'opencode');
+    process.env.OPENCODE_DISABLE_PROJECT_CONFIG = '1';
     startupController.signal.throwIfAborted();
     const { createOpencode } = await import(pathToFileURL(sdkModule).href);
     if (typeof createOpencode !== 'function') throw new Error('SDK module does not export createOpencode');
     const startup = createOpencode({ hostname: '127.0.0.1', port: 0, timeout: 20_000,
       signal: startupController.signal,
       config: { provider: { opencode: { options: { apiKey: '{env:OPENCODE_API_KEY}' } } },
+        mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer],
+          cwd: scratch, environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog }, enabled: true } },
         share: 'disabled', autoupdate: false } });
     try {
       official = await raceAbort(startup, startupController.signal, 'OpenCode SDK startup');

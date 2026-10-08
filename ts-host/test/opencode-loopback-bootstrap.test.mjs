@@ -23,8 +23,12 @@ async function fixture(t, { blockStartup = false, maxConcurrency = 1 } = {}) {
   await writeFile(binary, '#!/bin/sh\nexit 0\n');
   await chmod(binary, 0o755);
   const sdkSource = `import { writeFileSync } from 'node:fs';
-export async function createOpencode({ signal }) {
-  writeFileSync(${JSON.stringify(started)}, JSON.stringify({ cwd: process.cwd() }));
+export async function createOpencode({ signal, config }) {
+  writeFileSync(${JSON.stringify(started)}, JSON.stringify({ cwd: process.cwd(), home: process.env.HOME,
+    xdgConfig: process.env.XDG_CONFIG_HOME, xdgData: process.env.XDG_DATA_HOME,
+    xdgCache: process.env.XDG_CACHE_HOME, xdgState: process.env.XDG_STATE_HOME,
+    configDir: process.env.OPENCODE_CONFIG_DIR, disableProjectConfig: process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
+    mcp: Object.keys(config.mcp ?? {}) }));
   ${blockStartup ? `if (signal.aborted) throw signal.reason;
   const holdEventLoop = setInterval(() => {}, 1000);
   try { await new Promise((resolve, reject) => {
@@ -65,6 +69,14 @@ test('bootstraps a configured concurrency limit in isolated scratch and closes o
   const scratch = resolve(fx.output, 'scratch');
   const started = JSON.parse(await readFile(fx.started, 'utf8'));
   assert.equal(started.cwd, scratch);
+  assert.equal(started.home, resolve(fx.output, 'opencode-home'));
+  assert.equal(started.xdgConfig, resolve(fx.output, 'opencode-home/config'));
+  assert.equal(started.xdgData, resolve(fx.output, 'opencode-home/data'));
+  assert.equal(started.xdgCache, resolve(fx.output, 'opencode-home/cache'));
+  assert.equal(started.xdgState, resolve(fx.output, 'opencode-home/state'));
+  assert.equal(started.configDir, resolve(fx.output, 'opencode-home/config/opencode'));
+  assert.equal(started.disableProjectConfig, '1');
+  assert.deepEqual(started.mcp, ['natlang_action_bridge']);
   const config = JSON.parse(await readFile(resolve(fx.output, 'bootstrap-config.json'), 'utf8'));
   assert.equal(config.provider_availability, 'not-probed');
   assert.equal(config.model_id, 'exo-free');

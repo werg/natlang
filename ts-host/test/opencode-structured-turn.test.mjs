@@ -1,14 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { buildOpenCodeStructuredPrompt, buildOpenCodeToolPolicy, createOpenCodeStructuredTurnBackend,
+import { join, resolve } from 'node:path';
+import { buildOpenCodeStructuredPrompt, buildOpenCodeToolPolicy, buildOpenCodeSessionPermissions, createOpenCodeStructuredTurnBackend,
   openCodeStructuredTurnBridgeId } from '../../scripts/opencode-structured-turn.mjs';
 import { createOpenCodeLoopbackChatAdapter, openCodeLoopbackBridgeId } from '../../scripts/opencode-loopback-chat-adapter.mjs';
 
-function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt,
-  toolIds = ['invalid', 'read', 'bash', 'plugin_search'] } = {}) {
+const ACTION_TOOL = 'natlang_action_bridge_submit_action';
+const actionPart = (name = 'read_file', args = { path: 'a.txt' }) => ({ type: 'tool', tool: ACTION_TOOL,
+  state: { status: 'completed', input: { name, arguments: args }, output: 'ACTION_RECORDED' } });
+
+function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt, events = [],
+  permissionReplyData = true, toolIds = ['invalid', 'read', 'bash', 'plugin_search', ACTION_TOOL] } = {}) {
   const calls = [];
   let sequence = 0;
   const assistantText = text ?? JSON.stringify(structured ?? { content: 'ok', toolCalls: [] });
@@ -45,8 +50,24 @@ function fakeClient({ structured, text, parts = [], promptError, promptInfoError
       async delete(params) {
         calls.push({ method: 'delete', params });
         return { data: true };
+      },
+      permission: {
+        async reply(params) {
+          calls.push({ method: 'permission.v2.reply', params });
+          return { data: undefined };
+        }
       }
-    }
+    },
+    permission: {
+      async reply(params) {
+        calls.push({ method: 'permission.reply', params });
+        return { data: permissionReplyData };
+      }
+    },
+    ...(events.length ? { event: { async subscribe(_params, options) {
+      await options.fetch(new Request('http://127.0.0.1/event'));
+      return { stream: (async function* () { for (const event of events) yield event; })() };
+    } } } : {})
   };
 }
 
@@ -72,7 +93,7 @@ test('builds a JSON text prompt with exact Natlang transcript and declared respo
   assert.deepEqual(prompt.responseSchema.required, ['content', 'toolCalls']);
   assert.deepEqual(prompt.responseSchema.properties.toolCalls.items.properties.name.enum, ['read_file']);
   assert.equal(prompt.responseSchema.properties.toolCalls.minItems, 1);
-  assert.equal(Object.hasOwn(prompt.body, 'tools'), false, 'SDK native tool policy is supplied on session.prompt');
+  assert.equal(Object.hasOwn(prompt.body, 'tools'), false, 'SDK native inventory is retained through default prompt behavior');
   const payload = JSON.parse(prompt.body.parts[0].text);
   assert.equal(payload.protocol, openCodeStructuredTurnBridgeId);
   assert.deepEqual(payload.messages, request.messages);
@@ -82,27 +103,36 @@ test('builds a JSON text prompt with exact Natlang transcript and declared respo
   assert.equal(payload.invocation_id, undefined, 'collector-only invocation identity is not model context');
 });
 
-test('disables every dynamically inventoried native tool except pure invalid rejection', () => {
-  assert.deepEqual(buildOpenCodeToolPolicy(['invalid', 'bash', 'mcp_browser_search', 'new_plugin']), {
-    '*': false, bash: false, mcp_browser_search: false, new_plugin: false, invalid: true
+test('retains the full default inventory and builds a wildcard-ask plus exact action-MCP session policy', () => {
+  assert.deepEqual(buildOpenCodeToolPolicy(['invalid', 'bash', 'mcp_browser_search', ACTION_TOOL, 'new_plugin']), {
+    wildcard: 'ask', action_tool: ACTION_TOOL,
+    retained_default_inventory: ['bash', 'invalid', 'mcp_browser_search', ACTION_TOOL, 'new_plugin']
   });
-  assert.throws(() => buildOpenCodeToolPolicy(['bash']), /omits its invalid-call rejection handler/);
-  assert.throws(() => buildOpenCodeToolPolicy(['invalid', 'bash', 'bash']), /duplicate IDs/);
-  assert.throws(() => buildOpenCodeToolPolicy(['invalid', '*']), /reserved wildcard ID/);
-  assert.throws(() => buildOpenCodeToolPolicy(['invalid', null]), /nonempty IDs/);
+  assert.deepEqual(buildOpenCodeSessionPermissions(['read_file']), [
+    { permission: '*', pattern: '*', action: 'ask' },
+    { permission: ACTION_TOOL, pattern: '*', action: 'allow' }
+  ]);
+  assert.deepEqual(buildOpenCodeSessionPermissions([]), [
+    { permission: '*', pattern: '*', action: 'ask' },
+    { permission: ACTION_TOOL, pattern: '*', action: 'deny' }
+  ]);
+  assert.throws(() => buildOpenCodeToolPolicy(['bash']), /omits the configured Natlang action MCP tool/);
+  assert.throws(() => buildOpenCodeToolPolicy(['bash', ACTION_TOOL, ACTION_TOOL]), /duplicate IDs/);
+  assert.throws(() => buildOpenCodeToolPolicy(['*', ACTION_TOOL]), /reserved wildcard ID/);
+  assert.throws(() => buildOpenCodeToolPolicy([null, ACTION_TOOL]), /nonempty IDs/);
 });
 
 test('fails before session creation when official tool inventory is incomplete', async () => {
   const client = fakeClient({ toolIds: ['bash', 'mcp_new_tool'] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
-    directory: '/tmp/natlang-opencode-test' });
-  await assert.rejects(turn(request), /omits its invalid-call rejection handler/);
+    directory: '/tmp/natlang-opencode-test', eventFetchImpl: async () => new Response('data: {}\n\n',
+      { headers: { 'content-type': 'text/event-stream' } }) });
+  await assert.rejects(turn(request), /omits the configured Natlang action MCP tool/);
   assert.deepEqual(client.calls.map(call => call.method), ['tool.ids']);
 });
 
-test('maps strict JSON text to a clearly labeled Natlang action and always deletes its session', async () => {
-  const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] },
-    parts: [] });
+test('maps the isolated action-MCP record to a Natlang call and always deletes its session', async () => {
+  const client = fakeClient({ structured: { content: '', toolCalls: [] }, parts: [actionPart()] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free', agent: 'build',
     directory: '/tmp/natlang-opencode-test' });
   const result = await turn(request);
@@ -114,23 +144,73 @@ test('maps strict JSON text to a clearly labeled Natlang action and always delet
   assert.equal(result.raw_response.transport, openCodeStructuredTurnBridgeId);
   assert.equal(result.raw_response.session_messages_audited, 2);
   assert.equal(result.raw_response.assistant_steps[0].message_id, 'assistant-final');
-  assert.equal(result.raw_response.assistant_steps[0].parsed_json_text.toolCalls[0].name, 'read_file');
+  assert.deepEqual(result.raw_response.assistant_steps[0].parsed_json_text.toolCalls, []);
   assert.match(result.raw_response.fidelity, /not provider-enforced JSON Schema or native provider tool-call output/);
   assert.equal(result.raw_response.output_contract, 'exact JSON text parsed and validated by the bridge');
   assert.deepEqual(result.raw_response.open_code_tool_policy, {
-    control: 'official SDK session.prompt tools boolean map',
+    control: 'official SDK session.create permission rules; prompt default inventory retained',
     inventory: 'official SDK tool.ids endpoint, queried for this request',
-    inventory_ids: ['invalid', 'read', 'bash', 'plugin_search'],
-    enabled_ids: ['invalid'], disabled_wildcard: '*', all_other_inventory_ids_disabled: true,
-    future_tool_ids_remain_disabled: true
+    inventory_ids: ['bash', 'invalid', ACTION_TOOL, 'plugin_search', 'read'],
+    wildcard_action: 'ask', allowed_tool_ids: [ACTION_TOOL], rejected_permission_requests: [],
+    session_history_audited: true, non_bridge_tool_parts_observed: false,
+    native_execution_prevention: 'not established by permission policy and post-turn history audit'
   });
+  assert.deepEqual(buildOpenCodeToolPolicy(['invalid', 'read', 'bash', 'plugin_search', ACTION_TOOL]).retained_default_inventory,
+    ['bash', 'invalid', ACTION_TOOL, 'plugin_search', 'read']);
   const promptCall = client.calls.find(call => call.method === 'prompt');
-  assert.deepEqual(promptCall.params.tools, { '*': false, bash: false, plugin_search: false, read: false, invalid: true });
+  assert.equal(Object.hasOwn(promptCall.params, 'tools'), false);
+  assert.deepEqual(client.calls.find(call => call.method === 'create').params.permission, buildOpenCodeSessionPermissions(['read_file']));
   assert.equal(Object.hasOwn(promptCall.params, 'format'), false);
   assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'messages', 'delete']);
 });
 
-test('maps text-only turns and accepts no tools when Natlang offered none', async () => {
+test('rejects every asked built-in permission with the official SDK and records that audit', async () => {
+  const client = fakeClient({ structured: { content: 'No action.', toolCalls: [] },
+    events: [{ id: 'e-1', type: 'permission.asked', properties: { id: 'perm-1', sessionID: 'ses-1',
+      permission: 'bash', patterns: ['*'], metadata: {}, always: [] } }],
+    onPrompt: async () => new Promise(resolve => setTimeout(resolve, 20)) });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test', eventFetchImpl: async () => new Response('data: {}\n\n',
+      { headers: { 'content-type': 'text/event-stream' } }) });
+  const result = await turn({ ...request, tool_choice: 'auto' });
+  assert.deepEqual(client.calls.find(call => call.method === 'permission.reply').params, {
+    requestID: 'perm-1', directory: '/tmp/natlang-opencode-test', reply: 'reject',
+    message: 'Natlang bridge rejects every requested OpenCode tool except its pre-authorized action MCP tool.'
+  });
+  assert.deepEqual(result.raw_response.open_code_tool_policy.rejected_permission_requests, [{
+    request_id: 'perm-1', permission: 'bash', patterns: ['*'], reply: 'reject', succeeded: true
+  }]);
+});
+
+test('fails closed when the SDK does not confirm permission rejection', async () => {
+  const client = fakeClient({ structured: { content: 'No action.', toolCalls: [] }, permissionReplyData: false,
+    events: [{ id: 'e-1', type: 'permission.asked', properties: { id: 'perm-1', sessionID: 'ses-1',
+      permission: 'bash', patterns: ['*'], metadata: {}, always: [] } }] });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test', eventFetchImpl: async () => new Response('data: {}\n\n',
+      { headers: { 'content-type': 'text/event-stream' } }) });
+  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /permission request could not be rejected/);
+  assert.equal(client.calls.at(-1).method, 'delete');
+});
+
+test('rejects v2 permission requests through the official session permission reply API', async () => {
+  const client = fakeClient({ structured: { content: 'No action.', toolCalls: [] },
+    events: [{ id: 'e-2', type: 'permission.v2.asked', properties: { id: 'perm-v2', sessionID: 'ses-1',
+      action: 'bash', resources: ['command:*'] } }] });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'ling-3.1-flash-free',
+    directory: '/tmp/natlang-opencode-test', eventFetchImpl: async () => new Response('data: {}\n\n',
+      { headers: { 'content-type': 'text/event-stream' } }) });
+  const result = await turn({ ...request, tool_choice: 'auto' });
+  assert.deepEqual(client.calls.find(call => call.method === 'permission.v2.reply').params, {
+    sessionID: 'ses-1', requestID: 'perm-v2', directory: '/tmp/natlang-opencode-test', reply: 'reject',
+    message: 'Natlang bridge rejects every requested OpenCode tool except its pre-authorized action MCP tool.'
+  });
+  assert.deepEqual(result.raw_response.open_code_tool_policy.rejected_permission_requests, [{
+    request_id: 'perm-v2', permission: 'bash', patterns: ['command:*'], reply: 'reject', succeeded: true
+  }]);
+});
+
+test('maps text-only turns and denies the action MCP when Natlang offered no tools', async () => {
   const client = fakeClient({ structured: { content: 'Done.', toolCalls: [] } });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
@@ -140,6 +220,7 @@ test('maps text-only turns and accepts no tools when Natlang offered none', asyn
   assert.equal(result.calls, undefined);
   const promptCall = client.calls.find(call => call.method === 'prompt');
   assert.equal(JSON.parse(promptCall.params.parts[0].text).response_schema.properties.toolCalls.maxItems, 0);
+  assert.deepEqual(client.calls.find(call => call.method === 'create').params.permission, buildOpenCodeSessionPermissions([]));
 });
 
 test('rejects markdown or malformed JSON text instead of extracting or repairing it', async () => {
@@ -235,16 +316,16 @@ test('rejects unavailable calls and OpenCode tool execution instead of launderin
   assert.equal(external.calls.at(-1).method, 'delete');
 });
 
-test('records only the exact pure OpenCode invalid-handler rejection for a declared Natlang action', async () => {
+test('retains an exact invalid-handler rejection as evidence without treating it as a Natlang action', async () => {
   const error = "Model tried to call unavailable tool 'read_file'. Available tools: bash, read";
   const rejected = { type: 'tool', tool: 'invalid', state: { status: 'completed', title: 'Invalid Tool',
     input: { tool: 'read_file', error }, output: `The arguments provided to the tool are invalid: ${error}`, metadata: {} } };
-  const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] },
-    parts: [rejected] });
+  const client = fakeClient({ structured: { content: 'No action.', toolCalls: [] }, parts: [rejected] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
-  const result = await turn(request);
-  assert.deepEqual(result.calls, [['read_file', { path: 'a.txt' }]]);
+  const result = await turn({ ...request, tool_choice: 'auto' });
+  assert.equal(result.calls, undefined);
+  assert.equal(result.text, 'No action.');
   assert.deepEqual(result.raw_response.rejected_native_tool_attempts, [{ rejected_tool_name: 'read_file', rejection: error,
     handler: 'OpenCode InvalidTool', status: 'completed', protocol_record: rejected }]);
   assert.deepEqual(result.raw_response.open_code_tool_parts, [{ name: 'invalid', status: 'completed' }]);
@@ -334,7 +415,7 @@ test('aggregates and preserves usage and cost across assistant steps', async () 
   assert.deepEqual(result.raw_response.assistant_steps[0].tokens.cache, { read: 2, write: 1 });
 });
 
-test('enforces required tool calls and cleans up when parsing fails', async () => {
+test('enforces required tool calls and cleans up when MCP did not record an action', async () => {
   const client = fakeClient({ structured: { content: 'No call', toolCalls: [] } });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
@@ -387,14 +468,14 @@ function chatRequest(overrides = {}) {
     tools: request.tools, tool_choice: 'required', stream: false, temperature: 0, max_tokens: 32, ...overrides };
 }
 
-test('loopback HTTP adapter returns OpenAI shape with explicit bridge provenance', async t => {
-  const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] } });
+test('loopback HTTP adapter returns OpenAI shape from an isolated action-MCP record', async t => {
+  const client = fakeClient({ structured: { content: '', toolCalls: [] }, parts: [actionPart()] });
   const adapter = await createOpenCodeLoopbackChatAdapter({ client, providerID: 'opencode', modelID: 'exo-free',
     modelAlias: 'opencode/exo-free', directory: '/tmp/natlang-opencode-test', maxConcurrency: 1 });
   t.after(() => adapter.close());
   assert.equal(Object.isFrozen(adapter.config), true);
   assert.equal(adapter.config.host, '127.0.0.1');
-  assert.match(adapter.config.nativeOpenCodeToolPolicy, /official SDK tool.ids inventory/);
+  assert.match(adapter.config.nativeOpenCodeToolPolicy, /default inventory retained/);
   const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify(chatRequest()) });
   assert.equal(response.status, 200);
@@ -488,4 +569,33 @@ test('loopback adapter enforces loopback bind, body bound, and concurrency limit
   const oversized = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tooBig: 'x'.repeat(2048) }) });
   assert.equal(oversized.status, 413);
+});
+
+test('action MCP negotiates only its implemented protocol version and records actions without executing them', t => {
+  const scratch = mkdtempSync(join(tmpdir(), 'natlang-opencode-mcp-protocol-test-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const actionLog = join(scratch, 'actions.jsonl');
+  const server = resolve('scripts/opencode-natlang-action-mcp-server.mjs');
+  const input = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 'unsupported' } },
+    { jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2024-11-05' } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} },
+    { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'submit_action', arguments: {
+      name: 'read_file', arguments: { path: 'a.txt' }
+    } } }
+  ].map(value => JSON.stringify(value)).join('\n') + '\n';
+  const child = spawnSync(process.execPath, [server], { input, encoding: 'utf8', env: {
+    PATH: process.env.PATH ?? '', HOME: tmpdir(), NATLANG_OPENCODE_ACTION_LOG: actionLog
+  } });
+  assert.equal(child.status, 0, child.stderr);
+  const replies = child.stdout.trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(replies[0].id, 1);
+  assert.equal(replies[0].error.code, -32602);
+  assert.match(replies[0].error.message, /supported: 2024-11-05/);
+  assert.equal(replies[1].result.protocolVersion, '2024-11-05');
+  assert.deepEqual(replies[2].result.tools.map(tool => tool.name), ['submit_action']);
+  assert.equal(replies[3].result.content[0].text, 'ACTION_RECORDED');
+  const recorded = JSON.parse(readFileSync(actionLog, 'utf8'));
+  assert.equal(recorded.name, 'read_file');
+  assert.deepEqual(recorded.arguments, { path: 'a.txt' });
 });

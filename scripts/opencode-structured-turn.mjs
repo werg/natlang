@@ -1,5 +1,5 @@
 /**
- * A contained OpenCode SDK adapter for Natlang's ModelTurn contract.
+ * An experimental OpenCode SDK adapter for Natlang's ModelTurn contract.
  *
  * OpenCode owns the provider request and may run its own agent loop. This
  * adapter asks for a JSON text action envelope, validates it locally, and maps
@@ -12,7 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/5';
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/6';
 const FAILURE_DIAGNOSTIC_VERSION = 'natlang.opencode_transport_failure/1';
 const FAILURE_TEXT_PREVIEW_BYTES = 16 * 1024;
 const FAILURE_INLINE_TEXT_PREVIEW_BYTES = 256;
@@ -175,6 +175,7 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
   let streamState = 'connecting';
   let streamHandshake;
   let latestSessionStatus;
+  const permissionReplies = [];
   const settleReady = result => {
     if (readySettled) return;
     readySettled = true;
@@ -220,6 +221,33 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
       }
       for await (const event of subscription.stream) {
         if (controller.signal.aborted) return;
+        if ((event?.type === 'permission.asked' || event?.type === 'permission.v2.asked') &&
+            event.properties?.sessionID === sessionID) {
+          const request = event.properties;
+          const v2 = event.type === 'permission.v2.asked';
+          const row = { request_id: typeof request.id === 'string' ? request.id.slice(0, 128) : null,
+            permission: typeof (request.permission ?? request.action) === 'string' ? (request.permission ?? request.action).slice(0, 128) : null,
+            patterns: Array.isArray(request.patterns ?? request.resources) ? (request.patterns ?? request.resources)
+              .filter(value => typeof value === 'string').slice(0, 16) : [] };
+          try {
+            const reply = v2 ? client.session?.permission?.reply : client.permission?.reply;
+            if (!row.request_id || typeof reply !== 'function')
+              throw new Error('official SDK permission reply API unavailable');
+            const result = await reply.call(v2 ? client.session.permission : client.permission, {
+              ...(v2 ? { sessionID } : {}), requestID: row.request_id, directory, reply: 'reject',
+              message: 'Natlang bridge rejects every requested OpenCode tool except its pre-authorized action MCP tool.' });
+            const replyData = unwrapSdkResult(result, 'permission rejection');
+            if (!v2 && replyData !== true) throw new Error('official SDK did not confirm permission rejection');
+            permissionReplies.push({ ...row, reply: 'reject', succeeded: true });
+          } catch (error) {
+            permissionReplies.push({ ...row, reply: 'reject', succeeded: false,
+              error: redactCredentialLikeText(error instanceof Error ? error.message : String(error)).slice(0, 160) });
+            const fatal = new Error('OpenCode permission request could not be rejected by the official SDK');
+            fatal.code = 'OPENCODE_PERMISSION_REJECTION_FAILED';
+            resolveMatch(fatal);
+            return;
+          }
+        }
         latestSessionStatus = safeSessionStatus(event, sessionID) ?? latestSessionStatus;
         if (latestSessionStatus?.type === 'retry') {
           const retry = scheduledRetryError(latestSessionStatus, sessionID);
@@ -267,7 +295,8 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
           content_type: streamHandshake.contentType,
           directory: streamHandshake.directory
         } } : {}),
-        ...(latestSessionStatus ? { latest_session_status: latestSessionStatus } : {})
+        ...(latestSessionStatus ? { latest_session_status: latestSessionStatus } : {}),
+        permission_rejections: permissionReplies
       };
     }
   };
@@ -342,10 +371,10 @@ async function persistFailureDiagnostic(error, directory) {
 const SYSTEM_INSTRUCTIONS = [
   'You are returning one response for a Natlang model turn.',
   'The user message contains the complete serialized Natlang request, including its ordered message history and tool schemas.',
-  'Treat that serialized history as the conversation context. Do not call OpenCode tools or take external actions. The SDK denies every OpenCode tool except its no-I/O invalid-call rejection handler.',
+  'Treat that serialized history as the conversation context. Do not use built-in OpenCode tools. When a declared Natlang action is needed, call the natlang_action_bridge submit_action MCP tool with the exact Natlang function name and object arguments. This tool records a candidate action for the Natlang host and does not execute it. Do not invent or execute any other action.',
   'Return exactly one JSON text object matching the response_schema included in the user payload. Do not add markdown, fences, commentary, or extra keys.',
-  'The object contains content, which is the assistant text, and toolCalls, which contains only declared Natlang tool calls for the host to execute.',
-  'This is prompt-directed JSON text, not provider-enforced JSON Schema output and not native provider tool-call output. The Natlang host validates and executes toolCalls, and owns the next turn.'
+  'The object contains content, which is the assistant text, and toolCalls, which must be an empty array. The host obtains declared action calls only from the isolated submit_action MCP tool record.',
+  'This is prompt-directed JSON text, not provider-enforced JSON Schema output. The Natlang host validates the recorded tool name and arguments, executes the action, and owns the next turn.'
 ].join(' ');
 
 function isPlainRecord(value) {
@@ -396,10 +425,13 @@ function toolNames(tools) {
 }
 
 /**
- * Disable every tool in the official server inventory, except its pure rejection handler.
- * OpenCode v1.18.35 applies these booleans as session permission rules and
- * resolves `*` through its wildcard matcher, so tools registered after the
- * inventory lookup remain denied too. Pinned source, tag commit
+ * Verify the official server kept its complete default inventory and the
+ * configured action MCP tool. The session asks before tools except the exact
+ * bridge tool; the SDK event watcher rejects observed asks. This is not a
+ * universal execution barrier: handlers that skip Permission.ask could run
+ * before history audit, so the caller must not claim native execution was
+ * prevented without a separately reviewed containment boundary.
+ * Pinned official SDK/client, tag commit
  * 53d1eabb61e21162157817bf677da0a4ad3332e3:
  * https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/session/prompt.ts
  * https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/permission/index.ts
@@ -410,11 +442,19 @@ export function buildOpenCodeToolPolicy(ids) {
   const unique = [...new Set(ids)].sort();
   if (unique.length !== ids.length) throw new TypeError('OpenCode tool inventory contains duplicate IDs');
   if (unique.includes('*')) throw new TypeError('OpenCode tool inventory uses the reserved wildcard ID');
-  if (!unique.includes('invalid')) throw new TypeError('OpenCode tool inventory omits its invalid-call rejection handler');
-  return Object.fromEntries([['*', false], ...unique.filter(id => id !== 'invalid').map(id => [id, false]), ['invalid', true]]);
+  if (!unique.includes('natlang_action_bridge_submit_action'))
+    throw new TypeError('OpenCode default inventory omits the configured Natlang action MCP tool');
+  return { wildcard: 'ask', action_tool: 'natlang_action_bridge_submit_action', retained_default_inventory: unique };
 }
 
-/** Build the official SDK session.prompt input; native OpenCode tools are controlled separately by its tools map. */
+export function buildOpenCodeSessionPermissions(toolIds) {
+  const rows = [{ permission: '*', pattern: '*', action: 'ask' }];
+  rows.push({ permission: 'natlang_action_bridge_submit_action', pattern: '*',
+    action: toolIds.length ? 'allow' : 'deny' });
+  return rows;
+}
+
+/** Build the official SDK session.prompt input; default tools stay visible and gated by session permissions. */
 export function buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent } = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request))
     throw new TypeError('Natlang request must be an object');
@@ -499,8 +539,6 @@ function parseStructuredTurn(value, allowedNames, toolChoice) {
       throw new TypeError(`OpenCode structured tool call ${index} arguments must be an object`);
     return [call.name, call.arguments];
   });
-  if (toolChoice === 'required' && calls.length === 0)
-    throw new TypeError('Natlang required a tool call, but OpenCode returned none');
   if (allowedNames.size === 0 && calls.length)
     throw new TypeError('OpenCode returned a tool call when Natlang offered no tools');
   return { calls, text: value.content };
@@ -528,18 +566,28 @@ function rejectedNatlangToolAttempt(part, allowedNames) {
     protocol_record: part };
 }
 
+const NATLANG_ACTION_TOOL = 'natlang_action_bridge_submit_action';
+
 function auditOpenCodeTools(messages, allowedNames) {
   const parts = (Array.isArray(messages) ? messages : [])
     .flatMap(message => Array.isArray(message?.parts) ? message.parts : [])
     .filter(part => part?.type === 'tool');
   const rejectedNatlangAttempts = [];
+  const bridgeActions = [];
   const externalActions = [];
   for (const part of parts) {
+    if (part?.tool === NATLANG_ACTION_TOOL && part?.state?.status === 'completed' &&
+        part.state.output === 'ACTION_RECORDED' && exactRecordKeys(part.state.input, ['name', 'arguments']) &&
+        typeof part.state.input.name === 'string' && allowedNames.has(part.state.input.name) &&
+        isPlainRecord(part.state.input.arguments)) {
+      bridgeActions.push([part.state.input.name, part.state.input.arguments]);
+      continue;
+    }
     const rejected = rejectedNatlangToolAttempt(part, allowedNames);
     if (rejected) rejectedNatlangAttempts.push(rejected);
     else externalActions.push(part);
   }
-  return { externalActions, rejectedNatlangAttempts, toolParts: parts };
+  return { externalActions, bridgeActions, rejectedNatlangAttempts, toolParts: parts };
 }
 
 function assistantUsageAudit(messages, { finalMessageId, finalStructured } = {}) {
@@ -594,7 +642,8 @@ function extractAssistantResult(data, allowedNames, context) {
     throw error;
   }
   const parts = Array.isArray(data.parts) ? data.parts : [];
-  const { externalActions } = auditOpenCodeTools([{ parts }], allowedNames);
+  const toolAudit = auditOpenCodeTools([{ parts }], allowedNames);
+  const { externalActions } = toolAudit;
   if (externalActions.length) {
     const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
     throw failWithDiagnostic(`OpenCode session contains non-bridge tool part(s) during a Natlang turn: ${names.join(', ')}`,
@@ -608,15 +657,15 @@ function extractAssistantResult(data, allowedNames, context) {
     throw failWithDiagnostic('OpenCode assistant text is not one valid JSON action object', { ...context, data },
       'invalid_json_text', cause);
   }
-  return { structured, info, parts, text };
+  return { structured, info, parts, text, bridgeActions: toolAudit.bridgeActions };
 }
 
 /**
  * Create an experimental single-turn backend around an official OpenCode v2 SDK
- * client. Each request gets an isolated session; cleanup runs on success,
- * provider error, and abort. Before prompting, the official SDK tool inventory
- * is read and every listed native tool is disabled except the pure `invalid`
- * rejection handler.
+ * client. Each request gets a new session; cleanup runs on success, provider
+ * error, and abort. OpenCode's default tool inventory stays present; session
+ * permissions ask for every tool except the action-recording MCP tool, and
+ * observed permission requests are rejected and logged through the SDK.
  */
 export function createOpenCodeStructuredTurnBackend({ client, providerID, modelID, agent, directory, eventFetchImpl,
   cleanupTimeoutMs = 2_000 } = {}) {
@@ -642,7 +691,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     failurePhase = 'session_create';
     const createResult = await withAbort(client.session.create({
       model: { providerID, id: modelID }, ...(agent ? { agent } : {}), directory,
-      title: 'Natlang JSON text action turn'
+      title: 'Natlang isolated action turn', permission: buildOpenCodeSessionPermissions(prompt.toolNames)
     }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session create');
     const session = unwrapSdkResult(createResult, 'session create');
     if (typeof session.id !== 'string' || !session.id) throw new Error('OpenCode session create returned no session id');
@@ -690,7 +739,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       failurePhase = 'session_prompt';
       const promptPromise = withAbort(client.session.prompt({
         sessionID: session.id, directory, model: { providerID, modelID }, agent,
-        system: prompt.body.system, parts: prompt.body.parts, tools: openCodeTools
+        system: prompt.body.system, parts: prompt.body.parts
       }, { signal: promptController.signal }), promptController.signal, 'OpenCode session prompt')
         .then(result => ({ kind: 'prompt', result }), error => ({ kind: 'prompt_error', error }));
       const outcome = errorWatch
@@ -742,6 +791,9 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         throw failWithDiagnostic(error instanceof Error ? error.message : String(error), { ...context, data },
           'schema_invalid_json_text', error);
       }
+      if (parsed.calls.length)
+        throw failWithDiagnostic('JSON text output must leave toolCalls empty; native action calls are accepted only through submit_action MCP',
+          { ...context, data }, 'schema_invalid_json_text');
       failurePhase = 'session_history_audit';
       const historyResult = await withAbort(client.session.messages({
         sessionID: session.id, directory
@@ -762,9 +814,13 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           { ...context, data: { info: response.info, parts: history.flatMap(message => Array.isArray(message?.parts) ? message.parts : []) } },
           'native_tool_refusal');
       }
+      const recordedCalls = historyAudit.bridgeActions;
+      if (request.tool_choice === 'required' && recordedCalls.length === 0)
+        throw failWithDiagnostic('Natlang required a tool call, but the action MCP did not record one',
+          { ...context, data }, 'schema_invalid_json_text');
       const usageAudit = assistantUsageAudit(history, { finalMessageId: response.info.id, finalStructured: response.structured });
       return {
-        ...(parsed.calls.length ? { calls: parsed.calls } : {}),
+        ...(recordedCalls.length ? { calls: recordedCalls } : {}),
         ...(parsed.text ? { text: parsed.text } : {}),
         ...(usageAudit.inputTokens === undefined ? {} : { prompt_tokens: usageAudit.inputTokens }),
         ...(usageAudit.outputTokens === undefined ? {} : { completion_tokens: usageAudit.outputTokens }),
@@ -777,13 +833,15 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           fidelity: 'prompt-directed-strict-json-text; not provider-enforced JSON Schema or native provider tool-call output',
           output_contract: 'exact JSON text parsed and validated by the bridge',
           open_code_tool_policy: {
-            control: 'official SDK session.prompt tools boolean map',
+            control: 'official SDK session.create permission rules; prompt default inventory retained',
             inventory: 'official SDK tool.ids endpoint, queried for this request',
-            inventory_ids: openCodeToolIds,
-            enabled_ids: ['invalid'],
-            disabled_wildcard: '*',
-            all_other_inventory_ids_disabled: true,
-            future_tool_ids_remain_disabled: true
+            inventory_ids: openCodeTools.retained_default_inventory,
+            wildcard_action: 'ask',
+            allowed_tool_ids: prompt.toolNames.length ? [NATLANG_ACTION_TOOL] : [],
+            rejected_permission_requests: errorWatch?.snapshot().permission_rejections ?? [],
+            session_history_audited: true,
+            non_bridge_tool_parts_observed: false,
+            native_execution_prevention: 'not established by permission policy and post-turn history audit'
           },
           generation_controls: {
             temperature: { requested: request.temperature ?? null, enforced_by_sdk: false },
