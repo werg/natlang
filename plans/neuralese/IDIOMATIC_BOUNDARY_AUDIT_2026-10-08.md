@@ -172,7 +172,34 @@ the child returns `Neuralese<string>` to its caller, while the parent owns the
 final file write. Its captures pass decision context and the current pass
 constraints, not the parent's artifact-writing instruction.
 
-### 7. Eval exposes a read-only tool facade; other tool actions stay direct
+### 7. Spread arrays in `String.concat` can use the existing async readout
+
+**Priority: medium; implemented as a narrow conversion convenience.** The
+checker previously rejected `''.concat(...values)` when `values` was a statically
+typed array or tuple containing a `Neuralese` element. Its diagnostic said the
+array could not be spread into this “synchronous string conversion” at
+`ts-host/src/compiler/neuralese.ts` (then lines 155–163), and
+`ts-host/test/neuralese.test.mjs` asserted `neuralese-opaque-access` for that
+expression. This is an actual current compiler refusal, although I did not find
+a historical generation trace that attempted it.
+
+The compiler already has an async lowering for direct `String.concat` values:
+`ts-host/src/scope-compiler.ts:516-523` evaluates the receiver and method,
+materializes the argument list (including spread expansion), then calls
+`concatNeuralese`; `ts-host/src/runtime/lowered.ts:43-49` awaits each soft
+read and applies JavaScript string coercion in order. The spread array is fully
+expanded before any async read, matching JavaScript call evaluation order. The
+checker now marks a spread as needing that readout only when its static array or
+tuple element type includes Neuralese. It does not accept an arbitrary
+iterable, change native spread behavior, or grant a new capability.
+
+Regressions in `ts-host/test/neuralese.test.mjs` check the diagnostics,
+generated spread lowering, receiver/spread/later-argument/read order, ordinary
+string coercion, and repeated typed reads. The focused Neuralese suite passed
+19/19 in an isolated build. Other opaque uses and unsupported dynamic types
+remain errors.
+
+### 8. Eval exposes a read-only tool facade; other tool actions stay direct
 
 The prompt says to invoke native tools directly but explicitly makes
 `read_code(name)` available in eval when unshadowed (`ts-host/src/native/prompt.ts:6`).
@@ -213,9 +240,10 @@ Native `for...in` is accepted unchanged, with compiler/runtime regressions for
 ordinary property order and inherited enumerable keys versus `Object.keys`.
 The focused compiler and interpreter tests passed 99/99 in an isolated build
 copy. The denied-child-write regressions passed 94/94 focused file-system and
-interpreter tests in an isolated build. The updated TypeScript source compiled
-to a temporary isolated output directory. No dependencies or shared `dist`
-were changed.
+interpreter tests in an isolated build, and the Neuralese suite passed 19/19
+after adding the `String.concat` spread readout. The updated TypeScript source
+compiled to a temporary isolated output directory. No dependencies or shared
+`dist` were changed.
 Cross-eval capture-free helper persistence remains a useful but larger
 source-backed design candidate, grounded in the cited V97 error and requiring
 a separate lifetime/provenance design.

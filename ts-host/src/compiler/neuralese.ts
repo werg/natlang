@@ -156,8 +156,9 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
           !!(checker.getTypeAtLocation(callee.expression).flags & ts.TypeFlags.StringLike)) {
         let softArgument = false;
         for (const argument of node.arguments) {
-          if (ts.isSpreadElement(argument) && arrayJoinKind(argument.expression))
-            opaque(argument, 'an array containing Neuralese values cannot be spread into this synchronous string conversion');
+          // The call's existing concat readout lowering materializes argument spreads
+          // before any awaited reads, then coerces each expanded argument in order.
+          if (ts.isSpreadElement(argument) && arrayJoinKind(argument.expression)) softArgument = true;
           else if (soft(argument)) softArgument = true;
         }
         if (softArgument) readout(node, 'concat');

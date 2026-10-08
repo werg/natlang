@@ -160,7 +160,9 @@ test('string conversions read typed Neuralese values with native method ordering
   const join = analyzeText(`return values.join('|');`);
   assert.deepEqual(join.diagnostics, []);
   assert.deepEqual(join.readouts.map(item => [item.kind, "values.join('|')"]), [['join', "values.join('|')"]]);
-  assert.deepEqual(analyzeText(`return ''.concat(...values);`).diagnostics.map(item => item.code), ['neuralese-opaque-access']);
+  const spreadConcat = analyzeText(`return ''.concat(...values);`);
+  assert.deepEqual(spreadConcat.diagnostics, []);
+  assert.deepEqual(spreadConcat.readouts.map(item => [item.kind, "''.concat(...values)"]), [['concat', "''.concat(...values)"]]);
   assert.deepEqual(analyzeText('function show() { return text.toString(); }').diagnostics.map(item => item.code),
     ['neuralese-readout-sync']);
   const planString = analyzeEvalSnippet('return plan.toString();', SCOPE);
@@ -179,6 +181,11 @@ test('string conversions read typed Neuralese values with native method ordering
     analyze: source => analyzeText(source) });
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.match(compiled.program, /await __live\.joinNeuralese\(\(values\), ['"]\|['"], async/);
+  const spreadCompiled = compileScopeSnippet(`return ''.concat(...values);`, { inputBindings: ['values'], neuralese: true,
+    analyze: source => analyzeText(source) });
+  assert.equal(spreadCompiled.ok, true, JSON.stringify(spreadCompiled.diagnostics));
+  assert.match(spreadCompiled.program, /concatNeuralese/);
+  assert.match(spreadCompiled.program, /__values = \[\.\.\.values\]/);
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {
@@ -203,6 +210,32 @@ test('string conversions read typed Neuralese values with native method ordering
   }, async () => 'later-value');
   assert.equal(result, 'valuelater-valuevalue');
   assert.deepEqual(events, ['receiver', 'later-argument', 'read:nz1_cccccccccccccccccccc', 'read:nz1_cccccccccccccccccccc']);
+
+  const spreadModule = compileModule({ kind: 'module', id: 'concat-spread-order', name: 'spreadOrder', source: 'spreadOrder.ts', revision: 'r1',
+    text: `export async function show(values: (Neuralese<string> | string)[], events: string[], receiver: () => string) {
+      return receiver().concat(...(events.push('spread'), values), (events.push('tail'), 'end'));
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const spreadExports = {};
+  const showSpread = new Function('exports', '__natlang', `${spreadModule}; return exports.show;`)(spreadExports, {
+    guard: (_id, fn) => fn(), concatNeuralese,
+    readNeuralese: async ref => { events.push(`read:${ref.$neuralese.id}`); return 'soft'; },
+  });
+  events.length = 0;
+  const spreadAnswer = await showSpread([
+    neuraleseRef('Neuralese<string>', 'nz1_hhhhhhhhhhhhhhhhhhhh'), 'middle',
+    neuraleseRef('Neuralese<string>', 'nz1_iiiiiiiiiiiiiiiiiiii'),
+  ], events, () => { events.push('receiver'); return 'start'; });
+  assert.equal(spreadAnswer, 'startsoftmiddlesoftend');
+  assert.deepEqual(events, ['receiver', 'spread', 'tail', 'read:nz1_hhhhhhhhhhhhhhhhhhhh', 'read:nz1_iiiiiiiiiiiiiiiiiiii']);
+
+  const spreadOrder = [];
+  const spreadValues = ['before', neuraleseRef('Neuralese<number>', 'nz1_gggggggggggggggggggg'), null,
+    { toString() { spreadOrder.push('ordinary-coercion'); return 'after'; } }];
+  const spreadResult = await concatNeuralese('', ''.concat, [...spreadValues], async ref => {
+    spreadOrder.push(`typed-read:${ref.$neuralese.id}`); return 7;
+  });
+  assert.equal(spreadResult, 'before7nullafter');
+  assert.deepEqual(spreadOrder, ['typed-read:nz1_gggggggggggggggggggg', 'ordinary-coercion']);
 
   const order = [];
   const items = ['label', 2, neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
