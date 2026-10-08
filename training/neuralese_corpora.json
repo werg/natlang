@@ -7032,6 +7032,43 @@
       ],
       "admission": "held-complete-runtime-snapshot-no-training-or-runtime-qualification-admission",
       "notes": "Complete immutable V27 runtime snapshot: all 1,048 files from frozen-runtime.json, including root metadata/prelude/package files and recursively nested runtime tree. Bound to committed source 854789a4 and the V27 fresh CPU reference proof. V1 was an incomplete recursive-only manifest and is superseded; no learned-weight, transport, gradient-replay, or training qualification is implied."
+    },
+    {
+      "id": "luna-v9-v2-review-dependencies-20261008",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v2",
+      "include": [
+        "README.md",
+        "build-provenance.json",
+        "review/action-quality-review.jsonl",
+        "review/case02-write-reemission-proof.json",
+        "review/luna-v17-action-disposition.jsonl",
+        "review/luna-v17-parent-source-review.jsonl",
+        "review/opencode-bunny-parent-source-review.jsonl"
+      ],
+      "admission": "provenance dependencies only; no additional training admission",
+      "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
+    },
+    {
+      "id": "luna-v9-v6-delta-dependencies-20261008",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v6-repeat-context-repair",
+      "include": [
+        "delta-native-records-26.jsonl",
+        "delta-pieces-26.jsonl"
+      ],
+      "admission": "provenance dependencies only; no additional training admission",
+      "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
+    },
+    {
+      "id": "luna-v9-v8-selection-dependencies-20261008",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v8-context-availability-review-v1",
+      "include": [
+        "source-selection.json"
+      ],
+      "admission": "provenance dependencies only; no additional training admission",
+      "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
     }
   ],
   "coverage_backlog": [

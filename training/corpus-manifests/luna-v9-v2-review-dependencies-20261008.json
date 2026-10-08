@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v9-v2-review-dependencies-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4154,
+      "sha256": "0915039c26f296c731de65676454c0dda2c291ed565c505f774ad32926789e6e"
+    },
+    {
+      "path": "build-provenance.json",
+      "bytes": 9025,
+      "sha256": "597fe338eab4f278cf91042eea92493565bcffdb0848dd92a42e18ff7e24cb52"
+    },
+    {
+      "path": "review/action-quality-review.jsonl",
+      "bytes": 3831,
+      "sha256": "770a14348d58db09d5104c9a465942b46da153f68a110e54dcb6b035fd53e530",
+      "lines": 12
+    },
+    {
+      "path": "review/case02-write-reemission-proof.json",
+      "bytes": 3828,
+      "sha256": "6d1b601d402442d77c182642af4aec0606a1cd986c19ea63c0483bea50e8c13c"
+    },
+    {
+      "path": "review/luna-v17-action-disposition.jsonl",
+      "bytes": 1099361,
+      "sha256": "97aa3c4a72886ae4d2a17b00bccc2564c00e13c7fc931e8b5f3d528600aa5c06",
+      "lines": 941
+    },
+    {
+      "path": "review/luna-v17-parent-source-review.jsonl",
+      "bytes": 25079,
+      "sha256": "167db836f46005fb6b20c0f4edd5c02301bcc8546487665182776a5aecddb8d4",
+      "lines": 18
+    },
+    {
+      "path": "review/opencode-bunny-parent-source-review.jsonl",
+      "bytes": 3576,
+      "sha256": "8a7cf0b6d16f0211b78200ef8267f9ce91ef0b5ba918f0a7939f9ade0b87944d",
+      "lines": 2
+    }
+  ],
+  "bytes": 1148854
+}

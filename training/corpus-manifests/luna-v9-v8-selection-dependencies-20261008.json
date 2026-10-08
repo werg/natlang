@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v9-v8-selection-dependencies-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v8-context-availability-review-v1",
+  "files": [
+    {
+      "path": "source-selection.json",
+      "bytes": 2538,
+      "sha256": "d63413c18ce86bc807c78a732f18cbe9f92e02c041ff908681c1e0a068777e31"
+    }
+  ],
+  "bytes": 2538
+}

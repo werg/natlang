@@ -1,0 +1,21 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v9-v6-delta-dependencies-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v6-repeat-context-repair",
+  "files": [
+    {
+      "path": "delta-native-records-26.jsonl",
+      "bytes": 3419490,
+      "sha256": "d857b7a20a9084767bb362ba4614f9be6e03c65aed4c6f8bce67e00e6c2616db",
+      "lines": 26
+    },
+    {
+      "path": "delta-pieces-26.jsonl",
+      "bytes": 37595,
+      "sha256": "0a3d745506fe3866759c662d3b9855c7f13faaf99ab210bf736a02ddb6f0fc91",
+      "lines": 7
+    }
+  ],
+  "bytes": 3457085
+}
