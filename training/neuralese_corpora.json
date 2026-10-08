@@ -7936,6 +7936,39 @@
         "verified-reasoning-pools-v18-answer-key-v2-20261008-v1"
       ],
       "notes": "Immutable V18 Luna launch packet for the root-approved 32-variant generation campaign over 128 existing S1 train records. Includes exact approved plan, authorization, launch binding, initial claims and five runner starts, and launch-time authority snapshot. Live results and mutable worker evidence will be published after closure; no semantic, trace, DPO, or training admission."
+    },
+    {
+      "id": "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-lfm-stage4-8-20261008-v4",
+      "include": [
+        "**/*"
+      ],
+      "admission": "closed-unqualified-training-state;not-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1",
+        "neuralese-v24-v9-three-action-native-text-20261008-v2"
+      ],
+      "notes": "Gracefully closed at19998 with complete model/heads/Muon/AdamW/RNG/schedule. Exact final checkpoint195a8befc78aef2b35db8704eecda33b856ea73faa5fe4c9ee2ea76b02c70916 is active input-map successor parent and remains local. Frozen runtime, failed gates, best-state and exact diagnostic provenance retained; no qualification inherited."
+    },
+    {
+      "id": "neuralese-lfm-input-map-launch-preparation-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-20261008-v1",
+      "include": [
+        "recipe.json",
+        "parent-handoff.json",
+        "train-launch.prepared.json",
+        "train-launch.approved.json",
+        "train-launch.json",
+        "runtime/**/*"
+      ],
+      "admission": "immutable-execution-provenance;not-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-lfm-stage4-8-closed-handoff-20261008-v1",
+        "neuralese-v24-v9-three-action-native-text-20261008-v2"
+      ],
+      "notes": "Shared corrected causal input-map warmup: fullprojection goldembedding supervision retained; map self-consistency target separate; frozen109Pythonfiles, launch from19998weights/RNG and explicit fresh optimizer for changed trainables. Active train-continuation excluded from immutable manifest; publish only when sealed. Mapped text alignment is not autoregressive/runtime/function qualification."
     }
   ],
   "coverage_backlog": [
