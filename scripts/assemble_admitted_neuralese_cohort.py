@@ -222,7 +222,11 @@ def main():
             decision = approval_by_id[row['id']]
             if target_digest(row) != decision.get('target_sha256'):
                 raise ValueError(f'root admission target digest mismatch: {row["id"]}')
-            if row.get('split') != decision.get('split') or decision.get('source_group') not in (row.get('source_groups') or []):
+            decision_groups = decision.get('source_groups')
+            if decision_groups is None and isinstance(decision.get('source_group'), str):
+                decision_groups = [decision['source_group']]
+            if (row.get('split') != decision.get('split') or not isinstance(decision_groups, list) or
+                    not decision_groups or decision_groups != (row.get('source_groups') or [])):
                 raise ValueError(f'root admission source split/group mismatch: {row["id"]}')
             row['training_admission'] = {
                 'approved': True, 'kind': 'root-selected-native-action-sft-only',

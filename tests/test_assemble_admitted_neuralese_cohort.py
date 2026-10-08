@@ -64,7 +64,7 @@ class AssemblerInvariantTests(unittest.TestCase):
                      "messages": [], "decision": {"failed_action": False, "training_approved": False},
                      "training_admission": {"approved": False}}
             delta_native = root / "delta-native.jsonl"; delta_native.write_text(json.dumps(delta) + "\n")
-            approval_row = {"native_id": "selected", "split": "train", "source_group": "selected-world",
+            approval_row = {"native_id": "selected", "split": "train", "source_groups": ["selected-world"],
                             "target_sha256": hashlib.sha256(json.dumps(target, separators=(",", ":")).encode()).hexdigest(),
                             "decision": "admit-exact-selected-native-action-SFT-only"}
             approval = root / "admission.json"
