@@ -52,6 +52,13 @@ async function run(): Promise<void> {
     abort.signal.throwIfAborted();
     const observation = fixture.observe ? await fixture.observe(result, outcome) : { ...(result === undefined ? {} : { result }), outcome };
     const metric = validateMetrics(await suite.score(input.testCase, observation, outcome), suite.requiredGates);
+    // The score is independent evidence about the calls that produced it (plans/TRACE_SPECIALIZATION.md §3.6).
+    try {
+      const store = runtime.callStore();
+      for (const trace of traces.filter(item => !item.parentCallId))
+        store?.annotate?.(trace.callId, 'evaluation', { evaluation: input.id, case: input.testCase.id, quality: metric.quality,
+          gates: metric.gates ?? {}, feedback: metric.feedback ?? '' }, 'evaluation', false);
+    } catch { /* recording never fails an evaluation */ }
     let captured: unknown;
     try { captured = cloneData(observation); }
     catch { throw new Error('fixture observation must be finite JSON; supply observe() to project live handles and captures'); }

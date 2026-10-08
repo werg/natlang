@@ -18,6 +18,8 @@ export interface CallStoreLike {
   currentCompilation(definitionKey: string): (CompilationRow & { cases: CaseStats[] }) | undefined;
   caseServed(caseHash: string, callId: string, handedOff: boolean): void;
   enqueue(kind: 'audit' | 'shadow', caseHash: string, callId: string): void;
+  /** Attach independent evidence to a recorded call (an evaluation score, a judge's verdict, user feedback). */
+  annotate?(callId: string, kind: string, value: unknown, source?: string, pin?: boolean): void;
   /** Iteration statistics kept with the machine's records, so iterateOn sites learn across processes. */
   iterationStatistics?(): import('../runtime/iterate.js').IterationStatisticsStore;
 }

@@ -251,10 +251,11 @@ export class CallStore {
     return Number((this.db.prepare("SELECT COUNT(*) AS n FROM calls WHERE definition_key = ? AND audit_of IS NULL AND executor != 'crisp'")
       .get(definitionKey) as { n: number }).n);
   }
-  annotate(callId: string, kind: string, value: unknown, source?: string): void {
+  /** Attach evidence to a call; it is pinned unless `pin` is false (routine annotations such as evaluation scores). */
+  annotate(callId: string, kind: string, value: unknown, source?: string, pin = true): void {
     this.db.prepare('INSERT INTO annotations (call_id, kind, value, source, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(callId, kind, JSON.stringify(value), source ?? null, now());
-    this.pin(callId);
+    if (pin) this.pin(callId);
   }
   annotations(callId: string): { kind: string; value: unknown; source: string | null; created_at: string }[] {
     return (this.db.prepare('SELECT kind, value, source, created_at FROM annotations WHERE call_id = ? ORDER BY id').all(callId) as
