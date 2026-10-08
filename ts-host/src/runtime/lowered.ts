@@ -57,6 +57,50 @@ const ARRAY_TO_STRING = Array.prototype.toString;
 const OBJECT_TO_STRING = Object.prototype.toString;
 const REFLECT_APPLY = Reflect.apply;
 
+/** A native Array prototype method recognized in the receiver's realm (eval can create cross-realm arrays). */
+function standardArrayMethod(source: unknown, name: string, callable: unknown): boolean {
+  if (!Array.isArray(source)) return false;
+  const prototype = Object.getPrototypeOf(source) as Record<string, unknown> | null;
+  const descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, name);
+  const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  const standardArrayPrototype = typeof constructor === 'function' &&
+    (constructor as { prototype?: unknown }).prototype === prototype &&
+    Function.prototype.toString.call(constructor) === 'function Array() { [native code] }';
+  return !!(standardArrayPrototype && descriptor?.value === callable && typeof callable === 'function' &&
+    (callable as Function).name === name && Function.prototype.toString.call(callable).includes('[native code]'));
+}
+
+function ordinaryArraySpecies(source: unknown): boolean {
+  if (!Array.isArray(source) || Object.hasOwn(source, 'constructor')) return false;
+  const prototype = Object.getPrototypeOf(source) as Record<PropertyKey, unknown> | null;
+  const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  if (typeof constructor !== 'function' || (constructor as { prototype?: unknown }).prototype !== prototype ||
+      Function.prototype.toString.call(constructor) !== 'function Array() { [native code] }') return false;
+  const species = Object.getOwnPropertyDescriptor(constructor, Symbol.species);
+  return !!species?.get && species.set === undefined && Function.prototype.toString.call(species.get).includes('[native code]') &&
+    species.get.name.includes('Symbol.species');
+}
+
+/** Await only the promises produced by a statically recognized readout callback on native Array#map. */
+export async function mapNeuraleseReadout(receiver: unknown, method: unknown, args: readonly unknown[]): Promise<unknown[]> {
+  if (!standardArrayMethod(receiver, 'map', method) || !ordinaryArraySpecies(receiver))
+    throw new TypeError('Async Neuralese readout in Array.map needs the native map method and ordinary Array species; ' +
+      'use an async callback with Promise.all for a custom map or species.');
+  const result = REFLECT_APPLY(method as (...values: unknown[]) => unknown, receiver, args) as unknown;
+  if (!Array.isArray(result) || !ordinaryArraySpecies(result))
+    throw new TypeError('Async Neuralese readout in Array.map needs an ordinary Array result from native map.');
+  const array = result as unknown[];
+  const indexes: number[] = [];
+  const pending: unknown[] = [];
+  for (let index = 0; index < array.length; index++) if (Object.prototype.hasOwnProperty.call(array, index)) {
+    indexes.push(index);
+    pending.push(array[index]);
+  }
+  const resolved = await Promise.all(pending);
+  for (let index = 0; index < indexes.length; index++) array[indexes[index]!] = resolved[index];
+  return array;
+}
+
 /** Invoke a captured native or custom method without consulting a mutable `.call` property. */
 export function invokeWithReceiver(method: unknown, receiver: unknown, args: readonly unknown[]): unknown {
   return REFLECT_APPLY(method as (...values: unknown[]) => unknown, receiver, args);
@@ -426,13 +470,7 @@ export function finiteArrayIterator<T>(source: unknown, method: 'entries' | 'key
   // Eval scopes can create arrays in another realm, so compare against that array's own prototype method instead
   // of this module's Array.prototype. A standard intrinsic method is still required; instance/subclass overrides
   // follow the ordinary iterator policy below.
-  const prototype = Object.getPrototypeOf(source) as Record<string, unknown> | null;
-  const descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, method);
-  const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
-  const standardArrayPrototype = typeof constructor === 'function' && (constructor as { prototype?: unknown }).prototype === prototype &&
-    Function.prototype.toString.call(constructor) === 'function Array() { [native code] }';
-  const nativeMethod = standardArrayPrototype && descriptor?.value === callable && typeof callable === 'function' &&
-    (callable as Function).name === method && Function.prototype.toString.call(callable).includes('[native code]');
+  const nativeMethod = standardArrayMethod(source, method, callable);
   if (!nativeMethod) return finite(iterator as unknown as Iterable<T>, label);
 
   const array = source as unknown[];

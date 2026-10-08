@@ -10,7 +10,7 @@ import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { createVirtualProgram } from '../dist/compiler/host.js';
 import { compileScopeSnippet } from '../dist/scope-compiler.js';
 import { compileModule } from '../dist/runtime/modules.js';
-import { arrayToStringNeuralese, concatNeuralese, joinNeuralese, readNeuraleseIfReference } from '../dist/runtime/lowered.js';
+import { arrayToStringNeuralese, concatNeuralese, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference } from '../dist/runtime/lowered.js';
 import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
@@ -262,6 +262,73 @@ test('scope type analysis infers ordinary step.iterateOn state and keeps declare
     inputs: [{ name: 'step', type: 'CustomStep' }], locals: [], captures: [], imports: [], returns: 'string' });
   assert.deepEqual(custom.readouts.map(item => customSource.slice(item.start, item.end)), ['final'],
     'an explicitly declared custom iterateOn method retains its own result type');
+});
+
+test('typed readout in an inline Array.map callback is awaited with native sparse-array semantics', async () => {
+  const scope = { types: {}, inputs: [{ name: 'values', type: 'Neuralese<string>[]' },
+    { name: 'events', type: 'string[]' }, { name: 'context', type: '{ suffix: string }' }],
+    locals: [], captures: [], imports: [], returns: 'string[]' };
+  const source = `const source = (events.push('receiver'), values);
+    const result = source.map(function(this: { suffix: string }, value, index, original) {
+      events.push('callback:' + index + ':' + String(original.length));
+      return String(value) + this.suffix;
+    }, (events.push('thisArg'), context));
+    return result;`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.filter(item => item.kind === 'array-map').map(item => source.slice(item.start, item.end)),
+    ["source.map(function(this: { suffix: string }, value, index, original) {\n      events.push('callback:' + index + ':' + String(original.length));\n      return String(value) + this.suffix;\n    }, (events.push('thisArg'), context))"],
+    'the compiler marks just the native map call whose inline callback needs typed readout');
+  assert.deepEqual(analysis.readouts.filter(item => !item.kind).map(item => source.slice(item.start, item.end)), ['value']);
+  const compiled = compileScopeSnippet(source, { inputBindings: ['values', 'events', 'context'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  const events = [];
+  const values = [neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), ,
+    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')];
+  Object.defineProperty(values, 'map', { configurable: true, get() { events.push('map-get'); return Array.prototype.map; } });
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { mapNeuraleseReadout, guard: (_id, fn, args) => fn(...(args ?? [])), readNeuralese: async value => {
+      events.push('read:' + value.$neuralese.id);
+      return value.$neuralese.id === 'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'first' : 'second';
+    } });
+  const mapped = await run({ values, events, context: { suffix: '!' } }, {}, {});
+  assert.equal(mapped.length, 3);
+  assert.equal(0 in mapped, true);
+  assert.equal(1 in mapped, false, 'Array.map holes remain holes after the readout promises settle');
+  assert.deepEqual([mapped[0], mapped[2]], ['first!', 'second!']);
+  assert.deepEqual(events, ['receiver', 'map-get', 'thisArg', 'callback:0:3', 'read:nz1_aaaaaaaaaaaaaaaaaaaa',
+    'callback:2:3', 'read:nz1_bbbbbbbbbbbbbbbbbbbb'],
+    'receiver, one method lookup and thisArg evaluation precede native ordered callback invocation');
+
+  const unchanged = compileScopeSnippet('return values.map(value => value.toUpperCase());', {
+    inputBindings: ['values'], analyze: text => analyzeEvalSnippet(text, { ...scope, inputs: [{ name: 'values', type: 'string[]' }] }),
+  });
+  assert.equal(unchanged.ok, true, JSON.stringify(unchanged.diagnostics));
+  assert.doesNotMatch(unchanged.program, /mapNeuraleseReadout/);
+
+  const overridden = [neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc')];
+  Object.defineProperty(overridden, 'map', { value: () => ['custom'] });
+  const error = await run({ values: overridden, events: [], context: { suffix: '!' } }, {}, {}).catch(item => item);
+  assert.match(error.message, /native map method and ordinary Array species/,
+    'an overridden method is reported instead of being bypassed or receiving an unawaited callback');
+
+  const customSpecies = [neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd')];
+  Object.defineProperty(customSpecies, 'constructor', { value: { [Symbol.species]: class extends Array {} } });
+  const speciesError = await run({ values: customSpecies, events: [], context: { suffix: '!' } }, {}, {}).catch(item => item);
+  assert.match(speciesError.message, /native map method and ordinary Array species/,
+    'custom species is rejected before callback execution rather than changing its result contract');
+
+  const module = compileModule({ kind: 'module', id: 'async-map-readout', name: 'asyncMapReadout',
+    source: 'asyncMapReadout.ts', revision: 'r1', text: `export async function mapText(values: Neuralese<string>[], suffix: string) {
+      return values.map(value => String(value) + suffix);
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)({}, {
+    guard: (_id, fn) => fn(), mapNeuraleseReadout, readNeuralese: async value => value.$neuralese.id ===
+      'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'module' : 'other',
+  });
+  assert.deepEqual(await moduleFns.mapText([neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa')], '?'), ['module?']);
 });
 
 test('computed member and object keys read soft values at the key position', async () => {

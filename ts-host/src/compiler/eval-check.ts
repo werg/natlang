@@ -144,7 +144,8 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
     templateSpan: shift(plan.templateSpan),
     interpolations: plan.interpolations.map(item => ({ ...item, sourceSpan: shift(item.sourceSpan) })),
     captures: plan.captures.map(capture => ({ ...capture, mentionSpan: capture.mentionSpan - offset })) })),
-    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(shift),
+    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(item => ({ ...shift(item),
+      ...(item.callback ? { callback: { start: item.callback.start - offset, end: item.callback.end - offset } } : {}) })),
     rebinds: rebinds.map(site => ({ ...site, start: site.start - offset, end: site.end - offset,
       templateStart: site.templateStart - offset, templateEnd: site.templateEnd - offset })) };
 }
