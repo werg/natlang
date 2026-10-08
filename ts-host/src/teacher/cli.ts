@@ -5,12 +5,14 @@ import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import {pathToFileURL} from 'node:url';
 import { observeCollectionPromise, type CollectionLivenessSnapshot } from './collection-liveness.js';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
+import { CollectorRequestTelemetryAccumulator } from './request-telemetry.js';
 
 function fileToolSurface(value: string): FileToolSurface {
   if (!FILE_TOOL_SURFACES.includes(value as FileToolSurface)) throw new Error(`--file-tools must be one of ${FILE_TOOL_SURFACES.join(', ')}`);
@@ -162,6 +164,12 @@ async function main(): Promise<void> {
   const source = await readFile(ir);
   const outputHash = createHash('sha256');
   for await (const chunk of createReadStream(output)) outputHash.update(chunk);
+  const requestTotals = new CollectorRequestTelemetryAccumulator();
+  const requestStream = createInterface({ input: createReadStream(output), crlfDelay: Infinity });
+  for await (const line of requestStream) {
+    if (!line.trim()) continue;
+    requestTotals.add(JSON.parse(line) as Parameters<CollectorRequestTelemetryAccumulator['add']>[0]);
+  }
   await writeAtomic(`${output}.manifest.json`, JSON.stringify({
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
@@ -169,7 +177,10 @@ async function main(): Promise<void> {
     text_neuralese_transport: config.textNeuraleseEmulation ? TEXT_NEURALESE_EMULATION_VERSION : null,
     text_neuralese_prompt_revision: config.textNeuraleseEmulation ? TEXT_NEURALESE_PROMPT_REVISION : null,
     workers: config.workers, completed: result.completed,
-    missing: result.missing, output_sha256: outputHash.digest('hex') }) + '\n');
+    missing: result.missing, output_sha256: outputHash.digest('hex'),
+    request_telemetry: { schema: 'natlang.collector_request_manifest/1',
+      scope: 'rows in merged output (includes completed/reused rows); exact collector sender invocations and ChatTransport calls; provider SDK entries are turn starts, not physical network counts',
+      ...requestTotals.totals } }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);
   if (result.missing.length) process.exitCode = 2;
 }

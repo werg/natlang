@@ -1,0 +1,857 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "guided-authored-root-retry-v8-evidence-20261008-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "authored-root-guided-runtime-v8/frozen/frozen-runtime.json",
+      "bytes": 119916,
+      "sha256": "177b0da282b41392d6f15d2cd133d1d24ddedafcc0367ccd26f442de6385ea53"
+    },
+    {
+      "path": "authored-root-guided-runtime-v8/full-source-fixture-independent-v1/independent-review-v2.json",
+      "bytes": 8822,
+      "sha256": "50404806acbb2309d71bbb8f7f6b186f624750bd20467d840f3da357b33938ce"
+    },
+    {
+      "path": "authored-root-guided-runtime-v8/full-source-fixture-independent-v1/soft-marker-smoke-v1.json",
+      "bytes": 1097,
+      "sha256": "54a4a37f8ce929bb15826a67209c7518ca984f1fa10502f63287cbd2115be6b5"
+    },
+    {
+      "path": "authored-root-guided-runtime-v8/full-source-fixture-v1/fixture-proof-v1.json",
+      "bytes": 3078,
+      "sha256": "c1f8fdfa76bf3dc8f2a3720fd8b64028b53dc7834a21ad1601855ad9af235f24"
+    },
+    {
+      "path": "neuralese-v17-v8-corrected-source-review-20261008-v1/no-gold-input-review-v1.json",
+      "bytes": 15348,
+      "sha256": "c793f03b4b03f1b98bfe50142e25500141f61de3785842e3d519138f926dcf06"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/authored-root-guided-v8-one-case-v1/independent-review-v1/postrun-action-review-v1.json",
+      "bytes": 10586,
+      "sha256": "ccf9883c1be0ab84747d9a6b8502ac7593661992130deb5df34bd4a305ab1099"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/authored-root-guided-v8-one-case-v1/postrun-identity-review-v1.json",
+      "bytes": 8114,
+      "sha256": "c1b43f06985998c3a1f289abd23556a1c92b191f8c018111d7362ecf852c0408"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/authority-at-review-v1.json",
+      "bytes": 792325,
+      "sha256": "86ece71df70494b7018a59b4b835a6114303d87769ab1cadd4bd79bcb09fea3b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/child-error-pair-review-v1.json",
+      "bytes": 12221,
+      "sha256": "db3316c19ecc511036ae9f6bfdc2073341bea0425f17f666e8a798255a856b8e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/child-error-review-v1.json",
+      "bytes": 11408,
+      "sha256": "39c41266746b73a129cb4eebdbc13646d51aa29a6d1ed7faa208c67792c6eba2"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action-selection-review-v1.json",
+      "bytes": 227524,
+      "sha256": "5b52453dd8e11f2d6c2587c979883393e44455fdbd070a39a6d710201bc4a5d7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/authored-root-synthetic-context-candidate-v1.json",
+      "bytes": 11438,
+      "sha256": "9b7ba608e55b05fe9a60ed3bcc447e43a364fcb195a411890da2da838241c5f7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/authored-root-synthetic-sft-candidate-review-v1.json",
+      "bytes": 4693,
+      "sha256": "f6f906a38a28045ec81bc1f8c730f9cdb1dcc227a18565c9744b647d1475bc72"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/authored-root-synthetic-sft-candidate-review-v2.json",
+      "bytes": 2551,
+      "sha256": "cc38dddb7fe680223cb6f7ad7a202b0bf42c9b613972f42b22b13296b710e88b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/00/afed845a6a2e6be99a36206e912565d7ec4881c35a04b1c8922ce45a353be6",
+      "bytes": 2301,
+      "sha256": "00afed845a6a2e6be99a36206e912565d7ec4881c35a04b1c8922ce45a353be6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/01/772e4b28cd76de021980f60ba98afc852b15be44fdad7693dfb224877c248b",
+      "bytes": 3745,
+      "sha256": "01772e4b28cd76de021980f60ba98afc852b15be44fdad7693dfb224877c248b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/02/7a16844e278f8f039f389ab225a8753eb12fc3f9b583e2f3245ffdbff8b00b",
+      "bytes": 1550,
+      "sha256": "027a16844e278f8f039f389ab225a8753eb12fc3f9b583e2f3245ffdbff8b00b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/02/fb6f7fc5467452c2c9b00f6eef7865016d211cfcff053ef3a305c8cd8adfcf",
+      "bytes": 3861,
+      "sha256": "02fb6f7fc5467452c2c9b00f6eef7865016d211cfcff053ef3a305c8cd8adfcf"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/04/3bd92cd24d048b2622370db785f37f58efa64b467b177a281a9339a985e2fb",
+      "bytes": 12462,
+      "sha256": "043bd92cd24d048b2622370db785f37f58efa64b467b177a281a9339a985e2fb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/06/47047ad7318e052012c6c3a17455da9aa6fdf24a07fea622e33a43c6482de0",
+      "bytes": 137,
+      "sha256": "0647047ad7318e052012c6c3a17455da9aa6fdf24a07fea622e33a43c6482de0"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/07/b3555fe5d01791d2c21202d4665321399507b3cb141f37292af1ff24605ddb",
+      "bytes": 107,
+      "sha256": "07b3555fe5d01791d2c21202d4665321399507b3cb141f37292af1ff24605ddb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/11/26ff2073a8931700e0e927fb159d462038f175fefd6aed3915f4d05c478872",
+      "bytes": 139,
+      "sha256": "1126ff2073a8931700e0e927fb159d462038f175fefd6aed3915f4d05c478872"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/16/3117ca1c3806069208660c27d1222dc89e2952fe2f56c1b34ffdc2cfdbb392",
+      "bytes": 2971,
+      "sha256": "163117ca1c3806069208660c27d1222dc89e2952fe2f56c1b34ffdc2cfdbb392"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/17/90c838fbc39251cd3cd9314183a803899b3a7fa9fba484abff44978383f2c9",
+      "bytes": 2741,
+      "sha256": "1790c838fbc39251cd3cd9314183a803899b3a7fa9fba484abff44978383f2c9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/19/16b390112b102d078d2fe2effc96d8a8ca467028ceaf7bbb756f56287f95d1",
+      "bytes": 3029,
+      "sha256": "1916b390112b102d078d2fe2effc96d8a8ca467028ceaf7bbb756f56287f95d1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/19/1f434765e8acc9cc9ffe5c7bea536a2796781ad428caf69b573ed95c06a061",
+      "bytes": 15543,
+      "sha256": "191f434765e8acc9cc9ffe5c7bea536a2796781ad428caf69b573ed95c06a061"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/1d/44908331f8f7c394ece0df374a32518193297d71a1ae6b8512351b60147ffd",
+      "bytes": 143,
+      "sha256": "1d44908331f8f7c394ece0df374a32518193297d71a1ae6b8512351b60147ffd"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/1d/a1e574a5b13eb34fd5c4f40b404d78ba4eebc78d06ca01ba3a34cae7166f61",
+      "bytes": 1459,
+      "sha256": "1da1e574a5b13eb34fd5c4f40b404d78ba4eebc78d06ca01ba3a34cae7166f61"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/20/5a6777220bdf2991b29afcb134b678937c57c0bf6d3f8e092f08ddf64746a3",
+      "bytes": 28595,
+      "sha256": "205a6777220bdf2991b29afcb134b678937c57c0bf6d3f8e092f08ddf64746a3"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/20/ecc8643ca6e549b879ccea5890877446270287ee90253ecf129b38b7beb198",
+      "bytes": 8,
+      "sha256": "20ecc8643ca6e549b879ccea5890877446270287ee90253ecf129b38b7beb198"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/27/f322093eef62bd83ab17839359a8278c2d67fd8b78bfe8faf30f6d66f4eec9",
+      "bytes": 6157,
+      "sha256": "27f322093eef62bd83ab17839359a8278c2d67fd8b78bfe8faf30f6d66f4eec9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/28/4e039d29ff82c27d17395caa6cba862640e99c84a820689337a8a88ae92cae",
+      "bytes": 2697,
+      "sha256": "284e039d29ff82c27d17395caa6cba862640e99c84a820689337a8a88ae92cae"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/28/e5f63d0ed727cb4451cd5c429ed6030af9afe55c3423beaf2f0a6819d25b0e",
+      "bytes": 143,
+      "sha256": "28e5f63d0ed727cb4451cd5c429ed6030af9afe55c3423beaf2f0a6819d25b0e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/29/7310f53b215e65738a92833f83349e24b0c192bee2a984e959eff54ef1487e",
+      "bytes": 107,
+      "sha256": "297310f53b215e65738a92833f83349e24b0c192bee2a984e959eff54ef1487e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/2a/1270f4507b85ebc1eae3eb1e743948e99d06f5b695270ad173a8818cc0b90b",
+      "bytes": 1548,
+      "sha256": "2a1270f4507b85ebc1eae3eb1e743948e99d06f5b695270ad173a8818cc0b90b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/2e/7975d0c0d737160595b47e0255799b76189bd5abf4b16c1b0ef98c7bd1d2f4",
+      "bytes": 5909,
+      "sha256": "2e7975d0c0d737160595b47e0255799b76189bd5abf4b16c1b0ef98c7bd1d2f4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/2e/db769ba6c2b4511a5c846e044e1b3026a38a3601b710a3e4fd75bd4d04aa67",
+      "bytes": 10965,
+      "sha256": "2edb769ba6c2b4511a5c846e044e1b3026a38a3601b710a3e4fd75bd4d04aa67"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/31/24f2272ac56fec057da934f501500579dc2e8f509d8ae55eb07b3ce408e9c1",
+      "bytes": 1550,
+      "sha256": "3124f2272ac56fec057da934f501500579dc2e8f509d8ae55eb07b3ce408e9c1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/31/61106603e01e6703b4ffc44f1153640319dd01ab65bd1881306f0eb6639591",
+      "bytes": 107,
+      "sha256": "3161106603e01e6703b4ffc44f1153640319dd01ab65bd1881306f0eb6639591"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/33/002bf8ef68c26621db04344ebaf848dd26250e385294b41982f73c2b62bd8d",
+      "bytes": 11830,
+      "sha256": "33002bf8ef68c26621db04344ebaf848dd26250e385294b41982f73c2b62bd8d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/34/8614faa349b2bf373310d95c116c0ba342704b5b6ae740ea4b7c5fb31ef42d",
+      "bytes": 11060,
+      "sha256": "348614faa349b2bf373310d95c116c0ba342704b5b6ae740ea4b7c5fb31ef42d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/34/c3d60715b527155ff190d06ea83d40617aef6c0830b5801ed92ece1a10d07c",
+      "bytes": 446,
+      "sha256": "34c3d60715b527155ff190d06ea83d40617aef6c0830b5801ed92ece1a10d07c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/36/2c047bb308464abcc54f8edea100169e0d13e33d998f6101cbcb49954c0bd7",
+      "bytes": 16,
+      "sha256": "362c047bb308464abcc54f8edea100169e0d13e33d998f6101cbcb49954c0bd7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/38/7abe1e376399c98b18a3ea6ebf7a8538ae776099790ad463e6d348249a3c8d",
+      "bytes": 1550,
+      "sha256": "387abe1e376399c98b18a3ea6ebf7a8538ae776099790ad463e6d348249a3c8d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/3a/563f9433e7a659dbf38cd6aa990c3ff57a52f8c4c4696434ff2f36052acc8d",
+      "bytes": 8,
+      "sha256": "3a563f9433e7a659dbf38cd6aa990c3ff57a52f8c4c4696434ff2f36052acc8d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/3e/0cda215abb4d5a0f144f0aebef685faad51f52f9fee9cc72fbffcd47a9d58b",
+      "bytes": 11829,
+      "sha256": "3e0cda215abb4d5a0f144f0aebef685faad51f52f9fee9cc72fbffcd47a9d58b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/40/dc94c586bef2c3f062ae0b37fd3dcdbb9c0355b52583534084375b300e6049",
+      "bytes": 2657,
+      "sha256": "40dc94c586bef2c3f062ae0b37fd3dcdbb9c0355b52583534084375b300e6049"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/43/ab808bad6f59c4591cff09dbd3a908e6ac1790bbcdaa2ef435a680f97faeaa",
+      "bytes": 2600,
+      "sha256": "43ab808bad6f59c4591cff09dbd3a908e6ac1790bbcdaa2ef435a680f97faeaa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/44/ef2357e2ede48113b2633c2ba1dfbf4da0fe97599e0d5e69fdf92208c3c583",
+      "bytes": 2693,
+      "sha256": "44ef2357e2ede48113b2633c2ba1dfbf4da0fe97599e0d5e69fdf92208c3c583"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/46/1af6d7bbaa728abf3c80d8eb344b1ae722127f5c48849bd95f15a7b1be8119",
+      "bytes": 17096,
+      "sha256": "461af6d7bbaa728abf3c80d8eb344b1ae722127f5c48849bd95f15a7b1be8119"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/49/a88f4a5dcadf0303a13ac19223243d4ed4d7ae6fcf84b24adf5bdb7e69e499",
+      "bytes": 11813,
+      "sha256": "49a88f4a5dcadf0303a13ac19223243d4ed4d7ae6fcf84b24adf5bdb7e69e499"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/4b/30f24bf105a8efdfc4f603228eb329925687537cb8fa53cbee93841ae48398",
+      "bytes": 2428,
+      "sha256": "4b30f24bf105a8efdfc4f603228eb329925687537cb8fa53cbee93841ae48398"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/4f/b54d687364b795841b9a8973e4a05f87d493c0db338dc66b39c703fb773659",
+      "bytes": 16045,
+      "sha256": "4fb54d687364b795841b9a8973e4a05f87d493c0db338dc66b39c703fb773659"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/53/75eefb7f9c5d1a8f2eba91bcbc734c6a8b9108543d13d49cd6b47518b46900",
+      "bytes": 3404,
+      "sha256": "5375eefb7f9c5d1a8f2eba91bcbc734c6a8b9108543d13d49cd6b47518b46900"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/58/903d4aff64c8f7487950e61adf5181c225770a5e03289d4978722f7f8a3ab8",
+      "bytes": 21100,
+      "sha256": "58903d4aff64c8f7487950e61adf5181c225770a5e03289d4978722f7f8a3ab8"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5a/01fbf156ca6935ae1d3f084e5b28f68e5343098da6b8fe43c61dda01af0514",
+      "bytes": 35,
+      "sha256": "5a01fbf156ca6935ae1d3f084e5b28f68e5343098da6b8fe43c61dda01af0514"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5a/fedec74a3bce90fa291d135d43be0525893ff63171ea0eca62ef046238800e",
+      "bytes": 131,
+      "sha256": "5afedec74a3bce90fa291d135d43be0525893ff63171ea0eca62ef046238800e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5f/01edf7b9ae53cf8c4c079a3df5c12e5897f3fc26d05a03bfbdbf1e6042bcf3",
+      "bytes": 11220,
+      "sha256": "5f01edf7b9ae53cf8c4c079a3df5c12e5897f3fc26d05a03bfbdbf1e6042bcf3"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5f/1a5185cd73aa0a65545c7cba996840684ca430507b2bb6ad36ebdeacd7456e",
+      "bytes": 69,
+      "sha256": "5f1a5185cd73aa0a65545c7cba996840684ca430507b2bb6ad36ebdeacd7456e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5f/360864046a8275f7122c658bbc1f76771e4933eca73d5535b0dd7b9cc86aef",
+      "bytes": 16362,
+      "sha256": "5f360864046a8275f7122c658bbc1f76771e4933eca73d5535b0dd7b9cc86aef"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/5f/94889dcda38aa920c4153603954d6265974a46d88e540a232989eb66104d56",
+      "bytes": 139,
+      "sha256": "5f94889dcda38aa920c4153603954d6265974a46d88e540a232989eb66104d56"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/65/6865960f55dfaa2a63e6d62bfdf0a1f0dc5d8a5fcdf8550a75f67ee143dfed",
+      "bytes": 15851,
+      "sha256": "656865960f55dfaa2a63e6d62bfdf0a1f0dc5d8a5fcdf8550a75f67ee143dfed"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/66/366d1b9c603cfd7d6b6a5f0cbded4d9e08484ff6f5f2fa788bafccf3c7d93d",
+      "bytes": 321,
+      "sha256": "66366d1b9c603cfd7d6b6a5f0cbded4d9e08484ff6f5f2fa788bafccf3c7d93d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/67/ce9aad0a16f76954ff9d03f9fbdedc5b0ae2ec9551ee1dd40dbf21465e7c7f",
+      "bytes": 107,
+      "sha256": "67ce9aad0a16f76954ff9d03f9fbdedc5b0ae2ec9551ee1dd40dbf21465e7c7f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/6a/f1f8338ad271256d5431b7413308093405174a35cb65c64ae4fb4f4a91d43c",
+      "bytes": 1550,
+      "sha256": "6af1f8338ad271256d5431b7413308093405174a35cb65c64ae4fb4f4a91d43c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/6b/63054d6f8e3221473c2238ba8dc6fb1512bc86407265a73dedc3ceea3991fe",
+      "bytes": 17711,
+      "sha256": "6b63054d6f8e3221473c2238ba8dc6fb1512bc86407265a73dedc3ceea3991fe"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/6c/4ae83fc86f6e13e1317911ab6c766111d12de36b64587affa40b06f0778bed",
+      "bytes": 145,
+      "sha256": "6c4ae83fc86f6e13e1317911ab6c766111d12de36b64587affa40b06f0778bed"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/6f/4f453d419ac3d891b7f31b02799ca89f768527b12af0e42c49201cb7966b59",
+      "bytes": 143,
+      "sha256": "6f4f453d419ac3d891b7f31b02799ca89f768527b12af0e42c49201cb7966b59"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/6f/c0b8b1bba6792449597b5f1885f5efcfbca35deda0a8af02556ce05bc9bc1f",
+      "bytes": 1874,
+      "sha256": "6fc0b8b1bba6792449597b5f1885f5efcfbca35deda0a8af02556ce05bc9bc1f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/70/061d43d58b03c1a0782a863e401ce38cd0ca51cf223e2862d86ce557c3d9a7",
+      "bytes": 1904,
+      "sha256": "70061d43d58b03c1a0782a863e401ce38cd0ca51cf223e2862d86ce557c3d9a7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/71/b2c5db2a03a0c612a21b9f9cd2b8dd0146bd94955f981cee0a1abed526d384",
+      "bytes": 1320,
+      "sha256": "71b2c5db2a03a0c612a21b9f9cd2b8dd0146bd94955f981cee0a1abed526d384"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/71/e2c47b721d776aad9d35ee65bd58524862c5c70bc5594dda79e00bef1be9ce",
+      "bytes": 11829,
+      "sha256": "71e2c47b721d776aad9d35ee65bd58524862c5c70bc5594dda79e00bef1be9ce"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/72/ebe87f0e47392b602b65666238bdb9f2bfb6b187a733fb785b89908a1b889b",
+      "bytes": 617,
+      "sha256": "72ebe87f0e47392b602b65666238bdb9f2bfb6b187a733fb785b89908a1b889b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/75/6f239365a8156af275847de4bec553158d9f1a5763358ec5989c6b511201c5",
+      "bytes": 539,
+      "sha256": "756f239365a8156af275847de4bec553158d9f1a5763358ec5989c6b511201c5"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/7e/8b7009a45a0a4624a35cf84a64574f1d6061cf737ebbb380d95c95dd7a6ed2",
+      "bytes": 31466,
+      "sha256": "7e8b7009a45a0a4624a35cf84a64574f1d6061cf737ebbb380d95c95dd7a6ed2"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/81/1637555ea164cf07dfb75df199c8fd6cc24c580a7e02d6744bd531d9abf63b",
+      "bytes": 35,
+      "sha256": "811637555ea164cf07dfb75df199c8fd6cc24c580a7e02d6744bd531d9abf63b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/84/0aa88f7b0fd84403d33e7bf776a0e77f54bbadf137b7974968cff94eeebee6",
+      "bytes": 10910,
+      "sha256": "840aa88f7b0fd84403d33e7bf776a0e77f54bbadf137b7974968cff94eeebee6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/88/00408b2158748e1b9fcffbb6ab5a254483228207b6c312e26a2ef569f7fa8b",
+      "bytes": 7341,
+      "sha256": "8800408b2158748e1b9fcffbb6ab5a254483228207b6c312e26a2ef569f7fa8b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/89/5e07192a7d44fafc0bce0540da5287aac242cf26eb58b97bee889ca1842eed",
+      "bytes": 1552,
+      "sha256": "895e07192a7d44fafc0bce0540da5287aac242cf26eb58b97bee889ca1842eed"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/89/79e2d8a74aca9e64712d2bc8507200cae5d8686d10cb4f3a26f906497db216",
+      "bytes": 11164,
+      "sha256": "8979e2d8a74aca9e64712d2bc8507200cae5d8686d10cb4f3a26f906497db216"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/8c/ac02952232790e7cacefd548f94dda363426e645b7bb3b2e48ed3848b80c2f",
+      "bytes": 7889,
+      "sha256": "8cac02952232790e7cacefd548f94dda363426e645b7bb3b2e48ed3848b80c2f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/91/5f0508a93aeec6421e8a503357bcedad01e8378bf1cddcf6152e88dee865e7",
+      "bytes": 3910,
+      "sha256": "915f0508a93aeec6421e8a503357bcedad01e8378bf1cddcf6152e88dee865e7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/92/3577950f2bab071f7ed16838a671d6ddac43a2841b334722e8bfcf6b7c6e2c",
+      "bytes": 10014,
+      "sha256": "923577950f2bab071f7ed16838a671d6ddac43a2841b334722e8bfcf6b7c6e2c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/93/91b8c5f9461bc16d3df355ef9251326f23c71cf566ffd97a10dcc3e5dbc2bc",
+      "bytes": 11830,
+      "sha256": "9391b8c5f9461bc16d3df355ef9251326f23c71cf566ffd97a10dcc3e5dbc2bc"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/93/fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871",
+      "bytes": 110,
+      "sha256": "93fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/94/a72c4afdee33f77995a3c519a3e91642c9c7802f2f9e734252a7bacb2c7f53",
+      "bytes": 1550,
+      "sha256": "94a72c4afdee33f77995a3c519a3e91642c9c7802f2f9e734252a7bacb2c7f53"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/94/ddc61085c7b2109166367e95f2d4c9b512396848bdde9a3efc5a030e7b1b0e",
+      "bytes": 139,
+      "sha256": "94ddc61085c7b2109166367e95f2d4c9b512396848bdde9a3efc5a030e7b1b0e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/95/a1345460195c224a74bdb8db3bc9d1080e72b1148662aeea40ff6d8aa603c5",
+      "bytes": 79,
+      "sha256": "95a1345460195c224a74bdb8db3bc9d1080e72b1148662aeea40ff6d8aa603c5"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/95/e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003",
+      "bytes": 15,
+      "sha256": "95e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/97/55f2e7a274ca0675d33bc7037db942bebfd502db6e3c85f1483fbf454c1e86",
+      "bytes": 1552,
+      "sha256": "9755f2e7a274ca0675d33bc7037db942bebfd502db6e3c85f1483fbf454c1e86"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/97/71120963868a930771876b0f67e99f02ed2390ca2e78e0222d7ee34a7a974e",
+      "bytes": 3071,
+      "sha256": "9771120963868a930771876b0f67e99f02ed2390ca2e78e0222d7ee34a7a974e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/98/d98e8bc8d72d4190b8e06fe13781fce2598864f154f67a460f787280635a01",
+      "bytes": 8,
+      "sha256": "98d98e8bc8d72d4190b8e06fe13781fce2598864f154f67a460f787280635a01"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/9a/7a729e6933dba8281ce21959dd69992b2171e9f11378f4ae164c89c8f462f3",
+      "bytes": 1549,
+      "sha256": "9a7a729e6933dba8281ce21959dd69992b2171e9f11378f4ae164c89c8f462f3"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/9d/b910f4d0a4ad85886935799ded9d24633d0d0e3007ceb11544c496bd37f6db",
+      "bytes": 10174,
+      "sha256": "9db910f4d0a4ad85886935799ded9d24633d0d0e3007ceb11544c496bd37f6db"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/9e/26067460b794b8a4d24a647491f5d5d028657172da450348e571910a891b37",
+      "bytes": 12357,
+      "sha256": "9e26067460b794b8a4d24a647491f5d5d028657172da450348e571910a891b37"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/9e/bafc94243705486a331708f88e81d176dc1195027b7867f9730a4758af5bfa",
+      "bytes": 143,
+      "sha256": "9ebafc94243705486a331708f88e81d176dc1195027b7867f9730a4758af5bfa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/a6/d195ca4c3b999b17954c5442efd831f6047e22dc775943600000609a2789c3",
+      "bytes": 16739,
+      "sha256": "a6d195ca4c3b999b17954c5442efd831f6047e22dc775943600000609a2789c3"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/a6/f881743f6574a857df66675de0aed8c2c10df5369b17e2498a4ac5088f4f40",
+      "bytes": 23403,
+      "sha256": "a6f881743f6574a857df66675de0aed8c2c10df5369b17e2498a4ac5088f4f40"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/a9/aa766d9d7b126a404647a4519bc2d008b9d96099dfb0aa2c2f161c7ebe13f1",
+      "bytes": 435,
+      "sha256": "a9aa766d9d7b126a404647a4519bc2d008b9d96099dfb0aa2c2f161c7ebe13f1"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/aa/3ac73fb708f38d13e879932e8d86b9c310c601d9de9b50b9cbd7a7ac79e5ff",
+      "bytes": 33005,
+      "sha256": "aa3ac73fb708f38d13e879932e8d86b9c310c601d9de9b50b9cbd7a7ac79e5ff"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/aa/3b94e3e42beffee64da3041e1d4af727a8910f44f0a0f37cd2ef3b34c9fa47",
+      "bytes": 1971,
+      "sha256": "aa3b94e3e42beffee64da3041e1d4af727a8910f44f0a0f37cd2ef3b34c9fa47"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ab/dce6c02e2311a52e6facd558703b21544840f25829a7e7216d806153da37a3",
+      "bytes": 360,
+      "sha256": "abdce6c02e2311a52e6facd558703b21544840f25829a7e7216d806153da37a3"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ac/93f0843faa9ddbe31356219bbbc15a8eeac8943bf53bcdb7f8197eeaaa0c95",
+      "bytes": 8995,
+      "sha256": "ac93f0843faa9ddbe31356219bbbc15a8eeac8943bf53bcdb7f8197eeaaa0c95"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ac/b51af75d19af96bd3905263d96d30b43cd57d00ab88859375ce449e898e373",
+      "bytes": 144,
+      "sha256": "acb51af75d19af96bd3905263d96d30b43cd57d00ab88859375ce449e898e373"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/b1/728d29bc040fd5be06d12dd10955b7072eadd8546c5b3d971ccd196de54ecb",
+      "bytes": 9620,
+      "sha256": "b1728d29bc040fd5be06d12dd10955b7072eadd8546c5b3d971ccd196de54ecb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/b4/ec0225edbf208790238fa0be01fedcb3748728c85307ebdcf2cf7ac5283b7b",
+      "bytes": 9199,
+      "sha256": "b4ec0225edbf208790238fa0be01fedcb3748728c85307ebdcf2cf7ac5283b7b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/b5/bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+      "bytes": 4,
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/b9/153627ac2bd3f012e8cfb2f4fe2f7d95895f3cf6e6dff3b5d38aaeb299cf04",
+      "bytes": 35,
+      "sha256": "b9153627ac2bd3f012e8cfb2f4fe2f7d95895f3cf6e6dff3b5d38aaeb299cf04"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ba/ca46fb9bc3af935f3e2283e033387c594f0b74e3db1d6670432bfd821b3056",
+      "bytes": 11188,
+      "sha256": "baca46fb9bc3af935f3e2283e033387c594f0b74e3db1d6670432bfd821b3056"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/bd/f6d91402b39d8ac3d97f044738c16305c1383d6e98333b819bb3f11651a8f6",
+      "bytes": 39837,
+      "sha256": "bdf6d91402b39d8ac3d97f044738c16305c1383d6e98333b819bb3f11651a8f6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/be/f4187af842e0a8832c99dfddffd7808273538327ab1c3e76e7eefc3c6ad2f4",
+      "bytes": 2741,
+      "sha256": "bef4187af842e0a8832c99dfddffd7808273538327ab1c3e76e7eefc3c6ad2f4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/bf/9835d265a617308a22410eca5b67d390e2e7027ad468662a164f66631aa248",
+      "bytes": 11829,
+      "sha256": "bf9835d265a617308a22410eca5b67d390e2e7027ad468662a164f66631aa248"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/c8/850409b192c4e89a90d07450d60dc80db897ac7fffc665b22f33a22bccf500",
+      "bytes": 131,
+      "sha256": "c8850409b192c4e89a90d07450d60dc80db897ac7fffc665b22f33a22bccf500"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/c9/a82ebd55db766d8b650b3b710fd3104c18b775ff0eb4d1993d1220f5f3e3b9",
+      "bytes": 15293,
+      "sha256": "c9a82ebd55db766d8b650b3b710fd3104c18b775ff0eb4d1993d1220f5f3e3b9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/cb/77a3e294335512530b70236b1b83c72986e7e3e62cf084880b43840bdcdc2a",
+      "bytes": 1549,
+      "sha256": "cb77a3e294335512530b70236b1b83c72986e7e3e62cf084880b43840bdcdc2a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/cb/b137698a04b3831f0780db8e346435a3b808ce572aeb62cdb856c0422e2c06",
+      "bytes": 8,
+      "sha256": "cbb137698a04b3831f0780db8e346435a3b808ce572aeb62cdb856c0422e2c06"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/cc/a07f2106155f23f3496c10aef9fa0c699120ce830f81045fdeb1dc1b08c58a",
+      "bytes": 35,
+      "sha256": "cca07f2106155f23f3496c10aef9fa0c699120ce830f81045fdeb1dc1b08c58a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/d0/e132269ab068037231ab56543d4235fa99e2d35b3c2d377bbcf1a787698f84",
+      "bytes": 16644,
+      "sha256": "d0e132269ab068037231ab56543d4235fa99e2d35b3c2d377bbcf1a787698f84"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/d1/4895b5b2d7841adf286a0f147e16169e46d0a62c4480f45227355b97aef760",
+      "bytes": 13294,
+      "sha256": "d14895b5b2d7841adf286a0f147e16169e46d0a62c4480f45227355b97aef760"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/d2/1c3c2b3649228c3fcd7e8c9c738cae3b3ee1a3b68c3cfeeeab44bad40fb0a4",
+      "bytes": 139,
+      "sha256": "d21c3c2b3649228c3fcd7e8c9c738cae3b3ee1a3b68c3cfeeeab44bad40fb0a4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/da/ad2d971adc358296a7480eb063aa231762131ea108de37f9662902b34886bb",
+      "bytes": 2757,
+      "sha256": "daad2d971adc358296a7480eb063aa231762131ea108de37f9662902b34886bb"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/da/f38f4b3cdf68defd8e0ebca32a7bfc29e6d1e32b8dbdcde3284bf2f1a251a4",
+      "bytes": 7224,
+      "sha256": "daf38f4b3cdf68defd8e0ebca32a7bfc29e6d1e32b8dbdcde3284bf2f1a251a4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/db/461345e6c971d6039a0bc5417566ff63d1d842ba345afaf38ec04634a5682b",
+      "bytes": 131,
+      "sha256": "db461345e6c971d6039a0bc5417566ff63d1d842ba345afaf38ec04634a5682b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/dd/df6947654614adc68df32f18f5d110749dfaff7e078e29368b2ab2445beb76",
+      "bytes": 9869,
+      "sha256": "dddf6947654614adc68df32f18f5d110749dfaff7e078e29368b2ab2445beb76"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/e5/d83dff2d48d7b90bac20cee042f64411e7df2f760307c2feaf760e3713c597",
+      "bytes": 1485,
+      "sha256": "e5d83dff2d48d7b90bac20cee042f64411e7df2f760307c2feaf760e3713c597"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/e7/45e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851",
+      "bytes": 261,
+      "sha256": "e745e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/e8/362e65837de2f4bb1aea60ddd1ba402e874b8cceb0d293cf62e691096422a9",
+      "bytes": 11442,
+      "sha256": "e8362e65837de2f4bb1aea60ddd1ba402e874b8cceb0d293cf62e691096422a9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ea/75748eb549417355a99b95eddb1fce90c72d43eb61e7584280e3f71720076b",
+      "bytes": 487,
+      "sha256": "ea75748eb549417355a99b95eddb1fce90c72d43eb61e7584280e3f71720076b"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/eb/b171968c9c680f5e90f97aa017eb6d6b14d2a80b3c3fed8b0635931f35888e",
+      "bytes": 2778,
+      "sha256": "ebb171968c9c680f5e90f97aa017eb6d6b14d2a80b3c3fed8b0635931f35888e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ec/5591f2b450434a1465a9fadad34d9a911afa8a37783e6764561f0f4f4bb801",
+      "bytes": 141,
+      "sha256": "ec5591f2b450434a1465a9fadad34d9a911afa8a37783e6764561f0f4f4bb801"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/ee/6cd4699867ccf9fcc94ce84881064a2699e3191e504c2face68e099d7ddbda",
+      "bytes": 2434,
+      "sha256": "ee6cd4699867ccf9fcc94ce84881064a2699e3191e504c2face68e099d7ddbda"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f0/d7c46d0a52d5db7e8ca574c0e6a63c62e060381e94e876b9ce2b51780918dc",
+      "bytes": 6841,
+      "sha256": "f0d7c46d0a52d5db7e8ca574c0e6a63c62e060381e94e876b9ce2b51780918dc"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f0/e281bbaa5ea821556cb3fb4a8e65e4d3b5e12646c4d6691ad7621ca366faf8",
+      "bytes": 21466,
+      "sha256": "f0e281bbaa5ea821556cb3fb4a8e65e4d3b5e12646c4d6691ad7621ca366faf8"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f1/ef084a9d7cd468013ad412a55f0196d02496c733acabcc4f3d0f1fe98a97b4",
+      "bytes": 11828,
+      "sha256": "f1ef084a9d7cd468013ad412a55f0196d02496c733acabcc4f3d0f1fe98a97b4"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f2/e6486d8a06584060b5a07efde0cf7ccdcf31c83a6364a5c0a95d9da376491d",
+      "bytes": 107,
+      "sha256": "f2e6486d8a06584060b5a07efde0cf7ccdcf31c83a6364a5c0a95d9da376491d"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f4/a4c72533a238b267c48369fc5c7458a7f0925c4f8903c4132d82b032501985",
+      "bytes": 8092,
+      "sha256": "f4a4c72533a238b267c48369fc5c7458a7f0925c4f8903c4132d82b032501985"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f6/9961d0ef817b41b29b1fa6dd8e180fd33b1d2484214e819016800c8addc54e",
+      "bytes": 125,
+      "sha256": "f69961d0ef817b41b29b1fa6dd8e180fd33b1d2484214e819016800c8addc54e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f8/9ff767c2116223e2cbf183d0197dcdc26c2bc7405597a3e57c9d5f61546a39",
+      "bytes": 1853,
+      "sha256": "f89ff767c2116223e2cbf183d0197dcdc26c2bc7405597a3e57c9d5f61546a39"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/f9/55b7a1775567f75f08f63dcd21e94fc20e7f65906df63f04f507a46ac56176",
+      "bytes": 3194,
+      "sha256": "f955b7a1775567f75f08f63dcd21e94fc20e7f65906df63f04f507a46ac56176"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/fc/bcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+      "bytes": 5,
+      "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/blobs/fd/736a999c960cc185afc92d7a30bc96cd8c1edfd8aba2512c988496f1e6d667",
+      "bytes": 18125,
+      "sha256": "fd736a999c960cc185afc92d7a30bc96cd8c1edfd8aba2512c988496f1e6d667"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/calls.sqlite",
+      "bytes": 233472,
+      "sha256": "51e3a8872267412154c124e423f1893dd42830ea24a37253231f002007f62522"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/provenance.json",
+      "bytes": 76939,
+      "sha256": "55f1bbab2ce34d046e8d8f4d39346d1093a2ed845bd52a68d8fc9469d9ffc7d7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/snapshot-files-manifest-v1.json",
+      "bytes": 27167,
+      "sha256": "c01705917637117f62a6602ef51ff0f8f9fbddadee6c37b363ab5191eb852787"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-provider-children-v1/unresolved-calls.json",
+      "bytes": 254335,
+      "sha256": "54009632c92823232b62531bd600281e988b5ef2d4c9a09379e7ab71f03329c8"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/callstore-snapshot-spec-v1.json",
+      "bytes": 6673,
+      "sha256": "115c356ccdf17bc88bc56ecbf0f9ca70742961b466c9a5fa467bd8116781b702"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/campaign-closeout-v1.json",
+      "bytes": 65597,
+      "sha256": "b959f74dda7eeb102c28993a1384473ce4d4ef7c888815668a69879e4a3cb3ca"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/held-sampled-child-turns-v1.jsonl",
+      "bytes": 5933067,
+      "sha256": "940fbf38d8f840a6f84cba12f08aea15bf8ccc167cb258d4ca4080d8890c9f0c",
+      "lines": 47
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/held-sampled-child-turns-v1.jsonl.authored-actions.jsonl",
+      "bytes": 113199,
+      "sha256": "8bd19f2fb062935e9fcf8634e9684e3d6f51c98f3d387570123dafba0f9ae5e0",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/provider-child-invocations-v1.json",
+      "bytes": 1435,
+      "sha256": "d161807971a6a0f67ed3ed04d29280cc8392f6e43e94c708705030feda37f279"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/semantic-source-review-v1.json",
+      "bytes": 171733,
+      "sha256": "22dfd55dd0c14543427079e0488c0ac28ae8031512b989bf1f626c3ad1dbc0a9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/semantic-source-review-v2.json",
+      "bytes": 175106,
+      "sha256": "0c4d9c864cdd5f81ca8b6f4e498fab78f72130bd02360c1911d93c163dc25a79"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v2/closeout-supplement-v2.json",
+      "bytes": 3090,
+      "sha256": "7020c4d4951eb10dd860f676d125c1ee4aafa53c8cf69fe55a3ce7a027553784"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v2/synthetic-context-transformation-audit-v1.json",
+      "bytes": 2436,
+      "sha256": "d7c5ea91c3b92f18166e9ea661253b89fc0c4048c6f12da1161f1f22e3b66cda"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/dispatch/claims.jsonl",
+      "bytes": 6036,
+      "sha256": "01e332a92203fa9a884164e40734c17794a87c69f13e41d4d64893d364ae2e45",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/dispatch/launch.json",
+      "bytes": 2121,
+      "sha256": "93a9a8c3d6d4bca25255b4e78e73e63945195ee4e46eb36fdb2b33eb238acd30"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/dispatcher.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/independent-terminal-review-v1.json",
+      "bytes": 8290,
+      "sha256": "9dbb161b1f6bbf7d3866b7357099e8c0c6778b852c40ddc15f729c37cdd72e5c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/claims/authored-root-guided-v8-retry-one-case-v1-case-000000/queue.jsonl",
+      "bytes": 931,
+      "sha256": "e1169f55c86739230864f019e97828d06395649f6bd34a05b86368fe40c529bc",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 131980,
+      "sha256": "c96cd3c784f49ee783cd9715450a6d598cb094006e843bd2a244a3015c94c210"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/jobs/000000-196d60531018c973.result.json",
+      "bytes": 3206333,
+      "sha256": "deea4a18e8eadd79cdaf67f3088b6e01e11c84a8b565f7a9ed993f4d995b800c"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/jobs/000000-196d60531018c973.trace.jsonl",
+      "bytes": 678131,
+      "sha256": "abb0435ab135d14b4ea4757b4406e78e7e4ecc5603b94decfab50d08caa500e0",
+      "lines": 773
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 9302,
+      "sha256": "b925a00c271bd04169643533f8bc9b27ada9eefd7e515b2d57f1c0e786e668d7",
+      "lines": 10
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3206333,
+      "sha256": "deea4a18e8eadd79cdaf67f3088b6e01e11c84a8b565f7a9ed993f4d995b800c",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 615,
+      "sha256": "0bd0dbb8c25e8aaca82ef26b8eb6dd6937abd0a2cc10cb373a6b64643a6fd8b9"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/slot-01/supervisor.log",
+      "bytes": 9302,
+      "sha256": "b925a00c271bd04169643533f8bc9b27ada9eefd7e515b2d57f1c0e786e668d7"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/retry-plan.root-approved-v1.json",
+      "bytes": 11611,
+      "sha256": "bc2490fe1c7474d6cc31ce6550b4d65c4fadcfebdec0f122761a60fb0e531636"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/source-v2.cases.jsonl",
+      "bytes": 44847,
+      "sha256": "10080c1adbe346aab8e397edff3494676c10a664694207785159768465185ea4",
+      "lines": 1
+    }
+  ],
+  "bytes": 16369719
+}

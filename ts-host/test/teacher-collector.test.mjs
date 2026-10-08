@@ -237,6 +237,10 @@ test('native collector journals model replies and replays them after an interrup
     const output = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(output.outcome.accepted, true);
     assert.equal(output.trajectory.length, 2);
+    assert.equal(output.request_telemetry.starts.length, 3, 'the failed transport start remains in the successful retry row');
+    assert.equal(output.request_telemetry.starts.filter(start => start.status === 'failed').length, 1);
+    assert.equal(output.request_telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), 3);
+    assert.equal(output.request_telemetry.attempt_ids.length, 2);
     await assert.rejects(readFile(join(options.jobs, `${jobKey(item)}.partial.json`)), /ENOENT/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
@@ -418,7 +422,62 @@ test('parallel judgments complete plan/action pairs and retain durable progress 
     assert.deepEqual(kinds, ['plan','action','plan','action']);
     const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(row.outcome.accepted, true);
+    assert.equal(row.request_telemetry.starts.length, 10, 'the terminal row includes all starts from both collector attempts');
+    assert.equal(row.request_telemetry.starts.filter(start => start.purpose === 'planner').length, 5);
+    assert.equal(row.request_telemetry.starts.filter(start => start.purpose === 'action').length, 5);
+    assert.equal(new Set(row.request_telemetry.starts.map(start => start.attempt_id)).size, 2);
+    assert.equal(row.request_telemetry.attempt_ids.length, 2);
     await assert.rejects(readFile(evidencePath), /ENOENT/, 'the completed result replaces the partial evidence sidecar');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('terminal rows retain exact admitted sender starts and distinguish planner retries from action sends', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-telemetry-'));
+  const received = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const payload = JSON.parse(body), planner = payload.tools.length === 1 &&
+        payload.tools[0].function.name === 'execution_plan';
+      received.push(planner ? 'planner' : 'action');
+      const n = received.filter(kind => kind === 'planner').length;
+      const actionN = received.filter(kind => kind === 'action').length;
+      const call = planner && n === 1 ? ['eval', { code: 'not a plan' }] :
+        planner ? ['execution_plan', { plan: 'Read the prompt and return the result.' }] :
+          ['eval', { code: 'return 1;' }];
+      const callArguments = !planner && actionN === 1 ? '{' : JSON.stringify(call[1]);
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{
+        id: `telemetry-${received.length}`, type: 'function', function: { name: call[0], arguments: callArguments } }] } }],
+        usage: { prompt_tokens: 8, completion_tokens: 2 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('request-telemetry') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), executionPlans: true,
+      transportRetries: 0, execution: { identity: 'telemetry-adapter/1', run: async (_record, driver) => {
+        await driver({ invocation_id: 'telemetry-fixture', messages: [{ role: 'user', content: 'Do one task.' }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }],
+          max_tokens: 64 });
+        return { outcome: { accepted: true }, trace: [] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(result.completed, 1);
+    assert.deepEqual(received, ['planner', 'planner', 'action', 'action']);
+    const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    const telemetry = row.request_telemetry;
+    assert.equal(telemetry.scope.includes('opaque provider SDK/server network retries'), true);
+    assert.equal(telemetry.sampled_logical_turns, 1);
+    assert.equal(telemetry.planned_action_turns, 1);
+    assert.equal(telemetry.planner_fallback_turns, 0);
+    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), 4);
+    assert.equal(telemetry.starts.reduce((sum, start) => sum + start.chat_transport_retry_starts, 0), 1);
+    assert.deepEqual(telemetry.starts.map(start => [start.purpose, start.planner_attempt, start.plan_status, start.status]), [
+      ['planner', 1, null, 'completed'], ['planner', 2, null, 'completed'], ['action', null, 'planned', 'completed'],
+    ]);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 

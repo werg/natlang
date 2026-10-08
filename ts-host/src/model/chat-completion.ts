@@ -21,6 +21,8 @@ export type ChatCompletionOptions = {
   toolAliases?: Record<string, string>;
   /** Called with detached snapshots of each request and its (assembled) response. */
   onExchange?: (exchange: ChatExchange) => void | Promise<void>;
+  /** Called immediately before every underlying ChatTransport invocation, including malformed-call retries. */
+  onRequestStart?: (request: ModelTurnRequest, retryIndex: number) => void | Promise<void>;
   /** Called once per turn with its token counts and duration. */
   onTurn?: (stats: ChatTurnStats) => void;
 };
@@ -172,6 +174,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (request.max_tokens != null)
         wireRequest.max_tokens = typeof configuredMax === 'number' ?
           Math.min(configuredMax, request.max_tokens) : request.max_tokens;
+      await options.onRequestStart?.(request, retries);
       const reply = await transport(wireRequest, signal);
       const body = isStream(reply) ? await assembleChatCompletion(reply) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
