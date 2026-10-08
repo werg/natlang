@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 import hashlib
-from generation_authority import authority_lock, reconcile_luna_authority
+from generation_authority import authority_lock, reconcile_luna_authority, observe_additional_teacher_processes
 
 
 def utc():
@@ -39,10 +39,16 @@ def live(pid, signature):
         return False
 
 
-def additional_teacher_alerts(authority):
+def additional_teacher_alerts(authority, *, process_argv=None):
     alerts = []
     for name, teacher in authority.get('additional_teachers', {}).items():
+        process_observation = observe_additional_teacher_processes(teacher, process_argv=process_argv)
+        if process_observation['active_processes_unverified']:
+            alerts.append(f'{name}: {process_observation["active_processes_unverified"]} active worker binding(s) have no verified live PID/argv')
         state = teacher.get('state', 'unknown')
+        if (process_observation['actual_live_workers'] and
+                (state in {'completed', 'finished', 'idle', 'stopped'} or teacher.get('status') == 'idle')):
+            alerts.append(f'{name}: lifecycle state {state!r} conflicts with verified live worker processes')
         if teacher.get('status_file'):
             try:
                 state = read_json(Path(teacher['status_file'])).get('state', 'unknown')
