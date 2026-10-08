@@ -297,6 +297,31 @@ interpreter tests in an isolated build, and the Neuralese suite passed 19/19
 after the concat-spread and array-union readout changes. The updated TypeScript
 source compiled to a temporary isolated output directory. No dependencies or
 shared `dist` were changed.
-Cross-eval capture-free helper persistence remains a useful but larger
-source-backed design candidate, grounded in the cited V97 error and requiring
-a separate lifetime/provenance design.
+Cross-eval source-backed helper persistence is now implemented for top-level
+function declarations and arrow/function-valued declarations whose free value
+names resolve in the current call and whose referenced type aliases persist.
+They are stored as authenticated source text, recompiled against each eval's
+current inputs, locals, services, and folder handle, and receive fresh inline
+`nl` analysis and execution origins. The runtime stores no function closures or
+host handles. Nested functions in the helper are recreated from its source;
+references to eval-local function bindings remain eval-local with an explicit
+message. Failed evals do not replace the registry; successful same-name
+declarations do. Source spans in helper plans point to the recorded helper
+source hash and original declaration span, without claiming the helper was
+written in the current eval. See
+`ts-host/src/scope-compiler.ts`, `ts-host/src/native/runtime.ts`, and the
+focused regressions in `ts-host/test/persistent-scope-helpers.test.mjs`.
+
+The Bunny V20 index 13 trace provides direct evidence for the ergonomics
+problem and distinguishes it from a later reasoning failure. In
+`runs/neuralese-semantic-iterate-reducers-v20-20261008-v8/generation-review-v1/bunny/bunny-campaign-v1-native/attempt-02/case-000013/jobs/000013-000431ad1b41d8db.trace.jsonl`, root eval action seq 17 declares `Progress` and a top-level `const revise = async (...) => ...`; seq 28, at 102.302 seconds, calls `revise(firstCompleted)` and fails with `ReferenceError: revise is not defined`. The failure's own scope guide lists `task`, `decisionContext`, `seed`, `initialNotes`, and `firstCompleted`, but not `revise`. At seq 38 the model re-emits the full helper and successfully gets pass 2, showing that the source itself was usable and the omitted helper cost an avoidable model turn. Its free values (`task`, `folder`, `decisionContext`, `nl`) and type alias (`Progress`) are now rebound/revalidated at the current eval rather than retained as a closure.
+
+This helper loss does not explain the final blocked result. The seq 50 and seq 63 pass actions receive and return accumulated notes containing the current-pass facts. The final interpreter child at seq 78 then states that ACT-R's risk score is missing. The campaign's source/evidence files and the earlier pass outputs contain ACT-R's measured score 89, ACT-S 94, and ACT-T 96; the pass-3 notes nevertheless repeat that ACT-R's score is absent. That is a child synthesis/evidence-propagation mistake after the helper had already been manually restored, not a typed-conversion, capture, or helper-rebinding error. Helper persistence should remove the concrete `revise` ReferenceError and repeated source declaration, but should not be described as fixing the later missing-score claim.
+
+The helper implementation was checked with an isolated TypeScript output tree and
+seven focused runtime regressions covering the `Progress` alias, fresh inline
+`nl` compilation with source provenance, successful replacement, failed-eval
+rollback, eval-local callable captures including parameter defaults, nested
+lexical shadowing, and the current child-folder authority fence. The free-name
+check uses TypeScript's symbol resolution rather than a hand-maintained global
+value allowlist.

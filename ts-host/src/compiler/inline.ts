@@ -36,6 +36,10 @@ export type CapturePlan = {
 export type InlineLambdaPlan = {
   programId?: string;
   sourceSpan: SourceSpan;
+  /** Authenticated prior-eval source for a template recompiled from a persistent eval helper. */
+  sourceBackedHelper?: { name: string; sourceHash: string;
+    declaredAction?: { toolCallId?: string; actionOrdinal: number; writtenCodeSha256: string };
+    declarationSpan: { start: number; end: number; line: number; column: number } };
   /** Present only for compiler-registered authored source. */
   adaptation?: { label?: string; templateStart: number; templateEnd: number; expressions: string[]; visibleBindings: string[]; slotBindings: string[] };
   /** Source revision + AST span; stable for one source revision, not a user-facing name. */

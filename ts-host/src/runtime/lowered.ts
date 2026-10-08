@@ -126,6 +126,7 @@ function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string
     checked_template_span: plan.templateSpan, source_span: plan.sourceSpan, template_segments: plan.strings,
     interpolations: plan.interpolations.map((item, index) => ({ ...item, rendered: renderedValues[index] })),
     parameters: plan.parameters, returns: plan.returns, captures: plan.captures,
+    ...(plan.sourceBackedHelper ? { source_backed_helper: plan.sourceBackedHelper } : {}),
     ...(plan.softBody ? { soft_body_id: plan.softBody } : {}),
     ...(plan.explicitCaptures ? { explicit_captures: true } : {}), origin: origin ?? null };
 }

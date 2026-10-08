@@ -18,7 +18,7 @@ import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
 import { fileDiffPreview } from './file-diff-preview.js';
 import type { PythonHost } from './folder-python.js';
-import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
+import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
@@ -921,6 +921,8 @@ export class NativeSession {
   private cuts: { shown: string; full: string }[] = [];
   /** Types this call's evals declared (`type X = …`, `interface X { … }`), by name. */
   private localTypes: Record<string, Type> = {};
+  /** Authenticated source for top-level helpers from successful evals; never stores closures or host handles. */
+  private readonly persistentScopeHelpers = new Map<string, PersistentScopeHelper>();
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
@@ -1387,7 +1389,8 @@ export class NativeSession {
   private scopeGuide(): string {
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const locals = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
-    const names = [...new Set([...inputs, ...locals, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
+    const helperNames = [...this.persistentScopeHelpers.keys()];
+    const names = [...new Set([...inputs, ...locals, ...helperNames, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
     return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
@@ -1657,8 +1660,19 @@ export class NativeSession {
     const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
       !Object.hasOwn(captureCells, 'decide');
     if (decideBinding) opaqueNames.push('decide');
+    const savedHelpers = [...this.persistentScopeHelpers.values()].filter(helper =>
+      hexDigest(helper.source) === helper.sourceHash && Number.isSafeInteger(helper.declarationSpan.start) &&
+      helper.declarationSpan.start >= 0 && helper.declarationSpan.end - helper.declarationSpan.start === helper.source.length &&
+      !declaredHere(helper.name) && !inputNames.includes(helper.name) && !localNames.includes(helper.name) &&
+      !callableNames.includes(helper.name) && !serviceNames.includes(helper.name) && !opaqueNames.includes(helper.name) &&
+      !Object.hasOwn(captureCells, helper.name));
+    const savedHelperNames = savedHelpers.map(helper => helper.name);
+    const visibleTypes = { ...this.lam.typesSrc, ...Object.fromEntries(Object.keys(this.localTypes).map(name => [name, ''])) };
+    const currentTypes = evalTypeDeclarations(code);
+    const persistentTypeNames = [...new Set([...Object.keys(visibleTypes), ...Object.keys(currentTypes)])];
     const hooks = this.runtime.hooks;
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
+      persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
@@ -1850,6 +1864,17 @@ export class NativeSession {
       const changed = staged.filter(([name, , value]) => !before.has(name) ||
         (containsLive(value) ? before.get(name) !== value : sameValueWithin(before.get(name), value) !== true));
       Object.assign(this.localTypes, typesHere);
+      // A successful transaction replaces helpers by their source. An ordinary or transient declaration
+      // with the same name shadows the old source-backed definition for later evals.
+      for (const binding of compiled.bindings) this.persistentScopeHelpers.delete(binding.name);
+      for (const helper of compiled.persistentHelpers ?? []) {
+        const exactSource = helper.source;
+        if (code.slice(helper.declarationSpan.start, helper.declarationSpan.end) !== exactSource)
+          throw new Error(`Saved helper ${helper.name} source span did not match the successfully compiled eval source`);
+        this.persistentScopeHelpers.set(helper.name, { ...helper, sourceHash: hexDigest(exactSource),
+          declaredAction: { ...(toolCallId ? { toolCallId } : {}), actionOrdinal: this.actions,
+            writtenCodeSha256: hexDigest(written) } });
+      }
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;
         this.lam.let[name] = value;
@@ -1866,7 +1891,9 @@ export class NativeSession {
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId) : notResult;
       const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId)}`);
-      const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
+      const storedStatus = (stored.length ? `\nStored ${stored.join('; ')}.` : '') +
+        ((compiled.transientHelpers?.length ?? 0) ? `\n${compiled.transientHelpers!.map(helper =>
+          `${helper.name} is available only in this eval because ${helper.reason}; use it here or move its dependencies into persistent scope.`).join('\n')}` : '');
       // A local without a value cannot be kept, so say so here rather than let a later eval fail on its name.
       const unset = compiled.bindings.filter(binding => binding.mutable && !binding.initializer).map(binding => binding.name)
         .filter(name => output.bindings[name] === undefined && !Object.hasOwn(this.lam.let, name));

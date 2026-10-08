@@ -39,6 +39,12 @@ export type ScopeCompileOptions = {
   localBindings?: readonly ScopeExistingBinding[];
   /** Checked async callables generated over the runtime's host dispatcher. */
   helperBindings?: readonly string[];
+  /** Source declarations from earlier successful evals, rechecked and recompiled in this eval. */
+  persistentHelpers?: readonly PersistentScopeHelper[];
+  /** Names of current scope values and built-ins a saved helper may resolve against. */
+  persistentHelperNames?: readonly string[];
+  /** Eval's retained type aliases, used to reject saved helpers that capture a transient type. */
+  persistentTypeNames?: readonly string[];
   /** Opaque host values supplied by the runtime outside the portable snapshot. */
   opaqueBindings?: readonly string[];
   /** Enabled only when the evaluator exposes application-scoped module loading. */
@@ -58,12 +64,20 @@ export type ScopeCompileOptions = {
 };
 
 export type ScopeExistingBinding = { name: string; mutable: boolean; annotation?: string };
+export type PersistentScopeHelper = { name: string; source: string; freeNames: string[];
+  typeNames: string[];
+  sourceHash: string; declaredAction?: { toolCallId?: string; actionOrdinal: number; writtenCodeSha256: string };
+  declarationSpan: ScopeSourceSpan };
 
 export type ScopeCompileResult = {
   version: typeof SCOPE_COMPILE_VERSION;
   ok: boolean;
   entrypoint: '__natlang_scope';
   bindings: ScopeBinding[];
+  /** Top-level function sources eligible to persist after this eval transaction succeeds. */
+  persistentHelpers?: PersistentScopeHelper[];
+  /** Helpers usable in this eval only because their source depends on an eval-local function. */
+  transientHelpers?: { name: string; reason: string }[];
   finalExpression?: ScopeSourceSpan;
   /** The snippet has a final expression or a top-level return. */
   producesResult: boolean;
@@ -218,6 +232,83 @@ function isDeclarationName(node: ts.Identifier): boolean {
     ts.isNamespaceImport(parent) || ts.isBindingElement(parent)) && parent.name === node;
 }
 
+const PERSISTENT_HELPER_TYPES = new Set(['any', 'unknown', 'never', 'void', 'string', 'number', 'boolean', 'bigint', 'symbol',
+  'object', 'Function', 'Array', 'ReadonlyArray', 'Promise', 'PromiseLike', 'Record', 'Partial', 'Required', 'Readonly',
+  'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable', 'ReturnType', 'Parameters', 'Awaited', 'Neuralese', 'FileHandle',
+  'Folder', 'FolderSnapshot', 'FolderProposal', 'Entry', 'Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegExp', 'Error',
+  'Uint8Array', 'Uint16Array', 'Uint32Array', 'Int8Array', 'Int16Array', 'Int32Array', 'Float32Array', 'Float64Array',
+  'ArrayBuffer', 'Promise']);
+
+/** Free value names from checker-resolved lexical scopes, including parameter defaults and nested scopes. */
+function persistentHelperFreeNames(fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
+  checker: ts.TypeChecker, sourceFile: ts.SourceFile): { names: string[]; nested: boolean } {
+  const names = new Set<string>();
+  let nested = false;
+  const insideHelper = (node: ts.Node): boolean => {
+    for (let current: ts.Node | undefined = node; current; current = current.parent) if (current === fn) return true;
+    return false;
+  };
+  const typePosition = (node: ts.Identifier): boolean => {
+    for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
+      if (ts.isTypeQueryNode(parent)) return false;
+      if (ts.isTypeNode(parent)) return true;
+      if (ts.isExpression(parent) || ts.isStatement(parent)) return false;
+    }
+    return false;
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) if (node !== fn) nested = true;
+    if (ts.isIdentifier(node) && !isDeclarationName(node) && !isPropertyName(node) && !typePosition(node)) {
+      const symbol = checker.getSymbolAtLocation(node);
+      const declarations = symbol?.declarations ?? [];
+      const lexical = declarations.some(declaration => declaration.getSourceFile() === sourceFile && insideHelper(declaration));
+      const sameFileOuter = declarations.some(declaration => declaration.getSourceFile() === sourceFile && !insideHelper(declaration));
+      const global = declarations.length > 0 && declarations.every(declaration => declaration.getSourceFile() !== sourceFile);
+      if (!lexical && !global || sameFileOuter) names.add(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(fn);
+  return { names: [...names].sort(), nested };
+}
+
+function checkerFor(sourceFile: ts.SourceFile): ts.TypeChecker {
+  const compilerOptions: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, noEmit: true, skipLibCheck: true };
+  const host = ts.createCompilerHost(compilerOptions);
+  const getSourceFile = host.getSourceFile.bind(host);
+  const wanted = sourceFile.fileName.replace(/\\/g, '/').replace(/^\.\//, '');
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    (fileName.replace(/\\/g, '/').replace(/^\.\//, '') === wanted ||
+      fileName.replace(/\\/g, '/').endsWith(`/${wanted}`)) ? sourceFile : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  return ts.createProgram([sourceFile.fileName], compilerOptions, host).getTypeChecker();
+}
+
+function persistentHelperTypeNames(node: ts.Node): string[] {
+  const names = new Set<string>();
+  const typeParameters = new Set<string>();
+  const visit = (item: ts.Node): void => {
+    if (ts.isTypeParameterDeclaration(item)) typeParameters.add(item.name.text);
+    if (ts.isTypeReferenceNode(item) && ts.isIdentifier(item.typeName) &&
+        !typeParameters.has(item.typeName.text) && !PERSISTENT_HELPER_TYPES.has(item.typeName.text)) names.add(item.typeName.text);
+    ts.forEachChild(item, visit);
+  };
+  visit(node);
+  return [...names].sort();
+}
+
+function helperFunction(statement: ts.Statement): { name: string; fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression } | undefined {
+  if (ts.isFunctionDeclaration(statement) && statement.name)
+    return { name: statement.name.text, fn: statement };
+  if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return;
+  const declaration = statement.declarationList.declarations[0]!;
+  if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return;
+  let initializer = declaration.initializer;
+  while (ts.isAwaitExpression(initializer) || ts.isParenthesizedExpression(initializer) || ts.isAsExpression(initializer) ||
+      ts.isSatisfiesExpression(initializer)) initializer = initializer.expression;
+  return ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer) ?
+    { name: declaration.name.text, fn: initializer } : undefined;
+}
+
 function propertyText(expression: ts.Expression): string | undefined {
   if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
   if (ts.isElementAccessExpression(expression) && expression.argumentExpression &&
@@ -282,14 +373,19 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       return compileScopeSnippet(lowered, options);
     }
   }
-  const wrapped = PREFIX + source + SUFFIX;
+  const snippetSource = source;
+  const persistentHelpers = options.persistentHelpers ?? [];
+  const helperPrefix = persistentHelpers.map(helper => helper.source).join('\n') + (persistentHelpers.length ? '\n' : '');
+  const analysisSource = helperPrefix + snippetSource;
+  const wrapped = PREFIX + analysisSource + SUFFIX;
   const file = ts.createSourceFile('natlang-scope.ts', wrapped, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   // `await nl`...`` awaits the function nl`...` creates, which is never what is meant: it runs the judgment now,
   // on the names its instructions mention and its interpolations, as `await nl`...`()` does.
-  const uncalled = uncalledInlineFunctions(file);
+  const userStart = PREFIX.length + helperPrefix.length;
+  const uncalled = uncalledInlineFunctions(file).filter(end => end >= userStart);
   if (uncalled.length) {
-    let called = source;
-    for (const end of uncalled.sort((a, b) => b - a)) called = called.slice(0, end - PREFIX.length) + '()' + called.slice(end - PREFIX.length);
+    let called = snippetSource;
+    for (const end of uncalled.sort((a, b) => b - a)) called = called.slice(0, end - userStart) + '()' + called.slice(end - userStart);
     return compileScopeSnippet(called, options);
   }
   const fn = file.statements.find(ts.isFunctionDeclaration);
@@ -297,16 +393,26 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const diagnostics: ScopeCompileDiagnostic[] = [];
   const repairs: ScopeCompileDiagnostic[] = [];
 
+  const sourceFile = ts.createSourceFile('eval-source.ts', snippetSource, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const span = (nodeOrStart: ts.Node | number, length?: number): ScopeSourceSpan => {
     const absolute = typeof nodeOrStart === 'number' ? nodeOrStart : nodeOrStart.getStart(file);
-    const rawStart = Math.max(0, Math.min(source.length, absolute - PREFIX.length));
+    if (absolute < userStart) {
+      const inHelpers = absolute - PREFIX.length;
+      let offset = 0;
+      for (const helper of persistentHelpers) {
+        if (inHelpers >= offset && inHelpers < offset + helper.source.length) return helper.declarationSpan;
+        offset += helper.source.length + 1;
+      }
+      return rawSpan(0, 0);
+    }
+    const rawStart = Math.max(0, Math.min(source.length, absolute - userStart));
     const rawEnd = Math.max(rawStart, Math.min(source.length,
-      typeof nodeOrStart === 'number' ? rawStart + (length ?? 1) : nodeOrStart.getEnd() - PREFIX.length));
-    const location = file.getLineAndCharacterOfPosition(Math.max(PREFIX.length, absolute));
+      typeof nodeOrStart === 'number' ? rawStart + (length ?? 1) : nodeOrStart.getEnd() - userStart));
+    const location = sourceFile.getLineAndCharacterOfPosition(rawStart);
     return { start: rawStart, end: rawEnd, line: Math.max(1, location.line), column: location.character + 1 };
   };
   const rawSpan = (start: number, end = start): ScopeSourceSpan => {
-    const location = file.getLineAndCharacterOfPosition(PREFIX.length + start);
+    const location = sourceFile.getLineAndCharacterOfPosition(start);
     return { start, end, line: Math.max(1, location.line), column: location.character + 1 };
   };
   const add = (code: ScopeCompileDiagnostic['code'], message: string, node: ts.Node): void => {
@@ -332,7 +438,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const injectedNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames, ...serviceNames]);
   const redundantAliases: ScopeSourceSpan[] = [];
   const bindings: ScopeBinding[] = [];
+  const helperCandidates: { statement: ts.Statement; helper: NonNullable<ReturnType<typeof helperFunction>> }[] = [];
   for (const statement of fn.body.statements) {
+    if (statement.getStart(file) < userStart) continue;
     if (ts.isVariableStatement(statement)) {
       const declarations = statement.declarationList.declarations;
       if (declarations.length === 1) {
@@ -369,12 +477,57 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       bindings.push({ name: statement.name.text, kind: 'function', mutable: false, transient: true,
         ...(statement.type && portableAnnotation(statement.type, file) ?
           { annotation: portableAnnotation(statement.type, file) } : {}),
-        start: span(statement.name).start, end: span(statement.name).end });
+          start: span(statement.name).start, end: span(statement.name).end });
     }
+    const helper = helperFunction(statement);
+    if (helper) helperCandidates.push({ statement, helper });
   }
   // Each eval is a new lexical transaction. A top-level declaration may replace
   // a local from an earlier eval without reusing that earlier const/let binding.
   const shadowedLocals = new Set(bindings.map(binding => binding.name).filter(name => localNames.includes(name)));
+
+  const knownHelperNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames,
+    ...serviceNames, ...bindings.map(binding => binding.name), ...(options.persistentHelperNames ?? []), 'nl', 'iterateOn']);
+  const transientNames = new Set(bindings.filter(binding => binding.transient).map(binding => binding.name));
+  const persistentTypeNames = new Set(options.persistentTypeNames ?? []);
+  const helperChecker = helperCandidates.length ? checkerFor(file) : undefined;
+  for (const helper of persistentHelpers) {
+    const missing = helper.freeNames.filter(name => !knownHelperNames.has(name));
+    const missingTypes = helper.typeNames.filter(name => !persistentTypeNames.has(name));
+    if (missing.length || missingTypes.length) diagnostics.push({ ...helper.declarationSpan, code: 'invalid-binding',
+      message: `Saved helper ${JSON.stringify(helper.name)} is unavailable in this scope because ${[...missing, ...missingTypes].join(', ')} is not visible.` });
+  }
+  const savedHelpers: PersistentScopeHelper[] = [];
+  const transientHelpers: { name: string; reason: string }[] = [];
+  for (const { statement, helper } of helperCandidates) {
+    const free = persistentHelperFreeNames(helper.fn, helperChecker!, file);
+    const spanOfDeclaration = span(statement);
+    const hidden = free.names.filter(name => !knownHelperNames.has(name) && !bindings.some(binding => binding.name === name));
+    const ephemeral = free.names.filter(name => transientNames.has(name));
+    const missingTypes = persistentHelperTypeNames(statement).filter(name => !persistentTypeNames.has(name));
+    if (ephemeral.length) {
+      const details = [ephemeral.length ? `it refers to eval-local function${ephemeral.length > 1 ? 's' : ''} ${ephemeral.join(', ')}` : '']
+        .filter(Boolean).join(' and ');
+      transientHelpers.push({ name: helper.name, reason: details });
+      continue;
+    }
+    if (hidden.length || missingTypes.length) {
+      diagnostics.push({ ...spanOfDeclaration, code: 'invalid-binding',
+        message: `Saved helper ${JSON.stringify(helper.name)} cannot persist because it refers to unavailable ` +
+          [...hidden, ...missingTypes].join(', ') + '; declare those names in the call scope first.' });
+      continue;
+    }
+    const source = statement.getText(file);
+    savedHelpers.push({ name: helper.name, source, freeNames: free.names,
+      typeNames: persistentHelperTypeNames(statement), sourceHash: '', declarationSpan: spanOfDeclaration });
+  }
+  // Helpers may refer to another helper declared in the same successful transaction.
+  const transactionHelperNames = new Set(savedHelpers.map(helper => helper.name));
+  for (const helper of savedHelpers) {
+    const unknown = helper.freeNames.filter(name => !knownHelperNames.has(name) && !transactionHelperNames.has(name));
+    if (unknown.length) diagnostics.push({ ...helper.declarationSpan, code: 'invalid-binding',
+      message: `Saved helper ${JSON.stringify(helper.name)} cannot persist because it refers to unavailable ${unknown.join(', ')}; declare those names in the call scope first.` });
+  }
 
   const immutable = new Set([...inputNames, ...helperNames, ...opaqueNames, ...serviceNames,
     ...captureOptions.filter(binding => !binding.mutable).map(binding => binding.name),
@@ -429,12 +582,24 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const statement of fn.body.statements) visit(statement);
 
   // Constrained-source policy: finite iteration and no recursion among functions authored here.
-  const toRaw = (item: NatlangDiagnostic): ScopeCompileDiagnostic => {
-    const start = Math.max(0, item.start - PREFIX.length), end = Math.max(start, item.end - PREFIX.length);
-    return { ...rawSpan(start, end), code: item.code, message: item.message };
+  const toRaw = (item: NatlangDiagnostic, wrappedOffsets = false): ScopeCompileDiagnostic => {
+    const base = (wrappedOffsets ? PREFIX.length : 0) + helperPrefix.length;
+    const start = item.start - base, end = item.end - base;
+    if (start < 0) {
+      const helperOffset = item.start - (wrappedOffsets ? PREFIX.length : 0);
+      let offset = 0, helper: PersistentScopeHelper | undefined;
+      for (const candidate of persistentHelpers) {
+        if (helperOffset >= offset && helperOffset < offset + candidate.source.length) { helper = candidate; break; }
+        offset += candidate.source.length + 1;
+      }
+      const location = helper?.declarationSpan ?? rawSpan(0, 0);
+      return { ...location, code: item.code,
+        message: `Saved helper ${JSON.stringify(helper?.name ?? '<unknown>')} declared at its recorded source span is no longer valid here: ${item.message}` };
+    }
+    return { ...rawSpan(start, Math.max(start, end)), code: item.code, message: item.message };
   };
   for (const item of checkConstrainedSource(file, { allowDynamicImport: true }))
-    if (item.code !== 'forbidden-dynamic-code') diagnostics.push(toRaw(item));
+    if (item.code !== 'forbidden-dynamic-code') diagnostics.push(toRaw(item, true));
   // Recursion is checked when it happens: a function may call itself on a smaller argument (runtime/context.ts guard).
   const authored = authoredCallables(file, options.guardPrefix ?? 'eval').filter(callable => callable.node !== fn);
 
@@ -469,24 +634,47 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
 
   // Inline `nl` analysis, only when the snippet mentions it.
   let plans: InlineLambdaPlan[] = [];
+  const planCoordinates = new Map<InlineLambdaPlan, { start: number; end: number }>();
   // nl written as code is analyzed: besides the template sites, uses of nl as a value are reported with the form that
   // works. A mention in a file name ("x.nl") is not code.
   // Model-written Neuralese literals (`__neuralese("nz1_…")`) are typed by the analysis, and a scope holding soft values
   // is always analyzed so their opacity is checked.
-  const literalCalls = /(?<![.\w$])__neuralese\(/.test(source);
+  const literalCalls = /(?<![.\w$])__neuralese\(/.test(analysisSource);
   let literals: NeuraleseLiteral[] = [];
   let readouts: NeuraleseReadout[] = [];
   let rebinds: InlineRebindSite[] = [];
-  if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, source.length), code: 'neuralese-untyped-literal',
+  if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, snippetSource.length), code: 'neuralese-untyped-literal',
     message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
   if (options.analyze && (options.neuralese || literalCalls ||
-      /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source))) {
-    const analysis = options.analyze(source);
+      /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(analysisSource))) {
+    const analysis = options.analyze(analysisSource);
     plans = analysis.plans;
+    for (const plan of plans) planCoordinates.set(plan, { start: plan.sourceSpan.start, end: plan.sourceSpan.end });
+    let helperOffset = 0;
+    for (const helper of persistentHelpers) {
+      const sourceFile = ts.createSourceFile(`saved-helper-${helper.name}.ts`, helper.source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+      const fileName = `saved-helper:${helper.name}@${helper.sourceHash}`;
+      const localSpan = (item: { file: string; start: number; end: number; line: number; column: number }) => {
+        const start = Math.max(0, item.start - helperOffset), end = Math.max(0, item.end - helperOffset);
+        const location = sourceFile.getLineAndCharacterOfPosition(Math.min(sourceFile.text.length, start));
+        return { file: fileName, start, end, line: location.line + 1, column: location.character + 1 };
+      };
+      for (const plan of plans) {
+        const coordinate = planCoordinates.get(plan)!;
+        if (coordinate.start < helperOffset || coordinate.end > helperOffset + helper.source.length) continue;
+        plan.sourceBackedHelper = { name: helper.name, sourceHash: helper.sourceHash,
+          ...(helper.declaredAction ? { declaredAction: helper.declaredAction } : {}), declarationSpan: helper.declarationSpan };
+        plan.sourceSpan = localSpan(plan.sourceSpan);
+        plan.templateSpan = localSpan(plan.templateSpan);
+        plan.interpolations = plan.interpolations.map(item => ({ ...item, sourceSpan: localSpan(item.sourceSpan) }));
+        plan.captures = plan.captures.map(capture => ({ ...capture, mentionSpan: Math.max(0, capture.mentionSpan - helperOffset) }));
+      }
+      helperOffset += helper.source.length + 1;
+    }
     literals = analysis.neuralese ?? [];
     readouts = analysis.readouts ?? [];
     rebinds = analysis.rebinds ?? [];
-    for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
+    for (const item of analysis.diagnostics) diagnostics.push(toRaw(item));
   }
 
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
@@ -494,10 +682,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const primitive: Edit[] = [];
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
-  const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
+  const planAt = new Map(plans.map((plan, index) => {
+    const coordinate = planCoordinates.get(plan)!;
+    return [`${coordinate.start}:${coordinate.end}`, index];
+  }));
   const rebindAt = new Map(rebinds.map(site => [`${site.start}:${site.end}`, site]));
   for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
-    text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${source.slice(readout.start, readout.end)})))` });
+    text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${analysisSource.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const lowerNodes = (node: ts.Node): void => {
@@ -611,7 +802,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     if (ts.isForOfStatement(node)) {
       const at = rel(node.expression);
       primitive.push({ start: at.start, end: at.start, text: node.awaitModifier ? '__natlang_finiteAsync(' : '__natlang_finite(' },
-        { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(source.slice(at.start, at.end)))})` });
+        { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
     }
     // A counted loop reads its bound once, when the loop starts, and checks that the counter advances toward it.
     if (ts.isForStatement(node) && node.initializer && ts.isVariableDeclarationList(node.initializer) &&
@@ -651,7 +842,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ts.forEachChild(node, lowerNodes);
   };
   const lowerSpan = (start: number, end: number): string => {
-    let text = source.slice(start, end);
+    let text = analysisSource.slice(start, end);
     const contained = primitive.filter(edit => edit.start >= start && edit.end <= end);
     const inside = contained.filter(edit => !contained.some(parent => parent.composed && parent !== edit &&
       parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
@@ -677,17 +868,20 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const expression = statement.expression ? lowerSpan(rel(statement.expression).start, rel(statement.expression).end) : 'null';
     const available = [
       ...localOptions.map(binding => binding.name),
-      ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
+      ...bindings.filter(binding => !binding.transient && binding.end + helperPrefix.length < location.start).map(binding => binding.name)];
     return { ...location, text: `return __natlang_finish((${expression}), { ${available.join(', ')} }, true);` };
   });
-  if (finalExpression) containers.push({ start: finalExpression.start, end: finalExpression.end,
-    text: `return __natlang_finish((${lowerSpan(finalExpression.start, finalExpression.end)}));` });
-  for (const repair of redundantAliases) containers.push({ start: repair.start, end: repair.end, text: '' });
+  if (finalExpression) {
+    const start = finalExpression.start + helperPrefix.length, end = finalExpression.end + helperPrefix.length;
+    containers.push({ start, end, text: `return __natlang_finish((${lowerSpan(start, end)}));` });
+  }
+  for (const repair of redundantAliases) containers.push({ start: repair.start + helperPrefix.length,
+    end: repair.end + helperPrefix.length, text: '' });
   const topPrimitive = primitive.filter(edit => !primitive.some(parent => parent.composed && parent !== edit &&
     parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
   const edits = [...containers, ...topPrimitive.filter(edit => !containers.some(container =>
     edit.start >= container.start && edit.end <= container.end && container.text !== ''))];
-  let body = source;
+  let body = analysisSource;
   for (const edit of edits.sort((a, b) => b.start - a.start || b.end - a.end))
     body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
 
@@ -697,7 +891,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     producesResult,
     resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
       ? [statement.expression.text] : []))],
-    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs,
+    entrypoint: ENTRYPOINT, bindings, ...(savedHelpers.length ? { persistentHelpers: savedHelpers } : {}),
+    ...(transientHelpers.length ? { transientHelpers } : {}), ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs,
     ...(literals.length ? { literals } : {}) };
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
