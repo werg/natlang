@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v9-root-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v9-root-review-20261008-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 1333,
+      "sha256": "881085d35e661e5995326ab92b3b15d7c9eecd98fb81dc265eee360cdb4a2fea"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 3744,
+      "sha256": "4cc0e7931506b199d46f2b11c3117a120dabaafd00204d3eeae6e6e7305e289c"
+    }
+  ],
+  "bytes": 5077
+}

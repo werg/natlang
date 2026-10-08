@@ -6561,8 +6561,24 @@
         "assembled-v3/*",
         "text-proposal-26-v3/*"
       ],
-      "admission": "held-v17-portable-context-proposal-root-review-pending-no-training-admission",
-      "notes": "Authoritative V9 held proposal with 26 selected native/R/text actions, exact V17 prefixes, context-only receipts, and zero selected text omissions. This is evidence for root review only. Excludes superseded conversion previews and hardlinked duplicate directories, which are separately registered for recoverable storage cleanup. Does not grant action, corpus, model qualification, or training admission."
+      "admission": "root-admitted-exact-source-grounded-native-sft-closed-recurrence-and-derived-gold-text;not-runtime-qualified",
+      "notes": "Root admission through runs/neuralese-v9-root-review-20261008-v1/root-admission.json only. Authoritative assembled-v3 and text-proposal-26-v3 retain exact V17 prefixes; 26 protected actions (21 train/5 test), 5242 native/4961 recurrence/1020 closed links, 4496 gold docs (2792 train/1704 test), zero text omissions. Authenticated context-only inputs do not add writer targets or learned edges. Null-provider-type row held. Historical proposal flags unchanged. No new worlds/DPO/runtime/foundation qualification and no active V22 input change.",
+      "derived_from": [
+        "neuralese-native-r-v17-bunny-v5-20261008"
+      ]
+    },
+    {
+      "id": "neuralese-v9-root-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v9-root-review-20261008-v1",
+      "include": [
+        "*.json"
+      ],
+      "admission": "root-admission-review-receipts-not-training-examples",
+      "derived_from": [
+        "luna-v17-v9-portable-context-proposal-20261008"
+      ],
+      "notes": "Immutable independent root prefix/target/alignment checks and exact final admission decision; source/body proof and validator parity explicit."
     }
   ],
   "coverage_backlog": [
