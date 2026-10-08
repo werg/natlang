@@ -40,6 +40,7 @@ export type NativeRuntimeHooks = {
   inline(session: NativeSession, plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>, origin?: InlineInstructionOrigin): unknown;
   iterateOn(session: NativeSession, step: unknown, initial: unknown, ...args: unknown[]): unknown;
   finite(source: unknown, label?: string): unknown;
+  finiteArrayIterator(source: unknown, method: 'entries' | 'keys' | 'values', label?: string): unknown;
   finiteAsync(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
@@ -1889,7 +1890,7 @@ export class NativeSession {
         }
         return hooks.inline(this, plan, values, bound, origin);
       },
-      finite: hooks.finite, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
+      finite: hooks.finite, finiteArrayIterator: hooks.finiteArrayIterator, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),
       finish: (value: unknown) => { finished = value; } };
     const prologue = [

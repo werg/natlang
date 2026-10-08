@@ -4,7 +4,7 @@ import { formatType } from '../native/types.js';
 import { analyzeEvalSnippet, type EvalImport, type EvalScopeDeclarations } from '../compiler/eval-check.js';
 import { guard } from './context.js';
 import { callableTree } from './callable.js';
-import { finite, finiteAsync, inline, type CaptureAccessors } from './lowered.js';
+import { finite, finiteArrayIterator, finiteAsync, inline, type CaptureAccessors } from './lowered.js';
 import { iterateOn } from './iterate.js';
 import type { ItemRecord } from './loader.js';
 
@@ -17,6 +17,7 @@ export const kernelHooks: NativeRuntimeHooks = {
     undefined, session.runtime.frame, origin),
   iterateOn: (session, step, initial, ...args) => iterateOn(step as never, initial, ...args).inFrame(session.runtime.frame),
   finite: (source, label) => finite(source as Iterable<unknown>, label),
+  finiteArrayIterator: (source, method, label) => finiteArrayIterator(source, method, label),
   finiteAsync: (source, label) => finiteAsync(source, label),
   guard: (id, fn, args) => guard(id, fn, args),
   analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),

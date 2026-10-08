@@ -208,7 +208,7 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
   const displayPath = options.displayPath ?? (source => source.fileName);
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) =>
     diagnostics.push({ ...spanOf(node, displayPath), code, message, severity: 'error' });
-  const loopHint = ' Use `for (const item of array)`, `for (const key in record)` for enumerable string keys, ' +
+  const loopHint = ' Use `for (const item of array)` or `for (const [index, item] of array.entries())` (also `array.keys()` and `array.values()`) for bounded arrays, `for (const key in record)` for enumerable string keys, ' +
     'a counter `for (let i = 0; i < n; i++)`, an array method, or `step.iterateOn(initial).until(done)` for open-ended iteration.';
   const visit = (node: ts.Node): void => {
     if (ts.isWhileStatement(node)) report(node, 'forbidden-loop', '`while` loops are not allowed here.' + loopHint);
@@ -239,10 +239,21 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
       report(node, 'forbidden-dynamic-code', 'Dynamic `import()` is not allowed here; use a static import.');
     else if (ts.isForOfStatement(node) && options.checker) {
       const type = options.checker.getTypeAtLocation(node.expression);
+      const arrayIteratorCall = (expression: ts.Expression): boolean => {
+        while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) ||
+            ts.isNonNullExpression(expression)) expression = expression.expression;
+        if (!ts.isCallExpression(expression) || expression.arguments.length !== 0 ||
+            !ts.isPropertyAccessExpression(expression.expression) ||
+            !['entries', 'keys', 'values'].includes(expression.expression.name.text)) return false;
+        const receiver = options.checker!.getTypeAtLocation(expression.expression.expression);
+        const arrayLike = (candidate: ts.Type): boolean => candidate.isUnion() ? candidate.types.every(arrayLike) :
+          options.checker!.isArrayType(candidate) || options.checker!.isTupleType(candidate);
+        return arrayLike(receiver);
+      };
       const acceptable = (candidate: ts.Type): boolean => candidate.isUnion() ? candidate.types.every(acceptable) :
         !!(candidate.flags & (ts.TypeFlags.Any | ts.TypeFlags.StringLike)) || options.checker!.isArrayType(candidate) ||
         options.checker!.isTupleType(candidate) || ['Map', 'Set', 'ReadonlyMap', 'ReadonlySet'].includes(candidate.getSymbol()?.name ?? '');
-      if (!acceptable(type))
+      if (!acceptable(type) && !arrayIteratorCall(node.expression))
         report(node.expression, 'forbidden-loop', '`for ... of` here must iterate an array, string, Map or Set.' + loopHint);
     }
     ts.forEachChild(node, visit);
