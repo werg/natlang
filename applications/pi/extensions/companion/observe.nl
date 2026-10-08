@@ -12,7 +12,7 @@ workspace files, and observation.previous your last briefing (null on the first 
 1. Learn the touched files. For each path in observation.touched, in order, at most 6 of them:
    file = await companion.file(path). Skip it when file is null (it does not exist) or when file.known is not null
    (you already know this version). Otherwise summary = await summarize(path, file.text), then
-   await companion.remember(path, file.hash, summary).
+   await companion.remember(path, summary).
 2. Write the briefing for the agent's next request. Read observation.recent closely: what is the agent trying to do,
    what has it found, what went wrong? Then return a Briefing:
    - focus: what the agent is working toward right now, in one sentence.

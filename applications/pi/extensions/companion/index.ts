@@ -42,8 +42,8 @@ type Runtime = TaskRuntime<{ basis?: number }, { phase: 'observe' }, null, objec
 export const COMPANION_DECLARATION = `/** The workspace as the companion sees it. Paths are relative to the workspace. */
 /** A file's current hash and text (cut at ${FILE_LIMIT} characters), and what you know about this version (null when you know nothing about it, or only about an older version). Null when the file does not exist. */
 export function file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null>;
-/** Remember summary as what you know about version hash of path. */
-export function remember(path: string, hash: string, summary: FileSummary): Promise<void>;`;
+/** Remember summary as what you know about path, as file(path) last showed it. */
+export function remember(path: string, summary: FileSummary): Promise<void>;`;
 
 const hashOf = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
@@ -74,17 +74,22 @@ function touched(messages: readonly Message[], cwd: string): string[] {
 }
 
 function companionService(runtime: Runtime, context: Context, cwd: string) {
+  // The version of each file this run showed the model: what it summarizes is that version.
+  const shown = new Map<string, string>();
   return {
     async file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null> {
       const absolute = join(cwd, path);
       try { if (!statSync(absolute).isFile()) return null; } catch { return null; }
       const full = readFileSync(absolute, 'utf8');
       const hash = hashOf(full);
+      shown.set(path, hash);
       const known = (await runtime.snapshot(CompanionFiles, context))?.files[path];
       const text = full.length > FILE_LIMIT ? `${full.slice(0, FILE_LIMIT)}\n[cut: ${full.length - FILE_LIMIT} more characters]` : full;
       return { hash, text, known: known?.hash === hash ? known : null };
     },
-    async remember(path: string, hash: string, summary: FileSummary): Promise<void> {
+    async remember(path: string, summary: FileSummary): Promise<void> {
+      const hash = shown.get(path);
+      if (hash === undefined) throw new Error(`remember(${JSON.stringify(path)}) needs file(${JSON.stringify(path)}) first: it remembers the version file showed you`);
       const knowledge = JSON.parse(JSON.stringify({ path, hash, purpose: summary.purpose, symbols: summary.symbols, notes: summary.notes })) as FileKnowledge;
       await runtime.commit(async tx => { (await tx.doc(CompanionFiles)).files[path] = knowledge as never; return undefined; }, context);
     },
@@ -93,7 +98,8 @@ function companionService(runtime: Runtime, context: Context, cwd: string) {
 
 /** The briefing as the agent reads it. Deterministic: an unchanged briefing renders the same text. */
 export function briefingText(briefing: Briefing): string {
-  const list = (title: string, items: string[]) => items.length ? [`${title}:`, ...items.map(item => `- ${item}`)] : [];
+  // Stored documents drop empty lists, so a list may be absent.
+  const list = (title: string, items: string[] | undefined) => items?.length ? [`${title}:`, ...items.map(item => `- ${item}`)] : [];
   return ['Notes from your harness companion, which watches your work in the background. Use what helps; ignore the rest.',
     `Focus: ${briefing.focus}`, ...list('Known', briefing.facts), ...list('Watch out', briefing.warnings),
     ...list('Consider', briefing.suggestions)].join('\n');

@@ -36,7 +36,7 @@ const CODE = [
   ['You accompany a coding agent', `
     const path = observation.touched[0];
     const file = await companion.file(path);
-    if (file && !file.known) await companion.remember(path, file.hash, await summarize(path, file.text));
+    if (file && !file.known) await companion.remember(path, await summarize(path, file.text));
     return { focus: 'Read ' + path, facts: [path + ': ' + file.text.trim()], warnings: [], suggestions: ['Run the tests'] };`],
   ['is the content of the workspace file', `return { purpose: 'A greeting', symbols: [], notes: [] };`],
 ];
