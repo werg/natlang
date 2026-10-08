@@ -25,7 +25,8 @@ when the tool has it; two declarations are equal when the JSON of those four fie
      then every desired key -> text, in desired order.
    - Otherwise one minimal patch: each shown key whose desired text differs -> the new text, or null when it is no
      longer desired; then each desired key not shown -> its text. An empty patch means no patch.
-   patches = that list (0, 1 or 2 objects).
+   When nothing is shown yet (view.sections is empty), patchedOrder is the desired order, so this is always the
+   one-patch case. patches = that list (0, 1 or 2 objects); a patch with no keys is never in it.
 3. Tool changes. offered = view.tools. kept = the offered declarations whose name is among tools and equal to that
    tool's declaration, in offered order. added = the tools whose name is not in kept, in tools order.
    - If kept followed by added does not have exactly the tools' name order: toolsRemoved = every offered name (as
@@ -35,6 +36,7 @@ when the tool has it; two declarations are equal when the JSON of those four fie
    - No tool changes (both lists empty): one entry per patch, each with that patch as sections.
    - Tool changes and no patch: one entry with only the tool changes.
    - Both: one entry per patch; the last one also carries the tool changes.
-Return the entries as { message } objects (and edits only in case 1).
+Return the entries as { message } objects (and edits only in case 1). Outside case 1, an entry whose message has no
+section keys and no tool changes is never returned.
 
 Return a result that is not null from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.
