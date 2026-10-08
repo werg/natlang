@@ -43,6 +43,11 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   /** `model: NAME` in the frontmatter: the call runs on the runtime's model of that name (`models`), else the default. */
   model?: string;
   /**
+   * `uses: [dir/item]` in the frontmatter: package items this function may call besides its companion folder, by path
+   * from the package root. Each is in `codebase` under its base name.
+   */
+  uses?: string[];
+  /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
    */
@@ -83,7 +88,7 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout', 'model']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout', 'model', 'uses']);
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
 const TYPE_KEYS = /^(args|types|returns):(.*)$/;
 
@@ -193,6 +198,9 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   }
   if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w-]*$/.test(meta.model)))
     throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small');
+  if (meta.uses !== undefined && (!Array.isArray(meta.uses) || meta.uses.some(item => typeof item !== 'string' ||
+      !/^[A-Za-z_$][\w$]*(\/[A-Za-z_$][\w$]*)*$/.test(item))))
+    throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]');
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
     if ((finiteValues(parseType(meta.returns), env)?.length ?? 0) < 2)
@@ -203,7 +211,47 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     description: String(meta.description ?? ''), args, returns: meta.returns,
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {},
     ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
-    ...(typeof meta.model === 'string' ? { model: meta.model } : {}) };
+    ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
+    ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}) };
+}
+
+/** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
+function packageRoot(dir: string, files: SourceFiles): string {
+  for (let current = dir; ; current = files.dirname(current)) {
+    if (files.isFile(files.join(current, 'natlang.json')) || files.isFile(files.join(current, 'package.json'))) return current;
+    if (files.dirname(current) === current) return current;
+  }
+}
+
+/** Items being attached through `uses`, by path: a function cannot use itself or one of its users. */
+const ATTACHING = new Set<string>();
+
+/**
+ * Add the items `record.uses` names to its codebase under their base names: `harness/cut` is `<root>/harness/cut.nl`,
+ * or `cut.ts`, loaded with its own companion folder. A used item counts as part of the user's callable context.
+ */
+function attachUses(record: NatlangRecord, path: string, files: SourceFiles): void {
+  if (!record.uses?.length || files === PATH_ONLY) return;
+  const root = packageRoot(files.dirname(path), files);
+  for (const item of record.uses) {
+    const base = files.join(root, ...item.split('/'));
+    const name = item.slice(item.lastIndexOf('/') + 1);
+    if (Object.hasOwn(record.codebase, name))
+      throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
+    const target = files.isFile(`${base}.nl`) ? `${base}.nl` : files.isFile(`${base}.ts`) ? `${base}.ts` : undefined;
+    if (!target) throw new NatlangSourceError(path, `uses ${item}, but the package has no ${item}.nl or ${item}.ts`);
+    if (ATTACHING.has(target)) throw new NatlangSourceError(path, `uses ${item}, which uses this function in turn; a function cannot reach itself`);
+    ATTACHING.add(target);
+    try {
+      if (target.endsWith('.nl')) record.codebase[name] = loadNamedFunction(target, files);
+      else {
+        const dir = files.dirname(target);
+        const module = parseModule(target, files.read(target), packageTypes(dir, files), files);
+        module.codebase = loadCallableFolder(files.join(dir, name), files, module.types);
+        record.codebase[name] = module;
+      }
+    } finally { ATTACHING.delete(target); }
+  }
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string): ExportRecord {
@@ -401,6 +449,8 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
     } else if (Object.keys(children).length)
       add(entry, { kind: 'namespace', name: entry, source: files.relative?.(path) ?? path, codebase: children }, path);
   }
+  for (const [name, item] of Object.entries(items))
+    if (item.kind === 'natlang' && item.uses) attachUses(item, files.join(dir, `${name}.nl`), files);
   if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
 }
@@ -466,6 +516,7 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
     const data = folderNzData(companion, files, record.codebase);
     if (Object.keys(data).length) record.contextData = data;
   }
+  attachUses(record, path, files);
   registerFileRecords(record);
   return record;
 }
