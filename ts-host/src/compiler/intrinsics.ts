@@ -37,7 +37,8 @@ type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: in
 export const NEURALESE_TYPE_DOCUMENTATION =
   `Built-in compile-time type declaration (not a runtime value):\n${NEURALESE_TYPE_DECLARATION}\n` +
   'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields; use read(value) for an ordinary typed value, ' +
-  'or a supported native coercion context for text conversion. This declaration grants no call or service capability.';
+  'or a supported native coercion context for text conversion. A direct string argument to a declared Neuralese<string> parameter is ' +
+  'materialized through the configured writer; this does not convert nested fields or other payload types. This declaration grants no call or service capability.';
 
 const DECLARATIONS = String.raw`
 /** Marker for an unspecified \`nl\` type argument. */

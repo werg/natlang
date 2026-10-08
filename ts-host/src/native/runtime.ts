@@ -188,7 +188,7 @@ reading it through, and rather than repeating work.`,
 function rejected(error: Reject): NativeResult {
   const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
     /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
-  const hint = softMismatch ? 'For a final result, plain text can fill an exact Neuralese<string> slot, including a field in a structured return; the runtime validates the whole result before writing those typed blocks. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. These conversions do not apply to arguments and locals: preserve typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+  const hint = softMismatch ? 'At a declared Neuralese<string> argument or final-result slot, an ordinary string is written as that typed value through the configured port; argument conversion applies only to the direct parameter, not nested fields. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. These conversions do not apply to locals or other payload types: preserve typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
@@ -581,6 +581,63 @@ export class NativeRuntime {
     }
     if (this.deadline !== undefined && Date.now() >= this.deadline)
       throw new Error('natlang run timed out; external effects may have occurred');
+  }
+
+  /** Lift only an ordinary string supplied directly to a declared Neuralese<string> parameter. */
+  async materializeSoftStringArguments(definition: { params: { name: string; type: string }[]; types: Record<string, string> },
+    inputs: readonly unknown[], parentCallId?: string): Promise<unknown[]> {
+    const aliases: Record<string, Type> = {};
+    for (const [name, source] of Object.entries(definition.types)) {
+      try { aliases[name] = parseType(source); } catch { /* Keep TypeScript-only aliases outside portable checks. */ }
+    }
+    const env = new TypeEnv(aliases);
+    const normalized = [...inputs];
+    for (let index = 0; index < Math.min(definition.params.length, normalized.length); index++) {
+      const input = normalized[index];
+      if (typeof input !== 'string') continue;
+      const parameter = definition.params[index]!;
+      let wanted: Type;
+      try { wanted = env.resolve(parseType(parameter.type)); }
+      catch { continue; }
+      const element = wanted.kind === 'neuralese' ? env.resolve(wanted.element) : undefined;
+      if (wanted.kind !== 'neuralese' || element?.kind !== 'prim' || element.name !== 'string') continue;
+
+      const callerInput = { node: parentCallId ? invocationNodeId(parentCallId) : 'external', port: `argument:${parameter.name}` };
+      normalized[index] = await this.writeNeuraleseText(input, wanted, {
+        sourceKind: 'typed-text-argument', source: 'call-argument', markerContext: 'typed-argument',
+        argumentName: parameter.name, inputs: [callerInput],
+      });
+    }
+    return normalized;
+  }
+
+  /** Shared, graph-recorded text block writer for typed result and typed argument boundaries. */
+  async writeNeuraleseText(text: string, wanted: Type, metadata: {
+    sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field' | 'typed-text-argument';
+    source: string;
+    markerContext: string;
+    inputs: readonly { node: string; port?: string }[];
+    resultPath?: (string | number)[];
+    argumentName?: string;
+  }): Promise<Value> {
+    const port = this.neuralese?.port;
+    const type = formatType(wanted), bodySha = hexDigest(text);
+    if (!port) throw new NeuraleseUnsupportedError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
+      `${type} needs a configured Neuralese write port`);
+    const callId = this.currentCallId ?? this.options.runId;
+    const producer = { source_kind: metadata.sourceKind, source: metadata.source, marker_context: metadata.markerContext,
+      call_id: callId, ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
+      ...(metadata.resultPath ? { result_path: metadata.resultPath } : {}),
+      ...(metadata.argumentName ? { argument_name: metadata.argumentName } : {}) };
+    const block = await port.write(text, { type, producer });
+    const sourceTurn = metadata.inputs.find(input => /#turn\d+$/.test(input.node))?.node ?? '';
+    graphNode(this.trace, 'block_write', { call_id: callId, block: block.id, length: block.length, turn: sourceTurn, stops: [],
+      truncated: !!block.truncated, producer: block.producer?.kind ?? null, source_kind: producer.source_kind,
+      source: metadata.source, marker_context: metadata.markerContext,
+      ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
+      ...(producer.result_path ? { result_path: producer.result_path } : {}),
+      ...(producer.argument_name ? { argument_name: producer.argument_name } : {}) }, metadata.inputs);
+    return neuraleseRef(type, block.id);
   }
 
   async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>, timeoutMs?: number,
@@ -1120,23 +1177,14 @@ export class NativeSession {
 
   private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
     sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field', resultPath?: (string | number)[]): Promise<Value> {
-    const port = this.runtime.neuralese?.port;
-    const type = formatType(wanted), bodySha = hexDigest(text);
-    if (!port) throw new NeuraleseUnsupportedError(`a ${sourceKind !== 'typed-json-result' ? 'plain-text' : 'plain JSON'} ` +
-      `${type} result needs a configured Neuralese write port`);
-    const producer = { source_kind: sourceKind, source, marker_context: 'return-result',
-      call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha,
-      ...(resultPath ? { result_path: ['return', ...resultPath] } : {}) };
-    const block = await port.write(text, { type, producer });
+    const callId = this.runtime.currentCallId ?? this.runtime.options.runId;
     const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
-      event.kind === 'model_turn' && event.call_id === producer.call_id && typeof event.node === 'string');
+      event.kind === 'model_turn' && event.call_id === callId && typeof event.node === 'string');
     const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
       { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
-    graphNode(this.runtime.trace, 'block_write', { call_id: producer.call_id, block: block.id,
-      length: block.length, truncated: !!block.truncated, producer: block.producer?.kind ?? null,
-      source_kind: producer.source_kind, source, marker_context: producer.marker_context,
-      result_type: type, text_body_sha256: bodySha, ...(producer.result_path ? { result_path: producer.result_path } : {}) }, [input]);
-    return coerce(neuraleseRef(type, block.id), wanted, this.env, 'return');
+    const ref = await this.runtime.writeNeuraleseText(text, wanted, { sourceKind, source, markerContext: 'return-result',
+      inputs: [input], ...(resultPath ? { resultPath: ['return', ...resultPath] } : {}) });
+    return coerce(ref, wanted, this.env, 'return');
   }
 
   /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */

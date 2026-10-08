@@ -26,6 +26,7 @@ test('the opening names the built-ins and where their documentation is', async (
 });
 
 test('shared result guidance shows computed Neuralese text return and static marker bodies', () => {
+  assert.match(SEMANTIC_RESULT_PROMPT, /At a direct parameter declared Neuralese<string>, an ordinary string argument is written through the configured writer/);
   assert.match(SEMANTIC_RESULT_PROMPT, /When this call's declared result is exactly Neuralese<string>/);
   assert.match(SEMANTIC_RESULT_PROMPT, /marker body is literal payload written before eval runs/);
   assert.match(SEMANTIC_RESULT_PROMPT, /for computed Neuralese<string> output, return the computed string/);
