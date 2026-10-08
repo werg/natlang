@@ -1439,7 +1439,9 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     module.main(args)
     run=tmp_path/'run'
     rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
-    assert any(r['sketch_gradient_norm']>0 for r in rows)
+    bootstrap=[r for r in rows if r['schedule']['sequence_passes']==1]
+    assert bootstrap and all(r['sketch_gradient_norm']>0 for r in bootstrap)  # the map trains from the first update
+    assert any(r['sketch_gradient_norm']>0 for r in rows if r['schedule']['sequence_passes']>1)
     assert any(r['supervised_embedding_mse']>0 for r in rows)
     assert all(r['schedule']['sequence_passes']<=3 for r in rows)
     evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
