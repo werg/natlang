@@ -238,7 +238,8 @@ async function main() {
     // Close any handle that finished initializing after the first stop pass.
     try { await adapter?.close(); } catch { /* shutdown is best effort */ }
     try { official?.server.close(); } catch { /* shutdown is best effort */ }
-    process.stderr.write(`OpenCode loopback bootstrap failed (${error?.name ?? 'Error'}).\n`);
+    const detail = safeDiagnosticText(error?.message);
+    process.stderr.write(`OpenCode loopback bootstrap failed (${error?.name ?? 'Error'}${detail ? `: ${detail}` : ''}).\n`);
     process.exitCode = 1;
   } finally {
     process.removeListener('SIGINT', onSignal);
@@ -247,6 +248,7 @@ async function main() {
 }
 
 main().catch(error => {
-  process.stderr.write(`OpenCode loopback bootstrap failed (${error?.name ?? 'Error'}).\n`);
+  const detail = safeDiagnosticText(error?.message);
+  process.stderr.write(`OpenCode loopback bootstrap failed (${error?.name ?? 'Error'}${detail ? `: ${detail}` : ''}).\n`);
   process.exitCode = 1;
 });

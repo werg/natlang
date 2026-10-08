@@ -122,6 +122,6 @@ test('refuses to expose the collector endpoint unless the official MCP tools/lis
   assert.equal(code, 1);
   assert.equal(signal, null);
   assert.equal(fx.stdout.includes('"endpoint"'), false);
-  assert.match(fx.stderr, /bootstrap failed \(Error\)/);
+  assert.match(fx.stderr, /expected tool list/);
   assert.equal(JSON.parse(await readFile(resolve(fx.output, 'lifecycle.json'), 'utf8')).status, 'stopped');
 });
