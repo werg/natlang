@@ -972,3 +972,29 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   sketch error ~0.76).
 - Added `sketch_projection` as a third matched consumer: pass 0's sketches are exactly the history pass 1 consumes.
   Schema matched-history/2. No gate changed. The proposal to gate pass ≥ 1 against live_greedy is withdrawn.
+
+## 2026-10-08 — Owner: deeper sketch rollout, sketch-only first (Maple v8)
+
+- Owner question: can the unfrozen stack learn to produce target embeddings from a greedy sketch rollout?
+- Probe: the 8-pass held eval of v7's step-4660 weights (V17 held long windows). Passes 1–2 (trained depth) are
+  usable. Every untrained depth collapses:
+
+  | Pass | CE delta | Agreement |
+  |---|---|---|
+  | 1 | 0.38 | 0.92 |
+  | 2 | 0.55 | 0.90 |
+  | 3 | 6.2 | 0.14 |
+  | 7 | 7.8 | 0.03 |
+
+  The 3-pass schedule only covers depth ≤ 2; there is no stable rollout fixed point.
+- Owner decision: first train only the sketch map at the deeper rollout with the rest frozen until it saturates, then
+  unfreeze the whole stack.
+- Implemented `--rollout-passes N` / `--rollout-sketch-first` (a940cbb8; `RolloutStage` in foundation_schedule.py):
+  - Applies after whole-transformer adaptation has started.
+  - Sketch-only: only `heads.feedback` is trainable at N passes, and CE still reaches it through the frozen consumer.
+    It stops when the held CE delta of the sketch-history passes (≥ 1) plateaus (projection patience/min-improvement).
+  - Then the whole stack trains at N.
+  - Held evals cover all N passes, so qualification now includes every rollout depth. No gate is relaxed.
+- Maple v8 (`runs/maple-native-text-warmup-20261008-v8.sh`) continues v7 at 4660 with N=8: ~34 s/step, reserved
+  52–65 GB, backbone gradient 0 during sketch-only.
+- History: pass 2 looked like pass 3 now (agreement 0.15 at step 2832) and recovered within ~750 steps once trained.
