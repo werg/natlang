@@ -1123,7 +1123,7 @@ def main(argv=None):
     if args.backbone_training=='lora' and args.rank<1:
         raise ValueError('explicit LoRA policy requires --rank positive')
     backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
-    from ..maple.family import evaluate_members, family_members, member_loss, private_parameters, window_labels
+    from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
     family = family_members(engine.backbone)
     if args.member_weight and not family:
         raise ValueError('--member-weight needs a nested-family student')
@@ -1699,13 +1699,9 @@ def main(argv=None):
             if args.member_weight and step_record_ids:
                 # The family term (MAPLE_NESTED §4a): one member per update, in rotation, on this update's last record.
                 member = family[step % len(family)]
-                member_value, parts = member_loss(backbone, member, *member_window(record))
-                if not torch.isfinite(member_value):
-                    raise RuntimeError('nonfinite member loss')
-                (args.member_weight * member_value).backward()
+                parts = member_backward(backbone, member, *member_window(record), weight=args.member_weight)
                 family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
                                  'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
-                del member_value
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)

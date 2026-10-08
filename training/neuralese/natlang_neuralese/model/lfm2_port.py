@@ -454,9 +454,14 @@ class PortBackbone(nn.Module):
                         states[index] = AttentionState.from_fields(tensors) if attention else ConvState(tensors[0])
                     lengths[index] = start
                     current_cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
-                    output, updated = self.run_layers(value, range(index, index + 1), current_cache,
-                                                     positions=pos, padding=padding_arg, left_pad=left_pad_arg,
-                                                     _checkpoint_layer=True)
+                    # Forward and recompute must build the same graph: Maple's dynamic-shape compiled RMSNorm can
+                    # pick a different graph on recompute (CheckpointError at Maple recurrence step 89), so the
+                    # checkpointed layer runs it eagerly both times. LFM2 norms are unaffected.
+                    from ..maple.model import eager_rms_norm
+                    with eager_rms_norm():
+                        output, updated = self.run_layers(value, range(index, index + 1), current_cache,
+                                                         positions=pos, padding=padding_arg, left_pad=left_pad_arg,
+                                                         _checkpoint_layer=True)
                     state = updated.states[index]
                     return (output, *state.fields()) if attention else (output, state.window)
                 result = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,

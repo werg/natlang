@@ -324,7 +324,7 @@ def balanced_position_weights(span, suffix_starts):
     return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
-from ..maple.family import evaluate_members, member_loss, window_labels
+from ..maple.family import evaluate_members, member_backward, window_labels
 from ..maple.model import eager_rms_norm
 
 
@@ -1614,9 +1614,7 @@ def main(argv=None):
                 if a.member_weight and not bootstrap:
                     # The family term (MAPLE_NESTED §4a): one member per update, in rotation.
                     member=family[step%len(family)]
-                    member_value,parts=member_loss(backbone,member,*member_window(batch[0]))
-                    if not torch.isfinite(member_value):raise RuntimeError('nonfinite member loss')
-                    (a.member_weight*member_value).backward();next_pass()
+                    parts=member_backward(backbone,member,*member_window(batch[0]),weight=a.member_weight);next_pass()
                     family_record={'member':member.key,'ce':parts.ce/max(parts.tokens,1),
                                    'kl':parts.kl/max(parts.tokens,1),'tokens':parts.tokens}
         wrapped_forward_backward_seconds=time.perf_counter()-wrapped_started
