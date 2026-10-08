@@ -8133,6 +8133,77 @@
         "neuralese-lfm-input-map-completed-state-20261008-v2"
       ],
       "notes": "Frozen e3198f93 Python package and declared tighter-check refinement launch, exact20992 optimizer/RNG resume. Live outputs deliberately excluded; no inherited AR/runtime/task/stopping qualification."
+    },
+    {
+      "id": "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-three-action-action45-root-integration-review-20261008-v1",
+      "include": [
+        "admission.json",
+        "selected-action-admission.json",
+        "mechanical-review.json"
+      ],
+      "admission": "root-issued-exact45-native-action-and-ordinary-gold-text-facets-only; supersedes-47-action-selection-due-to-two-model-visible-context-holds",
+      "derived_from": [
+        "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+        "s1-question-collection-v8-action-source-audit-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+        "neuralese-v24-v9-integration-root-admission-20261008-v1"
+      ],
+      "notes": "Root-issued selected45 certificate plus V24 integration certificate and mechanical review. Selected action targets are exactly the 45 independently source-reviewed actions with sufficient model-visible grounding; qa_quality_mcq:24 and :26 are excluded from native and ordinary-text facets due to missing decisive facts in visible excerpts. The older root-issued47 action certificate remains immutable historical evidence, superseded in active scope by these two holds. No recurrence additions, trajectory admission, writer/runtime/foundation qualification, or active training-input change."
+    },
+    {
+      "id": "neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+      "include": [
+        "selected-actions-45.jsonl",
+        "action45-text-delta.jsonl",
+        "action45-text-delta-extraction.json",
+        "proposal-review.json",
+        "decoded-target-review.json",
+        "decode_target_review.py",
+        "assembled/delta-native-records.jsonl",
+        "assembled/proposal-manifest.json",
+        "assembled/recurrence-audit.json",
+        "empty-delta.jsonl",
+        "base-prefix-binding.json",
+        "draft-superseding-action-certificate.json",
+        "text-append/README.md",
+        "text-append/anchor-selection.json",
+        "text-append/omissions.jsonl",
+        "text-append/output-manifest.json",
+        "text-append/packet-manifest.json",
+        "text-append/provenance.jsonl",
+        "text-append/receipt.json",
+        "text-append/source-coverage.jsonl"
+      ],
+      "admission": "root-admitted-exact45-native-action-sft-and-ordinary-gold-text-delta; no new recurrence records or channel qualification",
+      "derived_from": [
+        "neuralese-v24-v9-three-action-native-text-20261008-v2",
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+        "s1-question-collection-v8-action-source-audit-20261008-v1"
+      ],
+      "notes": "Root-admitted action45 delta proposal. The selected native action delta has 45 rows; matching exact text delta has 45 tokenized documents with suffix decode verified against the shared renderer. Cumulative assembled native/text files are deliberately represented by the already registered V24 base snapshots plus these exact action45 deltas, avoiding duplicate prefix copies. Original V24 native/text prefixes and V9 recurrence/pieces are exact unchanged per hash-bound proposal review. Text-visible holds qa_quality_mcq:24 and :26 are excluded from both facets; no retroactive context injection. No writer/trajectory/foundation/runtime/DPO/independent-world qualification and no GPU training-input change."
+    },
+    {
+      "id": "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/proposal-review.json",
+        "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/text-visibility-review.json",
+        "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/delta-native-records.jsonl",
+        "s1-question-collection-v8-root-selected-action-admission-20261008-v1/admission.json",
+        "s1-question-collection-v8-action-second-source-review-20261008-v1/review.json"
+      ],
+      "admission": "superseded-47-action-proposal-and-context-review-only; not-active-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+        "s1-question-collection-v8-action-source-audit-20261008-v1"
+      ],
+      "notes": "Immutable review evidence for the superseded47 selected-action proposal: old root action47 admission, exact selected delta, prior proposal review, second source audit, and model-visible-context review. The later visibility review found two insufficient answer-grounding excerpts (qa_quality_mcq:24 and :26); action45 admission excludes both. The old47 root certificate and outputs remain preserved as history and are not current training admission. No full cumulative native/text copies are selected here."
     }
   ],
   "coverage_backlog": [

@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { createNatlangCompilerHost } from './compiler/host.js';
 import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './compiler/inline.js';
 import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
-import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
+import { authoredCallables, finiteCounterComparison, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 3 as const;
@@ -1034,16 +1034,18 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     }
     // A counted loop reads its bound once, when the loop starts, and checks that the counter advances toward it.
     if (ts.isForStatement(node) && node.initializer && ts.isVariableDeclarationList(node.initializer) &&
-        node.initializer.declarations.length === 1 && node.condition && ts.isBinaryExpression(node.condition)) {
+        node.initializer.declarations.length === 1 && node.condition) {
       const declaration = node.initializer.declarations[0]!;
-      const condition = node.condition;
-      if (ts.isIdentifier(declaration.name)) {
+      const boundedCondition = ts.isIdentifier(declaration.name) ?
+        finiteCounterComparison(node.condition, declaration.name.text) : undefined;
+      if (ts.isIdentifier(declaration.name) && boundedCondition) {
         const counter = declaration.name.text;
-        const left = ts.isIdentifier(condition.left) && condition.left.text === counter;
-        const kind = condition.operatorToken.kind;
+        const comparison = boundedCondition.comparison;
+        const left = ts.isIdentifier(comparison.left) && comparison.left.text === counter;
+        const kind = comparison.operatorToken.kind;
         const upward = left ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
           kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
-        const loop = `__natlang_loop_${++loops}`, bound = rel(left ? condition.right : condition.left);
+        const loop = `__natlang_loop_${++loops}`, bound = rel(left ? comparison.right : comparison.left);
         primitive.push({ start: rel(declaration).end, end: rel(declaration).end, text: `, ${loop} = __natlang_counted(${upward})` },
           { start: bound.start, end: bound.start, text: `(${loop}.at(${counter}) ?? ${loop}.fix(${counter}, ` },
           { start: bound.end, end: bound.end, text: '))' });

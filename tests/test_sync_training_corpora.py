@@ -255,6 +255,87 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(refs['open_fds'][0]['pid'], 12345)
         self.assertEqual(refs['inaccessible_fd_directories'], 1)
 
+    def test_file_path_arguments_and_environment_protect_only_the_canonical_file(self):
+        checkpoint = self.root / 'checkpoint.pt'
+        best = self.root / 'best-checkpoint.pt'
+        best.write_bytes(b'closed sibling')
+        alias = self.repo / 'checkpoint-alias.pt'
+        alias.symlink_to(checkpoint)
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(f'worker\0--continue-from={alias}\0'.encode())
+            (process / 'environ').write_bytes(f'CHECKPOINT={checkpoint}\0'.encode())
+            (process / 'cwd').symlink_to(self.repo)
+            refs = module.local_references([checkpoint, best], proc_root=proc)
+        self.assertEqual(refs['open_fds'], [])
+        self.assertEqual(refs['live_job_references'], [
+            {'pid': 12345, 'path': str(checkpoint.resolve()), 'source': 'process-arguments-or-environment'}])
+
+    def test_explicit_directory_path_operands_protect_selected_descendants(self):
+        checkpoint = self.root / 'checkpoint.pt'
+        best = self.root / 'best-checkpoint.pt'
+        best.write_bytes(b'closed sibling')
+        alias = self.repo / 'artifact-directory'
+        alias.symlink_to(self.root, target_is_directory=True)
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(f'worker\0--artifact-dir={alias}\0'.encode())
+            (process / 'environ').write_bytes(f'DATA_DIR={self.root}\0'.encode())
+            (process / 'cwd').symlink_to(self.repo)
+            refs = module.local_references([checkpoint, best], proc_root=proc)
+        self.assertEqual(refs['open_fds'], [])
+        self.assertEqual(sorted(refs['live_job_references'], key=lambda row: row['path']), sorted([
+            {'pid': 12345, 'path': str(checkpoint.resolve()), 'source': 'artifact-directory-reference'},
+            {'pid': 12345, 'path': str(best.resolve()), 'source': 'artifact-directory-reference'}], key=lambda row: row['path']))
+
+    def test_current_working_directory_keeps_the_existing_immediate_parent_rule(self):
+        target = self.root / 'checkpoint.pt'
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(b'worker\0')
+            (process / 'environ').write_bytes(b'')
+            (process / 'cwd').symlink_to(self.root)
+            refs = module.local_references([target], proc_root=proc)
+        self.assertEqual(refs['live_job_references'], [
+            {'pid': 12345, 'path': str(target.resolve()), 'source': 'artifact-directory-reference'}])
+
+    def test_local_reference_scan_ignores_long_nonpath_environment_data_without_echoing_it(self):
+        target = self.root / 'checkpoint.pt'
+        secret = 'PRIVATE_ENV_SENTINEL_' + ('x' * 10000)
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(b'worker\0')
+            (process / 'environ').write_bytes(('LS_COLORS=' + secret + '\0').encode())
+            (process / 'cwd').symlink_to(self.repo)
+            refs = module.local_references([target], proc_root=proc)
+        self.assertEqual(refs['open_fds'], [])
+        self.assertEqual(refs['live_job_references'], [])
+        self.assertNotIn('PRIVATE_ENV_SENTINEL', repr(refs))
+
+    def test_ambient_home_and_pwd_do_not_protect_repo_descendants_but_checkpoint_env_does(self):
+        checkpoint = self.root / 'checkpoint.pt'
+        best = self.root / 'best-checkpoint.pt'
+        best.write_bytes(b'closed sibling')
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(b'worker\0')
+            (process / 'environ').write_bytes(
+                f'HOME={self.repo.parent}\0PWD={self.repo}\0CHECKPOINT={checkpoint}\0'.encode())
+            (process / 'cwd').symlink_to(self.repo)
+            refs = module.local_references([checkpoint, best], proc_root=proc)
+        self.assertEqual(refs['live_job_references'], [
+            {'pid': 12345, 'path': str(checkpoint.resolve()), 'source': 'process-arguments-or-environment'}])
+
     def test_remote_verification_receipt_is_bound_to_selected_manifest_and_not_full_receipt(self):
         selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
         expected_hash = hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()

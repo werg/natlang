@@ -1,6 +1,6 @@
 {
   "schema": "natlang.neuralese-dataset-coverage/1",
-  "as_of": "2026-10-05",
+  "as_of": "2026-10-08",
   "registry": "training/neuralese_corpora.json",
   "source_ledger": "training/neuralese_data_ledger.json",
   "source_dispositions": {
@@ -50,6 +50,28 @@
         "paired improvement/transfer admission",
         "modern neuralese conversion",
         "source coverage including word/semantic games, optimization, visual/frontend families"
+      ]
+    },
+    "neuralese-v24-v9-three-action-action45-proposal-20261008-v1": {
+      "derived_from": [
+        "neuralese-v24-v9-three-action-native-text-20261008-v2",
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1"
+      ],
+      "root_admission": "runs/neuralese-v24-v9-three-action-action45-root-integration-review-20261008-v1/admission.json",
+      "native_action_delta": 45,
+      "ordinary_gold_text_delta": 45,
+      "train": 45,
+      "test": 0,
+      "distinct_source_groups": 16,
+      "model_visible_context_holds": [
+        "qa_quality_mcq:24",
+        "qa_quality_mcq:26"
+      ],
+      "text_visible_target_verification": "45/45 decoded suffixes and full render/token sequences exactly match shared native gold renderer; receipt runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/decoded-target-review.json",
+      "remaining": [
+        "no new recurrence rows or channel qualification",
+        "no writer/trajectory/runtime/foundation/DPO admission",
+        "no active GPU training-input change"
       ]
     }
   },

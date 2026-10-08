@@ -1015,3 +1015,34 @@ introduced here. A future interruptible execution-isolation boundary could
 allow arbitrary JavaScript loops without a blanket language ban or default
 language timeout; current Node/browser execution does not provide that boundary
 for all loop placements.
+
+### V19 frozen eval regression: guarded finite loop bound — 2026-10-08
+
+Correction to the bounded V19 trace survey above: V19's approved frozen runtime
+does include `d9340de1` and is pinned to manifest SHA-256
+`bf7889dbf75f46e875e2bd38734f324f9c92d3a732c1c627f799d76e9f484769` in
+`runs/verified-reasoning-pools-20261008-v19-answer-key-v2/runtime-build/runtime/frozen-runtime.json`.
+V19 slot 02, job `000006-b6d58acd8afb2cdb`, action sequence 18 tried this
+ordinary Euclid loop and received `a counted for loop needs a finite number as
+its bound, but got true`:
+
+```ts
+for (let i = 0; i < 32 && y !== 0; i++) {
+  const r = x % y;
+  x = y;
+  y = r;
+}
+```
+
+The guarded comparison was accepted by the compiler policy and shared `lower`
+transformer, but eval goes through separate source-based loop instrumentation
+in `scope-compiler.ts`. That path recognized only a top-level comparison and
+mistook the whole left conjunct `i < 32` for the numeric bound, generating
+`fix(i, i < 32)`. The resulting `true` value caused the observed runtime error.
+The scope instrumentation now uses the shared `finiteCounterComparison` helper
+to locate the comparison and wraps only its numeric bound. An isolated build of
+the current scope compiler ran the same GCD snippet, preserved `y !== 0` in the
+condition, and returned `1`; the frozen compiler reproduction emitted
+`fix(i, i < 32)` and failed as recorded. This is an uncovered second compiler
+path, not stale job provenance. Frozen campaign artifacts and canonical dist
+were left unchanged.
