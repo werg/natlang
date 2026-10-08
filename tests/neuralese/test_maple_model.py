@@ -399,7 +399,7 @@ def test_full_qat_policy(pair):
 def test_family_term_and_member_evaluation_for_neuralese_stages(pair):
     from types import SimpleNamespace
 
-    from natlang_neuralese.maple.family import (evaluate_members, family_members, member_loss, private_parameters,
+    from natlang_neuralese.maple.family import (evaluate_members, family_members, member_backward, private_parameters,
                                                 window_labels)
     from natlang_neuralese.maple.nested_train import Member, setup
 
@@ -417,8 +417,7 @@ def test_family_term_and_member_evaluation_for_neuralese_stages(pair):
         p.requires_grad_(False)
     for p in private:
         p.requires_grad_(True)
-    loss, parts = member_loss(backbone, members[1], ids, labels, chunk=4)
-    loss.backward()
+    parts = member_backward(backbone, members[1], ids, labels, weight=0.5, chunk=4)
     assert parts.tokens == WINDOW and parts.kl >= 0
     assert ours.model.layers[0].mlp.private_gate["2x3"].grad is not None
     assert ours.model.active_layers is None
