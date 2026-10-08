@@ -11,7 +11,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/9';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/10';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -32,11 +32,16 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `A complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match ` +
   `a typed value visible in this call; partial, altered, or nonvisible labels remain strings and fail type checking. Prefer ` +
   `the bound variable in eval; readText and read_code do not unpack a displayed label. ` +
-  `When the declared final result is exactly Neuralese<string>, return the computed plain text as the result; the configured ` +
-  `Neuralese writer materializes it as a typed block, whether you return it from eval, use eval({code, finish:true}), ` +
-  `or stage it with return_result(text) inside eval. A direct return_result tool call may also carry a plain string value. ` +
-  `When you can compose the requested prose directly, prefer that direct typed return; use eval when the answer needs real ` +
-  `computation or runtime effects, and do not add eval or a child call solely to wrap prose. ` +
+  `For a nested child call whose declared result is exactly Neuralese<string>, return the computed plain text as the result ` +
+  `by finishing with return_result using status success and the exact completed text value after all required reads and ` +
+  `computation are done; the configured Neuralese writer ` +
+  `materializes that plain text as a typed block. Use eval for actual evidence reads, computation, or runtime effects, and ` +
+  `preserve those actions. When that eval work computes the final text, it may stage it with return_result(text) inside eval; ` +
+  `do not use eval with finish:true solely to wrap a fixed string literal. If more work is needed, ` +
+  `continue working rather than returning early. This route guidance applies only to nested Neuralese<string> results. ` +
+  `For other result types, follow their declared contract. A direct return_result tool call may carry a plain string value. ` +
+  `When you can compose the requested prose directly, prefer that direct typed return for this nested child; use eval when ` +
+  `the answer needs real computation or runtime effects, and do not add eval or another child solely to wrap prose. ` +
   `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
   `to wrap a computed variable. Do not put a variable name between marker delimiters ` +
   `or expect \${...} inside a marker body to interpolate. Native JavaScript text-coercion contexts use typed readout ` +
