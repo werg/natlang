@@ -42,7 +42,7 @@ test('rule induction finds a guard with no counterexample and leaves the rest un
   const { rules, unclassified } = induceRules(examples);
   assert.ok(rules.length >= 2);
   for (const rule of rules) {
-    const measured = measureGuard(rule.guard, rule.approach, examples);
+    const measured = measureGuard(rule.guard, rule.label, examples);
     assert.equal(measured.counterexamples.length, 0, rule.guard);
   }
   assert.deepEqual(unclassified, ['odd']);

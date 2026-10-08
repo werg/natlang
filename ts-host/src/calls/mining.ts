@@ -10,7 +10,15 @@ import { VALUE_CLASSES, tokens } from './snapshot.js';
 
 /** One recorded call as mining sees it. */
 export type Example = { callId: string; args: Record<string, unknown>; features: Record<string, string | number | boolean>;
-  evals: string[]; approach: string; split: 'training' | 'held-out' };
+  evals: string[]; approach: string; split: 'training' | 'held-out';
+  /** What the call did, whatever code it ran: its service calls and the functions it called, in order (`none` when nothing). */
+  behavior?: string };
+
+/** A behavior label from the service calls and child functions of a call, consecutive repeats folded. */
+export function behaviorLabel(steps: readonly string[]): string {
+  const folded = steps.filter((step, index) => step !== steps[index - 1]);
+  return folded.length ? folded.join(' > ') : 'none';
+}
 
 /** Calls are split by a hash of their ID: a fifth held out, stably across runs. */
 export const splitOf = (callId: string): 'training' | 'held-out' => parseInt(hexDigest(callId).slice(0, 4), 16) % 5 === 0 ? 'held-out' : 'training';
@@ -128,22 +136,25 @@ export function candidatePredicates(examples: readonly Example[]): Predicate[] {
   return [...texts].map(predicate).filter((item): item is Predicate => !!item);
 }
 
-/** One rule of an induced decision list: a guard that selects one approach with no counterexample in training. */
-export type Rule = { approach: string; guard: string; covers: string[]; heldOut: { covered: number; correct: number } };
+/** One rule of an induced decision list: a guard that selects one label (a behavior) with no counterexample in training. */
+export type Rule = { label: string; guard: string; covers: string[]; heldOut: { covered: number; correct: number } };
+const labelOf = (example: Example): string => example.behavior ?? example.approach;
 
 /**
  * Greedy decision-list induction (§5.2): repeatedly take the condition, or pair of conditions, with the widest coverage
- * among the calls not yet covered that selects a single approach without exception, until nothing covers `minSupport`
+ * among the calls not yet covered that selects a single behavior (else approach) without exception, until nothing covers `minSupport`
  * calls. Calls no rule covers are left to the agent. Held-out calls are only measured.
  */
 export function induceRules(examples: readonly Example[], options: { minSupport?: number; maxRules?: number; maxPairs?: number } = {}):
   { rules: Rule[]; unclassified: string[] } {
   const minSupport = options.minSupport ?? 3;
+  // One behavior for every call says nothing about which inputs select it: tell approaches apart instead.
+  if (new Set(examples.map(example => example.behavior)).size < 2) examples = examples.map(({ behavior: _behavior, ...example }) => example);
   const training = examples.filter(example => example.split === 'training');
   const heldOut = examples.filter(example => example.split === 'held-out');
   const predicates = candidatePredicates(training);
   const truth = new Map(predicates.map(item => [item.text, new Set(training.filter(example => item.test(example.args)).map(example => example.callId))]));
-  const label = new Map(training.map(example => [example.callId, example.approach]));
+  const label = new Map(training.map(example => [example.callId, labelOf(example)]));
   let remaining = new Set(training.map(example => example.callId));
   const rules: Rule[] = [];
   const pure = (covered: string[]): string | undefined => {
@@ -172,21 +183,21 @@ export function induceRules(examples: readonly Example[], options: { minSupport?
     const chosen = predicate(best.guard)!;
     const earlier = rules.map(rule => predicate(rule.guard)!);
     const heldCovered = heldOut.filter(example => chosen.test(example.args) && !earlier.some(rule => rule.test(example.args)));
-    rules.push({ approach: best.approach, guard: best.guard, covers: best.covered,
-      heldOut: { covered: heldCovered.length, correct: heldCovered.filter(example => example.approach === best!.approach).length } });
+    rules.push({ label: best.approach, guard: best.guard, covers: best.covered,
+      heldOut: { covered: heldCovered.length, correct: heldCovered.filter(example => labelOf(example) === best!.approach).length } });
     remaining = new Set([...remaining].filter(id => !best!.covered.includes(id)));
   }
   return { rules, unclassified: [...remaining] };
 }
 
 /** Exact precision and coverage of a guard expression over examples (for proposals from the model). */
-export function measureGuard(guard: string, approach: string, examples: readonly Example[]):
+export function measureGuard(guard: string, label: string, examples: readonly Example[]):
   { valid: boolean; error?: string; covered: number; correct: number; counterexamples: string[] } {
   const item = predicate(guard);
   if (!item) return { valid: false, error: 'the guard is not a JavaScript expression over args', covered: 0, correct: 0, counterexamples: [] };
   const covered = examples.filter(example => item.test(example.args));
-  return { valid: true, covered: covered.length, correct: covered.filter(example => example.approach === approach).length,
-    counterexamples: covered.filter(example => example.approach !== approach).map(example => example.callId) };
+  return { valid: true, covered: covered.length, correct: covered.filter(example => labelOf(example) === label).length,
+    counterexamples: covered.filter(example => labelOf(example) !== label).map(example => example.callId) };
 }
 
 export { tokens };

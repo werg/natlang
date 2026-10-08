@@ -10,7 +10,7 @@ tool tasks are terminal. Every phase ends with the commit of step 3: the run is 
 all three steps in one eval and return only after the commit succeeded.
 
 1. Poll phase only: when ai.model(checkpoint.model) is not null, try await ai.cancel(checkpoint.model,
-   checkpoint.handle); if it rejects, durable.report(the error text) and go on. Other phases skip this step.
+   checkpoint.handle); if it rejects, durable.report(the caught error itself) and go on. Other phases skip this step.
 2. Tools phase only: the calls never started are checkpoint.pending. message = (await
    durable.entry(checkpoint.assistant)).model[0]; for each call ID of checkpoint.pending, in order, take the first
    toolCall item of message.content with that id (skip an ID with none). These are unstarted. Other phases have no

@@ -112,7 +112,10 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
         return { error: error instanceof Error ? error.message : String(error) };
       }
     },
-    report(message: string): void { runtime.report(new Error(message)); },
+    report(error: unknown): void {
+      // A caught error is reported as it is; text becomes an Error with that message.
+      runtime.report(error instanceof Error ? error : new Error(String(error).replace(/^Error: /, '')));
+    },
     async sleep(until: number): Promise<void> { await runtime.sleep(until, context); },
     now(): number { return runtime.now(); },
     async memo(name: string, candidate?: unknown): Promise<unknown> {
@@ -157,8 +160,8 @@ export function hooks(name: string): Promise<string[]>;
 export function hook(name: string, index: number, args: unknown[]): Promise<{ value?: unknown; error?: string }>;
 /** Render the agent's section key given the shown sections (key to text): text, omit, or error (already reported). */
 export function renderSection(key: string, shown: Record<string, string>): Promise<{ text?: string; omit?: true; error?: string }>;
-/** Report a non-fatal failure to the host. */
-export function report(message: string): void;
+/** Report a failure the harness keeps going after: pass a caught error itself (catch (e) { durable.report(e) }), or a text. */
+export function report(error: unknown): void;
 /** Wait until the durable clock reaches until (milliseconds). */
 export function sleep(until: number): Promise<void>;
 /** The durable clock, in milliseconds. */
