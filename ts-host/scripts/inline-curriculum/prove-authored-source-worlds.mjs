@@ -250,7 +250,8 @@ for (const [index, record] of rows.entries()) {
     const matchedReads = reads.map((read, readIndex) => {
       const expectedRead = expectedReads[readIndex];
       const matched = matchDeclaredSourceRead({ readPath: read.arguments?.path, expectedPath: expectedRead,
-        resultText: read.result_text, folderFiles: record.semantics.folder_files });
+        resultText: read.result_text, folderFiles: record.semantics.folder_files,
+        pageEvents: childEvents.filter(event => event.name === 'read_page') });
       if (!matched) throw new Error(`${record.id}: child ${child.invocation_id} did not read its complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
       return matched;
     });

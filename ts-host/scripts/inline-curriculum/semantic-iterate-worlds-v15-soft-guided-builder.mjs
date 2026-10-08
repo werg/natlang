@@ -65,7 +65,7 @@ function finalDraftType(world) {
   return `{ ${fields.map(field => {
     const metadata = world.field_enums?.[field];
     const values = Array.isArray(metadata) ? metadata : metadata?.final;
-    const type = Array.isArray(values) && values.length ? values.map(value => JSON.stringify(value)).join(' | ') : 'string';
+    const type = Array.isArray(values) && values.length ? values.map(value => JSON.stringify(value)).join(' | ') : (world.output_types?.[field] ?? 'string');
     return `${field}: ${type}`;
   }).join('; ')} }`;
 }
@@ -75,7 +75,10 @@ function initialDraftType(world) {
   return `{ ${fields.map(field => {
     const metadata = world.field_enums?.[field];
     const values = Array.isArray(metadata) ? metadata : metadata?.intermediate;
-    const type = Array.isArray(values) && values.length ? values.map(value => JSON.stringify(value)).join(' | ') : 'string';
+    const baseType = Array.isArray(values) && values.length ? values.map(value => JSON.stringify(value)).join(' | ') : (world.output_types?.[field] ?? 'string');
+    const placeholders = world.initial_types?.[field];
+    const type = Array.isArray(placeholders) && placeholders.length
+      ? `${baseType} | ${placeholders.map(value => JSON.stringify(value)).join(' | ')}` : baseType;
     return `${field}: ${type}`;
   }).join('; ')} }`;
 }
