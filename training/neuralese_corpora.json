@@ -6781,6 +6781,53 @@
         "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008"
       ],
       "notes": "Root-approved V26 generation-only Luna plan and actual launch binding. The recorded reused READY receipt is for the unchanged provider route from V25 runtime 45c15184; V26 runtime behavior is supported separately by the pinned CPU reference proof. Initial actual worker bindings cover source indices 0-4 under five slots, with zero collector transport retries. Mutable claims, live journals, job traces, and partials are excluded until closure. No action, trace, DPO, or training admission is granted."
+    },
+    {
+      "id": "neuralese-v24-v25-source-action-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v25-source-action-review-20261008-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-per-action-source-quality-review-no-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008",
+        "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008"
+      ],
+      "notes": "Held actual-action review of V24/V25 campaign evidence, separate from scripted runtime references. V25 screened all 16 parent outputs against source-reviewed expected values and manually reviewed four selected note targets plus the TREE-710/FISH-730 incorrect authority cases; other actions remain unreviewed. V24 review currently contains the FLD-510 pass-03/pass-04 sample while exhaustive V24 review proceeds separately. No action or training admission is granted."
+    },
+    {
+      "id": "neuralese-v24-actual-action-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-actual-action-review-20261008-v1",
+      "include": [
+        "README.md",
+        "review.json"
+      ],
+      "admission": "held-actual-semantic-action-review-no-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008"
+      ],
+      "notes": "Exhaustive actual V24 generated-action review: 16 cases across the original train/test source groups and 61 returned child note bodies, with per-action invocation/turn/context/provenance plus final interpreter rationales. FLD-511 semantic omission retained as rejection evidence; HAB-570 unit suffix held as source-format ambiguity. MFG-561 has no child prose note; final rationale reviewed and eval code excluded as prose evidence. Not a training, DPO, or action admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v26-luna-campaign-v1-closed-raw-20261008",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/**/*",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.approved.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/root-authorization.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launch-registration-v1.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launcher-logs/**/*",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/closed-raw-review-v1/**/*"
+      ],
+      "admission": "held-closed-raw-generation-observations-action-review-pending-no-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008",
+        "neuralese-semantic-iterate-reducers-v26-luna-launch-binding-v1-20261008"
+      ],
+      "notes": "Closed raw V26 Luna campaign for all 16 reviewed source IDs. All 16 claims and results are terminal: 15 parents accepted, LANG-850 rejected on files/answer, zero infrastructure error sidecars. The LANG-850 trajectory's carried notes collapsed factual eligibility evidence into a proposed JSON draft; its final interpreter then returned no_action despite eligible LOCALE-B with 17 verified issues and request-level lead assignment. Keep as a held semantic trajectory rejection, not infrastructure. Preserves raw jobs, actions, graph, partials, journals, claims, launch attempts and exact runtime/source bindings. Neither acceptance nor CPU reference proof grants action trace, DPO or training admission."
     }
   ],
   "coverage_backlog": [

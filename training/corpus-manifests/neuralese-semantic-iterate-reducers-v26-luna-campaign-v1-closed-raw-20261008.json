@@ -1,0 +1,618 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v26-luna-campaign-v1-closed-raw-20261008",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/dispatch/claims.jsonl",
+      "bytes": 64197,
+      "sha256": "f4caaffeafba2ae27760844a9f449abc41c76b26640a40b53a4b4ce7d90a7f8e",
+      "lines": 50
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/dispatch/launch.json",
+      "bytes": 2939,
+      "sha256": "39cf7ac98f8de1a4e45788b4724169c9ba1168e795a65c0da2e6113241e9fddc"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000000/queue.jsonl",
+      "bytes": 848,
+      "sha256": "420f9cd9c85e67d0611cca2d10f0867b79489076ab4a67cae3bc749cda1a8104",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000007/queue.jsonl",
+      "bytes": 848,
+      "sha256": "08fb302328a1ea43173f80d008831e04aa5e52cb98d0bdc20dd5e4b909e060c8",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000010/queue.jsonl",
+      "bytes": 849,
+      "sha256": "756e9f559f879d9d0ba00df60dc65186edb67628311ec8d6244d80815a8d25de",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 77867,
+      "sha256": "44162c5988fbe0e7b26651238b63b9b23952b25a99e527275762769043279610"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000007.log",
+      "bytes": 76307,
+      "sha256": "08724a190d49a29d3146a2c497139f7c2ea8dea1ea7514d0735ec749336c1791"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000010.log",
+      "bytes": 63995,
+      "sha256": "4250a2a7a76c85b0f914287a64590c49b2145549731e2183cc03399811c2a48e"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-a37b1084e88c920a.result.json",
+      "bytes": 2570285,
+      "sha256": "fbf2340963ba5bebb7052229a841cd6e0874b494a654670cd434dbe3b99bb30e"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-a37b1084e88c920a.trace.jsonl",
+      "bytes": 578918,
+      "sha256": "0cbc9dc49d6361e10ff5202b30297b95d6ec94c16126099c1e1864341f53ad43",
+      "lines": 452
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000007-4214f82811d429f6.result.json",
+      "bytes": 2615376,
+      "sha256": "8eb5e7fa8d5d54e4c50a63253c035d8d8e7750ca28f623121b3740d69a3a8a05"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000007-4214f82811d429f6.trace.jsonl",
+      "bytes": 705234,
+      "sha256": "121ee799eadf332b0ba7c27b6e7549879b468ebd4260aeb715630f7638abaf5a",
+      "lines": 456
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000010-56fe5466f5ae4c30.result.json",
+      "bytes": 2299605,
+      "sha256": "002d0659b534d65de39c85d91230de4231a1279e6969859b132e74eab78c7509"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000010-56fe5466f5ae4c30.trace.jsonl",
+      "bytes": 622395,
+      "sha256": "244dd17322b98cfa644cdcc995ad8070d4c4ae5e0d74ab2acb5ebf0dc57747c7",
+      "lines": 398
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 20404,
+      "sha256": "0aae150ef5dee58c5e95ee9510e64166c528fb7f93fd6a8287419593c9a5c069",
+      "lines": 22
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 2570285,
+      "sha256": "fbf2340963ba5bebb7052229a841cd6e0874b494a654670cd434dbe3b99bb30e",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "4f45f8102b0789b09535a2fbdcb1a966c4fb5519451d276106cff12019053dae"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000007.results.jsonl",
+      "bytes": 2615376,
+      "sha256": "8eb5e7fa8d5d54e4c50a63253c035d8d8e7750ca28f623121b3740d69a3a8a05",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000007.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "e3205a2bcc3032caf48f2e1a4996584fe51b8190880fc1d4005ca1a1a6e02230"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000010.results.jsonl",
+      "bytes": 2299605,
+      "sha256": "002d0659b534d65de39c85d91230de4231a1279e6969859b132e74eab78c7509",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000010.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "75a1263bc3868806b00ab3806f78b57da4dc277f77db67a1d0b85e8c7fb7c1af"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 20404,
+      "sha256": "0aae150ef5dee58c5e95ee9510e64166c528fb7f93fd6a8287419593c9a5c069"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000001/queue.jsonl",
+      "bytes": 848,
+      "sha256": "a0f217a5665e608d7fe3e606b39c1a95d85feec0317e5e87e14e0f4d4dc2ef9a",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000008/queue.jsonl",
+      "bytes": 848,
+      "sha256": "df72ed21b8dde8173b90ba14f091db2f83d9c098b3e48ca238852e23ba55cab0",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 110049,
+      "sha256": "11ccd87d9b6cb9c8e4010794ee4ba0f428cc6fda0b3339ffb1f9a3b52f7e9b1f"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000008.log",
+      "bytes": 319646,
+      "sha256": "a15e1ac499101a5438e44a3ea80edb209e04cfb88b18092aa04b28b2d160dbfb"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-edec12241db59c39.result.json",
+      "bytes": 3622801,
+      "sha256": "43e781bdcb3c36902d2404829ce321efbb88b9ab7d4d9d9ba322b3c9892a2dd4"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-edec12241db59c39.trace.jsonl",
+      "bytes": 873097,
+      "sha256": "d07aa96c2751c9d3e20df46bf713f8b47521055b9ab79c990300cbb2be43a369",
+      "lines": 583
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000008-8b3fef4abc77ac76.result.json",
+      "bytes": 10221170,
+      "sha256": "7a283a2c4ab325698a3ac118ef7c901188df69d67159e3ac32f36985248186d8"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000008-8b3fef4abc77ac76.trace.jsonl",
+      "bytes": 1547677,
+      "sha256": "e49ff1984c9bff96a11fe2e01c9c5c7096a7d1991cde23a5f9bc05d445acf058",
+      "lines": 1528
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 34482,
+      "sha256": "908bc34803536be6148b796a8a87fbe2c2bd7790f628fed0cd1156b55e316579",
+      "lines": 38
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 3622801,
+      "sha256": "43e781bdcb3c36902d2404829ce321efbb88b9ab7d4d9d9ba322b3c9892a2dd4",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "3f35b0489a5751d7b0aa0e8b4ef6281ba8b5673e3346379a4ff23e66762b51f5"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000008.results.jsonl",
+      "bytes": 10221170,
+      "sha256": "7a283a2c4ab325698a3ac118ef7c901188df69d67159e3ac32f36985248186d8",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000008.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "6a224b1ffeb0143a513f85ae98a97adbdc4244ca60e06d7cac561e3f35c801f2"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 34482,
+      "sha256": "908bc34803536be6148b796a8a87fbe2c2bd7790f628fed0cd1156b55e316579"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000002/queue.jsonl",
+      "bytes": 848,
+      "sha256": "d1b88ca7962013b5c971916409b45a26aa11f9d827d47a6ec336d9e16e7888d9",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000009/queue.jsonl",
+      "bytes": 848,
+      "sha256": "1993a39e070492478f2dfa6b9f74fe8d043a9a4a5edee6b5641a6161ab1c6040",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000013/queue.jsonl",
+      "bytes": 849,
+      "sha256": "6b0d7f5475cfa797f345e1039f86ed51964962850e6acbe7fc384156b1ed1973",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 116790,
+      "sha256": "8b822eb47d92630578c0c0ae9ced45b47661db1ab689c0bbabaa427a814e871c"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000009.log",
+      "bytes": 69178,
+      "sha256": "9ecab983d3b5d80881124f594d3c952d67d52190b0c1285b634d2eb71fc6bf96"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000013.log",
+      "bytes": 42555,
+      "sha256": "6f03510b62c2651a797b5eb00b21fa30f0dc0a7ea309a733cdcbfbb4f251102e"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-accc23a5fde467ef.result.json",
+      "bytes": 3672939,
+      "sha256": "edf868d678c512483fa3bea16000d8bf9aea140af170555bcff269ed80c8a756"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-accc23a5fde467ef.trace.jsonl",
+      "bytes": 1112001,
+      "sha256": "847eb160f594562e2cf5e098c744364e060f194b417acd8d0e0714a48e705ff4",
+      "lines": 605
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000009-f10d9ec684c59da9.result.json",
+      "bytes": 2542235,
+      "sha256": "f3f242b0a872e9110de948edc985b5deac0e47e5c6b3cb250b5239dcf34f837d"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000009-f10d9ec684c59da9.trace.jsonl",
+      "bytes": 719337,
+      "sha256": "f9d674ac0336a279bd2731309814596c52d3b37f98c18b2b9daf01143f0d06d2",
+      "lines": 493
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000013-acd293b570734265.result.json",
+      "bytes": 1464753,
+      "sha256": "8c0096df68bce9310b8c5da7bd6c801bf59b761c6cc519ea05bf8077ca6ac200"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000013-acd293b570734265.trace.jsonl",
+      "bytes": 456414,
+      "sha256": "ff76e173f938ee65ec2d19baf1a001b81c1fe7b190c205ae6b3725d44e466349",
+      "lines": 282
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/journal.jsonl",
+      "bytes": 22288,
+      "sha256": "ca9f3c131361d23a27f28b79fdbc464ad54672e5863ba01a27ad0fe1e26982e2",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 3672939,
+      "sha256": "edf868d678c512483fa3bea16000d8bf9aea140af170555bcff269ed80c8a756",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "7a83e4b0584cb6bf16712851d42a5c79297f3ca1c31fbb8c6d009141b4a7e442"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000009.results.jsonl",
+      "bytes": 2542235,
+      "sha256": "f3f242b0a872e9110de948edc985b5deac0e47e5c6b3cb250b5239dcf34f837d",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000009.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "c5a83847f64e88a7e6eacee688b5499e15473f67faaa5191209d56e527808e49"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000013.results.jsonl",
+      "bytes": 1464753,
+      "sha256": "8c0096df68bce9310b8c5da7bd6c801bf59b761c6cc519ea05bf8077ca6ac200",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000013.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "9422268d0d52a4daa33b2be29f108befadd76f835e9e80cba3407dc288593df9"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/supervisor.log",
+      "bytes": 22288,
+      "sha256": "ca9f3c131361d23a27f28b79fdbc464ad54672e5863ba01a27ad0fe1e26982e2"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000003/queue.jsonl",
+      "bytes": 848,
+      "sha256": "a813709809d43db8fcc2d5fbf8f4ed78968df5d9b819f913848fbf5d2eac37f4",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000006/queue.jsonl",
+      "bytes": 848,
+      "sha256": "a17fa29fe1281f38983edc43efb8b6b46865fddafe053dd044423fa633a5e096",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000011/queue.jsonl",
+      "bytes": 849,
+      "sha256": "20cff6141d80469a4d8b0df4ccc22bc4fc224df45f6b6e532205e038fd296452",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000014/queue.jsonl",
+      "bytes": 849,
+      "sha256": "58ba6be1f40ccba5455ea213809abf9b2d153b10b9335e0531de35fbf8f232b3",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 74718,
+      "sha256": "c975ab8249eb4fb052536fc369f8e008a2f4e0bc1f789e2089260fe78a150f7b"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000006.log",
+      "bytes": 82662,
+      "sha256": "7a0477a9a225bf14d4b666955357256c4d17214967f734289309ee8dbd94ca73"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000011.log",
+      "bytes": 44144,
+      "sha256": "af39c798a43b567314891459dd2216d0868652695b2244d29f6484e43d79c335"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000014.log",
+      "bytes": 74288,
+      "sha256": "99838e13186745898c79d50d12cc79c2d09d19a212b7b098fb10192b16b5f58b"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3966f836c02cf826.result.json",
+      "bytes": 2432738,
+      "sha256": "449b482161741149413773a876a84aff7e97da13a3f11323aeb9119a151fbbc7"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3966f836c02cf826.trace.jsonl",
+      "bytes": 854495,
+      "sha256": "b707955ae38d8de3f702794b72a528d48a219237c351bee4da743697fb92367f",
+      "lines": 420
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000006-df8170a2dae19a46.result.json",
+      "bytes": 2987113,
+      "sha256": "28c3f9acd64180e0c589badc18d554d5a2dd65b7927a0a451d85abb8b33656f4"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000006-df8170a2dae19a46.trace.jsonl",
+      "bytes": 821592,
+      "sha256": "9477cc7a8433c4fa86ea1a9a4cdb25f508aa999dfbb19479f59d9ba23f78062b",
+      "lines": 521
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000011-a44fe24837230f58.result.json",
+      "bytes": 1592404,
+      "sha256": "e375d08d75b19be2a5af6bc03c5e12bcffcc5a597cc2b6c8292ca2cd47d7f907"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000011-a44fe24837230f58.trace.jsonl",
+      "bytes": 554344,
+      "sha256": "93bad7984dedffaa5b06b57c31d7046c4b269a86a3817e4bfeeef92c9edd1582",
+      "lines": 312
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000014-bba88cdc5eefc2dd.result.json",
+      "bytes": 2455483,
+      "sha256": "64d10aa574e698d23fbc69718578c270d01bde43efda9340f04e99877832f6b2"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000014-bba88cdc5eefc2dd.trace.jsonl",
+      "bytes": 540756,
+      "sha256": "e4767203c488487610c2afc7c09c9aaebb53e7a548331abc0cf9e509dd4f1040",
+      "lines": 393
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/journal.jsonl",
+      "bytes": 26162,
+      "sha256": "cda6719325519703fecb841dbea317ae1525890cc4120d8038184ee61fb28267",
+      "lines": 28
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 2432738,
+      "sha256": "449b482161741149413773a876a84aff7e97da13a3f11323aeb9119a151fbbc7",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "ab8d1c47c562507bb5140372205f8a37169caf43a239bf39a3c7d04dd9df037c"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000006.results.jsonl",
+      "bytes": 2987113,
+      "sha256": "28c3f9acd64180e0c589badc18d554d5a2dd65b7927a0a451d85abb8b33656f4",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000006.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "2e4e2906002508b1ddd48813c86f7571df123e0327c2b060d7cadfa4b3b61a8b"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000011.results.jsonl",
+      "bytes": 1592404,
+      "sha256": "e375d08d75b19be2a5af6bc03c5e12bcffcc5a597cc2b6c8292ca2cd47d7f907",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000011.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "8531f7837c5d2573a9aafa5db68244622b70fc6208c0625c0aac65edc03a1a72"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000014.results.jsonl",
+      "bytes": 2455483,
+      "sha256": "64d10aa574e698d23fbc69718578c270d01bde43efda9340f04e99877832f6b2",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000014.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "07cfeb4d6f91a2f7bde853c46177e4799d71dcef52cd5685f8e182f2967c8b2a"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/supervisor.log",
+      "bytes": 26162,
+      "sha256": "cda6719325519703fecb841dbea317ae1525890cc4120d8038184ee61fb28267"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000004/queue.jsonl",
+      "bytes": 848,
+      "sha256": "663c095209a9e7e9bd14239c33c319b4cc601f1144df0ebf1a17f08e5f191d3b",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000005/queue.jsonl",
+      "bytes": 848,
+      "sha256": "847d9601a896e183a3f69a9e96d1cbba0075a8c576fb6d4e700058b916ecb45a",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000012/queue.jsonl",
+      "bytes": 849,
+      "sha256": "e287592d1c2ae10d74cc7d49e6d695adaaa795fa31ae7663522d3a083d88a728",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/luna-v26-authority-scoped-evidence-ledger-v2-case-000015/queue.jsonl",
+      "bytes": 849,
+      "sha256": "2c98bbdf055ad0776142bc167db644f3673eed4bb646db3d0833363092fc08e5",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 67550,
+      "sha256": "7a6e55001f1ebe011adb8e79dfafe2f0d7d02ccd988031ecda8e495e5958576a"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000005.log",
+      "bytes": 96145,
+      "sha256": "fdbc546e7a51a9c2387f0f20748acedbd290a37b02ef8bea970a71175198edd4"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000012.log",
+      "bytes": 50890,
+      "sha256": "0b712d72c9173e7e364774e9ce12da995d614a75bb9699f7827d987284544728"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000015.log",
+      "bytes": 136994,
+      "sha256": "e7f1cddf392dbd42c331b089880d0ebc82a7cc488c8593b36b080e2190ae2353"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-65b7a558db6df74c.result.json",
+      "bytes": 2232335,
+      "sha256": "75effc443cc0b3ad4aeafd112ee84c328888de77cc3fdec131b2936b82187de0"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-65b7a558db6df74c.trace.jsonl",
+      "bytes": 609210,
+      "sha256": "fea62801b8713c551d9370b77c560634b7c5a4ec64e1de6d969488215016cf62",
+      "lines": 383
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-5fdc496666e14ec0.result.json",
+      "bytes": 3107407,
+      "sha256": "0a9f3c234a5428a6580004889cc154ff2004e496039133b7532eb71e6c59f3ba"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-5fdc496666e14ec0.trace.jsonl",
+      "bytes": 836553,
+      "sha256": "a644548f7919143c1ac2128ccd25406dba6ebd9c6d4be807cedf84828000aaea",
+      "lines": 531
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000012-79460c2cf112893d.result.json",
+      "bytes": 1778321,
+      "sha256": "d74e12e4d235cf3e3f292a07705ac907a81d04653f9b44e04e8def7771ed69c2"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000012-79460c2cf112893d.trace.jsonl",
+      "bytes": 511949,
+      "sha256": "9410da8fbf4d94b916ea1e9fa3e6c33113f356811ab19e7f21140fcc5ebfedc6",
+      "lines": 315
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000015-0f066223e1583ec8.result.json",
+      "bytes": 4470627,
+      "sha256": "69a50e6c161532eaba73dee26586f6a11fbd642fdb410636281f0258693d13d4"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000015-0f066223e1583ec8.trace.jsonl",
+      "bytes": 1103645,
+      "sha256": "713fdedc4b19388fafae551ddf2aef8bb94d3cc15067fe84db9afe4632863175",
+      "lines": 571
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/journal.jsonl",
+      "bytes": 33004,
+      "sha256": "0f9c695e0b43dfeefc393f6a62ebedc4fc4c429e35f10152dd70205409f6665d",
+      "lines": 36
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 2232335,
+      "sha256": "75effc443cc0b3ad4aeafd112ee84c328888de77cc3fdec131b2936b82187de0",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "975a0902943f756a77e116bc07a623ce1ef5289b342be9286dae6b07bd4c11da"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl",
+      "bytes": 3107407,
+      "sha256": "0a9f3c234a5428a6580004889cc154ff2004e496039133b7532eb71e6c59f3ba",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl.manifest.json",
+      "bytes": 601,
+      "sha256": "f60ba3b76ff8200dda79c53d88d31784582515ccbae3ed8b2b1ddeff9ae2ff3c"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000012.results.jsonl",
+      "bytes": 1778321,
+      "sha256": "d74e12e4d235cf3e3f292a07705ac907a81d04653f9b44e04e8def7771ed69c2",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000012.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "097bfe1fcc131bf3cccf7033221c35efaa212fa22b9894000c8083a35a6d6991"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000015.results.jsonl",
+      "bytes": 4470627,
+      "sha256": "69a50e6c161532eaba73dee26586f6a11fbd642fdb410636281f0258693d13d4",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000015.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "6bd1be691160150343768fe41cce527d37b318111b5008384c1f07ca7d32fcb2"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/supervisor.log",
+      "bytes": 33004,
+      "sha256": "0f9c695e0b43dfeefc393f6a62ebedc4fc4c429e35f10152dd70205409f6665d"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/launch-registration-v1.json",
+      "bytes": 10836,
+      "sha256": "c7b823b3689c65c805d00ce62eb3c31a85a60035725499a69b39a6b9d8d86e5b"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.approved.json",
+      "bytes": 9363,
+      "sha256": "2c2a4abe9135097d3c618c91409efa2478d0ed16e58f93dbf1840632cbde212e"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/root-authorization.json",
+      "bytes": 2261,
+      "sha256": "c9c40df7bb1fd962ddc38995cb486bc0bed50df330a16b4868014d7e8a7a0b36"
+    }
+  ],
+  "bytes": 114468051
+}
