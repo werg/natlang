@@ -417,6 +417,33 @@ def sequence_completions(backbone, heads, prefix_ids, span_ids, *, passes=3,
         del producer,consumer,predictions,replacements,sources,guesses,top
 
 
+def mapped_completions(backbone, heads, prefix_ids, span_ids, *, passes=2):
+    """Neuralese positions read the token-to-Neuralese input map (``heads.input_map``) of the gold tokens.
+
+    Pass zero reads gold text; pass one reads the mapped history in one parallel full-stack pass. In both passes
+    the map's outputs (one per target slot) are fitted to the model's own stop-gradient projection at that slot
+    (self-consistency), and the consumer reads the map's values detached: the map models the drift, the model
+    learns to read it.
+    """
+    if span_ids.ndim != 2 or span_ids.shape[1] < 1 or prefix_ids.shape[1] < 1:
+        raise ValueError('nonempty prefixes and gold target tokens required')
+    start=prefix_ids.shape[1]-1
+    def projected(top):
+        with torch.no_grad():return heads.content(torch.zeros_like(top),top)
+    ordinary=backbone.forward_ids(torch.cat([prefix_ids,span_ids[:,:-1]],1),cutoff=heads.cutoff,logits=False)
+    top=ordinary['h_final'][:,start:]
+    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'sketch_target':projected(top),
+           'pass_index':0}
+    del ordinary,top
+    if passes<2:return
+    with torch.no_grad():mapped=heads.input_map(backbone.embed(span_ids[:,:-1]))
+    history=heads.read_embeddings(backbone,mapped)
+    out=backbone.forward_embeds(torch.cat([backbone.embed(prefix_ids),history],1),cutoff=heads.cutoff,logits=False)
+    top=out['h_final'][:,start:]
+    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'sketch_target':projected(top),
+           'pass_index':1}
+
+
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
                   min_agreement=.9):
     """All held strata must pass; no aggregate can hide a failing stratum."""
@@ -679,12 +706,12 @@ def same_foundation_context(previous, current):
     return not any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS)
 
 
-def configure_student(engine, policy='full', rank=16):
+def configure_student(engine, policy='full', rank=16, sketch='feedback'):
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import configure_backbone_training
     backbone_named=configure_backbone_training(backbone,policy,rank=rank)
     for p in heads.parameters():p.requires_grad_(False)
-    for p in heads.feedback.parameters():p.requires_grad_(True)
+    for p in getattr(heads,sketch).parameters():p.requires_grad_(True)
     for p in heads.content.proj.parameters():p.requires_grad_(True)
     # Keep vocabulary/embedding coordinates and output normalization stable.
     backbone.hf.eval();heads.eval()
@@ -784,9 +811,15 @@ def main(argv=None):
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
                    help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
                         'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
+    p.add_argument('--neuralese-input',choices=('sketch','map'),default='sketch',
+                   help='how Neuralese positions are filled in training: sketch = repeated shallow sketch passes; '
+                        'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
+                        'self-consistent with the model\'s own projection)')
+    p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
+    if a.neuralese_input=='map' and a.rollout_passes:p.error('--neuralese-input map replaces the sketch rollout (--rollout-passes 0)')
     if a.rollout_passes and a.rollout_passes<2:raise ValueError('--rollout-passes needs at least 2 (or 0 to keep the schedule)')
     if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
@@ -868,7 +901,12 @@ def main(argv=None):
     ffn_chunk_candidates=((default_ffn_chunk_tokens,) if getattr(backbone,'ternary',False)
                          else TEXT_WARMUP_FFN_CHUNKS)
     backbone.ffn_chunk_tokens=default_ffn_chunk_tokens
-    named=configure_student(engine,a.backbone_training,a.rank)
+    input_map=a.neuralese_input=='map'
+    if input_map:
+        from ..model.input_map import NeuraleseInputMap
+        heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
+            kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
+    named=configure_student(engine,a.backbone_training,a.rank,sketch='input_map' if input_map else 'feedback')
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
         backbone,heads,checkpointed=a.checkpoint_layers)
@@ -1000,7 +1038,8 @@ def main(argv=None):
         if evaluation and out['pass_index']==0 and projected_observer is not None:
             projected_observer(out,prediction)
         target=backbone.embed(span).detach()
-        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target)
+        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],
+                                                               out.get('sketch_target',target))
         embedding,sketch=embedding_positions.mean(),sketch_positions.mean()
         if out['pass_index']==0:
             with torch.no_grad():
@@ -1065,7 +1104,9 @@ def main(argv=None):
         rows=[w] if isinstance(w,dict) else w
         roles=(torch.tensor([r['roles'][r['prefix']:] for r in rows],device=span.device)
                if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
-        for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
+        completions=(mapped_completions(backbone,heads,prefix,span,passes=min(passes,2)) if input_map
+                     else sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size))
+        for out in completions:
             yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
@@ -1086,7 +1127,16 @@ def main(argv=None):
     if restored:
         with torch.no_grad():
             for n,v in restored['student_parameters'].items():parameters[n].copy_(v.to(parameters[n]))
-        heads.load_state_dict(restored['heads']);optimizer.load_state_dict(restored['optimizer'])
+        fresh_map=input_map and not any(k.startswith('input_map.') for k in restored['heads'])
+        if fresh_map:
+            # A sketch-lineage state continues into the input map: the map starts at identity and its optimizer
+            # (whose parameter groups now differ) starts fresh.
+            missing,unexpected=heads.load_state_dict(restored['heads'],strict=False)
+            if unexpected or any(not k.startswith('input_map.') for k in missing):
+                raise ValueError(f'continuation heads differ beyond the new input map: {missing} {unexpected}')
+            print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
+        else:
+            heads.load_state_dict(restored['heads']);optimizer.load_state_dict(restored['optimizer'])
         step=restored['step'];updates=restored['updates']
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1170,7 +1220,7 @@ def main(argv=None):
                             'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
                             'scores':window_scores})
                 for _,m in objective(batch,max(3,a.rollout_passes),projected_observer=observe_projected_history):
-                    if m['pass_index']==2:
+                    if m['pass_index']==(1 if input_map else 2):
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
                             boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
@@ -1320,7 +1370,10 @@ def main(argv=None):
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
         from .adapters import lora_state,adapter_layers
         initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
-        exported={**initial,'heads':heads.state_dict(),'control_rows':backbone.control_rows.detach().cpu(),
+        serving=heads.state_dict()
+        trained_map={k.removeprefix('input_map.'):v for k,v in serving.items() if k.startswith('input_map.')}
+        serving={k:v for k,v in serving.items() if not k.startswith('input_map.')}
+        exported={**initial,'heads':serving,**({'neuralese_input_map':trained_map} if trained_map else {}),'control_rows':backbone.control_rows.detach().cpu(),
           'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
           'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
           'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
@@ -1446,10 +1499,11 @@ def main(argv=None):
         pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes)
         metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
-        sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
+        sketch_prefix='heads.input_map.' if input_map else 'heads.feedback.'
+        sketch_norm=gradient_norm(q for n,q in named if n.startswith(sketch_prefix))
         clip_finite_gradients(parameters.values())
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
-                 for k,prefix in [('backbone','backbone.'),('sketch','heads.feedback.'),
+                 for k,prefix in [('backbone','backbone.'),('sketch',sketch_prefix),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
@@ -1697,7 +1751,7 @@ def main(argv=None):
         report=None
         if step%a.eval_every==0:
             report=evaluate()
-            streak=streak+1 if passes==3 and report['alignment_gate_passed'] and all(updates.values()) else 0
+            streak=streak+1 if passes==(2 if input_map else 3) and report['alignment_gate_passed'] and all(updates.values()) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
             score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,
@@ -1724,6 +1778,7 @@ def main(argv=None):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
         passes=controls['sequence_passes'];sketch_only=False
+        if input_map:passes=min(passes,2)
         if rollout is not None and not bootstrap:
             stage=rollout.controls();passes=stage['passes'];sketch_only=stage['sketch_only']
             # Sketch-only: the backbone and full projection are frozen (no gradients, so no optimizer update).
