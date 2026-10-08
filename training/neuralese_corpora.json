@@ -12477,6 +12477,37 @@
         "neuralese-v17-v8-corrected-luna-evidence-20261008-v1"
       ],
       "notes": "V2 complete exact transfer set for corrected no-gold V8 Luna evidence, adding the independent no-gold input review and excluding a mutable authored guided-root input; see publication-index-v2 for V1 local path drift note. Includes 6 accepted terminal provider cases, source/reference proof and reviews, all raw campaign logs/results/traces, and V5 held turn inventory/index. All effective training and trace flags false; zero fresh-world credit."
+    },
+    {
+      "id": "v18-v19-action45-base-selected84-native-text-20261008-v1",
+      "owner": "pop",
+      "path": "runs/v18-v19-native-soft-edge-review-20261008-v2",
+      "include": [
+        "action45-root-admitted84-integration-v1/integration-review.json",
+        "action45-root-admitted84-integration-v1/assembled/delta-native-records.jsonl",
+        "action45-root-admitted84-integration-v1/assembled/proposal-manifest.json",
+        "action45-root-admitted84-integration-v1/assembled/recurrence-audit.json",
+        "action45-root-admitted84-integration-v1/compact/delta-text.jsonl",
+        "action45-root-admitted84-integration-v1/compact/delta-provenance.jsonl",
+        "action45-root-admitted84-integration-v1/text-append/decoded-supervised-suffixes.jsonl",
+        "action45-root-admitted84-integration-v1/text-append/source-coverage.jsonl",
+        "action45-root-admitted84-integration-v1/text-append/omissions.jsonl",
+        "action45-root-admitted84-integration-v1/text-append/receipt.json",
+        "action45-root-admitted84-integration-v1/text-append/anchor-selection.json",
+        "action45-root-admitted84-integration-v1/text-append/README.md",
+        "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/root-selected-action-admission-v1.json",
+        "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/action45-base-prefix-binding.json",
+        "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/root-mechanical-review-v1.json",
+        "held-action45-integration-proposal-v1/held-complete-context-proposal-v2/delta-pieces.jsonl"
+      ],
+      "admission": "root-admitted-exact84-native-action-sft-and-faithful-shared-renderer-ordinary-text-only; 68-new-train-text-documents; no-new-recurrence-rows-or-active-input-selection",
+      "derived_from": [
+        "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+        "v18-held-recurrence-fixed-point-103-review-20261008-v1",
+        "v18-v19-native-soft-edge-materialization-review-20261008-v2"
+      ],
+      "notes": "Root-signed exact84 selected-action admission is the native source authority; shared native assembler verified 84 train actions appended to exact action45 base (5374 total, 3339 train/2035 test). Shared gold-text delta builder preserved exact 4544-document text prefix and appended 68 faithful train documents (4612 total, 2908 train/1704 test), with all84 actions covered, no delta omissions, no heldout additions and 68 pinned-tokenizer suffix decodes. Existing 4961-row recurrence records and recurrence pieces remain exact unchanged; recurrence admission false. Manifest carries compact native/text deltas and source/prefix receipts; action45 base is the explicit required dependency. This registration publishes the already root-admitted source action and ordinary-text facets only. No parent or whole-trajectory admission, no learned/runtime qualification, and no active GPU input change."
     }
   ],
   "coverage_backlog": [

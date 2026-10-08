@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-action45-base-selected84-native-text-20261008-v1",
+  "owner": "pop",
+  "path": "runs/v18-v19-native-soft-edge-review-20261008-v2",
+  "files": [
+    {
+      "path": "action45-root-admitted84-integration-v1/assembled/delta-native-records.jsonl",
+      "bytes": 5974259,
+      "sha256": "a8f0be06878b24dbe0ad443127ab027a741e0e63b84f625af79d13ae1b74ba0c",
+      "lines": 84
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/assembled/proposal-manifest.json",
+      "bytes": 14960,
+      "sha256": "63b10ced8cd3d2880ed98429798a1f11ef9aebb9074c3fa7a5f55dd319642aeb"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/assembled/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/compact/delta-provenance.jsonl",
+      "bytes": 212716,
+      "sha256": "591741ca2400fe1157a4bc72aedddafbf4beff1da43d52c319463e3e641b5045",
+      "lines": 68
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/compact/delta-text.jsonl",
+      "bytes": 3852665,
+      "sha256": "2451cd4de191410db1cbc3547604fe94676599d2bed8b266bca91979eccc372c",
+      "lines": 68
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/integration-review.json",
+      "bytes": 13944,
+      "sha256": "345c90ad3ea05503e1b7a73bc58952aa158dd94bc8abebe8b27abd7102d4bf61"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/README.md",
+      "bytes": 1439,
+      "sha256": "d96007b90228dc4f144f4aa1ec9fec0844d503da95106c0a72ac154f30992e0d"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/decoded-supervised-suffixes.jsonl",
+      "bytes": 147599,
+      "sha256": "b71ce5c77c8a70d26f1039bb10b0108ce9ac11cf3d0bb378eb9d75b225d4115f",
+      "lines": 68
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/receipt.json",
+      "bytes": 4690,
+      "sha256": "9f82b5338a0e443f7066e6569c3760de13ce01c0761de59e8e0eee0c3d87918b"
+    },
+    {
+      "path": "action45-root-admitted84-integration-v1/text-append/source-coverage.jsonl",
+      "bytes": 54688,
+      "sha256": "36f27f0782fd36af333048372c976dd97bc68838b94116d5789d9c797931549d",
+      "lines": 84
+    },
+    {
+      "path": "held-action45-integration-proposal-v1/held-complete-context-proposal-v2/delta-pieces.jsonl",
+      "bytes": 22363,
+      "sha256": "c70dc31dbab68b894fd4e1511393cf1407b55a1803721c4656aed33d9dbf96aa",
+      "lines": 16
+    },
+    {
+      "path": "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/action45-base-prefix-binding.json",
+      "bytes": 1831,
+      "sha256": "6f9f2e2c55ef25b9544d64f3038c44da0418094f280e46339a657caa102b9d1c"
+    },
+    {
+      "path": "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/root-mechanical-review-v1.json",
+      "bytes": 31466,
+      "sha256": "31323937e90260fd28c90e32cb1113a45f5fa4b777c13b7c3f7c400e8ce8c180"
+    },
+    {
+      "path": "held-action45-integration-proposal-v1/held-complete-context-proposal-v3-action45-base/root-selected-action-admission-v1.json",
+      "bytes": 111450,
+      "sha256": "be0ba6ea02ad4033c69427b15a68d962834202c41059fd8ef492be2ca8b9a65d"
+    }
+  ],
+  "bytes": 10449032
+}
