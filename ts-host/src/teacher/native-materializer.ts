@@ -102,6 +102,71 @@ function trainingTarget(assistant: Dict, calls: Dict[], decisionIndex: number): 
   return target;
 }
 
+type StatusOnlySuccessProof = { schema: 'natlang.status-only-success-proof/1';
+  basis: 'same-invocation-staged-result' | 'declared-void-return';
+  invocation_id?: string; staged_call_id?: string; staged_output_sha256?: string; declared_return_type?: string };
+
+function exactTranscriptText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return;
+  const parts: string[] = [];
+  for (const part of value) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) return;
+    const item = part as Dict;
+    if (item.type === 'text' && typeof item.text === 'string') parts.push(item.text);
+    else if (item.type === 'neuralese' && typeof item.id === 'string' && /^nz1_[a-z2-7]{20,}$/.test(item.id))
+      parts.push(`${item.id}`);
+    else return;
+  }
+  return parts.join('');
+}
+
+/** A status-only success can finish a non-void call only when the same call has just staged a
+ * runtime-accepted typed result. The runtime's own linked eval output is the receipt: arbitrary
+ * host captures, parent outcomes, prior tool outputs, and unlinked prose cannot stand in for it. */
+function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocationId: string | undefined,
+  declaredReturnType: unknown, actionLedger: readonly Dict[], terminalSeq: unknown): StatusOnlySuccessProof | undefined {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return;
+  const result = args as Dict;
+  if (result.status !== 'success' || Object.hasOwn(result, 'value')) return;
+  const returnType = typeof declaredReturnType === 'string' ? declaredReturnType :
+    declaredReturnType && typeof declaredReturnType === 'object' && !Array.isArray(declaredReturnType) ?
+      String((declaredReturnType as Dict).natlang ?? '') : '';
+  if (returnType.trim() === 'void') return { schema: 'natlang.status-only-success-proof/1',
+    basis: 'declared-void-return', ...(invocationId ? { invocation_id: invocationId } : {}), declared_return_type: returnType };
+  if (!returnType.trim() || !invocationId || context.length < 2) return;
+  const last = context.at(-1);
+  const lastText = exactTranscriptText(last?.content);
+  if (!last || last.role !== 'tool' || typeof last.tool_call_id !== 'string' || lastText === undefined) return;
+  const stage = /(?:^|\n)Staged (.+) as the result\. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result\./s.exec(lastText);
+  if (!stage || stage[1]!.includes('<<cut off') || lastText.slice(stage.index! + stage[0].length).includes('This is not a valid')) return;
+  const producer = [...context].reverse().find(message => message.role === 'assistant' && Array.isArray(message.tool_calls) &&
+    (message.tool_calls as Dict[]).some(call => call.id === last.tool_call_id));
+  const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === last.tool_call_id);
+  const fn = call?.function && typeof call.function === 'object' ? call.function as Dict : undefined;
+  if (fn?.name !== 'eval') return;
+  const stagedArgs = parseArguments(fn.arguments);
+  const stagedEvents = actionLedger.filter(event => event.call_id === invocationId && event.name === 'eval' &&
+    event.tool_call_id === last.tool_call_id && ['ok', 'completed'].includes(String(event.outcome)) &&
+    canonical(event.arguments) === canonical(stagedArgs) && event.result_text === lastText &&
+    !(event.arguments && typeof event.arguments === 'object' && (event.arguments as Dict).finish === true) &&
+    Number.isSafeInteger(event.seq) && Number.isSafeInteger(terminalSeq) && Number(event.seq) < Number(terminalSeq));
+  if (stagedEvents.length !== 1) return;
+  return { schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
+    invocation_id: invocationId, staged_call_id: last.tool_call_id, staged_output_sha256: hexDigest(lastText),
+    ...(returnType ? { declared_return_type: returnType } : {}) };
+}
+
+function contextDeclaredReturnType(context: readonly Dict[]): string | undefined {
+  const user = context.find(message => message.role === 'user');
+  const content = exactTranscriptText(user?.content) ?? '';
+  const firstLine = content.split(/\r?\n/, 1)[0] ?? '';
+  const signature = /^You are inside this call: .*$/.exec(firstLine)?.[0];
+  if (!signature) return;
+  const delimiter = signature.lastIndexOf('): ');
+  return delimiter < 0 ? undefined : signature.slice(delimiter + 3).trim() || undefined;
+}
+
 function callMatches(call: Dict, event: Dict): boolean {
   return call.source_tool === event.name && canonical(call.arguments) === canonical(event.arguments);
 }
@@ -768,6 +833,20 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         return normalized;
       }) : [];
 
+      const invocationReturnType = invocation ?
+        ((instructionSites.get(invocation) as Dict | undefined)?.returns ?? contextDeclaredReturnType(contextSource)) :
+        contextDeclaredReturnType(contextSource);
+      const statusOnlySuccessValidation = calls.flatMap(call => {
+        if (call.source_tool !== 'return_result') return [];
+        const args = call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? call.arguments as Dict : {};
+        if (args.status !== 'success' || Object.hasOwn(args, 'value')) return [];
+        const proof = statusOnlySuccessProof(args, contextSource, invocation, invocationReturnType, ledger,
+          (call.outcome as Dict | undefined)?.trace_seq);
+        return [{ valid: proof !== undefined, ...(proof ? { proof } : {}),
+          ...(proof ? {} : { reason: 'success without value has no same-invocation staged typed result or declared void return' }) }];
+      });
+      const invalidStatusOnlySuccess = statusOnlySuccessValidation.some(item => !item.valid);
+
       const programId = taskIr.id ?? null;
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
@@ -810,7 +889,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
       const decisionApproved = !semanticHold && !afterChunkCutoff && (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
-        !heldDirect && !variantContext;
+        !heldDirect && !variantContext && !invalidStatusOnlySuccess;
       const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation);
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
@@ -861,7 +940,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: semanticHold ? semanticHold.reason : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -873,6 +952,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: outcomeDigest },
         decision: { index,
+          ...(statusOnlySuccessValidation.length ? { status_only_success_validation: statusOnlySuccessValidation } : {}),
           durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
           tool_schemas: offered,
           assistant: { content: assistant.content ?? '', reasoning: retainedReasoning,

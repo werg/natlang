@@ -83,6 +83,66 @@ test('native lineage hashes the saved JSON representation', () => {
   assert.ok(turns.every(t => t.source_ref.source_row_sha256 === nativeRowDigest(saved)));
 });
 
+test('status-only success requires a same-invocation linked staged typed result unless the return type is void', () => {
+  const stageCallId = 'stage-return';
+  const stagedText = 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result.';
+  const stageCall = { id: stageCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"draft"}' } };
+  const resultArgs = { status: 'success' };
+  const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }' } = {}) => {
+    const row = nativeRow(`status-only-${withStage}-${linked}-${returnType}`);
+    const user = { role: 'user', content: `You are inside this call: root(): ${returnType}\n\nInstructions:\nReturn the staged value.` };
+    const context = [system, user];
+    if (withStage) context.push({ role: 'assistant', content: '', tool_calls: [stageCall] },
+      { role: 'tool', tool_call_id: linked ? stageCallId : 'other-eval', content: stagedText });
+    row.outcome.action_ledger = [
+      ...(withStage ? [{ seq: 1, call_id: stageInvocation, tool_call_id: stageCallId, name: 'eval', arguments: { code: 'draft' }, outcome: 'ok', result_text: stagedText }] : []),
+      { seq: 2, call_id: 'same-invocation', name: 'return_result', arguments: resultArgs, outcome: 'completed', result_text: 'Returned staged result.' },
+    ];
+    row.trajectory = [
+      ...(withStage ? [{ phase: 'action', invocation_id: 'same-invocation', context: [system, user], tools_offered: schema,
+        assistant: { content: '', reasoning: 'Evaluate the result.', calls: [{ tool: 'eval', source_tool: 'eval',
+          arguments: { code: 'draft' }, call_id: stageCallId }] }, raw_response_sha256: 'status-only-stage-raw' }] : []),
+      { phase: 'action', invocation_id: 'same-invocation', context, tools_offered: schema,
+        assistant: { content: '', reasoning: 'Finish with the staged result.', calls: [{ tool: 'return_result', source_tool: 'return_result',
+          arguments: resultArgs, call_id: null }] }, raw_response_sha256: 'status-only-raw' },
+    ];
+    return row;
+  };
+
+  const valid = materializeNativeRows([make()]).turns.at(-1);
+  assert.equal(valid.training_admission.approved, true);
+  assert.deepEqual(valid.decision.status_only_success_validation[0].proof, {
+    schema: 'natlang.status-only-success-proof/1', basis: 'same-invocation-staged-result',
+    invocation_id: 'same-invocation', staged_call_id: stageCallId,
+    staged_output_sha256: createHash('sha256').update(stagedText).digest('hex'), declared_return_type: '{ answer: string }',
+  });
+
+  const segmented = make();
+  const markerId = `nz1_${'a'.repeat(26)}`;
+  const segmentedText = stagedText.replace('{ answer: "ready" }', `${markerId}`);
+  const finalMessage = segmented.trajectory.at(-1).context.at(-1);
+  finalMessage.content = [
+    { type: 'text', text: 'Staged ' },
+    { type: 'neuralese', id: markerId },
+    { type: 'text', text: segmentedText.slice(segmentedText.indexOf(' as the result.')) },
+  ];
+  segmented.outcome.action_ledger[0].result_text = segmentedText;
+  const segmentedTurn = materializeNativeRows([segmented]).turns.at(-1);
+  assert.equal(segmentedTurn.training_admission.approved, true);
+  assert.equal(segmentedTurn.decision.status_only_success_validation[0].proof.staged_output_sha256,
+    createHash('sha256').update(segmentedText).digest('hex'));
+
+  for (const row of [make({ withStage: false }), make({ linked: false })]) {
+    const turn = materializeNativeRows([row]).turns.at(-1);
+    assert.ok(turn);
+    assert.equal(turn.training_admission.approved, false);
+    assert.match(turn.training_admission.reason, /same-invocation staged typed result/);
+  }
+  const voidTurn = materializeNativeRows([make({ withStage: false, returnType: 'void' })]).turns.at(-1);
+  assert.equal(voidTurn.training_admission.approved, true);
+  assert.equal(voidTurn.decision.status_only_success_validation[0].proof.basis, 'declared-void-return');
+});
+
 test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
   for (const curriculum of [
     { family: 'folio_batch', shape: 'story337' },
