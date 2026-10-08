@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { buildOpenCodeStructuredPrompt } from '../scripts/opencode-structured-turn.mjs';
-import { buildAuditedCompletion, extractSessionText, parseOpenCodeEnvelope, readSessionText } from '../scripts/opencode-cli-chat-adapter.mjs';
+import { buildAuditedCompletion, extractSessionText, parseOpenCodeEnvelope, readSessionText,
+  rejectOpenCodePermission } from '../scripts/opencode-cli-chat-adapter.mjs';
 
 test('session messages recover the final assistant text when CLI JSON events omit it', () => {
   const text = extractSessionText([
@@ -22,6 +23,23 @@ test('session text fallback uses the official SDK path parameter shape', async (
   } } }, 'ses_example', '/isolated/scratch');
   assert.equal(text, 'recovered');
   assert.deepEqual(call, { path: { id: 'ses_example' }, query: { directory: '/isolated/scratch' } });
+});
+
+test('native permission rejection uses the installed official SDK route and confirms rejection', async () => {
+  let options;
+  const result = await rejectOpenCodePermission({ postSessionIdPermissionsPermissionId: async value => {
+    options = value; return { data: true };
+  } }, { v2: false, sessionID: 'ses_native', requestID: 'per_native' }, '/isolated/scratch');
+  assert.deepEqual(options, { path: { id: 'ses_native', permissionID: 'per_native' },
+    query: { directory: '/isolated/scratch' }, body: { response: 'reject' } });
+  assert.deepEqual(result, { ok: true, status: 'rejected' });
+});
+
+test('native permission rejection fails closed when the SDK route or confirmation is unavailable', async () => {
+  await assert.rejects(() => rejectOpenCodePermission({}, { v2: false, sessionID: 'ses_native', requestID: 'per_native' }, '/isolated'),
+    /permission reply API is unavailable/);
+  await assert.rejects(() => rejectOpenCodePermission({ postSessionIdPermissionsPermissionId: async () => ({ data: false }) },
+    { v2: false, sessionID: 'ses_native', requestID: 'per_native' }, '/isolated'), /not confirmed/);
 });
 
 test('text envelope parser validates calls against declared tools', () => {

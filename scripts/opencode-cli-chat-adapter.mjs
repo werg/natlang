@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { buildOpenCodeStructuredPrompt } from './opencode-structured-turn.mjs';
 
-const ID = 'natlang-opencode-cli-chat-adapter/2';
+const ID = 'natlang-opencode-cli-chat-adapter/3';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -263,6 +263,25 @@ function permissionDetails(event) {
   return { v2, sessionID: p.sessionID, requestID: p.id, permission: p.permission ?? p.action ?? null };
 }
 
+/** Reject a native permission using the exact official SDK route and require confirmation. */
+export async function rejectOpenCodePermission(client, details, directory, message = 'Natlang CLI bridge rejects native OpenCode tool permissions.') {
+  let result;
+  if (details?.v2) {
+    const method = client?.session?.permission?.reply;
+    if (typeof method !== 'function') throw new Error('OpenCode v2 permission reply API is unavailable');
+    result = await method({ path: { sessionID: details.sessionID, requestID: details.requestID },
+      body: { reply: 'reject', message } });
+  } else {
+    const method = client?.postSessionIdPermissionsPermissionId;
+    if (typeof method !== 'function') throw new Error('OpenCode permission reply API is unavailable');
+    result = await method({ path: { id: details.sessionID, permissionID: details.requestID },
+      query: { directory }, body: { response: 'reject' } });
+  }
+  if (result?.error) throw new Error(String(result.error.message ?? 'permission rejection failed').slice(0, 180));
+  if (result?.data !== true) throw new Error('permission rejection was not confirmed');
+  return { ok: true, status: 'rejected' };
+}
+
 function createEventWatcher({ baseUrl, directory, client, onViolation }) {
   const controller = new AbortController();
   let response, reader;
@@ -295,12 +314,7 @@ function createEventWatcher({ baseUrl, directory, client, onViolation }) {
             const record = { ...details, reply: 'reject', succeeded: false };
             onViolation({ kind: 'native_permission', sessionID: details.sessionID });
             try {
-              const method = details.v2 ? client.session.permission.reply : client.permission.reply;
-              const reply = await method({ ...(details.v2 ? { sessionID: details.sessionID } : {}),
-                requestID: details.requestID, directory, reply: 'reject',
-                message: 'Natlang CLI bridge rejects native OpenCode tool permissions.' });
-              if (reply?.error) throw new Error(String(reply.error.message ?? 'permission rejection failed').slice(0, 180));
-              if (!details.v2 && reply?.data !== true) throw new Error('permission rejection was not confirmed');
+              await rejectOpenCodePermission(client, details, directory);
               record.succeeded = true;
             } catch (error) { record.error = String(error?.message ?? error).slice(0, 180); }
             permissionRejections.push(record);
