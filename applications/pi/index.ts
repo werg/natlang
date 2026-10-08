@@ -12,9 +12,12 @@ import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import type { Models } from '@earendil-works/pi-ai';
 import type { NatlangRuntime } from '@natlang/node';
 import { Harness, type HarnessOptions, type HarnessSettings } from './vendor/durable/src/index.ts';
-import type { AnyTask, Extension, Registry, RegistryReader, RegistrySnapshot } from './vendor/durable/src/harness/types.ts';
+import type { Extension, Registry } from './vendor/durable/src/harness/types.ts';
 import type { ConversationId, EntryId, EntryRecord as PiEntryRecord, Storage, SubmissionId } from './vendor/durable/src/types.ts';
 import { naturalLanguageTask, type Entry, type TaskHost } from './host/tasks.ts';
+import { substituteTasks } from './host/registry.ts';
+import { admissionPolicy, schedulerPolicy } from './host/policies.ts';
+import { LiveDoc } from './vendor/durable/src/harness/live.ts';
 import type { EntryRecord, SubmissionDraft } from './types.ts';
 import generation from './generation.nl';
 import tool from './tool.nl';
@@ -39,28 +42,6 @@ export type PiOptions = {
   /** Runs per phase before the task faults (default 2). */
   attempts?: number;
 };
-
-/** A registry reader whose snapshots resolve the built-in task names to the natural-language kinds. */
-export function substituteTasks(registry: RegistryReader, tasks: readonly AnyTask[]): RegistryReader {
-  const byName = new Map(tasks.map(task => [task.definition.name, task]));
-  const wrap = (snapshot: RegistrySnapshot): RegistrySnapshot => ({
-    installed: () => snapshot.installed(),
-    extension: name => snapshot.extension(name),
-    tools: () => snapshot.tools(),
-    sections: () => snapshot.sections(),
-    tasks: () => snapshot.tasks().map(task => byName.get(task.definition.name) ?? task),
-    task: name => byName.get(name) ?? snapshot.task(name),
-  });
-  let source: RegistrySnapshot | undefined, wrapped: RegistrySnapshot | undefined;
-  return {
-    snapshot() {
-      const current = registry.snapshot();
-      if (current !== source) { source = current; wrapped = wrap(current); }
-      return wrapped!;
-    },
-    subscribe: listener => registry.subscribe(listener),
-  };
-}
 
 /** Open pi on `options.storage`: a Harness whose built-in task kinds are natural-language functions. */
 export async function openPi(options: PiOptions, context: Context = BACKGROUND_CONTEXT): Promise<Harness> {
@@ -104,6 +85,10 @@ export async function openPi(options: PiOptions, context: Context = BACKGROUND_C
     naturalLanguageTask(host, 'pi.tool', 1, () => ({ phase: 'call' }), ['call', 'execute'], tool as Entry),
     naturalLanguageTask(host, 'pi.compaction', 1, () => ({ phase: 'select' }), ['select', 'summarize', 'retry'], compaction as Entry),
   ];
+  const policyHost = { natlang: options.natlang, now: options.now ?? Date.now,
+    live: async (id: number, liveContext: Context) => (await harness!.snapshot(LiveDoc, id as ConversationId, liveContext)) ?? {} };
+  const scheduler = schedulerPolicy(policyHost as never, implementations.scheduler);
+  const admission = admissionPolicy(policyHost as never, implementations.admission);
   harness = await Harness.open(options.storage, {
     models: options.models,
     registry: substituteTasks(options.registry, tasks),
@@ -111,8 +96,11 @@ export async function openPi(options: PiOptions, context: Context = BACKGROUND_C
     ...(options.env ? { env: options.env } : {}),
     ...(options.now ? { now: options.now } : {}),
     ...(options.onReport ? { onReport: options.onReport } : {}),
+    ...(scheduler ? { schedulerPolicy: scheduler } : {}),
+    ...(admission ? { admission } : {}),
   }, context);
   return harness;
 }
 
 export type { Extension, Harness };
+export { substituteTasks };

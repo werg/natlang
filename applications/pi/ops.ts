@@ -197,7 +197,7 @@ export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<u
         await startRun(tx, conversationId, live, op.inputs.map((input: number | string) => id(ids, input, `${where} inputs`) as SubmissionId));
         break;
       case 'endRun':
-        endRun(tx, live, self, json(op.settlement) as never);
+        endRun(tx, live, self, resolveRefs(ids, json(op.settlement)) as never);
         break;
       case 'handOver':
         handOver(live, self, id(ids, op.to, `${where} to`) as TaskId);

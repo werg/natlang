@@ -14,7 +14,7 @@ import type {
 import { startRun } from "./generation.ts";
 import { applyBoundary, InboxDoc, isStale, prepareBoundary, type QueueModes, removeInboxItem } from "./inbox.ts";
 import { LiveDoc } from "./live.ts";
-import type { SettledSubmissionRecord, Submission, SubmissionDraft, UserInput } from "./types.ts";
+import type { AdmissionPolicy, SettledSubmissionRecord, Submission, SubmissionDraft, UserInput } from "./types.ts";
 import { closedError, Waiters } from "./util.ts";
 
 type AbortResult = "aborted" | "already_placed" | "settled";
@@ -29,6 +29,8 @@ export class Submissions {
 	/** Enable task scheduling; submitting or waiting asks for progress. */
 	readonly #resume: () => void;
 	readonly #waiters = new Waiters<SubmissionId, SettledSubmissionRecord>();
+	/** PATCH (natlang port): the selected admission; absent, `admitSubmission` in one commit. */
+	readonly #admission: AdmissionPolicy | undefined;
 	#closed = false;
 
 	constructor(
@@ -37,7 +39,9 @@ export class Submissions {
 		now: () => number,
 		queueModes: () => QueueModes,
 		resume: () => void,
+		admission?: AdmissionPolicy,
 	) {
+		this.#admission = admission;
 		this.#session = session;
 		this.#storage = storage;
 		this.#now = now;
@@ -53,10 +57,29 @@ export class Submissions {
 	/** Admit a submission in one commit; see `admitSubmission()`. */
 	async submit(conversationId: ConversationId, draft: SubmissionDraft, context: Context): Promise<Submission> {
 		this.#resume();
-		const id = await this.#session.commitWith(
-			(tx) => admitSubmission(tx, conversationId, draft, this.#now(), this.#queueModes()),
-			context,
-		);
+		const session = this.#session, storage = this.#storage;
+		const id =
+			this.#admission === undefined
+				? await this.#session.commitWith(
+						(tx) => admitSubmission(tx, conversationId, draft, this.#now(), this.#queueModes()),
+						context,
+					)
+				: await this.#admission.admit(
+						{
+							conversationId,
+							draft,
+							now: this.#now(),
+							queueModes: this.#queueModes(),
+							session: {
+								read: (job) => session.readOnLine(job),
+								commit: (change, commitContext) => session.commitWith(change, commitContext),
+								storage,
+								snapshot: (token, id, snapshotContext) =>
+									session.snapshot(token as never, id, snapshotContext),
+							},
+						},
+						context,
+					);
 		return new SubmissionHandle(id, this);
 	}
 

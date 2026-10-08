@@ -197,8 +197,11 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 				return record === undefined ? undefined : boundConversation(id, binding, this.#submissions, this.#tasks);
 			},
 			context: withoutAbortSignal(context),
+			// PATCH (natlang port): a pluggable scheduler policy; absent, the scheduler's own.
+			...(options.schedulerPolicy === undefined ? {} : { policy: options.schedulerPolicy }),
 		});
-		this.#submissions = new Submissions(this, storage, now, settings, () => this.#tasks.resume());
+		// PATCH (natlang port): a pluggable admission policy; absent, `admitSubmission`.
+		this.#submissions = new Submissions(this, storage, now, settings, () => this.#tasks.resume(), options.admission);
 		this.#taskGraph = new TaskGraphView(this, storage);
 		this.#host = {
 			harness: this,

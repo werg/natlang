@@ -25,14 +25,19 @@ import type {
 import { agentHooks } from "./agent.ts";
 import { type ContextRange, readContextFrom } from "./context.ts";
 import type {
+	AbortTaskFacts,
 	Agent,
 	AnyTask,
 	ConversationHandle,
 	HarnessInspection,
+	OwnerStep,
 	RegistryReader,
 	RegistrySnapshot,
+	SchedulerPolicy,
 	Settings,
 	SettledTask,
+	StepDecision,
+	TaskFact,
 	TaskInspection,
 } from "./types.ts";
 import { closedError, scanAll, Waiters } from "./util.ts";
@@ -154,6 +159,12 @@ export type TaskSchedulerOptions = {
 	) => Promise<ConversationHandle | undefined>;
 	/** Context for scheduler commits and invocations; carries no caller cancellation. */
 	readonly context: Context;
+	/**
+	 * PATCH (natlang port): a pluggable policy. Absent: the inline policy below, pi-durable's own. Present: every policy
+	 * point reads facts on the line, asks the policy outside any commit, and commits the decision guarded on the records
+	 * read, deciding again when a guard fails.
+	 */
+	readonly policy?: SchedulerPolicy;
 };
 
 /**
@@ -185,6 +196,9 @@ export class TaskScheduler {
 	readonly #withdrawInputs: TaskSchedulerOptions["withdrawInputs"];
 	readonly #conversation: TaskSchedulerOptions["conversation"];
 	readonly #context: Context;
+	readonly #policy: SchedulerPolicy | undefined;
+	/** PATCH: counts committed task and conversation changes, so a policy's idle answers apply only to current facts. */
+	#epoch = 0;
 	readonly #live = new Map<TaskId, AnyTaskRecord>();
 	/**
 	 * Context range last read through a task runtime, per conversation: a later read, by any of its tasks, scans only
@@ -233,6 +247,7 @@ export class TaskScheduler {
 		this.#withdrawInputs = options.withdrawInputs;
 		this.#conversation = options.conversation;
 		this.#context = options.context;
+		this.#policy = options.policy;
 	}
 
 	/** Load live tasks and change surviving `running` tasks back to `pending`. Dispatches nothing. */
@@ -280,6 +295,7 @@ export class TaskScheduler {
 	 * starts once the task's ordinary owned work is gone. A `completing` task is only marked.
 	 */
 	async abort(id: TaskId, context: Context): Promise<"marked" | "terminal"> {
+		if (this.#policy !== undefined) return this.#abortWithPolicy(this.#policy, id, context);
 		const marked = await this.#session.commitWith(async (tx) => {
 			const current = await tx.task(id);
 			if (current === undefined) throw new Error(`Task ${id} does not exist`);
@@ -321,6 +337,13 @@ export class TaskScheduler {
 	 */
 	waitForIdle(conversationId: ConversationId | undefined, context: Context): Promise<void> {
 		if (this.#closing) return Promise.reject(closedError());
+		if (this.#policy !== undefined) {
+			// The policy's scheduling pass answers idle for every scope with a waiter.
+			const waiting = this.#idleWaiters.add(conversationId, context);
+			this.#scheduleReconcile();
+			this.#kick();
+			return waiting;
+		}
 		if (this.#idle(conversationId)) return Promise.resolve();
 		this.#scheduleReconcile();
 		return this.#idleWaiters.add(conversationId, context);
@@ -332,6 +355,7 @@ export class TaskScheduler {
 	 * crosses background boundaries, and the wait also covers every task it reached.
 	 */
 	async abortConversation(conversationId: ConversationId, background: boolean, context: Context): Promise<void> {
+		if (this.#policy !== undefined) return this.#abortConversationWithPolicy(this.#policy, conversationId, background, context);
 		const reached = await this.#session.commitWith(async (tx) => {
 			const queued = await this.#loadScopes(true);
 			const scope = { conversation: conversationId };
@@ -400,6 +424,7 @@ export class TaskScheduler {
 				}
 			}
 		}
+		for (const change of publication.changes) if (change.type === "task" || change.type === "conversation") this.#epoch++;
 		for (const change of publication.changes) {
 			if (change.type === "conversation" && !this.#edges.has(change.value.id)) {
 				this.#setEdge(change.value.id, change.value.owner?.taskId ?? null);
@@ -441,8 +466,11 @@ export class TaskScheduler {
 
 	/** Resolve idle waiters, and drop each kept context whose conversation has been idle for the retention period. */
 	#settleIdle(): void {
-		for (const conversationId of this.#idleWaiters.keys()) {
-			if (this.#idle(conversationId)) this.#idleWaiters.resolve(conversationId);
+		// With a policy, its scheduling pass answers idle (R9).
+		if (this.#policy === undefined) {
+			for (const conversationId of this.#idleWaiters.keys()) {
+				if (this.#idle(conversationId)) this.#idleWaiters.resolve(conversationId);
+			}
 		}
 		const now = this.#now();
 		const retention = this.#contextRetentionMs();
@@ -513,6 +541,7 @@ export class TaskScheduler {
 		this.#cascadePending = false;
 		const checks = [...this.#failFastChecks];
 		this.#failFastChecks.clear();
+		if (this.#policy !== undefined) return this.#reconcileWithPolicy(this.#policy, cascade, checks);
 		try {
 			await this.#session.commitWith(async (tx) => {
 				if (this.#closing) return;
@@ -769,6 +798,7 @@ export class TaskScheduler {
 
 	/** Reserve every eligible task in one commit; orphan abort-marked tasks no definition can take. */
 	async #reserve(): Promise<Reservation[]> {
+		if (this.#policy !== undefined) return this.#reserveWithPolicy(this.#policy);
 		const reservations: Reservation[] = [];
 		try {
 			await this.#session.commitWith(async (tx) => {
@@ -929,7 +959,10 @@ export class TaskScheduler {
 		const runtime = this.#runtime(invocation, phase);
 		let previous: PhaseResult | undefined;
 		for (;;) {
-			const current = await this.#step(invocation, (tx, current) => this.#decide(tx, current, previous, state));
+			const current =
+				this.#policy !== undefined
+					? await this.#stepWithPolicy(this.#policy, invocation, previous, state)
+					: await this.#step(invocation, (tx, current) => this.#decide(tx, current, previous, state));
 			// Close may seal between the decision and dispatch.
 			if (current === undefined || this.#closing) return;
 			const checkpoint = current.state.checkpoint;
@@ -997,6 +1030,11 @@ export class TaskScheduler {
 			failure = { error };
 		}
 		const message = `Abort handler of task ${invocation.taskId} returned without a terminal outcome`;
+		if (this.#policy !== undefined) {
+			const state = { task: reservation.task, snapshot: reservation.snapshot, reported: undefined as ReportedTask };
+			await this.#stepWithPolicy(this.#policy, invocation, failure === undefined ? undefined : { checkpoint: current.state.checkpoint, failure }, state);
+			return;
+		}
 		await this.#step(invocation, () => ({ fault: failure?.error ?? new Error(message) }));
 	}
 
@@ -1034,14 +1072,23 @@ export class TaskScheduler {
 	 * Write an outcome the scheduler decided. While the task's ordinary owned work is live it holds as `completing` and
 	 * its Harness cleanup waits for the final commit (spec §5.5, rule 4); otherwise it is terminal with its cleanup.
 	 */
-	async #terminate(tx: Transaction, record: AnyTaskRecord, outcome: SchedulerOutcome): Promise<void> {
+	async #terminate(tx: Transaction, record: AnyTaskRecord, outcome: SchedulerOutcome, cleanup?: unknown): Promise<void> {
 		await this.#loadScopes(false);
 		if (this.#ownedLive(overlayOf(tx)).has(record.id)) {
 			tx.setTask(withState(record, { status: "completing", outcome }));
 			return;
 		}
 		tx.setTask(withState(record, { status: "terminal", outcome }));
-		await this.#settleOutcome(tx, record, outcome);
+		await this.#cleanup(tx, record, outcome, cleanup);
+	}
+
+	/** PATCH: the Harness cleanup of a scheduler outcome: the policy's decided cleanup, else `settleSchedulerOutcome`. */
+	async #cleanup(tx: Transaction, record: AnyTaskRecord, outcome: SchedulerOutcome, cleanup: unknown): Promise<void> {
+		if (cleanup !== undefined && this.#policy?.applyCleanup !== undefined) {
+			await this.#policy.applyCleanup(tx, record, cleanup, this.#context);
+		} else {
+			await this.#settleOutcome(tx, record, outcome);
+		}
 	}
 
 	/**
@@ -1113,6 +1160,389 @@ export class TaskScheduler {
 			if (!record.background && this.#inScope(parentOf(record), scope) !== false) return false;
 		}
 		return true;
+	}
+
+	// ─── PATCH (natlang port): the policy paths ──────────────────────────────
+	//
+	// With a policy, each policy point reads its facts on the Session line, asks the policy outside any commit, and
+	// commits the decision guarded on the records it read; a failed guard reads and decides again. Holding an outcome as
+	// `completing`, wait validation, and the runtime commit gates stay here.
+
+	/** A record's identity for guards: its state, abort mark, and version. */
+	#print(record: AnyTaskRecord | undefined): string {
+		return record === undefined ? "" : JSON.stringify([record.state, record.abortRequested, record.version]);
+	}
+
+	/** The walk up from `start`, as facts. Owner chains must be loaded. */
+	#walk(start: Up): OwnerStep[] {
+		const steps: OwnerStep[] = [];
+		for (const step of this.#above(start)) {
+			if ("unknown" in step) {
+				steps.push({ kind: "unknown" });
+				break;
+			}
+			if ("conversation" in step) {
+				steps.push({ kind: "conversation", id: step.conversation });
+				continue;
+			}
+			const live = this.#live.get(step.task);
+			if (live === undefined) {
+				steps.push({ kind: "task", id: step.task, background: step.node.background, status: "terminal" });
+				continue;
+			}
+			steps.push({
+				kind: "task",
+				id: step.task,
+				background: live.background,
+				status: live.state.status,
+				abortRequested: live.abortRequested,
+				...(live.state.status === "completing" ? { outcome: live.state.outcome.status } : {}),
+			});
+		}
+		return steps;
+	}
+
+	#taskFact(record: AnyTaskRecord): TaskFact {
+		const state = record.state;
+		return {
+			id: record.id,
+			conversationId: record.conversationId,
+			kind: record.kind,
+			version: record.version,
+			status: state.status as TaskFact["status"],
+			abortRequested: record.abortRequested,
+			background: record.background,
+			...(record.owner === undefined ? {} : { owner: record.owner }),
+			...(state.status === "waiting" ? { on: [...state.on], policy: state.policy } : {}),
+			...(state.status === "completing" || state.status === "terminal"
+				? {
+						outcome: state.outcome.status,
+						...(state.outcome.error === undefined ? {} : { message: state.outcome.error.message }),
+						...(state.outcome.reason === undefined ? {} : { reason: state.outcome.reason }),
+					}
+				: {}),
+			invocation: this.#invocations.get(record.id)?.mode ?? null,
+			above: this.#walk(parentOf(record)),
+		};
+	}
+
+	#liveFacts(): TaskFact[] {
+		return [...this.#live.values()].map((record) => this.#taskFact(record));
+	}
+
+	/** R4, R4a, R9 through the policy: one pass reserves what it decides, orphans what it decides, answers idle. */
+	async #reserveWithPolicy(policy: SchedulerPolicy): Promise<Reservation[]> {
+		for (;;) {
+			const read = await this.#session.readOnLine(async () => {
+				if (!this.#enabled || this.#closing) return undefined;
+				await this.#loadScopes(false);
+				const snapshot = this.#registry.snapshot();
+				const tasks = this.#liveFacts();
+				const definitions = [...new Set(tasks.map((task) => task.kind))].flatMap((kind) => {
+					const task = snapshot.task(kind);
+					return task === undefined
+						? []
+						: [{ kind, version: task.definition.version, migrate: task.definition.migrate !== undefined }];
+				});
+				const migrationFailed = tasks
+					.filter((task) => {
+						const failed = this.#failedMigrations.get(task.id as TaskId);
+						return failed !== undefined && failed.task === snapshot.task(task.kind);
+					})
+					.map((task) => task.id);
+				const prints = new Map([...this.#live.values()].map((record) => [record.id as number, this.#print(record)]));
+				const idleScopes = [...this.#idleWaiters.keys()].map((id) => id ?? null);
+				return { facts: { tasks, definitions, migrationFailed, idleScopes }, snapshot, prints, epoch: this.#epoch };
+			});
+			if (read === undefined) return [];
+			let decision: Awaited<ReturnType<SchedulerPolicy["pass"]>>;
+			try {
+				decision = await policy.pass(read.facts, this.#context);
+			} catch (error) {
+				// A policy that fails decides nothing; try the pass again shortly rather than wait for the next change.
+				const timer = setTimeout(() => this.#kick(), 1000);
+				(timer as { unref?: () => void }).unref?.();
+				throw error;
+			}
+			const reservations: Reservation[] = [];
+			let stale = false;
+			try {
+				await this.#session.commitWith(async (tx) => {
+					if (!this.#enabled || this.#closing) return;
+					await this.#loadScopes(false);
+					const owned = this.#ownedLive();
+					// Guard: as read, no invocation, not held; bottom-up work (abort, orphan) has no live owned work left.
+					const guard = (id: number, bottomUp: boolean): AnyTaskRecord | undefined => {
+						const record = this.#live.get(id as TaskId);
+						if (record === undefined || this.#print(record) !== read.prints.get(id)) return undefined;
+						if (this.#invocations.has(record.id) || record.state.status === "completing") return undefined;
+						return bottomUp && owned.has(record.id) ? undefined : record;
+					};
+					const orphans = decision.orphan.map((item) => ({ item, record: guard(item.id, true) }));
+					const reserves = decision.reserve.map((item) => ({ item, record: guard(item.id, item.mode === "abort") }));
+					if ([...orphans, ...reserves].some(({ record }) => record === undefined)) {
+						stale = true;
+						return;
+					}
+					for (const { item, record } of orphans) {
+						await this.#terminate(tx, record!, { status: "orphaned", reason: item.reason }, item.cleanup);
+					}
+					for (const { item, record } of reserves) {
+						// Running `migrate` is the host's; a failure is recorded and the next pass decides again.
+						const resolution = this.#resolve(record as RunnableTaskRecord, read.snapshot);
+						if (resolution.kind === "blocked") {
+							this.#dirty = true;
+							continue;
+						}
+						if (resolution.record !== record || record!.state.status !== "running") {
+							tx.setTask(
+								withState(resolution.record, { status: "running", checkpoint: resolution.record.state.checkpoint }),
+							);
+						}
+						const invocation = this.#createInvocation(record!, item.mode);
+						reservations.push({ invocation, task: resolution.task, snapshot: read.snapshot });
+					}
+				}, this.#context);
+			} catch (error) {
+				for (const { invocation } of reservations) {
+					this.#invocations.delete(invocation.taskId);
+					invocation.finish();
+				}
+				throw error;
+			}
+			if (stale) continue;
+			// Idle answers hold only for the state they were read from.
+			if (read.epoch === this.#epoch) {
+				for (const answer of decision.idle) if (answer.idle) this.#idleWaiters.resolve((answer.scope ?? undefined) as ConversationId | undefined);
+			}
+			return reservations;
+		}
+	}
+
+	/** R5 through the policy, before each phase and once after an abort handler. */
+	async #stepWithPolicy(
+		policy: SchedulerPolicy,
+		invocation: Invocation,
+		previous: PhaseResult | undefined,
+		state: { task: AnyTask; snapshot: RegistrySnapshot; reported: ReportedTask },
+	): Promise<ErasedRunningTask | undefined> {
+		try {
+			for (;;) {
+				const read = await this.#session.readOnLine(async () => {
+					const found = this.#live.get(invocation.taskId);
+					const snapshot = this.#registry.snapshot();
+					const next = found === undefined ? undefined : snapshot.task(found.kind);
+					const failure = previous?.failure?.error;
+					const facts = {
+						mode: invocation.mode,
+						task:
+							found === undefined
+								? null
+								: {
+										id: found.id as number,
+										conversationId: found.conversationId as number,
+										kind: found.kind,
+										status: found.state.status as "pending" | "running" | "waiting" | "completing",
+										abortRequested: found.abortRequested,
+										...(found.state.status === "completing" ? {} : { checkpoint: found.state.checkpoint }),
+									},
+						closing: this.#closing,
+						previous:
+							previous === undefined
+								? null
+								: {
+										phase: previous.checkpoint.phase,
+										...(failure === undefined
+											? {}
+											: { error: failure instanceof Error ? failure.message : String(failure) }),
+										unchanged:
+											found?.state.status === "running" &&
+											jsonEqual(found.state.checkpoint as JsonValue, previous.checkpoint as unknown as JsonValue),
+									},
+						definition: {
+							same: next === state.task,
+							exists: next !== undefined,
+							canReserve: next !== undefined && found !== undefined && canReserve(next, found),
+						},
+						reported: state.reported !== undefined && state.reported.task === next,
+					};
+					return { facts, print: this.#print(found), snapshot, next };
+				});
+				const decision: StepDecision = await policy.step(read.facts, this.#context);
+				const result = await this.#session.commitWith(async (tx) => {
+					const found = this.#live.get(invocation.taskId);
+					if (this.#print(found) !== read.print || this.#closing !== read.facts.closing) return { retry: true as const };
+					const current = found?.state.status === "running" ? (found as ErasedRunningTask) : undefined;
+					if (decision.kind === "continue" && current !== undefined && !this.#closing && invocation.mode === "run") {
+						if (previous !== undefined && previous.failure === undefined) {
+							state.snapshot = read.snapshot;
+							if (decision.report !== undefined && !read.facts.reported) {
+								state.reported = { task: read.next };
+								const cause = read.next === undefined ? "missing_task" : "incompatible_task";
+								this.#report(new Error(decision.report, { cause }));
+							}
+						}
+						return { current };
+					}
+					this.#end(invocation);
+					if (current === undefined || this.#closing) return { current: undefined };
+					if (decision.kind === "handover") {
+						tx.setTask(withState(current, { status: "pending", checkpoint: current.state.checkpoint }));
+					} else if (decision.kind === "fault") {
+						const message = decision.message ?? `Task ${current.id} faulted`;
+						await this.#terminate(tx, current, { status: "faulted", error: { message } }, decision.cleanup);
+					}
+					return { current: undefined };
+				}, this.#context);
+				if ("retry" in result) continue;
+				return result.current;
+			}
+		} catch (error) {
+			this.#end(invocation);
+			if (!this.#closing) this.#report(error);
+			return undefined;
+		}
+	}
+
+	/** R8 through the policy: marks, withdrawals, and finalizations, each guarded. */
+	async #reconcileWithPolicy(policy: SchedulerPolicy, cascade: boolean, checks: readonly TaskId[]): Promise<void> {
+		try {
+			const read = await this.#session.readOnLine(async () => {
+				if (this.#closing) return undefined;
+				const queued = await this.#loadScopes(cascade);
+				const failFast = [];
+				for (const id of checks) {
+					const waiter = this.#live.get(id);
+					if (waiter?.state.status !== "waiting") continue;
+					const members = [];
+					for (const member of waiter.state.on) {
+						const live = this.#live.get(member);
+						const record = live ?? (await this.#storage.task(member, this.#context));
+						const state = record?.state;
+						members.push({
+							id: member as number,
+							live: live !== undefined,
+							status: state?.status ?? ("missing" as const),
+							abortRequested: record?.abortRequested ?? false,
+							...(state?.status === "completing" || state?.status === "terminal" ? { outcome: state.outcome.status } : {}),
+						});
+					}
+					failFast.push({ id: id as number, members });
+				}
+				return {
+					tasks: this.#liveFacts(),
+					failFast,
+					queued: queued.map((id) => ({ conversation: id as number, above: this.#walk({ conversation: id }) })),
+				};
+			});
+			if (read !== undefined) {
+				const decision = await policy.reconcile(read, this.#context);
+				await this.#session.commitWith(async (tx) => {
+					if (this.#closing) return;
+					await this.#loadScopes(false);
+					for (const id of new Set(decision.mark)) {
+						const record = this.#live.get(id as TaskId);
+						if (record !== undefined && !record.abortRequested) tx.setTask({ ...record, abortRequested: true });
+					}
+					for (const id of new Set(decision.withdraw)) await this.#withdrawInputs(tx, id as ConversationId);
+					// Guard each finalization: still held, and no ordinary owned work live on this commit's candidates.
+					for (const { id, cleanup } of decision.finalize) {
+						const overlay = overlayOf(tx);
+						const record = overlay.tasks.get(id as TaskId) ?? this.#live.get(id as TaskId);
+						if (record?.state.status !== "completing" || this.#ownedLive(overlay).has(record.id)) continue;
+						const outcome = record.state.outcome;
+						tx.setTask(withState(record, { status: "terminal", outcome }));
+						if (outcome.status === "faulted" || outcome.status === "orphaned") {
+							await this.#cleanup(tx, record, outcome, cleanup);
+						}
+					}
+				}, this.#context);
+			}
+		} catch (error) {
+			this.#cascadePending = true;
+			for (const id of checks) this.#failFastChecks.add(id);
+			if (!this.#closing) this.#report(error);
+		}
+		this.#settleIdle();
+	}
+
+	/** R7 `abortTask` through the policy. */
+	async #abortWithPolicy(policy: SchedulerPolicy, id: TaskId, context: Context): Promise<"marked" | "terminal"> {
+		for (;;) {
+			const read = await this.#session.readOnLine(async () => {
+				const current = await this.#storage.task(id, this.#context);
+				const invocation = this.#invocations.get(id);
+				await this.#loadScopes(false);
+				let blocked: AbortTaskFacts["blocked"] = null;
+				if (current !== undefined && current.state.status !== "terminal" && current.state.status !== "completing" && invocation === undefined) {
+					const resolution = this.#resolve(current as RunnableTaskRecord, this.#registry.snapshot());
+					if (resolution.kind === "blocked") blocked = resolution.reason;
+				}
+				let task: AbortTaskFacts["task"] = null;
+				if (current !== undefined) {
+					if (current.state.status !== "terminal" && !this.#chainKnown(parentOf(current))) await this.#loadChain(parentOf(current));
+					const { invocation: _invocation, ...fact } = this.#taskFact(current);
+					task = { ...fact, status: current.state.status };
+				}
+				const facts: AbortTaskFacts = { id, task, invocation: invocation?.mode ?? null, tasks: this.#liveFacts(), blocked };
+				return { facts, print: this.#print(current), invocation };
+			});
+			const decision = await policy.abortTask(read.facts, context);
+			const result = await this.#session.commitWith(async (tx) => {
+				const current = await tx.task(id);
+				if (this.#print(current) !== read.print || this.#invocations.get(id) !== read.invocation) return { retry: true as const };
+				if (decision.kind === "reject" || current === undefined) throw new Error(decision.message ?? `Task ${id} does not exist`);
+				if (decision.kind === "terminal" || current.state.status === "terminal") return { result: "terminal" as const };
+				if (decision.kind === "orphan") {
+					await this.#terminate(tx, current, { status: "orphaned", reason: decision.reason ?? "missing_task" }, decision.cleanup);
+					return { result: "marked" as const };
+				}
+				if (!current.abortRequested) tx.setTask({ ...current, abortRequested: true });
+				const run = decision.join && read.invocation?.mode === "run" ? read.invocation : undefined;
+				return { result: "marked" as const, run };
+			}, context);
+			if ("retry" in result) continue;
+			if (result.run !== undefined) await awaitWithContext(result.run.done, context);
+			return result.result;
+		}
+	}
+
+	/** R7 `Conversation.abort()` through the policy; the guard is the set of live tasks it decided over. */
+	async #abortConversationWithPolicy(
+		policy: SchedulerPolicy,
+		conversationId: ConversationId,
+		background: boolean,
+		context: Context,
+	): Promise<void> {
+		const liveIds = (): string => JSON.stringify([...this.#live.keys()].sort((a, b) => a - b));
+		for (;;) {
+			const read = await this.#session.readOnLine(async () => {
+				const queued = await this.#loadScopes(true);
+				return {
+					facts: {
+						conversation: conversationId as number,
+						background,
+						tasks: this.#liveFacts(),
+						queued: queued.map((id) => ({ conversation: id as number, above: this.#walk({ conversation: id }) })),
+					},
+					ids: liveIds(),
+				};
+			});
+			const decision = await policy.abortConversation(read.facts, context);
+			const applied = await this.#session.commitWith(async (tx) => {
+				if (liveIds() !== read.ids) return false;
+				for (const id of new Set(decision.mark)) {
+					const record = this.#live.get(id as TaskId);
+					if (record !== undefined && !record.abortRequested) tx.setTask({ ...record, abortRequested: true });
+				}
+				for (const id of new Set(decision.withdraw)) await this.#withdrawInputs(tx, id as ConversationId);
+				return true;
+			}, context);
+			if (!applied) continue;
+			for (const id of decision.waitFor) await this.waitForTask(id as TaskId, context);
+			await this.waitForIdle(conversationId, context);
+			return;
+		}
 	}
 
 	// ─── Invocation runtime ──────────────────────────────────────────────────

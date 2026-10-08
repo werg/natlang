@@ -3,5 +3,5 @@
     "skipLibCheck": true, "rootDir": ".", "outDir": "dist", "types": ["node"],
     "allowImportingTsExtensions": true, "rewriteRelativeImportExtensions": true, "erasableSyntaxOnly": true },
   "include": ["*.ts", "**/*.ts"],
-  "exclude": ["node_modules", "dist", "vendor/durable/test", "vendor/durable/src/testing", "vendor/durable/src/storage/sqlite/cloudflare.ts", ".natlang"]
+  "exclude": ["node_modules", "dist", "test", "vendor/durable/test", "vendor/durable/src/testing", "vendor/durable/src/storage/sqlite/cloudflare.ts", ".natlang"]
 }
