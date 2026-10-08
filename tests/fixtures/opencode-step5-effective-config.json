@@ -18,7 +18,7 @@
     }
   },
   "permission": {
-    "*": "ask",
+    "*": "deny",
     "natlang_action_bridge_submit_action": "allow"
   },
   "mcp": {

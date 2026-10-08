@@ -11,6 +11,9 @@ test('effective Step 5 config pins both main and title work to the explicit free
   assert.equal(actual.provider['zen-step5-free'].options.baseURL, 'https://opencode.ai/zen/v1');
   assert.equal(actual.provider['zen-step5-free'].options.apiKey, '{env:OPENCODE_API_KEY}');
   assert.equal(Object.hasOwn(actual.provider['zen-step5-free'].options, 'headers'), false);
+  assert.deepEqual(actual.permission, { '*': 'deny', natlang_action_bridge_submit_action: 'allow' });
+  assert.equal(actual.permission['*'], 'deny');
+  assert.equal(actual.permission.natlang_action_bridge_submit_action, 'allow');
 });
 
 test('an alternate configured free model stays on its own provider model ID', () => {
@@ -18,5 +21,6 @@ test('an alternate configured free model stays on its own provider model ID', ()
     '/test/mcp-handshake.jsonl', 'ling-3.1-flash-free');
   assert.equal(actual.model, 'opencode/ling-3.1-flash-free');
   assert.equal(actual.small_model, 'opencode/ling-3.1-flash-free');
+  assert.deepEqual(actual.permission, { '*': 'deny', natlang_action_bridge_submit_action: 'allow' });
   assert.equal(actual.provider, undefined);
 });

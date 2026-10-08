@@ -40,7 +40,9 @@ export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, mode
     '$schema': 'https://opencode.ai/config.json',
     model: modelAlias,
     small_model: modelAlias,
-    permission: { '*': 'ask', natlang_action_bridge_submit_action: 'allow' },
+    // OpenCode's supported permission rules hide denied built-ins from the
+    // model-facing tool list. The named Natlang MCP action remains available.
+    permission: { '*': 'deny', natlang_action_bridge_submit_action: 'allow' },
     mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer], enabled: true,
       environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog, NATLANG_OPENCODE_MCP_HANDSHAKE_LOG: handshakeLog } } },
     share: 'disabled', autoupdate: false
@@ -219,6 +221,8 @@ async function main() {
       credential_source: 'OPENCODE_API_KEY environment; value excluded', server_url: serverUrl,
       server_pid: serverChild.pid, adapter_url: adapter.url, scratch_directory: scratch, isolated_home: isolatedHome,
       default_tool_ids: defaultTools.data, mcp_status: statuses.natlang_action_bridge.status,
+      model_tool_surface: { default_native_tools: 'denied and hidden by global permission rule',
+        natlang_action_bridge_submit_action: 'allowed; this is the only enabled action tool' },
       mcp_handshake_path: handshakeLog, action_log_path: actionLog,
       permission_policy: 'official default tools retained; wildcard ask; isolated Natlang action MCP allowed; observed permission asks rejected; session history is not an execution barrier',
       containment: 'requires bwrap launcher; official CLI server and model subprocess run under isolated HOME/XDG, scratch cwd; provider network shared',
