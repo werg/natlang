@@ -124,6 +124,18 @@ const FOLDER_DECLARATIONS = [
 const DEFAULT_CONTEXT_TOKENS = 16384;
 
 /**
+ * The context budget when none is configured: the model's context window as its server reports it (a driver's
+ * `contextWindow()`), less an eighth (at least 2048 tokens) for the reply; DEFAULT_CONTEXT_TOKENS when unknown.
+ */
+export async function defaultContextBudget(driver: unknown): Promise<number> {
+  const ask = (driver as { contextWindow?: unknown } | null)?.contextWindow;
+  let window: unknown;
+  try { window = typeof ask === 'function' ? await (ask as () => Promise<unknown>).call(driver) : undefined; } catch { window = undefined; }
+  if (typeof window !== 'number' || !Number.isInteger(window) || window < 4096) return DEFAULT_CONTEXT_TOKENS;
+  return window - Math.max(2048, Math.floor(window / 8));
+}
+
+/**
  * Compaction: everything between the kept start (the opening, and the pinned note once there is one) and the latest
  * exchange (the last assistant turn and what followed it) leaves the conversation. It is all in transcript, and every
  * value the model stored is still in eval's scope. Returns how many messages were removed.
@@ -874,7 +886,7 @@ export class NativeToolAgent {
     const decided = await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
     const openingLength = messages.length;
-    const budget = this.options.contextTokens === undefined ? DEFAULT_CONTEXT_TOKENS : this.options.contextTokens;
+    const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
     let tokensPerChar = 1 / 3.5;
     const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;

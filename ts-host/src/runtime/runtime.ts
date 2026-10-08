@@ -16,7 +16,7 @@ export type ModelConfig = { driver: ModelDriver;
   id?: string; revision?: string;
   maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number;
-  /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
+  /** Context budget in prompt tokens before old tool outputs are elided (default: the context window the model server reports, less an eighth for the reply; 16384 when it does not say; null never compacts). */
   contextTokens?: number | null;
   /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
   maxFailureRepairs?: number;
