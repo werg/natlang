@@ -1,0 +1,547 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v19-closed-generation-v1-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v1",
+  "files": [
+    {
+      "path": "bunny/__pycache__/run_bunny_v19.cpython-310.pyc",
+      "bytes": 10378,
+      "sha256": "9924ab12a18daebe8cae48623b3abd7dcd626fc71b92f54f9eaa97ac0e14a372"
+    },
+    {
+      "path": "bunny/approval.receipt.json",
+      "bytes": 2306,
+      "sha256": "8ada4ffbdb2925c7035c33f4e1c9b4b61071c9216a32631f1ee57a97f5b62027"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/jobs/000005-f0ba208200903eca.partial.json",
+      "bytes": 2080,
+      "sha256": "6a36ac70a8888e9578215b27bf09155200b1a3f8546eceadba02424ccef975cb"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/jobs/000005-f0ba208200903eca.partial.json.evidence-46fbe5ff-2094-40ad-afe3-ba0ffe196028.jsonl",
+      "bytes": 80691,
+      "sha256": "1973ff70e22b200e6c26806d28a65ac292fd2075cc955fce04d72bdfed16b18f",
+      "lines": 11
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/jobs/000005.error.json",
+      "bytes": 347,
+      "sha256": "c167d3f1bb776ff849926879c6470dae65aa1f178a6c71e3a1fb2b8239f1f34b"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/logs/case.log",
+      "bytes": 1586,
+      "sha256": "7a71a9f45dde2e07fd572446ec91e101397a3570e9a8307cdd8012747cddecd5"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/results/case.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000005/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "ca08aad0d0b0d3efe382a3b702a8430c9c513f504fd11a3e36dd405677598381"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/jobs/000006-21785f466a5345b1.partial.json",
+      "bytes": 2079,
+      "sha256": "bca4892d5e22541a6682a57bb13869faa7e07550e1a81ea3edc1410780ab5185"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/jobs/000006-21785f466a5345b1.partial.json.evidence-5415dbb1-fd09-4d14-b4fe-08794c254c59.jsonl",
+      "bytes": 81285,
+      "sha256": "eeac2dab84d9e13818e7c96ab38c1310f0f76d81d4e44f13f0bea9133c073e7d",
+      "lines": 11
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/jobs/000006.error.json",
+      "bytes": 346,
+      "sha256": "4fe7fa468be14ffda2ead33e5944d25720df4a5e0c6f9d00a5f7faa9a095d0d5"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/logs/case.log",
+      "bytes": 1586,
+      "sha256": "59f9b73d28d0d6a2bd4a93e4b1fe31d201dc66b310e6566738ebd5a833af2d5f"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/results/case.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000006/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "4576b5242c5b97931d2507aab1c757dea0bd64ae319baacbb19106d51b4d0b7c"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/jobs/000007-e972615677d34c47.partial.json",
+      "bytes": 2088,
+      "sha256": "f4331e0a3db9ebc5fa19900c54aa5f23bbec9dc3fad1f2fae9f3c749ee658766"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/jobs/000007-e972615677d34c47.partial.json.evidence-8afeff78-6bea-4a7b-9487-255705b8697d.jsonl",
+      "bytes": 80689,
+      "sha256": "004938039b5f5d66538b670728f30d7dd6865fe645a2684a7415d9049cba6c70",
+      "lines": 11
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/jobs/000007.error.json",
+      "bytes": 355,
+      "sha256": "3afa16785e8f338491af756a764ecb01da11b7d931a3ccc4deac476c85ac7f90"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/logs/case.log",
+      "bytes": 1586,
+      "sha256": "ef43d6cb7c17476f75c0fe4f8de57c4a8377456c29b8b8b78878f1d1b8340998"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/results/case.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/case-000007/results/case.results.jsonl.manifest.json",
+      "bytes": 605,
+      "sha256": "16aca21b618d631de7a37fc37178abf62e8669e5b92e549b2be251d79189eac1"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/journal.jsonl",
+      "bytes": 6093,
+      "sha256": "1b7e4dd3d9283a7b4e47cd00e88e4e0f9e6f5901a5e26eda96f366dad14251b8",
+      "lines": 8
+    },
+    {
+      "path": "bunny/bunny-campaign-v1/supervisor.log",
+      "bytes": 6093,
+      "sha256": "1b7e4dd3d9283a7b4e47cd00e88e4e0f9e6f5901a5e26eda96f366dad14251b8"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/events/case.jsonl",
+      "bytes": 833,
+      "sha256": "95cd7b7a3e9f6ab626a105420d460f7931f64706c567a8304a3d12386a865bc3",
+      "lines": 2
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/jobs/000005-f0ba208200903eca.result.json",
+      "bytes": 979054,
+      "sha256": "70c678de30fcda654bf0972b73a525b2bc10cbc2ba4ebb924ffce4f760b2dc3c"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/jobs/000005-f0ba208200903eca.trace.jsonl",
+      "bytes": 52958,
+      "sha256": "bef84becb8d7ccf41364bbc028ec9e19ba22e9e06936c33ba8c38da4e5323867",
+      "lines": 23
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/logs/case.log",
+      "bytes": 599,
+      "sha256": "a3df6c1f9a142e087e08ceecd4d0a67f9f745bdfbf024865767c16dac3752bc7"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/results/case.results.jsonl",
+      "bytes": 979054,
+      "sha256": "70c678de30fcda654bf0972b73a525b2bc10cbc2ba4ebb924ffce4f760b2dc3c",
+      "lines": 1
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000005/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "993685d35b518cd39998821cc53d60b5ec19675409de1fe73004196f08f3c96b"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/events/case.jsonl",
+      "bytes": 831,
+      "sha256": "2f46ff013e89b41283057e693da29cabfec79d661b938b357e3c533a05eb928f",
+      "lines": 2
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/jobs/000006-21785f466a5345b1.result.json",
+      "bytes": 1249856,
+      "sha256": "89b8e40900d85c6c26319ed151584655d213e52c86293171fa893556d58dfd92"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/jobs/000006-21785f466a5345b1.trace.jsonl",
+      "bytes": 55256,
+      "sha256": "8585cb27344ef89929fcf64b5e9879fbae660d306e38acb078929a774b9960f4",
+      "lines": 23
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/logs/case.log",
+      "bytes": 598,
+      "sha256": "33dc27aff6c9523f1c7f4ed236966a5f8ba800c19b5f69d518da98ed6e2cec60"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/results/case.results.jsonl",
+      "bytes": 1249856,
+      "sha256": "89b8e40900d85c6c26319ed151584655d213e52c86293171fa893556d58dfd92",
+      "lines": 1
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000006/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "440f5da9f06b96661eaa45f10ed5adf65374da43586d909eea9a171b38ee11dd"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/events/case.jsonl",
+      "bytes": 849,
+      "sha256": "ddbceb2637935f8754dce75e6381e265f29d2957fe309cc9dc7a9da1956f70d1",
+      "lines": 2
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/jobs/000007-e972615677d34c47.result.json",
+      "bytes": 1004053,
+      "sha256": "7e69c26a4e4bce0470243a237246b9184a7d12ed29ed62236756932b60b86a58"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/jobs/000007-e972615677d34c47.trace.jsonl",
+      "bytes": 53274,
+      "sha256": "844116764d89f34076aa8192be10f760cb6d7f7da1e2e11b47ec192aba99e5a0",
+      "lines": 23
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/logs/case.log",
+      "bytes": 607,
+      "sha256": "567e96313f8fcc2575f93e4b6c7ccfa146a2faf26b7f9443657bfa8c897c14ce"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/results/case.results.jsonl",
+      "bytes": 1004053,
+      "sha256": "7e69c26a4e4bce0470243a237246b9184a7d12ed29ed62236756932b60b86a58",
+      "lines": 1
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/attempt-02/case-000007/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "2634e5720aac77d93e631efed3905b4974027c988bc9212d3db024fe12f41cf2"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/completion-check.json",
+      "bytes": 4872,
+      "sha256": "4d52d48b353b0327320e38236c4acd39e68249dc21c58be5142eb6af67f9c7ce"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/launch-attempt02.json",
+      "bytes": 9752,
+      "sha256": "296ccd5c191a3426c33a88ee636a1d44e52d01feaa1a8138248b4523e9f1280f"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/launch.json",
+      "bytes": 5003,
+      "sha256": "c28670c5f8bf39742d5c66356e0eb4d60c6c6b53d471955e4b1f71dc34832d09"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/supervisor-attempt02.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/supervisor-attempt02.pid",
+      "bytes": 6,
+      "sha256": "f915d2b8a419cc5955bac1b4f446cbbe42e369cc21038a93f2de21c0669294cc"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/supervisor.log",
+      "bytes": 596,
+      "sha256": "bea28c5c9d998bad717adf5136670be3889308d7d1be8edd918799a1cd343fae"
+    },
+    {
+      "path": "bunny/bunny-campaign-v1-native/supervisor.log.pid",
+      "bytes": 6,
+      "sha256": "dd1adca377d0844df5d73aebc4030d8cfbcca44c7e59605ebf366c64b1e7c90f"
+    },
+    {
+      "path": "bunny/plan.draft.json",
+      "bytes": 6447,
+      "sha256": "9b5b975b5b90ef41ee4d6b675b68d9a5d035e6dc5299570f2a471c59bdc79986"
+    },
+    {
+      "path": "bunny/plan.root-approved.json",
+      "bytes": 7407,
+      "sha256": "9571b7ed0811fffa19eee80619f97e289d4c1938cde99193e0f3cf384f0abc8f"
+    },
+    {
+      "path": "bunny/queue.jsonl",
+      "bytes": 3384,
+      "sha256": "828698a762ffe31090e2eaf1c8b6cd57fef924e4d159aaae9e318129ab07d374",
+      "lines": 3
+    },
+    {
+      "path": "bunny/run_bunny_v19.py",
+      "bytes": 11023,
+      "sha256": "b2ccf2d2ddac9bc1dd4cbc5bb6018aeb1dd6d1efe48a283a1f8b2aa4b733d76a"
+    },
+    {
+      "path": "luna/approval.receipt.json",
+      "bytes": 1794,
+      "sha256": "e171038242cd9dc159ed13ad31924d4dffa4a63471324032626406178efac645"
+    },
+    {
+      "path": "luna/luna-campaign-v1/dispatch/claims.jsonl",
+      "bytes": 20820,
+      "sha256": "680ae914b06b92bbcb53a56b35e3ec6d7af4f9ed0845dfeabe20bb05b1739ccc",
+      "lines": 17
+    },
+    {
+      "path": "luna/luna-campaign-v1/dispatch/dispatcher-supervisor.json",
+      "bytes": 639,
+      "sha256": "1ac81f0dbfb80801216fd286c0b787c8b1b325a3e284cca790058440dd05a3b3"
+    },
+    {
+      "path": "luna/luna-campaign-v1/dispatch/dispatcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna/luna-campaign-v1/dispatch/launch.json",
+      "bytes": 2203,
+      "sha256": "453b2111138e1c31f2ac6d715faf9b714add5d23cd715494b0a3a086a411ad17"
+    },
+    {
+      "path": "luna/luna-campaign-v1/dispatcher.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/claims/luna-v19-paired-counterfactual-v1-case-000000/queue.jsonl",
+      "bytes": 816,
+      "sha256": "3182ee880c5772dd3866a995bf440f99134d788cf93d167b560df6c2c3f6a0ad",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 106897,
+      "sha256": "8625d462de7ee8a888c33f66013eb15d65b83dd4598102b615e99d9468431ec3"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/jobs/000000-cdc8c998f4896bcf.result.json",
+      "bytes": 3206344,
+      "sha256": "203d7c7f95f49f227632ddc13fe0d992283ca50d0c2f31800519fd0044c813cf"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/jobs/000000-cdc8c998f4896bcf.trace.jsonl",
+      "bytes": 96991,
+      "sha256": "75a7aeb26642ab9168fb1ddafbcc753aaba33e4f14d812469d34886a3c6d29d4",
+      "lines": 52
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/journal.jsonl",
+      "bytes": 7385,
+      "sha256": "8bddfe6f62a08eef44512840f51004bdc8c4988f8697327ba8377e3695f8e257",
+      "lines": 8
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3206344,
+      "sha256": "203d7c7f95f49f227632ddc13fe0d992283ca50d0c2f31800519fd0044c813cf",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "361829b00b1c933d8c50a086919f69051b3303d4a6d21fa8044d189e27984d81"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-01/supervisor.log",
+      "bytes": 7385,
+      "sha256": "8bddfe6f62a08eef44512840f51004bdc8c4988f8697327ba8377e3695f8e257"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/claims/luna-v19-paired-counterfactual-v1-case-000001/queue.jsonl",
+      "bytes": 816,
+      "sha256": "ad53f02bce646a38430567445312c4e50b6cc921a631816fcb4494c3eb87c363",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 223497,
+      "sha256": "74c67a7c375666d89265ee3e2fe96e12df251108cf9e155b66468008bf980eb3"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/jobs/000001-ecfb6dd411fe5acd.result.json",
+      "bytes": 7815983,
+      "sha256": "75a556cb58811c0e5f35a743074e4c400719c69d1c95b79933e2b03df1d350c9"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/jobs/000001-ecfb6dd411fe5acd.trace.jsonl",
+      "bytes": 156355,
+      "sha256": "c20196dd0f828973101a6a1ac53a025efa08b0342c66d3c9ab8568d482bff0b6",
+      "lines": 74
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/journal.jsonl",
+      "bytes": 14457,
+      "sha256": "aefcb2b88eadc741d4385e6e7764bfabe7abff5f47e99c35e629647657dc61b4",
+      "lines": 16
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 7815983,
+      "sha256": "75a556cb58811c0e5f35a743074e4c400719c69d1c95b79933e2b03df1d350c9",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "ba7d6a390508d95654df1c451afe597b443cdc863d4d6ce7bad5b509ffffbacd"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-02/supervisor.log",
+      "bytes": 14457,
+      "sha256": "aefcb2b88eadc741d4385e6e7764bfabe7abff5f47e99c35e629647657dc61b4"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/claims/luna-v19-paired-counterfactual-v1-case-000002/queue.jsonl",
+      "bytes": 816,
+      "sha256": "6d2202ce1641a3dec1d65620dbed185e6e1a57bd39e7dbcde9db94e666118cc6",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 145831,
+      "sha256": "abe690dbadd6bb11f023e9a5c7a8e9fe3c37ebc98834ac5f016bf8f5f33ccc92"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/jobs/000002-87e8b91d8c99c269.result.json",
+      "bytes": 4303462,
+      "sha256": "65ac7bc2482f0adb8d826d5fba96a6e8b1775a443a641f452d950cf224055c31"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/jobs/000002-87e8b91d8c99c269.trace.jsonl",
+      "bytes": 125417,
+      "sha256": "74ea10101bbc49238f7a0bdcdddec795cbc3abc1051b2e7c867b86fdf7883c83",
+      "lines": 69
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/journal.jsonl",
+      "bytes": 9159,
+      "sha256": "ed17ebe04824e6f17803ac4da6fae307db6051fbc96645ff36c1302283a24526",
+      "lines": 10
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 4303462,
+      "sha256": "65ac7bc2482f0adb8d826d5fba96a6e8b1775a443a641f452d950cf224055c31",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "91b08c68bfeb1a737e9d80742f30e573a892ef94c33186663ce046aede33d156"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-03/supervisor.log",
+      "bytes": 9159,
+      "sha256": "ed17ebe04824e6f17803ac4da6fae307db6051fbc96645ff36c1302283a24526"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/claims/luna-v19-paired-counterfactual-v1-case-000003/queue.jsonl",
+      "bytes": 816,
+      "sha256": "5493f2eda128e49b3e7733e1f4038866224919b0a7014cb5d955175146cfc05a",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 514539,
+      "sha256": "f7266488b7444c77802b507df3473479de3372e6a2682fc1df62ad9ecc76136b"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/jobs/000003-64f57198009df9e9.partial.json",
+      "bytes": 11975626,
+      "sha256": "fe2b6ad126bbe29ae0f28707b9b035329249105217d78ad24a3345eb39f06391"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/jobs/000003-64f57198009df9e9.partial.json.evidence-2e150bcc-87c8-46b7-8351-195f35250e1c.jsonl",
+      "bytes": 73649833,
+      "sha256": "5448309509234d93b87e203e6d993c47efe4b742d3e8672cec9404e36e36e2dc",
+      "lines": 2835
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/jobs/000003.error.json",
+      "bytes": 372,
+      "sha256": "b8f28c7d1fc077e641b226dfaafd863dec05bcde21c7e70d018e28b13804384a"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/journal.jsonl",
+      "bytes": 29111,
+      "sha256": "3ab7d05e88977796372389db7a2680ba6803a29e56b20a8494a240be6a2fa7bd",
+      "lines": 33
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 590,
+      "sha256": "1a2e5ba9b156c452f60f2e08815555841cf6e8e14f9e751eff090a385815e3ba"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-04/supervisor.log",
+      "bytes": 29111,
+      "sha256": "3ab7d05e88977796372389db7a2680ba6803a29e56b20a8494a240be6a2fa7bd"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/claims/luna-v19-paired-counterfactual-v1-case-000004/queue.jsonl",
+      "bytes": 816,
+      "sha256": "270ccf8b99224aa079d4879e1aca2148e495fa3f80a6c3b1b4ca2dc4ee8425e8",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 404578,
+      "sha256": "525be2a16df03b4f40c7af8bdfe5d7d8919649b8b62700ebd42606785eb2187e"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/jobs/000004-796e6f38e20ac6a3.result.json",
+      "bytes": 11282632,
+      "sha256": "df3dbda0149f0e341ca9574425633d09bf469718e755f0ff0c427f8df179ce67"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/jobs/000004-796e6f38e20ac6a3.trace.jsonl",
+      "bytes": 283722,
+      "sha256": "8db72872cba4014de9da98c814684066d83fbe180e75aea9947d893bd463e882",
+      "lines": 131
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/journal.jsonl",
+      "bytes": 22346,
+      "sha256": "842a6236d008bd46e19c8037631e2723e7ccf62509ebbb7ea5a240412af98fd5",
+      "lines": 25
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 11282632,
+      "sha256": "df3dbda0149f0e341ca9574425633d09bf469718e755f0ff0c427f8df179ce67",
+      "lines": 1
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 589,
+      "sha256": "9a3d7cf2fc4643e7ec5854eab36b009424ef791c97de5b6bbab95a9593d46508"
+    },
+    {
+      "path": "luna/luna-campaign-v1/slot-05/supervisor.log",
+      "bytes": 22346,
+      "sha256": "842a6236d008bd46e19c8037631e2723e7ccf62509ebbb7ea5a240412af98fd5"
+    },
+    {
+      "path": "luna/plan.draft.json",
+      "bytes": 7423,
+      "sha256": "c1763d76770f830394dd021f4c659d6bd358ab838f83cb97f2f22bfeb0a7b013"
+    },
+    {
+      "path": "luna/plan.root-approved.json",
+      "bytes": 8364,
+      "sha256": "cabb45bef4aa9942de1435f91bf5efc437c170d0718872e96541b9d16c9a4a0f"
+    }
+  ],
+  "bytes": 148077127
+}

@@ -868,7 +868,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -890,7 +890,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -2296,7 +2296,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -4805,7 +4805,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5000,7 +5000,7 @@
         "**/*"
       ],
       "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
-      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
+      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan\u2019s missing runtime frozen-manifest SHA is recorded as a gap.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v16-caption-role-clarification-publication-20261007-v1",
@@ -5035,7 +5035,7 @@
         "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
         "luna-semantic-v65-v67-closed-audit-20261007-v1"
       ],
-      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68\u2019s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
     },
     {
       "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
@@ -5045,7 +5045,7 @@
         "**/*"
       ],
       "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
-      "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
       "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
@@ -5058,7 +5058,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v15-lineage-20261007-v1"
       ],
-      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1\u2013V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
     },
     {
       "id": "luna-semantic-v68-v71-closed-action-audit-20261007-v1",
@@ -5068,7 +5068,7 @@
         "**/*"
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
-      "notes": "Immutable 1453-file V68–V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+      "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
@@ -5850,7 +5850,7 @@
       "include": [
         "**/*"
       ],
-      "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+      "notes": "Closed corrected-source campaign: Luna accepted indices0\u20135,7\u201311;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
     },
     {
       "id": "luna-v17-recovery-runtime-20261008-a2a53630",
@@ -6135,6 +6135,160 @@
         "neuralese-semantic-iterate-reducers-v19-source-20261008-v1"
       ],
       "notes": "Nine-case structural reference on frozen cb892 runtime: 108 decisions, 36 evidence reads. Independently reviewed source outcome derivations remain separate from authored reference execution. No provider inference, model qualification, action admission or new-world credit. Separate snapshot preserves actual runtime proof not matched by original source nested glob."
+    },
+    {
+      "id": "v19-closed-generation-v1-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v1",
+      "include": [
+        "bunny/__pycache__/run_bunny_v19.cpython-310.pyc",
+        "bunny/approval.receipt.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/events/case.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/jobs/000005-f0ba208200903eca.result.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/jobs/000005-f0ba208200903eca.trace.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/logs/case.log",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000005/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/events/case.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/jobs/000006-21785f466a5345b1.result.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/jobs/000006-21785f466a5345b1.trace.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/logs/case.log",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000006/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/events/case.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/jobs/000007-e972615677d34c47.result.json",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/jobs/000007-e972615677d34c47.trace.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/logs/case.log",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1-native/attempt-02/case-000007/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1-native/completion-check.json",
+        "bunny/bunny-campaign-v1-native/launch-attempt02.json",
+        "bunny/bunny-campaign-v1-native/launch.json",
+        "bunny/bunny-campaign-v1-native/supervisor-attempt02.log",
+        "bunny/bunny-campaign-v1-native/supervisor-attempt02.pid",
+        "bunny/bunny-campaign-v1-native/supervisor.log",
+        "bunny/bunny-campaign-v1-native/supervisor.log.pid",
+        "bunny/bunny-campaign-v1/case-000005/jobs/000005-f0ba208200903eca.partial.json",
+        "bunny/bunny-campaign-v1/case-000005/jobs/000005-f0ba208200903eca.partial.json.evidence-46fbe5ff-2094-40ad-afe3-ba0ffe196028.jsonl",
+        "bunny/bunny-campaign-v1/case-000005/jobs/000005.error.json",
+        "bunny/bunny-campaign-v1/case-000005/logs/case.log",
+        "bunny/bunny-campaign-v1/case-000005/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1/case-000005/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1/case-000006/jobs/000006-21785f466a5345b1.partial.json",
+        "bunny/bunny-campaign-v1/case-000006/jobs/000006-21785f466a5345b1.partial.json.evidence-5415dbb1-fd09-4d14-b4fe-08794c254c59.jsonl",
+        "bunny/bunny-campaign-v1/case-000006/jobs/000006.error.json",
+        "bunny/bunny-campaign-v1/case-000006/logs/case.log",
+        "bunny/bunny-campaign-v1/case-000006/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1/case-000006/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1/case-000007/jobs/000007-e972615677d34c47.partial.json",
+        "bunny/bunny-campaign-v1/case-000007/jobs/000007-e972615677d34c47.partial.json.evidence-8afeff78-6bea-4a7b-9487-255705b8697d.jsonl",
+        "bunny/bunny-campaign-v1/case-000007/jobs/000007.error.json",
+        "bunny/bunny-campaign-v1/case-000007/logs/case.log",
+        "bunny/bunny-campaign-v1/case-000007/results/case.results.jsonl",
+        "bunny/bunny-campaign-v1/case-000007/results/case.results.jsonl.manifest.json",
+        "bunny/bunny-campaign-v1/journal.jsonl",
+        "bunny/bunny-campaign-v1/supervisor.log",
+        "bunny/plan.draft.json",
+        "bunny/plan.root-approved.json",
+        "bunny/queue.jsonl",
+        "bunny/run_bunny_v19.py",
+        "luna/approval.receipt.json",
+        "luna/luna-campaign-v1/dispatch/claims.jsonl",
+        "luna/luna-campaign-v1/dispatch/dispatcher-supervisor.json",
+        "luna/luna-campaign-v1/dispatch/dispatcher.log",
+        "luna/luna-campaign-v1/dispatch/launch.json",
+        "luna/luna-campaign-v1/dispatcher.lock",
+        "luna/luna-campaign-v1/slot-01/claims/luna-v19-paired-counterfactual-v1-case-000000/queue.jsonl",
+        "luna/luna-campaign-v1/slot-01/collector-logs/case-000000.log",
+        "luna/luna-campaign-v1/slot-01/jobs/000000-cdc8c998f4896bcf.result.json",
+        "luna/luna-campaign-v1/slot-01/jobs/000000-cdc8c998f4896bcf.trace.jsonl",
+        "luna/luna-campaign-v1/slot-01/journal.jsonl",
+        "luna/luna-campaign-v1/slot-01/results/case-000000.results.jsonl",
+        "luna/luna-campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+        "luna/luna-campaign-v1/slot-01/supervisor.log",
+        "luna/luna-campaign-v1/slot-02/claims/luna-v19-paired-counterfactual-v1-case-000001/queue.jsonl",
+        "luna/luna-campaign-v1/slot-02/collector-logs/case-000001.log",
+        "luna/luna-campaign-v1/slot-02/jobs/000001-ecfb6dd411fe5acd.result.json",
+        "luna/luna-campaign-v1/slot-02/jobs/000001-ecfb6dd411fe5acd.trace.jsonl",
+        "luna/luna-campaign-v1/slot-02/journal.jsonl",
+        "luna/luna-campaign-v1/slot-02/results/case-000001.results.jsonl",
+        "luna/luna-campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+        "luna/luna-campaign-v1/slot-02/supervisor.log",
+        "luna/luna-campaign-v1/slot-03/claims/luna-v19-paired-counterfactual-v1-case-000002/queue.jsonl",
+        "luna/luna-campaign-v1/slot-03/collector-logs/case-000002.log",
+        "luna/luna-campaign-v1/slot-03/jobs/000002-87e8b91d8c99c269.result.json",
+        "luna/luna-campaign-v1/slot-03/jobs/000002-87e8b91d8c99c269.trace.jsonl",
+        "luna/luna-campaign-v1/slot-03/journal.jsonl",
+        "luna/luna-campaign-v1/slot-03/results/case-000002.results.jsonl",
+        "luna/luna-campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+        "luna/luna-campaign-v1/slot-03/supervisor.log",
+        "luna/luna-campaign-v1/slot-04/claims/luna-v19-paired-counterfactual-v1-case-000003/queue.jsonl",
+        "luna/luna-campaign-v1/slot-04/collector-logs/case-000003.log",
+        "luna/luna-campaign-v1/slot-04/jobs/000003-64f57198009df9e9.partial.json",
+        "luna/luna-campaign-v1/slot-04/jobs/000003-64f57198009df9e9.partial.json.evidence-2e150bcc-87c8-46b7-8351-195f35250e1c.jsonl",
+        "luna/luna-campaign-v1/slot-04/jobs/000003.error.json",
+        "luna/luna-campaign-v1/slot-04/journal.jsonl",
+        "luna/luna-campaign-v1/slot-04/results/case-000003.results.jsonl",
+        "luna/luna-campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+        "luna/luna-campaign-v1/slot-04/supervisor.log",
+        "luna/luna-campaign-v1/slot-05/claims/luna-v19-paired-counterfactual-v1-case-000004/queue.jsonl",
+        "luna/luna-campaign-v1/slot-05/collector-logs/case-000004.log",
+        "luna/luna-campaign-v1/slot-05/jobs/000004-796e6f38e20ac6a3.result.json",
+        "luna/luna-campaign-v1/slot-05/jobs/000004-796e6f38e20ac6a3.trace.jsonl",
+        "luna/luna-campaign-v1/slot-05/journal.jsonl",
+        "luna/luna-campaign-v1/slot-05/results/case-000004.results.jsonl",
+        "luna/luna-campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+        "luna/luna-campaign-v1/slot-05/supervisor.log",
+        "luna/plan.draft.json",
+        "luna/plan.root-approved.json"
+      ],
+      "admission": "held-raw-or-review-evidence-no-new-training-admission",
+      "notes": "Closed five Luna/eight combined teacher cases: seven exact accepted, PX106 exhausted request budget with sticky denied-write overlay. Failed early unsupported Bunny launcher preserved as infrastructure attempt. Raw outcomes require per-action semantic and source admission; no automatic training or DPO admission."
+    },
+    {
+      "id": "v19-closed-rt227-generation-v2-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v2",
+      "include": [
+        "bunny-rt227/approval.receipt.json",
+        "bunny-rt227/bunny-campaign-v1/case-000008/events/case.jsonl",
+        "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.result.json",
+        "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.trace.jsonl",
+        "bunny-rt227/bunny-campaign-v1/case-000008/logs/case.log",
+        "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl",
+        "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl.manifest.json",
+        "bunny-rt227/bunny-campaign-v1/launch.json",
+        "bunny-rt227/plan.draft.json",
+        "bunny-rt227/plan.root-approved.json",
+        "bunny-rt227/queue.jsonl"
+      ],
+      "admission": "held-raw-or-review-evidence-no-new-training-admission",
+      "notes": "Closed corrected complete-map RT227 generation, exact none/0/no_action accepted; raw failures/recovery retained, no automatic action admission."
+    },
+    {
+      "id": "v17-expanded-root-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v17-expanded-root-review-20261008-v1",
+      "include": [
+        "context-sufficiency-review.json",
+        "context-sufficiency-review.sha256",
+        "exact-soft-body-hydration-review-v2.json",
+        "exact-soft-body-hydration-review-v2.sha256",
+        "value-visibility.json"
+      ],
+      "admission": "held-raw-or-review-evidence-no-new-training-admission",
+      "notes": "Root context sufficiency/exact body hydration diagnostic receipts for held27-action proposal. Same-run provider bodies identified; generic authenticated hydration pending. Not corpus admission."
+    },
+    {
+      "id": "v17-status-only-return-audit-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v17-status-only-return-audit-20261008-v2",
+      "include": [
+        "clarification.json",
+        "files.sha256"
+      ],
+      "admission": "held-raw-or-review-evidence-no-new-training-admission",
+      "notes": "Status-only successful root results have exact same-invocation typed staged values. Clarifies no quarantine of admitted prefix; no new examples."
     }
   ],
   "coverage_backlog": [

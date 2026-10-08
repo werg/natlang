@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v17-expanded-root-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-expanded-root-review-20261008-v1",
+  "files": [
+    {
+      "path": "context-sufficiency-review.json",
+      "bytes": 66949,
+      "sha256": "89e891b7c7a7ba089a46e4707284edc96d65607bcf6ba2e289dfadfe700e0aad"
+    },
+    {
+      "path": "context-sufficiency-review.sha256",
+      "bytes": 98,
+      "sha256": "01edd64eff5e0a9102f0dbbc4c6f3837a3fab144a36505efb0aa1544ae66f37b"
+    },
+    {
+      "path": "exact-soft-body-hydration-review-v2.json",
+      "bytes": 9544,
+      "sha256": "cdf5488a574c540bd9024de3e8aef94958581d9293d9cfb944c3fc13c246e5ab"
+    },
+    {
+      "path": "exact-soft-body-hydration-review-v2.sha256",
+      "bytes": 107,
+      "sha256": "4f5e135fed11337c16db4345a2ec453e78f4fdd2464e919d86b12d347ead9b78"
+    },
+    {
+      "path": "value-visibility.json",
+      "bytes": 907,
+      "sha256": "74e6eaf3a37f896a67db5da138248cb0da1e25550bd318ffc931f2319042c562"
+    }
+  ],
+  "bytes": 77605
+}

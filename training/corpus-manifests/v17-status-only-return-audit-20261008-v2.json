@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v17-status-only-return-audit-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-status-only-return-audit-20261008-v2",
+  "files": [
+    {
+      "path": "clarification.json",
+      "bytes": 11154,
+      "sha256": "635e5c1218b0aa8d5cb78145270c924d473a602d635cb5b291547e5e303552fc"
+    },
+    {
+      "path": "files.sha256",
+      "bytes": 141,
+      "sha256": "1aa6d7b33fb30c8debdb5f4aa73fb2caaf40e929e89430862789595135c5f014"
+    }
+  ],
+  "bytes": 11295
+}

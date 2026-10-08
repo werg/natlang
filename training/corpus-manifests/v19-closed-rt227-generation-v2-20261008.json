@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v19-closed-rt227-generation-v2-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/generation-review-v2",
+  "files": [
+    {
+      "path": "bunny-rt227/approval.receipt.json",
+      "bytes": 1818,
+      "sha256": "6bd7c73b9a53a030f1351f2032b2778a93fb412bcaca25d809f8ee4b62492b4b"
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/events/case.jsonl",
+      "bytes": 831,
+      "sha256": "d226d77af990b7a07889dd62bbe5d529f72a57ed88eeb6dd65949f5bbfd48570",
+      "lines": 2
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.result.json",
+      "bytes": 1781950,
+      "sha256": "667eb97d4568dd8ac5f67f3f23cdb7428b57b3cee67764c34c07b4e9dc583649"
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/jobs/000008-6d2f44e98e8decda.trace.jsonl",
+      "bytes": 53341,
+      "sha256": "a9b5c6536027d294b17fb39c3c0f524546f95de2c74678a3c5cdb30e5098e856",
+      "lines": 23
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/logs/case.log",
+      "bytes": 586,
+      "sha256": "61325ee6d1e103d458d8475759f6cf6cf15adfa3e5973a5dbc12249c5b7f959c"
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl",
+      "bytes": 1781950,
+      "sha256": "667eb97d4568dd8ac5f67f3f23cdb7428b57b3cee67764c34c07b4e9dc583649",
+      "lines": 1
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/case-000008/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "764197128901c0cea29fac4fe9f7f425a6bf1738e67fdc96736f73f2d6fb3a37"
+    },
+    {
+      "path": "bunny-rt227/bunny-campaign-v1/launch.json",
+      "bytes": 3955,
+      "sha256": "b72527eceb299dc7b6792aac9f7e2493295c134b53a2f98ba9887cddccfe77f8"
+    },
+    {
+      "path": "bunny-rt227/plan.draft.json",
+      "bytes": 6369,
+      "sha256": "71824fd656714371db2621ee6bc182c50bfe3bb8060e44352a702d3f09f5b8ac"
+    },
+    {
+      "path": "bunny-rt227/plan.root-approved.json",
+      "bytes": 5863,
+      "sha256": "af807b1d332e1265d4f3e16375576da1dcf54ff81d80c1fe34e8e8398958fd9e"
+    },
+    {
+      "path": "bunny-rt227/queue.jsonl",
+      "bytes": 1203,
+      "sha256": "5cbe65b5251ee9c017824f0da1f312ccf8d43a64eb98823c8192ea0e7d83cf62",
+      "lines": 1
+    }
+  ],
+  "bytes": 3638470
+}
