@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-action45-plus-adopted37-native-text-delta-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/capsule-receipt-v1.json",
+      "bytes": 4562,
+      "sha256": "d6a6ade3262d3b79aa9372d918bdb11caa1aa0abee8f17c1f856c3a10b0c6371"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/decoded-supervised-suffixes.jsonl",
+      "bytes": 86929,
+      "sha256": "8a3bb9c7ff3a7a3e586c354cd9fe588606cf89a8b98e8cd42472a0ecc6a15343",
+      "lines": 31
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/delta-manifest-v1.json",
+      "bytes": 8972,
+      "sha256": "f0af8e8f5edf3ad08de9e3fc3fb93e8d0f61aa8122a0b2b554b6d7228445890e"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/delta-native-pieces.jsonl",
+      "bytes": 30808,
+      "sha256": "5a567f923a587b9c453b83e5f1b52e285c15d600aba4860650b9d700842b5b41",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/delta-native-records.jsonl",
+      "bytes": 4104517,
+      "sha256": "9d6a40eb26853a7d7fa9998bd0f94a4c888ad486cf73e40a0361ddd76a7fc049",
+      "lines": 37
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/delta-text-provenance.jsonl",
+      "bytes": 167553,
+      "sha256": "bcdb9d3b6b3f4469c3991d3ca15ea6970d7dcc11ea20ffe14f8a258a51f9fb37",
+      "lines": 31
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/delta-text.jsonl",
+      "bytes": 2292363,
+      "sha256": "c629f21de117dd281da6377e0911c009ab50b8210398b0512e2b62a808d98253",
+      "lines": 31
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/integration-review-v2.json",
+      "bytes": 12328,
+      "sha256": "1cc09a330b22a6c348665ac25aafffd866ef6b1f5b4f099f9a33159446fa4174"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/root-integration-adoption-v2.json",
+      "bytes": 1657,
+      "sha256": "884bacae555bf416372b21270f5ec24880d4c4b1d133a115a659efd58147e146"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/source-coverage.jsonl",
+      "bytes": 17618,
+      "sha256": "9b3277d1b2c7f43226e2ba7bb877c7adb7a3429c7629131bef91dcd1ca18e64a",
+      "lines": 37
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/action37-action45-base-integration-v1/delta-publication-v2/superseded-integration-review-receipts-v1.json",
+      "bytes": 1970,
+      "sha256": "caaa1b0d4432f754b1936672df5b3d1af4892259afe99bedcc12c32fa835ab9a"
+    }
+  ],
+  "bytes": 6729277
+}
