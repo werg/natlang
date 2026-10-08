@@ -7,6 +7,7 @@ import type { ProgramRecord } from './program.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
+import { formatType, parseType, type Type } from '../native/types.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -358,12 +359,13 @@ function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown
 
 /** Match an authored Neuralese result marker only when runtime trace proves that exact child wrote its block. */
 function softReturnResultActionMatches(modelArguments: unknown, actionArguments: unknown,
-  row: NativeRow, invocationId: string | undefined): boolean {
+  row: NativeRow, invocationId: string | undefined, actionEvent: Dict): boolean {
   if (!invocationId) return false;
   const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
   const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
-  if (model.status !== 'success' || typeof model.value !== 'string' || action.status !== 'success' || typeof action.value !== 'string')
-    return false;
+  if (model.status !== 'success' || action.status !== 'success') return false;
+  if (typeof model.value !== 'string' || typeof action.value !== 'string')
+    return nestedNeuraleseReturnMatches(model, action, row, invocationId, actionEvent);
   const markers = [...model.value.matchAll(/^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/g)];
   const sentinel = /^(nz1_[a-z2-7]{20,})$/.exec(action.value);
   if (markers.length !== 1 || !sentinel || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
@@ -407,6 +409,117 @@ function neuraleseReference(value: unknown): Dict | undefined {
   if (!ref || typeof ref !== 'object' || Array.isArray(ref)) return;
   const record = ref as Dict;
   return typeof record.id === 'string' && typeof record.type === 'string' ? record : undefined;
+}
+
+function exactNeuraleseTextMarker(value: unknown): { id: string; type: string; body: string } | undefined {
+  if (typeof value !== 'string') return;
+  const match = /^\[\[Neuralese text block id=(nz1_[a-z2-7]{20,}) type=(.+); exact JSON string body=([\s\S]*)\]\]$/.exec(value);
+  if (!match) return;
+  try {
+    const body = JSON.parse(match[3]!) as unknown;
+    return typeof body === 'string' ? { id: match[1]!, type: match[2]!, body } : undefined;
+  } catch { return; }
+}
+
+/**
+ * Match an expanded text marker back to its typed value only at a declared Neuralese return slot.
+ * The caller's raw tool call, host capture, current-turn read and graph writer must all name the
+ * same content-addressed block. Ordinary string fields retain exact string comparison.
+ */
+function nestedNeuraleseReturnMatches(modelArguments: Dict, actionArguments: Dict, row: NativeRow,
+  invocationId: string, actionEvent: Dict): boolean {
+  if (typeof actionEvent.tool_call_id !== 'string' || !Number.isSafeInteger(actionEvent.seq)) return false;
+  const invocationEntries = (Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger : [])
+    .filter((entry: Dict) => entry.invocation_id === invocationId);
+  if (invocationEntries.length !== 1) return false;
+  const invocation = invocationEntries[0] as Dict;
+  const host = invocation.host_result && typeof invocation.host_result === 'object' ? invocation.host_result as Dict : undefined;
+  const site = invocation.inline_instruction_site && typeof invocation.inline_instruction_site === 'object' ?
+    invocation.inline_instruction_site as Dict : undefined;
+  const returns = site?.returns && typeof site.returns === 'object' ? site.returns as Dict : undefined;
+  if (host?.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== invocationId ||
+      host.complete !== true || host.terminal_action_seq !== actionEvent.seq || !Object.hasOwn(host, 'value') ||
+      typeof returns?.natlang !== 'string' || typeof host.result_type !== 'string' ||
+      typeof host.value_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(host.value_sha256) ||
+      host.value_sha256 !== hexDigest(JSON.stringify(host.value)) ||
+      (typeof host.bytes === 'number' && host.bytes !== new TextEncoder().encode(JSON.stringify(host.value)).byteLength)) return false;
+  let declared: Type, captured: Type;
+  try { declared = parseType(returns.natlang); captured = parseType(host.result_type); }
+  catch { return false; }
+  if (canonical(declared) !== canonical(captured)) return false;
+
+  const sourceSteps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId &&
+    Array.isArray((step.model_response as Dict | undefined)?.raw_calls) &&
+    ((step.model_response as Dict).raw_calls as Dict[]).some(raw => {
+      if (raw?.id !== actionEvent.tool_call_id) return false;
+      const fn = raw.function && typeof raw.function === 'object' ? raw.function as Dict : {};
+      if (fn.name !== 'return_result' || typeof fn.arguments !== 'string') return false;
+      try { return canonical(JSON.parse(fn.arguments)) === canonical(modelArguments); }
+      catch { return false; }
+    }));
+  if (sourceSteps.length !== 1) return false;
+  const sameInvocationSteps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId);
+  const callTurn = sameInvocationSteps.indexOf(sourceSteps[0]!) + 1;
+  if (callTurn <= 0) return false;
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const modelTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId && event.turn === callTurn);
+  if (modelTurns.length !== 1) return false;
+  const modelTurn = modelTurns[0]!;
+
+  const sameValue = (type: Type, raw: unknown, action: unknown, capturedValue: unknown): boolean => {
+    if (type.kind === 'neuralese' && type.element.kind === 'prim' && type.element.name === 'string') {
+      const marker = exactNeuraleseTextMarker(raw), actionRef = neuraleseReference(action), hostRef = neuraleseReference(capturedValue);
+      const typeText = formatType(type);
+      if (!marker || marker.type !== typeText || !actionRef || !hostRef ||
+          actionRef.id !== marker.id || hostRef.id !== marker.id || actionRef.type !== typeText || hostRef.type !== typeText)
+        return false;
+      const bodySha = hexDigest(marker.body);
+      const writers = graph.filter(event => event.kind === 'block_write' && typeof event.call_id === 'string' &&
+        event.block === marker.id &&
+        event.truncated === false && event.result_type === typeText && event.text_body_sha256 === bodySha &&
+        ['typed-text-result', 'typed-text-result-field'].includes(String(event.source_kind)) &&
+        ['return_result', 'eval-return', 'eval-finish'].includes(String(event.source)) &&
+        event.marker_context === 'return-result' && typeof event.node === 'string');
+      const reads = graph.filter(event => event.kind === 'block_read' && event.call_id === invocationId &&
+        event.block === marker.id && event.turn === modelTurn.node && typeof event.node === 'string');
+      const authenticatedRead = reads.some(read => Array.isArray(read.inputs) &&
+        (read.inputs as Dict[]).some(input => writers.some(writer => input.node === writer.node &&
+          input.block === marker.id && input.port === 'block')) &&
+        Array.isArray(modelTurn.inputs) && (modelTurn.inputs as Dict[]).some(input =>
+          input.node === read.node && input.block === marker.id && input.port === 'read'));
+      return writers.length > 0 && authenticatedRead;
+    }
+    if (type.kind === 'record') {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !action || typeof action !== 'object' || Array.isArray(action) ||
+          !capturedValue || typeof capturedValue !== 'object' || Array.isArray(capturedValue)) return false;
+      const rawRecord = raw as Dict, actionRecord = action as Dict, hostRecord = capturedValue as Dict;
+      const declaredNames = type.fields.map(field => field.name);
+      if ([rawRecord, actionRecord, hostRecord].some(value => Object.keys(value).some(key => !declaredNames.includes(key)))) return false;
+      for (const field of type.fields) {
+        const hasRaw = Object.hasOwn(rawRecord, field.name), hasAction = Object.hasOwn(actionRecord, field.name), hasHost = Object.hasOwn(hostRecord, field.name);
+        if (!(hasRaw || hasAction || hasHost) && field.optional) continue;
+        if (hasRaw !== hasAction || hasRaw !== hasHost || !hasRaw ||
+            !sameValue(field.type, rawRecord[field.name], actionRecord[field.name], hostRecord[field.name])) return false;
+      }
+      return true;
+    }
+    if (type.kind === 'list') {
+      return Array.isArray(raw) && Array.isArray(action) && Array.isArray(capturedValue) &&
+        raw.length === action.length && raw.length === capturedValue.length &&
+        raw.every((value, index) => sameValue(type.element, value, action[index], capturedValue[index]));
+    }
+    if (type.kind === 'dict') {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !action || typeof action !== 'object' || Array.isArray(action) ||
+          !capturedValue || typeof capturedValue !== 'object' || Array.isArray(capturedValue)) return false;
+      const rawRecord = raw as Dict, actionRecord = action as Dict, hostRecord = capturedValue as Dict;
+      const keys = Object.keys(rawRecord).sort();
+      return canonical(keys) === canonical(Object.keys(actionRecord).sort()) && canonical(keys) === canonical(Object.keys(hostRecord).sort()) &&
+        keys.every(key => sameValue(type.element, rawRecord[key], actionRecord[key], hostRecord[key]));
+    }
+    return canonical(raw) === canonical(action) && canonical(action) === canonical(capturedValue);
+  };
+  return modelArguments.status === 'success' && Object.hasOwn(modelArguments, 'value') &&
+    sameValue(declared, modelArguments.value, actionArguments.value, host.value);
 }
 
 /** Count typed Neuralese references without treating quoted IDs as reads. */
@@ -1098,7 +1211,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
             softBodyActionMatches(normalized.arguments, candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
             normalized.source_tool === 'return_result' && softReturnResultActionMatches(normalized.arguments,
-              candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
+              candidate.arguments, row, invocation, candidate)) || (exactRaw && candidate.name === normalized.source_tool &&
             containsIncompleteDiagnostic(candidate.arguments)));
         const projectedOutcome = [...logs.keys()].some(key => !owners.has(key) &&
           logs.get(key)![next.get(key) ?? 0]?.name === normalized.source_tool &&

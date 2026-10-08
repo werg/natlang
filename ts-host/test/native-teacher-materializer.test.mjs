@@ -72,6 +72,45 @@ function softReturnRow(id = 'soft-return-linked') {
   return row;
 }
 
+function nestedSoftReturnRow(id = 'nested-soft-return-linked') {
+  const row = nativeRow(id), callId = `nested-${id}`, rawCallId = `raw-${id}`;
+  const priorId = `nz1_${'b'.repeat(32)}`, arrayId = `nz1_${'c'.repeat(32)}`;
+  const priorBody = 'A note from the earlier pass.', arrayBody = 'A captured item.';
+  const marker = (block, body) => `[[Neuralese text block id=${block} type=Neuralese<string>; exact JSON string body=${JSON.stringify(body)}]]`;
+  const ref = block => ({ $neuralese: { id: block, type: 'Neuralese<string>' } });
+  const resultType = '{ priorNotes: Neuralese<string>; labels: string[]; captured: Neuralese<string>[] }';
+  const rawArgs = { status: 'success', value: { priorNotes: marker(priorId, priorBody), labels: ['ordinary marker-like text: [[Neuralese text block id=debug]]'],
+    captured: [marker(arrayId, arrayBody), marker(arrayId, arrayBody)] } };
+  const actionArgs = { status: 'success', value: { priorNotes: ref(priorId), labels: rawArgs.value.labels,
+    captured: [ref(arrayId), ref(arrayId)] } };
+  const hostValue = structuredClone(actionArgs.value), turnNode = `${callId}#turn1`;
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  row.outcome.action_ledger = [{ seq: 12, call_id: callId, tool_call_id: rawCallId, name: 'return_result',
+    arguments: actionArgs, outcome: 'completed', result_text: 'completed' }];
+  row.outcome.execution_graph = [{ kind: 'model_turn', seq: 5, call_id: callId, node: turnNode, turn: 1,
+    inputs: [{ node: `call:${callId}`, port: 'invocation' }] }];
+  for (const [index, [block, body]] of [[priorId, priorBody], [arrayId, arrayBody]].entries()) {
+    const writerNode = `${callId}#write${index}`, readNode = `${callId}#read${index}`;
+    row.outcome.execution_graph.push(
+      { kind: 'block_write', seq: 6 + index * 2, call_id: callId, block, node: writerNode, turn: turnNode,
+        inputs: [{ node: turnNode, port: 'turn' }], truncated: false, result_type: 'Neuralese<string>',
+        text_body_sha256: sha(body), source_kind: 'typed-text-result-field', source: 'eval-finish', marker_context: 'return-result' },
+      { kind: 'block_read', seq: 7 + index * 2, call_id: callId, block, node: readNode, turn: turnNode,
+        inputs: [{ node: writerNode, block, port: 'block' }] });
+    row.outcome.execution_graph[0].inputs.push({ node: readNode, block, port: 'read' });
+  }
+  row.outcome.invocation_ledger = [{ invocation_id: callId,
+    inline_instruction_site: { returns: { natlang: resultType } },
+    host_result: { kind: 'host_capture', capture_kind: 'invocation_output', call_id: callId,
+      complete: true, result_type: resultType, value: hostValue, value_sha256: sha(JSON.stringify(hostValue)),
+      bytes: new TextEncoder().encode(JSON.stringify(hostValue)).byteLength, terminal_action_seq: 12 } }];
+  row.trajectory = [{ phase: 'action', invocation_id: callId, context: [system, opening], tools_offered: schema,
+    assistant: { content: '', reasoning: 'Return the typed record.', calls: [{ tool: 'return_result', source_tool: 'return_result',
+      arguments: rawArgs, call_id: rawCallId }] }, model_response: { raw_calls: [{ id: rawCallId, function: {
+      name: 'return_result', arguments: JSON.stringify(rawArgs) } }] }, raw_response_sha256: `raw-${id}` }];
+  return row;
+}
+
 test('native lineage hashes the saved JSON representation', () => {
   const row = nativeRow('json-lineage');
   row.provenance.optional = undefined;
@@ -355,6 +394,35 @@ test('links a soft return marker only to its exact typed runtime block write and
   const call = result.turns[0].decision.assistant.calls[0];
   assert.equal(call.outcome.status, 'completed');
   assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
+});
+
+test('links nested Neuralese return slots recursively while preserving ordinary marker-like strings', () => {
+  const row = nestedSoftReturnRow();
+  const result = materializeNativeRows([row], { directAnswers: true });
+  assert.equal(result.acceptedRows, 1);
+  assert.deepEqual(result.unlinked, []);
+  assert.equal(result.turns.length, 1);
+  const target = JSON.parse(result.turns[0].target.tool_calls[0].function.arguments);
+  assert.equal(target.value.priorNotes, row.trajectory[0].assistant.calls[0].arguments.value.priorNotes);
+  assert.equal(target.value.labels[0], row.trajectory[0].assistant.calls[0].arguments.value.labels[0]);
+});
+
+test('keeps nested Neuralese slots unlinked when block evidence belongs to another invocation or disagrees', () => {
+  const mutations = [
+    row => { row.outcome.execution_graph[2].call_id = 'other-child'; },
+    row => { row.outcome.execution_graph[2].turn = 'other-child#turn1'; },
+    row => { row.outcome.execution_graph[1].text_body_sha256 = '0'.repeat(64); },
+    row => { row.outcome.action_ledger[0].tool_call_id = 'other-raw-call'; },
+    row => { row.outcome.invocation_ledger[0].inline_instruction_site.returns.natlang = '{ priorNotes: string; labels: string[]; captured: Neuralese<string>[] }'; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const row = nestedSoftReturnRow(`nested-soft-return-held-${index}`);
+    mutate(row);
+    const result = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(result.acceptedRows, 0, `mutation ${index} unexpectedly linked`);
+    assert.deepEqual(result.unlinked, [{ id: row.id, outcomes: 1 }]);
+    assert.deepEqual(result.turns, []);
+  }
 });
 
 test('retains exact typed final-result write receipts for native and gold-text consumers', () => {
