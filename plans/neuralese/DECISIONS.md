@@ -914,3 +914,12 @@ Persist runtime-collected child traces in standalone collector sidecars alongsid
 ## 2026-10-08 — Explicit eval deadlines are not automatic language limits
 
 V19 INC-904's first scaffold eval explicitly requested timeout_ms=200000. Its child calls were producing turns, notes and iteration progress throughout that interval; the cap interrupted healthy work, then the parent recovered and returned the exact correct result. Preserve the failed attempt separately from the successful recovery. Clarify the shared eval parameter to omit guessed deadlines for nl/iterateOn unless the task requests one. Keep explicit wall-clock semantics, cancellation and external resource limits; do not silently disregard a supplied deadline or call this a default runtime timeout.
+
+## 2026-10-08 — Maple warm-up memory: eval token cap and CUDA reserved cap
+
+- V17's long held windows pushed Maple's v7 warm-up over its guard line (110–111 GB vs 109) four times, at eval
+  (four 4k windows per batch) and in training (allocator cache 87 GB reserved for a 75 GB allocated peak).
+- Held-eval batches are capped at `--tokens` (8800689e). `--cuda-reserved-cap-gb` (0b5d9573, bc0517a1; operational,
+  resume accepts it) caps the CUDA allocator so it frees cache and retries instead of growing. Maple runs with 88:
+  reserved 76 GB, run peak 98 GB, 3.69 ms/token unchanged.
+- The supervisor retries 5 min after a guard stop when a periodic checkpoint exists (it was 30 min).
