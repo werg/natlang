@@ -998,3 +998,16 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
 - Maple v8 (`runs/maple-native-text-warmup-20261008-v8.sh`) continues v7 at 4660 with N=8: ~34 s/step, reserved
   52–65 GB, backbone gradient 0 during sketch-only.
 - History: pass 2 looked like pass 3 now (agreement 0.15 at step 2832) and recovered within ~750 steps once trained.
+
+## 2026-10-08 — Owner: purpose of the sketch rollout and the planned cutover
+
+- The warm-up serves two things:
+  1. A warmed-up Neuralese representation whose outputs start near the token-embedding manifold.
+  2. An efficient, parallel way to initialize perceiver-style positional inputs of Neuralese blocks, instead of
+     running the whole network autoregressively per block position.
+- Plan: start real whole-model Neuralese training on iteratively deepened sketch rollouts with token-embedding input.
+  Cut over to autoregressive initialization later, once Neuralese and crisp runs reach very good parity.
+- The sketch passes are a Jacobi-style parallel decode. Pass k reads pass k−1's sketches, so depth N reproduces the
+  sequential sketch rollout exactly for the first N positions after the gold seed, and approximates it after that.
+  Rollout depth vs Neuralese block length is therefore the efficiency/accuracy dial.
+- Sketch-only training ramps one pass per held plateau (d058e5ff), from 4 to 8 passes, then unfreezes the stack.
