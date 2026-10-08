@@ -1303,6 +1303,10 @@ def test_rollout_stage_unfreezes_after_sketch_plateau_and_restores():
     ramp=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=1)
     assert [(c['phase'],c['passes']) for c in map(ramp.observe,(2.,2.,1.,1.,.5,.5))]==[
         ('sketch_only',4),('sketch_only',5),('sketch_only',5),('sketch_only',6),('sketch_only',6),('whole_stack',6)]
+    converging=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=9,converge_ratio=1.25)
+    assert converging.observe(3.,{1:.4,2:.55,3:6.2})['passes']==4
+    assert converging.observe(1.,{1:.4,2:.55,3:.65})['passes']==5
+    assert converging.controls()['deepened'][0]['reason']=='converged'
     legacy={'schema':'natlang.sketch-rollout-stage/1','config':{'passes':6,'sketch_first':True},'phase':'sketch_only',
             'history':[3.0],'best':3.0,'last_significant':1,'unfrozen_at_eval':None}
     restarted=RolloutStage(passes=6,start_passes=4);restarted.load_state_dict(legacy)
@@ -1328,6 +1332,7 @@ def test_sketch_rollout_trains_only_the_sketch_at_depth_then_evaluates_every_pas
         assert row['sketch_gradient_norm']>0
     evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
     assert evals[-1]['evaluation_passes']==4
+    assert set(evals[-1]['pass_ce_deltas'])=={'0','1','2','3'} or set(evals[-1]['pass_ce_deltas'])=={0,1,2,3}
     assert any(key.startswith('pass-3-') for key in evals[-1]['strata'])
     assert 'rollout' in evals[-1]
     assert {r['schedule']['sequence_passes'] for r in sketch_rows}=={3,4}
