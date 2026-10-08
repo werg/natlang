@@ -24,8 +24,7 @@ Then by checkpoint.phase:
 
 prepare: return prepare(facts, checkpoint, info).
 
-request: message = request(facts, checkpoint, info). If message is null the request found the task aborted; return
-"stopped". Otherwise decision = classify(facts, checkpoint, message, null). It returns "committed" when it already
+request: message = request(facts, checkpoint, info). Then decision = classify(facts, checkpoint, message, null). It returns "committed" when it already
 committed the next state. On "answer" call answer(facts, message); on "tools" call startToolRound(facts, checkpoint,
 message). Return their line.
 
