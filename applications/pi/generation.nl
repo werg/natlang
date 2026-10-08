@@ -36,7 +36,8 @@ made during the wait apply: commit [{ op: "liveGeneration", value: { attempt: ch
 adding compacted to the new checkpoint when checkpoint has it.
 
 poll: durable.sleep(checkpoint.pollAt). message = ai.poll(checkpoint.model, checkpoint.handle). Then
-classify(facts, checkpoint, message, checkpoint.pollAt) and continue exactly as after request.
+classify(facts, checkpoint, message, checkpoint.pollAt) and continue exactly as after request. Poll once per phase:
+when the message is still deferred, classify commits the next poll; polling again here returns the same message.
 
 tools: this phase runs once every tool task this round waited on is terminal.
 - checkpoint.pending is empty: return finishToolRound(facts, checkpoint).
