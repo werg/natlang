@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v19-luna-v3-v5-paired-closeout-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-20261008-v19-answer-key-v2",
+  "files": [
+    {
+      "path": "generation-review-v5/luna/final-refill-closeout-v1/README.md",
+      "bytes": 2628,
+      "sha256": "5252cf8f17280878751f8960d8f5181248103b0426c7ef98aa62250a3491ef07"
+    },
+    {
+      "path": "generation-review-v5/luna/final-refill-closeout-v1/pair-review.json",
+      "bytes": 34422,
+      "sha256": "824872029fe1a88b40022085fe831af0b08e10cb71a4726c4e740223a9bdb450"
+    },
+    {
+      "path": "generation-review-v5/luna/final-refill-closeout-v1/review-manifest.json",
+      "bytes": 432,
+      "sha256": "6247e0d8889a9611716149443865c99e51251ef3b321ad7dd6514930ed47e07d"
+    }
+  ],
+  "bytes": 37482
+}
