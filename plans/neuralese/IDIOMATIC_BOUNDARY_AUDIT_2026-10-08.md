@@ -692,3 +692,49 @@ missing return, or absent capture in the examined traces is treated as an
 implicit-value conversion opportunity. The only capture-name collision
 evidence is recorded in §12's Luna V20/V34/V35 traces; the corrected
 parameter-shadowing behavior is not a reason to infer unspecified captures.
+
+## Final follow-up: scalar conversion and native string replacement — 2026-10-08
+
+`Number(value)` and `Boolean(value)` were missing typed readout despite being
+explicit scalar conversions. An isolated compiled-runtime reproduction showed
+that the underlying JavaScript wrapper would give `Number(ref) === NaN` and
+`Boolean(ref) === true`, regardless of the trained scalar text/value. No
+preserved generation trace showed these exact conversion failures; this is a
+prospective correction, not historical failure evidence. The compiler now
+recognizes only unshadowed global `Number(...)` and `Boolean(...)` calls whose
+Neuralese alternatives have declared `string`, `number`, or `boolean` payloads.
+It evaluates the callee and every argument first, conditionally reads only an
+actual reference in argument zero, then invokes the captured native function.
+Crisp union arms retain native conversion, extra arguments still evaluate,
+and read failures propagate. Opaque record/function payloads are not
+crispified. `new Number(...)`/`new Boolean(...)` remain outside this change.
+Focused eval and compiled-module tests cover soft and crisp arms, order,
+truthiness, read errors, shadowing, and unsupported record payloads
+(`ts-host/test/neuralese.test.mjs`; commit `c61f79ab`).
+
+Mixed soft/crisp values in branch conditions previously escaped the pure-soft
+condition diagnostic, allowing wrapper truthiness. The checker now reports the
+same `neuralese-condition` for mixed arms. It still does not auto-read branch
+conditions. A future safe case is limited to `Neuralese<boolean>` alternatives
+in actual branch/short-circuit positions, with readout only when execution is
+in an async function and with each logical operand read before its truthiness
+test. Wrapping an entire `a && b` result after evaluation would be wrong: a
+soft false wrapper is truthy and could cause `b` to run. No Boolean meaning is
+inferred for soft strings, numbers, or records.
+
+There is one actual `replace` attempt: Luna V20 trace
+`runs/neuralese-semantic-iterate-reducers-v20-20261008-v8/generation-review-v3/luna/luna-campaign-v3/slot-05/jobs/000004-0bfdbbf2984e99ac.trace.jsonl`,
+seq 19 calls `priorNotes.replace("Recomputing ...", "The selectedItems field ...")`
+with `priorNotes: Neuralese<string>` and receives `neuralese-opaque-access`.
+The nearby workaround explicitly uses `String(priorNotes).replace(...)`.
+The trace supports only the literal string/string overload; it does not support
+coercing RegExp search values or callback replacements. A narrow future
+lowering could recognize the standard String `replace` declaration and require
+string-like search/replacement arms, preserve crisp arms and captured method
+dispatch, and read only a soft receiver/search/replacement. This still needs
+review of prototype lookup versus asynchronous receiver read order before
+implementation. `replaceAll`, `split`, `match`, and `search` remain deferred
+until a trace establishes a concrete typed argument case and their RegExp,
+callback, and `Symbol.match` behavior can be preserved exactly. This actual
+`replace` trace supersedes the earlier statement that no recent trace had
+attempted it; no RegExp/callback overload failure is claimed.
