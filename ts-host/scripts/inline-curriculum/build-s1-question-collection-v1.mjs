@@ -18,15 +18,19 @@ const corpusManifest = JSON.parse(manifestBytes);
 const required = ['qa_extractive', 'qa_mcq', 'table_qa_stored', 'qa_multihop'];
 const selectionBytes = values.selection ? await readFile(resolve(values.selection)) : null;
 const selection = selectionBytes ? JSON.parse(selectionBytes) : null;
-if (selection && (selection.schema !== 'natlang.s1_question_collection_selection/1' ||
+if (selection && (!['natlang.s1_question_collection_selection/1', 'natlang.s1_question_collection_selection/2'].includes(selection.schema) ||
     !Array.isArray(selection.batches) || selection.batches.length === 0))
-  throw new Error('selection must use natlang.s1_question_collection_selection/1 with a nonempty batches array');
+  throw new Error('selection must use a supported natlang.s1_question_collection_selection schema with a nonempty batches array');
 const selectedByFamily = selection ? new Map(required.map(family => [family, new Set()])) : null;
 if (selection) for (const [index, batch] of selection.batches.entries()) {
   if (!batch || !required.includes(batch.family) || typeof batch.group !== 'string' || !batch.group ||
       !['train', 'validation', 'test'].includes(batch.split) || !Array.isArray(batch.source_ids) ||
       batch.source_ids.length < 2 || batch.source_ids.length > 8 ||
       batch.source_ids.some(id => typeof id !== 'string' || !id) ||
+      (batch.source_groups !== undefined && (selection.schema !== 'natlang.s1_question_collection_selection/2' ||
+        !Array.isArray(batch.source_groups) || !batch.source_groups.length ||
+        batch.source_groups.some(group => typeof group !== 'string' || !group) ||
+        new Set(batch.source_groups).size !== batch.source_groups.length)) ||
       !['crisp', 'soft'].includes(batch.answer_mode ?? 'crisp'))
     throw new Error(`selection batch ${index} must specify a supported family/group/split, 2–8 source_ids, and crisp or soft answer_mode`);
   const seen = selectedByFamily.get(batch.family);
@@ -84,22 +88,32 @@ function assertRows(rows, family, split, min = 1) {
 }
 
 const batches = [];
-function addGroup(family, group, split, count = 4, selectedIds = null, answerMode = 'crisp') {
-  const available = byGroup(families[family].rows, group).filter(row => ['text', 'choice'].includes(row.target?.kind) &&
+function addGroup(family, group, split, count = 4, selectedIds = null, answerMode = 'crisp', declaredGroups = null) {
+  const selectedGroupSet = declaredGroups ? new Set(declaredGroups) : null;
+  const groupRows = selectedGroupSet ? families[family].rows.filter(row =>
+    row.split_groups?.some(sourceGroup => selectedGroupSet.has(sourceGroup))) : byGroup(families[family].rows, group);
+  const available = groupRows.filter(row => ['text', 'choice'].includes(row.target?.kind) &&
     typeof row.target.value === 'string' && row.target.value.trim() && row.outcome?.label === 'gold')
     .sort((a, b) => a.id.localeCompare(b.id));
   const rows = selectedIds ? selectedIds.map(id => available.find(row => row.id === id)).filter(Boolean) : available.slice(0, count);
   if (selectedIds && rows.length !== selectedIds.length) throw new Error(`${group}: one or more selected source IDs are absent`);
+  if (selectedGroupSet) {
+    const actualGroups = [...new Set(rows.flatMap(row => row.split_groups ?? []))].sort();
+    const expectedGroups = [...selectedGroupSet].sort();
+    if (JSON.stringify(actualGroups) !== JSON.stringify(expectedGroups))
+      throw new Error(`${group}: declared source_groups do not exactly match selected source rows`);
+  }
   if (family === 'table_qa_stored' && rows.some(row => /[;,]/.test(row.target.value)))
     throw new Error(`${group}: collection tasks require scalar table labels; unordered multi-value labels are excluded`);
   assertRows(rows, family, split, count);
   if (!['crisp', 'soft'].includes(answerMode)) throw new Error(`${group}: unsupported answer mode ${answerMode}`);
-  batches.push({ family, group, split, rows, answer_mode: answerMode });
+  batches.push({ family, group, split, rows, answer_mode: answerMode, source_groups: declaredGroups ?? [group] });
 }
 
 if (selection) {
   for (const batch of selection.batches)
-    addGroup(batch.family, batch.group, batch.split, batch.source_ids.length, batch.source_ids, batch.answer_mode ?? 'crisp');
+    addGroup(batch.family, batch.group, batch.split, batch.source_ids.length, batch.source_ids,
+      batch.answer_mode ?? 'crisp', batch.source_groups ?? null);
 } else {
   // Historical default selection for V7. Successor pools use a pinned explicit selection file.
   for (const group of ['wiki:university_of_notre_dame', 'wiki:beyoncé', 'wiki:montana', 'wiki:genocide'])
@@ -204,9 +218,9 @@ for (const [index, batch] of batches.entries()) {
     return child;
   });
   const record = curriculumCase({
-    family: 's1_question_collection', familyVersion: selection ? 5 : 1,
+    family: 's1_question_collection', familyVersion: selection ? 6 : 1,
     shape: `${batch.family}-${sha(sourceIds.join('\n')).slice(0, 20)}-${selection ? answerMode : 'v1'}`,
-    variant: selection ? `iterate-source-questions/5-${answerMode}` : 'iterate-source-questions/1',
+    variant: selection ? `iterate-source-questions/6-${answerMode}` : 'iterate-source-questions/1',
     splitGroup: sourceBundleGroup, split: batch.split, slice: 'iterate', domain: batch.family,
     mode: 'single_call', inline: 'required', iterate: 'required',
     evidence: { world: [], retrieved: sourceIds, background: [`S1 source family ${batch.family}; original source group(s): ${sourceGroups.join('; ')}`] },
@@ -241,7 +255,7 @@ for (const [index, batch] of batches.entries()) {
     adaptation: 'Directory collection variant over preserved source questions and source targets; no independent-world credit.' };
   const qaStringMap = selection && ['qa_extractive', 'qa_multihop'].includes(batch.family);
   const fileMapCompare = !selection ? 'exact' : qaStringMap ? 'qa-string-map' : 'json-string-record';
-  record.generation = { generator: selection ? 'natlang.s1_question_collection_adapter/6' : 'natlang.s1_question_collection_adapter/1', source_groups: sourceGroups,
+  record.generation = { generator: selection ? 'natlang.s1_question_collection_adapter/7' : 'natlang.s1_question_collection_adapter/1', source_groups: sourceGroups,
     task_variant: true, independent_world_credit: 0,
     independent_world_credit_reason: 'All answers come from existing source question records; this is a task variant over them.',
     output_kind: 'exact string answer map', answer_payload_mode: answerMode, target_values_visible_to_model: false,
@@ -254,7 +268,7 @@ for (const [index, batch] of batches.entries()) {
 
 const sourceText = records.map(record => JSON.stringify(record)).join('\n') + '\n';
 const sourceSha = sha(sourceText);
-const sourceProof = { schema: selection ? 's1-question-collection-source-proof/5' : 's1-question-collection-source-proof/1', source_cases_sha256: sourceSha,
+const sourceProof = { schema: selection ? 's1-question-collection-source-proof/6' : 's1-question-collection-source-proof/1', source_cases_sha256: sourceSha,
   source_records: records.reduce((count, record) => count + record.dataset_records.length, 0),
   task_variants: records.length, independent_world_credit: 0, provider_calls: 0, teacher_observations: 0,
   ...(selectionBytes ? { selection_sha256: sha(selectionBytes), answer_normalization: 'SQuAD token-map values for qa_extractive and qa_multihop; JSON string-record map with exact values for qa_mcq and table_qa_stored', answer_mode_counts: Object.fromEntries(['crisp', 'soft'].map(mode => [mode,
@@ -277,7 +291,7 @@ await writeFile(resolve(out, 'review-facts.json'), JSON.stringify(records.map(re
   expected: record.semantics.expected, item_prompts: Object.entries(record.semantics.folder_files)
     .filter(([path]) => path.startsWith('items/')).map(([path, body]) => ({ path, body_sha256: sha(body),
       source_prompt: JSON.parse(body).question, answer_format: JSON.parse(body).answer_format })) })), null, 2) + '\n');
-await writeFile(resolve(out, 'source-manifest.json'), JSON.stringify({ schema: selection ? 'natlang.s1-question-collection/5' : 'natlang.s1-question-collection/1',
+await writeFile(resolve(out, 'source-manifest.json'), JSON.stringify({ schema: selection ? 'natlang.s1-question-collection/6' : 'natlang.s1-question-collection/1',
   source_cases: 'source.cases.jsonl', source_cases_sha256: sourceSha, source_proof: 'source-proof.json',
   source_proof_sha256: sha(JSON.stringify(sourceProof, null, 2) + '\n'), source_corpus: corpus,
   ...(selectionBytes ? { selection: 'selection.json', selection_sha256: sha(selectionBytes) } : {}),
