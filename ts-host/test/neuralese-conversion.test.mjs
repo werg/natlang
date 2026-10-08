@@ -105,6 +105,25 @@ test('typed final-result receipts become exact nested native/R write leaves', ()
   const held = convertTrajectory(tampered).record;
   assert.equal(JSON.parse(held.target.tool_calls[0].function.arguments).value.notes, 'different',
     'a raw target value that no longer matches its receipt remains unchanged');
+
+  const evalRow = record();
+  evalRow.id = 'eval-row';
+  evalRow.source_ref = { trajectory_id: 'eval-run', invocation_id: 'eval-call', source_row_sha256: 'eval-row-sha' };
+  const evalArgs = { code: 'return await buildResult();', finish: true };
+  evalRow.decision = { index: 4, assistant: { calls: [{ source_tool: 'eval', arguments: evalArgs,
+    outcome: { name: 'eval', arguments: evalArgs, typed_result_writes: [{
+      schema: 'natlang.typed-result-write/1', trajectory_id: 'eval-run', source_row_sha256: 'eval-row-sha',
+      invocation_id: 'eval-call', writer_call_id: 'eval-call', writer_node: 'eval-call#12',
+      block_id: `nz1_${'d'.repeat(52)}`, source_kind: 'typed-text-result-field', source: 'eval-finish',
+      result_type: 'Neuralese<string>', result_path: ['return', 'note'], body_sha256: bodySha,
+      body_source_basis: 'authenticated-final-host-output-reference',
+    }] } }] } };
+  evalRow.target = { role: 'assistant', tool_calls: [{ id: 'eval-1', type: 'function',
+    function: { name: 'eval', arguments: JSON.stringify(evalArgs) } }] };
+  const evalConverted = convertTrajectory(evalRow).record;
+  assert.equal(evalConverted.target.tool_calls[0].function.arguments, JSON.stringify(evalArgs),
+    'eval source remains exact because no validated code span corresponds to the returned value');
+  assert.equal(evalConverted.neuralese_conversion.sites['typed-result-write'].exact['eval-result-kept-without-source-span'], 1);
 });
 
 const createHash = text => {

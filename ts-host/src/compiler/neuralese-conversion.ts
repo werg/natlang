@@ -399,6 +399,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       return Array.isArray(outcome?.typed_result_writes) ?
         (outcome.typed_result_writes as Record<string, unknown>[]).map(receipt => ({ action, outcome, receipt })) : [];
     });
+  const preservedEvalResultCount = typedResultReceipts.filter(({ receipt }) =>
+    ['eval-return', 'eval-finish'].includes(String(receipt.source)) && receipt.body_source === undefined).length;
+  if (preservedEvalResultCount) count('typed-result-write', 'eval-result-kept-without-source-span', preservedEvalResultCount);
   const edges = options.softStateEdges?.edges ?? [];
   const matchingEdge = (role: 'writer' | 'reader') => edges.filter(edge =>
     role === 'writer' ? edge.writer_call_id === invocationOf(record as Record<string, unknown>) &&
