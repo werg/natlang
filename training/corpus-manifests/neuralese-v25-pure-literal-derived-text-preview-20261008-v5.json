@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v25-pure-literal-derived-text-preview-20261008-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-pure-literal-derived-text-preview-20261008-v5",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1469,
+      "sha256": "ebcbf92ee57cf29139a50d97ed2e78f12e5c155e8a0a635819094073eaedf2c8"
+    },
+    {
+      "path": "converted-preview-rows.jsonl",
+      "bytes": 1347209,
+      "sha256": "3ec3934d3354bbdaa5182ee64446847827fc9abad6534fce4a4fac9475fc7200",
+      "lines": 6
+    },
+    {
+      "path": "derived-rows.jsonl",
+      "bytes": 1447572,
+      "sha256": "b3e5ce155aa887b198f01ea41cb99b959aa080e4a2a8ac0d12ae7a365bfb38c2",
+      "lines": 6
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 3128,
+      "sha256": "b564967d23d8c3831a5f9c8c968745cb49ff62b5c27f97231241ced789f248f4"
+    },
+    {
+      "path": "selection-receipts.jsonl",
+      "bytes": 12692,
+      "sha256": "8c7cc63396ad1bb3d5afa33ae355ebd55b6cb084191ce6dc1f9a8227f64ae660",
+      "lines": 6
+    }
+  ],
+  "bytes": 2812070
+}
