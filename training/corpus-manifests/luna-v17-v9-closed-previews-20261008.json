@@ -1,0 +1,33 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-v9-closed-previews-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal",
+  "files": [
+    {
+      "path": "assembled/native-records.jsonl",
+      "bytes": 315850001,
+      "sha256": "74a5ad92964f6de4b10399c92f4050f2096986f2e3baef169f135fee9f017b14",
+      "lines": 5242
+    },
+    {
+      "path": "assembled/recurrence-records.jsonl",
+      "bytes": 271335239,
+      "sha256": "92243093179a4c489dd600a1f9ed99ffec7fd2b2196f9e1a54695e30d494662f",
+      "lines": 4961
+    },
+    {
+      "path": "text-proposal-26/text.jsonl",
+      "bytes": 215792157,
+      "sha256": "a09855c7196c928051c742e7656efaf370dd1fbee97fd1f15efb6678ff47330b",
+      "lines": 4495
+    },
+    {
+      "path": "text-proposal-26-pre-renderer-fix/text.jsonl",
+      "bytes": 214991140,
+      "sha256": "0a608f01cf341363e66a119755b30aec60a961b7551471b649626ec9ea7cd9f0",
+      "lines": 4488
+    }
+  ],
+  "bytes": 1017968537
+}
