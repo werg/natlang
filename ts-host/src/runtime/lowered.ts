@@ -62,7 +62,8 @@ export async function joinNeuralese(receiver: unknown, method: unknown, args: re
   const values = receiver as ArrayLike<unknown>;
   const length = values.length;
   const separator = args[0];
-  const delimiter = separator === undefined ? ',' : toStringValue(separator);
+  const resolvedSeparator = isNeuraleseRef(separator) ? await read(separator) : separator;
+  const delimiter = separator === undefined ? ',' : toStringValue(resolvedSeparator);
   const parts = new Array<string>(length);
   for (let index = 0; index < length; index++) {
     const value = values[index];

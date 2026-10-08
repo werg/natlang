@@ -465,6 +465,7 @@ test('string conversions read typed Neuralese values with native method ordering
 
   const unionJoinModule = compileModule({ kind: 'module', id: 'union-join', name: 'unionJoin', source: 'unionJoin.ts', revision: 'r1',
     text: `export async function show(values: Neuralese<string>[] | string[]) { return values.join('|'); }
+    export async function separator(values: Neuralese<string>[], delimiter: Neuralese<string> | string) { return values.join(delimiter as any); }
     export async function custom(values: Neuralese<string>[], args: string[], events: string[]) {
       return (events.push('receiver'), values).join(...(events.push('spread'), args));
     }`,
@@ -473,7 +474,8 @@ test('string conversions read typed Neuralese values with native method ordering
   const unionJoinExports = {};
   const unionJoinFns = new Function('exports', '__natlang', `${unionJoinModule}; return exports;`)(unionJoinExports, {
     guard: (_id, fn) => fn(), joinNeuralese,
-    readNeuralese: async ref => { events.push(`union-read:${ref.$neuralese.id}`); return 'read value'; },
+    readNeuralese: async ref => { events.push(`union-read:${ref.$neuralese.id}`);
+      return ref.$neuralese.id === 'nz1_llllllllllllllllllll' ? ' / ' : 'read value'; },
   });
   const showUnionJoin = unionJoinFns.show;
   const unionJoinAnswer = await showUnionJoin([
@@ -481,6 +483,18 @@ test('string conversions read typed Neuralese values with native method ordering
   ]);
   assert.equal(unionJoinAnswer, 'read value|ordinary');
   assert.deepEqual(events.slice(-1), ['union-read:nz1_jjjjjjjjjjjjjjjjjjjj']);
+  const softDelimiter = neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll');
+  const joinedWithSoftDelimiter = await unionJoinFns.separator([
+    neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm'),
+    neuraleseRef('Neuralese<string>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+  ], softDelimiter);
+  assert.equal(joinedWithSoftDelimiter, 'read value / read value');
+  assert.deepEqual(events.slice(-3), [
+    'union-read:nz1_llllllllllllllllllll',
+    'union-read:nz1_mmmmmmmmmmmmmmmmmmmm',
+    'union-read:nz1_nnnnnnnnnnnnnnnnnnnn',
+  ]);
+  assert.equal(await unionJoinFns.separator(['plain', 'strings'], '|'), 'plain|strings');
   const customJoinEvents = [];
   const customJoinValues = [neuraleseRef('Neuralese<string>', 'nz1_kkkllllllllllllllllll')];
   let customJoinProxy;
@@ -494,6 +508,15 @@ test('string conversions read typed Neuralese values with native method ordering
   } });
   assert.equal(await unionJoinFns.custom(customJoinProxy, ['first', 'second'], customJoinEvents), 'custom join');
   assert.deepEqual(customJoinEvents, ['receiver', 'method', 'spread', 'custom:true:first|second']);
+  const customSoftSeparatorEvents = [];
+  const customSoftSeparatorValues = [neuraleseRef('Neuralese<string>', 'nz1_oooooooooooooooooooo')];
+  const customSoftSeparator = neuraleseRef('Neuralese<string>', 'nz1_pppppppppppppppppppp');
+  customSoftSeparatorValues.join = function (delimiter) {
+    customSoftSeparatorEvents.push(`custom:${this === customSoftSeparatorValues}:${delimiter === customSoftSeparator}`);
+    return 'custom soft separator';
+  };
+  assert.equal(await unionJoinFns.separator(customSoftSeparatorValues, customSoftSeparator), 'custom soft separator');
+  assert.deepEqual(customSoftSeparatorEvents, ['custom:true:true'], 'custom joins receive the original typed separator without implicit readout');
 
   const spreadModule = compileModule({ kind: 'module', id: 'concat-spread-order', name: 'spreadOrder', source: 'spreadOrder.ts', revision: 'r1',
     text: `export async function show(values: (Neuralese<string> | string)[], events: string[], receiver: () => string) {
@@ -531,6 +554,37 @@ test('string conversions read typed Neuralese values with native method ordering
   })).value;
   assert.equal(joined, 'label:2:first:::last:');
   assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb', 'nz1_dddddddddddddddddddd']);
+  const separatorOrder = [];
+  const separatorItems = new Proxy([neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc'), 'plain'], {
+    get(target, property, receiver) {
+      if (property === 'length') separatorOrder.push('length');
+      if (property === '0' || property === '1') separatorOrder.push(`item:${property}`);
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const softSeparator = neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd');
+  const softSeparated = await joinNeuralese(separatorItems, Array.prototype.join, [softSeparator], async ref => {
+    separatorOrder.push(`read:${ref.$neuralese.id}`);
+    return ref.$neuralese.id === softSeparator.$neuralese.id ? ' / ' : 'resolved';
+  });
+  assert.equal(softSeparated.value, 'resolved / plain');
+  assert.deepEqual(separatorOrder, ['length', 'read:nz1_dddddddddddddddddddd', 'item:0', 'read:nz1_cccccccccccccccccccc', 'item:1']);
+  const crispSeparator = await joinNeuralese(['a', 'b'], Array.prototype.join, ['|'], async () => {
+    assert.fail('crisp separators do not need typed readout');
+  });
+  assert.equal(crispSeparator.value, 'a|b');
+  const failedSeparatorOrder = [];
+  const failedSeparatorItems = new Proxy(['first', 'second'], {
+    get(target, property, receiver) {
+      if (property === 'length') failedSeparatorOrder.push('length');
+      if (property === '0' || property === '1') failedSeparatorOrder.push(`item:${property}`);
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  await assert.rejects(() => joinNeuralese(failedSeparatorItems, Array.prototype.join, [softSeparator], async () => {
+    failedSeparatorOrder.push('separator-read'); throw new Error('separator unavailable');
+  }), /separator unavailable/);
+  assert.deepEqual(failedSeparatorOrder, ['length', 'separator-read'], 'a failed separator read precedes all indexed gets');
   const coercionOrder = [];
   const customJoined = (await joinNeuralese([{ toString() { coercionOrder.push('object-before'); return 'before'; } },
     neuraleseRef('Neuralese<number>', 'nz1_eeeeeeeeeeeeeeeeeeee'),
