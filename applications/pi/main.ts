@@ -15,6 +15,7 @@
  *   --admission natural-language            admission in natural language (default crisp)
  *   --planning natural-language             the system-entry plan and the context estimate in natural language
  *   --pure                                  all four in natural language
+ *   --companion                             run the companion beside the agent (COMPANION.md): background briefings
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
  *   --quiet                                 no phase log on stderr
@@ -33,6 +34,8 @@ import { NatlangRuntime, type TargetContext } from '@natlang/node';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
 import type { EntryId } from './vendor/durable/src/types.ts';
 import { codingRegistry, createEnvs } from './extensions/index.ts';
+import { companion } from './extensions/companion/index.ts';
+import type { Harness } from './vendor/durable/src/harness/harness.ts';
 import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
@@ -106,17 +109,23 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   const envs = createEnvs(cwd);
   const natlang = executor(target, args);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
+  const registry = codingRegistry(natlang, { cwd });
+  let opened: Harness | undefined;
+  // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
+  if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
+    onReport: error => log(`  [companion] ${error instanceof Error ? error.message : String(error)}`) }));
   const harness = await openPi({
     storage: await openNodeSqliteStorage(sessionPath),
     natlang,
     models,
-    registry: codingRegistry(natlang, { cwd }),
+    registry,
     env: envs.env,
     implementations: implementations(args),
     onReport: error => log(`  [report] ${error instanceof Error ? error.message : String(error)}`),
     onPhase: event => log(`  ${event.kind}#${event.taskId} ${event.phase}${event.mode === 'abort' ? ' (abort)' : ''}` +
       `${event.attempt > 1 ? ` attempt ${event.attempt}` : ''}: ${event.error ? `failed: ${event.error.slice(0, 300)}` : (event.summary ?? '').slice(0, 200)}`),
   }, context);
+  opened = harness;
   const onAbort = () => { void harness.root(context).then(root => root.abort(context)).catch(() => {}); };
   signal?.addEventListener('abort', onAbort, { once: true });
   try {

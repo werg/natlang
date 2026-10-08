@@ -531,3 +531,46 @@ export type AdmissionExpect = { run: number | null; inbox: number[]; requestAbse
 
 /** What admission concluded: the submission's ID, or the conversation is busy and rejects the input, or a request conflict. */
 export type AdmitResult = { id?: number; busy?: boolean; conflict?: string };
+
+// The companion (extensions/companion, COMPANION.md §§1, 4).
+
+/** What the companion knows about one workspace file, valid while the file's hash is `hash`. */
+export type FileKnowledge = {
+  path: string;
+  hash: string;
+  /** What the file is for, in one or two sentences. */
+  purpose: string;
+  /** Its main definitions and exports. */
+  symbols: string[];
+  /** What someone changing or using the file must know: invariants, pitfalls, how it is tested. */
+  notes: string[];
+};
+
+/** A file's summary as summarize returns it; the host adds the path and hash. */
+export type FileSummary = { purpose: string; symbols: string[]; notes: string[] };
+
+/** What the companion offers the agent for its next request. Every item is short and stands on its own. */
+export type Briefing = {
+  /** What the agent is working toward right now, in one sentence. */
+  focus: string;
+  /** Relevant facts the agent may not have in view, each naming its source (a file path or a command). */
+  facts: string[];
+  /** Problems in the agent's work: repeated failing steps, claims without evidence, edits whose dependents were not checked. */
+  warnings: string[];
+  /** Concrete next steps that would help: files to read, commands to run, checks to make. */
+  suggestions: string[];
+};
+
+/** What one companion run sees. */
+export type Observation = {
+  /** The user's request that started the current work. */
+  goal: string;
+  /** The latest part of the conversation, compactly rendered: messages, tool calls and results (cut). */
+  recent: string;
+  /** Workspace files the recent tool calls read, edited or wrote, relative to the workspace. */
+  touched: string[];
+  /** The briefing the agent was shown last, or null. */
+  previous: Briefing | null;
+  /** Everything the companion already knows about workspace files (possibly stale for files changed since). */
+  known: FileKnowledge[];
+};
