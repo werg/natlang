@@ -608,6 +608,9 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.final_text_bytes = Buffer.byteLength(responseText);
       const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
         cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
+      if (body.tool_choice === 'required' && completion.calls.length === 0)
+        throw Object.assign(new Error('Natlang required a tool call, but no audited action was recorded'), {
+          code: 'MISSING_REQUIRED_ACTION' });
       diagnostics.final_text_status = completion.finalTextStatus;
       diagnostics.response_normalization = completion.responseNormalization ?? 'not_applicable';
       diagnostics.action_route = completion.actionRoute;

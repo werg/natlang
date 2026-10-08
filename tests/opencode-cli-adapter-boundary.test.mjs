@@ -75,9 +75,10 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
     async close() { await adapter.close(); eventServer.closeAllConnections(); await new Promise(resolve => eventServer.close(resolve)); await rm(root, { recursive: true, force: true }); } };
 }
 
-async function invoke(adapter) {
+async function invoke(adapter, { toolChoice } = {}) {
   return fetch(`${adapter.url}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ model: 'fixture/free', messages: [{ role: 'user', content: 'Record the action.' }],
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       tools: [{ type: 'function', function: { name: 'probe_tool', parameters: { type: 'object', properties: { value: { type: 'number' } } } } }] }) });
 }
 
@@ -123,6 +124,44 @@ test('terminal boundary preserves every action in a multi-action step', async ()
     const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
     assert.equal(diagnostic.terminal_action_boundary.action_record_count, 2);
     assert.equal(diagnostic.cli_tool_use_audit.filter(use => use.bridge).length, 2);
+  } finally { await f.close(); }
+});
+
+test('official CLI no-op invalid Natlang attempt does not block an audited MCP action', async () => {
+  const error = "Model tried to call unavailable tool 'probe_tool'. Available tools: bash, invalid.";
+  const invalidEvent = { type: 'tool_use', sessionID: 'fake-session-1', part: { type: 'tool', tool: 'invalid',
+    callID: 'call-invalid', state: { status: 'completed', title: 'Invalid Tool',
+      input: { tool: 'probe_tool', error },
+      output: `The arguments provided to the tool are invalid: ${error}`, metadata: { truncated: false },
+      time: { start: 10, end: 11 } } } };
+  const f = await fixture({ extraEvents: [invalidEvent] });
+  try {
+    const response = await invoke(f.adapter, { toolChoice: 'required' }); const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.choices[0].finish_reason, 'tool_calls');
+    assert.equal(body.choices[0].message.tool_calls.length, 1);
+    assert.equal(f.abortCalls.length, 1, 'the completed audited action still reaches the terminal abort');
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(diagnostic.non_bridge_tool_use_count, 0);
+    assert.equal(diagnostic.rejected_natlang_tool_attempts.length, 1);
+    assert.equal(diagnostic.rejected_natlang_tool_attempts[0].rejected_tool_name, 'probe_tool');
+    assert.equal(diagnostic.terminal_action_boundary.status, 'aborted');
+  } finally { await f.close(); }
+});
+
+test('official CLI no-op invalid tool attempt alone cannot satisfy required action', async () => {
+  const error = "Model tried to call unavailable tool 'probe_tool'. Available tools: bash, invalid.";
+  const invalidEvent = { type: 'tool_use', sessionID: 'fake-session-1', part: { type: 'tool', tool: 'invalid',
+    callID: 'call-invalid', state: { status: 'completed', title: 'Invalid Tool',
+      input: { tool: 'probe_tool', error },
+      output: `The arguments provided to the tool are invalid: ${error}`, metadata: { truncated: false },
+      time: { start: 10, end: 11 } } } };
+  const f = await fixture({ actions: [], extraEvents: [invalidEvent] });
+  try {
+    const response = await invoke(f.adapter, { toolChoice: 'required' }); const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.equal(body.error.code, 'MISSING_REQUIRED_ACTION');
+    assert.equal(f.abortCalls.length, 0, 'a rejected invalid attempt is not an executed action');
   } finally { await f.close(); }
 });
 

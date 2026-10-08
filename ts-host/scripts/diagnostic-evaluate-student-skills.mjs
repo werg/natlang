@@ -12,6 +12,10 @@ if (!planPath || !['--preflight', '--execute'].includes(mode))
 const planBytes = await readFile(planPath);
 const plan = JSON.parse(planBytes);
 if (plan.schema !== 'natlang.criterion_grounded_skill_diagnostic_plan/1') throw new Error('unsupported plan schema');
+if (plan.runner_path && resolve(plan.runner_path) !== resolve(process.argv[1]))
+  throw new Error(`invoke the exact pinned evaluator path: ${plan.runner_path}`);
+if (plan.runner_path && !Object.hasOwn(plan.pins ?? {}, plan.runner_path))
+  throw new Error('the evaluator path must be included in the plan pin map');
 if (mode === '--execute' && (plan.root_approved !== true || approvedPlanSha !== hash(planBytes)))
   throw new Error('execution requires root-approved plan bytes and exact SHA-256 argument');
 if (mode === '--preflight' && plan.root_approved !== false) throw new Error('preflight plan must remain unapproved');
@@ -27,47 +31,82 @@ const module = relative => import(pathToFileURL(join(plan.runtime, 'dist', relat
 const [collector, prompts, programs] = await Promise.all([module('teacher/collector.js'), module('native/prompt.js'), module('teacher/program.js')]);
 const contexts = JSON.parse(await readFile(plan.contexts, 'utf8'));
 const oracle = JSON.parse(await readFile(plan.oracle, 'utf8'));
-if (contexts.schema !== 'natlang.criterion-grounded-fixtures/1' || oracle.schema !== 'natlang.criterion-grounded-fixture-oracles/1' ||
-    contexts.cases.length !== 4 || oracle.decisions.length !== 4) throw new Error('unexpected fixture schema or count');
+const supportedContextSchemas = new Set([
+  'natlang.criterion-grounded-fixtures/1',
+  'natlang.criterion_grounded_incremental_evidence_fixtures/1',
+]);
+const supportedOracleSchemas = new Set([
+  'natlang.criterion-grounded-fixture-oracles/1',
+  'natlang.criterion_grounded_incremental_evidence_oracle/1',
+]);
+if (!supportedContextSchemas.has(contexts.schema) || !supportedOracleSchemas.has(oracle.schema) ||
+    !Array.isArray(contexts.cases) || contexts.cases.length < 1 || !Array.isArray(oracle.decisions) ||
+    oracle.decisions.length !== contexts.cases.length) throw new Error('unexpected fixture schema or count');
 const decisions = new Map(oracle.decisions.map(row => [row.id, row.expected]));
-if (decisions.size !== 4 || contexts.cases.some(row => !decisions.has(row.id)) ||
+if (decisions.size !== contexts.cases.length || contexts.cases.some(row => !decisions.has(row.id)) ||
     JSON.stringify(plan.fixture_ids) !== JSON.stringify(contexts.cases.map(row => row.id))) throw new Error('oracle/plan does not exactly cover fixture IDs');
 const arms = ['discovery', 'instructed'];
+const collections = plan.collections ?? [{id:'default', skill:plan.skill}];
+if (!Array.isArray(collections) || collections.length < 1 || collections.some(row =>
+    typeof row.id !== 'string' || !row.id || typeof row.skill !== 'string' || !row.skill) ||
+    new Set(collections.map(row => row.id)).size !== collections.length) throw new Error('invalid skill collection matrix');
+const executions = contexts.cases.length * arms.length * collections.length;
+const boundedRequests = executions * plan.max_requests_per_execution;
 if (JSON.stringify(plan.arms) !== JSON.stringify(arms) || plan.workers !== 1 || plan.transport_retries !== 0 ||
-    plan.max_requests_per_execution !== 4 || plan.max_total_requests !== 32 || contexts.cases.length * arms.length !== 8)
+    plan.max_requests_per_execution !== 4 || !Number.isSafeInteger(plan.max_total_requests) ||
+    plan.max_total_requests < boundedRequests)
   throw new Error('execution bounds/design mismatch');
-const candidate = await readFile(plan.skill, 'utf8');
-const candidateInstructions = candidate.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
-const records = contexts.cases.map((fixture, index) => ({
-  version: 'natlang.program/2', id: `criterion-diagnostic-${index + 1}`,
-  kind: 'lambda_source', source: 'project-authored-diagnostic-fixture', split: 'diagnostic',
-  source_groups: ['criterion-grounded-skill-diagnostic-v1'], license: 'project-authored',
-  semantics: {
-    root: 'judge.nl',
-    files: {
-      'judge.nl': `---\nargs:\n  contract: string\n  entityId: string\n  evidenceScope: string\n  criterion: string\n  evidence: string\nreturns: string\n---\nApply the supplied contract to the criterion and evidence for entityId. Return only the requested result label.\n`,
-      'judge/skills/judge-against-criteria/SKILL.md': candidate,
-    },
-    inputs: {
-      contract: fixture.contract.rule,
-      entityId: fixture.entityId,
-      evidenceScope: fixture.evidenceScope,
-      criterion: fixture.criterion,
-      evidence: fixture.evidence,
-    },
-    expected: decisions.get(fixture.id), oracle: 'exact',
-  },
-  diagnostic: {fixture_id: fixture.id, source_artifact: plan.contexts, source_sha256: plan.pins[plan.contexts],
-    sampled: false, training_admission: false, split_reason: 'project-authored paired skill diagnostic'},
+const loadedCollections = await Promise.all(collections.map(async item => {
+  const body = await readFile(item.skill, 'utf8');
+  return {...item, body, instructions:body.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim()};
 }));
-for (const record of records) {
+const records = [];
+for (const [collectionIndex, collection] of loadedCollections.entries()) {
+for (const [index, fixture] of contexts.cases.entries()) {
+  const legacyFixture = contexts.schema === 'natlang.criterion-grounded-fixtures/1';
+  const inputKeys = legacyFixture
+    ? ['contract','entityId','evidenceScope','criterion','evidence']
+    : ['contract','entityId','evidenceScope','criterion','priorNotes','currentEvidence'];
+  const inputs = legacyFixture ? {
+    contract:fixture.contract.rule, entityId:fixture.entityId, evidenceScope:fixture.evidenceScope,
+    criterion:fixture.criterion, evidence:fixture.evidence,
+  } : {
+    contract:fixture.contract.rule, entityId:fixture.entity_scope, evidenceScope:fixture.evidenceScope ??
+      'The caller identifies the entity whose current evidence is being judged.',
+    criterion:fixture.criterion, priorNotes:fixture.priorNotes ?? '',
+    currentEvidence:fixture.currentEvidence ?? '',
+  };
+  const args = inputKeys.map(key => `  ${key}: string`).join('\n');
+  const root = `---\nargs:\n${args}\nreturns: string\n---\nApply the supplied contract to the criterion and current evidence for entityId. Prior notes describe earlier stages; use only current evidence supplied to this call. Return only the contract result.\n`;
+  const visibleTask = JSON.stringify({root, inputs});
+  for (const row of oracle.decisions) if (visibleTask.includes(row.reason)) throw new Error('host oracle rationale leaked into task input');
+  const collectionSlug = collection.id.replace(/[^A-Za-z0-9_-]/g, '-');
+  const id = collections.length === 1 ? `criterion-diagnostic-${index + 1}` :
+    `criterion-diagnostic-${collectionSlug}-${index + 1}`;
+  const record = {
+    version: 'natlang.program/2', id,
+    kind: 'lambda_source', source: 'project-authored-diagnostic-fixture', split: 'diagnostic',
+    source_groups: [fixture.source_group ?? plan.source_group ?? 'criterion-grounded-skill-diagnostic-v1'],
+    license: 'project-authored',
+    semantics: {
+      root: 'judge.nl',
+      files: {'judge.nl':root, 'judge/skills/judge-against-criteria/SKILL.md':collection.body},
+      inputs,
+      expected:decisions.get(fixture.id), oracle:'exact',
+    },
+    diagnostic: {fixture_id:fixture.id, collection_id:collection.id, source_artifact:plan.contexts,
+      source_sha256:plan.pins[plan.contexts], source_split:plan.source_split ?? null,
+      source_group:fixture.source_group ?? plan.source_group ?? null, sampled:false,
+      training_admission:false, split_reason:'project-authored paired skill diagnostic'},
+  };
+  records.push(record);
   collector.validateFocusedRecord(record);
   const node = await programs.prepareProgramNode(record);
-  if (!node.skills?.listing?.includes('judge-against-criteria') || !node.skills.listing.includes('Boolean eligibility') ||
-      node.skills.listing.includes(candidateInstructions) || !node.skills.documents?.['skills.judge-against-criteria']?.startsWith(candidateInstructions))
+  if (!node.skills?.listing?.includes('judge-against-criteria') ||
+      node.skills.listing.includes(collection.instructions) ||
+      !node.skills.documents?.['skills.judge-against-criteria']?.startsWith(collection.instructions))
     throw new Error(`native runtime skill listing/body binding mismatch for ${record.id}`);
-  const visibleTask = JSON.stringify({root:record.semantics.files['judge.nl'], inputs:record.semantics.inputs});
-  for (const row of oracle.decisions) if (visibleTask.includes(row.reason)) throw new Error('host oracle rationale leaked into task input');
+}
 }
 if (!plan.output || !plan.endpoint && !plan.provider) throw new Error('plan must provide an output and provider route');
 const localFake = plan.local_fake_provider === true && !plan.provider && plan.model === 'mock-luna' &&
@@ -83,7 +122,8 @@ const initialFreeBytes = await available(dirname(output));
 if (initialFreeBytes < plan.min_free_bytes) throw new Error(`free-space floor violated: ${initialFreeBytes} < ${plan.min_free_bytes}`);
 if (mode === '--preflight') {
   console.log(JSON.stringify({status:'preflight_passed', provider_calls:0, split:'diagnostic', corpus_publication:false,
-    cases:records.length, arms:arms.length, root_executions:records.length*arms.length, max_requests:plan.max_total_requests,
+    cases:contexts.cases.length, collections:loadedCollections.length, arms:arms.length, root_executions:executions,
+    max_requests:boundedRequests, max_requests_allowed:plan.max_total_requests,
     free_bytes:initialFreeBytes, min_free_bytes:plan.min_free_bytes, job_wall_cap_ms:plan.job_wall_cap_ms,
     runtime_manifest_sha256:plan.runtime_manifest_sha256, plan_sha256:hash(planBytes)}));
   process.exit(0);
@@ -95,9 +135,12 @@ async function ensureDiskFloor() { const free = await available(dirname(output))
 await ensureDiskFloor();
 const systemBase = prompts.TOOLS_PROMPT;
 const results = [];
-for (const arm of arms) for (let index = 0; index < records.length; index++) {
+for (const arm of arms) for (const [collectionIndex, collection] of loadedCollections.entries()) for (let index = 0; index < contexts.cases.length; index++) {
+  const recordIndex = collectionIndex;
+  const record = records[recordIndex * contexts.cases.length + index];
   const freeBytes = await ensureDiskFloor();
-  const armDir = join(output, arm); await mkdir(armDir, {recursive:true});
+  const armDir = collections.length === 1 ? join(output, arm) : join(output, arm, collection.id);
+  await mkdir(armDir, {recursive:true});
   const caseDir = join(armDir, String(index).padStart(2,'0'));
   const resultPath = join(caseDir, 'result.json');
   const systemPrompt = systemBase + (arm === 'instructed'
@@ -115,22 +158,24 @@ for (const arm of arms) for (let index = 0; index < records.length; index++) {
   await mkdir(caseDir, {recursive:false});
   await mkdir(options.jobs, {recursive:true});
   const runner = collector.nativeJobRunner(options);
-  const expected = collector.expectedProvenance(records[index], options);
+  const expected = collector.expectedProvenance(record, options);
   let row, error;
-  try { row = await runner({index, record: structuredClone(records[index])}, expected, wallSignal); }
+  try { row = await runner({index, record: structuredClone(record)}, expected, wallSignal); }
   catch (cause) { error = {name:cause?.name, code:cause?.code, message:String(cause?.message??cause).slice(0,1000)}; }
   let traceEvents = [];
-  try { traceEvents = (await readFile(join(options.jobs, `${String(index).padStart(6,'0')}-${collector.recordDigest(records[index]).slice(0,16)}.trace.jsonl`),'utf8'))
+  try { traceEvents = (await readFile(join(options.jobs, `${String(index).padStart(6,'0')}-${collector.recordDigest(record).slice(0,16)}.trace.jsonl`),'utf8'))
     .split('\n').filter(Boolean).map(JSON.parse); } catch {}
   const skillEvents = traceEvents.filter(event => event.kind === 'skill_use' && event.skill_name === 'judge-against-criteria');
   const reads = (row?.trajectory ?? []).flatMap(turn => (turn.assistant?.calls ?? [])
     .filter(call => call.tool === 'read_code' && String(call.arguments?.name??'').startsWith('skills.'))
     .map(call => ({target:call.arguments.name, arguments:call.arguments})));
   const exactValueMatch = row?.outcome && Object.hasOwn(row.outcome,'value') &&
-    row.outcome.value === records[index].semantics.expected;
+    row.outcome.value === record.semantics.expected;
   const answerAccepted = row?.outcome?.checks?.answer === true && row?.outcome?.oracle?.accepted === true && exactValueMatch === true;
   const result = {schema:'natlang.criterion-grounded-diagnostic-result/1', plan_sha256:hash(planBytes), arm,
-    program_id:records[index].id, fixture_index:index, split:'diagnostic', training_admission:false,
+    program_id:record.id, fixture_id:contexts.cases[index].id, collection_id:collection.id,
+    fixture_index:index, split:'diagnostic', source_split:plan.source_split ?? null,
+    source_group:contexts.cases[index].source_group ?? plan.source_group ?? null, training_admission:false,
     expected:decisions.get(contexts.cases[index].id), answer_accepted:answerAccepted,
     exact_value_match:exactValueMatch===true, collector_answer_check:row?.outcome?.checks?.answer===true,
     collector_oracle_accepted:row?.outcome?.oracle?.accepted===true,
@@ -144,6 +189,10 @@ const summary = {schema:'natlang.criterion-grounded-diagnostic-summary/1', plan_
     collector_answer_check:rows.filter(row=>row.collector_answer_check).length,
     collector_oracle_accepted:rows.filter(row=>row.collector_oracle_accepted).length, body_reads:rows.filter(row=>row.skill_events.some(event=>event.phase==='body_read')).length,
     offered:rows.filter(row=>row.skill_events.some(event=>event.phase==='offered')).length,
-    failures:rows.filter(row=>row.error).length}]})), all_cases_preserved:true, training_admission:false, corpus_publication:false};
+    failures:rows.filter(row=>row.error).length}]})),
+  collection_matrix:Object.fromEntries(loadedCollections.map(c=>[c.id,Object.fromEntries(arms.map(arm=>{
+    const rows=results.filter(row=>row.collection_id===c.id&&row.arm===arm);return [arm,{cases:rows.length,
+      accepted:rows.filter(row=>row.answer_accepted).length,failures:rows.filter(row=>row.error).length}];
+  }))])), total_executions:results.length, all_cases_preserved:true, training_admission:false, corpus_publication:false};
 await writeFile(join(output,'summary.json'), JSON.stringify({...summary, operational:{job_wall_cap_ms:plan.job_wall_cap_ms,min_free_bytes:plan.min_free_bytes}, all_cases_preserved:true, training_admission:false, corpus_publication:false},null,2)+'\n', {flag:'wx'});
 console.log(JSON.stringify(summary));
