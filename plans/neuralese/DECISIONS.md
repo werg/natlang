@@ -934,3 +934,22 @@ Guided note children receive semantic decision context and their current pass, r
 The Luna audit admitted typed soft-array spread into String.concat through its existing async readout, preserving receiver/argument evaluation and coercion order (5185274d). Union-of-array join/concat classification previously missed the soft arm and generated `[object Object]`; 9f0b8837 distributes classification only over array/tuple alternatives and reuses the same readout. Isolated generated-module regressions pass. No historical generation occurrence is claimed. Keep opaque authority/target typing intact rather than globally treating every union as one Neuralese type.
 
 V20 launch review also found the dispatcher/queue hardcoded retry allowance1 while its reviewed plan specified0. Stop and retain those interrupted attempts; c4568c56 explicitly carries the reviewed budget. Relaunch only unattempted cases5–11 under a newly pinned plan. Configuration mismatch is infrastructure evidence, not a model/source negative.
+## 2026-10-08 — Diagnosis: Maple's late-window pass-1/2 gap is history exposure, not channel drift
+
+- Maple v7, step 3968, V17 held long windows. The pass-1/2 last-256 strata stay at relative MSE 0.71/0.88 (agreement
+  0.61/0.49) over several evals, while pass 0 passes (0.22).
+- Pop's matched projected-history control (c42a7638) at the same step:
+
+  | Window | History | CE | Gold accuracy |
+  |---|---|---|---|
+  | Last 256 | full projection | 1.627 | 0.747 |
+  | Last 256 | crisp live-greedy tokens | 1.621 | 0.755 |
+  | Whole | full projection | 0.545 | — |
+  | Whole | crisp live-greedy tokens | 0.484 | — |
+
+  On the last 256 the CE delta is 0.006 and argmax agreement is 0.91. On whole windows the CE delta is 0.061 and
+  agreement is 0.957.
+- So late-window degradation is almost entirely what any self-generated history (even crisp greedy tokens) costs
+  against gold-history targets. The residual channel gap is the whole-window 0.06 CE.
+- No gate is changed or waived. The per-stratum gold-target gate on pass ≥1 tails may be unreachable by construction.
+  A gate relative to the matched live-greedy control is proposed for review with Pop and the owner.
