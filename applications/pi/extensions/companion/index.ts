@@ -5,8 +5,9 @@
  * language (`observe.nl`, `observe/summarize.nl`); this file is the mechanism: documents, the task, the trigger and
  * the section. Without this extension a conversation is today's harness.
  */
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
 import type { Message } from '@earendil-works/pi-ai';
@@ -43,6 +44,8 @@ const TASK = 'pi.companion';
 const SHAPE_LIMIT = 6_000;
 const SHAPE_HEAD = 2_500;
 const SHAPE_TAIL = 2_000;
+/** Lines a search returns. */
+const SEARCH_LINES = 40;
 /** Messages of the transcript tail an observation shows. */
 const RECENT_MESSAGES = 16;
 /** Characters of a file the companion reads. */
@@ -54,7 +57,11 @@ export const COMPANION_DECLARATION = `/** The workspace as the companion sees it
 /** A file's current hash and text (cut at ${FILE_LIMIT} characters), and what you know about this version (null when you know nothing about it, or only about an older version). Null when the file does not exist. */
 export function file(path: string): Promise<{ hash: string; text: string; known: FileKnowledge | null } | null>;
 /** Remember summary as what you know about path, as file(path) last showed it. */
-export function remember(path: string, summary: FileSummary): Promise<void>;`;
+export function remember(path: string, summary: FileSummary): Promise<void>;
+/** Lines matching the regular expression pattern (grep -E syntax) in the workspace's text files, as "path:line:text", at most ${SEARCH_LINES}; glob limits the files (for example "*.py"). Hidden directories are skipped. */
+export function search(pattern: string, glob?: string): Promise<string[]>;
+/** The entries of a workspace directory ("." for the root), directories with a trailing "/". Hidden entries are skipped. */
+export function list(directory: string): Promise<string[]>;`;
 
 const hashOf = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
@@ -97,6 +104,19 @@ function companionService(runtime: Runtime, context: Context, cwd: string) {
       const known = (await runtime.snapshot(CompanionFiles, context))?.files[path];
       const text = full.length > FILE_LIMIT ? `${full.slice(0, FILE_LIMIT)}\n[cut: ${full.length - FILE_LIMIT} more characters]` : full;
       return { hash, text, known: known?.hash === hash ? known : null };
+    },
+    async search(pattern: string, glob?: string): Promise<string[]> {
+      const args = ['-rnIE', '--exclude-dir=.*', '-m', '5', ...(glob ? [`--include=${glob}`] : []), '-e', pattern, '.'];
+      const output = await new Promise<string>(done => execFile('grep', args, { cwd, timeout: 10_000, maxBuffer: 4 << 20 },
+        (_error, stdout) => done(String(stdout ?? ''))));
+      return output.split('\n').filter(Boolean).slice(0, SEARCH_LINES).map(line => line.replace(/^\.\//, '').slice(0, 300));
+    },
+    async list(directory: string): Promise<string[]> {
+      const absolute = resolve(cwd, directory);
+      const local = relative(cwd, absolute);
+      if (local.startsWith('..') || isAbsolute(local)) throw new Error(`${directory} is outside the workspace`);
+      return readdirSync(absolute, { withFileTypes: true }).filter(entry => !entry.name.startsWith('.'))
+        .map(entry => entry.isDirectory() ? `${entry.name}/` : entry.name).sort().slice(0, 200);
     },
     async remember(path: string, summary: FileSummary): Promise<void> {
       const hash = shown.get(path);

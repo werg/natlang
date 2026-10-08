@@ -13,12 +13,16 @@ workspace files, and observation.previous your last briefing (null on the first 
    file = await companion.file(path). Skip it when file is null (it does not exist) or when file.known is not null
    (you already know this version). Otherwise summary = await summarize(path, file.text), then
    await companion.remember(path, summary).
-2. Write the briefing for the agent's next request. Read observation.recent closely: what is the agent trying to do,
+2. Look ahead. From the goal and the recent work, name at most 2 things the agent will probably need next and does not
+   have yet: where something is defined or used, which tests cover the code it is changing, how the project builds or
+   tests, what a configuration says. Find each with companion.search, companion.list and companion.file (learn a file
+   you read this way as in step 1). Skip this step when the agent is about to finish.
+3. Write the briefing for the agent's next request. Read observation.recent closely: what is the agent trying to do,
    what has it found, what went wrong? Then return a Briefing:
    - focus: what the agent is working toward right now, in one sentence.
-   - facts: up to 5 facts from what you know about the files (step 1 and observation.known) that matter for the focus
-     and that the agent does not already have in view in observation.recent. Each names its file. Leave the list empty
-     rather than repeat what the agent just read.
+   - facts: up to 5 facts from what you know (steps 1 and 2 and observation.known) that matter for the focus and
+     that the agent does not already have in view in observation.recent. Each names its file or the search that found
+     it. Leave the list empty rather than repeat what the agent just read.
    - warnings: problems you see in the recent work, with the evidence. For example, the same command failed twice the
      same way, the agent said something is fixed or done without running a check, or an edited file's callers or
      tests were not looked at. Empty when there are none.
