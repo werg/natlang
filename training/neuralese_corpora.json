@@ -5874,6 +5874,16 @@
         "**/*"
       ],
       "notes": "Root review of 192-response/request-budget source6 partial: distinct progress, concrete API/type friction, correct intermediate decision; missing original graph/capture evidence cannot be retroactively synthesized. Bound exact raw source/partial/runtime hashes."
+    },
+    {
+      "id": "luna-idiomatic-boundary-review-20261008-v2",
+      "owner": "pop",
+      "path": "runs/luna-idiomatic-boundary-review-20261008-v2",
+      "admission": "review-evidence-only;not-training-data",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Immutable broader Luna idiomatic audit, observed fixes/direct aliases/chained inline capture snapshots and shared runtime validation; unresolved ordinary JS closure lifetime separated from proactive readout helpers. Root review binds exact packet and commits; no learned-channel qualification."
     }
   ],
   "coverage_backlog": [
