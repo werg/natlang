@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s1-question-collection-v8-quality-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-quality-review-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1272,
+      "sha256": "8cffcc5620f2127278d84fd3a2a63f22070823a2d4d7e3d066409a11acc5123a"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 274,
+      "sha256": "f706257d0fb41dd9d38bd116da96f8aae5f62af4be5ba7e6ca29ca7bbeedab54"
+    },
+    {
+      "path": "review.json",
+      "bytes": 303311,
+      "sha256": "9431c3720f171164ea79e0bcd1e1501fd7577980d5f53b6a78592e9fe1a7b053"
+    }
+  ],
+  "bytes": 304857
+}

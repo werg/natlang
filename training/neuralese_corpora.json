@@ -7373,6 +7373,36 @@
         "neuralese-native-text-warmup-v20-closed-storage-20261008",
         "neuralese-native-text-warmup-v20-surviving-artifacts-20261008"
       ]
+    },
+    {
+      "id": "s1-question-collection-v8-quality-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-quality-review-20261008-v1",
+      "include": [
+        "README.md",
+        "review.json",
+        "manifest.json"
+      ],
+      "admission": "superseded-audit-with-field-path-error-not-authoritative-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-luna-campaign-20261008-v1"
+      ],
+      "notes": "Superseded by V2: V1 incorrectly read outcome.execution_graph/action_ledger at result root rather than under outcome. Preserve V1 as historical diagnostic only; use V2."
+    },
+    {
+      "id": "s1-question-collection-v8-quality-review-20261008-v2",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-quality-review-20261008-v2",
+      "include": [
+        "README.md",
+        "review.json",
+        "manifest.json"
+      ],
+      "admission": "held-source-semantic-and-grader-review-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-luna-campaign-20261008-v1"
+      ],
+      "notes": "Corrected V8 independent review of closed indices 0–14 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
     }
   ],
   "coverage_backlog": [
