@@ -1,0 +1,1075 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-workflowevals-folder-iterate-v27-luna-closed-raw-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/closed-review-v1/README.md",
+      "bytes": 580,
+      "sha256": "de7248052d40c2cc48198dbf67a096a80f5c21a417de4b27376afebacd717733"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/closed-review-v1/closure-review.json",
+      "bytes": 41519,
+      "sha256": "0ce14b8f5d479dc95f5e7ae42b801c9b8b86f281d66955668e37f7d1d831c06f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/dispatch/claims.jsonl",
+      "bytes": 110328,
+      "sha256": "4495b44bac324d02bd1aa3a995bd2539f6e418c944b95860124133ac98daad36",
+      "lines": 92
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/dispatch/launch.json",
+      "bytes": 3639,
+      "sha256": "2893aba117bbc732ace5e9ea42c605a2c0bf5cc603b2e7d89120e76e7dcd1f50"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000000/queue.jsonl",
+      "bytes": 730,
+      "sha256": "25bdd9faa00b5a5ed3cdd88b69e3248f47215dbd4b4b328b90df04d05d02393c",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000006/queue.jsonl",
+      "bytes": 730,
+      "sha256": "e4101dc2a7dc39f046cfd8d17057ee0688c5f5cdad7b5aa0fb1966e62c609194",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000009/queue.jsonl",
+      "bytes": 730,
+      "sha256": "577cfff9fb0a3dc2f9d73cf9aff3706e4384401325dd445aeee6d6d348271504",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000014/queue.jsonl",
+      "bytes": 731,
+      "sha256": "0d27ec28bdfcb7b6eab3158d5548b9466db22f00ca425a463ca0d6acf4f2a047",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000019/queue.jsonl",
+      "bytes": 731,
+      "sha256": "ca1f65fd996725e1114c55ab5e87de9c3fa793c741fde3f387b1efe265ac202a",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000026/queue.jsonl",
+      "bytes": 731,
+      "sha256": "78606b15671e746c5b7ad6b33d1fb56b275b1feceae18bf776ab26e8f35347c7",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000027/queue.jsonl",
+      "bytes": 731,
+      "sha256": "244ae775e3b4a5ecf81f711a4344d352fb371eedc469b7f22efd1d15c63f7bcf",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 73020,
+      "sha256": "c09a5cbf0971f973693621ee889329d9e19e5b21f799e8a8f38e4edfc6fc1f37"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000006.log",
+      "bytes": 65088,
+      "sha256": "2648113a867104f7c822002e3d7b4ed71febc5b61853dd58af309f4da047635b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000009.log",
+      "bytes": 80526,
+      "sha256": "dcbf70765580a71bfaf3266d65e6a64737209231b24741abf47d3de2f5af2fb1"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000014.log",
+      "bytes": 57937,
+      "sha256": "91f789707c4fe2f42141fc72e72e81347805dd541f709f40642da32b018ecd07"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000019.log",
+      "bytes": 88478,
+      "sha256": "4844c16fc1de99a2eab80f658b4d8bc13f8932aad0eee3d4bf78650dbb8a0c74"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000026.log",
+      "bytes": 23375,
+      "sha256": "cba7746f9ee02acfd83f09a083d4b13561b360d7da3ddd466fc1978fcee6142b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/collector-logs/case-000027.log",
+      "bytes": 64686,
+      "sha256": "c9cb2f54c1ca7bcd65be94ee792e47ea7f379458970265b0b0db02a2dfb73abc"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000000-a8116f7a84c0a6f8.result.json",
+      "bytes": 2743684,
+      "sha256": "89b7bc7bedd3f22b917647bde777ebbc003f682549f4c108634b57519575fde6"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000000-a8116f7a84c0a6f8.trace.jsonl",
+      "bytes": 865875,
+      "sha256": "0d2eaf2d3744c5b613ea280f05daa9a99ab1a6579c0946a4f07146228810a68d",
+      "lines": 381
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000006-cf1f2d2f7b6f4ae5.result.json",
+      "bytes": 2209951,
+      "sha256": "472835c7f72fd7fc382a9a34530e542add7f0ab8591d63591b146803a6db4fab"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000006-cf1f2d2f7b6f4ae5.trace.jsonl",
+      "bytes": 776002,
+      "sha256": "4eb3baa34706ed8b6f381bea3ea2b632d2f568315298667165ae44d841e61ef7",
+      "lines": 425
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000009-8844b5d2bc3e54b5.result.json",
+      "bytes": 2609244,
+      "sha256": "19f75f888346f06d80318b74e3014e2d759b2bed1fcb5a79c07a2e58f2dd7832"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000009-8844b5d2bc3e54b5.trace.jsonl",
+      "bytes": 602144,
+      "sha256": "3c80c9af23e67b0ac1bc694210ac98a78383e99f5a5eee0f1d23a14f01b85276",
+      "lines": 471
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000014-ee93903ee2b0a6ea.result.json",
+      "bytes": 2049172,
+      "sha256": "4ee45d30a15c63dfaf62b27435dc12811c70c31f395bb8ee32c7e90480654a07"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000014-ee93903ee2b0a6ea.trace.jsonl",
+      "bytes": 526149,
+      "sha256": "5d4bd7f252b0ef38f4104741307176909c20adf71452335d309f2617af9b65e4",
+      "lines": 353
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000019-9d804cb2c816ac2f.result.json",
+      "bytes": 2534712,
+      "sha256": "c60c2f0681defbc661ea248a9e402618abe7750fcca29d2410b0624b78f0175d"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000019-9d804cb2c816ac2f.trace.jsonl",
+      "bytes": 624184,
+      "sha256": "a332273c7e4dac8ecb0eab4c5b83101f7e183c42c94af3820961ae0d60ca6536",
+      "lines": 514
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000026-5e59efdd277c9926.result.json",
+      "bytes": 895567,
+      "sha256": "77d10732c32cb82bb4692dae380497610403e9f5f22e11973fdf71e57e7b21a6"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000026-5e59efdd277c9926.trace.jsonl",
+      "bytes": 256684,
+      "sha256": "5da672da558cdb04e2e12464f6d0c1efbef0ba1199f4189e8fdbf3e0c6205ae7",
+      "lines": 71
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000027-c4721058be79b566.result.json",
+      "bytes": 2042162,
+      "sha256": "f6aeed219ce9a20f16c0a2134145eb5be509c6c9916724bd9054c022c66b3586"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/jobs/000027-c4721058be79b566.trace.jsonl",
+      "bytes": 671434,
+      "sha256": "9e366228732baddd2d57c3133f4923b2e9648d8b909ad366fedf588731a4f914",
+      "lines": 370
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/journal.jsonl",
+      "bytes": 45331,
+      "sha256": "9339a46e74c88dc357c6c13ac43d315a24cecedfcd2a15387e46751d6c2c9bb5",
+      "lines": 49
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 2743684,
+      "sha256": "89b7bc7bedd3f22b917647bde777ebbc003f682549f4c108634b57519575fde6",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "48ce8321331c3ab5aee6159583cefcbbcdb811280fd58ffcf0f6431de5f5276b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000006.results.jsonl",
+      "bytes": 2209951,
+      "sha256": "472835c7f72fd7fc382a9a34530e542add7f0ab8591d63591b146803a6db4fab",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000006.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "ec7f7336a649427fd2967afb3a2acdb0f9d08feb9a2ad8b502781691fab6d6a1"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000009.results.jsonl",
+      "bytes": 2609244,
+      "sha256": "19f75f888346f06d80318b74e3014e2d759b2bed1fcb5a79c07a2e58f2dd7832",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000009.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "3be7dee5e1943d0f4b5af59fc8dc1f79197a9e7411ea48b53160037777f88cd3"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000014.results.jsonl",
+      "bytes": 2049172,
+      "sha256": "4ee45d30a15c63dfaf62b27435dc12811c70c31f395bb8ee32c7e90480654a07",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000014.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "2d24c3ccef0a9e24171ff8f19c260cb6b1a6f3669933739ac113d011193c8097"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000019.results.jsonl",
+      "bytes": 2534712,
+      "sha256": "c60c2f0681defbc661ea248a9e402618abe7750fcca29d2410b0624b78f0175d",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000019.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "38b09bb4cdbbf4fdc7f4594c2cf331e32b25413c31802e0969f4a79297fadf58"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000026.results.jsonl",
+      "bytes": 895567,
+      "sha256": "77d10732c32cb82bb4692dae380497610403e9f5f22e11973fdf71e57e7b21a6",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000026.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "4310247279d6a286e3fda3087f6cb7b6eb265c66f5a5f108126570cfc5c96291"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000027.results.jsonl",
+      "bytes": 2042162,
+      "sha256": "f6aeed219ce9a20f16c0a2134145eb5be509c6c9916724bd9054c022c66b3586",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/results/case-000027.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "3e2f0db2229579328a885061b72ef7ed6391e6ffb3fb05e3566f21e45be78e30"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-01/supervisor.log",
+      "bytes": 45331,
+      "sha256": "9339a46e74c88dc357c6c13ac43d315a24cecedfcd2a15387e46751d6c2c9bb5"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000001/queue.jsonl",
+      "bytes": 730,
+      "sha256": "0ff47301f10e4f28a94664dcd5ed4302d1e093b7ad137a4508ee6a90da2e49fc",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000012/queue.jsonl",
+      "bytes": 731,
+      "sha256": "cdcf068c8fd40995ec38e1283f4ebc51a016b7f1a313fed1ef70809920c2d461",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000017/queue.jsonl",
+      "bytes": 731,
+      "sha256": "f6c31bf8c2a22b8cdebc297be666897873c8f9694e9501d27e3ed1b83d90c278",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000021/queue.jsonl",
+      "bytes": 731,
+      "sha256": "3eb164c5b7dea8559ed2df9d6a9633213fca0ac33a09c28c6f4eb2d85f902b9f",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000024/queue.jsonl",
+      "bytes": 731,
+      "sha256": "3c7504c366ba1fd23880038b7e9e85265f7e40e8093a32a197ff725607239756",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 160440,
+      "sha256": "8b1b889c37d9147167dcb878f71d6911e73acc2eda5d18dc911da94edf65f382"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/collector-logs/case-000012.log",
+      "bytes": 66256,
+      "sha256": "a0727be6dfda07bee27fe01668339cab8aced8e2ee40e86a7f6f5813e09ad538"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/collector-logs/case-000017.log",
+      "bytes": 61124,
+      "sha256": "21fe328315031aee85ed3f24f75df5f57cae3f606f6066c4a2baaeb807cc3602"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/collector-logs/case-000021.log",
+      "bytes": 56327,
+      "sha256": "a55dadde16e7f498cc5535bc0775909f538c009dfe0a900000f8e22988e6e088"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/collector-logs/case-000024.log",
+      "bytes": 81340,
+      "sha256": "6ca4e733126adad942f56cd4c8020135a5ca654fe26c12f41a0d7bc4d4eb0ca0"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000001-e6a0edb748fc53d7.result.json",
+      "bytes": 6166129,
+      "sha256": "3f18f9952f738bf02f0b31928b64e85641e7f95c447e2019b587431ab2de701f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000001-e6a0edb748fc53d7.trace.jsonl",
+      "bytes": 1875999,
+      "sha256": "ae0d03a274d83c1c57f315e87f489f0e732a2d074cd883636581433f69c29a18",
+      "lines": 801
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000012-eecdbbeabb6cb8a7.result.json",
+      "bytes": 2087018,
+      "sha256": "eddda69b3e7e0e5e5d1cc4ff21c3667e9bdd81cdf7db0aefcf3c750064318a51"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000012-eecdbbeabb6cb8a7.trace.jsonl",
+      "bytes": 497090,
+      "sha256": "85f4a201f31b74144b08cc40a9104495467e1affc9df9a1dc5482417f6adc8c7",
+      "lines": 398
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000017-7caf4fcd69535d19.result.json",
+      "bytes": 2233829,
+      "sha256": "87e1b8e998fadb591c36f618f16dcb4c4ae45073f23bca02ce7847f10116afad"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000017-7caf4fcd69535d19.trace.jsonl",
+      "bytes": 637954,
+      "sha256": "5ffa97e79e14fb5f4d4c51f88715017c2f1abd6ae8235ef34bfe402d496912dd",
+      "lines": 399
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000021-ce782d8d23b5720c.result.json",
+      "bytes": 1837222,
+      "sha256": "ee7e8d825fb45f33b16da0c2e3e1c4d0338356dc98fcb2dc0b1e3745a5202474"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000021-ce782d8d23b5720c.trace.jsonl",
+      "bytes": 491928,
+      "sha256": "b2be412c50105b9907c21b8148c51aa11fbab292cca70d63160d89973fefa6c0",
+      "lines": 347
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000024-2b0f41e9d1b790c8.result.json",
+      "bytes": 2606713,
+      "sha256": "0cd22dc0b6cfb0faef550b551f7ac7e22a19ed4d84ed244ed905e4062b0ffe03"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/jobs/000024-2b0f41e9d1b790c8.trace.jsonl",
+      "bytes": 567844,
+      "sha256": "42617fd52d38aafde5fa14bc03de2e9c1809e868067aae9cf442cce3cf3ebffa",
+      "lines": 424
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/journal.jsonl",
+      "bytes": 40372,
+      "sha256": "fe996c447ae64ae867990debb57b13bdedd46ca2a092394ff6653cd3f47b335a",
+      "lines": 44
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 6166129,
+      "sha256": "3f18f9952f738bf02f0b31928b64e85641e7f95c447e2019b587431ab2de701f",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "cc24ae0c70bbc3351d42d966deedbe0664f1f9ec795fc7ea50e34f41462f986f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000012.results.jsonl",
+      "bytes": 2087018,
+      "sha256": "eddda69b3e7e0e5e5d1cc4ff21c3667e9bdd81cdf7db0aefcf3c750064318a51",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000012.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "8440389315c75c0a0f9ffc787f3166d324424f22dd06ee100fed8f80eb262206"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000017.results.jsonl",
+      "bytes": 2233829,
+      "sha256": "87e1b8e998fadb591c36f618f16dcb4c4ae45073f23bca02ce7847f10116afad",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000017.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "7dbcbbafeae6e5198d55652ccd99d608c63ec1595d51a8b6b53e0e984fbdf8ea"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000021.results.jsonl",
+      "bytes": 1837222,
+      "sha256": "ee7e8d825fb45f33b16da0c2e3e1c4d0338356dc98fcb2dc0b1e3745a5202474",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000021.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "c27a939a6f6a704a565813fda040bb73e0605215c3918a549bc7e057c23018e3"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000024.results.jsonl",
+      "bytes": 2606713,
+      "sha256": "0cd22dc0b6cfb0faef550b551f7ac7e22a19ed4d84ed244ed905e4062b0ffe03",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/results/case-000024.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "2003a3d0a63b7ea8441fb95503155c3d38cf0291d9d2f1c667c68dd5e9ed5ac9"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-02/supervisor.log",
+      "bytes": 40372,
+      "sha256": "fe996c447ae64ae867990debb57b13bdedd46ca2a092394ff6653cd3f47b335a"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000002/queue.jsonl",
+      "bytes": 730,
+      "sha256": "407d6c7c1ee3ec51047faa966c0caa354dc34f7d78b0621e5e4660cab872e0c0",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000008/queue.jsonl",
+      "bytes": 730,
+      "sha256": "fca797981abfe6d5f4bbbcd1c5427575756a2b3c5c4883018dea37366c112c87",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000015/queue.jsonl",
+      "bytes": 731,
+      "sha256": "c7a8afcf8e815150b7c342f66669f8b94e614ebc8dbd59d8caed84586d725024",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000020/queue.jsonl",
+      "bytes": 731,
+      "sha256": "e858edad7873d700549d4fb75f144d27ca967e1e28c976aef6188a2a77035fa2",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000025/queue.jsonl",
+      "bytes": 731,
+      "sha256": "865437fc53af7dfb5944d343c5176542900dc7278e3468c8b1f8797edb61ceb5",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 136926,
+      "sha256": "e64f6b4b240f2917071c2168b275dc07b18ae67228eca0c2cddab24f28a15dcb"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/collector-logs/case-000008.log",
+      "bytes": 81334,
+      "sha256": "1c88a7fd6dc0dc5bcd1d26fd3afaf150af2b12b0d6117ee667c9d7807d6b7253"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/collector-logs/case-000015.log",
+      "bytes": 64683,
+      "sha256": "fac49c1a7504a4ef86ee1549e6e71e5e0a7cce54aebacd20579236e24bdbac0e"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/collector-logs/case-000020.log",
+      "bytes": 85699,
+      "sha256": "cc02cf9342401ef4d1ba850b448396fe6553668e9af579f43305920d3ab5238b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/collector-logs/case-000025.log",
+      "bytes": 75783,
+      "sha256": "4c5a9f5992a8236e489649f3aa81187fa22bed261824fdb0cc7cf3955026db66"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000002-614869eeeae013d2.result.json",
+      "bytes": 4991006,
+      "sha256": "c90115493d907a75adc6846cce8b054fbdccd13133ab05196642f3a05ecd31db"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000002-614869eeeae013d2.trace.jsonl",
+      "bytes": 1141691,
+      "sha256": "d8019a489d0cf945ca4364a3bb2b1cac3b3495603944a1f3ed06a9172820b406",
+      "lines": 693
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000008-a7b5ef3f1db77600.result.json",
+      "bytes": 2642433,
+      "sha256": "cf5fa6480840160ffb078188203400b733da9a2861b419188f8d7ee36f5893fa"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000008-a7b5ef3f1db77600.trace.jsonl",
+      "bytes": 661225,
+      "sha256": "bf37fcf9168f7e28ec000316f06acaea43089d9629822f70ec2b7fe3a0bd39c1",
+      "lines": 441
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000015-f40ce03f21f5cc88.result.json",
+      "bytes": 2103375,
+      "sha256": "9d9ac39743d0de811d426ae7244e6ec2ef15ff095ff18d2147d26c0aab65894b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000015-f40ce03f21f5cc88.trace.jsonl",
+      "bytes": 614014,
+      "sha256": "29352a53b897d88aa558c0126ddfcc9df1b6562ebc6b7a8dce3db1a4d08cf63f",
+      "lines": 382
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000020-8448a5ecd5de79b7.result.json",
+      "bytes": 2708133,
+      "sha256": "acf0644fcfd89ca99320aeabe415ece4c4130044bf0b2ec2e7d0fa28ec515343"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000020-8448a5ecd5de79b7.trace.jsonl",
+      "bytes": 624725,
+      "sha256": "dc162659f897827689c5484b22191f31936b04155e94135e1975f3d83184f5b6",
+      "lines": 477
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000025-4f2517a737d4af52.result.json",
+      "bytes": 2472465,
+      "sha256": "74e5be8225f0cc004d042c6d7262fa54e31d72978ab760cf18c1cc7d02f45a8b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/jobs/000025-4f2517a737d4af52.trace.jsonl",
+      "bytes": 643979,
+      "sha256": "dbbabc117a7f7651cbca4afd4a41f169aebbcf5d325956cdecd1d0c6754ef374",
+      "lines": 430
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/journal.jsonl",
+      "bytes": 40424,
+      "sha256": "7582f4432cb12537db4755aa72908454c0a879f49576a37558b997c2353baac7",
+      "lines": 44
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 4991006,
+      "sha256": "c90115493d907a75adc6846cce8b054fbdccd13133ab05196642f3a05ecd31db",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "f34dc02f28697c29e79cb04fd44fc6a154c13762d999d1e04629a49af4816daa"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000008.results.jsonl",
+      "bytes": 2642433,
+      "sha256": "cf5fa6480840160ffb078188203400b733da9a2861b419188f8d7ee36f5893fa",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000008.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "0b86b437c663cbd6ac07b5fd21292022db7271301f943139cb360b9dd7c724f0"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000015.results.jsonl",
+      "bytes": 2103375,
+      "sha256": "9d9ac39743d0de811d426ae7244e6ec2ef15ff095ff18d2147d26c0aab65894b",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000015.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "7ecb89553bb23a7e0fd9b767b50347dcff5d5159b9c45850c278f59ee4a15dd8"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000020.results.jsonl",
+      "bytes": 2708133,
+      "sha256": "acf0644fcfd89ca99320aeabe415ece4c4130044bf0b2ec2e7d0fa28ec515343",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000020.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "831ab1c8308a782a730926135da707a0e4e2d04d4e411d64ff237059fd43f73b"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000025.results.jsonl",
+      "bytes": 2472465,
+      "sha256": "74e5be8225f0cc004d042c6d7262fa54e31d72978ab760cf18c1cc7d02f45a8b",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/results/case-000025.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "4e281bf676abf89cb9259bf5e3eb679cf94868a180f92901a13aaaa91d56e315"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-03/supervisor.log",
+      "bytes": 40424,
+      "sha256": "7582f4432cb12537db4755aa72908454c0a879f49576a37558b997c2353baac7"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000003/queue.jsonl",
+      "bytes": 730,
+      "sha256": "9db61fb220571bb7da9bc6a62b2af5d1816f2d675b2d8a81ee8e0ccbeb15f797",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000007/queue.jsonl",
+      "bytes": 730,
+      "sha256": "5bab5c15dd216ccc47aecfd0e4393442e3d511d09feb34d73786ef90e884471a",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000010/queue.jsonl",
+      "bytes": 731,
+      "sha256": "15f7428d546ab1ff80fc88039d61e93e37c87638bdf300898088a1324e5d6b82",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000013/queue.jsonl",
+      "bytes": 731,
+      "sha256": "944e856679e0519e899b64e0b200c9862f464fd4827c61c64997c50935e836bd",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000018/queue.jsonl",
+      "bytes": 731,
+      "sha256": "b94d3fdab73a2f03cc596debd1145c11fff14d3e41bfca1bdb7f9fec426d78da",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000022/queue.jsonl",
+      "bytes": 731,
+      "sha256": "e644d8a34a925b7179ff17cf07b1a547dae2114ff4c1c3b80ab7ce636d3a02bf",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000029/queue.jsonl",
+      "bytes": 731,
+      "sha256": "25b14cb67893f79651e6a7ea27a72e4d81b6ab43d4e672e62a2f471453de58bf",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 92850,
+      "sha256": "6d89429796a46567b2892b739c1b0104d1ea5ae5123d30af91ce616a8a74783f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000007.log",
+      "bytes": 70608,
+      "sha256": "b68dd9532eb0ad173e5a7377cf24f9aca2cccf2c1f873b87dda41e0017d600f2"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000010.log",
+      "bytes": 64659,
+      "sha256": "bfc037cb2b52a76ceedaea04ebed8dbb627b5784640ed715ee62124202a40e37"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000013.log",
+      "bytes": 42459,
+      "sha256": "4c601fff361b900bbdb01e963e6626524039bdaf34b2d4fa844276e8dc706e79"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000018.log",
+      "bytes": 88492,
+      "sha256": "d81619af2adbddcce3c36a0fd7c0142d90cac9bacf9a413845e1695e73d4795a"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000022.log",
+      "bytes": 98408,
+      "sha256": "040aa2d728bb702179a21dc551fe32a82e378c40026f0cb5e5796cb32d9afa14"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/collector-logs/case-000029.log",
+      "bytes": 65857,
+      "sha256": "be9d5ee5a85d82a7695ff1b7c97abab089ccedd67e8ea531b11ab3dac3c06af5"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000003-ff1ad6c74d7cb1fa.result.json",
+      "bytes": 2999813,
+      "sha256": "b6d5cb2355c02a3816ca20519c465a4602c44bc1dc04b764b46154faf19ffe86"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000003-ff1ad6c74d7cb1fa.trace.jsonl",
+      "bytes": 704709,
+      "sha256": "37d25bac5d1fdfd4288c16399dd647ea0a2f129c66e1e98d86e1d1e3ef7ed07c",
+      "lines": 527
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000007-c9ab581452d011a4.result.json",
+      "bytes": 2117611,
+      "sha256": "fd9cc515b41377893c351dfa1a608c3feba0bfd2d2cb9c319fc6a6f6583e76e0"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000007-c9ab581452d011a4.trace.jsonl",
+      "bytes": 518170,
+      "sha256": "ffc494aac50ec898e942b36f805a0ef5ae1f7722666c71576875704a52608006",
+      "lines": 441
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000010-8a69a50a7cf2feb8.result.json",
+      "bytes": 1870496,
+      "sha256": "89231b25fb522952a94e058e0607088ce6926d51130312911c6ba5aa3746ebdd"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000010-8a69a50a7cf2feb8.trace.jsonl",
+      "bytes": 512993,
+      "sha256": "2bc1fad091f3a7feb002092a7a11892779e06f7a80b05b0dc98d8762b0e277cb",
+      "lines": 411
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000013-ed8b281d827bb844.result.json",
+      "bytes": 1585403,
+      "sha256": "faac2915d15afb3a911b083ccb54c36f22a3749a6e630201576f64740d03c013"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000013-ed8b281d827bb844.trace.jsonl",
+      "bytes": 528345,
+      "sha256": "961e69e7cf687be844cdfbccabfd4b769fc0a5c323efdfb9cb1c3f2328fa7200",
+      "lines": 282
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000018-1d840e16daad3079.result.json",
+      "bytes": 2440282,
+      "sha256": "db43be6c844abeaad21eeb7f541f5675da45e54ae5368579634892988e584757"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000018-1d840e16daad3079.trace.jsonl",
+      "bytes": 599512,
+      "sha256": "4f4f294adcfed920824e75faf1e98dfb00f1f65cf9dd6c405ed4697402cd314a",
+      "lines": 515
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000022-dc05bb9a6dcc89ca.result.json",
+      "bytes": 3172951,
+      "sha256": "0b5b518e56cfdb53b09f069230b608da9c6ff8b6108b57aec2853e393ac3510f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000022-dc05bb9a6dcc89ca.trace.jsonl",
+      "bytes": 796740,
+      "sha256": "9a1f526ae6d6699b448cc6a32baee1adccb069e56b6bcc195ce7b308c052bd85",
+      "lines": 564
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000029-6ad428530c35b693.result.json",
+      "bytes": 2413836,
+      "sha256": "c01541cf98c04ca4f52211d2d66323eab27bd5b2ec3183d72bdf8b4c9e3c0a36"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/jobs/000029-6ad428530c35b693.trace.jsonl",
+      "bytes": 666981,
+      "sha256": "ea776c984809ad653632f882f1d473ebd83c4860f0420670a1be38891a575d87",
+      "lines": 339
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/journal.jsonl",
+      "bytes": 48113,
+      "sha256": "191d2419585808f6bac9b6ce976b2df0b91513e106d410470330ebc808626d3d",
+      "lines": 52
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 2999813,
+      "sha256": "b6d5cb2355c02a3816ca20519c465a4602c44bc1dc04b764b46154faf19ffe86",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "974215293a81824f763f6c851c9368ee0bed296e3b4adbc358b16f2c9654dde3"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000007.results.jsonl",
+      "bytes": 2117611,
+      "sha256": "fd9cc515b41377893c351dfa1a608c3feba0bfd2d2cb9c319fc6a6f6583e76e0",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000007.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "ef938451bf2f2feace4224480de32ec72b310e09495e434433c1a7f935cda206"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000010.results.jsonl",
+      "bytes": 1870496,
+      "sha256": "89231b25fb522952a94e058e0607088ce6926d51130312911c6ba5aa3746ebdd",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000010.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "2e577a97cbd6af25345ad9f22427acc90c96b138507d999895fdbd22139e62db"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000013.results.jsonl",
+      "bytes": 1585403,
+      "sha256": "faac2915d15afb3a911b083ccb54c36f22a3749a6e630201576f64740d03c013",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000013.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "59fb134ed9bbf5e69171a19edcbb57901e1595fbe34bb4df37e5fd808929a783"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000018.results.jsonl",
+      "bytes": 2440282,
+      "sha256": "db43be6c844abeaad21eeb7f541f5675da45e54ae5368579634892988e584757",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000018.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "214af5f8c40d975011c222eb77f6c572fb861c9aca02dd0efecb4878957b6977"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000022.results.jsonl",
+      "bytes": 3172951,
+      "sha256": "0b5b518e56cfdb53b09f069230b608da9c6ff8b6108b57aec2853e393ac3510f",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000022.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "cf3cef9222b26bfc8342cfeafd74e2662f034bbd5efcfeedfdf17ba4907c2bcb"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000029.results.jsonl",
+      "bytes": 2413836,
+      "sha256": "c01541cf98c04ca4f52211d2d66323eab27bd5b2ec3183d72bdf8b4c9e3c0a36",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/results/case-000029.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "6c913dea3dfa5ac0bf7b0e12327ceb9827d0c51f926b9f1dc63d8717a76b01b1"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-04/supervisor.log",
+      "bytes": 48113,
+      "sha256": "191d2419585808f6bac9b6ce976b2df0b91513e106d410470330ebc808626d3d"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000004/queue.jsonl",
+      "bytes": 730,
+      "sha256": "a813a7f6fe90ebb891038c28d67b06514e7cfca8299c59b4b19c83d884ed7402",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000005/queue.jsonl",
+      "bytes": 730,
+      "sha256": "097550194458edc3d2443666845d6727289c60b7ee089bcbe229cd7d34930bdc",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000011/queue.jsonl",
+      "bytes": 731,
+      "sha256": "744418752f0419946775a3e07267846216a3abd6468a368373bcebc1c7f59093",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000016/queue.jsonl",
+      "bytes": 731,
+      "sha256": "52af6dc095479bf5c141ac43efa3922ff07b1e299df75eca93a3222642a8c424",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000023/queue.jsonl",
+      "bytes": 731,
+      "sha256": "4f4764cd8a04ce0b2a846f0822dbfc0a999b1b08e88f2490a77ae92cd5d94723",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/claims/luna-workflowevals-folder-iterate-v3-20261008-case-000028/queue.jsonl",
+      "bytes": 731,
+      "sha256": "b401b28162a6518d05220e8f4a2ee5c4de652ee97d7655e88bb8517a53bf3dbf",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 89674,
+      "sha256": "b112f202e4d4f033bac913daf011f4ebf1ce9f0b087381df81139124015065aa"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000005.log",
+      "bytes": 98431,
+      "sha256": "cfdaf669bbe57f9870b62358214e10bc62d8cce40d9b7580c7bd92c81a199e2f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000011.log",
+      "bytes": 73004,
+      "sha256": "87ff0918e714e37aea5b822156ddd9fa0ad6aef11519bfc29337b738250dc6db"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000016.log",
+      "bytes": 94869,
+      "sha256": "4dd2c01f71b6846e4eba450a8634117027992c08f8b654b87e05a16b2b9ed2ad"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000023.log",
+      "bytes": 59115,
+      "sha256": "c2db3d19a2c330d797853f302f39ec0f48aa2b9e8facd10340eb2a85b9b3c734"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/collector-logs/case-000028.log",
+      "bytes": 127768,
+      "sha256": "cf6abd9c14fe31728548300eccde6268ca2954e3f71959b2cb4cec38617c3e65"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000004-b6e1fd8d87bf0e67.result.json",
+      "bytes": 2442005,
+      "sha256": "8e05f4c1a7ff8df5af7362907476b97abead05ff3dbe266d560af823218f7e9d"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000004-b6e1fd8d87bf0e67.trace.jsonl",
+      "bytes": 664857,
+      "sha256": "d267ea2cd5324b6f0cacc2e5595217734b9198fdb09f5382e38516c83c12c4ae",
+      "lines": 507
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000005-93a1a077923dc2c5.result.json",
+      "bytes": 3005719,
+      "sha256": "26ddcb9ec297665fbc7a7d7dc307f694523ba627be9354c1c0778042d2d31779"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000005-93a1a077923dc2c5.trace.jsonl",
+      "bytes": 811129,
+      "sha256": "1f630b7065a29d3d0e964dc63ff1fe181374fdbfb6da511c8782c46a2ae8c3e5",
+      "lines": 559
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000011-a8327a886f237ab1.result.json",
+      "bytes": 2348536,
+      "sha256": "b0f9843275fdc888151d08698f117a0577f7ca2e34c5704042a2e7887b28d2db"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000011-a8327a886f237ab1.trace.jsonl",
+      "bytes": 517834,
+      "sha256": "d3d9b1805f72362676d41e71a6c1de54ef63789df8f6cb82868e7381f422b815",
+      "lines": 401
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000016-20c13c268f488e55.result.json",
+      "bytes": 3533527,
+      "sha256": "3f368e82e95dbe830e6b60647aca3efda46bdbfd9482ae0d6fdd45884f4996c9"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000016-20c13c268f488e55.trace.jsonl",
+      "bytes": 999117,
+      "sha256": "fecf0d641b6e9e9fbf600f16a3ecfcf7279571ce295da6106e57ff78ef3068d1",
+      "lines": 552
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000023-86ed879e1fad840e.result.json",
+      "bytes": 1831102,
+      "sha256": "e4e76393b4a676f7359fe9351233f342a4042212e78b3ac09633c29b041ea16f"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000023-86ed879e1fad840e.trace.jsonl",
+      "bytes": 534554,
+      "sha256": "99b02652608257caf8d23ac4f9434d5e04dc351b9b55f46481dc8219b118d50f",
+      "lines": 367
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000028-9199452b7e150df2.result.json",
+      "bytes": 3692935,
+      "sha256": "fb2d2c8ab03e7dc6aa59bfa02c2b11a9eae331c1bdfd1c0e07383bf856eb2e35"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/jobs/000028-9199452b7e150df2.trace.jsonl",
+      "bytes": 936832,
+      "sha256": "ee3fdddf54d7ec976a71cd56dcd97d16caf66aaf3e9c554aa665285955e64154",
+      "lines": 703
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/journal.jsonl",
+      "bytes": 48632,
+      "sha256": "4e2746f6e319d40f09a1c567146ed1b3b6b1cb27c12810ae76e4f03f03e2dad5",
+      "lines": 53
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 2442005,
+      "sha256": "8e05f4c1a7ff8df5af7362907476b97abead05ff3dbe266d560af823218f7e9d",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "3cf0284d50e79d21b3437ae34b384f587d6045ece7567f0d46593ac4ba694654"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000005.results.jsonl",
+      "bytes": 3005719,
+      "sha256": "26ddcb9ec297665fbc7a7d7dc307f694523ba627be9354c1c0778042d2d31779",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000005.results.jsonl.manifest.json",
+      "bytes": 578,
+      "sha256": "981e915b189bc74df610e52e575a24bd02742c6425075f925ef1e1367c911014"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000011.results.jsonl",
+      "bytes": 2348536,
+      "sha256": "b0f9843275fdc888151d08698f117a0577f7ca2e34c5704042a2e7887b28d2db",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000011.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "edd037322ff86aafe44b5e529ce0f7eb314f13b44eb21d4b8c08778036725651"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000016.results.jsonl",
+      "bytes": 3533527,
+      "sha256": "3f368e82e95dbe830e6b60647aca3efda46bdbfd9482ae0d6fdd45884f4996c9",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000016.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "c32241098cb1745a3774175d53294dcbb92063e062f3ee46a47890ea74cbbe74"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000023.results.jsonl",
+      "bytes": 1831102,
+      "sha256": "e4e76393b4a676f7359fe9351233f342a4042212e78b3ac09633c29b041ea16f",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000023.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "5a6a44aca97cfb76cda64a9504fc90087ea6d31d7736c3081f7b60d9ae5553c8"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000028.results.jsonl",
+      "bytes": 3692935,
+      "sha256": "fb2d2c8ab03e7dc6aa59bfa02c2b11a9eae331c1bdfd1c0e07383bf856eb2e35",
+      "lines": 1
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/results/case-000028.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "bce48bc18ddfccf7cc0f45a5c786fb072c3a052cf1053ea22e6847dbbcb0cd67"
+    },
+    {
+      "path": "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/slot-05/supervisor.log",
+      "bytes": 48632,
+      "sha256": "4e2746f6e319d40f09a1c567146ed1b3b6b1cb27c12810ae76e4f03f03e2dad5"
+    }
+  ],
+  "bytes": 180675062
+}

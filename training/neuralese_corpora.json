@@ -7082,6 +7082,21 @@
       ],
       "admission": "provenance dependencies only; no additional training admission",
       "notes": "Exact historical inputs referenced by V9 text-source-selection-26.json; required for DGX Maple twin reproducibility. Superseded candidate snapshots do not inherit final V9 admission."
+    },
+    {
+      "id": "neuralese-workflowevals-folder-iterate-v27-luna-closed-raw-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "workflowevals-folder-iterate-20261008-v3/luna-campaign-v1/**/*",
+        "workflowevals-folder-iterate-20261008-v3/closed-review-v1/*"
+      ],
+      "admission": "held-closed-generation-observations-action-review-pending-no-training-admission",
+      "derived_from": [
+        "neuralese-workflowevals-folder-iterate-v27-source-review-launch-20261008-v1",
+        "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v2"
+      ],
+      "notes": "Closed raw V27 Luna campaign with all 30 distinct source variants claimed and terminal, all 30 parent results accepted with exact oracle, zero transport retries. Preserves the full campaign tree including raw per-invocation result/trace files, collector logs, result manifests, journals, queues, dispatch claim ledger, launch record, and per-case closure index. Indices 1 and 5 each have one scope failure despite accepted exact parent results; keep these two trajectories held for action/trace review. The remaining 28 have no scope failures. Thirty are derived task variants across inherited WorkflowEvals groups, with zero independent-world credit. No training, trace, DPO, or action admission."
     }
   ],
   "coverage_backlog": [
