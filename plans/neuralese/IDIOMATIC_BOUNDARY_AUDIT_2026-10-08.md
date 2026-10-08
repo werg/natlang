@@ -986,3 +986,32 @@ The focused eval regression covers `entries`, `keys`, and `values`, including pa
 V18 S1 case 2 (`runs/verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-d463890a2764a09c.trace.jsonl`, action seq 32, child `task-1-30f82fea66e5f8c67c064f45c6bfc19a`) used `answersSoft.map(answer => String(answer))`. The element type was declared `Neuralese<string>`, so the text conversion had an unambiguous trained readout. The compiler rejected it with `neuralese-readout-sync` because a normal `Array.map` callback is synchronous. The task later recovered by changing its code; the first rejection was unnecessary friction, not a persistent campaign failure.
 
 An async enclosing scope can now use this idiom when the callback is inline, non-async, and its inferred return is not thenable. The compiler makes that callback async and awaits the native map result through one shared eval/module path. Runtime checks the actual cross-realm native `Array#map` and ordinary Array species, then awaits callback results while preserving holes and native order. Receiver, method lookup, callback and `thisArg` expressions are evaluated once in their usual order. An overridden map method or custom species receives a clear error rather than being bypassed. Other callback methods such as `filter`, `reduce`, or `forEach` are not rewritten: their callback results have different native meanings, so they need separate semantics. The isolated TypeScript build passed, and `neuralese.test.mjs` passed 33/33, covering sparse arrays, `thisArg`, evaluation order, module/eval behavior, and override/species rejection. Commit `5825a4c3` contains the implementation; no canonical dist was rebuilt.
+
+### V18 data-dependent loops and the execution boundary — 2026-10-08
+
+V18 Luna traces contain repeated `forbidden-loop` rejections for ordinary
+data-dependent algorithms, including Euclid's extended algorithm and base
+conversion (`runs/verified-reasoning-pools-20261008-v18-answer-key-v2/generation-review-v1/luna/campaign-v1/slot-03/jobs/000029-3972ef776897477a.trace.jsonl`, child `task-1-wvq5j6`, actions 8–18; and `slot-03/jobs/000002-d463890a2764a09c.trace.jsonl`, child `task-1-dql9p5`, actions 8–18). These are legitimate deterministic algorithms, not requests for a model to choose a stopping condition. The finite-counter `for` form with an early-exit guard is now accepted by the compiler fix in `d9340de1`, giving these algorithms an ordinary bounded-loop expression when a suitable finite bound is available.
+
+The separate `while` ban remains a language policy because the current execution
+boundary cannot reliably stop every synchronous infinite loop. In Node, an
+explicit eval `timeout_ms` reaches `vm.runInContext` and can stop synchronous
+work during initial evaluation. It is optional, the default environment has no
+timeout, and a synchronous loop resumed after `await` can starve the timer. The
+browser evaluator uses `new Function` plus an asynchronous timeout race, which
+cannot interrupt a synchronous loop on the UI thread. Action/tool-call budgets
+do not count iterations, and `numericProgress` applies only to recognized
+counted `for` loops; it is not a general execution budget. See
+`plans/TERMINATION_ASYNC_STATE.md` for the no-default-gas design and
+`ts-host/src/environment.ts` / `ts-host/src/browser/environment.ts` for these
+execution paths.
+
+For deterministic arithmetic or data algorithms, guidance should prefer an
+ordinary finite counted `for` loop with an early-exit condition when its bound
+is known. Do not prescribe model-controlled `iterateOn` as a substitute for
+Euclid or base conversion: its stopping predicate has different semantics and
+adds avoidable model work. No timer, gas counter, or compiler relaxation is
+introduced here. A future interruptible execution-isolation boundary could
+allow arbitrary JavaScript loops without a blanket language ban or default
+language timeout; current Node/browser execution does not provide that boundary
+for all loop placements.
