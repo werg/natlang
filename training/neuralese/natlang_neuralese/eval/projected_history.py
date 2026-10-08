@@ -182,5 +182,90 @@ def main(argv=None):
     (args.out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
 
 
+
+AUTOREGRESSIVE_KINDS = ('ar_greedy', 'ar_projection', 'ar_sketch')
+
+
+@torch.no_grad()
+def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE_KINDS):
+    """Self-fed rollouts from one prefix, one position at a time.
+
+    ar_greedy feeds back the crisp greedy token; ar_projection the full-depth projection of the top state (the
+    autoregressive Neuralese initialization); ar_sketch the shallow sketch of the shallow state, which is what
+    sequence passes approximate in parallel (depth N is exact for the first N positions). Each payload has
+    ``steps`` positions aligned with the targets they predict, like the matched-history payloads.
+    """
+    from ..train.execution import prefill_write_context
+    if heads.read_markers:
+        raise ValueError('autoregressive history controls require the raw read profile')
+    prefix_embeddings = backbone.embed(prefix)
+    payloads = {}
+    for kind in kinds:
+        if kind not in AUTOREGRESSIVE_KINDS:
+            raise ValueError(f'unknown autoregressive control {kind}')
+        # A separate prefill per rollout: no-grad caches grow in place.
+        context = prefill_write_context(backbone, heads, prefix_embeddings)
+        cache, values = context.cache, []
+        state, top = context.state[:, None], context.top[:, None]
+        for position in range(steps):
+            if kind == 'ar_sketch':
+                value = heads.feedback(state)
+            elif kind == 'ar_greedy':
+                value = backbone.embed(backbone.logits(top).argmax(-1))
+            else:
+                value = heads.content(torch.zeros_like(top), top)
+            values.append(value)
+            if position == steps - 1:
+                break
+            history = heads.read_embeddings(backbone, value)
+            if kind == 'ar_sketch':
+                state, cache = backbone.run_layers(history, range(0, heads.cutoff), cache)
+            else:
+                top, cache = backbone.run_layers(history, range(backbone.num_layers), cache)
+        payloads[kind] = torch.cat(values, 1)
+        del cache
+    return payloads
+
+
+@torch.no_grad()
+def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, kinds=AUTOREGRESSIVE_KINDS):
+    """Score self-fed histories with the same full-stack consumer as the matched controls.
+
+    Gold CE over the first ``steps`` targets given each self-generated history, against the teacher-forced gold
+    history and against the crisp autoregressive (ar_greedy) run; the latter is the Neuralese-vs-crisp parity
+    that gates the cutover from sketch initialization to autoregressive initialization.
+    """
+    steps = min(int(steps), span.shape[1])
+    if steps < 2:
+        raise ValueError('autoregressive controls need at least two target positions')
+    span = span[:, :steps]
+    payloads = autoregressive_payloads(backbone, heads, prefix, steps, kinds)
+    payloads = {'gold': backbone.embed(span), **payloads}
+    prefix_embeddings = backbone.embed(prefix)
+    scores = {}
+    for name, payload in payloads.items():
+        history = heads.read_embeddings(backbone, payload[:, :-1])
+        out = backbone.forward_embeds(torch.cat((prefix_embeddings, history), 1), logits=False)
+        states = out['h_final'][:, prefix.shape[1]-1:]
+        _, _, prediction, _, losses = chunked_readout(
+            backbone, states, span, backbone.controls.close_id, gradients=False)
+        scores[name] = (prediction, losses)
+        del out, states
+    gold_prediction, gold_losses = scores['gold']
+    crisp_prediction, crisp_losses = scores.get('ar_greedy', (None, None))
+    rows = {}
+    for name, (prediction, losses) in scores.items():
+        row = {'tokens': losses.numel(), 'ce': float(losses.mean()),
+               'gold_accuracy': float((prediction == span).float().mean()),
+               'ce_delta_from_gold': float((losses - gold_losses).mean()),
+               'argmax_agreement_with_gold': float((prediction == gold_prediction).float().mean())}
+        if crisp_losses is not None:
+            row['ce_delta_from_ar_greedy'] = float((losses - crisp_losses).mean())
+            row['argmax_agreement_with_ar_greedy'] = float((prediction == crisp_prediction).float().mean())
+        rows[name] = row
+    return {'schema': 'natlang.autoregressive-history-controls/1', 'steps': steps, 'windows': span.shape[0],
+            'consumer': 'full stack over prefix + history, scored on gold targets', 'scores': rows}
+
+
 if __name__ == '__main__':
     main()

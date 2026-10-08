@@ -178,18 +178,25 @@ class RolloutStage:
     observations (after at least ``min_evals`` at that depth). A plateau at the target depth ``passes``
     unfreezes the whole stack at that depth. Each depth starts its own plateau record, since its metric covers
     one more pass. Plateau is not qualification. Without ``sketch_first`` the whole stack trains at ``passes``.
+
+    With ``converge_ratio`` the ramp also deepens as soon as the parallel rollout is settling: the deepest
+    trained pass's held CE delta is within ``converge_ratio`` times the pass before it (and at least
+    ``min_evals`` observations were made at this depth). The plateau rule remains the fallback.
     """
 
     SCHEMA = "natlang.sketch-rollout-stage/2"
 
     def __init__(self, *, passes, start_passes=None, sketch_first=True, min_evals=2, patience=3,
-                 min_relative_improvement=0.01):
+                 min_relative_improvement=0.01, converge_ratio=None):
         start_passes = passes if start_passes is None or not sketch_first else min(int(start_passes), int(passes))
         if passes < 2 or start_passes < 2:
             raise ValueError("a sketch rollout needs at least two sequence passes")
         if min_evals < 1 or patience < 1 or not math.isfinite(min_relative_improvement) or min_relative_improvement < 0:
             raise ValueError("positive evaluation counts and a finite nonnegative improvement are required")
+        if converge_ratio is not None and (not math.isfinite(converge_ratio) or converge_ratio < 1):
+            raise ValueError("converge_ratio must be a finite ratio of at least 1")
         self.config = {"passes": int(passes), "start_passes": int(start_passes), "sketch_first": bool(sketch_first),
+                       "converge_ratio": None if converge_ratio is None else float(converge_ratio),
                        "min_evals": int(min_evals), "patience": int(patience),
                        "min_relative_improvement": float(min_relative_improvement)}
         self.phase = "sketch_only" if sketch_first else "whole_stack"
@@ -204,12 +211,16 @@ class RolloutStage:
         self.best = None
         self.last_significant = 0
 
-    def observe(self, rollout_ce_delta):
-        """Observe one held evaluation's CE delta over the trained sketch-history passes (1 .. depth-1)."""
+    def observe(self, rollout_ce_delta, pass_ce_deltas=None):
+        """Observe one held evaluation's CE delta over the trained sketch-history passes (1 .. depth-1).
+
+        ``pass_ce_deltas`` maps pass index to that pass's held CE delta, for the convergence rule."""
         if isinstance(rollout_ce_delta, bool) or not isinstance(rollout_ce_delta, (int, float)) or not math.isfinite(rollout_ce_delta):
             raise ValueError("invalid rollout CE delta")
         value = float(rollout_ce_delta)
-        self.history.append({"depth": self.depth, "phase": self.phase, "ce_delta": value})
+        self.history.append({"depth": self.depth, "phase": self.phase, "ce_delta": value,
+                             **({"pass_ce_deltas": {str(k): float(v) for k, v in pass_ce_deltas.items()}}
+                                if pass_ce_deltas else {})})
         if self.phase != "sketch_only":
             return self.controls()
         self.depth_observations += 1
@@ -220,10 +231,24 @@ class RolloutStage:
             self.last_significant = count
         elif value < self.best:
             self.best = value
-        if count >= self.config["min_evals"] and count - self.last_significant >= self.config["patience"]:
+        converged = False
+        ratio = self.config.get("converge_ratio")
+        deepest, previous = self.depth - 1, self.depth - 2
+        if ratio is not None and pass_ce_deltas and previous >= 1 and count >= self.config["min_evals"]:
+            last, before = pass_ce_deltas.get(deepest), pass_ce_deltas.get(previous)
+            if last is not None and before is not None and math.isfinite(last) and math.isfinite(before):
+                converged = last <= ratio * max(before, 0.0) + 1e-12
+        plateau = count >= self.config["min_evals"] and count - self.last_significant >= self.config["patience"]
+        if converged and self.depth < self.config["passes"]:
+            self.deepened.append({"observation": len(self.history), "from": self.depth, "to": self.depth + 1,
+                                  "reason": "converged", "deepest_ce_delta": pass_ce_deltas[deepest],
+                                  "previous_ce_delta": pass_ce_deltas[previous]})
+            self.depth += 1
+            self._reset_depth()
+        elif plateau:
             if self.depth < self.config["passes"]:
                 self.deepened.append({"observation": len(self.history), "from": self.depth, "to": self.depth + 1,
-                                      "plateau_ce_delta": value})
+                                      "reason": "plateau", "plateau_ce_delta": value})
                 self.depth += 1
                 self._reset_depth()
             else:

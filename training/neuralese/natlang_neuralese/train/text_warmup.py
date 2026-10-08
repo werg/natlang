@@ -718,6 +718,12 @@ def main(argv=None):
                    help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
                         'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
                         'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--ar-control-steps',type=int,default=256,
+                   help='held autoregressive controls (crisp greedy, full-projection and sketch self-fed rollouts) '
+                        'over this many positions of the first held batch; 0 disables. Diagnostic, not a gate')
+    p.add_argument('--rollout-converge-ratio',type=float,default=1.25,
+                   help='also deepen the sketch-only ramp once the deepest trained pass\'s held CE delta is within '
+                        'this ratio of the pass before it (the parallel rollout is settling); plateau stays the fallback')
     p.add_argument('--rollout-start-passes',type=int,default=4,
                    help='sketch-only rollout depth to start the one-pass-per-plateau ramp from')
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
@@ -972,6 +978,7 @@ def main(argv=None):
     from .foundation_schedule import RolloutStage
     rollout=(RolloutStage(passes=a.rollout_passes,start_passes=a.rollout_start_passes,
                           sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
+                          converge_ratio=a.rollout_converge_ratio,
                           patience=a.projection_patience,min_relative_improvement=a.projection_min_improvement)
              if a.rollout_passes else None)
     restored=resumed or continuation
@@ -1035,10 +1042,12 @@ def main(argv=None):
     def evaluate():
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
+        ar_batch=None
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
                 prefix,span,_=ids_for(batch)
+                if ar_batch is None:ar_batch=(prefix,span)
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
@@ -1065,6 +1074,12 @@ def main(argv=None):
                         for n,value in values.items():
                             if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
                         regional['tokens']+=values['tokens']
+            autoregressive_controls=None
+            if a.ar_control_steps and ar_batch is not None:
+                from ..eval.projected_history import autoregressive_history_metrics
+                started_ar=time.perf_counter()
+                autoregressive_controls=autoregressive_history_metrics(backbone,heads,*ar_batch,steps=a.ar_control_steps)
+                autoregressive_controls['seconds']=time.perf_counter()-started_ar
         for row in strata.values():
             for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         for key,row in strata.items():
@@ -1080,9 +1095,15 @@ def main(argv=None):
         rollout_rows=[r for k,r in strata.items() if 1<=int(k.split('-')[1])<trained_depth and not k.endswith('-last256')]
         rollout_tokens=sum(r['tokens'] for r in rollout_rows)
         rollout_ce_delta=sum(r['ce_delta']*r['tokens'] for r in rollout_rows)/rollout_tokens if rollout_tokens else None
+        pass_ce_deltas={}
+        for key,row in strata.items():
+            if key.endswith('-last256'):continue
+            index=int(key.split('-')[1]);total_row=pass_ce_deltas.setdefault(index,[0.,0])
+            total_row[0]+=row['ce_delta']*row['tokens'];total_row[1]+=row['tokens']
+        pass_ce_deltas={index:value/count for index,(value,count) in pass_ce_deltas.items() if count}
         if last_schedule_step is None or step>last_schedule_step:
             if rollout is not None and schedule.plateau_reached and rollout_ce_delta is not None:
-                rollout.observe(rollout_ce_delta)
+                rollout.observe(rollout_ce_delta,pass_ce_deltas)
             schedule.observe(errors);last_schedule_step=step
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
@@ -1090,8 +1111,10 @@ def main(argv=None):
                 'held_probe_selection':held_selection_eval,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
-                'sketch_history_ce_delta':rollout_ce_delta,'evaluation_passes':max(3,a.rollout_passes)}
+                'sketch_history_ce_delta':rollout_ce_delta,'pass_ce_deltas':pass_ce_deltas,
+                'evaluation_passes':max(3,a.rollout_passes)}
         if rollout is not None:report['rollout']=rollout.controls()
+        if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         matched_summary={}
         for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}
