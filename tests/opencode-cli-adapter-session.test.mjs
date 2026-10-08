@@ -99,6 +99,7 @@ test('zero audited actions keep the strict JSON envelope protocol', () => {
 });
 
 const exactV8Text = readFileSync(fileURLToPath(new URL('./fixtures/opencode-step5-v8-text-envelope.json', import.meta.url)), 'utf8');
+const exactV12Retry2Text = readFileSync(fileURLToPath(new URL('./fixtures/opencode-step5-v12-retry2-text-envelope.json', import.meta.url)), 'utf8');
 
 test('exact v8 declared envelope is accepted as prompt-directed text with raw/context pins', () => {
   const rawHash = createHash('sha256').update(exactV8Text).digest('hex');
@@ -112,6 +113,36 @@ test('exact v8 declared envelope is accepted as prompt-directed text with raw/co
   assert.ok(JSON.parse(result.calls[0].function.arguments).plan.startsWith('Evidence:'));
   assert.equal(rawHash, '8421a21620e44563b0a9ac62c4db71eef5dc3d19981b381285139a0eedf993d4');
   assert.match(contextHash, /^[a-f0-9]{64}$/);
+});
+
+test('exact v12-retry2 malformed response remains rejected with its raw hash pinned', () => {
+  const rawHash = createHash('sha256').update(exactV12Retry2Text).digest('hex');
+  assert.equal(Buffer.byteLength(exactV12Retry2Text), 1034);
+  assert.equal(rawHash, '99e6c41de48f1d7361fec153c76f9c5f934531478b2a6653eaf5256a288212db');
+  assert.match(exactV12Retry2Text, /ScoreFact\.\"]}}\]}/);
+  assert.throws(() => buildAuditedCompletion({ responseText: exactV12Retry2Text,
+    names: ['execution_plan'], recordedActions: [] }), /invalid JSON text/);
+});
+
+test('raw LF, CR, and TAB inside JSON strings are escaped losslessly before strict validation', () => {
+  const strict = JSON.stringify({ content: 'line1\nline2\r\tend', toolCalls: [
+    { name: 'probe_tool', arguments: { value: 1 } }
+  ] });
+  const responseText = strict.replace('line1\\nline2\\r\\tend', 'line1\nline2\r\tend');
+  const result = buildAuditedCompletion({ responseText, names: ['probe_tool'], recordedActions: [] });
+  assert.equal(result.responseNormalization, 'raw_string_controls_escaped');
+  assert.equal(result.finalTextStatus, 'validated_prompt_directed_text_actions_raw_controls_escaped');
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.content, null);
+});
+
+test('raw controls outside strings and other malformed JSON structure are never repaired', () => {
+  for (const responseText of [
+    '{\u0000"content":"x","toolCalls":[]}',
+    '{"content":"unterminated\n,"toolCalls":[]}',
+    '{"content":"x","toolCalls":[{"name":"probe_tool","arguments":{}}]'
+  ]) assert.throws(() => buildAuditedCompletion({ responseText, names: ['probe_tool'], recordedActions: [] }),
+    /invalid JSON text/);
 });
 
 test('the structured prompt permits validated text actions without claiming MCP fidelity', () => {

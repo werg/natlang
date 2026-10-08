@@ -135,9 +135,32 @@ async function readActionRowsAfterWrite(logPath, startBytes, expectedCount, time
 }
 
 export function parseOpenCodeEnvelope(text, names) {
-  let value;
+  let value, normalization = 'strict_json';
   try { value = JSON.parse(text); }
-  catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
+  catch {
+    // Some model responses contain literal line breaks/tabs inside JSON string
+    // values. Escaping those controls is semantics-preserving; do not repair
+    // quotes, commas, delimiters, or any other malformed JSON structure.
+    let inString = false, escaped = false, changed = false, repaired = '';
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i], code = text.charCodeAt(i);
+      if (inString) {
+        if (escaped) { repaired += char; escaped = false; continue; }
+        if (char === '\\') { repaired += char; escaped = true; continue; }
+        if (char === '"') { repaired += char; inString = false; continue; }
+        if (code <= 0x1f) {
+          repaired += `\\u${code.toString(16).padStart(4, '0')}`;
+          changed = true;
+          continue;
+        }
+      } else if (char === '"') inString = true;
+      repaired += char;
+    }
+    if (!changed) throw new Error('OpenCode CLI returned invalid JSON text');
+    try { value = JSON.parse(repaired); }
+    catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
+    normalization = 'raw_string_controls_escaped';
+  }
   if (!isObject(value) || Object.keys(value).sort().join(',') !== 'content,toolCalls' ||
       typeof value.content !== 'string' || !Array.isArray(value.toolCalls))
     throw new Error('OpenCode CLI response must have exactly content and toolCalls fields');
@@ -151,7 +174,7 @@ export function parseOpenCodeEnvelope(text, names) {
   const fingerprints = calls.map(call => canonicalJson(call));
   if (new Set(fingerprints).size !== fingerprints.length)
     throw new Error('OpenCode text action envelope contains ambiguous duplicate calls');
-  return { content: value.content, calls };
+  return { content: value.content, calls, normalization };
 }
 
 /**
@@ -174,7 +197,10 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
     const textCalls = envelope.calls.map(row => ({ id: `call_${randomUUID()}`, type: 'function',
       function: { name: row.name, arguments: JSON.stringify(row.arguments) } }));
     return { content: textCalls.length ? null : (envelope.content || null), calls: textCalls,
-      finalTextStatus: textCalls.length ? 'validated_prompt_directed_text_actions' : 'strict_json_envelope_no_actions',
+      responseNormalization: envelope.normalization,
+      finalTextStatus: textCalls.length ? (envelope.normalization === 'strict_json'
+        ? 'validated_prompt_directed_text_actions' : 'validated_prompt_directed_text_actions_raw_controls_escaped')
+        : (envelope.normalization === 'strict_json' ? 'strict_json_envelope_no_actions' : 'json_envelope_no_actions_raw_controls_escaped'),
       actionRoute: textCalls.length ? 'prompt_directed_text_envelope' : 'strict_json_text_no_actions',
       actionFidelity: textCalls.length ? 'prompt_directed_text' : 'none' };
   }
@@ -577,6 +603,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
         cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
       diagnostics.final_text_status = completion.finalTextStatus;
+      diagnostics.response_normalization = completion.responseNormalization ?? 'not_applicable';
       diagnostics.action_route = completion.actionRoute;
       diagnostics.action_fidelity = completion.actionFidelity;
       const calls = completion.calls;
@@ -599,6 +626,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
           action_log_byte_range: [startBytes, rawLog.length], action_record_count: calls.length,
           final_text_sha256: diagnostics.final_text_sha256, final_text_bytes: diagnostics.final_text_bytes,
           final_text_status: completion.finalTextStatus, action_route: completion.actionRoute,
+          response_normalization: completion.responseNormalization ?? 'not_applicable',
           action_fidelity: completion.actionFidelity,
           route: 'official OpenCode CLI run --attach; default tool inventory; local action MCP',
           cli_turn_number: cliTurnCount, cli_turn_limit: maxCliTurns,
