@@ -10485,6 +10485,23 @@
       "notes": "Immutable comparison packet preserves the earlier CLI/SDK READY controls, later SDK plain/structured/system/user-frame 503 responses, one canceled collector 503, and local CLI action-harness setup attempts that never reached a provider prompt. One prior exact READY per route does not establish sustained availability; the repeated 503s do not isolate an underlying cause or prove an SDK bug. User-frame no-side-effect action probe recorded zero actions. Official free model/client only, no direct provider bypass/header spoof, no paid fallback, no source-case rerun, no qualification, data, DPO, or training admission."
     },
     {
+      "id": "verified-reasoning-pools-v20-luna-retry-campaign-v2-closed-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2",
+      "include": [
+        "luna/campaign-v2/*",
+        "luna/campaign-v2/**/*",
+        "luna/retry-closeout-v2/*",
+        "luna/retry-closeout-v2/**/*"
+      ],
+      "admission": "held-provider-outcome-evidence-only-no-training-or-dpo-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
+        "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
+      ],
+      "notes": "Complete immutable Luna retry campaign-v2 raw tree (57 files) and exact seven-row pair closeout. Cases 3, 4, 8 and 10 passed the unchanged oracle; 19, 20 and 22 remain rejected. Same V20 source rows and program IR hashes as their prior attempts; zero new-world credit. Provider outcomes only; no source/gold mutation, action/trace/DPO/training admission, or automatic pairing."
+    },
+    {
       "id": "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1",
       "owner": "pop",
       "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2/retry-review-v1",
