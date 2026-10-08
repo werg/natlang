@@ -77,11 +77,26 @@ class OffloadTests(unittest.TestCase):
         self.assertTrue((self.root / 'checkpoint.pt').exists())
         sync.assert_not_called()
 
+    def test_offload_uses_local_manifest_owner_and_allows_an_explicit_other_host(self):
+        entry = {**self.entry, 'owner': 'dgx'}
+        args = SimpleNamespace(machine='dgx', files=['checkpoint.pt'], host='pop-host',
+                               remote_repo='/remote/repo', reserve_gib=0, execute=False)
+        output = io.StringIO()
+        with patch.object(module, 'local_references', return_value={
+                'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
+             contextlib.redirect_stdout(output):
+            module.offload(self.repo, entry, self.manifest, args)
+        preflight = json.loads(output.getvalue())
+        self.assertEqual(preflight['machine'], 'dgx')
+        self.assertIn('--machine dgx --host pop-host', preflight['execute_command'])
+        self.assertIn('--machine dgx --host pop-host', preflight['restore'])
+
     def test_execute_transfers_and_verifies_subset_before_unlink_and_writes_restore_receipt(self):
         selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
         remote = {'id': selected['id'], 'status': 'verified', 'verification_scope': 'ssh-remote',
                   'manifest_sha256': hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest(),
-                  'verified_hostname': 'dgx-host', 'verified_repo': '/remote/repo'}
+                  'verified_hostname': 'pop-host', 'machine_boot_id': 'remote-boot',
+                  'verified_repo': '/remote/repo'}
         def transfer(_repo, _entry, _manifest, transfer_args):
             self.assertEqual(transfer_args.action, 'sync')
             self.assertEqual(transfer_args.machine, 'pop')
@@ -94,6 +109,7 @@ class OffloadTests(unittest.TestCase):
         with patch.object(module, 'local_references', return_value={
                 'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
              patch.object(module.socket, 'gethostname', return_value='pop-host'), \
+             patch.object(module, 'machine_boot_id', return_value='local-boot'), \
              patch.object(module, 'sync', side_effect=transfer), contextlib.redirect_stdout(output):
             module.offload(self.repo, self.entry, self.manifest, self.args)
         result = json.loads(output.getvalue())
@@ -105,19 +121,36 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(receipt['local_hostname'], 'pop-host')
         self.assertIn('--file checkpoint.pt', receipt['restore'])
 
-    def test_execute_refuses_to_unlink_when_ssh_verification_resolves_to_local_host(self):
+    def test_execute_refuses_to_unlink_when_ssh_verification_runs_on_same_kernel_boot(self):
         selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
         remote = {'id': selected['id'], 'status': 'verified', 'verification_scope': 'ssh-remote',
                   'manifest_sha256': hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest(),
-                  'verified_hostname': 'pop-host'}
+                  'verified_hostname': 'dgx-host', 'machine_boot_id': 'same-boot'}
         self.args.execute = True
         with patch.object(module, 'local_references', return_value={
                 'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
-             patch.object(module.socket, 'gethostname', return_value='pop-host'), \
+             patch.object(module, 'machine_boot_id', return_value='same-boot'), \
              patch.object(module, 'sync', return_value=remote):
-            with self.assertRaisesRegex(ValueError, 'resolved to this local host'):
+            with self.assertRaisesRegex(ValueError, 'same kernel boot'):
                 module.offload(self.repo, self.entry, self.manifest, self.args)
         self.assertTrue((self.root / 'checkpoint.pt').exists())
+
+    def test_ordinary_verification_keeps_historical_symlink_alias_support_but_offload_rejects_it(self):
+        target = self.root / 'target.pt'
+        target.write_bytes(self.body)
+        alias = self.root / 'checkpoint.pt'
+        alias.unlink()
+        alias.symlink_to(target.name)
+        errors, checked, _ = module.verify_files(self.root, [self.manifest['files'][0]])
+        self.assertEqual(errors, [])
+        self.assertEqual(checked, ['checkpoint.pt'])
+        errors, _, _ = module.verify_files(self.root, [self.manifest['files'][0]], reject_symlinks=True)
+        self.assertEqual(errors[0]['reason'], 'symlink')
+        with patch.object(module, 'local_references', return_value={
+                'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}):
+            with self.assertRaisesRegex(ValueError, 'do not match'):
+                module.offload(self.repo, self.entry, self.manifest, self.args)
+        self.assertTrue(alias.is_symlink())
 
     def test_offload_rejects_unmanifested_paths_and_live_references_before_transfer(self):
         with patch.object(module, 'local_references', return_value={
@@ -171,17 +204,23 @@ class OffloadTests(unittest.TestCase):
         manifest_path = self.repo / 'training' / 'corpus-manifests' / 'closed-checkpoint.json'
         registry.parent.mkdir(parents=True)
         manifest_path.parent.mkdir(parents=True)
-        registry.write_text('{"corpora":[]}\n')
+        registry.write_text(json.dumps({'corpora': [self.entry]}) + '\n')
         manifest_path.write_text(json.dumps(self.manifest) + '\n')
-        snapshots = [registry.read_bytes(), manifest_path.read_bytes()]
+        committed_registry = json.dumps({'corpora': [self.entry]}, indent=2).encode() + b'\n'
+        snapshots = [committed_registry, manifest_path.read_bytes()]
         results = [SimpleNamespace(returncode=0, stdout=data, stderr=b'') for data in snapshots]
+        with patch.object(module.subprocess, 'run', side_effect=results):
+            module.require_committed_offload_snapshot(self.repo, 'closed-checkpoint')
+        registry.write_text(json.dumps({'corpora': [self.entry, {'id': 'unrelated', 'owner': 'dgx'}]}) + '\n')
+        results = [SimpleNamespace(returncode=0, stdout=snapshots[0], stderr=b''),
+                   SimpleNamespace(returncode=0, stdout=snapshots[1], stderr=b'')]
         with patch.object(module.subprocess, 'run', side_effect=results):
             module.require_committed_offload_snapshot(self.repo, 'closed-checkpoint')
         manifest_path.write_text('{}\n')
         results = [SimpleNamespace(returncode=0, stdout=snapshots[0], stderr=b''),
                    SimpleNamespace(returncode=0, stdout=snapshots[1], stderr=b'')]
         with patch.object(module.subprocess, 'run', side_effect=results):
-            with self.assertRaisesRegex(ValueError, 'committed, unchanged'):
+            with self.assertRaisesRegex(ValueError, 'manifest unchanged at HEAD'):
                 module.require_committed_offload_snapshot(self.repo, 'closed-checkpoint')
 
     def test_push_subset_uses_rsync_then_persists_a_separate_remote_subset_receipt(self):

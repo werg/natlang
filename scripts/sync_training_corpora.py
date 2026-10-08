@@ -49,13 +49,30 @@ def manifest_path(repo, identity):
 
 
 def require_committed_offload_snapshot(repo, identity):
-    """Offload only from the exact registry and immutable manifest committed at HEAD."""
-    for path in [repo / 'training/neuralese_corpora.json', manifest_path(repo, identity)]:
+    """Require the selected registry entry and immutable manifest at HEAD."""
+    registry_path = repo / 'training/neuralese_corpora.json'
+    selected_manifest_path = manifest_path(repo, identity)
+    committed = {}
+    for path in [registry_path, selected_manifest_path]:
         relative_path = path.relative_to(repo).as_posix()
         result = subprocess.run(['git', 'show', f'HEAD:{relative_path}'], cwd=repo,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode or not path.is_file() or path.read_bytes() != result.stdout:
-            raise ValueError(f'offload requires committed, unchanged registry and manifest: {relative_path}')
+        if result.returncode or not path.is_file():
+            raise ValueError(f'offload requires a committed registry entry and manifest: {relative_path}')
+        committed[relative_path] = result.stdout
+    try:
+        current_registry = json.loads(registry_path.read_text())
+        committed_registry = json.loads(committed[registry_path.relative_to(repo).as_posix()])
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f'offload requires a readable registry: {registry_path}') from error
+    def find_entry(registry):
+        matches = [entry for entry in registry.get('corpora', []) if entry.get('id') == identity]
+        return matches[0] if len(matches) == 1 else None
+    if find_entry(current_registry) is None or find_entry(current_registry) != find_entry(committed_registry):
+        raise ValueError(f'offload requires the selected registry entry unchanged at HEAD: {identity}')
+    manifest_rel = selected_manifest_path.relative_to(repo).as_posix()
+    if selected_manifest_path.read_bytes() != committed[manifest_rel]:
+        raise ValueError(f'offload requires the immutable manifest unchanged at HEAD: {manifest_rel}')
 
 
 def publish(repo, entry):
@@ -119,11 +136,21 @@ def file_stat(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
 
 
-def verify_files(root, files):
+def machine_boot_id():
+    """Return this kernel's boot ID where Linux exposes it."""
+    try:
+        return Path('/proc/sys/kernel/random/boot_id').read_text().strip() or None
+    except OSError:
+        return None
+
+
+def verify_files(root, files, reject_symlinks=False):
     errors, checked, stats = [], [], {}
     for item in files:
         p = root / relative(item['path'])
-        if p.is_symlink() or not p.is_file() or p.stat().st_size != item['bytes']:
+        if reject_symlinks and p.is_symlink():
+            errors.append({'path': item['path'], 'reason': 'symlink'})
+        elif not p.is_file() or p.stat().st_size != item['bytes']:
             errors.append({'path': item['path'], 'reason': 'missing_or_size'})
         else:
             before = file_stat(p)
@@ -143,6 +170,7 @@ def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='
     errors, checked, stats = verify_files(root, manifest['files'])
     receipt = {'id': manifest['id'], 'status': 'failed' if errors else 'verified', 'checked': len(checked),
                'verification_scope': verification_scope, 'verified_hostname': socket.gethostname(),
+               'machine_boot_id': machine_boot_id(),
                'verified_repo': str(repo.resolve()),
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
@@ -234,32 +262,32 @@ def local_references(paths, proc_root=Path('/proc')):
 
 
 def offload(repo, entry, manifest, args):
-    if args.machine != 'pop':
-        raise ValueError('offload is currently limited to selected local Pop files')
     if entry['owner'] != args.machine:
-        raise ValueError('offload requires the local Pop machine to own the registered snapshot')
+        raise ValueError(f'offload requires the local {args.machine} machine to own the registered snapshot')
     selected = select_manifest_files(manifest, args.files or [])
     root = repo / relative(manifest['path'])
     paths = [root / relative(item['path']) for item in selected['files']]
-    errors, checked, stats = verify_files(root, selected['files'])
+    errors, checked, stats = verify_files(root, selected['files'], reject_symlinks=True)
     if errors:
         raise ValueError('local files do not match the immutable manifest: ' + json.dumps(errors))
     references = local_references(paths)
     if references['open_fds'] or references['live_job_references']:
         raise ValueError('selected files are still referenced locally: ' + json.dumps(references))
+    local_boot_id = machine_boot_id()
 
     selection_hash = hashlib.sha256(json.dumps(selected['files'], sort_keys=True).encode()).hexdigest()
     verification_id = f"{manifest['id']}--{selection_hash[:16]}"
-    restore = f"python3 scripts/sync_training_corpora.py restore --machine pop --host {shlex.quote(args.host)} " + \
+    restore = f"python3 scripts/sync_training_corpora.py restore --machine {shlex.quote(args.machine)} --host {shlex.quote(args.host)} " + \
         f"--remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " + \
         ' '.join(f'--file {shlex.quote(item["path"])}' for item in selected['files'])
     if not args.execute:
-        print(json.dumps({'status': 'preflight_only', 'id': manifest['id'], 'files': selected['files'],
+        print(json.dumps({'status': 'preflight_only', 'id': manifest['id'], 'machine': args.machine, 'files': selected['files'],
                           'bytes': selected['bytes'], 'local_sha256_verified': True,
-                          'local_hostname': socket.gethostname(), 'local_references': references,
+                          'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
+                          'local_references': references,
                           'remote': f'{args.host}:{args.remote_repo}/{relative(manifest["path"])}',
                           'will_transfer_and_verify_before_unlink': True, 'restore': restore,
-                          'execute_command': f"python3 scripts/sync_training_corpora.py offload --machine pop --host {shlex.quote(args.host)} --remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " +
+                          'execute_command': f"python3 scripts/sync_training_corpora.py offload --machine {shlex.quote(args.machine)} --host {shlex.quote(args.host)} --remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " +
                                              ' '.join(f'--file {shlex.quote(item["path"])}' for item in selected['files']) + ' --execute'}), flush=True)
         return
 
@@ -272,12 +300,13 @@ def offload(repo, entry, manifest, args):
     if (not remote_receipt or remote_receipt.get('status') != 'verified' or
             remote_receipt.get('manifest_sha256') != hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()):
         raise ValueError('selected remote files were not transferred and verified against their exact manifest')
-    if not remote_receipt.get('verified_hostname') or remote_receipt['verified_hostname'] == socket.gethostname():
-        raise ValueError('remote verification resolved to this local host; refusing to unlink a local copy')
+    remote_boot_id = remote_receipt.get('machine_boot_id')
+    if local_boot_id and remote_boot_id and local_boot_id == remote_boot_id:
+        raise ValueError('remote verification ran on the same kernel boot as this local host; refusing to unlink a local copy')
 
     # Re-hash and re-check references after the remote operation, immediately
     # before the optional unlink, so a changed/opened file is never removed.
-    errors, checked, final_stats = verify_files(root, selected['files'])
+    errors, checked, final_stats = verify_files(root, selected['files'], reject_symlinks=True)
     final_references = local_references(paths)
     if errors or final_stats != stats or final_references['open_fds'] or final_references['live_job_references']:
         raise ValueError('local files or references changed after remote verification: ' + json.dumps({
@@ -286,7 +315,8 @@ def offload(repo, entry, manifest, args):
     receipt = {'schema': 'natlang.artifact-offload/1', 'id': manifest['id'], 'verification_id': verification_id,
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'selected_files': selected['files'], 'bytes': selected['bytes'], 'local_file_stats': final_stats,
-               'local_hostname': socket.gethostname(), 'local_references': final_references,
+               'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
+               'local_references': final_references,
                'remote_verification': remote_receipt,
                'restore': restore, 'status': 'verified_not_unlinked',
                'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
@@ -398,8 +428,8 @@ def main():
     args = parser.parse_args()
     if args.files and (args.action not in {'restore', 'offload'} or not args.ids or len(args.ids) != 1):
         parser.error('--file requires restore/offload and exactly one --id')
-    if args.action == 'offload' and (args.machine != 'pop' or not args.files or not args.ids or len(args.ids) != 1):
-        parser.error('offload requires --machine pop, exactly one --id, and one or more --file paths')
+    if args.action == 'offload' and (not args.files or not args.ids or len(args.ids) != 1):
+        parser.error('offload requires exactly one --id and one or more --file paths')
     if args.execute and args.action != 'offload':
         parser.error('--execute is only valid with offload')
     registry = json.loads((args.repo / 'training/neuralese_corpora.json').read_text())

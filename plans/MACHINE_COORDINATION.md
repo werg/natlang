@@ -97,8 +97,10 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    remote exact manifest and its hashes over SSH, as well as local hashes and
    live references. A local receipt is never backup evidence. Stop if any remote
    file is missing; preserve failed verification and unresolved loss explicitly.
-   For recoverable Pop-only local storage offload, use the manifest-driven
-   command rather than manually sequencing verification and `unlink`:
+   For recoverable local storage offload, use the manifest-driven command
+   rather than manually sequencing verification and `unlink`. `--machine`
+   names the local owner; `--host` names the remote destination. Pop defaults
+   to DGX, while DGX should pass the Pop host explicitly:
 
    ```sh
    # Read-only preflight: exact manifest paths, local hashes, open FDs and
@@ -112,7 +114,8 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
      --id ID --file checkpoint.pt --execute
    ```
 
-   Offload requires a committed, unchanged registry and manifest. Each selected
+   Offload requires the selected committed registry entry and immutable
+   manifest; unrelated registry additions do not block it. Each selected
    path must occur verbatim in that immutable manifest; globs and arbitrary
    paths are rejected. The execute command reuses exact manifest sync, writes a
    remote subset verification receipt without replacing the full-corpus receipt,
@@ -120,6 +123,8 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    local checks, selected files, and a restore command. Unrelated inaccessible
    `/proc` FD directories are recorded, not treated as global blockers; an
    observed selected-file FD or live process reference stops before unlink.
+   A matching Linux kernel boot ID on both sides stops unlinking even if host
+   names differ; duplicate host names alone do not.
    Restore the selected paths with the command in the receipt. This is storage
    management only; it changes no corpus admission or training qualification.
 6. Announce snapshot IDs, source coverage, counts and admission state in the
