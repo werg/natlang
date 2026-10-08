@@ -73,3 +73,11 @@ def test_mellum_logits_match_transformers_reference_across_window_and_yarn_conte
         expected = reference(input_ids=ids).logits
         actual = model(ids).logits
     assert torch.allclose(actual, expected, atol=2e-4, rtol=1e-4), (actual - expected).abs().max()
+
+
+def test_mellum_truncated_load_keeps_per_type_rotary(tmp_path):
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False, layers=2)
+    assert len(model.model.layers) == 2
+    with torch.no_grad():
+        assert model(torch.randint(0, 128, (1, 12))).logits.shape == (1, 12, 128)

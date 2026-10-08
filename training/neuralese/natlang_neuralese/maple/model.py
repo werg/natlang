@@ -153,6 +153,11 @@ class LayerTypeRotary(nn.Module):
         from transformers.models.mellum.modeling_mellum import MellumRotaryEmbedding
 
         fields = {k: v for k, v in config.__dict__.items() if not k.startswith("_")}
+        # A truncated load (``layers``) keeps the checkpoint's per-layer lists; the rotary tables need only the types.
+        layers = fields.get("num_hidden_layers")
+        for key in ("layer_types", "mlp_layer_types"):
+            if isinstance(fields.get(key), list):
+                fields[key] = fields[key][:layers]
         self.inner = MellumRotaryEmbedding(MellumConfig(**fields))
         self.layer_types = sorted(set(config.layer_types))
 
