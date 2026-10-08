@@ -592,6 +592,14 @@ def test_evaluation_batches_preserve_strata_and_every_window():
         assert len({(len(w['ids']),w['prefix'],w['offset']==0) for w in batch})==1
 
 
+def test_evaluation_batches_cap_tokens_per_batch():
+    from natlang_neuralese.train.text_warmup import evaluation_batches
+    windows=[{'ids':list(range(length)), 'prefix':1, 'offset':0, 'index':index}
+             for index,length in enumerate([9]*5+[4]*5+[30])]
+    batches=list(evaluation_batches(windows,4,max_tokens=20))
+    assert sorted(w['index'] for batch in batches for w in batch)==list(range(11))
+    assert {len(b[0]['ids']):max(len(x) for x in batches if len(x[0]['ids'])==len(b[0]['ids'])) for b in batches}=={9:2,4:4,30:1}
+
 def test_full_sketch_fraction_still_uses_gold_text_history():
     backbone,heads=tiny_student()
     prefix=torch.tensor([[backbone.controls.open_id]])
