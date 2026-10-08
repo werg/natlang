@@ -1,6 +1,6 @@
 ---
 name: natlang-integration
-description: Embed natlang in Node/TypeScript and browser applications. Use when wiring the runtime, model drivers, host services, compiled `nl` calls, event loops, terminal or browser interfaces, directory reducers, packages, persistence, traces, or application evaluations.
+description: Embed natlang in Node/TypeScript and browser applications. Use when wiring the runtime, model drivers, host services, compiled `nl` calls, event loops, terminal or browser interfaces, directory reducers, packages, persistence, traces, call records and compilations, or application evaluations.
 ---
 
 # Integrate natlang applications
@@ -11,7 +11,7 @@ Start by locating the installed `@natlang/node` / `@natlang/browser` version or 
 
 ## Choose the smallest adequate boundary
 
-Read [hosts and model drivers](references/hosts.md) for the runtime, compilation, services, and model transport; [frontend applications](references/frontend.md) for browser models, event loops, and generated interfaces; [terminal applications](references/terminal.md) for CLIs, packages, sessions, and event streams; [effects and recovery](references/recovery.md) for native objects, concurrency, and durability. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
+Read [hosts and model drivers](references/hosts.md) for the runtime, compilation, services, and model transport; [frontend applications](references/frontend.md) for browser models, event loops, and generated interfaces; [terminal applications](references/terminal.md) for CLIs, packages, sessions, and event streams; [effects and recovery](references/recovery.md) for native objects, concurrency, and durability; [call records and compilations](references/records.md) for the machine's record of calls, opting values out of it, and compiled cases. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
 
 1. Decide who owns state, native objects, and effects. Host capabilities become typed services passed to the runtime; natlang code reaches them only through `natlang:services` or eval bindings.
 2. Write the application in TypeScript and compile it with `natlang build` (or `buildProject` / `compileVirtualProject`) so `nl` calls are planned and typed. Named `.nl` functions import like modules.
@@ -25,6 +25,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Set budgets (`maxTurns`, `maxTokens`, `maxSeconds`, `maxFailureRepairs`) explicitly for evaluations; none apply by default.
 - Services and live values are trusted native authority passed by reference. Eval is trusted code in the application's process, not a sandbox.
 - Service calls and live-object writes happen immediately and are traced as effects; they are not rolled back when a call fails. Captured `let` variables are written back only after a successful eval.
+- Every call is recorded in the machine's call store (exact values within bounds) and may be served by a compiled crisp case; a case that fails hands the call back to the function. Exclude sensitive values with `"recording": { "exclude": [...] }` in `natlang.json`, and give embedded runtimes `programRoot`. See [records](references/records.md).
 - Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 
