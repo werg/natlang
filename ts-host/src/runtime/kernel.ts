@@ -514,7 +514,8 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       parentActionIndex: parentTrace ? parentTrace.events.filter(event => event.kind === 'action').length : null,
       taskId: task.id, programId: view.program?.id ?? null, buildHash: view.program?.buildHash ?? null,
       programRoot: task.runtime.options.programRoot ?? null, definition: identity,
-      model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null) : null, revision: model?.revision ?? null },
+      model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? (model.driver.name || null) : null,
+        revision: model?.revision ?? null },
       exclude: task.runtime.options.recording?.exclude });
     identity.instructions = capture.ref(body);
     if (task.auditOf && !frame.parentCallId) capture.auditOf = task.auditOf;
@@ -530,6 +531,13 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
     console.warn(`natlang: call recording failed for ${definition.name}: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
+}
+
+/** The model named by the runtime's executor identity (the CLI's profile), when there is one. */
+function executorModel(task: Frame['task']): string | undefined {
+  const identity = task.runtime.options.executorIdentity;
+  const configured = identity?.configuration?.model;
+  return typeof configured === 'string' && configured ? configured : identity?.id || undefined;
 }
 
 /** The one argument a case's guard and body receive: the call's parameters and captures by name (and `folder`). */

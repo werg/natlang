@@ -29,7 +29,7 @@ export async function main(context: TargetContext): Promise<number> {
   const [command = 'workload', value = '20'] = context.args;
   const service = orderService();
   const runtime = createNatlangRuntime({ model: context.model, services: { orders: service.orders },
-    programRoot: context.package?.root ?? context.workspace });
+    executorIdentity: context.executorIdentity, programRoot: context.package?.root ?? context.workspace });
   const requests = command === 'ask' ? [context.args.slice(1).join(' ')] :
     Array.from({ length: Number(value) }, (_, index) => TEMPLATES[index % TEMPLATES.length]!(100 + index));
   for (const request of requests) {
