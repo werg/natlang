@@ -253,6 +253,24 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(await runJsonScope({ value: neuraleseRef('Neuralese<string>', 'nz1_qqqqqqqqqqqqqqqqqqqq') }, {}, {}), '"scope payload"');
   assert.equal(await runJsonScope({ value: 'crisp scope value' }, {}, {}), '"crisp scope value"');
   assert.equal(scopeJsonReads, 1);
+  const runJsonScopeSource = async (source, value) => {
+    const compiled = compileScopeSnippet(source, { inputBindings: ['value'], neuralese: true,
+      analyze: text => analyzeEvalSnippet(text, jsonScope) });
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+    const scope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(item => item, item => item, async item => item,
+      output => output.result, { readNeuraleseIfReference: async item => isNeuraleseRef(item) ? 'scope payload' : item });
+    return scope({ value }, {}, {});
+  };
+  const scopeSoftValue = neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr');
+  assert.equal(await runJsonScopeSource('const serialized = JSON.stringify(value); return typeof serialized;', scopeSoftValue), 'string');
+  assert.equal(await runJsonScopeSource(`return 'json=' + JSON.stringify(value);`, scopeSoftValue), 'json="scope payload"');
+  assert.equal(await runJsonScopeSource('return JSON.stringify({ nested: JSON.stringify(value) });', scopeSoftValue),
+    '{"nested":"\\"scope payload\\""}');
+  assert.equal(await runJsonScopeSource('const serialized = JSON.stringify(value); return typeof serialized;', 'crisp'), 'string');
+  assert.equal(await runJsonScopeSource(`return 'json=' + JSON.stringify(value);`, 'crisp'), 'json="crisp"');
+  assert.equal(await runJsonScopeSource('return JSON.stringify({ nested: JSON.stringify(value) });', 'crisp'),
+    '{"nested":"\\"crisp\\""}');
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {

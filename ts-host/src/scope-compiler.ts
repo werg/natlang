@@ -722,10 +722,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const receiverName = fresh(`__natlang_json_receiver_${rel(node).start}`);
       const callName = fresh(`__natlang_json_call_${rel(node).start}`);
       const argsName = fresh(`__natlang_json_args_${rel(node).start}`);
-      primitive.push({ ...rel(node), text: `((${receiverName}: any) => (async (${callName}: [any, any], ${argsName}: any[]) => ` +
+      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${callName}: [any, any], ${argsName}: any[]) => ` +
         `${callName}[1].call(${callName}[0], await __live.${reader}(${argsName}[0])` +
         `${args.slice(1).map((_arg, index) => `, ${argsName}[${index + 1}]`).join('')}` +
-        `))([${receiverName}, ${receiverName}.stringify], [${args.join(', ')}]))(${receiver})` });
+        `))([${receiverName}, ${receiverName}.stringify], [${args.join(', ')}]))(${receiver}))` });
       return;
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&

@@ -441,11 +441,14 @@ supports it; no generation failure has been attributed to this expression.
 The JSON union case above is now lowered as one typed call. The compiler captures
 the JSON receiver/method and evaluates the argument expressions in source order
 before awaiting the first argument's readout, then calls the captured method
-with its original receiver and remaining arguments. The conditional runtime
-brand check returns crisp union arms unchanged. Replacer/space evaluation,
-replacer calls, ordinary JSON serialization, and readout errors remain visible
-in focused generated module and eval regressions. No replacer, space, or nested
-object field is automatically read. No historical generation error is claimed.
+with its original receiver and remaining arguments. Both module and eval scope
+lowerings await the helper call itself, so a local assignment, type check,
+concatenation, or nested argument receives the ordinary JSON result rather than
+an implementation Promise. The conditional runtime brand check returns crisp
+union arms unchanged. Replacer/space evaluation, replacer calls, ordinary JSON
+serialization, and readout errors remain visible in focused generated module
+and eval regressions. No replacer, space, or nested object field is
+automatically read. No historical generation error is claimed.
 
 ### 16. Other implicit text/key conversions are candidates, not current fixes
 
