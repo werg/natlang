@@ -1,0 +1,9 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/specialization-example",
+  "version": "0.1.0",
+  "description": "A support function whose recorded calls the specializer compiles into guarded crisp cases.",
+  "include": ["main.ts", "support.nl", "tsconfig.json"],
+  "targets": { "demo": { "entry": "main.ts", "description": "natlang run examples/specialization -- workload N | ask REQUEST" } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

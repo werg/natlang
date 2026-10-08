@@ -32,6 +32,8 @@ export function targets(store: CallStore, options: Options, self: string | null)
     if (options.definition && ![item.definition_key, item.definition_id, item.definition_name, item.definition_source].includes(options.definition)) return false;
     if (!options.includeSelf && self && item.program_root === self) return false;
     if (item.agent_calls < minCalls) return false;
+    // Calls that used no model tokens (scripted test drivers) have nothing to save.
+    if (!options.definition && !item.tokens) return false;
     const decline = store.declineFor(item.definition_key);
     if (decline && !options.definition && item.agent_calls < 2 * decline.calls_at_decline) return false;
     const current = store.currentCompilation(item.definition_key);

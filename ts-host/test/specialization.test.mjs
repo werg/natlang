@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang, CallStore, ReplayServices, approaches, induceRules, measureGuard, inputFeatures,
-  splitOf, study, crispDecline, renderEvidence, verifyCases, saveAccepted, keepCases, runJobs, caseHashes, Folder } from '../dist/index.js';
+  splitOf, study, crispDecline, approachHash, normalizeProgram, renderEvidence, verifyCases, saveAccepted, keepCases, runJobs, caseHashes, Folder } from '../dist/index.js';
 
 const freshStore = () => CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-spec-')));
 const done = store => { const root = store.root; store.close(); rmSync(root, { recursive: true, force: true }); };
@@ -12,13 +12,24 @@ const done = store => { const root = store.root; store.close(); rmSync(root, { r
 test('approaches group calls that ran the same code, with differing literals as holes', () => {
   const example = (callId, request, code) => ({ callId, args: { request }, features: inputFeatures({ request }), evals: [code], approach: '', split: 'training' });
   const found = approaches([
-    example('a', 'refund 1', "await orders.refund('1')"), example('b', 'refund 2', "await orders.refund('2')"),
+    example('a', 'refund the last one', "await orders.refund('A-7')"), example('b', 'refund the last one', "await orders.refund('B-9')"),
     example('c', 'status 3', "return orders.lookup('3').status"), example('d', 'status 3 now', "return orders.lookup('3').status")]);
   assert.equal(found.length, 2);
   const refunds = found.find(item => item.calls.includes('a'));
   assert.deepEqual(refunds.calls.sort(), ['a', 'b']);
   assert.match(refunds.template[0], /\$h0/);
-  assert.deepEqual(refunds.holes.a, ["'1'"]);
+  assert.deepEqual(refunds.holes.a, ['"A-7"']);
+});
+
+test('normalization abstracts input parts, logging and shown values', () => {
+  const a = approachHash(["const o = orders.lookup('144');\nconsole.log(o);\no"], { request: 'What is the status of order 144?' });
+  const b = approachHash(['const x = await orders.lookup("136")\nconsole.log("result:", x)'], { request: 'What is the status of order 136?' });
+  assert.equal(a, b);
+  const refund = (id, request) => normalizeProgram(`const r = orders.refund("${id}");\nreturn \`refunded ${id}\``, { request });
+  assert.equal(refund('140', 'refund 140'), refund('132', 'refund 132'));
+  assert.match(refund('140', 'refund 140'), /\$part\.request/);
+  assert.equal(approachHash([], { request: 'thanks' }), 'answer-only');
+  assert.notEqual(approachHash(['orders.refund("1")'], { request: 'refund 1' }), approachHash(['orders.lookup("1")'], { request: 'refund 1' }));
 });
 
 test('rule induction finds a guard with no counterexample and leaves the rest unclassified', () => {

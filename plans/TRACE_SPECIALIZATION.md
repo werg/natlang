@@ -1,7 +1,22 @@
 # Trace-guided specialization: a tracing JIT for natural-language functions
 
-Status: design, 2026-10-08, revised three times the same day with the owner's decisions (section 9). Nothing below is
-implemented.
+Status: implemented 2026-10-08 (design revised three times that day with the owner's decisions, section 9). Code:
+`ts-host/src/calls/` (store, recorder, normalization, mining, replay, judge, offline jobs, specializer support),
+`ts-host/src/runtime/kernel.ts` (recording and dispatch), `ts-host/src/cli/calls.ts` (`natlang traces`,
+`natlang compilations`, `natlang specialize`), `applications/specializer/`, `examples/specialization/`. Tests:
+`ts-host/test/call-records.test.mjs`, `ts-host/test/specialization.test.mjs`. User documentation:
+`skills/natlang-integration/references/records.md`, SPEC.md "Call records and compilations".
+
+Where the implementation differs from the text below:
+
+- The reducer's folder holds the evidence beside `cases.ts` (`evidence/...`), so the model reads it with ordinary file
+  tools; only `cases.ts` is kept. The program is read through `evidence/function.md` and the function's context.
+- §4: `iterateOn` site statistics moved into the store. The teacher collector keeps `exactHostTraceCapture` (its data
+  contract is unchanged) and the improver keeps its evaluation traces; both can read the store, neither was rewritten.
+- Offline jobs (shadow replays, audits) run in the specializer loop, with definitions reloaded from the recorded
+  `program_root`, or rebuilt from the record (instructions, signature, types) when the source is unavailable.
+- Bounds: besides `maxStoreBytes`, the store keeps `minFreeBytes` (20 GiB) free on its filesystem.
+- Not built: the browser IndexedDB sink (§3.4, explicitly later).
 
 ## 1. Idea
 
