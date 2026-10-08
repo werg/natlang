@@ -1105,12 +1105,20 @@ def main(argv=None):
     def evaluate():
         nonlocal last_schedule_step,last_report
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
-        ar_batch=None;role_strata={}
+        ar_batch=None;ar_fallback=None;role_strata={}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
                 prefix,span,_=ids_for(batch)
-                if ar_batch is None:ar_batch=(prefix,span)
+                if ar_fallback is None:ar_fallback=(prefix,span)
+                if ar_batch is None and 'roles' in batch[0]:
+                    # Self-fed rollouts start at the first assistant token: the shared system prompt is memorized
+                    # boilerplate and would make every rollout trivially exact.
+                    assistant={ROLE_CODES.index('assistant_reasoning'),ROLE_CODES.index('assistant_reply')}
+                    first=next((i for i,c in enumerate(batch[0]['roles']) if i>=1 and c in assistant),None)
+                    if first is not None and len(batch[0]['ids'])-first>=16:
+                        whole=torch.tensor([batch[0]['ids']],device=a.device)
+                        ar_batch=(whole[:,:first],whole[:,first:])
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
@@ -1143,11 +1151,13 @@ def main(argv=None):
                             if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
                         regional['tokens']+=values['tokens']
             autoregressive_controls=None
+            if ar_batch is None:ar_batch=ar_fallback
             if a.ar_control_steps and ar_batch is not None:
                 from ..eval.projected_history import autoregressive_history_metrics
                 started_ar=time.perf_counter()
                 autoregressive_controls=autoregressive_history_metrics(backbone,heads,*ar_batch,steps=a.ar_control_steps)
                 autoregressive_controls['seconds']=time.perf_counter()-started_ar
+                autoregressive_controls['start']='first assistant token' if ar_batch is not ar_fallback else 'window start'
         for row in strata.values():
             for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         for key,row in strata.items():
