@@ -454,19 +454,28 @@ automatically read. No historical generation error is claimed.
 
 The analyzer currently auto-reads typed values in explicit text contexts such
 as `String(value)`, templates, string `+`, `concat`, `join`, and the JSON value
-argument. Additional contexts are not currently normalized: computed property
-keys such as `record[softKey]` and `{ [softKey]: value }`, the message argument
-to `new Error(softMessage)`, and string method arguments such as
-`label.includes(softNeedle)`. These have clear JavaScript `ToPropertyKey` or
-`ToString` semantics when the expression is statically typed as
-`Neuralese<string>` or a union containing it, but the current compiler produces
-no typed readout for them. A local type-directed read of the exact key/message/
-method argument could preserve ordinary crisp values via the existing brand
-check; it must not recursively read arbitrary objects or inspect the transport
-record. Method-specific support must use standard-library declarations and
-known receiver/argument positions, not guess from a method name. Where a
-readout makes a call asynchronous, capture the callee and all source arguments
-in native order before awaiting, as in the JSON lowering.
+argument. Direct `analyzeEvalSnippet` reproductions on
+`Neuralese<string>`-typed values produce no diagnostic and no readout for
+computed keys (`record[key]`, `{ [key]: value }`), `new Error(message)`, and
+standard string methods such as `label.includes(needle)`, `replace`, and
+`split`. The current checker handles text conversion for a soft receiver's
+`toString`, but does not inspect these argument/key positions
+(`ts-host/src/compiler/neuralese.ts:130-184`). At runtime the opaque ref is an
+ordinary object, so native JS coercion would use its object representation
+instead of the typed payload.
+
+Prospective priority: computed keys are medium because `ToPropertyKey` has a
+clear value position; Error messages are medium/low because the default global
+Error constructor applies `ToString`; string methods are low/medium because
+support must enumerate standard library declarations and specific argument
+positions. For each, a typed read of only the key/message/argument can preserve
+crisp arms through the existing brand check; never recursively read arbitrary
+objects or inspect transport metadata. Require the unshadowed standard global
+or exact TypeScript-library declaration. Method and constructor rewrites must
+capture receiver/constructor and every argument in native order before
+awaiting, since an inline `await` can otherwise move effects past argument
+evaluation. These were reproduced compiler gaps, but no recent generation
+trace demonstrating failure was found.
 
 `console.log(value)` is different: it receives a value for inspection and
 does not apply JavaScript `ToString` to each argument. It should remain an
