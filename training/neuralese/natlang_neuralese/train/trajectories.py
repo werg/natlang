@@ -603,7 +603,10 @@ def main(argv=None):
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     new_continuation = resumed is None and bool(args.continue_from)
     if resumed is not None:
-        validate_resume(resumed, identity)
+        changed_code = validate_resume(resumed, identity)
+        if changed_code:
+            print(json.dumps({'event': 'resumed_on_new_code', 'changed_modules': len(changed_code),
+                              'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
         validate_continuation(resumed, identity, allowed_changes=args.curriculum_change)
