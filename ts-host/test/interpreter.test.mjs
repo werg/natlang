@@ -1449,11 +1449,16 @@ test('eval finish computes and completes a fresh typed result atomically',async(
 });
 
 test('eval finish never publishes an older staged result after inspection, invalid return or failure',async()=>{
- for(const code of ['const inspection = 99;','return "wrong type";','throw new Error("computation failed");']){
+ for(const code of ['const inspection = 99;','return "wrong type";','"wrong type";','throw new Error("computation failed");']){
   const {session:call,lam}=open({instructions:'Return a number.',type:'() => number',args:{}});
   await call.applyAsync('eval',{code:'return 7;'});
   const result=await call.applyAsync('eval',{code,finish:true});
   assert.ok(['rejected','error'].includes(result.kind),result.text);assert.equal(call.completed,false);assert.equal(lam.return,7);
+  if (code === 'return "wrong type";' || code === '"wrong type";') {
+   assert.match(result.text,/not a valid number/);
+   assert.match(result.text,/Correct this eval's value to match the declared result type/);
+   assert.doesNotMatch(result.text,/Use a final expression or explicit return/);
+  }
  }
  const {session:call}=open({instructions:'Return a number.',type:'() => number',args:{}});
  const invalid=await call.applyAsync('eval',{code:'return 1;',finish:'yes'});

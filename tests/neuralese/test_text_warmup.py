@@ -738,11 +738,15 @@ def test_held_evaluation_records_matched_projection_and_crisp_history_without_ch
     assert crisp['whole']['read_history_mse_vs_live_greedy']==0
     assert 'alignment_gate_passed' in report
     ar=report['autoregressive_controls']
-    assert ar['schema']=='natlang.autoregressive-history-controls/1'
+    assert ar['schema']=='natlang.autoregressive-history-controls/2'
     assert set(ar['scores'])=={'gold','ar_greedy','ar_projection','ar_sketch'}
     assert ar['scores']['gold']['ce_delta_from_gold']==0
     assert ar['scores']['ar_greedy']['ce_delta_from_ar_greedy']==0
     assert all(0<=row['argmax_agreement_with_gold']<=1 for row in ar['scores'].values())
+    survival=ar['scores']['ar_greedy']['gold_reference_after_divergence']
+    assert survival['exact_prefix_survival_tokens']>=1
+    assert survival['first_token_ce']>=0
+    assert 'after a rollout diverges' in ar['gold_reference_interpretation']
 
 
 def test_autoregressive_sketch_rollout_matches_parallel_passes_on_early_positions():

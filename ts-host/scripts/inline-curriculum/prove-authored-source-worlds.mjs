@@ -19,6 +19,7 @@ const runtimeDist = resolve(values.runtimeDist ?? fileURLToPath(new URL('../../d
 const runtimeModuleNames = [
   'teacher/curriculum.js', 'teacher/collector.js', 'teacher/opening.js', 'teacher/native-materializer.js',
   'teacher/source-conversion.js', 'native/neuralese-store.js', 'native/neuralese.js', 'native/prompt.js',
+  'model/text-neuralese-emulation.js',
 ];
 const runtimeModules = await Promise.all(runtimeModuleNames.map(name => import(pathToFileURL(resolve(runtimeDist, name)).href)));
 const [curriculumModule, collectorModule, openingModule, materializerModule, sourceConversionModule,
@@ -28,8 +29,9 @@ const { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, 
 const { openingLength, openingText, text } = openingModule;
 const { markAuthoredStaticReferencePending, materializeNativeRows } = materializerModule;
 const { sourceConversionProblems } = sourceConversionModule;
-const { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } = storeModule;
+const { MemoryNeuraleseStore } = storeModule;
 const { isNeuraleseRef } = neuraleseModule;
+const { createTextNeuraleseEmulation } = runtimeModules[8];
 const { TOOLS_PROMPT } = promptModule;
 let runtimePin = { runtime_dist: runtimeDist, imported_runtime_hashes: {} };
 for (const name of runtimeModuleNames)
@@ -76,11 +78,43 @@ for (const [index, record] of rows.entries()) {
   // source row, including this task and its evidence, for review.
   validateSourceValueBoundaries(record);
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:authored-source-reference@1');
+  const textEmulation = createTextNeuraleseEmulation({ store, width: 8 });
+  const standardLibrary = await textEmulation.standardLibraryReady;
   const reference = referenceDriver(record); reference.neuralese = true;
   const trajectory = [];
+  const readTextFromRenderedOpening = request => {
+    const strings = [];
+    const visit = value => {
+      if (typeof value === 'string') strings.push(value);
+      else if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === 'object') Object.values(value).forEach(visit);
+    };
+    visit(request.messages ?? []);
+    for (const rendered of strings) {
+      const markerStart = rendered.indexOf('[[Neuralese text block id=');
+      if (markerStart < 0) continue;
+      const bodyStart = rendered.indexOf('; exact JSON string body=', markerStart);
+      if (bodyStart < 0) continue;
+      if (!rendered.slice(markerStart, bodyStart).includes('type=Neuralese<string>')) continue;
+      const valueStart = bodyStart + '; exact JSON string body='.length;
+      for (let close = rendered.indexOf(']]', valueStart); close >= 0; close = rendered.indexOf(']]', close + 2)) {
+        try {
+          const body = JSON.parse(rendered.slice(valueStart, close));
+          if (typeof body === 'string') return body;
+        } catch { /* A body may itself contain the display delimiter; try the next terminator. */ }
+      }
+    }
+    throw new Error('scripted typed read has no parseable visible exact JSON string body');
+  };
+  const scriptedSend = async request => {
+    const messages = JSON.stringify(request.messages ?? []);
+    if (messages.includes('This is a typed Neuralese read call.'))
+      return { calls: [['return_result', { status: 'success', value: readTextFromRenderedOpening(request) }]] };
+    return reference(request);
+  };
+  const wrappedDriver = textEmulation.wrap(scriptedSend);
   const driver = async request => {
-    const response = await reference(request);
+    const response = await wrappedDriver(request);
     // The deterministic authored reference is the source of these model-call
     // arguments. Record them in provider-shaped form so materializer can bind
     // the original inline body to the host's sentinel-rewritten eval event.
@@ -97,7 +131,8 @@ for (const [index, record] of rows.entries()) {
   driver.neuralese = true;
   const options = { modelId: 'authored-source-static-reference', rootSeed: 909,
     systemPrompt: TOOLS_PROMPT, contextTokens: 65_536, maxTurns: 80, toolSurfaceSha256,
-    collectionRole: 'authored-source-static-reference', neuralese: { store, port } };
+    collectionRole: 'authored-source-static-reference', neuralese: textEmulation.runtime,
+    neuraleseService: standardLibrary };
   const provenance = { ...expectedProvenance(record, options), collection_role: options.collectionRole,
     synthetic_reasoning: 'action-notes/1', source_review_status: 'candidate-only' };
   const runId = programRunId(index, provenance);
@@ -143,6 +178,7 @@ for (const [index, record] of rows.entries()) {
   const root = ledger.find(entry => entry.parent_invocation_id === null);
   if (!root) throw new Error(`${record.id}: no root invocation`);
   const children = ledger.filter(entry => entry.parent_invocation_id === root.invocation_id);
+  const inlineChildren = children.filter(entry => entry.inline_instruction_site);
   const events = run.outcome.action_ledger ?? [];
   const failedActions = events.filter(event => !['ok', 'completed'].includes(String(event.outcome ?? '')));
   let childReads;
@@ -233,7 +269,7 @@ for (const [index, record] of rows.entries()) {
     childReads = childReadsByRoot;
     depthAudit = { depth_layers: 2, outer_reducers: outerAudit.length,
       item_judges: itemChildren.length, outer_reducer_audit: outerAudit };
-  } else childReads = children.map((child, childIndex) => {
+  } else childReads = inlineChildren.map((child, childIndex) => {
     const childTurn = trajectory.find(turn => turn.invocation_id === child.invocation_id);
     if (!childTurn) throw new Error(`${record.id}: missing child opening ${child.invocation_id}`);
     const childOpening = openingPlainText(childTurn.context ?? []);
@@ -298,7 +334,7 @@ for (const [index, record] of rows.entries()) {
       if (!write) throw new Error(`${record.id}: no actual block_write event produced ${actualAnswer.$neuralese.id} in ${child.invocation_id}`);
       softOutput = { kind: softType, text_sha256: createHash('sha256').update(marker[1]).digest('hex'),
         block: actualAnswer.$neuralese.id, writer_node: write.node, writer_call_id: child.invocation_id,
-        next_argument: childTarget.soft_output.next_argument };
+        next_argument: childTarget.soft_output.next_argument, readout_by_parent: childTarget.soft_output.readout_by_parent };
     } else if (canonical(actualAnswer) !== canonical(expectedAnswer)) {
       throw new Error(`${record.id}: child ${child.invocation_id} answer differs from its authored, source-bound reference`);
     }
@@ -316,10 +352,26 @@ for (const [index, record] of rows.entries()) {
       successful_actions: childEvents.length };
   });
   const softEdges = [];
+  const softReadouts = [];
   for (let childIndex = 0; childIndex < childReads.length; childIndex++) {
     const producer = childReads[childIndex].soft_output;
     if (!producer) continue;
-    const consumer = children[childIndex + 1];
+    if (producer.readout_by_parent === 'String(answer)') {
+      const graph = run.outcome.execution_graph ?? [];
+      const writer = graph.find(event => event.kind === 'block_write' && event.call_id === producer.writer_call_id &&
+        event.block === producer.block && event.node === producer.writer_node);
+      if (!writer) throw new Error(`${record.id}: typed answer block ${producer.block} has no authenticated writer event`);
+      const readout = graph.find(event => event.kind === 'readout' && event.type === 'string' &&
+        Array.isArray(event.inputs) && event.inputs.some(input => input?.block === producer.block && input?.node === producer.writer_node));
+      if (!readout) throw new Error(`${record.id}: String(answer) has no typed readout graph edge from block ${producer.block}`);
+      softReadouts.push({ kind: producer.kind, block: producer.block, writer_node: producer.writer_node,
+        writer_call_id: producer.writer_call_id, readout_node: readout.node, readout_call_id: readout.call_id,
+        readout_type: readout.type, input_edge: readout.inputs.find(input =>
+          input?.block === producer.block && input?.node === producer.writer_node),
+        output_verified_by_exact_parent_file_and_value: true });
+      continue;
+    }
+    const consumer = inlineChildren[childIndex + 1];
     const consumerReceipt = childReads[childIndex + 1];
     if (!consumer || !consumerReceipt) throw new Error(`${record.id}: soft block ${producer.block} has no following consumer invocation`);
     const declaredConsumerArgument = consumerReceipt.expected_soft_input;
@@ -355,7 +407,8 @@ for (const [index, record] of rows.entries()) {
     accepted_by_runtime_oracles: true, value_matches_expected: true, files_match_expected: true,
     child_invocations: isDepth2Variant ? children.length + (depthAudit.item_judges ?? 0) : children.length,
     ...(isDepth2Variant ? { depth_audit: depthAudit } : {}), clean_child_reads: childReads,
-    soft_state_edges: softEdges, soft_state_edge_count: softEdges.length, failed_actions: 0,
+    soft_state_edges: softEdges, soft_state_edge_count: softEdges.length, soft_readouts: softReadouts,
+    soft_readout_count: softReadouts.length, failed_actions: 0,
     materialized_native_decisions: turns.length,
     decisions_training_approved: turns.filter(turn => turn.training_admission.approved).length,
     materializer_audit: materializerAudit });
@@ -406,7 +459,9 @@ await exclusive('materializer-runtime-flags-attestation.jsonl',
 const sourceEvidenceCounts = summarizeSourceEvidence(proofCases);
 const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', source_path: sourcePath,
   source_sha256: sourceSha,
-  runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
+  runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and explicit non-learned text-provider read implementation',
+  text_readout_provider: { implementation: 'createTextNeuraleseEmulation + declared natlang.read body', learned_vectors: false,
+    qualification_certificate: false, training_admission: false },
   runtime_pin: runtimePin,
   model_calls: 0, provider_calls: 0, teacher_trajectories: 0, admission_granted: false,
   status: caseErrors.length ? 'failed' : 'passed', failed_cases: caseErrors.length, case_errors: caseErrors,

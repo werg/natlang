@@ -939,3 +939,30 @@ V22 RES-832 has one recorded `nl@eval:1/notes` mismatch where the author synthes
 The same scan found `ReferenceError` cases for `passName`, `current`, and `source` when child evals referenced names not passed in their argument record or named captures. In V24 ARC-530 (`slot-05/jobs/000004-d386e4a2238dcc2b.trace.jsonl`, child `task-1-ggb3jl/22`), the visible callable signature was `(input: { context, evidence, current, constraint }) => Draft`; the failed eval at seq 9 used bare `current`, `evidence`, `constraint`, and `context` instead of `input.current`, `input.evidence`, `input.constraint`, and `input.context`. Its trace manifest also records `context` and `evidence` as legitimate named captures. The runtime scope-feedback list omitted those captures because `scopeGuide()` listed parameters, locals, helpers, codebase items, and services but not `lam.captures`. The diagnostic is now fixed to list captures as available lexical bindings, without adding implicit captures; `current` and `constraint` remain properties on `input`, not standalone names, for this invocation. A focused regression checks that the error guide names input plus actual captures while not promoting unrelated record fields. Current eval guidance says a child does not inherit a parent's conversation or sibling evidence and must receive the values it needs as arguments or named captures. V22/V23/V26 attempts to write evidence files failed with `folder is read-only`; these paths were intentionally supplied as read-only evidence snapshots, while the designated output remained writable. Neither case supports widening scope or write authority.
 
 Other V19–V26 errors in the bounded scan were provider/runtime timeouts, malformed TypeScript, `nl` used as a value instead of a template tag, redeclaration of eval bindings, caller-provided `null` for a required `Neuralese<string>`, and children blocked because notes omitted source-supported facts. None supplies a safe behavior-preserving compiler normalization: increase timeouts only with execution-policy evidence; retain declared input/result types; and do not synthesize omitted evidence. V22–V26 unknown-field reports for callers passing richer task records are already addressed by the input-only structural-view change documented above; capture/result records remain closed. No iterator/directory-reducer policy change is warranted by this scan.
+
+### Fresh-result correction after an explicit type mismatch — 2026-10-08
+
+A bounded pass over current V24–V26 eval traces found several `finish:true`
+rejections where the eval had produced a value, but the value did not fit the
+child's declared result. For example, V24 child `task-1-tzpiuc/14` (slot 02,
+`runs/neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/campaign-v1/slot-02/jobs/000015-0f35f6f160aac482.trace.jsonl`, action seq 24, trace SHA-256 `b3dfe6558d76281501504b5e78f6389c5db7f1bcce7575e4b6acbc78c88d623f`) returned `updated.notes`; the declared result was `{ notes: string }`. The response already explained the mismatch, then incorrectly appended that the model should “Use a final expression or explicit return,” although its source used an explicit `return`. Similar type-mismatch-plus-generic-fresh-result messages occur in V25 `PATCH-771` and V26 `PROC-881` traces.
+
+`eval finish` now keeps the same result validation and rejection, but changes its
+final hint when validation has already supplied a `notResult` explanation: it
+asks the model to correct this eval's value to the declared result type. When
+there is no value to validate (for example, only a local inspection ran), the
+existing fresh-result guidance remains. No prior result is reused, no declared
+shape is inferred or repaired, and the previous staged return remains intact.
+The isolated interpreter suite passed 92/92, including wrong explicit return,
+wrong final expression, and missing fresh value cases.
+
+The current V27 / WorkflowEval trace survey otherwise found no new safe
+acceptance change beyond the recent fixes recorded above: extra source fields at
+callable input boundaries are already preserved while declared input fields are
+checked; richer captures/returns remain closed; read-only snapshot write errors
+remain authority decisions; missing names/functions and malformed TypeScript
+remain real inputs or syntax errors. `decide` calls with data instead of a
+callable cannot reveal an intended judgment, and semantic draft mismatches must
+not be repaired by coercing values or inventing fields. This is a disposition
+from the inspected traces, not a claim that other language surfaces cannot
+benefit from future source-backed review.

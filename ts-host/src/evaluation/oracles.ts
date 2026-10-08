@@ -5,7 +5,7 @@ export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'sp
 /** Bump whenever answer comparison semantics change so older outcomes cannot stand in for new runs. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact'; rubric?: string; context?: unknown; [key: string]: unknown };
+  threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact'; rubric?: string; context?: unknown; [key: string]: unknown };
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
 
 /** TreeDST's author implementation keys children by name; sibling order is not semantic.
@@ -135,6 +135,24 @@ function normalized(value: unknown): string {
     .sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => `${JSON.stringify(key)}:${normalized(child)}`).join(',')}}`;
   return normalizeText(value);
 }
+function qaAnswerText(value: string): string {
+  const normalized = value.normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[\p{P}\p{S}]/gu, '');
+  return normalized.split(/\s+/u).filter(token => token && !['a', 'an', 'the'].includes(token)).join(' ');
+}
+/** Canonical map for extractive QA: keys stay exact; answer values use SQuAD token normalization. */
+export function qaStringMapCanonical(value: unknown): string | null {
+  let record: unknown = value;
+  if (typeof value === 'string') {
+    if (jsonStringRecordCanonical(value) === null) return null;
+    try { record = JSON.parse(value); } catch { return null; }
+  }
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+  const entries = Object.entries(record as Record<string, unknown>);
+  if (!entries.every(([, answer]) => typeof answer === 'string')) return null;
+  return JSON.stringify(entries.sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, answer]) => [key, qaAnswerText(answer as string)]));
+}
 function words(value: unknown, qa = false): string[] {
   const tokens = String(Array.isArray(value) ? value.join(' ') : value ?? '').normalize('NFKC')
     .toLocaleLowerCase('en-US').match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -186,9 +204,9 @@ export function agreement(actual: unknown, expected: unknown): number {
 }
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
-export const DATA_QUALITY_VERSION = 2;
+export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
   markdown_terminal_newline_paths?: string[];
@@ -198,6 +216,7 @@ export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' 
   quote_alternates?: Record<string, string[]>;
   return_count?: 'changed' | 'csv_nonempty' | 'counts'; report?: string };
 export type FilesVerdict = { accepted: boolean; score: number; passed: number; items: number; failed: string[];
+  comparison_version?: string;
   quality_version: number; errors: string[]; pending: string[]; positive_recall?: number; positive_precision?: number;
   judgments?: Record<string, { accepted: boolean; verdict: string; needs_review?: boolean }> };
 export type OracleJudge = (input: { actual: unknown; expected: unknown; rubric: string }) =>
@@ -366,6 +385,11 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
       item(path, parsed !== null && candidates.some(candidate => parsed === jsonStringRecordCanonical(candidate)));
       continue;
     }
+    if (compare === 'qa-string-map') {
+      const parsed = qaStringMapCanonical(got);
+      item(path, path === 'answers.json' && parsed !== null && parsed === qaStringMapCanonical(want));
+      continue;
+    }
     if (compare === 'tatqa-answer-record' || compare === 'tatqa-answer-record-exact') {
       item(path, path === 'answer.json' && tatqaAnswerRecordsEqual(got, want,
         compare === 'tatqa-answer-record-exact' ? 'exact' : 'rounded-2dp'));
@@ -427,6 +451,7 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
   return { accepted: !errors.length && !pending.length && score >= threshold && (compare !== 'rewrite' || score === 1) && (compare !== 'csv' ||
       positiveRecall >= threshold && positivePrecision >= threshold), score, passed, items, failed: failed.slice(0, 20),
     errors, pending, quality_version: DATA_QUALITY_VERSION,
+    ...(compare === 'qa-string-map' ? { comparison_version: 'squad-token-map/1' } : {}),
     ...(compare === 'csv' ? { positive_recall: positiveRecall, positive_precision: positivePrecision } : {}),
     ...(Object.keys(judgments).length ? { judgments } : {}) };
 }
@@ -513,6 +538,10 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (level === 'normalized' && spec.normalization === 'named-tree') {
     const answer = namedTreeCanonical(actual);
     return { accepted: answer !== null && candidates.some(candidate => namedTreeCanonical(candidate) === answer), level };
+  }
+  if (level === 'normalized' && spec.normalization === 'qa-string-map') {
+    const answer = qaStringMapCanonical(actual);
+    return { accepted: answer !== null && candidates.some(candidate => qaStringMapCanonical(candidate) === answer), level };
   }
   if (level === 'normalized' && spec.normalization === 'json-string-record') {
     const answer = jsonStringRecordCanonical(actual);
