@@ -26,6 +26,8 @@ export type LowerOptions = {
   concats?: ReadonlySet<string>;
   /** Call spans of JSON.stringify whose first value argument needs typed Neuralese readout. */
   jsons?: ReadonlySet<string>;
+  /** Call/new spans of the default Error constructor whose message needs typed Neuralese readout. */
+  errors?: ReadonlySet<string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -86,6 +88,25 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      if ((ts.isCallExpression(node) || ts.isNewExpression(node)) &&
+          (ts.isCallExpression(source) || ts.isNewExpression(source)) &&
+          options.errors?.has(`${source.getStart(file)}:${source.getEnd()}`) && node.arguments?.length) {
+        const callee = f.createUniqueName('__natlang_error_constructor');
+        const args = f.createUniqueName('__natlang_error_args');
+        const message = readNeuraleseValue(f.createElementAccessExpression(args, f.createNumericLiteral(0)),
+          options.conditionalReadouts?.has(`${source.getStart(file)}:${source.getEnd()}`));
+        const rest = f.createSpreadElement(f.createCallExpression(f.createPropertyAccessExpression(args, 'slice'), undefined,
+          [f.createNumericLiteral(1)]));
+        const invoke = ts.isNewExpression(node) ? f.createNewExpression(callee, undefined, [message, rest]) :
+          f.createCallExpression(callee, undefined, [message, rest]);
+        const inner = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, args)], undefined, undefined, invoke)), undefined,
+          [f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        const outer = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, callee)], undefined, undefined, inner)), undefined,
+          [ts.visitNode(node.expression, visit) as ts.Expression]);
+        return f.createAwaitExpression(outer);
+      }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.jsons?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
           ts.isPropertyAccessExpression(node.expression) && node.arguments.length > 0) {
         const readoutCall = `${source.getStart(file)}:${source.getEnd()}`;

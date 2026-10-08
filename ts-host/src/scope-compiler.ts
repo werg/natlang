@@ -693,6 +693,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const jsonReadouts = new Map(readouts.filter(readout => readout.kind === 'json')
     .map(readout => [`${readout.start}:${readout.end}`, readout]));
+  const errorReadouts = new Map(readouts.filter(readout => readout.kind === 'error')
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
       const site = rebindAt.get(`${rel(node).start}:${rel(node).end}`);
@@ -704,6 +706,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           `${lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end)}, ${JSON.stringify(site.captureSources)})` });
         return;
       }
+    }
+    if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && node.arguments?.length &&
+        errorReadouts.has(`${rel(node).start}:${rel(node).end}`)) {
+      const readout = errorReadouts.get(`${rel(node).start}:${rel(node).end}`)!;
+      for (const argument of node.arguments) lowerNodes(argument);
+      const callee = lowerSpan(rel(node.expression).start, rel(node.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const calleeName = `__natlang_error_constructor_${rel(node).start}`;
+      const argsName = `__natlang_error_args_${rel(node).start}`;
+      const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+      const invoke = ts.isNewExpression(node) ? `new ${calleeName}(await __live.${reader}(${argsName}[0]), ...${argsName}.slice(1))` :
+        `${calleeName}(await __live.${reader}(${argsName}[0]), ...${argsName}.slice(1))`;
+      primitive.push({ ...rel(node), text: `(await ((${calleeName}: any) => (async (${argsName}: any[]) => ${invoke})` +
+        `([${args}]))(${callee}))` });
+      return;
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         jsonReadouts.has(`${rel(node).start}:${rel(node).end}`)) {

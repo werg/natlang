@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' | 'json'; conditional?: true };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' | 'json' | 'error'; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -166,8 +166,15 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     else if ((ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) && soft(node.expression)) opaque(node, 'it cannot be spread');
     else if ((ts.isForOfStatement(node) || ts.isForInStatement(node)) && soft(node.expression))
       opaque(node.expression, 'it cannot be iterated');
+    else if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Error' &&
+        isDefaultGlobal(checker, node.expression) && node.arguments?.length &&
+        hasSoftAlternative(checker, checker.getTypeAtLocation(node.arguments[0]!)))
+      readout(node, 'error', !soft(node.arguments[0]!));
     else if (ts.isCallExpression(node)) {
       const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === 'Error' && isDefaultGlobal(checker, callee) && node.arguments.length &&
+          hasSoftAlternative(checker, checker.getTypeAtLocation(node.arguments[0]!)))
+        readout(node, 'error', !soft(node.arguments[0]!));
       if (ts.isIdentifier(callee) && callee.text === 'String' && isDefaultString(checker, callee)) {
         const first = node.arguments[0];
         if (first && hasSoftAlternative(checker, checker.getTypeAtLocation(first)))
