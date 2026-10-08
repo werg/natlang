@@ -539,3 +539,58 @@ passes the generated root source through `compileModule()` and inline analysis,
 asserts the prompt example is literal text with no interpolation nodes, then
 compiles and executes the recommended `const next = String(priorNotes); return
 next;` eval pattern against the isolated runtime output.
+
+## Follow-up coverage check: array stringification and RegExp-capable methods — 2026-10-08
+
+**Priority: medium; prospective generated-runtime mismatch, no historical
+generation trace found.** A typed array of soft text has one working native
+text path: `values.join()` and `values.join('|')` request `joinNeuralese()` when
+the array/tuple's direct element type has a Neuralese arm
+(`neuralese.ts:105-126`). The helper asynchronously reads direct reference
+elements, applies commas or the supplied separator, and preserves index order
+and nullish-element blanks (`runtime/lowered.ts:55-68`). However,
+`values.toString()`, `String(values)`, and `` `${values}` `` produce no readout
+for `(Neuralese<string> | string)[]`. An isolated compiled module returned
+`[object Object],plain` for all three, while `values.join()` returned the
+resolved payload. This is wrapper coercion, not a historical model failure.
+
+There are two adjacent gaps in the existing join path. First, a soft separator
+is not read: with `values: Neuralese<string>[]` and `separator:
+Neuralese<string>`, analysis marks `values.join(separator)` as a join readout,
+but `joinNeuralese` calls `toStringValue(separator)` before reading elements;
+multiple items are separated by `[object Object]`. A narrow candidate is to
+read only a declared soft separator first, preserving `undefined` as the
+default comma and keeping separator conversion before element reads. Second,
+the lowering selects the helper from the standard library declaration but
+does not capture/check the runtime method: it bypasses a custom own or modified
+prototype `join`; an isolated compiled call with `values.join = () =>
+'custom join'` returned the resolved payload instead. The helper's
+`index in values` also adds a Proxy `has` trap
+that native `join` does not perform; reading each index once and treating a
+nullish result as blank would keep holes blank while honoring inherited reads
+without that extra trap.
+
+Do not lower `Array#toString`, `String(array)`, or template interpolation by
+blindly rewriting them to `joinNeuralese`. Native `Array#toString` fetches and
+calls the receiver's current `join`; `String(array)` and template coercion
+first honor `Symbol.toPrimitive` and custom `toString`. A prospective narrow
+design for explicit `.toString()` would capture the receiver and resolved
+method, use async direct-element joining only when the runtime methods are the
+standard Array `toString` and `join`, and otherwise invoke the captured method
+with native arguments. `String(array)` and template support would need to
+reproduce their full ToPrimitive method lookup order or stay out of scope.
+Neither path should recursively read nested arrays or object graphs. The
+existing `.join()` idiom is the currently supported route.
+
+The new String-method allowlist deliberately covers methods whose supported
+argument slots are text-only (`includes`, `startsWith`, `endsWith`, `indexOf`,
+`lastIndexOf`, `localeCompare`, plus the pad string slot). `replace` and
+`replaceAll` have RegExp and string search arms, plus string or callback
+replacement arms; `split`, `match`, and `search` also accept RegExp. They are
+not inherently impossible to support: exact declaration/argument-position
+checks and conditional readout can leave crisp RegExp or callback arms intact,
+then let native `Symbol.match` and replacement protocols run. They were
+excluded from the initial patch because a generic text-argument rule would
+coerce these nontext alternatives and could change callback or RegExp
+behavior. A separate follow-up should test overloads, mixed arms, custom
+`Symbol.match`, and argument side-effect order before extending the allowlist.
