@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-v11-free-tier-readiness-failure-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-loopback-20261008-v11-retry-schedule-probe",
+  "files": [
+    {
+      "path": "readiness-probe-receipt.json",
+      "bytes": 4847,
+      "sha256": "17f959057426d86f229638fdcf5f4eca3d329ae21098e9f7c00ec62298fc4ae6"
+    },
+    {
+      "path": "post-probe-review.json",
+      "bytes": 3289,
+      "sha256": "493d7c4b9a9bfd6a4a226795f27592f965c7f111d088b86928a49e3375147d7b"
+    },
+    {
+      "path": "server/scratch/.natlang-transport-failures/failure-ses_ee5d89e63ffeuEmqXVGBZ4MdQ9-45e5cbfc-3e4c-461d-911e-230a73eb392e.json",
+      "bytes": 2328,
+      "sha256": "22e0b223ff6d9cb2a078a69f676b347d98ebb50591c9460ae687146c61b127e9"
+    }
+  ],
+  "bytes": 10464
+}
