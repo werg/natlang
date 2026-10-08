@@ -186,8 +186,38 @@ def main(argv=None):
 AUTOREGRESSIVE_KINDS = ('ar_greedy', 'ar_projection', 'ar_sketch')
 
 
+def _gold_reference_survival(prediction, losses, span):
+    """Score gold targets only while the greedy token history still matches.
+
+    At target position ``t``, the history is still the reference history when
+    every generated token before ``t`` matched gold. The first mismatching
+    target itself is therefore included: its input context is still exact.
+    """
+    if prediction.shape != span.shape or losses.shape != span.shape or span.ndim != 2:
+        raise ValueError('prediction, loss and gold target shapes must match')
+    matches = prediction.eq(span)
+    survival = torch.cat((torch.ones_like(matches[:, :1]), matches[:, :-1]), dim=1).cumprod(dim=1).bool()
+    surviving_losses = losses[survival]
+    surviving_correct = matches[survival]
+    first_mismatch = []
+    for row in matches:
+        mismatch = torch.nonzero(~row, as_tuple=False)
+        first_mismatch.append(int(mismatch[0, 0]) if mismatch.numel() else None)
+    count = int(survival.sum())
+    return {
+        'first_token_ce': float(losses[:, 0].mean()),
+        'first_token_accuracy': float(matches[:, 0].float().mean()),
+        'first_divergence_index_by_window': first_mismatch,
+        'exact_prefix_survival_tokens': count,
+        'exact_prefix_survival_ce': float(surviving_losses.mean()) if count else None,
+        'exact_prefix_survival_accuracy': float(surviving_correct.float().mean()) if count else None,
+        'gold_reference_scope': 'gold next-token targets are context-valid through the first mismatching prediction; later targets are scored on divergent histories',
+    }
+
+
 @torch.no_grad()
-def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE_KINDS):
+def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE_KINDS, *,
+                            return_generated_tokens=False):
     """Self-fed rollouts from one prefix, one position at a time.
 
     ar_greedy feeds back the crisp greedy token; ar_projection the full-depth projection of the top state (the
@@ -199,19 +229,21 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
     if heads.read_markers:
         raise ValueError('autoregressive history controls require the raw read profile')
     prefix_embeddings = backbone.embed(prefix)
-    payloads = {}
+    payloads = {};generated_tokens={}
     for kind in kinds:
         if kind not in AUTOREGRESSIVE_KINDS:
             raise ValueError(f'unknown autoregressive control {kind}')
         # A separate prefill per rollout: no-grad caches grow in place.
         context = prefill_write_context(backbone, heads, prefix_embeddings)
-        cache, values = context.cache, []
+        cache, values = context.cache, [];tokens=[]
         state, top = context.state[:, None], context.top[:, None]
         for position in range(steps):
             if kind == 'ar_sketch':
                 value = heads.feedback(state)
             elif kind == 'ar_greedy':
-                value = backbone.embed(backbone.logits(top).argmax(-1))
+                token=backbone.logits(top).argmax(-1)
+                value = backbone.embed(token)
+                if return_generated_tokens:tokens.append(token)
             else:
                 value = heads.content(torch.zeros_like(top), top)
             values.append(value)
@@ -223,23 +255,26 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
             else:
                 top, cache = backbone.run_layers(history, range(backbone.num_layers), cache)
         payloads[kind] = torch.cat(values, 1)
+        if return_generated_tokens and kind=='ar_greedy':generated_tokens[kind]=torch.cat(tokens,1)
         del cache
-    return payloads
+    return (payloads,generated_tokens) if return_generated_tokens else payloads
 
 
 @torch.no_grad()
 def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, kinds=AUTOREGRESSIVE_KINDS):
     """Score self-fed histories with the same full-stack consumer as the matched controls.
 
-    Gold CE over the first ``steps`` targets given each self-generated history, against the teacher-forced gold
-    history and against the crisp autoregressive (ar_greedy) run; the latter is the Neuralese-vs-crisp parity
-    that gates the cutover from sketch initialization to autoregressive initialization.
+    Gold-reference CE over the first ``steps`` targets given each generated history, against the teacher-forced
+    gold history and against the crisp autoregressive (ar_greedy) run. Once a generated token diverges from gold,
+    subsequent gold tokens no longer describe the generated prefix; the reported survival subset isolates scores
+    whose prior crisp history still exactly matches gold. These are token-fidelity diagnostics, not task success.
     """
     steps = min(int(steps), span.shape[1])
     if steps < 2:
         raise ValueError('autoregressive controls need at least two target positions')
     span = span[:, :steps]
-    payloads = autoregressive_payloads(backbone, heads, prefix, steps, kinds)
+    payloads,generated_tokens = autoregressive_payloads(
+        backbone, heads, prefix, steps, kinds, return_generated_tokens=True)
     payloads = {'gold': backbone.embed(span), **payloads}
     prefix_embeddings = backbone.embed(prefix)
     scores = {}
@@ -262,9 +297,16 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
         if crisp_losses is not None:
             row['ce_delta_from_ar_greedy'] = float((losses - crisp_losses).mean())
             row['argmax_agreement_with_ar_greedy'] = float((prediction == crisp_prediction).float().mean())
+        if name == 'ar_greedy':
+            actual_tokens=generated_tokens['ar_greedy']
+            survival=_gold_reference_survival(actual_tokens, losses, span)
+            survival['generated_vs_rescored_prediction_agreement']=float((actual_tokens==prediction).float().mean())
+            row['gold_reference_after_divergence'] = survival
         rows[name] = row
-    return {'schema': 'natlang.autoregressive-history-controls/1', 'steps': steps, 'windows': span.shape[0],
-            'consumer': 'full stack over prefix + history, scored on gold targets', 'scores': rows}
+    return {'schema': 'natlang.autoregressive-history-controls/2', 'steps': steps, 'windows': span.shape[0],
+            'consumer': 'full stack over prefix + generated history, scored on gold-reference targets',
+            'gold_reference_interpretation': 'after a rollout diverges, later gold tokens are not asserted to be valid next-token targets for that generated context',
+            'scores': rows}
 
 
 if __name__ == '__main__':

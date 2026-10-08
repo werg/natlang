@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from natlang_neuralese.eval.projected_history import projected_history_metrics
+from natlang_neuralese.eval.projected_history import _gold_reference_survival, projected_history_metrics
 
 
 class CausalCycle(torch.nn.Module):
@@ -108,3 +108,27 @@ def test_matched_consumers_reuse_pass_zero_and_report_read_history_distance():
     assert projected['whole']['read_history_mse_vs_live_greedy']>0
     assert projected['last256']==projected['whole']
     assert report['live_greedy']['whole']['read_history_mse_vs_live_greedy']==0
+
+
+def test_greedy_gold_reference_metrics_stop_survival_at_first_divergence():
+    gold=torch.tensor([[4,5,6,7]])
+    predicted=torch.tensor([[4,9,6,7]])
+    losses=torch.tensor([[.1,.2,8.,9.]])
+    metrics=_gold_reference_survival(predicted,losses,gold)
+    assert metrics['first_token_accuracy']==1
+    assert metrics['first_token_ce']==pytest.approx(.1)
+    assert metrics['first_divergence_index_by_window']==[1]
+    # Target 1 is still scored on the exact prefix through target 0; later
+    # gold targets follow a prefix that the rollout never generated.
+    assert metrics['exact_prefix_survival_tokens']==2
+    assert metrics['exact_prefix_survival_ce']==pytest.approx(.15)
+    assert metrics['exact_prefix_survival_accuracy']==pytest.approx(.5)
+
+
+def test_greedy_gold_reference_reports_full_survival_without_zero_case_ambiguity():
+    gold=torch.tensor([[4,5]])
+    metrics=_gold_reference_survival(gold,torch.tensor([[.2,.3]]),gold)
+    assert metrics['first_divergence_index_by_window']==[None]
+    assert metrics['exact_prefix_survival_tokens']==2
+    assert metrics['exact_prefix_survival_ce']==pytest.approx(.25)
+    assert metrics['exact_prefix_survival_accuracy']==1
