@@ -96,15 +96,14 @@ a training job (about 170 generated tokens/s across all requests, about 28 per s
   errors say what to do, or general runtime changes (see below). Remaining variance comes from the executor under
   load: a phase occasionally improvises (skips a step, retypes a value) and the second attempt, which is told why
   the first failed (`facts.previousAttempt`), usually recovers.
-- Order of results in an aborted parallel round follows completion, not call order (pi's synchronous tools finish
-  in call order); context derivation reorders results by call, so the model sees the same transcript.
+- Results of an aborted parallel round are written in call order: an aborted tool waits (bounded) for the slots
+  before it, as pi's synchronous tools finish in call order.
 - Live: `eval js-off-by-one` ran 7 generations and several tool rounds end to end (bash, read, edit), fixed the
-  visible tests and missed the hidden `hasNext` case before its 90-minute limit. The subagent runs a child
-  conversation through `delegation`; one run failed when the executor of the tool phase improvised around its
-  steps.
-- Speed: a phase is a multi-turn executor call, 1 to 5 minutes under this load; prepare (with planSystem and the
-  token estimate as nested calls) is the slowest. planSystem and estimate are deterministic and are the next
-  candidates for crisp twins behind the hot-path setting.
+  visible tests and missed the hidden `hasNext` case before its 90-minute limit. The subagent tool ran a child
+  conversation end to end through `delegation` (the child ran bash, the parent answered with its findings).
+- Speed: a phase is a multi-turn executor call, 1 to 5 minutes under this load. Planning (planSystem and the
+  token estimate) has crisp twins behind the hot-path setting (`--planning`, default crisp), which cut prepare
+  from 4–7 minutes to about 1.5.
 
 General runtime changes that came out of the port: service arguments arrive as host-realm data; `ONCE_EFFECTS`
 (the provider request and poll run once per phase); computed values keep fields their declared type does not
