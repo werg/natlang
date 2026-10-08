@@ -6862,6 +6862,117 @@
         "neuralese-v24-actual-action-review-20261008-v1"
       ],
       "notes": "Materialized all 63 selected source-grounded V24 actions via the existing shared native held-preview builder: 55 prose notes and 8 typed final results, 30 train/33 test over 15 source groups. All target values and exact raw generation events matched crosswalk references; no omissions/missing contexts. All rows remain training_approved=false; 56 came from overall accepted source results and 7 from overall rejected source results. Six TRN-520 wrapper-bearing notes remain a separate adapter-review backlog. Native rows contain normal builder-produced context; selection/receipt/crosswalk carry references and hashes, not copied target/prefix bodies."
+    },
+    {
+      "id": "neuralese-v25-actual-action-review-20261008-v8",
+      "owner": "pop",
+      "path": "runs/neuralese-v25-source-action-review-20261008-v8",
+      "include": [
+        "README.md",
+        "review.json",
+        "manifest.json"
+      ],
+      "admission": "held-actual-source-action-review-no-training-admission",
+      "notes": "Held V25 source/action audit: all 16 actual Luna cases, exact typed-text writer event/body/request provenance, per-case source pass binding and selected output graph path; 30 train action recommendations, test rows diagnostic only. Not training admission, gradient replay qualification, or learned-runtime qualification.",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v25-20261008-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v25-actual-action-preview-20261008-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-v25-actual-action-preview-20261008-v3",
+      "include": [
+        "README.md",
+        "selected-actions.jsonl",
+        "raw-receipts.jsonl",
+        "native-preview.jsonl",
+        "candidate-crosswalk.jsonl",
+        "manifest.json"
+      ],
+      "admission": "held-action-preview-no-training-admission",
+      "notes": "V25 exact selected eval-code action preview: 30 train candidates and 26 test diagnostics across 16 source groups. All model targets are exact selected eval code; typed eval-finish bodies are separate authenticated outputs and are not substituted into assistant targets. Source quality and typed output roles have separate receipts. No runtime-gradient qualification or training admission.",
+      "derived_from": [
+        "neuralese-v25-actual-action-review-20261008-v8"
+      ]
+    },
+    {
+      "id": "neuralese-v25-target-output-role-audit-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v25-target-output-role-audit-20261008-v1",
+      "include": [
+        "README.md",
+        "roles.jsonl",
+        "manifest.json"
+      ],
+      "admission": "held-review-only-no-training-admission",
+      "notes": "Per-action raw-event audit distinguishes literal target code, nested Neuralese calls, accumulation/computation, structured serialization, and exact visible-input re-emission from separate typed eval-finish outputs. Review only; no writer or gradient admission.",
+      "derived_from": [
+        "neuralese-v25-actual-action-review-20261008-v8",
+        "neuralese-v25-actual-action-preview-20261008-v3"
+      ]
+    },
+    {
+      "id": "neuralese-v26-lang850-failure-source-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v26-lang850-failure-source-review-20261008-v1",
+      "include": [
+        "README.md",
+        "review.json",
+        "manifest.json"
+      ],
+      "admission": "held-source-action-diagnostic-no-training-admission",
+      "notes": "Bounded LANG-850 failure diagnosis: pass-03 source-grounded notes remain correct; pass-04 typed note child returns decision JSON instead of its declared accumulated Neuralese<string>, dropping the evidence before final interpretation. Diagnostic only; no answer normalization/admission.",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v24-semantic-target-role-correction-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-semantic-target-role-correction-20261008-v1",
+      "include": [
+        "README.md",
+        "role-correction.json"
+      ],
+      "admission": "held-role-correction-audit-only-no-training-admission",
+      "notes": "Supplemental audit corrects generation roles for all 63 targets in the sealed V24 semantic-target preview. Separates 50 trained readout surfaces (47 exact, 3 changed), 5 note writers/forwarders, 5 direct final interpreters, and 3 forwarded final completions. Sealed proposal/materialization remain unchanged; no learned projection qualification or training admission.",
+      "derived_from": [
+        "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+        "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+        "neuralese-v24-actual-action-review-20261008-v1"
+      ]
+    },
+    {
+      "id": "neuralese-workflowevals-old256-closed-raw-20261008-v1",
+      "owner": "pop",
+      "path": "runs/luna-slot1-spacebunny3-successor-20261002",
+      "admission": "held-closed-raw-generation-observations-action-review-pending-no-training-admission",
+      "include": [
+        "worker-1.queue.jsonl",
+        "worker-1/case-*.results.jsonl",
+        "worker-1/case-*.collector.log",
+        "worker-1/jobs/*.result.json",
+        "worker-1/jobs/*.error.json",
+        "worker-1/jobs/*.partial.json",
+        "worker-1/jobs/*.result.json.manifest.json",
+        "worker-1/jobs/*.error.json.manifest.json",
+        "worker-1/jobs/*.partial.json.manifest.json",
+        "worker-1/*.results.jsonl.manifest.json",
+        "worker-1/*.error.json.manifest.json",
+        "worker-1/*.partial.json.manifest.json"
+      ],
+      "notes": "Immutable raw snapshot of the retired 256-case WorkflowEvals directory-reducer campaign. Terminal recount: 245 accepted parent outcomes and 11 rejected; all 256 have result records. Raw campaign rows, provider job result records, case logs, and queue evidence are retained. All remain held for source/action review and required conversions; this does not grant training admission or authorize controller resumption."
+    },
+    {
+      "id": "neuralese-workflowevals-folder-inventory-20261008-v1",
+      "owner": "pop",
+      "path": "runs/workflowevals-folder-inventory-20261008-v1",
+      "admission": "held-source-inventory-candidate-shortlist-no-generation-or-training-admission",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Read-only inventory and candidate shortlist for unused WorkflowEvals directory-reducer source IDs, bound to the existing source policy/release lineage. Candidate rows are for review/conversion only; reused source groups receive no independent-world credit and are not generation authorization."
     }
   ],
   "coverage_backlog": [
