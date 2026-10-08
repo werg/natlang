@@ -1,6 +1,6 @@
 # Trace-guided specialization: a tracing JIT for natural-language functions
 
-Status: design, 2026-10-08, revised the same day with the owner's decisions (section 9). Nothing below is
+Status: design, 2026-10-08, revised twice the same day with the owner's decisions (section 9). Nothing below is
 implemented.
 
 ## 1. Idea
@@ -17,15 +17,17 @@ program and looks for invocation patterns that are already crisp in practice:
 - *"For inputs whose `items` array is empty, the call always returns `[]` after one turn."*
 - *"When `format` is `'csv'`, the model always writes an equivalent split/join program."*
 
-For each such pattern it emits a **specialization**: a crisp **guard** (a predicate over the call's typed inputs) and a
-crisp **body** (a TypeScript function with the definition's signature). At call time the runtime checks the guards.
+For each such pattern it writes a **case**: a crisp **guard** (`when`, a predicate over the call's typed inputs) and a
+crisp **body** (`run`, a TypeScript function with the definition's signature). A function's cases live in a
+`foo.cases.ts` file beside `foo.nl` (section 7). At call time the runtime checks the guards.
 When one holds, the body runs instead of the agent. If no guard holds, the agent runs as before. If the body fails,
 the failure goes back to the agent, which finishes the call (section 6.5). The `.nl` function remains the
 specification and the fallback.
 
 Specialization is part of the runtime: recording, dispatch, the background specializer run, tier promotion and
 auditing all happen without an application asking for them (section 7). The compiler itself is a natlang program
-(`applications/specializer`) that the runtime runs offline over the machine's record store. Natural-language
+(`applications/specializer`): a directory reducer from the program's context and its recorded evidence to a new
+context revision that contains cases files. The runtime runs it offline over the machine's record store. Natural-language
 functions make the judgments (which executions show the same approach, which conditions separate them, whether to
 compile at all, how to write the body). Crisp code handles counting, verification, hashing and storage.
 
@@ -69,7 +71,7 @@ definition_id, definition_source, revision      -- revision = hash of the instru
 site: { kind: named | inline | iterate-step | judge,
         template_hash, slots }                  -- inline: hash of the un-interpolated template + slot values (new)
 executor: { kind: agent | crisp | crisp→agent,  -- crisp→agent: a body failed and the agent finished (6.5)
-            model_id, revision, dialect, temperature, seed_policy, specialization_id }
+            model_id, revision, dialect, temperature, seed_policy, case_hash }
 adaptation                                      -- the instruction overlay that ran, if any
 inputs_ref, output_ref, captures_ref            -- exact portable snapshots (blob hashes); see 3.2
 input_features                                  -- typed feature vector, computed at record time (see 5.2)
@@ -95,7 +97,7 @@ Two bounds apply, both in machine configuration with defaults:
   cannot be a verification reference for that field.
 - **Per store** (default 50 GB on NVMe). When the store passes its bound, eviction runs in this order: event-stream
   blobs of unpinned calls, oldest first; then value blobs of unpinned calls; then rows older than the retention
-  horizon. Calls cited as evidence by a specialization, an adaptation artifact or a dataset manifest are pinned and
+  horizon. Calls cited as evidence by a case, an adaptation artifact or a dataset manifest are pinned and
   are never evicted.
 
 Programs opt out per definition or per argument in `natlang.json`
@@ -121,7 +123,7 @@ the frame (`Frame.parentActionSeq`), and `runDefinition` records it. A call tree
   and tests. A runtime option or `NATLANG_CALL_STORE=off` disables it. `--trace DIR` stays as a JSONL export.
 - Writes happen in the existing end-of-call hook (`task.record`), so recording adds no latency to model turns. A
   failed write is reported once per task and never fails the call.
-- Stores are machine-local and are not synchronized between machines. Specializations are portable artifacts.
+- Stores are machine-local and are not synchronized between machines. Cases files are portable source.
   Records that become training data move as corpus manifests, like any other data.
 - Browser runtime: an IndexedDB sink with the same row shape (later; not needed for the specializer).
 
@@ -142,8 +144,8 @@ CLI: `natlang traces hot|list|show CALL|export --jsonl`.
 
 ### 3.6 Correctness signals
 
-`outcome === 'done'` only says the call returned a typed value. Improving specializations (6.1) need independent
-signals, attached after the fact with `traces.annotate`. The runtime records them automatically where it can: a caller
+`outcome === 'done'` only says the call returned a typed value. Judging a case that behaves differently from the
+agent (6.1) needs independent signals, attached after the fact with `traces.annotate`. The runtime records them automatically where it can: a caller
 that catches a `NatlangCallError` and retries, an evaluation-suite score (`evaluation/`), a progress judge, an audit
 verdict. Application-level feedback (a user edits the answer) goes through the same call.
 
@@ -229,25 +231,27 @@ heuristic.
    calls.
 2. **Synthesize**: for answer-only approaches, an `.nl` author writes TypeScript from input/output/effect examples plus
    the instructions. Replay verifies the result.
-3. **Improve**: the author writes a better body than the recorded behavior. Examples: merging two equivalent
-   approaches, removing a wasted eval or a redundant service read, fixing an inconsistency between clusters, or
-   handling a case the agent often failed. Recorded outputs are then not the reference (6.1). An improvement must not
-   change which effects happen except where the improvement is precisely that (a redundant read removed); the
-   specializer states every effect difference in the specialization's description.
+Improving is not a separate mode. The compiler's instructions say that its crisp code may do better than the
+recorded agent: merge two equivalent approaches, drop a wasted eval or a redundant service read, make inconsistent
+clusters consistent, or handle inputs the agent often failed on. Acceptance (6.1) treats every case the same way.
 
 ## 6. Acceptance, lifecycle and runtime integration
 
-### 6.1 Two acceptance modes
+### 6.1 Acceptance
 
-- **Faithful**: on a held-out split of recorded calls the guard admits, replay (3.7) matches output, capture writes,
-  folder result and effect sequence. Output equality follows the return type: exact for records, enums and numbers;
-  for free-text fields, an equivalence judge whose verdicts are sampled for review. The executor was nondeterministic,
-  so the reference is the *agreeing majority* of recorded behaviors for equal inputs. Inputs whose recorded behavior
-  disagrees are excluded and reported. Disagreement is a finding about the program.
-- **Improving**: the body is scored on the program's evaluation suite, on annotated calls (3.6) and on offline audit
-  pairs, against the agent. Acceptance follows the adaptation system's rules: the baseline is always a candidate, the
-  scorer is independent of the author, the comparison is paired, and the improvement must be positive, not merely
-  equal. Effect differences are checked against the stated ones; an unstated effect difference rejects the body.
+There is one rule for every case, whether it copies the agent or improves on it. Replay (3.7) runs the case on a
+held-out split of recorded calls its guard admits. For each call:
+
+- If output, capture writes, folder result and effect sequence equal the recorded agent behavior, the call passes.
+  Equality follows the return type, and the reference is the agreeing majority of recorded behaviors for equal
+  inputs.
+- If anything differs, an independent judge compares the two behaviors against the definition's instructions and
+  contract, and against annotations on that call (3.6): `better`, `equivalent` or `worse`. The judge is a
+  natural-language decision in the runtime, not part of the compiler, and it does not see which side is the case.
+
+A case is accepted when no more calls than the acceptance bound are `worse`. Inputs whose recorded agent behavior
+disagrees with itself are judged the same way and reported, since the disagreement is a finding about the program.
+The same judge decides shadow and audit comparisons (6.2, 6.3).
 
 ### 6.2 Tiers, automatic and integrated
 
@@ -255,18 +259,19 @@ heuristic.
 observed → candidate (verified offline) → shadow → active → (demoted)
 ```
 
-The runtime moves specializations through the tiers by evidence. No application has to activate them. A machine
+The runtime moves cases through the tiers by evidence. No application has to activate them. A machine
 setting (`specialization: off | shadow | on`, default `on`) and a per-program override in `natlang.json` limit how far
 they may go.
 
+- Promotion is automatic for every case, including ones that change behavior.
 - **Shadow**: on guarded calls the agent runs and its result is returned. Afterwards, offline, the body is replayed
   against that call's record (recorded effects served back, no live effects). Divergences are recorded. Shadow adds no
   latency to the live call.
 - **Active**: the body's result is returned. Audits (6.3) continue. A divergence or regression rate above the
-  acceptance bound demotes the specialization automatically, and the demotion is recorded with the evidence.
-- A specialization is bound to the definition revision, the build, the service declarations it calls, and the
+  acceptance bound demotes the case automatically, and the demotion is recorded with the evidence.
+- A case is bound to the definition revision, the build, the service declarations it calls, and the
   executor identity whose traces it was learned from. A change to any of them puts it back in shadow (newest code
-  always: no frozen old specialization keeps running against new code).
+  always: no frozen old case keeps running against new code).
 
 ### 6.3 Offline audits through the agent
 
@@ -274,15 +279,16 @@ A declared fraction of active, guarded calls (default 5%) is queued for audit. T
 immediately. Later, when executor capacity is idle, the auditor runs the agent on the recorded inputs, captures and
 folder snapshot. Services are served from the crisp call's recorded effects where the arguments match. Where the agent
 asks for a different effect, that is a divergence, and the effect is not performed. The auditor then compares the two
-behaviors (faithful: equality; improving: the independent scorer) and annotates the original call.
+behaviors with the rule of 6.1 and annotates the original call.
 
 Audit runs are ordinary records with `audit` set. They keep producing agent trajectories for guarded inputs, so
 training data for those patterns keeps growing. They are marked so dataset builders can weight them deliberately.
 
 ### 6.4 Runtime dispatch
 
-In `runDefinition`, before the agent is built: look up `(definition revision, site template)` in the machine's active
-specialization table, evaluate guards in order, and run the first body whose guard admits. A guard that throws counts
+In `runDefinition`, before the agent is built: look up the cases attached to the definition in the program's bound
+context revision (7.4). Evaluate the guards of shadow and active cases in order, and run the first active case
+whose guard admits. A guard that throws counts
 as not admitting and is recorded. Body calls are recorded in the same store with `executor.kind = 'crisp'`. Nested
 natlang calls from a body go through the kernel as usual and can be specialized in turn.
 
@@ -302,54 +308,128 @@ its guard admitted but it cannot handle), the runtime hands the call to the agen
    the task needs them. The note is shown only in this case. There are no new tools, names or system-prompt text.
    This follows the existing practice of telling a retried phase why its first attempt failed.
 4. The record is `executor.kind = 'crisp→agent'`, with the body's error and journal. Each hand-off counts against the
-   specialization's divergence rate; repeated hand-offs demote it, and their records go to the specializer as
+   case's divergence rate; repeated hand-offs demote it, and their records go to the specializer as
    counterexamples for the guard.
 
 A body that returns a value of the wrong type is handled the same way: the type check fails, and the agent takes
 over.
 
-### 6.6 Artifact and source forms
+## 7. Shape in natlang: a reducer from context and evidence to a new context
 
-- **Artifact** (runtime overlay): a new adaptation component kind, `specialization`, carrying guard source, body
-  source, feature extractors, acceptance mode, stated effect differences, evidence (call ids, splits, precision and
-  coverage, divergence counts, declines) and compatibility. It uses the existing adaptation lifecycle
-  (`adaptation/compatibility.ts`, `optimization/promotion.ts`, `export-patch.ts`) for storage, rollback and export,
-  with tier promotion automated (6.2).
-- **Source** (pluggable hot path): a specialization can be exported as a crisp implementation next to the `.nl` file,
-  selected by a setting, following the owner's pluggable-hot-paths rule. The guard stays explicit in source so a
-  reader sees when the crisp path applies.
+The spec already names this operation: "Self-improvement is a function from a context and evidence to a new
+context revision; promotion binds a program to that revision" (SPEC.md, Directory reducers). Specialization is one
+such function. It needs no new execution concept. Its parts are a cases file, a directory reducer, an evidence folder
+and context promotion.
 
-## 7. The specializer application and its runtime loop
+### 7.1 The cases file
+
+A function's crisp cases are an ordinary callable-folder TypeScript module beside its `.nl` file:
+
+```ts
+// database/classify.cases.ts: crisp cases for classify.nl. Inputs no case takes go to classify.nl.
+import type { Classification } from '../types';
+
+export const cases = [
+  { when: (request: string) => /^\s*(create|define)\s+table\b/i.test(request),
+    run: async (request: string): Promise<Classification> => ({ kind: 'schema' }) },
+  { when: (request: string) => /^\s*(select|with)\b/i.test(request),
+    run: async (request: string): Promise<Classification> => ({ kind: 'question' }) },
+];
+```
+
+- `when` takes the function's parameters and returns a boolean. It must not cause effects.
+- `run` has the function's signature. It may call what the function itself may call (the items of its context and
+  its services) and nothing more, so a case never has more authority than its function. Calling a natlang item is
+  how a case keeps a semantic judgment natural (5.3).
+- A `throw` in `run` (or `Deopt`, for an input a guard admitted but the case cannot handle) hands the call to the
+  agent (6.5).
+- The runtime keys tier state by each case's content hash, not by its position. The compiler writes a comment line
+  with the case's evidence (`// 412 calls, 0 worse, a1`).
+
+The loader attaches `foo.cases.ts` to `foo.nl`. It is not an item that callers of the folder can call, and the agent
+executing `foo` does not see it. Authors can write cases files by hand. The specializer reads and edits existing
+ones like any other source, and hand-written cases go through the same acceptance and tiers.
+
+This is the one new authoring concept in the design. It is ordinary TypeScript with two fields, so small models can
+write it, and executing models never see it. `skills/natlang-authoring` gains a short section on it.
+
+### 7.2 The specializer: a directory reducer
 
 ```
 applications/specializer/
-  specialize.nl                 top level: profile, pick targets, run the per-definition loop, report
+  specialize.nl            directory reducer over the program context; reads evidence; for one definition,
+                           writes or edits foo.cases.ts, or declines
   specialize/
-    targets.nl                  which hot definitions are worth it (cost × volume × apparent regularity)
-    sameApproach.nl             decision: do two eval programs do the same thing
-    proposeGuards.nl            clusters + crisp candidates → condition clusters, unclassified calls, or a decline
-    semanticCheck.nl            decision: is this condition how the decision is really made, or does it need meaning
-    writeBody.nl                template / examples / instructions → a TypeScript body (lift, synthesize, improve)
-    explain.nl                  a reviewer-facing description of each specialization, its effects and its evidence
-  index.ts                      crisp: normalization, anti-unification, features, rule induction,
-                                precision/coverage, replay verification, splits, artifact assembly
+    sameApproach.nl        decision: do two eval programs do the same thing
+    semanticCheck.nl       decision: is a condition how the agent really decides, or does it need meaning
+  index.ts                 crisp: hot list, evidence folder rendering (7.3), replay verification, decline records
 ```
 
-The result type makes declining easy to express:
+The program context comes first, so it is a directory reducer. Evidence is a second, read-only folder:
 
 ```ts
-type DefinitionResult =
-  | { kind: 'specialized'; specializations: Specialization[]; unclassified: CallRef[] }
-  | { kind: 'declined'; reason: 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it'; evidence: string };
+specialize(program: Folder, evidence: Folder, definition: string): Promise<
+  | { kind: 'specialized'; cases: number; unclassified: number }
+  | { kind: 'declined'; reason: 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it'; why: string }>
 ```
 
-`proposeGuards` and `writeBody` say in their instructions that leaving calls unclassified and declining are expected,
-good outcomes, and that a heuristic standing in for a semantic judgment is a wrong one.
+Its instructions say, in plain words:
+- Group the recorded calls by the conditions that select each approach.
+- Write one case per group whose condition you can state crisply.
+- Leave every call you cannot classify to the natural-language function.
+- Improve on what the agent did where you can.
+- Decline, with a reason, when there are no groups or when the choice depends on meaning. Writing no cases is a good
+  result when that is the truth.
 
-**Runtime loop.** A machine-level background service runs the specializer when the store has enough new calls for a
-hot definition, and the shadow replays and audits when executor capacity is idle. On DGX the loop goes through the
-memory ledger like every other model-loading job, and it yields to training. It uses the newest code and data each time
-it starts, and it can be interrupted and resumed at any step: its progress is records in the store.
+Each definition is one `iterateOn` loop over the reducer's folder. The step writes or edits the cases file. Crisp code
+then replays it (3.7, 6.1) and writes the report into the evidence folder: counterexamples per case, judge verdicts,
+calls the guard wrongly admitted. The loop ends when every remaining case is accepted, or with a decline. A case that
+cannot be made acceptable is removed, and its calls count as unclassified.
+
+The top level is ordinary TypeScript in the application: take `traces.hot()`, skip definitions with a standing
+decline (5.3), and call `specialize` for each remaining one on the same staged folder.
+
+### 7.3 The evidence folder
+
+The model does not have to query the store. After the crisp mining steps of section 5, crisp code renders the
+evidence as files:
+
+```
+evidence/database/classify/
+  function.md                 instructions, signature, callees, call volume and cost
+  approaches/a1/approach.ts   anti-unified template with holes named by input path
+  approaches/a1/examples/     a few exact records: inputs.json, output.json, effects.json, evals.ts
+  approaches/a1/stats.md      calls, outcomes, recorded-behavior agreement
+  conditions.md               crisp rule-induction candidates per approach, with precision and coverage
+  unclassified/               calls in no approach or matching no condition
+  history.md                  earlier declines, hand-offs, demotions, audit divergences
+  report.md                   written by each replay round (7.2)
+```
+
+The model then does what it is good at with ordinary file tools: it reads the examples, compares approaches and
+writes TypeScript. It can still query `traces` when it wants more examples.
+
+### 7.4 Promotion and export
+
+The runtime's background loop (7.5) calls `specialize` on a staged copy of the program's current context and keeps the
+staged tree. Compiled, that tree is a new context revision of the program. The runtime binds the program to it on this
+machine, and the new cases start in shadow. Tiers are runtime state per case hash; the revision only says which cases
+exist.
+
+Applying the same reducer with `folder.apply` writes the cases files into the source tree, where they are reviewed and
+committed like any other change. That is the export. It is also the pluggable-hot-paths form: crisp cases beside the
+natural-language function, chosen per call by their guards. A machine whose program source already contains cases
+files starts from them.
+
+The adaptation machinery (`adaptation/compatibility.ts`, `optimization/promotion.ts`) is reused for revision
+bookkeeping and rollback. There is no separate artifact format.
+
+### 7.5 Runtime loop
+
+A machine-level background service runs the specializer when the store has enough new calls for a hot definition. It
+runs the shadow replays and audits when executor capacity is idle. On DGX the loop goes through the memory ledger like
+every other model-loading job, and it yields to training. It uses the newest code and data each time it starts, and it
+can be interrupted and resumed at any step: its progress is records in the store and staged revisions.
 
 Per the port-granularity rule, each part gets an explicit decision (NL function / instruction / crisp helper) in a
 short DECOMPOSITION.md before implementation.
@@ -361,33 +441,37 @@ short DECOMPOSITION.md before implementation.
    round trip, dedupe, bounds and eviction, pins, parent-action links, opt-out, concurrent writers.
 2. `traces` service and `natlang traces` CLI. Migrate `iterate` statistics and the improver's evidence reads.
 3. Replay harness with recorded-effect serving, folder copies, effect-sequence comparison and divergence reports.
-4. Runtime dispatch, the error hand-off to the agent (6.5), shadow replay, the audit queue, the `specialization`
-   adaptation component kind and schema, automatic tiers.
-5. Specializer application: crisp mining first (normalization, anti-unification, features, rule induction, the crisp
-   `no-clusters` decline), then the `.nl` judges and authors, then improving mode with paired scoring.
+4. Cases files: loader attachment to `foo.nl`, runtime dispatch, the error hand-off to the agent (6.5), the
+   comparison judge (6.1), shadow replay, the audit queue, automatic tiers, revision binding per machine.
+5. Specializer application: crisp mining and evidence-folder rendering first (normalization, anti-unification,
+   features, rule induction, the crisp `no-clusters` decline), then the `specialize` reducer, its replay loop and the
+   `.nl` decisions.
 6. Background loop and machine settings.
 7. First targets: pick high-volume definitions from recorded application runs. Likely candidates are nldb's
    `classify` and `filter/meets`, pi's per-message policies and the compilers' pattern-heavy passes. Report
    coverage, declines with reasons, hand-offs, divergence and saved model time per target.
 8. Skills and docs: `skills/natlang-integration` covers recording, opt-outs, `traces`, specialization settings and
-   the hand-off note. `skills/natlang-authoring` covers the recording opt-out in `natlang.json`.
+   the hand-off note. `skills/natlang-authoring` covers cases files and the recording opt-out in `natlang.json`.
+   SPEC.md gains cases files under Natural-language functions.
 
 ## 9. Decisions
 
 Owner decisions, 2026-10-08:
 
 1. Recording is bounded and on by default, in one store per machine (3.2, 3.4).
-2. Improving specializations are in scope (5.4, 6.1).
+2. Cases may improve on the agent. There is no separate mode: the compiler is told it may improve, and one
+   acceptance rule judges every case (6.1). Automatic promotion applies to all cases.
 3. Side-effecting functions are in scope: effects are journaled, replayed and compared (3.7, 6.4, 6.5).
 4. The specializer is primed to cluster conditions into guards, to leave unclassifiable calls to the agent, and to
    decline when there are no clusters or when semantic understanding is needed (5.2, 5.3, 7).
 5. Specialization is integrated into the runtime, and body errors go back to agent execution (6.2, 6.4, 6.5).
 6. A sample of guarded calls keeps running through the agent, offline so live latency does not change (6.3).
 
+7. Shape: a directory reducer from the program context and an evidence folder to a new context revision with
+   `foo.cases.ts` files (section 7).
+
 Still open:
 
 - Default bounds: 1 MiB per value, 50 GB per store, 5% audit rate. These are starting points to adjust when
   measurements arrive.
-- Whether automatic tiers may activate *improving* specializations without review, or only faithful ones. This
-  design lets both through by evidence; the alternative is to hold improving ones in shadow until a reviewer accepts
-  the stated differences.
+- The `foo.cases.ts` name and its `when`/`run` fields (7.1), the one new authoring concept.

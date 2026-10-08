@@ -222,7 +222,7 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
 def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
     """Bound new gradient and lazy optimizer-state allocations for one update."""
     active=[(name,param) for name,param in named if not bootstrap or
-            name.startswith(('heads.feedback.','heads.content.proj.'))]
+            name.startswith(('heads.feedback.','heads.input_map.','heads.content.proj.'))]
     grad_bytes=sum(param.numel()*param.element_size() for _,param in active)
     active_params={id(param):param for _,param in active}
     children=(getattr(optimizer,'muon',None),getattr(optimizer,'auxiliary',None)) if hasattr(optimizer,'muon') else (optimizer,)
@@ -911,6 +911,7 @@ def main(argv=None):
         heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
             kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
     named=configure_student(engine,a.backbone_training,a.rank,sketch='input_map' if input_map else 'feedback')
+    sketch_prefix='heads.input_map.' if input_map else 'heads.feedback.'  # the trained Neuralese-input head
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
         backbone,heads,checkpointed=a.checkpoint_layers)
@@ -1509,7 +1510,6 @@ def main(argv=None):
         pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes)
         metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
-        sketch_prefix='heads.input_map.' if input_map else 'heads.feedback.'
         sketch_norm=gradient_norm(q for n,q in named if n.startswith(sketch_prefix))
         clip_finite_gradients(parameters.values())
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
@@ -1798,8 +1798,8 @@ def main(argv=None):
         pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
         try:
             for name,q in named:
-                q.requires_grad_(name.startswith('heads.feedback.') if sketch_only else
-                                 not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
+                q.requires_grad_(name.startswith(sketch_prefix) if sketch_only else
+                                 not bootstrap or name.startswith((sketch_prefix,'heads.content.proj.')))
             for group in optimizer.param_groups:
                 group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
             w=windows['train'][random.randrange(len(windows['train']))]
