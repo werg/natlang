@@ -83,6 +83,35 @@ function extractText(events) {
     .map(event => event.part.text).join('');
 }
 
+function auditCliEvents(events, actionToolNames) {
+  const toolUses = [];
+  const steps = { started: 0, finished: 0, finish_events_with_usage: 0, tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } };
+  for (const event of events) {
+    const part = event?.part ?? {};
+    if (event?.type === 'step_start' || part.type === 'step-start') steps.started++;
+    if (event?.type === 'step_finish' || part.type === 'step-finish') {
+      steps.finished++;
+      const usage = part.tokens;
+      if (isObject(usage)) {
+        steps.finish_events_with_usage++;
+        for (const [out, key] of [['total', 'total'], ['input', 'input'], ['output', 'output'], ['reasoning', 'reasoning']])
+          if (Number.isFinite(usage[key])) steps.tokens[out] += usage[key];
+        if (Number.isFinite(usage.cache?.read)) steps.tokens.cache_read += usage.cache.read;
+        if (Number.isFinite(usage.cache?.write)) steps.tokens.cache_write += usage.cache.write;
+      }
+    }
+    const isToolEvent = String(event?.type ?? '').toLowerCase().includes('tool') || part.type === 'tool';
+    if (isToolEvent) {
+      const name = part.tool ?? part.name ?? event?.tool ?? event?.name ?? null;
+      const callID = part.callID ?? part.callId ?? event?.callID ?? event?.callId ?? null;
+      toolUses.push({ event_type: event?.type ?? null, part_type: part.type ?? null, name, call_id: callID,
+        bridge: typeof name === 'string' && actionToolNames.has(name) });
+    }
+  }
+  steps.usage_available = steps.finish_events_with_usage > 0;
+  return { steps, toolUses };
+}
+
 function boundedKill(child, firstSignal = 'SIGINT', graceMs = 1000) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
   return new Promise(resolve => {
@@ -137,16 +166,17 @@ function createEventWatcher({ baseUrl, directory, client, onViolation }) {
           if (event.type === 'permission.asked' || event.type === 'permission.v2.asked') {
             const details = permissionDetails(event);
             const record = { ...details, reply: 'reject', succeeded: false };
+            onViolation({ kind: 'native_permission', sessionID: details.sessionID });
             try {
               const method = details.v2 ? client.session.permission.reply : client.permission.reply;
               const reply = await method({ ...(details.v2 ? { sessionID: details.sessionID } : {}),
                 requestID: details.requestID, directory, reply: 'reject',
                 message: 'Natlang CLI bridge rejects native OpenCode tool permissions.' });
-              if (reply?.error || (!details.v2 && reply?.data !== true)) throw new Error('permission rejection was not confirmed');
+              if (reply?.error) throw new Error(String(reply.error.message ?? 'permission rejection failed').slice(0, 180));
+              if (!details.v2 && reply?.data !== true) throw new Error('permission rejection was not confirmed');
               record.succeeded = true;
             } catch (error) { record.error = String(error?.message ?? error).slice(0, 180); }
             permissionRejections.push(record);
-            if (record.succeeded) onViolation({ kind: 'native_permission', sessionID: details.sessionID });
           } else if (event.type === 'session.status' && event.properties?.status?.type === 'retry') {
             const sessionID = event.properties.sessionID;
             retryEvents.push({ sessionID, attempt: event.properties.status.attempt ?? null,
@@ -184,10 +214,10 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
   if (!cliPath || !client || !baseUrl || !directory?.startsWith('/') || !outputDirectory?.startsWith('/'))
     throw new TypeError('official CLI, SDK client, loopback server URL, isolated directory, and output directory are required');
   const maxRequestMs = options.maxRequestMs ?? 180_000;
-  const maxModelRequests = options.maxModelRequests ?? 384;
+  const maxCliTurns = options.maxCliTurns ?? options.maxModelRequests ?? 384;
   const contextTokens = options.contextTokens ?? 32768;
   if (!Number.isSafeInteger(contextTokens) || contextTokens < 1) throw new RangeError('contextTokens must be positive');
-  if (!Number.isSafeInteger(maxModelRequests) || maxModelRequests < 1) throw new RangeError('maxModelRequests must be positive');
+  if (!Number.isSafeInteger(maxCliTurns) || maxCliTurns < 1) throw new RangeError('maxCliTurns must be positive');
   const timeoutMs = options.timeoutMs ?? maxRequestMs;
   if (!Number.isSafeInteger(maxRequestMs) || maxRequestMs < 1 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
     throw new RangeError('timeouts must be positive integers');
@@ -211,7 +241,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
   if (!Array.isArray(defaultToolIds) || defaultToolIds.length === 0 ||
       defaultToolIds.some(id => typeof id !== 'string' || !id))
     throw new Error('official default OpenCode tool inventory is absent or invalid');
-  let active = false, closing = false, activeChild, requestCount = 0;
+  let active = false, closing = false, activeChild, cliTurnCount = 0;
   const server = createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       jsonResponse(res, 200, { ok: true, adapter: ID, providerChecked: false });
@@ -222,7 +252,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       return;
     }
     if (closing) { jsonResponse(res, 503, { error: { message: 'adapter closing', code: 'closing' } }); return; }
-    if (requestCount >= maxModelRequests) { jsonResponse(res, 429, { error: { message: 'model request budget exhausted', code: 'request_budget' } }); return; }
+    if (cliTurnCount >= maxCliTurns) { jsonResponse(res, 429, { error: { message: 'CLI turn budget exhausted', code: 'cli_turn_budget' } }); return; }
     if (active) { jsonResponse(res, 429, { error: { message: 'only one active CLI request is allowed', code: 'overloaded' } }); return; }
     active = true;
     let timedOut = false;
@@ -236,7 +266,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
     timer.unref?.();
     try {
       const body = validateRequest(await readJson(req), modelName);
-      requestCount++;
+      cliTurnCount++;
       const prompt = buildOpenCodeStructuredPrompt(body, { providerID, modelID: modelID ?? modelName });
       const userText = [
         'Return one response for a Natlang model turn. The following text contains the full serialized Natlang request with ordered message history and tool schemas. Use the configured `natlang_action_bridge` MCP `submit_action` tool to record each declared Natlang action; it only records candidates and does not execute them. Do not use built-in OpenCode tools. Return exactly one JSON object matching the included response_schema, with content and an empty toolCalls array. This is prompt-directed text, not provider-enforced JSON Schema.',
@@ -276,6 +306,14 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       if (exit.code !== 0) throw Object.assign(new Error(`OpenCode CLI exited ${exit.code ?? exit.signal}`), { code: 'CLI_EXIT' });
       diagnostics.cli_exit_code = exit.code; diagnostics.cli_signal = exit.signal;
       const events = parseJsonLines(stdout);
+      const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
+      diagnostics.cli_turn_number = cliTurnCount;
+      diagnostics.cli_event_count = events.length;
+      diagnostics.provider_step_telemetry = audit.steps;
+      diagnostics.cli_tool_use_audit = audit.toolUses;
+      const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
+      if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
+        code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
       const envelope = parseEnvelope(extractText(events), allowedNames);
       const rawLog = readFileSync(logPath);
       const actionRows = rawLog.subarray(startBytes).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
@@ -301,7 +339,12 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
           event_stream_errors: watcher.sessionErrors, permission_rejections: watcher.permissionRejections,
           provider_retries: watcher.retryEvents, user_text_sha256: sha256(userText), user_text_bytes: Buffer.byteLength(userText),
           action_log_byte_range: [startBytes, rawLog.length], action_record_count: calls.length,
-          route: 'official OpenCode CLI run --attach; default tool inventory; local action MCP', training_admission: false }
+          route: 'official OpenCode CLI run --attach; default tool inventory; local action MCP',
+          cli_turn_number: cliTurnCount, cli_turn_limit: maxCliTurns,
+          provider_step_telemetry: audit.steps, cli_tool_use_audit: audit.toolUses,
+          provider_request_count: null,
+          provider_request_count_note: 'The adapter counts CLI turns. One CLI turn may contain multiple provider model steps; step_finish and token usage are recorded when emitted, but are not a complete provider-request meter.',
+          training_admission: false }
       });
     } catch (error) {
       diagnostics.raw_error = safeError(error);
@@ -317,6 +360,9 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.cli_exit_code = exit?.code ?? null; diagnostics.cli_signal = exit?.signal ?? null;
       diagnostics.stdout_bytes = Buffer.byteLength(stdout); diagnostics.stderr_bytes = Buffer.byteLength(stderr);
       diagnostics.permission_rejections = watcher?.permissionRejections ?? [];
+      if (error?.toolUses) diagnostics.cli_tool_use_audit = error.toolUses;
+      diagnostics.cli_turn_number = cliTurnCount;
+      diagnostics.cli_turn_limit = maxCliTurns;
       diagnostics.provider_retries = watcher?.retryEvents ?? [];
       diagnostics.event_stream_errors = watcher?.sessionErrors ?? [];
       diagnostics.finished_at = new Date().toISOString();
@@ -341,7 +387,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
   return Object.freeze({
     url: `http://${options.host ?? '127.0.0.1'}:${address.port}/v1`,
     config: Object.freeze({ id: ID, host: options.host ?? '127.0.0.1', port: address.port,
-      providerID, modelID, modelAlias: modelName, maxRequestMs, timeoutMs, maxModelRequests, contextTokens,
+      providerID, modelID, modelAlias: modelName, maxRequestMs, timeoutMs, maxCliTurns, contextTokens,
       retained_default_tool_ids: defaultToolIds,
       route: 'official OpenCode CLI run --attach', stream: 'buffered only', nativeProviderToolCalls: false,
       trainingAdmission: false }),
