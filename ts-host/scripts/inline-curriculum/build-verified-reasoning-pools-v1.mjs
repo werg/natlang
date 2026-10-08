@@ -181,21 +181,19 @@ function sourceTaskFamily(row) {
   }
   return null;
 }
-function targetRadix(question) {
-  const match = question.match(/base-(\d+)\s+number\s+[0-9a-z]+\s+to\s+base-(\d+)/i);
+function parseBaseConversionQuestion(question) {
+  const match = question.match(/base-(\d+)\s+number\s+(?:the\s+)?([0-9a-z]+)\s+to\s+(?:its\s+equivalent\s+in\s+)?(?:base-(\d+)|(binary|octal|decimal|hexadecimal))/i);
   if (!match) throw new Error('base-conversion prompt shape is unsupported');
-  const base = Number(match[2]);
-  if (!Number.isInteger(base) || base < 2 || base > 36) throw new Error('target radix is outside 2..36');
-  return base;
+  const sourceBase = Number(match[1]);
+  const targetBase = match[3] ? Number(match[3]) : ({ binary: 2, octal: 8, decimal: 10, hexadecimal: 16 })[match[4].toLowerCase()];
+  if (!Number.isInteger(sourceBase) || sourceBase < 2 || sourceBase > 36 || !Number.isInteger(targetBase) || targetBase < 2 || targetBase > 36)
+    throw new Error('source or target radix is outside 2..36');
+  return { sourceBase, digitsText: match[2], targetBase };
 }
+function targetRadix(question) { return parseBaseConversionQuestion(question).targetBase; }
 function solveGymFamily(family, question) {
   if (family === 'base_conversion') {
-    const match = question.match(/base-(\d+)\s+number\s+([0-9a-z]+)\s+to\s+base-(\d+)/i);
-    if (!match) throw new Error('base-conversion prompt shape is unsupported');
-    const [, sourceBaseText, digitsText, targetBaseText] = match;
-    const sourceBase = Number(sourceBaseText), targetBase = Number(targetBaseText);
-    if (sourceBase < 2 || sourceBase > 36 || targetBase < 2 || targetBase > 36)
-      throw new Error('base-conversion bases are outside the supported range 2..36');
+    const { sourceBase, digitsText, targetBase } = parseBaseConversionQuestion(question);
     let value = 0n;
     for (const char of digitsText.toLowerCase()) {
       const digit = '0123456789abcdefghijklmnopqrstuvwxyz'.indexOf(char);
@@ -210,10 +208,15 @@ function solveGymFamily(family, question) {
   }
   if (family === 'gcd') {
     const numbers = [...question.matchAll(/(?<![\w.])-?\d+/g)].map(match => BigInt(match[0]));
-    if (numbers.length !== 2) throw new Error('GCD prompt must contain exactly two integers');
-    let [a, b] = numbers.map(value => value < 0n ? -value : value);
-    while (b !== 0n) [a, b] = [b, a % b];
-    return String(a);
+    if (numbers.length < 2) throw new Error('GCD prompt must contain at least two integers');
+    let gcd = 0n;
+    for (let value of numbers) {
+      if (value < 0n) value = -value;
+      let a = gcd, b = value;
+      while (b !== 0n) [a, b] = [b, a % b];
+      gcd = a;
+    }
+    return String(gcd);
   }
   if (family === 'fibonacci') {
     const matches = [...question.matchAll(/(\d+)-?(?:st|nd|rd|th)\s+Fibonacci number/gi)];
@@ -247,11 +250,13 @@ function solveGymFamily(family, question) {
     return words.reverse().join(', ');
   }
   if (family === 'word_sorting') {
-    const matches = [...question.matchAll(/Words:\s*\n?([^\n]+)/gi)];
-    const direction = question.match(/\b(ascending|descending) order\b/i)?.[1]?.toLowerCase();
+    const listed = question.match(/sort these words in (ascending|descending) order \(using ASCII\/Unicode ordering\) and return them as a comma-separated list:\s*([^\n]+)/i);
+    const rawList = listed?.[2] ?? question.match(/Words:\s*\n?([^\n]+)/i)?.[1];
+    const matches = rawList ? [rawList] : [];
+    const direction = (listed?.[1] ?? question.match(/\b(ascending|descending) order\b/i)?.[1])?.toLowerCase();
     if (matches.length !== 1 || !/ASCII\/Unicode ordering/i.test(question) || !direction)
       throw new Error('word-sorting prompt shape is unsupported');
-    const words = matches[0][1].split(/,\s*/).map(word => word.trim());
+    const words = matches[0].replace(/,\s*$/, '').split(/,\s*/).map(word => word.trim());
     if (words.length < 2 || words.some(word => !/^[\p{L}\p{N}_'-]+$/u.test(word)))
       throw new Error('word-sorting list contains unsupported tokens');
     return words.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0) * (direction === 'ascending' ? 1 : -1)).join(', ');

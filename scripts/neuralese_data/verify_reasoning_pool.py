@@ -104,10 +104,11 @@ def source_task_family(row: dict) -> str | None:
 
 def solve_gym_family(family: str, question: str) -> str:
     if family == "base_conversion":
-        match = re.search(r"base-(\d+)\s+number\s+([0-9a-z]+)\s+to\s+base-(\d+)", question, re.I)
+        match = re.search(r"base-(\d+)\s+number\s+(?:the\s+)?([0-9a-z]+)\s+to\s+(?:its\s+equivalent\s+in\s+)?(?:base-(\d+)|(binary|octal|decimal|hexadecimal))", question, re.I)
         if not match:
             raise ValueError("unsupported base-conversion question")
-        source_base, digits, target_base = int(match[1]), match[2].lower(), int(match[3])
+        source_base, digits = int(match[1]), match[2].lower()
+        target_base = int(match[3]) if match[3] else {"binary": 2, "octal": 8, "decimal": 10, "hexadecimal": 16}[match[4].lower()]
         if not 2 <= source_base <= 36 or not 2 <= target_base <= 36:
             raise ValueError("base outside exact supported range")
         value = 0
@@ -125,8 +126,8 @@ def solve_gym_family(family: str, question: str) -> str:
         return result
     if family == "gcd":
         numbers = re.findall(r"(?<![\w.])-?\d+", question)
-        if len(numbers) != 2:
-            raise ValueError("GCD question must contain exactly two integers")
+        if len(numbers) < 2:
+            raise ValueError("GCD question must contain at least two integers")
         return str(math.gcd(*(int(number) for number in numbers)))
     if family == "fibonacci":
         matches = list(re.finditer(r"(\d+)-?(?:st|nd|rd|th)\s+Fibonacci number", question, re.I))
@@ -157,14 +158,15 @@ def solve_gym_family(family: str, question: str) -> str:
             raise ValueError("unsupported word-sequence tokens")
         return ", ".join(reversed(words))
     if family == "word_sorting":
-        matches = list(re.finditer(r"Words:\s*\n?([^\n]+)", question, re.I))
-        direction = re.search(r"\b(ascending|descending) order\b", question, re.I)
-        if len(matches) != 1 or not direction or not re.search(r"ASCII/Unicode ordering", question, re.I):
+        listed = re.search(r"sort these words in (ascending|descending) order \(using ASCII/Unicode ordering\) and return them as a comma-separated list:\s*([^\n]+)", question, re.I)
+        raw_list = listed[2] if listed else (re.search(r"Words:\s*\n?([^\n]+)", question, re.I) or [None, None])[1]
+        direction = (listed[1] if listed else (re.search(r"\b(ascending|descending) order\b", question, re.I) or [None, None])[1])
+        if not raw_list or not direction or not re.search(r"ASCII/Unicode ordering", question, re.I):
             raise ValueError("unsupported word-sorting question")
-        words = [word.strip() for word in matches[0][1].split(",")]
+        words = [word.strip() for word in re.sub(r",\s*$", "", raw_list).split(",")]
         if len(words) < 2 or any(not re.fullmatch(r"[\w'-]+", word, re.UNICODE) for word in words):
             raise ValueError("unsupported word-sorting tokens")
-        return ", ".join(sorted(words, reverse=direction[1].lower() == "descending"))
+        return ", ".join(sorted(words, reverse=direction.lower() == "descending"))
     if family == "modular_inverse":
         match = re.search(r"integers\s+a\s*=\s*(-?\d+)\s+and\s+modulus\s+m\s*=\s*(\d+).*?smallest nonnegative", question, re.I | re.S)
         if not match:
