@@ -7,14 +7,14 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
  */
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { portablePrimitiveLiteral, type TargetDescriptor } from '../compiler/targets.js';
-import { isPlainRecord } from '../native/values.js';
+import { coerce, isPlainRecord } from '../native/values.js';
+import { parseType, TypeEnv } from '../native/types.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, guard } from './context.js';
 import { callableMeta, callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
-import { parseType } from '../native/types.js';
 import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
 import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
@@ -153,9 +153,26 @@ function captureSnapshotAttestation(plan: InlineLambdaPlan, origin: InlineInstru
 
 export type CaptureAccessors = Record<string, readonly [() => unknown, ((value: unknown) => void)?]>;
 
+function validateReboundCaptures(plan: InlineLambdaPlan, next: Record<string, unknown>, accessors: CaptureAccessors) {
+  const aliases: Record<string, string> = Object.assign({}, ...plan.captures.map(capture => capture.type.aliases));
+  const env = new TypeEnv(Object.fromEntries(Object.entries(aliases).map(([name, text]) => [name, parseType(text)])));
+  const classes = new Map<string, Function>();
+  env.classes = classes;
+  for (const capture of plan.captures) if (capture.type.host?.kind === 'class') {
+    const original = accessors[capture.name]?.[0]();
+    if (original && (typeof original === 'object' || typeof original === 'function')) {
+      const constructor = (original as { constructor?: unknown }).constructor;
+      if (typeof constructor === 'function') classes.set(capture.type.host.name, constructor);
+    }
+  }
+  return Object.fromEntries(plan.captures.map(capture => [capture.name,
+    coerce(next[capture.name], parseType(targetType(capture.type)), env, `capture/${capture.name}`)]));
+}
+
 /** Create an inline natlang callable instance for a compiled `nl` expression. */
 export function inline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
-  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
+  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame,
+  origin?: InlineInstructionOrigin): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)
     throw new Error(`this module was compiled for natlang output version ${version}; rebuild it with natlang build`);
   const renderedValues = values.map(interpolationText);
@@ -166,10 +183,11 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
     const keys = Object.keys(next).sort();
     if (keys.length !== names.length || keys.some((name, index) => name !== names[index]))
       throw new TypeError(`inline nl .with(...) needs exactly these captures: ${names.join(', ')}`);
+    const typedCaptures = validateReboundCaptures(plan, next, accessors);
     const rebound: InlineLambdaPlan = { ...plan, explicitCaptures: true,
       captures: plan.captures.map(capture => ({ ...capture, source: sources?.[capture.name] ?? capture.source,
         mode: 'snapshot', mutable: false })) };
-    const snapshotAccessors = Object.fromEntries(names.map(name => [name, [() => next[name]]])) as CaptureAccessors;
+    const snapshotAccessors = Object.fromEntries(names.map(name => [name, [() => typedCaptures[name]]])) as CaptureAccessors;
     return inline(rebound, renderedValues, snapshotAccessors, context, version, bound, nextOrigin ?? origin);
   } : undefined;
   if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound, origin, rebindInline);

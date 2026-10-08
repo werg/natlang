@@ -628,17 +628,26 @@ test('a saved inline nl value can be rebound with the same finite captures and k
   assert.equal(wrongType.kind, 'error');
   assert.match(wrongType.text, /policy|capture/i);
   assert.equal(childCalls, 0, 'a runtime type mismatch is rejected before a child invocation');
+  const wrongMethod = await session.applyAsync('eval', { code:
+    'let policy = "original"; const text = () => "original interpolation"; ' +
+    'const update = nl<string>`Use policy and ${text()}.`; ' +
+    '(update as any)["with"]({ policy: 42 as unknown as string, text });' });
+  assert.equal(wrongMethod.kind, 'error', wrongMethod.text);
+  assert.match(wrongMethod.text, /policy|capture/i);
+  assert.equal(childCalls, 0, 'direct callable method access uses the same runtime capture validator');
 
   const result = await session.applyAsync('eval', { code:
     'let policy = "original"; let replacement = "replacement"; let interpolationCalls = 0; ' +
     'const text = () => { interpolationCalls += 1; return "original interpolation"; }; ' +
     'const update = nl<string>`Use policy and ${text()}.`; ' +
+    'const direct = (update as any)["with"]({ policy: replacement, text }); ' +
     'const saved = update; const rebound = saved.with({ policy: replacement, text }).with({ policy: replacement, text }); ' +
     'replacement = "changed later"; ' +
-    'const answer = await rebound(); return answer === "done" && interpolationCalls === 1;' });
+    'const answer = await rebound(); const directAnswer = await direct(); ' +
+    'return answer === "done" && directAnswer === "done" && interpolationCalls === 1;' });
   assert.ok(['ok', 'completed'].includes(result.kind), result.text);
   assert.equal(lam.return, true);
-  assert.equal(childCalls, 1);
+  assert.equal(childCalls, 2);
   assert.equal(lam.let.interpolationCalls, 1);
 });
 

@@ -10,7 +10,6 @@ import { concatNeuralese, joinNeuralese, rebindInlineCallable, type InlineInstru
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
-import { callableMeta } from '../runtime/callable.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
@@ -1716,21 +1715,7 @@ export class NativeSession {
       concatNeuralese,
       joinNeuralese,
       rebindInline: (value: unknown, captures: Record<string, unknown>, sources: Record<string, 'input' | 'local' | 'block' | 'handle'>) =>
-        (() => {
-          const meta = callableMeta(value);
-          if (!meta?.rebindInline) return rebindInlineCallable(value, captures, origin, sources);
-          if (!isPlainRecord(captures)) throw new TypeError('inline nl .with(...) needs a plain record of captures');
-          const names = Object.keys(meta.captures ?? {}).sort();
-          const keys = Object.keys(captures).sort();
-          if (keys.length !== names.length || keys.some((name, index) => name !== names[index]))
-            throw new TypeError(`inline nl .with(...) needs exactly these captures: ${names.join(', ')}`);
-          const captureTypes = Object.fromEntries(Object.entries(meta.definition.types ?? {})
-            .map(([name, text]) => [name, parseType(text)]));
-          const captureEnv = this.env.child(captureTypes);
-          const typed = Object.fromEntries(names.map(name => [name,
-            coerce(captures[name], parseType(meta.captures![name]!.type), captureEnv, `capture/${name}`)]));
-          return rebindInlineCallable(value, typed, origin, sources);
-        })(),
+        rebindInlineCallable(value, captures, origin, sources),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       decide: (fn: (...args: unknown[]) => Promise<unknown>, args: unknown[]) => {
