@@ -7496,6 +7496,30 @@
         "s1-question-collection-runtime-v12-7c52a088-20261008"
       ],
       "notes": "Complete closed V15 Luna actual campaign and graph-bound closeout. 32 source-indexed cases: 16 accepted, 16 rejected by the configured answer and answers.json content checks; return map equals saved file in all cases, with no infrastructure errors. Source/gold object equality and normalized accepted maps are reported separately. Actual soft graph shows 48 typed writes and 46 linked readouts across 16 authored-soft cases; one case wrote but did not read its typed blocks and later used crisp fallback. All raw partial/result/error/trace/manifest/journal/claim/log records are preserved. Parent acceptance is generation outcome only; no trace, training, learned-vector, or DPO admission."
+    },
+    {
+      "id": "s1-question-collection-v8-action-candidates-20261008-v1",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-candidates-20261008-v1",
+      "include": [
+        "README.md",
+        "selection-summary.json",
+        "selected-actions.jsonl",
+        "raw-action-receipts.jsonl",
+        "selected-actions-convertible.jsonl",
+        "raw-action-receipts-convertible.jsonl",
+        "converter-omissions.jsonl",
+        "native-actions.jsonl",
+        "empty-pieces.jsonl",
+        "packet-summary.json",
+        "manifest.json",
+        "text-preview/**"
+      ],
+      "admission": "held-action-and-text-preview-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-quality-review-20261008-v3"
+      ],
+      "notes": "54 independently source-reviewed train-split child-action candidates; 49 passed shared held native materialization and shared gold-text review rendering. Five exact source-correct child actions remain explicit omissions because the enclosing source rows are quality_pending; raw outcomes and parent holds are unchanged. Targets are ordinary nl<string> outputs, not typed Neuralese writers, recurrence edges, DPO pairs, or parent approvals. Text preview is train-only review data; production gold text still requires independent train/held splits."
     }
   ],
   "coverage_backlog": [
