@@ -81,3 +81,24 @@ def test_mellum_truncated_load_keeps_per_type_rotary(tmp_path):
     assert len(model.model.layers) == 2
     with torch.no_grad():
         assert model(torch.randint(0, 128, (1, 12))).logits.shape == (1, 12, 128)
+
+
+def test_mellum_markers_are_its_spare_added_tokens_and_maple_keeps_unused_rows(tmp_path):
+    from types import SimpleNamespace
+
+    from natlang_neuralese.model.hf_port import QWEN_OPEN_ID, family_controls
+
+    class Vocab:
+        def __init__(self, vocab):
+            self.vocab = vocab
+
+        def get_vocab(self):
+            return self.vocab
+
+    mellum = SimpleNamespace(config=SimpleNamespace(model_type="mellum"))
+    controls = family_controls(mellum, Vocab({"<|extra_token_7|>": 33, "<|extra_token_8|>": 34}))
+    assert (controls.open_id, controls.close_id) == (33, 34)
+    with pytest.raises(ValueError):
+        family_controls(mellum, Vocab({}))
+    maple = SimpleNamespace(config=SimpleNamespace(model_type="maple"))
+    assert family_controls(maple, Vocab({"a": 0})).open_id == QWEN_OPEN_ID
