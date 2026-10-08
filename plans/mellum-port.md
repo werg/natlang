@@ -51,6 +51,27 @@ and does acceptably at raw agentic coding in our harness out of the box. If adop
    Qwen/Maple marker IDs (151669/151670) and need a per-tokenizer choice.
 5. GGUF: convert with the fork's converter, then check perplexity/logit parity vs our port (Maple's M0.3 equivalent).
 
+## Nested family (owner 2026-10-08: same goal as Maple)
+
+Mellum would carry the same nested family as Maple (`plans/neuralese/MAPLE_NESTED.md`): one model holding the full
+model and members `LxE` (first L layers, first E experts per layer in an N0 usage order; depth members exit early
+through the final norm and shared head), trained jointly with every member as a real objective (§4a). The code is
+`maple/nested_train.py` plus the member machinery in `maple/model.py` (`set_member`, private router rows and norm
+gains, expert ordering), which now loads Mellum.
+
+Mellum-specific:
+- Only 64 experts instead of 256, so prefixes are coarser. Candidates are 28x16, 28x24 and 28x32, plus a depth member
+  such as 14x16. N0 decides from routing coverage on our corpus.
+- Bootstrap and joint phases run inside QAT. Maple's shared QAT was scale-only; Mellum's is full latent ternary (below),
+  so every member's gradient flows into the latent expert weights.
+- `TernaryExperts.learn_scales` and expert permutation exist; `DenseExperts` already permutes. The QAT expert module
+  must keep the member hooks.
+
+Gap shared with Maple (MAPLE_NESTED §9 item 5, still open): the Neuralese trainers (`train/text_warmup.py`,
+`train/trajectories.py`) run on the frozen nested state but train only the full model, and do not evaluate members.
+Their QAT updates move shared weights the members depend on. Member objectives and per-member evaluation have to
+enter the Neuralese stages before either backbone's long runs.
+
 ## QAT design (if adopted)
 
 - Maple's experts were published ternary, so its expert QAT is scale-only (fixed codes, learned 256-column block
