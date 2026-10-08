@@ -70,7 +70,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/8');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/9');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -85,7 +85,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.match(renderedTexts, /return the computed plain text as the result/);
     assert.match(renderedTexts, /stage it with return_result\(text\) inside eval/);
     assert.doesNotMatch(renderedTexts, /Do not call return_result from inside eval/);
-    assert.match(renderedTexts, /No general text conversion applies to other Neuralese<T> types/);
+    assert.match(renderedTexts, /Native JavaScript text-coercion contexts use typed readout/);
     assert.match(renderedTexts, /For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content/);
     assert.match(renderedTexts, /a quoted marker is an ordinary string/);
     assert.match(renderedTexts, /label is a human-readable preview/);
@@ -103,7 +103,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/8' &&
+      item.prompt_revision === 'text-marker-guidance/9' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -154,14 +154,17 @@ test('native teacher collection emulates typed Neuralese markers through a recor
 });
 
 test('text transport prompt explains typed text result promotion and literal markers', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/8');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/9');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the computed plain text as the result/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /When you can compose the requested prose directly, prefer that direct typed return/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /use eval when the answer needs real computation or runtime effects/);
   assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /Do not call return_result from inside eval/);
-  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /No general text conversion applies to other Neuralese<T> types/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /Native JavaScript text-coercion contexts use typed readout/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /other payloads receive JavaScript's normal conversion after readout/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /does not enable field inspection of opaque values or turn console display into readout/);
+  assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /No general text conversion applies to other Neuralese<T> types/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /A quoted occurrence is ordinary string content/);
   assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /quote the marker as a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);

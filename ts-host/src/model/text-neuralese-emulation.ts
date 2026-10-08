@@ -11,7 +11,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/8';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/9';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -39,8 +39,12 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `computation or runtime effects, and do not add eval or a child call solely to wrap prose. ` +
   `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
   `to wrap a computed variable. Do not put a variable name between marker delimiters ` +
-  `or expect \${...} inside a marker body to interpolate. No general text conversion applies to other Neuralese<T> types: ` +
-  `pass their existing typed value or use an exact block marker in an explicitly typed position. ` +
+  `or expect \${...} inside a marker body to interpolate. Native JavaScript text-coercion contexts use typed readout ` +
+  `at the operand's declared Neuralese<T> type, then apply the ordinary JavaScript conversion (for example String(value), ` +
+  `untagged template interpolation, string concatenation, Error(message), JSON.stringify(value), or supported native text methods). ` +
+  `A string payload yields its text; other payloads receive JavaScript's normal conversion after readout. This does not enable ` +
+  `field inspection of opaque values or turn console display into readout. Outside a native coercion context, use read(value) ` +
+  `to obtain the ordinary typed value, or pass the existing typed value to compatible soft code. ` +
   `For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content; ` +
   `return them exactly without wrapping or interpreting them as a block. ` +
   `eval({code, finish:true}) completes its fresh typed expression. In JavaScript, a quoted marker is an ordinary string, ` +
