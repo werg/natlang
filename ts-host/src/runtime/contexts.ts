@@ -79,6 +79,8 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
   codebase?: Record<string, unknown>; name?: string;
   /** Compiler attestations for a runtime-created soft function, carried into its invocation manifest. */
   manifest?: Record<string, unknown>;
+  /** A pre-existing library operation does not consume a user-authored inline-nl layer. */
+  adHoc?: boolean;
   /** `template`: answer by template readout (the first reply forced to return_result; the combinators use it). */
   readout?: 'template' }): NatlangCallable {
   const type = parseType(spec.type);
@@ -105,7 +107,8 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
     subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20),
     ...(spec.readout ? { readout: spec.readout } : {}) };
   const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame) => invokeDefinition(frame, definition, args,
-    { captures, manifest: { inline: true, soft: true, ...(spec.manifest ?? {}) }, ...(skillFiles ? { skillFiles } : {}) }) });
+    { captures, manifest: { inline: true, soft: true, ...(spec.manifest ?? {}), ...(spec.adHoc === false ? { adHoc: false } : {}) },
+      ...(skillFiles ? { skillFiles } : {}) }) });
   attachChildren(fn, (spec.codebase ?? context.items) as Record<string, ItemRecord>);
   SOFT.set(fn, { type: softType, body: spec.body, captures: Object.fromEntries(Object.entries(spec.captures ?? {})
     .map(([name, value]) => [name, isLiveCapture(value) ? value : value])), live: hasLive });

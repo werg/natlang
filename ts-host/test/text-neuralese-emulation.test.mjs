@@ -289,7 +289,7 @@ test('explicit text read source uses the declared read body, typed block context
     services: { neuralese: library } });
   const graphTrace = new NativeTraceRecorder({ run_id: 'call:text-read-test' });
   registerTrace('call:text-read-test', graphTrace);
-  const result = await runtime.run(() => runInFrame({ ...currentFrame(), parentCallId: 'call:text-read-test' },
+  const result = await runtime.run(() => runInFrame({ ...currentFrame(), parentCallId: 'call:text-read-test', adHocDepth: 5 },
     () => createNeuraleseLibrary(library).read(value)));
   releaseTrace('call:text-read-test');
   assert.equal(result, NOTE);

@@ -284,7 +284,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     effectiveInstructionHash: hexDigest(options.instructions ?? definition.body), originalInstructionHash: descriptor?.baselineHash ?? null,
     guidanceComponent: eligibleGuidance ? view.program.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
     guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : undefined;
-  const adHoc = !!(options.manifest?.inline || options.manifest?.delegate);
+  const adHoc = !!(options.manifest?.inline || options.manifest?.delegate) && options.manifest?.adHoc !== false;
   const fileRoot = !adHoc && definition.source?.endsWith('.nl');
   const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
   if (adHocDepth > MAX_AD_HOC_NL_DEPTH)

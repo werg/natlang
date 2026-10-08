@@ -276,6 +276,7 @@ test('invalid multiple nl type arguments are rejected before any child schema is
     assert.equal(result.diagnostics.length, 1);
     assert.equal(result.diagnostics[0].code, 'nl-type-arguments');
     assert.match(result.diagnostics[0].message, /child result type or full callable signature/);
+    assert.match(result.diagnostics[0].message, /capture names and types come from the capture record/);
   }
   const valid = analyze('async function f() { const value = await nl.with<Verdict>({ policy })`Judge note.`(note); }', declarations);
   assert.deepEqual(valid.diagnostics, []);

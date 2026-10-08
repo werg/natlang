@@ -282,6 +282,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     // Do not silently lower an invalid two-generic tag to its first schema.
     if ((node.typeArguments?.length ?? 0) > 1 || (withCall?.typeArguments?.length ?? 0) > 1) {
       report(node, 'nl-type-arguments', '`nl` and `nl.with` accept one type argument: the child result type or full callable signature. ' +
+        'For `nl.with`, this type argument is the child result type; capture names and types come from the capture record. ' +
         'Put fixed context in `nl.with<Result>({ context })`, then call the function with its current input. ' +
         'Do not use `nl.with<CaptureObject, Result>` or pass the capture object in place of the child input.');
       return;

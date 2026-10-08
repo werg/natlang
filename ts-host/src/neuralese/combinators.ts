@@ -157,7 +157,7 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
       if (!isNeuraleseRef(v)) throw new TypeError('read needs a Neuralese value');
       record('readout', { type: elementType(v), call_id: currentFrame()?.parentCallId ?? null }, [v]);
       const typed = softFunction({ type: `(v: ${v.$neuralese.type}) => ${elementType(v)}`, body: library.bodies.read, name: 'natlang.read',
-        readout: 'template' });
+        readout: 'template', adHoc: false });
       return (typed as unknown as (value: unknown) => Promise<unknown>)(v);
     },
     convert: (v: NeuraleseRef, dialect: string) => call('convert', [v, dialect]),
