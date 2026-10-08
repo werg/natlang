@@ -12,7 +12,8 @@ export default defineConfig({
     include: ['test/harness-{generation,generation-recovery,compaction,context,prompt,inbox,submissions,tools,tools-recovery,structured,tasks}.test.ts'],
     testTimeout: 1_800_000,
     hookTimeout: 600_000,
-    fileParallelism: false,
+    fileParallelism: process.env.PI_FILE_PARALLEL === "1",
+    maxWorkers: Number(process.env.PI_WORKERS ?? 1),
   },
   resolve: {
     conditions: ['source'],

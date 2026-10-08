@@ -1030,3 +1030,33 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
 - Owner idea under consideration: untie the sketch from the main stack's first blocks. It would become a dedicated
   initialization tower (initialized as a copy of those blocks) that can specialize in autoregressive pre-initialization
   of the perceiver-style Neuralese encoder, with no trade-off against the main stack.
+
+## 2026-10-08 — Maple base-quality investigation: the setup is sound; the system prompt dominates our text
+
+- Trigger: base Maple scored 31% top-1 / CE 5.07 on our gold text at warm-up start, despite being a strong model.
+- The port is sound:
+  - It matches an fp32 first-principles forward of the official architecture (layer 0 within 2%; final CE 2.86 vs
+    2.72; the residual gap looks like bf16 MoE routing flips at layers 1, 5 and 22).
+  - It answers chat questions correctly with proper `<think>` reasoning.
+  - With identical tokenization it beats llama.cpp on the official TQ2_0 GGUF: perplexity 7.6 vs 12.2 on
+    `maple-slices/text.txt`, and 107 vs 146 on our held text. The earlier "17.4 vs 12.2" was an artifact:
+    llama-perplexity splits `<|im_start|>` into ordinary text tokens.
+  - The official HF modeling code does not run correctly in our container (saved with transformers 4.57.1; we have
+    5.19); 4.57.1 needs a newer huggingface_hub. It was not used as the reference.
+- The template is the official one (renderer calls the tokenizer's `apply_chat_template`), and stored token IDs equal
+  a fresh tokenization.
+- Cause, measured by chat role on 8 held documents (base weights):
+
+  | Role | Share of tokens | CE | Top-1 |
+  |---|---|---|---|
+  | System | 85.7% | 5.60 | 25% |
+  | User / tool | 6.7% | 4.31 | — |
+  | Assistant | 7.6% | 1.60 | 70% |
+  | Supervised suffix | — | 0.87 | 86% |
+
+  A chat/reasoning model is not trained to predict long system prompts.
+- Implication: warm-up text metrics, gates and most training tokens are dominated by the large, largely shared
+  system prompt. Held "97% top-1" is mostly that prompt, so role-stratified metrics and a decision on repeated
+  boilerplate weight are needed (whole-trajectory supervision keeps prompts in, but not necessarily the same
+  boilerplate thousands of times).
+- Gate M0.3 (port vs llama.cpp) is now effectively measured on perplexity; a logit-level comparison remains open.
