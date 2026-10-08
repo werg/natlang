@@ -1109,3 +1109,16 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   self-generated (AR-block) inputs. That replaces "cut over at crisp parity" as the cutover signal. AR controls
   (with survival for projection and sketch rollouts, 92951796) keep measuring the exposure gap.
 - Training-only: exported serving heads omit the map (stored separately as `neuralese_input_map`).
+- MTP probe result (`runs/mtp-draft-probe-20261008-v1/report.json`; Maple v9 weights frozen; 67M-parameter shared
+  block; 3000 self-fed steps; 96 chunk starts on 12 held windows). Full-stack consumer ΔCE vs gold history, by
+  drafted offset 1..7:
+
+  | Drafts | +1 | +2 | +3 | +4 | +5 | +6 | +7 |
+  |---|---|---|---|---|---|---|---|
+  | Crisp greedy AR (ceiling) | 1.12 | 1.66 | 1.64 | 3.04 | 4.14 | 4.08 | 4.57 |
+  | MTP (shared block) | 1.12 | 1.56 | 2.99 | 3.42 | 3.92 | 4.15 | 4.06 |
+  | Sketch AR (trained head) | 3.37 | 5.43 | 6.41 | 6.84 | 7.68 | 7.11 | 8.02 |
+
+  MTP drafts match crisp AR quality at every offset (token accuracy 0.82 → 0.52 vs greedy's 0.82 → 0.58); the sketch
+  is 2–4 nats worse. Gold-reference ΔCE after divergence overstates all rollouts (Pop's caveat), but the comparison is
+  like-for-like. Supports dropping the sketch; MTP remains the inference-time initializer candidate.
