@@ -1,6 +1,6 @@
 const joinIds = rows => rows.length ? rows.map(row => row.id).join('; ') : 'none';
 
-function caseFrom(spec) {
+export function caseFrom(spec) {
   const rows = spec.candidates;
   const ordered = [...rows].sort(spec.compare);
   const provisional = spec.provisional(ordered);
@@ -29,15 +29,15 @@ function caseFrom(spec) {
     'pass-04-authority.md': `${spec.authorityHeading} for ${spec.requestId}. ${spec.authorityText}`,
   };
   const passes = [
-    { name:'request scope and rule', evidence_path:'pass-01-request.md', allowed_fields:['caseId'], constraint:'Copy the complete request identifier and establish the requested operation and explicit decision rule.', source_scope:`request ${spec.requestId}` },
+    { name:'request scope and rule', evidence_path:'pass-01-request.md', allowed_fields:['caseId'], constraint:'Copy the complete request identifier and preserve the complete decision rule, including the empty-selection and authorization branches.', source_scope:`request ${spec.requestId}` },
     { name:'candidate register', evidence_path:'pass-02-register.md', allowed_fields:['selectedItems','measure'], constraint:'Make a provisional ordering or worklist from registered metrics only. Eligibility, exceptions, and authorization have not yet been checked; keep it provisional.', source_scope:`register for ${spec.requestId}` },
     { name:'conditions and exceptions', evidence_path:'pass-03-conditions.md', allowed_fields:['selectedItems','measure'], constraint:'Apply every stated condition and scoped exception to the candidates. Recompute the selected set and measure; add no unstated conditions.', source_scope:`condition audit for ${spec.requestId}` },
-    { name:'execution authority', evidence_path:'pass-04-authority.md', allowed_fields:['decision'], constraint:'Keep the evidence-derived selection and measure. Determine whether execution is authorized under the exact stated authority rule.', source_scope:`authority record for ${spec.requestId}` },
+    { name:'execution authority', evidence_path:'pass-04-authority.md', allowed_fields:['decision'], constraint:`Keep the evidence-derived selection and measure. Apply authority only to a nonempty selection; an empty eligible selection remains ${spec.noAction}.`, source_scope:`authority record for ${spec.requestId}` },
   ];
   const changed=['selectedItems','measure'].find(field=>passStates[1][field]!==passStates[2][field]);
   if (!changed) throw new Error(`${spec.slug}: no source-derived provisional correction`);
   return {
-    slug:spec.slug, group:`v18:${spec.slug}:world`, domain:spec.domain, fields,
+    slug:spec.slug, group:spec.sourceGroup ?? `v18:${spec.slug}:world`, domain:spec.domain, fields,
     field_enums:{decision:{intermediate:['pending',...spec.finalDecisions],final:spec.finalDecisions}},
     initial,passes,passStates,evidence,
     instruction:`${spec.instruction}\n\nUse task.json and the four named source records. The candidate register supports only a provisional result. Apply the full condition audit, including scoped exceptions, before fixing selectedItems and measure. Apply authorization only to decision: selection evidence and permission to execute are distinct. Follow the exact tie rule and output formats. If nothing qualifies, use ${spec.noAction}. Do not infer facts absent from current and accumulated source records.`,
@@ -47,8 +47,8 @@ function caseFrom(spec) {
   };
 }
 
-const authoredWorlds=[
-  caseFrom({
+export const worldSpecs=[
+  {
     slug:'software-release-gate',domain:'software release gating',owner:'Platform release desk',requestId:'REL-640',
     requestText:'Choose the newest candidate build eligible for production deployment. The deployment window is open until 18:00 UTC.',
     ruleText:'A build qualifies if its required tests passed and it has no blocker, or exactly one noncritical blocker covered by a waiver naming that same complete build ID. Select the qualifying build with the greatest numeric version rank. Deployment requires a signed change order and an open deployment window.',
@@ -69,8 +69,8 @@ const authoredWorlds=[
     selectionFormat:'One complete build ID, or none.',measureFormat:'Numeric version rank of the selected build as digits; 0 when none.',
     decisionFormat:'Use deploy only when a build qualifies, a signed change order is present, and the deployment window is open. If a build qualifies but either authority condition is missing, use hold. Use no_action only when no build qualifies. Return exactly one bare literal: deploy, hold, or no_action.',
     finalDecisions:['deploy','hold','no_action'],approvedAction:'deploy',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'dependency-upgrade-batch',domain:'software dependency upgrade batching',owner:'Open-source security maintainers',requestId:'DEP-219',
     requestText:'Select at most two dependency updates for the next maintenance batch.',
     ruleText:'An update qualifies when review is complete, compatibility tests pass, and it has no unresolved dependency conflict. Select at most two qualifying updates by descending measured risk reduction, ties by ascending complete dependency ID. Merging requires two maintainer approvals.',
@@ -91,8 +91,8 @@ const authoredWorlds=[
     selectionFormat:'Up to two complete dependency IDs joined by exactly semicolon and one space; descending risk reduction then ID; none if empty.',
     measureFormat:'Corresponding risk reduction points in selected order, joined by exactly semicolon and one space; none if empty.',
     finalDecisions:['merge','hold','no_action'],approvedAction:'merge',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'research-instrument-booking',domain:'research instrument booking',owner:'Shared laboratory scheduler',requestId:'LAB-362',
     requestText:'Book one 90-minute instrument slot for the microscopy team before 11:00.',
     ruleText:'A slot qualifies only when the instrument is calibrated, the assigned researcher has current training, and the slot has no reservation conflict. An after-hours safety exception is allowed only when the permit names the same instrument and slot. Choose the earliest qualifying start time, ties by ascending complete slot ID. Booking requires the principal investigator approval and equipment availability.',
@@ -112,8 +112,8 @@ const authoredWorlds=[
     authorityText:'The PI approved LAB-362 and the selected equipment is available.',authorized:true,
     selectionFormat:'One complete slot ID or none.',measureFormat:'Selected slot start time in HH:MM or none.',
     finalDecisions:['book','hold','no_action'],approvedAction:'book',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'privacy-export-minimization',domain:'privacy-preserving data export',owner:'Regional outcomes analytics unit',requestId:'PX-105',
     requestText:'The regional outcome report requests all five schema fields: region, age_band, patient_name, rare_condition, and outcome_code. The approved purpose is regional-outcomes.',
     ruleText:'Start with all five requested fields. Keep a field when it is public or its restriction has explicit consent for the exact approved purpose, regional-outcomes. Then remove every direct identifier, regardless of request status, public classification, or consent. Sort the remaining fields by schema position. The data protection officer must approve the export.',
@@ -133,8 +133,8 @@ const authoredWorlds=[
     authorityText:'The data protection officer has not approved export PX-105. Preserve the minimum eligible field list, but set the disposition to hold.',authorized:false,
     selectionFormat:'Field names joined by exactly semicolon and one space in ascending schema position; none if empty.',measureFormat:'Number of included fields as digits only.',
     finalDecisions:['export','hold','no_action'],approvedAction:'export',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'incident-mitigation-selection',domain:'incident response mitigation selection',owner:'Service incident commander',requestId:'INC-903',
     requestText:'Select at most two mitigation actions for outage INC-903 to reduce customer impact.',
     ruleText:'An action qualifies if all listed prerequisites are complete and its blast radius is within the approved cap. An untested action may qualify only under a commander waiver naming that exact action. Select at most two by descending measured risk reduction, ties by ascending complete action ID. Execution requires the incident commander authorization.',
@@ -156,8 +156,8 @@ const authoredWorlds=[
     selectionFormat:'Up to two complete action IDs joined by exactly semicolon and one space; descending risk reduction then ID; none if empty.',
     measureFormat:'Corresponding risk reduction points in the same order, joined by exactly semicolon and one space; none if empty.',
     finalDecisions:['execute','hold','no_action'],approvedAction:'execute',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'research-sample-release',domain:'research sample batch release',owner:'Laboratory quality assurance',requestId:'SR-448',
     requestText:'Identify sample batches eligible for the next analysis run.',
     ruleText:'A batch qualifies when chain of custody is intact and quality control passed. A failed initial QC may be superseded only by a final passing retest linked to that same complete batch ID. Order qualifying batches by collection time ascending, then complete batch ID. Release requires the QA lead signature.',
@@ -177,8 +177,8 @@ const authoredWorlds=[
     authorityText:'QA lead signature for SR-448 is recorded.',authorized:true,
     selectionFormat:'Complete sample batch IDs joined by exactly semicolon and one space, ordered by collection time then ID; none if empty.',measureFormat:'Number of eligible sample batches as digits only.',
     finalDecisions:['release','hold','no_action'],approvedAction:'release',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'volunteer-shift-coverage',domain:'volunteer shift coverage reduction',owner:'Community response coordinator',requestId:'VS-610',
     requestText:'Fill the two critical response roles: interpreter (priority 1) and radio operator (priority 2). A volunteer may fill at most one role.',
     ruleText:'A person-role assignment qualifies when the person has that role qualification, is available for the shift, and has at least 10 hours of rest; the rest threshold may be waived only by a signed exception naming that exact person and role. Assign roles by ascending role priority, then descending fit score, then ascending complete person ID, without assigning one person twice. Staffing requires coordinator approval.',
@@ -202,8 +202,8 @@ const authoredWorlds=[
     authorityText:'Coordinator approval is recorded for VS-610.',authorized:true,
     selectionFormat:'Serialize each assignment with its role label in lowercase and the complete person ID exactly as listed, joined by exactly semicolon and one space in ascending role priority. Format: interpreter=<PERSON_ID>; radio=<PERSON_ID>. Return the literal lowercase string none if no assignments qualify.',measureFormat:'Number of distinct roles filled as digits only.',
     finalDecisions:['staff','hold','no_action'],approvedAction:'staff',noAction:'no_action',
-  }),
-  caseFrom({
+  },
+  {
     slug:'records-retention-disposition',domain:'records retention disposition',owner:'Public records counsel',requestId:'RT-227',
     requestText:'Prepare a disposition list using cutoff date 2026-10-01. The list is a proposed selection, not itself authority to destroy records.',
     ruleText:'Select a record for destruction only when its retention expiry is on or before the cutoff, no active legal hold applies, and custodian notice is complete. An active legal hold overrides age and notice. Sort selected records by expiry date ascending, then complete record ID. Counsel signature is required before destruction.',
@@ -221,7 +221,7 @@ const authoredWorlds=[
     authorityText:'Counsel has not signed a destruction order for RT-227. Report the eligible proposed list, but do not represent destruction as authorized.',authorized:false,
     selectionFormat:'When records qualify, return complete record IDs joined by exactly semicolon and one space, sorted by expiry date ascending then ID. When none qualify, return the literal lowercase string none (not an empty string).',measureFormat:'Count of records in the proposed destruction list as digits only.',
     finalDecisions:['destroy','hold','no_action'],approvedAction:'destroy',noAction:'no_action',
-  }),
+  },
 ];
 
-export const worlds=authoredWorlds;
+export const worlds=worldSpecs.map(caseFrom);
