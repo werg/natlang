@@ -1122,3 +1122,17 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   MTP drafts match crisp AR quality at every offset (token accuracy 0.82 → 0.52 vs greedy's 0.82 → 0.58); the sketch
   is 2–4 nats worse. Gold-reference ΔCE after divergence overstates all rollouts (Pop's caveat), but the comparison is
   like-for-like. Supports dropping the sketch; MTP remains the inference-time initializer candidate.
+
+## 2026-10-08 — Maple v10 (input map) qualified for text alignment
+
+- `runs/maple-native-text-warmup-20261008-v10` (continuing v9's step ~4870 sketch state; `--neuralese-input map`, kernel 4,
+  rank 64; system prompt masked) passed the alignment gate at 6400 and 6528 and stopped qualified at 6528
+  (`heads.pt` = step 6528).
+- Held at 6528: mapped-history ΔCE 0.003 vs crisp text; map-vs-own-projection relative MSE 0.284; projection-vs-gold
+  relative MSE 0.334; AR projection self-fed rollout stays on gold for 148 tokens (crisp greedy: all 256).
+- Cost: ~1660 updates, ~2–12 s each (v9's sketch curriculum: 15–40 s per update with every deep pass ΔCE ≥ 2).
+- Incidents: map frozen during the projection-first phase (fixed 33299848); a deterministic CheckpointError at update
+  6452 from the dynamic-shape compiled Maple RMSNorm recomputing an odd 39-row tail chunk differently (fixed
+  d7bd584e + 10ecee9b: eager norm inside checkpointed readout/projection chunks).
+- Next: `text_warmup_runtime` on the exact exported heads (`runs/maple-text-warmup-runtime-20261008-v10`), then raw
+  recurrence per `raw-recurrence-v1`.
