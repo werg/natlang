@@ -13200,6 +13200,27 @@
       "corpus_publication_for_training": false,
       "derived_from": [],
       "notes": "Four project-authored synthetic criterion fixtures evaluated in discovery and instructed arms using Luna through normal native skill discovery/read. Preserves raw results and traces, exact approved plan, used skill candidate, evaluator and fake-provider harness source copies, host-only contexts/oracle, root reviews, entire pinned frozen runtime v9, plus a held proposed task-workflows-v3 collection snapshot. Eight executions / 32 collector requests; all four exact host decisions matched in each arm and all skill bodies were read. This is diagnostic evidence only, not a clean benchmark, generalization claim, or training candidate. The skill collection v3 is held and was not used in this run. No source-world expansion or automatic admission."
+    },
+    {
+      "id": "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/nebius-swe-rebench-openhands-trajectories-20261009-v1",
+      "include": [
+        "README.md",
+        "LICENSE",
+        "tools.json",
+        "config.toml",
+        "trajectories.parquet"
+      ],
+      "split": "source",
+      "source_class": "public-teacher-agent-trajectories-with-executable-environments",
+      "admission": "held-source-harness-bench-evidence-only",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [],
+      "license": "CC-BY-4.0 (dataset card); repositories' own licences per instance",
+      "source_url": "https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories",
+      "notes": "67,074 OpenHands v0.54 trajectories by Qwen3-Coder-480B-A35B on SWE-rebench issues (1,823 Python repositories; 32,161 resolved per the card), downloaded 2026-10-09 as the first source of the harness bench (plans/neuralese/HARNESS_BENCH.md). Teacher tool dialect: OpenHands str_replace_editor / execute_bash / think / finish (tools.json). Evidence only: normalization to pi transcripts, environment replay and companion augmentation are separate derived corpora with their own admission decisions."
     }
   ],
   "coverage_backlog": [

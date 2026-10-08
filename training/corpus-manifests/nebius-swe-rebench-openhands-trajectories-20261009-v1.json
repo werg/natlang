@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/nebius-swe-rebench-openhands-trajectories-20261009-v1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 18656,
+      "sha256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6924,
+      "sha256": "90fa586c747d9ed1022c28847439489576049cde7de1fdfb80d24b2a0ae77b32"
+    },
+    {
+      "path": "config.toml",
+      "bytes": 7261,
+      "sha256": "d77ab00872c0929474c71ae989fe7cf4046706a7fccf19392e4ddb6953322191"
+    },
+    {
+      "path": "tools.json",
+      "bytes": 18512,
+      "sha256": "d13c473da05d5cd18f6d2fb23146015585f4159fb64cb819fdc9dd8948caae9d"
+    },
+    {
+      "path": "trajectories.parquet",
+      "bytes": 2079503354,
+      "sha256": "14048dd1fcd22ce094b6e85f8a38f223a9ef1327031aaaad052804870212efa1"
+    }
+  ],
+  "bytes": 2079554707
+}
