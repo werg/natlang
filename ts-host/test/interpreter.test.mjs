@@ -436,10 +436,18 @@ test('eval allows finite iteration and rejects open-ended loops', async () => {
     finished: ts('finished', 'export default function finished(state: number): boolean { return state >= 3; }') } });
   const folded = await session.applyAsync('eval', { code: 'let total: number = 1; for (const item of values) { total = add(total, item); } total' });
   assert.equal(folded.kind, 'ok', folded.text); assert.equal(folded.value, 6);
+  const propertyKeys = await session.applyAsync('eval', { code: `
+    const parent = { inherited: 'parent', shared: 'parent' };
+    const record = Object.assign(Object.create(parent), { first: 'a', shared: 'own', second: 'b' });
+    const enumerable: string[] = [];
+    for (const key in record) enumerable.push(key);
+    enumerable.join(',') + '|' + Object.keys(record).join(',')` });
+  assert.equal(propertyKeys.kind, 'ok', propertyKeys.text);
+  assert.equal(propertyKeys.value, 'first,shared,second,inherited|first,shared,second');
   const repeated = await session.applyAsync('eval', { code:
     'let current: number = 0; for (let attempt = 0; attempt < 8; attempt++) { if (finished(current)) break; current = step(current); } current' });
   assert.equal(repeated.kind, 'ok'); assert.equal(repeated.value, 3);
-  for (const code of ['while (true) {}', 'do {} while (false)', 'for (;;) {}', 'for (const key in values) {}',
+  for (const code of ['while (true) {}', 'do {} while (false)', 'for (;;) {}',
     'function* gen() { yield 1; }', 'for (let i = 0; i < 3; i++) { i = 0; }']) {
     const rejected = await session.applyAsync('eval', { code });
     assert.equal(rejected.kind, 'rejected', code); assert.match(rejected.text, /forbidden-loop/, code);

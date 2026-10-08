@@ -221,13 +221,14 @@ const policy = source => checkConstrainedSource(ts.createSourceFile('m.ts', sour
 
 test('constrained source accepts finite iteration and rejects open-ended forms', () => {
   assert.deepEqual(policy(`for (const x of [1, 2]) {}
+    for (const key in record) {}
     for (let i = 0; i < 10; i++) {}
     for (let i = 10; i >= 0; i -= 2) {}
     [1].map(x => x).filter(Boolean);
     for await (const event of step.iterateOn(1).streamUntil(done)) {}
     for await (const chunk of response.body) {}
     scheduler.setInterval(job, 5);`), []);
-  for (const source of ['while (x) {}', 'do {} while (x)', 'for (;;) {}', 'for (const k in o) {}', 'setInterval(tick, 5)', 'window.setInterval(tick, 5)',
+  for (const source of ['while (x) {}', 'do {} while (x)', 'for (;;) {}', 'setInterval(tick, 5)', 'window.setInterval(tick, 5)',
     'const o = { [Symbol.iterator]: () => it }', 'Iterator.from(source)', 'class Forever extends Iterator {}',
     'function* g() {}', 'for (let i = 0; i < n; i--) {}', 'for (let i = 0; i < n; i++) { i++; }', 'for (let i = 0; i < xs.length; i++) { xs.push(1); }',
     'for (let i = 0; i < count(); i++) {}', 'eval("1")', 'new Function("")', 'import("x")'])

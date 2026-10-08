@@ -4,9 +4,10 @@ import { spanOf, type NatlangDiagnostic } from './inline.js';
 /**
  * Source policy for callable-folder TypeScript, `natlang.d/`, and lambda `eval`.
  *
- * The checks are syntactic so they run without a type checker. Array-only `for ... of`
- * is enforced by a runtime guard that the lowering inserts; a checker, when present, only adds
- * earlier diagnostics. Ordinary application TypeScript is not subject to this policy.
+ * The checks are syntactic so they run without a type checker. Supported `for ... of` sources
+ * are enforced by a runtime guard that the lowering inserts; native `for ... in` keeps JavaScript's
+ * enumerable string-key semantics. A checker, when present, only adds earlier diagnostics.
+ * Ordinary application TypeScript is not subject to this policy.
  */
 export type PolicyOptions = {
   displayPath?: (file: ts.SourceFile) => string;
@@ -207,13 +208,11 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
   const displayPath = options.displayPath ?? (source => source.fileName);
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) =>
     diagnostics.push({ ...spanOf(node, displayPath), code, message, severity: 'error' });
-  const loopHint = ' Use `for (const item of array)`, a counter `for (let i = 0; i < n; i++)`, an array method, ' +
-    'or `step.iterateOn(initial).until(done)` for open-ended iteration.';
+  const loopHint = ' Use `for (const item of array)`, `for (const key in record)` for enumerable string keys, ' +
+    'a counter `for (let i = 0; i < n; i++)`, an array method, or `step.iterateOn(initial).until(done)` for open-ended iteration.';
   const visit = (node: ts.Node): void => {
     if (ts.isWhileStatement(node)) report(node, 'forbidden-loop', '`while` loops are not allowed here.' + loopHint);
     else if (ts.isDoStatement(node)) report(node, 'forbidden-loop', '`do ... while` loops are not allowed here.' + loopHint);
-    else if (ts.isForInStatement(node))
-      report(node, 'forbidden-loop', '`for ... in` is not allowed here; iterate `Object.keys(value)` or `Object.entries(value)`.');
     else if (ts.isForStatement(node)) {
       const problem = canonicalFor(node);
       if (problem) report(node, 'forbidden-loop', `This \`for\` loop is not a checked finite counter loop: ${problem}.` + loopHint);
@@ -276,4 +275,3 @@ export function authoredCallables(file: ts.SourceFile, idPrefix: string): Author
   visit(file);
   return found;
 }
-
