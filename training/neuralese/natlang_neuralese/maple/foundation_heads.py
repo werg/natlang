@@ -12,7 +12,7 @@ from pathlib import Path
 import torch
 
 from ..model.heads import PortHeads
-from ..model.hf_port import qwen_controls
+from ..model.hf_port import family_controls
 from .maple_port import MaplePortBackbone
 from .student import DEFAULT_MODEL, load_student, student_identity
 
@@ -33,7 +33,7 @@ def main(argv=None):
     state = str(Path(args.state).resolve()) if args.state else None
     model, tokenizer = load_student(args.model, state, device=args.device)
     torch.manual_seed(args.seed)
-    backbone = MaplePortBackbone(model, qwen_controls(tokenizer))
+    backbone = MaplePortBackbone(model, family_controls(model, tokenizer))
     if not 0 < args.cutoff < backbone.num_layers:
         parser.error(f'cutoff must lie inside the {backbone.num_layers}-layer stack')
     heads = PortHeads(backbone, cutoff=args.cutoff, max_length=args.max_length, stop_source=args.stop_source)
