@@ -1,3 +1,9 @@
+## Pop typed-readout depth correction — 2026-10-08 00:50 UTC
+
+- Requested Luna ergonomics audit found a concrete shared runtime bug: the pre-existing configured typed readout was consuming the five-layer generated-nl budget. `5441d026` exempts only that library operation from ad hoc depth increments; ordinary total depth, cancellation and call accounting remain. Isolated compilation and four focused tests passed (readout at depth five; sixth authored layer rejected; independent maxDepth enforced). No shared SDK staging or installed dependency change. Freeze a successor runtime before future collectors use this improvement; active frozen V8 jobs remain unchanged.
+- V6 generation closed: Luna indices1/4 accepted; Bunny5 accepted. Other failures remain preserved. Cross-provider V8 recovery now has two actual Luna workers (indices6/7) and two Bunny workers (0/3), after root reviewed exact source/proof/runtime/plan pins. V8 clarifies field formatting, decision rules, and evidence-file mutability without adding answer facts. These are generation-only attempts with no automatic admission or DPO pairing.
+- Real V22 training has advanced past step13,845 on admitted V17. GPU observed100%,5145MiB. Disk has15GiB free; preserve8GiB resource reserve and avoid unnecessary full corpus copies. Expanded V17 action proposal V2 remains held; portable evidence/reviewer-label clarification and additional producer review continue.
+
 ## Pop final warm-up handoff and fresh generation — 2026-10-08 00:40 UTC
 
 - V21 completed all 16,384 updates and exited cleanly. The final checkpoint SHA is `f2f903cf399e326e1f8a92c6c9d0e8b8440831fdb269464e2dabfd5954d9cef4`; the matching final heads SHA is `08b982cfd80d28c99afd74f654f1d0e1865d30d05d44fd67ebb3ed28ff47b544`. The export receipt binds both to step 16,384. Existing foundation gates remain failed; completion is not qualification. Best complete-state checkpoint remains step 13,824.
