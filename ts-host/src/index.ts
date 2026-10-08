@@ -30,6 +30,8 @@ export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
 export { WorkspaceModules, findPackageWorkspace } from './workspace-modules.js';
 export { TypeEnv, TypeSyntaxError, parseType, formatType, fitsType } from './native/types.js';
+export { ONCE_EFFECTS } from './native/effects.js';
+export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest } from './contracts.js';
 export type { NativeReviewOptions } from './native/agent.js';

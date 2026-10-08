@@ -3,7 +3,7 @@
  * deferred polling, failure classification, token estimates and pi's argument validation. Provider transports, auth,
  * catalogs, transcript conversion and the overflow and retry pattern tables stay inside pi-ai.
  */
-import type { Context } from '@earendil-works/chord';
+import { copyJson, type Context } from '@earendil-works/chord';
 import type { Api, AssistantMessage, Message, Model, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import { estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate';
 import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow';
@@ -12,7 +12,14 @@ import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
 import type { TaskRuntime } from '../vendor/durable/src/types.ts';
 import { streamResponse } from '../vendor/durable/src/harness/generation.ts';
 import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, ThinkingLevel } from '../types.ts';
+import { ONCE_EFFECTS } from '@natlang/node';
 import { plain } from './durable.ts';
+
+/**
+ * A provider's message as the Session line stores it: strict JSON, or a rejection as pi-durable's commit would give
+ * (a message that is not JSON faults the generation; it is never cleaned into a valid-looking one).
+ */
+const storable = (message: AssistantMessage): AssistantMessage => copyJson(message, { omitUndefinedProperties: true }) as unknown as AssistantMessage;
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
 
@@ -29,19 +36,10 @@ export function aiService(runtime: Runtime, context: Context) {
     const { thinkingLevel, ...rest } = turn;
     return { ...rest, signal: runtime.signal, ...(thinkingLevel === 'off' ? {} : { reasoning: thinkingLevel }) } as SimpleStreamOptions;
   };
-  // One phase invocation sends a given request or poll once: an executor that runs the same call again (a retried
-  // eval) gets the message the provider already returned, not a second request.
-  const sent = new Map<string, Promise<AssistantMessage>>();
-  const once = (key: string, send: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
-    let pending = sent.get(key);
-    if (!pending) {
-      pending = send();
-      pending.catch(() => sent.delete(key));
-      sent.set(key, pending);
-    }
-    return pending.then(message => plain(message));
-  };
   return {
+    // A phase's request and poll are external effects: an executor that runs the same call again within the phase
+    // (a retried eval, a function called twice) gets the provider's earlier answer, not a second request.
+    [ONCE_EFFECTS]: ['turn', 'poll'],
     model(ref: ModelRef): ModelInfo | null {
       const model = ref && typeof ref.provider === 'string' && typeof ref.modelId === 'string' ? runtime.models.getModel(ref.provider, ref.modelId) : undefined;
       if (!model) return null;
@@ -49,15 +47,12 @@ export function aiService(runtime: Runtime, context: Context) {
         maxTokens: model.maxTokens ?? 0, reasoning: Boolean(model.reasoning) };
     },
     turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
-      return once(JSON.stringify(['turn', model, messages, turn, live ?? null]), async () => {
-        const resolved = resolve(model);
-        return plain(live ? await streamResponse(runtime as never, resolved, messages, options(turn), live.attempt, context) :
-          await runtime.models.completeSimple(resolved, { messages }, options(turn)));
-      });
+      const resolved = resolve(model);
+      return (live ? streamResponse(runtime as never, resolved, messages, options(turn), live.attempt, context) :
+        runtime.models.completeSimple(resolved, { messages }, options(turn))).then(storable);
     },
     poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {
-      return once(JSON.stringify(['poll', model, handle]), async () =>
-        plain(await runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal })));
+      return runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal }).then(storable);
     },
     async cancel(model: ModelRef, handle: DeferredHandle): Promise<void> {
       await runtime.models.cancelDeferred(resolve(model), handle as never);

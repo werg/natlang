@@ -26,5 +26,3 @@ a summary for the caller to place.
    streamOptions: facts.settings.stream, maxTokens, tail, firstKept } } }] and return null, where
    - maxTokens = Math.floor(0.8 * policy.reserveTokens), lowered to info.maxTokens when info.maxTokens > 0 and smaller;
    - tail = the largest id among view.entries (at least firstKept).
-
-Return a result that is not null from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.

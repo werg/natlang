@@ -85,7 +85,7 @@ To port a durable agent harness (pi-durable), keep its host for what is mechanis
 
 ## Values a small interpreter must not retype
 
-A function that returns what a service produced (a provider message, a derived view, model-written text) returns the variable from eval (`return message;` with `finish: true`), never a literal in `return_result`: small models rewrite long values from memory and drop or invent fields (signatures, usage, provider ids). Say so in the instructions of every function that returns such a value. In pi's first live conformance run the executor called the provider correctly, then returned a retyped message with invented usage and a fake signature.
+A function that returns what a service produced (a provider message, a derived view, model-written text) returns the variable from eval (`return message;` with `finish: true`), never a literal in `return_result`: small models rewrite long values from memory and drop or invent fields (signatures, usage, provider ids). The runtime makes this the easy path: a computed value is assignable as in TypeScript, so fields the declared type does not list are kept instead of refused. A refusal there used to be what sent executors back to retyping: pi's provider messages carry a `durationMs` its declared type lacked, and the executor answered the refusal with a hand-written copy with invented usage and a fake signature. Declare such types as what the function relies on, not as a full schema of the provider's value.
 
 ## One set of stages, two drivers
 

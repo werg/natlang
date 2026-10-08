@@ -34,5 +34,3 @@ Steps, in order; stop at the first that settles:
     { op: "next", state: { status: "running", checkpoint: { phase: "execute", arguments: args,
       replay: tool.replay ?? "unsafe" } } }]
    and return { args }.
-
-Return a result that is not null from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.

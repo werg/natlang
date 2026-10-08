@@ -390,7 +390,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const { choice } = modelSelection(parsed);
   const model = modelSession(choice, parsed.options.has('--yes'));
   const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal) => model.turn(request, signal),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal) });
+    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() });
   const executorIdentity = executorIdentityForChoice(choice);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
@@ -461,7 +461,7 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal) => model.turn(request, signal),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal) })), program, adaptation, executorIdentity,
+    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() })), program, adaptation, executorIdentity,
     ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }
   finally { runtime.close(); await model.close(); }

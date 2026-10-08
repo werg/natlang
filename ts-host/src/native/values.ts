@@ -105,6 +105,31 @@ function preview(value: unknown): string {
   return (text ?? String(value)).slice(0, 45);
 }
 
+/** Rebuild plain data in this realm (eval values come from the sandbox realm); live values keep identity. */
+export function hostCopy(value: unknown, seen = new Map<object, unknown>()): unknown {
+  if (!value || typeof value !== 'object' || isLive(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle) return value;
+  if (seen.has(value)) return seen.get(value);
+  if (Array.isArray(value)) { const out: unknown[] = []; seen.set(value, out); for (const item of value) out.push(hostCopy(item, seen)); return out; }
+  const out: Record<string, unknown> = {}; seen.set(value, out);
+  for (const [key, item] of Object.entries(value)) Object.defineProperty(out, key,
+    { value: hostCopy(item, seen), enumerable: true, writable: true, configurable: true });
+  return out;
+}
+const depth = (path: string) => path.split('/').length;
+/** Of a union's member misses, the one deepest below `path` that is a wrong field value, not a wrong variant. */
+function closestMiss(misses: Reject[], path: string): Diagnostic | undefined {
+  let best: Diagnostic | undefined;
+  for (const miss of misses) {
+    if (miss.diagnostics.length !== 1) continue;
+    const diagnostic = miss.diagnostics[0]!;
+    if (diagnostic.code !== 'type-mismatch' || depth(diagnostic.path) <= depth(path)) continue;
+    // A literal expected is a variant's tag: that member is a different variant, not a near miss.
+    if (!diagnostic.expected || /^(".*"|-?\d[\d.e+-]*|true|false|null)$/.test(diagnostic.expected)) continue;
+    if (!best || depth(diagnostic.path) > depth(best.path)) best = diagnostic;
+  }
+  return best;
+}
+
 export type CoerceOptions = { /** Keep structurally compatible extra record properties (used for callable inputs only). */
   preserveRecordExtras?: boolean };
 
@@ -133,9 +158,15 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (wanted.kind === 'union') {
+    const misses: Reject[] = [];
     for (const member of wanted.members) {
-      try { return coerce(raw, member, env, path, options); } catch (error) { if (!(error instanceof Reject)) throw error; }
+      try { return coerce(raw, member, env, path, options); } catch (error) { if (!(error instanceof Reject)) throw error; misses.push(error); }
     }
+    // The member the value came closest to names the field that is wrong: its miss lies deepest inside the value, and
+    // it is not a different variant's tag (a literal) or field set. A record union ("phase": "request" | ...) then
+    // reports `checkpoint/cutoff: expected number`, not the whole union.
+    const closest = closestMiss(misses, path);
+    if (closest) throw new Reject([{ ...closest, expected: `${closest.expected} (in ${formatType(type)})` }]);
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (wanted.kind === 'prim') {
@@ -148,6 +179,8 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     if (wanted.name === 'null' && raw === null) return null;
     if (wanted.name === 'Folder' && (raw instanceof Folder || raw instanceof FolderHandle)) return raw;
     if (wanted.name === 'FileHandle' && raw instanceof FileHandle) return raw;
+    if (wanted.name === 'number' && typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw)))
+      return reject(path, 'type-mismatch', 'number', `the string ${preview(raw)}; write the number itself, without quotes`);
     return reject(path, 'type-mismatch', wanted.name, preview(raw));
   }
   if (wanted.kind === 'lit') {

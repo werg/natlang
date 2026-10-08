@@ -24,6 +24,8 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
   decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
+  /** The model's context window as its server reports it (undefined when it does not say). */
+  contextWindow(): Promise<number | undefined>;
   status(): ManagedModelStatus; close(): Promise<void> };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
@@ -198,6 +200,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   process.once('SIGINT', terminate); process.once('SIGTERM', terminate);
   const onExit = () => { if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); };
   process.once('exit', onExit);
+  let window: Promise<number | undefined> | undefined;
   return {
     async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
     async turn(request, signal, onProgress) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, onProgress); const options = await start(); signal?.throwIfAborted(); return driver(options)(request, signal); },
@@ -208,6 +211,10 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       const options = await start();
       try { return await driver(options).decide(request, signal); }
       catch (error) { if (String((error as Error)?.message).startsWith('decision-unsupported')) unscored = (error as Error).message; throw error; }
+    },
+    contextWindow() {
+      if (choice.kind === 'pi-provider') return Promise.resolve(undefined);
+      return window ??= start().then(options => driver(options).contextWindow(), () => undefined);
     },
     status() { return choice.kind === 'pi-provider' ? { source: 'pi-provider', endpoint: null, model: `${choice.provider}/${choice.model}`,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,

@@ -38,5 +38,3 @@ when the tool has it; two declarations are equal when the JSON of those four fie
    - Both: one entry per patch; the last one also carries the tool changes.
 Return the entries as { message } objects (and edits only in case 1). Outside case 1, an entry whose message has no
 section keys and no tool changes is never returned.
-
-Return a result that is not null from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.
