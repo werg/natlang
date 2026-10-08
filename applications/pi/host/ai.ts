@@ -29,9 +29,18 @@ export function aiService(runtime: Runtime, context: Context) {
     const { thinkingLevel, ...rest } = turn;
     return { ...rest, signal: runtime.signal, ...(thinkingLevel === 'off' ? {} : { reasoning: thinkingLevel }) } as SimpleStreamOptions;
   };
-  // One phase invocation sends a given request once: an executor that runs the same turn again (a retried eval) gets
-  // the message the provider already returned, not a second request.
-  const turns = new Map<string, Promise<AssistantMessage>>();
+  // One phase invocation sends a given request or poll once: an executor that runs the same call again (a retried
+  // eval) gets the message the provider already returned, not a second request.
+  const sent = new Map<string, Promise<AssistantMessage>>();
+  const once = (key: string, send: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
+    let pending = sent.get(key);
+    if (!pending) {
+      pending = send();
+      pending.catch(() => sent.delete(key));
+      sent.set(key, pending);
+    }
+    return pending.then(message => plain(message));
+  };
   return {
     model(ref: ModelRef): ModelInfo | null {
       const model = ref && typeof ref.provider === 'string' && typeof ref.modelId === 'string' ? runtime.models.getModel(ref.provider, ref.modelId) : undefined;
@@ -40,22 +49,15 @@ export function aiService(runtime: Runtime, context: Context) {
         maxTokens: model.maxTokens ?? 0, reasoning: Boolean(model.reasoning) };
     },
     turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
-      const key = JSON.stringify([model, messages, turn, live ?? null]);
-      let sent = turns.get(key);
-      if (!sent) {
-        sent = (async () => {
-          const resolved = resolve(model);
-          const message = live ? await streamResponse(runtime as never, resolved, messages, options(turn), live.attempt, context) :
-            await runtime.models.completeSimple(resolved, { messages }, options(turn));
-          return plain(message);
-        })();
-        sent.catch(() => turns.delete(key));
-        turns.set(key, sent);
-      }
-      return sent.then(message => plain(message));
+      return once(JSON.stringify(['turn', model, messages, turn, live ?? null]), async () => {
+        const resolved = resolve(model);
+        return plain(live ? await streamResponse(runtime as never, resolved, messages, options(turn), live.attempt, context) :
+          await runtime.models.completeSimple(resolved, { messages }, options(turn)));
+      });
     },
-    async poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {
-      return plain(await runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal }));
+    poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {
+      return once(JSON.stringify(['poll', model, handle]), async () =>
+        plain(await runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal })));
     },
     async cancel(model: ModelRef, handle: DeferredHandle): Promise<void> {
       await runtime.models.cancelDeferred(resolve(model), handle as never);
