@@ -6709,6 +6709,20 @@
       ],
       "admission": "held-generation-source-scripted-reference-readiness-and-static-launch-binding-no-teacher-output-or-training-admission",
       "notes": "Immutable V25 authored 16-case source pool, root source review, 16-case CPU-only scripted runtime reference, one successful Luna READY probe, exact approved plan and static actual launch binding, plus the 1044-file frozen runtime. The campaign was running when this packet was published; mutable claims/journals, job partials, results, logs and raw teacher outputs are deliberately excluded and will need a separate closed-campaign snapshot. Scripted references and READY readiness do not grant action, trace, DPO or training admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/**/*",
+        "neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/closed-raw-review-v1/**/*"
+      ],
+      "admission": "held-closed-raw-generation-observations-action-review-pending-no-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v25-v1-static-generation-packet-20261008"
+      ],
+      "notes": "Closed raw V25 Luna campaign for all 16 reviewed source IDs. Preserves result and trace files, slot logs/journals, claim ledger, and launch binding. Run-level parent outcomes: 14 accepted, 2 rejected (TREE-710 and FISH-730 file/answer checks), no infrastructure error sidecars, and one recovered intermediate scope failure on BURS-761. This is a held raw observation snapshot; no action, DPO, or training admission is granted."
     }
   ],
   "coverage_backlog": [
