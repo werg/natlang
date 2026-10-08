@@ -980,10 +980,11 @@ export function markAuthoredStaticReferencePending(turns: Dict[]): Dict[] {
 
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
   decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[] } = {}): {
-  turns: Dict[]; acceptedRows: number; rejectedRows: number;
+  turns: Dict[]; authored_actions: Dict[]; acceptedRows: number; rejectedRows: number;
   unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
   const turns: Dict[] = [];
+  const authoredActions: Dict[] = [];
   const unlinked: { id: string; outcomes: number }[] = [];
   let acceptedRows = 0, rejectedRows = 0;
   for (const candidate of input) {
@@ -1312,10 +1313,24 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (semanticApproval && !validNativeDecisionApproval(semanticApproval, { trajectory_id: row.id,
           source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
-      const decisionApproved = !semanticHold && !afterChunkCutoff && (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
+      const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
+        (row.collection_guidance as Dict).training_admission === false;
+      const decisionApproved = !authoredGuidancePending && !semanticHold && !afterChunkCutoff &&
+        (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
       const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target);
-      rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
+      const authoredRootAction = record(source.action_provenance ?? {}, 'action provenance').kind === 'authored_reference_root_eval';
+      if (authoredRootAction) authoredActions.push({ version: 'natlang.authored_action_hold/1',
+        id: `${row.id}:authored-action:${String(index).padStart(4, '0')}`,
+        source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest, invocation_id: invocation ?? null,
+          program_ir_id: programId }, provenance: row.provenance, task: row.task, collection_guidance: row.collection_guidance ?? null,
+        context: publicValue(contextSource), tools: publicValue(source.tools_offered ?? []), target,
+        action_provenance: source.action_provenance, outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
+          ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
+        training_admission: { approved: false, kind: 'authored-root-action-pending-review',
+          reason: 'authored reference root action requires separate root training approval' },
+        trace_admission: { admitted: false, kind: 'authored-root-action-pending-review' } });
+      if (!authoredRootAction) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
@@ -1325,6 +1340,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             ...(expandedReadContexts.length ? { provider_expanded_read_contexts: expandedReadContexts } : {}) } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
+        ...(row.collection_guidance ? { collection_guidance: row.collection_guidance } : {}),
         task: row.task,
         program_id: programId,
         family: `${role}_program`,
@@ -1360,11 +1376,13 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         // Keep the final verdict with each decision for downstream continuation validation, without copying files.
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
-        training_admission: { kind: semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
+        training_admission: { kind: authoredGuidancePending ? 'authored-root-guided-pending-review' :
+          semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
+          ...(authoredGuidancePending ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: authoredGuidancePending ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -1373,7 +1391,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             redundantSkillRead ? 'retrieves unchanged skill instructions again' :
             detour ? 'repeats an earlier call of this call with the same result' :
             refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
-        trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
+        trace_admission: { admitted: !authoredGuidancePending,
+          kind: authoredGuidancePending ? 'authored-root-guided-pending-review' : 'exact-native-runtime-oracle',
           final_outcome_sha256: outcomeDigest },
         decision: { index,
           ...(statusOnlySuccessValidation.length ? { status_only_success_validation: statusOnlySuccessValidation } : {}),
@@ -1398,5 +1417,5 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     }
     turns.push(...rowTurns);
   }
-  return { turns, acceptedRows, rejectedRows, unlinked };
+  return { turns, authored_actions: authoredActions, acceptedRows, rejectedRows, unlinked };
 }
