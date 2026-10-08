@@ -23,7 +23,8 @@ HANDLERS = {
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
-                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates'},'result':'heads.pt'},
+                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
+                          'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime',
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories',
@@ -68,6 +69,19 @@ def load_recipe(path):
         parameters = stage.get('parameters')
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
+        if kind == 'core_text_warmup':
+            neuralese_input = parameters.get('neuralese_input')
+            if neuralese_input not in {'map', 'sketch'}:
+                raise ValueError('core text warm-up must declare neuralese_input as map or sketch')
+            rollout_passes = parameters.get('rollout_passes', 0)
+            if type(rollout_passes) is not int or rollout_passes < 0 or rollout_passes == 1:
+                raise ValueError('invalid core text warm-up rollout_passes')
+            if neuralese_input == 'map' and rollout_passes != 0:
+                raise ValueError('mapped core text warm-up requires rollout_passes=0')
+            for option_name in ('input_map_kernel', 'input_map_rank'):
+                value = parameters.get(option_name, 4 if option_name == 'input_map_kernel' else 64)
+                if type(value) is not int or value < 1:
+                    raise ValueError('invalid core text warm-up ' + option_name)
         if kind == 'token_identity':
             identity_stages.add(name)
         if kind == 'causal_embedding_distillation' and not set(required) & identity_stages:
@@ -112,6 +126,17 @@ def write_json(path, value):
     pending = path.with_suffix('.pending')
     pending.write_text(json.dumps(value, indent=2) + '\n')
     pending.replace(path)
+
+
+def stage_parameter_args(parameters):
+    """Serialize a validated stage's typed options into CLI arguments."""
+    command = []
+    for key, value in parameters.items():
+        if isinstance(value, bool):
+            command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
+        else:
+            command += ['--' + key.replace('_', '-'), str(value)]
+    return command
 
 
 def require_foundation(certificate, *, heads, checkpoint):
@@ -216,11 +241,7 @@ def main(argv=None):
                 command += ['--pieces', str(args.pieces)]
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
-            for key, value in stage['parameters'].items():
-                if isinstance(value, bool):
-                    command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
-                else:
-                    command += ['--' + key.replace('_', '-'), str(value)]
+            command += stage_parameter_args(stage['parameters'])
             environment = dict(os.environ)
             environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
             print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)

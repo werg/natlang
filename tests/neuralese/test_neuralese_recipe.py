@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from natlang_neuralese.train.recipe import load_recipe, require_gate
+from natlang_neuralese.train.recipe import load_recipe, require_gate, stage_parameter_args
 
 
 def declared():
@@ -111,3 +111,53 @@ def test_shared_text_recipe_trains_both_projections_to_plateau_then_sequence_pas
     assert p['projection_patience']==3 and p['projection_min_evals']==2
     assert p['sketch_weight']==p['embedding_weight']==1.
     assert p['sketch_lr']>p['lr']
+    assert (p['neuralese_input'], p['input_map_kernel'], p['input_map_rank'], p['rollout_passes']) == ('map', 4, 64, 0)
+
+
+def test_core_text_recipe_requires_and_propagates_explicit_map_mode(tmp_path):
+    recipe = declared()
+    recipe['stages'].append({
+        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification'],
+        'parameters': {'neuralese_input': 'map', 'input_map_kernel': 4,
+                       'input_map_rank': 64, 'rollout_passes': 0},
+    })
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    assert load_recipe(path)['stages'][-1]['parameters']['neuralese_input'] == 'map'
+    assert stage_parameter_args(recipe['stages'][-1]['parameters']) == [
+        '--neuralese-input', 'map', '--input-map-kernel', '4',
+        '--input-map-rank', '64', '--rollout-passes', '0',
+    ]
+
+    recipe['stages'][-1]['parameters'] = {'rollout_passes': 0}
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='must declare neuralese_input'):
+        load_recipe(path)
+
+
+def test_core_text_recipe_keeps_explicit_sketch_reproduction_and_rejects_map_rollout(tmp_path):
+    recipe = declared()
+    recipe['stages'].append({
+        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification'],
+        'parameters': {'neuralese_input': 'sketch', 'rollout_passes': 4},
+    })
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    assert load_recipe(path)['stages'][-1]['parameters']['neuralese_input'] == 'sketch'
+    recipe['stages'][-1]['parameters'] = {'neuralese_input': 'map', 'rollout_passes': 4}
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='requires rollout_passes=0'):
+        load_recipe(path)
+
+
+def test_every_declared_shared_core_warmup_names_its_input_mode():
+    recipes = Path(__file__).parents[2] / 'training/neuralese/recipes'
+    declared_recipes = [json.loads(path.read_text()) for path in recipes.glob('*.json')]
+    for recipe in declared_recipes:
+        if recipe.get('schema') != 'natlang.neuralese-training-recipe/1':
+            continue
+        for stage in recipe['stages']:
+            if stage['kind'] == 'core_text_warmup':
+                assert stage['parameters']['neuralese_input'] in {'map', 'sketch'}

@@ -77,7 +77,11 @@
         "projection_min_evals": 2,
         "projection_min_improvement": 0.01,
         "backbone_ramp_evals": 4,
-        "pass_ramp_evals": 2
+        "pass_ramp_evals": 2,
+        "neuralese_input": "map",
+        "input_map_kernel": 4,
+        "input_map_rank": 64,
+        "rollout_passes": 0
       }
     },
     {

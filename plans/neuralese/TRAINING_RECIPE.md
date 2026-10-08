@@ -78,6 +78,16 @@ self-consistency target. Gold-history and detached mapped-history passes replace
 the repeated sketch-pass warm-up. This changes training inputs; it does not
 qualify autonomous neuralese rollout or function recurrence.
 
+The shared `raw-recurrence-v1` recipe declares this map mode explicitly in its
+`core_text_warmup` stage. The recipe runner requires every declared core text
+warm-up to choose `neuralese_input` as `map` or `sketch`; mapped warm-up also
+requires `rollout_passes: 0`. The direct `text_warmup` CLI keeps its historical
+sketch default for reproducing explicit sketch diagnostics, but new shared
+lineages use the declared recipe so the mode cannot be omitted silently. The
+input map is training-only: export keeps it beside the serving heads, and the
+recurrence runtime starts from the map-tuned backbone and serving heads. It does
+not apply the token-to-Neuralese map when serving.
+
 A sketch-to-map checkpoint handoff preserves all model/head weights and RNG.
 Its changed trainable parameter groups start a declared fresh optimizer and
 projection plateau. Subsequent map resumes restore the complete optimizer state.
