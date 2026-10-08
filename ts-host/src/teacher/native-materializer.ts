@@ -1325,6 +1325,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest, invocation_id: invocation ?? null,
           program_ir_id: programId }, provenance: row.provenance, task: row.task, collection_guidance: row.collection_guidance ?? null,
         context: publicValue(contextSource), tools: publicValue(source.tools_offered ?? []), target,
+        actions: calls.map(call => ({ tool: call.tool, source_tool: call.source_tool, arguments: publicValue(call.arguments),
+          call_id: call.call_id, outcome: publicValue(call.outcome) })),
         action_provenance: source.action_provenance, outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         training_admission: { approved: false, kind: 'authored-root-action-pending-review',

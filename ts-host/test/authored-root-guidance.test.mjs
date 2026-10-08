@@ -68,6 +68,7 @@ test('declared authored root eval runs once while child NL turns stay provider s
     assert.equal(collected.completed, 1);
     const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(row.outcome.accepted, true);
+    assert.equal(row.outcome.oracle?.accepted, true, 'retain exact-oracle attestation provisionally');
     assert.equal(requests, 2, 'only the two typed child calls reach the provider');
     assert.equal(sawNestedInvocation, true);
     assert.equal(row.trajectory[0].action_provenance.kind, 'authored_reference_root_eval');
@@ -84,11 +85,14 @@ test('declared authored root eval runs once while child NL turns stay provider s
     assert.equal(converted.turns.length, row.trajectory.length - 1, 'authored root action remains provenance only');
     assert.equal(converted.authored_actions.length, 1);
     assert.equal(converted.authored_actions[0].target.tool_calls[0].function.name, 'eval');
+    assert.ok(converted.authored_actions[0].actions[0].outcome, 'retain the authored root action outcome');
     assert.equal(converted.authored_actions[0].outcome.accepted, true, 'keep answer attestation separate from action admission');
     assert.equal(converted.authored_actions[0].training_admission.approved, false);
     assert.ok(converted.turns.every(turn => turn.source_ref.invocation_id !== row.trajectory[0].invocation_id));
     assert.ok(converted.turns.every(turn => turn.collection_guidance.root_action.sampled === false));
     assert.ok(converted.turns.every(turn => turn.training_admission.approved === false));
+    assert.ok(converted.turns.every(turn => turn.outcome.accepted === true && turn.outcome.oracle?.accepted === true),
+      'retain exact-oracle attestation while collection-review holds block admission');
     assert.ok(converted.turns.every(turn => turn.trace_admission.admitted === false));
     assert.ok(converted.turns.every(turn => turn.training_admission.kind === 'authored-root-guided-pending-review'));
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
