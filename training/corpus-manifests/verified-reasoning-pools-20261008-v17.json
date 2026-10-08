@@ -1,0 +1,199 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-20261008-v17",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v17-selection.json",
+      "bytes": 205350,
+      "sha256": "76ebf7f585e1d78f083d0721e1ba767be9aca6b59a8a442a6970a891f20b8025"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/root-generation-review.json",
+      "bytes": 681,
+      "sha256": "0ee0fd876b5aba2ae32f88bc745799ff5784fa6b7e9161acc7f141fff3c53054"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-000.reference.json",
+      "bytes": 1950195,
+      "sha256": "a5b8109e48a4a9a2bc76eeec24481a58c67bbb73e27996a8ee9df9445baeead9"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-001.reference.json",
+      "bytes": 1950746,
+      "sha256": "086f00058791f07541c49464fef37a7c34c3aab62b7867e5ac40846686f03693"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-002.reference.json",
+      "bytes": 2870061,
+      "sha256": "1b21e38baf5633abeec03831326f6242c451605698b24cec15bb7149ab1bbb2c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-003.reference.json",
+      "bytes": 1933267,
+      "sha256": "459bc1ead6f30b7ca0f7d70de29ce6201f087cce29f8a430e6ef049fe3a3a0ab"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-004.reference.json",
+      "bytes": 1933384,
+      "sha256": "d5c09da0012b7f6e6f427a24e8fdef694338fb5a956d28452767e42e6f696d74"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-005.reference.json",
+      "bytes": 2845692,
+      "sha256": "50ec02f918464e530b0cbc4e7f1f1aacd27ec02d5e94fbba11b240e75332f924"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-006.reference.json",
+      "bytes": 1934507,
+      "sha256": "373546e2e2c03f7842960baae3b2a1eecce03cad1b67e5b0cd796a5c04a406f2"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-007.reference.json",
+      "bytes": 1934019,
+      "sha256": "3a528cd61d6131819be224c8271d2171a8bc5c101a754740bd778a7fa61cabcd"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-008.reference.json",
+      "bytes": 2848708,
+      "sha256": "aabb3a28d6d1aad974a880d1af8eee73229d4b6248f17cd95f3fe3b925887088"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-009.reference.json",
+      "bytes": 1936138,
+      "sha256": "113d000cb1b3bc28fa4fae5919acfd6b13c0a8e630fdf66ddf8ef2f9f3d789fd"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-010.reference.json",
+      "bytes": 1936171,
+      "sha256": "491cbf05eb591c024a6616c653c4beec5c9024f61e477851e598b2ce7655622a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-011.reference.json",
+      "bytes": 2850824,
+      "sha256": "c5b59ff504c8a1725a7f6ec9dab4282a3bb620947cf052e56d00e4dba78e2c2b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-012.reference.json",
+      "bytes": 1935683,
+      "sha256": "97d94dacc8b3fea1f0c37bf8f2d57fb05011fc3b0a732eef24f19db7cd600e82"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-013.reference.json",
+      "bytes": 1935683,
+      "sha256": "c015997ff13af175170a67bd998b176674e135e5232ba2bac3c8ee9ce181e247"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-014.reference.json",
+      "bytes": 2850462,
+      "sha256": "dff9c16b00cd6169c54c8b1aec75fe7522aa4c99e164b4a1c0226f4db5f2a6e3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-015.reference.json",
+      "bytes": 2009186,
+      "sha256": "e46d80633324e880e4adcbd95df8062811cd061703d8e9b0f25e1eefe1f124f7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-016.reference.json",
+      "bytes": 2013384,
+      "sha256": "d6af77e1d11e748b223368b2b8f75658396eefafccab1c7cc25ba2b132ccf697"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-017.reference.json",
+      "bytes": 2957995,
+      "sha256": "c94c864a20d24cd33feb6d1d720f7ce94548ecb2eaa2b3a557d51d8f865226b0"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-018.reference.json",
+      "bytes": 1970555,
+      "sha256": "62d2c3d230a13081f1db02f1e270932e865708bbfb695c84d986db49930cfc28"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-019.reference.json",
+      "bytes": 1971387,
+      "sha256": "9992b2c3d931f58c545af6ff92dc2fe28779a38e2708a7a8ba2f2eb1fe95b543"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-020.reference.json",
+      "bytes": 2954709,
+      "sha256": "6c3b4da23393e99c5e341367e6862ce164aa3c1eaf42fddf5a887437ffe5d9fc"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-021.reference.json",
+      "bytes": 1946692,
+      "sha256": "e326ad1acf41a2e411894674ae08efac04d68c33a3a6b51e0d1028aed1b161a6"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-022.reference.json",
+      "bytes": 1946692,
+      "sha256": "8c0930606add461666b9185753a51accde38a1d703257dbed19df0bb17fdecf1"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-023.reference.json",
+      "bytes": 2864573,
+      "sha256": "f2db4b65f54d3f70cfb108903e5ea3779851ee16987a11c2b9ccbbe94d9d4a3c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 95200,
+      "sha256": "97cb266ed1bb6336cb8dc136383823c829deecd3c8e150f917c687bf16dc6124"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/native-decisions.jsonl",
+      "bytes": 15202712,
+      "sha256": "6f1be397b38bda30248b5789a065356933d50deab6753f84fa908683a526ba1c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/reference-trajectories.jsonl",
+      "bytes": 10511730,
+      "sha256": "edbf19b0644a996b0141044011ff4ca3f1f4a9ed60f99df5f875e2c4098819f9"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/review-artifact-manifest.json",
+      "bytes": 4438,
+      "sha256": "7847425f4e4d1126f13a19755cb47f3fa3ba4746a1da74f40782bd8d6cfa1d12"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/runtime-reference-proof.json",
+      "bytes": 273226,
+      "sha256": "6bc40f5a37943afa320a7dc8999d6ae391bd0563fc0c170733d0b11c30bec210"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source-action-review.jsonl",
+      "bytes": 222446,
+      "sha256": "8ccb9c7f19da970ac1739ccf54aa5694e61656a7cd4dab06a2865c6c16f6cd34"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source.cases.jsonl",
+      "bytes": 338779,
+      "sha256": "c7c123e9825501c42ee981385fd4c6ccb61650d9a999416f60a7fbc7e5e97dd0"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/selection.json",
+      "bytes": 205350,
+      "sha256": "5037931b9b03d8b4c797c61dd1debad139ccce4a05771145af9a077a41488538"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/source-manifest.json",
+      "bytes": 854,
+      "sha256": "d871cc32a6b7a49ffab46e163cf56bbb9742e6ffe8fa378d8d2b05440494228b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/source-proof.json",
+      "bytes": 51243,
+      "sha256": "4f82caf80572509cf0460fe417f09c76753b55ab1f3ea171f258fed17be535f7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/source-verification.json",
+      "bytes": 12460,
+      "sha256": "372aefa7252e2b1e7131a58f3c758c730b4cdb1a3f052b66331503881e4653f4"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/source.cases.jsonl",
+      "bytes": 338779,
+      "sha256": "c7c123e9825501c42ee981385fd4c6ccb61650d9a999416f60a7fbc7e5e97dd0"
+    }
+  ],
+  "bytes": 81743961
+}

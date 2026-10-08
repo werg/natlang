@@ -7759,6 +7759,56 @@
         "verified-reasoning-pools-v10-luna-launch-20261008-v1"
       ],
       "notes": "Immutable terminal V10 Luna evidence. Two parent results: one accepted and one rejected on answer/file checking. Raw jobs/traces/logs preserved; no training or DPO admission."
+    },
+    {
+      "id": "verified-reasoning-pools-20261008-v17",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v17-selection.json",
+        "verified-reasoning-pools-20261008-v17/root-generation-review.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-000.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-001.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-002.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-003.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-004.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-005.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-006.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-007.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-008.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-009.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-010.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-011.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-012.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-013.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-014.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-015.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-016.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-017.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-018.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-019.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-020.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-021.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-022.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-023.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/materializer-runtime-flags-attestation.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/native-decisions.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/reference-trajectories.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/review-artifact-manifest.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/runtime-reference-proof.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source-action-review.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source.cases.jsonl",
+        "verified-reasoning-pools-20261008-v17/selection.json",
+        "verified-reasoning-pools-20261008-v17/source-manifest.json",
+        "verified-reasoning-pools-20261008-v17/source-proof.json",
+        "verified-reasoning-pools-20261008-v17/source-verification.json",
+        "verified-reasoning-pools-20261008-v17/source.cases.jsonl"
+      ],
+      "admission": "source-generation-reviewed; CPU-reference-only; no teacher-quality, trace, or training admission",
+      "derived_from": [
+        "s1-full-final-20261003"
+      ],
+      "notes": "24 deterministic source-derived task variants over 96 existing train records in eight existing source families. V17 excludes eight separate soft-carry variants because final typed readout is unproven on the pinned runtime. Zero new independent-world credit. CPU reference proof used no provider calls and grants no training admission."
     }
   ],
   "coverage_backlog": [
