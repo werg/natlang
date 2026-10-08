@@ -8,8 +8,8 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 
-const { values } = parseArgs({ options: { corpus: { type: 'string' }, out: { type: 'string' } } });
-if (!values.corpus || !values.out) throw new Error('usage: build-verified-reasoning-pools-v1.mjs --corpus DIR --out NEW_DIR');
+const { values } = parseArgs({ options: { corpus: { type: 'string' }, out: { type: 'string' }, selection: { type: 'string' } } });
+if (!values.corpus || !values.out) throw new Error('usage: build-verified-reasoning-pools-v1.mjs --corpus DIR --out NEW_DIR [--selection selection.json]');
 const corpus = resolve(values.corpus), out = resolve(values.out);
 const sha = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => JSON.stringify(value);
@@ -28,10 +28,14 @@ const lines = async function* (path, hash) {
   if (pending.length) yield JSON.parse(pending.toString('utf8'));
 };
 
-const selectedIds = {
+const defaultSelectedIds = {
   reasoning_gym: [0, 1, 2, 3, 4, 5, 6, 8, 9, 11, 14, 18, 19, 22, 23, 24]
     .map(index => `sdkb:reasoning-gym:reasoning_gym-${index}`),
   synlogic_candidates: [],
+};
+defaultSelectedIds.reasoning_gym_answer_modes = {
+  crisp: defaultSelectedIds.reasoning_gym.slice(0, 8),
+  soft: defaultSelectedIds.reasoning_gym.slice(8),
 };
 const synlogicSupported = new Set([
   'sdkb:synlogic:synlogic-easy-train-1', 'sdkb:synlogic:synlogic-easy-train-28',
@@ -41,7 +45,7 @@ const synlogicSupported = new Set([
 ]);
 // Candidate pool includes the seven demonstration-checkable grids and nine explicit omissions.
 // The unsupported records are documented, not silently added to the generated cases.
-selectedIds.synlogic_candidates = [
+defaultSelectedIds.synlogic_candidates = [
   'sdkb:synlogic:synlogic-easy-train-0', 'sdkb:synlogic:synlogic-easy-train-1',
   'sdkb:synlogic:synlogic-easy-train-2', 'sdkb:synlogic:synlogic-easy-train-3',
   'sdkb:synlogic:synlogic-easy-train-4', 'sdkb:synlogic:synlogic-easy-train-5',
@@ -51,6 +55,28 @@ selectedIds.synlogic_candidates = [
   'sdkb:synlogic:synlogic-easy-train-207', 'sdkb:synlogic:synlogic-easy-train-263',
   'sdkb:synlogic:synlogic-easy-train-288', 'sdkb:synlogic:synlogic-easy-train-308',
 ];
+const selectionPath = values.selection ? resolve(values.selection) : null;
+const selectionInput = selectionPath ? JSON.parse(await readFile(selectionPath, 'utf8')) : null;
+if (selectionInput && (selectionInput.schema !== 'natlang.verified_reasoning_selection/1' ||
+    selectionInput.corpus !== 's1-full-final-20261003'))
+  throw new Error('selection schema or pinned source corpus is unsupported');
+const selectedIds = selectionInput ? {
+  reasoning_gym: selectionInput.source_ids?.reasoning_gym,
+  synlogic_candidates: selectionInput.source_ids?.synlogic_candidates ?? [],
+  reasoning_gym_answer_modes: selectionInput.reasoning_gym_answer_modes,
+} : defaultSelectedIds;
+if (!Array.isArray(selectedIds.reasoning_gym) || !selectedIds.reasoning_gym.length ||
+    !Array.isArray(selectedIds.synlogic_candidates) || !selectedIds.reasoning_gym_answer_modes ||
+    !Array.isArray(selectedIds.reasoning_gym_answer_modes.crisp) ||
+    !Array.isArray(selectedIds.reasoning_gym_answer_modes.soft))
+  throw new Error('selection must declare source_ids.reasoning_gym, source_ids.synlogic_candidates, and crisp/soft reasoning_gym_answer_modes');
+const gymModeIds = [...selectedIds.reasoning_gym_answer_modes.crisp, ...selectedIds.reasoning_gym_answer_modes.soft];
+if (new Set(selectedIds.reasoning_gym).size !== selectedIds.reasoning_gym.length ||
+    new Set(gymModeIds).size !== gymModeIds.length ||
+    canonical([...selectedIds.reasoning_gym].sort()) !== canonical([...gymModeIds].sort()) ||
+    selectedIds.reasoning_gym_answer_modes.crisp.length % 4 !== 0 ||
+    selectedIds.reasoning_gym_answer_modes.soft.length % 4 !== 0)
+  throw new Error('selection must assign each unique reasoning-gym source exactly once and provide complete four-item crisp/soft batches');
 const familyFiles = {
   reasoning_gym: 'reasoning_gym.port-records.jsonl',
   reasoning_synlogic: 'reasoning_synlogic.port-records.jsonl',
@@ -211,12 +237,14 @@ const synlogicAudit = selectedIds.synlogic_candidates.map(id => {
   return { id, source_group: row.split_groups[0], split: row.split, license: row.license.spdx,
     disposition: checked.supported ? 'included' : 'omitted-unsupported-rule', checker: checked };
 });
+const modeByGymId = new Map(selectedIds.reasoning_gym_answer_modes.crisp.map(id => [id, 'crisp']));
+for (const id of selectedIds.reasoning_gym_answer_modes.soft) modeByGymId.set(id, 'soft');
 const gymSolved = gymRecords.map(row => {
   const question = row.consumer.context.find(message => message.role === 'user')?.content;
   if (!question || row.consumer.withheld?.includes('sources') !== true) throw new Error(`${row.id}: unexpected visible-source boundary`);
   const answer = solveRewrite(question), target = targetFinalSequence(row.target.value);
   if (answer !== target) throw new Error(`${row.id}: independently solved state differs from original label`);
-  return { row, question, answer };
+  return { row, question, answer, mode: modeByGymId.get(row.id) };
 });
 
 const taskCases = [];
@@ -314,7 +342,10 @@ function buildBatch(family, mode, entries) {
   taskCases.push(record);
 }
 
-for (let i = 0; i < gymSolved.length; i += 4) buildBatch('reasoning_gym', i < 8 ? 'crisp' : 'soft', gymSolved.slice(i, i + 4));
+for (const mode of ['crisp', 'soft']) {
+  const entries = gymSolved.filter(entry => entry.mode === mode);
+  for (let i = 0; i < entries.length; i += 4) buildBatch('reasoning_gym', mode, entries.slice(i, i + 4));
+}
 const synlogicSolved = synlogicAudit.filter(entry => entry.disposition === 'included').map(entry => {
   const row = sourceRecords.get(entry.id);
   const question = row.consumer.context.find(message => message.role === 'user').content;
@@ -347,6 +378,9 @@ const selection = { schema: 'natlang.verified_reasoning_selection/1', corpus: 's
     synlogic_omitted: synlogicAudit.filter(entry => entry.disposition !== 'included').map(entry => entry.id) },
   reasoning_gym_answer_modes: { crisp: selectedIds.reasoning_gym.slice(0, 8), soft: selectedIds.reasoning_gym.slice(8) },
   synlogic_answer_modes: { crisp: synlogicSolved.slice(0, 4).map(entry => entry.row.id), soft: synlogicSolved.slice(4).map(entry => entry.row.id) },
+  selection_input_sha256: selectionPath ? sha(await readFile(selectionPath)) : null,
+  omissions: selectionInput?.omissions ?? { synlogic: synlogicAudit.filter(entry => entry.disposition !== 'included') },
+  source_metrics: selectionInput?.source_metrics ?? null,
   no_new_independent_world_credit: true };
 await writeFile(resolve(out, 'selection.json'), JSON.stringify(selection, null, 2) + '\n', { flag: 'wx' });
 await writeFile(resolve(out, 'source.cases.jsonl'), sourceText, { flag: 'wx' });
