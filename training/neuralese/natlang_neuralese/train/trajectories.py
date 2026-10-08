@@ -1037,7 +1037,13 @@ def main(argv=None):
         rendered = render_messages(crisp, record.get("tools"), engine._template, engine.specials)
         return len(session._items(rendered.segments, rendered.blocks, rendered.escape_nonce))
 
-    train, held_pool, skipped = [], [], {"long": 0, "no-target": 0}
+    def native_neuralese_prompt(record):
+        return any(isinstance(m.get("content"), list) and any(part.get("type") == "neuralese" for part in m["content"])
+                   for m in record["messages"])
+
+    # Records whose prompt already holds native Neuralese blocks have no attested crisp body to render here;
+    # they are omitted (and counted), never silently expanded.
+    train, held_pool, skipped = [], [], {"long": 0, "no-target": 0, "native-neuralese-prompt": 0}
     with open(args.records) as stream:
         for line in stream:
             record = json.loads(line)
@@ -1048,6 +1054,9 @@ def main(argv=None):
                 continue
             bucket = held_pool if record.get("split") == "test" else train
             if bucket is train and len(train) >= args.train:
+                continue
+            if native_neuralese_prompt(record):
+                skipped["native-neuralese-prompt"] += 1
                 continue
             if prompt_tokens(record) > args.max_tokens:
                 skipped["long"] += 1
