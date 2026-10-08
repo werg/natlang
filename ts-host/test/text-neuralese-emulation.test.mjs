@@ -77,7 +77,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome.rejection_reasons));
     assert.equal(row.outcome.value, NOTE);
     assert.ok(requests.length >= 7 && requests.length <= 12, `unexpected provider turns: ${requests.length}`);
-    assert.equal(row.request_telemetry.starts.reduce((sum, start) => sum + start.http_transport_starts, 0), requests.length,
+    assert.equal(row.request_telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), requests.length,
       'transport telemetry follows rendered requests through the text emulation wrapper');
     const renderedTexts = requests.flatMap(request => request.messages ?? []).flatMap(message => {
       const content = message.content;
