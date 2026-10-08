@@ -1423,9 +1423,11 @@ export class NativeSession {
   /** What eval code in this call can use, for a model looking for something it does not have. */
   private scopeGuide(): string {
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const captures = Object.keys(this.lam.captures ?? {});
     const locals = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
     const helperNames = [...this.persistentScopeHelpers.keys()];
-    const names = [...new Set([...inputs, ...locals, ...helperNames, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
+    const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
+      ...Object.keys(this.availableServices())])];
     return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }

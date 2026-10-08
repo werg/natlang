@@ -77,6 +77,18 @@ test('reaching for what the scope lacks is answered with what it has', async () 
   for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, iterateOn and transcript/);
 });
 
+test('scope feedback names declared captures separately from properties of the input record', async () => {
+  const { session: open } = await import('./support/natlang.mjs');
+  const { session } = open({ type: '(input: { context: string, evidence: string, current: string, constraint: string }) => string',
+    instructions: 'Revise the note.' });
+  session.lam.captures = Object.fromEntries(['context', 'evidence'].map(name => [name,
+    { name, type: 'string', mutable: false, get: () => name }]));
+  const guide = session.scopeGuide();
+  assert.match(guide, /has input, context, evidence,/);
+  assert.doesNotMatch(guide, /\bcurrent\b|\bconstraint\b/,
+    'record fields are not standalone lexical names unless passed as arguments or captures');
+});
+
 test("redeclaring an input says it already holds the caller's value", async () => {
   const { results } = await script([['eval', { code: 'const name = "Test";\nname' }]]);
   assert.match(results[0], /name is this call's input and already holds the caller's value; use it directly/);
