@@ -24,6 +24,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.alert && r.tested && r.crewReady,
+    factPatterns: { alert:[/alert threshold was exceeded|rose above the local alert threshold/i,/alert threshold was not reached/i], tested:[/pump passed its load test/i,/pump (?:load )?test failed/i], crewReady:[/crew [A-Z]-\d+ is certified and (?:completed its rest period|rested)/i,/has not completed its rest period/i] },
     request: id => `Select the response pump plan for flood event ${id}.`,
     metric: rows => rows.length ? String(rows[0].metric) : 'none',
     register: r => `${r.id}: measured households protected ${r.metric}.`,
@@ -48,6 +49,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.accessible && r.cleared && r.trained,
+    factPatterns: { accessible:[/path .{0,30}accessible|whole detour path is wheelchair accessible/i,/curb ramp is missing/i], cleared:[/road clearance is recorded/i,/road authority has not cleared the route/i], trained:[/completed detour training/i,/driver .{0,20}has not completed detour training/i] },
     request: id => `Choose accessible detours for service window ${id}.`,
     metric: rows => rows.length ? rows.map(r => String(r.metric)).join('; ') : 'none',
     register: r => `${r.id}: scheduled riders on the detour ${r.metric}.`,
@@ -68,10 +70,11 @@ const domains = [
       { id: 'ARC-531', auth: false, authority: 'The archivist of record has not authorized ARC-531; approval is pending.', rows: [
         ['COLL-B03', 91, true, true, true, 'Rights are cleared; the condition survey is complete; a preservation master already exists.'],
         ['COLL-B08', 83, false, true, false, 'Rights review remains open; the condition survey is complete; no preservation master exists.'],
-        ['COLL-B11', 96, true, false, true, 'Rights are cleared; the condition survey is not yet complete; no preservation master exists.'],
+        ['COLL-B11', 96, true, false, false, 'Rights are cleared; the condition survey is not yet complete; no preservation master exists.'],
       ] },
     ],
     eligible: r => r.rights && r.survey && !r.master,
+    factPatterns: { rights:[/rights are cleared/i,/rights review remains open/i], survey:[/condition survey is complete/i,/condition survey is not yet complete/i], master:[/preservation master already exists/i,/no preservation master exists/i] },
     request: id => `Set the next archival digitization collection for request ${id}.`,
     metric: rows => rows.length ? String(rows[0].metric) : 'none',
     register: r => `${r.id}: measured preservation urgency ${r.metric} on the 1–100 scale.`,
@@ -96,6 +99,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.easement && r.capacity && r.verified,
+    factPatterns: { easement:[/easement is signed/i,/easement is unsigned/i], capacity:[/capacity is reserved/i,/capacity is not reserved/i], verified:[/household count was verified in the field/i,/household totals are estimates and have not been field verified/i] },
     request: id => `Select the broadband construction site for funding request ${id}.`,
     metric: rows => rows.length ? String(rows[0].metric) : 'none',
     register: r => `${r.id}: documented cost ${r.metric} credits per household passed.`,
@@ -120,6 +124,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.verified && r.match && r.inScope,
+    factPatterns: { verified:[/completion packet was verified/i,/packet has not been verified/i], match:[/match receipt is present/i,/match receipt is missing/i], inScope:[/expenses are (?:within|in) (?:the )?(?:award )?scope/i,/expenses are outside the award scope/i] },
     request: id => `Prepare the eligible reimbursement list for grant ${id}.`,
     metric: rows => rows.length ? rows.map(r => String(r.metric)).join('; ') : 'none',
     register: r => `${r.id}: verified milestone completion ${r.metric} points.`,
@@ -144,6 +149,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.tests && r.calibrated && r.deviationsClosed,
+    factPatterns: { tests:[/all required tests passed/i,/required (?:dimensional )?test failed/i], calibrated:[/calibration is current/i,/calibration expired/i], deviationsClosed:[/deviation (?:DV-\d+ is closed|is closed)|there are no open deviations|no deviation (?:is|remains) open/i,/deviation DV-\d+ remains open/i] },
     request: id => `Select the lot eligible for shipment under release ${id}.`,
     metric: rows => rows.length ? String(rows[0].metric) : 'none',
     register: r => `${r.id}: accepted-unit yield ${r.metric} percent.`,
@@ -168,6 +174,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.permission && r.seed && r.survey,
+    factPatterns: { permission:[/landowner permission is filed/i,/landowner permission has not been filed/i], seed:[/native seed is in stock/i,/native seed is not available/i], survey:[/erosion survey is complete/i,/erosion survey is not complete/i] },
     request: id => `Prepare the eligible plot list for restoration plan ${id}.`,
     metric: rows => rows.length ? rows.map(r => String(r.metric)).join('; ') : 'none',
     register: r => `${r.id}: verified erosion reduction ${r.metric} hectares.`,
@@ -192,6 +199,7 @@ const domains = [
       ] },
     ],
     eligible: r => r.documents && r.feePaid && r.access,
+    factPatterns: { documents:[/required documents are complete/i,/required .{0,40}drawing is missing/i], feePaid:[/inspection fee is paid|fee is paid/i,/inspection fee is unpaid/i], access:[/site contact confirmed access/i,/site contact did not confirm access/i] },
     request: id => `Choose the next inspection from ready permits in queue ${id}.`,
     metric: rows => rows.length ? String(rows[0].metric) : 'none',
     register: r => `${r.id}: days waiting since ready ${r.metric}.`,
@@ -261,6 +269,19 @@ if (output.length !== 16 || new Set(output.map(w=>w.group)).size !== 16)
 if (output.filter(w=>w.split==='train').length !== 8 || output.filter(w=>w.split==='test').length !== 8)
   throw new Error('V24 requires a balanced 8/8 split by whole domain groups');
 for (const world of output) {
+  const domainForWorld = domains.find(d=>d.domain===world.domain);
+  for (const candidate of world.scenarioFacts) {
+    const factKeys = Object.keys(domainForWorld.factPatterns);
+    for (const key of factKeys) {
+      const patterns = domainForWorld.factPatterns[key];
+      const expectedPattern = patterns[candidate[key] ? 0 : 1];
+      if (!(expectedPattern instanceof RegExp) || !expectedPattern.test(candidate.facts))
+        throw new Error(`${world.slug}/${candidate.id}: prose fact disagrees with ${key}=${candidate[key]}`);
+    }
+    const registerLine = domainForWorld.register(candidate);
+    if (!registerLine.includes(candidate.id) || !registerLine.includes(String(candidate.metric)))
+      throw new Error(`${world.slug}/${candidate.id}: metric evidence does not state the exact register value`);
+  }
   const eligible = world.scenarioFacts.filter((r) => {
     const domain = domains.find(d=>d.domain===world.domain);
     return domain.eligible(r);

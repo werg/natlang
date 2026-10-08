@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { deriveWorldResult, sourceDomains, worlds } from './semantic-iterate-reducers-v24-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v24/1-additional-factual-domains';
+export const REVISION = 'authored-semantic-iterate-reducers-v24/3-validated-evidence-facts';
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
   throw new Error('usage: node build-semantic-iterate-reducers-v24.mjs --out FRESH_DIRECTORY');
@@ -112,6 +112,7 @@ const proof = {
     evidence_records: 64, saved_tag_examples: savedWith.size, provider_calls: 0, teacher_calls: 0 },
   domain_groups: sourceDomains, case_derivations: facts,
   claims: { gold_recomputed_from_authored_candidate_facts: true,
+    each_candidate_boolean_checked_against_its_readable_evidence_statement: true,
     evidence_is_readable_prose_with_explicit_fact_registers: true,
     all_four_stages_are_used_and_cumulative_notes_exclude_future_files: true,
     empty_eligibility_branch_covered: rows.some(row => row.semantics.expected.selectedItems === 'none'),
