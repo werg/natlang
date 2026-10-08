@@ -29,13 +29,14 @@ test('a long call compacts old outputs instead of rolling over, and the model ca
     recovered = requests.at(-1).at(-1).content;
     return { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: prompt };
   };
-  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 20 }).run(session);
+  // The opening (system prompt and task) is about 3,800 tokens; the budget leaves room for a few exchanges.
+  await new NativeToolAgent(driver, { contextTokens: 8192, maxTurns: 20 }).run(session);
   assert.equal(session.lam.return, 13);
   const last = requests.at(-1);
   assert.match(recovered, /\[\s*1\s*\]/, 'an eval found the first output in transcript after it left the conversation');
   assert.equal(last.filter(automaticNote).length, 1, 'the automatic note says where the earlier turns are');
   assert.ok(!JSON.stringify(last).includes('mark1\''), 'the first turns left the conversation');
-  assert.ok(requests.every(request => Math.round(JSON.stringify(request).length / 4) < 4096), 'every prompt stays within the budget');
+  assert.ok(requests.every(request => Math.round(JSON.stringify(request).length / 4) < 8192), 'every prompt stays within the budget');
 });
 
 test('without a budget nothing is compacted, and a parameter named transcript keeps its meaning', async () => {
@@ -197,4 +198,22 @@ test('a turn is limited to a quarter of the window, and long reasoning leaves th
   assert.ok(requests.every(request => promptOf(request) < CONTEXT));
   assert.ok(session.transcript.every(entry => entry.tool !== 'eval' || /Thinking hard/.test(entry.reasoning ?? '')),
     'the reasoning that left the conversation is still in transcript');
+});
+
+test('an opening larger than the budget does not make every turn a compaction request', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  const offered = [];
+  let turn = 0;
+  const driver = request => {
+    offered.push(request.tools.map(tool => tool.function?.name ?? tool.name));
+    turn++;
+    if (turn < 4) return { calls: [['eval', { code: `${turn}` }]], prompt_tokens: 100 };
+    return { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: 100 };
+  };
+  // The opening alone (about 3,800 tokens) is above three quarters of this budget.
+  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 10 }).run(session);
+  assert.equal(session.lam.return, 4);
+  assert.ok(offered[0].includes('eval'), 'the first turn offers the ordinary tools: there is nothing to compact yet');
+  assert.ok(offered.filter(tools => tools.length === 1 && tools[0] === 'compact_history').length <= 1,
+    'compaction is asked for at most once while it cannot remove anything');
 });

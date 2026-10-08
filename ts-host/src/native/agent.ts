@@ -939,7 +939,10 @@ export class NativeToolAgent {
       // for the turn's reply (its limit, at most a quarter of the window). Reaching that ceiling always asks for a
       // compaction, however recent the last one.
       const reply = budget === null ? 0 : Math.min(limit ?? Math.floor(budget / 4), Math.floor(budget / 4));
-      const nearLimit = budget !== null && compactedTurn !== turns && estimate(allTools) >
+      // Compaction can only remove what lies between the opening (with the pinned note) and the latest exchange; when
+      // nothing does, asking for it would only ask again on every turn.
+      const compactable = messages.length - protectedLength > 2;
+      const nearLimit = budget !== null && compactable && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
       // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
