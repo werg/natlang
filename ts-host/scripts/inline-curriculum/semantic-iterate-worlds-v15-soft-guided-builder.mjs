@@ -20,13 +20,8 @@ const seed: Neuralese<(initialDraft: __INITIAL_DRAFT_TYPE__) => Promise<Neurales
 const initialNotes = await seed(task.initialDraft);
 
 const revise = async (progress: Progress): Promise<Progress> => {
-  const current = task.passes[progress.pass];
-  const evidence = await folder.file(current.evidence_path);
-  const step: Neuralese<(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({
-    taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
-    decisionRule: task.output_contract.decision_rule, passName: current.name,
-    passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
-})\`Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve all supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string>; do not return a Draft or structured object.\`;
+  __STEP_SETUP__
+  __STEP_DECL__
   const notes = await step(evidence, progress.notes);
   return { pass: progress.pass + 1, notes };
 };
@@ -100,7 +95,7 @@ function summarizeObservedEvidence(path, text) {
   return 'No extracted summary; retain and use the complete source text above.';
 }
 
-export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT_REVISION, shapeVersion = 'v15' } = {}) {
+export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT_REVISION, shapeVersion = 'v15', savedWith = false } = {}) {
   const preparedWorld = clarifiedWorld(world);
   const record = makeSoftIterateCase(preparedWorld, index);
   const fields = Object.keys(world.fields);
@@ -121,7 +116,30 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   record.semantics.expected_files['decision.json'] = canonical(record.semantics.expected);
 
   const enumGuidance = 'Follow every declared field format exactly. For enum fields, return one bare listed literal only; do not add a prose explanation, unit label, or other text unless that field\'s declared format explicitly requires it. ';
+  const stepType = '(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>';
+  const stepPrompt = savedWith
+    ? 'Use the captured current pass context, including current.taskInstruction, current.outputContract, current.decisionRule, current.passName, current.passConstraint, and current.allowedFields. Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return complete accumulated readable prose as Neuralese<string>, not a Draft or structured object.'
+    : 'Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve all supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string>; do not return a Draft or structured object.';
+  const stepCaptures = `{
+    taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
+    decisionRule: task.output_contract.decision_rule, passName: current.name,
+    passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
+  }`;
+  const stepSetup = savedWith
+    ? `const current = { pass: task.passes[progress.pass], taskInstruction: task.instruction,
+    outputContract: JSON.stringify(task.output_contract), decisionRule: task.output_contract.decision_rule,
+    passName: task.passes[progress.pass].name, passConstraint: task.passes[progress.pass].constraint,
+    allowedFields: JSON.stringify(task.passes[progress.pass].allowed_fields) };
+  const evidence = await folder.file(current.pass.evidence_path);`
+    : `const current = task.passes[progress.pass];
+  const evidence = await folder.file(current.evidence_path);`;
+  const stepDeclaration = savedWith
+    ? `const stepTemplate = nl<${stepType}>\`${stepPrompt}\`;
+  const step = stepTemplate.with({ current });`
+    : `const step: Neuralese<${stepType}> = nl.with<Neuralese<string>>(${stepCaptures})\`${stepPrompt}\`;`;
   const code = guidedRootTemplate
+    .replace('__STEP_SETUP__', stepSetup)
+    .replace('__STEP_DECL__', stepDeclaration)
     .replace('__FIELDS__', finalDraftType(preparedWorld))
     .replace('__INITIAL_DRAFT_DECL__\n', `type InitialDraft = ${initialDraftType(preparedWorld)};\n`)
     .replace('__INITIAL_DRAFT_TYPE__', 'InitialDraft')
