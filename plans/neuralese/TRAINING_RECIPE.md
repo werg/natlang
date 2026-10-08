@@ -59,6 +59,19 @@ then add a stage declaration. The runner executes Python modules with argument
 lists, not shell command strings. Unknown implementations/parameters, unsafe stage
 paths, missing identity dependencies and failed gates are rejected.
 
+New recipes can pin inputs once in a top-level `input_bindings` object and select
+the needed dataset roles on each stage. For example, `input_bindings` can name
+`native.records`, `native.pieces`, `text.corpus`, `recurrence.records` and
+`recurrence.pieces`, each with a repo-relative `path` and exact lowercase
+`sha256`; a stage then maps CLI roles such as `records`, `pieces` and
+`text_data` to those names under its `inputs` field. This lets identity and
+distillation consume native files, core text warm-up consume the full text
+corpus, and recurrence consume its admitted trajectory pair in one shared
+runner. `--input-binding NAME=PATH` may relocate an artifact without changing
+its pinned content identity. Existing recipes without stage `inputs` retain the
+shared `--records`/`--pieces` fallback; the resolved stage roles and hashes are
+recorded in the recipe plan.
+
 The result is `foundation-certificate.json`, which binds the exact frozen backbone
 heads and feedback checkpoint hashes, recipe and passed stage reports. Downstream
 code uses `require_foundation` to check that handoff. Changes to input weights or

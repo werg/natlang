@@ -57,6 +57,142 @@ def test_runtime_stage_requires_the_embedding_gate(tmp_path):
         require_gate({}, 'raw_runtime_qualification')
 
 
+def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp_path):
+    from natlang_neuralese.train.recipe import resolve_stage_inputs, stage_input_args
+    from natlang_neuralese.train.output_embedding_projection import sha
+
+    records = tmp_path / 'native-records.jsonl'
+    pieces = tmp_path / 'native-pieces.jsonl'
+    text = tmp_path / 'ordinary-text.jsonl'
+    records.write_text('{"id":"n1"}\n')
+    pieces.write_text('{"id":"p1"}\n')
+    text.write_text('{"id":"t1"}\n')
+    recipe = declared()
+    recipe['input_bindings'] = {
+        'native.records': {'path': str(records), 'sha256': sha(records)},
+        'native.pieces': {'path': str(pieces), 'sha256': sha(pieces)},
+        'text.corpus': {'path': str(text), 'sha256': sha(text)},
+    }
+    recipe['stages'][0]['inputs'] = {'records': 'native.records'}
+    recipe['stages'][1]['inputs'] = {
+        'records': 'native.records', 'pieces': 'native.pieces'}
+    recipe['stages'][2]['inputs'] = {'records': 'native.records'}
+    recipe['stages'].append({
+        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification'],
+        'parameters': {'neuralese_input': 'map'},
+        'inputs': {'records': 'native.records', 'pieces': 'native.pieces',
+                   'text_data': 'text.corpus'},
+    })
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    loaded = load_recipe(path)
+
+    identity = resolve_stage_inputs(loaded, loaded['stages'][0], {})
+    assert set(identity) == {'records'}
+    assert identity['records']['sha256'] == sha(records)
+    assert stage_input_args(identity, 'token_identity') == ['--records', str(records.resolve())]
+
+    distill = resolve_stage_inputs(loaded, loaded['stages'][1], {})
+    assert set(distill) == {'records', 'pieces'}
+    assert stage_input_args(distill, 'causal_embedding_distillation') == [
+        '--records', str(records.resolve()), '--pieces', str(pieces.resolve())]
+
+    warmup = resolve_stage_inputs(loaded, loaded['stages'][3], {})
+    assert set(warmup) == {'records', 'pieces', 'text_data'}
+    assert stage_input_args(warmup, 'core_text_warmup') == [
+        '--records', str(records.resolve()), '--pieces', str(pieces.resolve()),
+        '--text-data', str(text.resolve())]
+
+
+def test_named_input_binding_relocation_keeps_expected_content_identity(tmp_path):
+    from natlang_neuralese.train.recipe import parse_input_binding_overrides, resolve_stage_inputs
+    from natlang_neuralese.train.output_embedding_projection import sha
+
+    original = tmp_path / 'source.jsonl'
+    relocated = tmp_path / 'relocated.jsonl'
+    mismatch = tmp_path / 'different.jsonl'
+    original.write_text('{"same":true}\n')
+    relocated.write_bytes(original.read_bytes())
+    mismatch.write_text('{"same":false}\n')
+    recipe = declared()
+    recipe['input_bindings'] = {
+        'corpus.native': {'path': str(original), 'sha256': sha(original)}}
+    recipe['stages'][0]['inputs'] = {'records': 'corpus.native'}
+    stage = recipe['stages'][0]
+    overrides = parse_input_binding_overrides([f'corpus.native={relocated}'])
+    resolved = resolve_stage_inputs(recipe, stage, {}, overrides)
+    assert resolved['records']['path'] == str(relocated.resolve())
+    assert resolved['records']['sha256'] == sha(original)
+    with pytest.raises(ValueError, match='content hash mismatch'):
+        resolve_stage_inputs(recipe, stage, {}, {'corpus.native': str(mismatch)})
+    with pytest.raises(ValueError, match='undeclared input binding'):
+        resolve_stage_inputs(recipe, stage, {}, {'other.input': str(relocated)})
+
+
+def test_recipe_runner_routes_each_stage_its_declared_input_files(tmp_path, monkeypatch):
+    from natlang_neuralese.train import recipe as recipe_runner
+    from natlang_neuralese.train.output_embedding_projection import sha
+
+    heads = tmp_path / 'heads.pt'
+    native = tmp_path / 'native-records.jsonl'
+    fallback_records = tmp_path / 'fallback-records.jsonl'
+    fallback_pieces = tmp_path / 'fallback-pieces.jsonl'
+    for path, body in ((heads, b'head'), (native, b'{"source":"native"}\n'),
+                       (fallback_records, b'{"source":"fallback"}\n'),
+                       (fallback_pieces, b'{"piece":"fallback"}\n')):
+        path.write_bytes(body)
+    recipe = declared()
+    recipe['input_bindings'] = {
+        'native.records': {'path': str(native), 'sha256': sha(native)}}
+    recipe['stages'][0]['inputs'] = {'records': 'native.records'}
+    recipe_path = tmp_path / 'recipe.json'
+    recipe_path.write_text(json.dumps(recipe))
+    commands = []
+
+    class CompletedStage:
+        def __init__(self, command, env):
+            commands.append(command)
+            output = Path(command[command.index('--out') + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps({'token_aligned_reference_passed': True}))
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(recipe_runner.subprocess, 'Popen', CompletedStage)
+    out = tmp_path / 'run'
+    recipe_runner.main([
+        '--recipe', str(recipe_path), '--heads', str(heads),
+        '--records', str(fallback_records), '--pieces', str(fallback_pieces),
+        '--out', str(out), '--device', 'cpu', '--until', 'token_identity'])
+
+    assert commands
+    command = commands[0]
+    assert command[command.index('--records') + 1] == str(native.resolve())
+    plan = json.loads((out / 'recipe-plan.json').read_text())
+    stage_inputs = plan['stage_inputs']
+    assert stage_inputs['token_identity']['records']['binding'] == 'native.records'
+    assert stage_inputs['token_identity']['records']['sha256'] == sha(native)
+    assert stage_inputs['embedding_distillation']['records']['path'] == str(fallback_records.resolve())
+
+
+def test_named_input_bindings_reject_incomplete_stage_roles(tmp_path):
+    recipe = declared()
+    recipe['input_bindings'] = {
+        'native.records': {'path': 'records.jsonl', 'sha256': '0' * 64}}
+    recipe['stages'].append({
+        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification'],
+        'parameters': {'neuralese_input': 'map'},
+        'inputs': {'records': 'native.records'},
+    })
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='stage input roles'):
+        load_recipe(path)
+
+
 def test_foundation_certificate_survives_verified_directory_relocation(tmp_path):
     from natlang_neuralese.train.recipe import require_foundation
     from natlang_neuralese.train.output_embedding_projection import sha

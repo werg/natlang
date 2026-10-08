@@ -18,16 +18,16 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
-    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup',
+    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data'},
                         'parameters':{'text_data','student_checkpoint','continue_from','batch','steps','tokens','prefix_tokens','cutoff','group_size',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
                           'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
-    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime',
+    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':set(),
                             'parameters':set(),'result':'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories',
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':set(),
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
@@ -40,16 +40,98 @@ HANDLERS = {
                                                'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib'},
                                 'result': 'checkpoint.pt'},
-    'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',
+    'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
-    'token_identity': {'module': 'natlang_neuralese.eval.foundation',
+    'token_identity': {'module': 'natlang_neuralese.eval.foundation', 'required_inputs':{'records'}, 'optional_inputs':set(),
                        'parameters': {'limit', 'max_tokens'}, 'result': 'identity.json'},
-    'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap',
+    'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap', 'required_inputs':{'records'}, 'optional_inputs':{'pieces'},
                                      'parameters': {'cutoff', 'steps', 'batch', 'lr', 'tokens', 'contexts',
                                                     'context_tokens', 'eval_every', 'checkpoint_every',
                                                     'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
                                                     'argmax_weight', 'continue_from', 'stop_on_gate'}, 'result': 'best-checkpoint.pt'},
 }
+
+INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
+
+
+def validate_input_bindings(recipe):
+    """Validate the optional, content-pinned dataset catalog and stage role map."""
+    catalog = recipe.get('input_bindings', {})
+    if not isinstance(catalog, dict):
+        raise ValueError('input_bindings must be an object')
+    for name, binding in catalog.items():
+        if not isinstance(name, str) or not INPUT_BINDING_NAME.fullmatch(name) or not isinstance(binding, dict):
+            raise ValueError('invalid named input binding')
+        if set(binding) != {'path', 'sha256'} or not isinstance(binding['path'], str) or not binding['path']:
+            raise ValueError('each input binding requires only path and sha256')
+        if not isinstance(binding['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', binding['sha256']):
+            raise ValueError('input binding sha256 must be lowercase hex')
+    for stage in recipe['stages']:
+        if 'inputs' not in stage:
+            continue
+        selected = stage['inputs']
+        if not isinstance(selected, dict):
+            raise ValueError('stage inputs must map input roles to named bindings')
+        kind = stage['kind']
+        allowed = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
+        if not set(selected) <= allowed or not HANDLERS[kind]['required_inputs'] <= set(selected):
+            raise ValueError('stage input roles do not satisfy handler contract: ' + stage['id'])
+        if any(not isinstance(name, str) or name not in catalog for name in selected.values()):
+            raise ValueError('stage refers to an unknown named input binding')
+    if catalog and not any(stage.get('inputs') for stage in recipe['stages']):
+        raise ValueError('input_bindings catalog is unused')
+
+
+def parse_input_binding_overrides(values):
+    overrides = {}
+    for value in values or []:
+        name, sep, path = value.partition('=')
+        if not sep or not INPUT_BINDING_NAME.fullmatch(name) or not path:
+            raise ValueError('--input-binding must be NAME=PATH')
+        if name in overrides:
+            raise ValueError('duplicate --input-binding: ' + name)
+        overrides[name] = path
+    return overrides
+
+
+def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
+    """Return hashed, exact inputs for one stage; overrides change location, never identity."""
+    selected = stage.get('inputs')
+    if selected is None:
+        result = {}
+        supported = HANDLERS[stage['kind']]['required_inputs'] | HANDLERS[stage['kind']]['optional_inputs']
+        for role, path in defaults.items():
+            if path is not None and role in supported:
+                resolved = Path(path).resolve()
+                result[role] = {'binding': None, 'path': str(resolved), 'sha256': sha(resolved)}
+        missing = HANDLERS[stage['kind']]['required_inputs'] - set(result)
+        if missing:
+            raise ValueError('missing required stage input(s): ' + ', '.join(sorted(missing)))
+        return result
+    catalog = recipe.get('input_bindings', {})
+    overrides = overrides or {}
+    unknown = set(overrides) - set(catalog)
+    if unknown:
+        raise ValueError('override for undeclared input binding: ' + ', '.join(sorted(unknown)))
+    result = {}
+    for role, name in selected.items():
+        spec = catalog[name]
+        path = Path(overrides.get(name, spec['path'])).resolve()
+        actual_sha = sha(path)
+        if actual_sha != spec['sha256']:
+            raise ValueError('input binding content hash mismatch: ' + name)
+        result[role] = {'binding': name, 'path': str(path), 'sha256': actual_sha}
+    return result
+
+
+def stage_input_args(resolved, kind):
+    """Serialize already-validated file roles to the shared handler CLIs."""
+    args = []
+    supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
+    for role in ('records', 'pieces', 'text_data'):
+        if role in resolved and role in supported:
+            args += ['--' + role.replace('_', '-'), resolved[role]['path']]
+    return args
 
 
 def load_recipe(path):
@@ -69,6 +151,8 @@ def load_recipe(path):
         parameters = stage.get('parameters')
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
+        if 'text_data' in parameters and 'text_data' in stage.get('inputs', {}):
+            raise ValueError('text_data must be declared either as a named stage input or a legacy parameter')
         if kind == 'core_text_warmup':
             neuralese_input = parameters.get('neuralese_input')
             if neuralese_input not in {'map', 'sketch'}:
@@ -96,6 +180,7 @@ def load_recipe(path):
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
+    validate_input_bindings(recipe)
     return recipe
 
 
@@ -169,8 +254,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', type=Path, required=True)
     parser.add_argument('--heads', type=Path, required=True)
-    parser.add_argument('--records', type=Path, required=True)
-    parser.add_argument('--pieces', type=Path, required=True)
+    parser.add_argument('--records', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
+    parser.add_argument('--pieces', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
+    parser.add_argument('--text-data', type=Path, help='legacy shared fallback for text warm-up stages')
+    parser.add_argument('--input-binding', action='append', default=[], metavar='NAME=PATH',
+                        help='relocate a declared named input while preserving its recipe-pinned SHA-256')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--until', help='run through a declared stage, retaining resumable state')
@@ -183,13 +271,30 @@ def main(argv=None):
         print(json.dumps(recipe, indent=2))
         return
     args.out = args.out.resolve()
-    args.heads, args.records, args.pieces = (path.resolve() for path in (args.heads, args.records, args.pieces))
-    inputs = {str(path): sha(path) for path in (args.heads, args.records, args.pieces)}
+    args.heads = args.heads.resolve()
+    overrides = parse_input_binding_overrides(args.input_binding)
+    defaults = {'records': args.records, 'pieces': args.pieces, 'text_data': args.text_data}
+    stage_inputs = {}
+    for stage in recipe['stages']:
+        stage_defaults = dict(defaults)
+        if 'text_data' in stage['parameters']:
+            stage_defaults['text_data'] = stage['parameters']['text_data']
+        stage_inputs[stage['id']] = resolve_stage_inputs(recipe, stage, stage_defaults, overrides)
+    inputs = {str(args.heads): sha(args.heads)}
+    for path in (args.records, args.pieces, args.text_data):
+        if path is not None:
+            resolved = path.resolve()
+            inputs[str(resolved)] = sha(resolved)
+    for resolved in stage_inputs.values():
+        for value in resolved.values():
+            inputs[value['path']] = value['sha256']
     package = Path(__file__).parents[1]
     frozen = args.out / 'runtime' / 'natlang_neuralese'
     plan_path = args.out / 'recipe-plan.json'
     plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
             'recipe_sha256': sha(args.recipe), 'inputs': inputs, 'device': args.device}
+    if any('inputs' in stage for stage in recipe['stages']):
+        plan['stage_inputs'] = stage_inputs
     if plan_path.exists():
         existing = json.loads(plan_path.read_text())
         if any(existing[key] != value for key, value in plan.items()):
@@ -235,13 +340,14 @@ def main(argv=None):
                 predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
                 stage_heads=predecessor['artifact']
             command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
-                       str(stage_heads), '--records', str(args.records), '--out',
+                       str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                        str(output if kind == 'token_identity' else directory), '--device', args.device]
-            if kind in {'causal_embedding_distillation', 'raw_recurrence_training','core_text_warmup'}:
-                command += ['--pieces', str(args.pieces)]
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
-            command += stage_parameter_args(stage['parameters'])
+            stage_parameters = stage['parameters']
+            if 'text_data' in stage_inputs[stage['id']]:
+                stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
+            command += stage_parameter_args(stage_parameters)
             environment = dict(os.environ)
             environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
             print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
