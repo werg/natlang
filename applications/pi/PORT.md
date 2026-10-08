@@ -608,6 +608,24 @@ Executor calls, approximately:
 A natural-language scheduler adds a step decision before every phase and a pass after every task change: roughly two
 calls per phase. The tools could later become pluggable the same way (decision 7).
 
+### Specialization (the tracing JIT)
+
+Every phase is an ordinary natlang call, so the runtime records it in the machine's call store and the specializer
+(plans/TRACE_SPECIALIZATION.md) may compile its recurring patterns into crisp cases under guards, with the phase's
+`.nl` function as the fallback. This needs nothing from the port, and the two mechanisms do different jobs:
+
+- The pluggable hot paths are **authored**: pi's own crisp code, chosen by a setting, for the points where pi already
+  has it (context, scheduler, admission, planning).
+- Specialization is **learned**: cases mined from recorded executor behavior, verified by replay, promoted by
+  shadow comparisons, demoted on divergence. It covers whatever turns out mechanical in practice (a retry phase, a
+  tools phase with nothing pending), including inside the natural-language variants of the pluggable points.
+
+The port keeps the specializer's inputs honest. Phase services are recorded as effects (commits, provider turns,
+tool runs), and the once-effects (`ai.turn`, `ai.poll`, `tools.execute`, `durable.hook`) keep a repeated call from
+looking like a second effect. Mining uses only calls run by a declared model that spent tokens, so the scripted
+agents of the wiring tests (`test/scheduler-policy.test.mjs`) are recorded but never become evidence. The
+conformance shim records its program root, so offline replays reload the port's functions.
+
 ## Verification
 
 - **Conformance.** pi-durable's harness suites run against the port with the natural-language task kinds substituted:
