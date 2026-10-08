@@ -4,7 +4,7 @@
 This intentionally reviews named constructed-world families, not arbitrary source corpora.
 Existing corpora retain their own source policy. Evaluation records remain in a separate file.
 """
-import argparse, collections, hashlib, json, re, subprocess
+import argparse, collections, functools, hashlib, json, re, subprocess
 from pathlib import Path
 from audit_neuralese_recurrence import names
 
@@ -12,10 +12,23 @@ REVIEWED = {'decision_skill_catalog', 'decision_extract_chain'}
 # A source review can admit named v7 records from these families only; membership
 # alone never admits a row. New families require an assembler policy update.
 SOURCE_REVIEW_FAMILIES = {'authored_semantic_reducers'}
-CURRENT_CONVERSIONS = {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6',
-                       'natlang.neuralese-conversion/7', 'natlang.neuralese-conversion/8'}
 SOURCE_REVIEW_SCHEMA = 'natlang.neuralese-source-review/1'
 SOURCE_WORLD_FAMILY = re.compile(r'authored_semantic_source_worlds_v\d+(?:r\d+)?\Z')
+
+@functools.lru_cache(maxsize=1)
+def _current_conversion_number():
+    compiler = Path(__file__).resolve().parents[1] / 'ts-host/src/compiler/neuralese-conversion.ts'
+    source = compiler.read_text()
+    current = re.search(r"export const NEURALESE_CONVERSION_VERSION = 'natlang\.neuralese-conversion/(\d+)';", source)
+    if current is None:
+        raise ValueError('cannot read the shared Neuralese conversion version')
+    return int(current.group(1))
+
+
+def supported_conversion(version):
+    """Accept positive historical converter versions through the shared compiler's current version."""
+    match = re.fullmatch(r'natlang\.neuralese-conversion/(\d+)', version) if isinstance(version, str) else None
+    return bool(match and 0 < int(match.group(1)) <= _current_conversion_number())
 
 def sha(path):
     h=hashlib.sha256()
@@ -217,12 +230,11 @@ def main(argv=None):
         reason=None
         if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
         elif set(ir.get('source_groups', [])) & held_groups or selector_matches(row,review_hold):reason='explicit semantic source hold'
-        elif row.get('neuralese_conversion',{}).get('version') not in CURRENT_CONVERSIONS:reason='requires current conversion'
+        elif not supported_conversion(row.get('neuralese_conversion',{}).get('version')):reason='requires supported conversion'
         elif family not in REVIEWED and not (
             source_review and
             ((source_world and exact_reviewed_id) or
-             (family in SOURCE_REVIEW_FAMILIES and selector_matches(row,allow_selector))) and
-            row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
+             (family in SOURCE_REVIEW_FAMILIES and selector_matches(row,allow_selector)))):
             reason='source family or target not explicitly reviewed'
         elif reviewed_decision and not exact_reviewed_id:reason='reviewed native decision requires an exact source-review target ID'
         elif reviewed_decision and not reviewed_decision_valid:reason='reviewed native decision approval invalid'

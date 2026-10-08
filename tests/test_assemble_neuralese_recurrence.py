@@ -192,6 +192,22 @@ def test_conversion7_remains_enabled_for_legacy_reviewed_families_without_new_ma
     assert len((out/'records.jsonl').read_text().splitlines())==2
 
 
+def test_shared_current_conversion_contract_accepts_reviewed_v13_and_holds_future_versions(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    current=row('current-train','train','current:train',version=13)
+    future=row('future-train','train','future:train',version=14)
+    baseline=row('baseline-test','test','baseline:test',family='decision_skill_catalog')
+    write_jsonl(records,[current,future,baseline])
+    review=review_for(records,pieces,allow_ids=['current-train','future-train','baseline-test'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    admitted=[json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]
+    assert admitted==['current-train','baseline-test']
+    rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
+    assert rejected==[{'id':'future-train','reason':'requires supported conversion'}]
+
+
 @pytest.mark.parametrize('tamper', ['digest','stale-target'])
 def test_source_review_rejects_stale_artifact_or_selectors(tmp_path,monkeypatch,tamper):
     records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
