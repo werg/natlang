@@ -5,7 +5,7 @@ import { worlds as authoredWorlds } from './semantic-iterate-worlds-v15-data.mjs
 import { makeSoftIterateCase } from './semantic-iterate-worlds-v15-soft-builder.mjs';
 import { validateIterateWorlds } from './authored-iterate-source-builder.mjs';
 
-export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/14-guided-decision-now';
+export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/15-note-only-child-context';
 const canonical = value => JSON.stringify(value);
 const marker = text => `<|neuralese|>${text}<|/neuralese|>`;
 
@@ -13,10 +13,14 @@ export const guidedRootTemplate = `const task = await folder.file('task.json').r
 type Draft = __FIELDS__;
 __INITIAL_DRAFT_DECL__
 type Progress = { pass: number; notes: Neuralese<string> };
+const decisionContext = JSON.stringify({
+  format: task.output_contract.format, fields: task.output_contract.fields,
+  decision_rule: task.output_contract.decision_rule,
+  final_field_enums: task.output_contract.final_field_enums ?? {},
+  enum_contract: task.output_contract.enum_contract ?? ''
+});
 
-const seed: Neuralese<(initialDraft: __INITIAL_DRAFT_TYPE__) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({
-  taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract)
-})\`Create a brief readable prose note from the supplied initialDraft. State that it is only a placeholder and no evidence has been reviewed. Do not infer facts or a decision. Return Neuralese<string> prose only.\`;
+const seed: Neuralese<(initialDraft: __INITIAL_DRAFT_TYPE__) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`Create a brief readable prose note from the supplied initialDraft. State that it is only a placeholder and no evidence has been reviewed. Do not infer facts or a decision. Return Neuralese<string> prose only.\`;
 const initialNotes = await seed(task.initialDraft);
 
 const revise = async (progress: Progress): Promise<Progress> => {
@@ -30,10 +34,7 @@ const completed = await iterateOn(revise, { pass: 0, notes: initialNotes })
   .withLimit({ maxSteps: task.passes.length })
   .until(state => state.pass === task.passes.length);
 
-const interpret: Neuralese<(notes: Neuralese<string>) => Promise<Draft>> = nl.with<Draft>({
-  taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
-  decisionRule: task.output_contract.decision_rule, outputPath: task.output_path
-})\`Read the complete accumulated Neuralese<string> notes. Determine the requested decision now by applying exactly the explicit decisionRule to the supported facts and outputContract. Historical events are evidence for that decision, not a substitute for making it. Do not require evidence that the requested decision has already been executed, and do not add eligibility, authorization, or other prerequisites absent from the explicit decisionRule. Do not invent facts; follow the rule's stated handling of uncertainty. Derive every declared final Draft field from the notes and contract. Return exactly the declared Draft, with no extra text.\`;
+const interpret: Neuralese<(notes: Neuralese<string>) => Promise<Draft>> = nl.with<Draft>({ decisionContext })\`Read the complete accumulated Neuralese<string> notes and the decisionContext content. Apply its explicit decision rule to the supported facts and return the requested decision now. Historical events are evidence for that decision, not a substitute for making it. Do not require evidence that the requested decision has already been executed, and do not add eligibility, authorization, or other prerequisites absent from the rule. Do not invent facts; follow the stated handling of uncertainty. Return exactly the declared final Draft fields and formats in decisionContext, with no extra text. This interpreter returns a value to its caller; it does not write files.\`;
 const finalDraft = await interpret(completed.notes);
 await folder.file(task.output_path).writeText(JSON.stringify(finalDraft));
 const saved = await folder.file(task.output_path).readJson();
@@ -117,19 +118,16 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   record.semantics.expected = structuredClone(preparedWorld.passStates.at(-1));
   record.semantics.expected_files['decision.json'] = canonical(record.semantics.expected);
 
-  const enumGuidance = 'Follow every declared field format exactly. For enum fields, return one bare listed literal only; do not add a prose explanation, unit label, or other text unless that field\'s declared format explicitly requires it. ';
   const stepType = '(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>';
   const stepPrompt = savedWith
-    ? 'Use the captured current pass context, including current.taskInstruction, current.outputContract, current.decisionRule, current.passName, current.passConstraint, and current.allowedFields. Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return complete accumulated readable prose as Neuralese<string>, not a Draft or structured object.'
-    : 'Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve all supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string>; do not return a Draft or structured object.';
+    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as Neuralese<string> to the caller. This note child does not write files; the parent owns the final decision.json write.'
+    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string> to the caller. This note child does not write files; the parent owns the final decision.json write.';
   const stepCaptures = `{
-    taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
-    decisionRule: task.output_contract.decision_rule, passName: current.name,
+    decisionContext, passName: current.name,
     passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
   }`;
   const stepSetup = savedWith
-    ? `const current = { pass: task.passes[progress.pass], taskInstruction: task.instruction,
-    outputContract: JSON.stringify(task.output_contract), decisionRule: task.output_contract.decision_rule,
+    ? `const current = { pass: task.passes[progress.pass], decisionContext,
     passName: task.passes[progress.pass].name, passConstraint: task.passes[progress.pass].constraint,
     allowedFields: JSON.stringify(task.passes[progress.pass].allowed_fields) };
   const evidence = await folder.file(current.pass.evidence_path);`
@@ -144,14 +142,13 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     .replace('__STEP_DECL__', stepDeclaration)
     .replace('__FIELDS__', finalDraftType(preparedWorld))
     .replace('__INITIAL_DRAFT_DECL__\n', `type InitialDraft = ${initialDraftType(preparedWorld)};\n`)
-    .replace('__INITIAL_DRAFT_TYPE__', 'InitialDraft')
-    .replace('Derive every declared final Draft field', `${enumGuidance}Derive every declared final Draft field`);
+    .replace('__INITIAL_DRAFT_TYPE__', 'InitialDraft');
   const hasFinalEnums = Object.keys(finalEnums).length > 0;
   record.id = record.id.replace(':evidence-scoped-soft-state-iterative-derived-decision-v1', `:evidence-scoped-guided-soft-state-derived-decision-${hasFinalEnums ? 'v2' : 'v1'}`);
   record.source_revisions = [revision];
   record.generation.generator = revision;
   record.generation.capture_contract = {
-    task_contract: 'task instruction, output contract, explicit decision rule, and current pass only',
+    task_contract: 'the parent retains task instruction and output path; note children receive the explicit decision rule, declared field formats, and current pass constraints only',
     soft_state: 'Progress is { pass: number, notes: Neuralese<string> }; the seed and each pass return Neuralese<string>',
     seed: 'one typed Neuralese<string> seed child receives initialDraft and creates a placeholder note without facts',
     iterative_children: 'four typed nl.with<Neuralese<string>> children; each receives only its current FileHandle and the prior Neuralese<string> notes',

@@ -20,8 +20,9 @@ test('guided intermediate and final enum types do not depend on revision spellin
   assert.match(firstCode, /type InitialDraft = \{[^\n]*decision: "pending" \|/);
   assert.match(firstCode, /initialDraft: InitialDraft/);
   assert.match(firstCode, /type Draft = \{[^\n]*decision: "approve" \| "hold"/);
-  assert.match(firstCode, /Follow every declared field format exactly/);
-  assert.match(firstCode, /one bare listed literal only/);
+  assert.match(firstCode, /decisionContext/);
+  assert.match(firstCode, /final_field_enums/);
+  assert.match(firstCode, /Return exactly the declared final Draft fields and formats in decisionContext/);
   assert.doesNotMatch(firstCode.match(/type Draft = \{[^\n]+/)[0], /"pending"/);
   assert.deepEqual(first.source_groups, second.source_groups);
   assert.equal(first.split, second.split);
