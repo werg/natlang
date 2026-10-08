@@ -141,6 +141,7 @@ function scheduledRetryError(status, sessionID) {
   const error = new Error('OpenCode scheduled an internal provider retry; the bridge stopped it to preserve the configured request retry budget');
   error.code = 'OPENCODE_RETRY_SCHEDULED';
   error.providerRetryable = true;
+  error.sdkRetrySuppressed = false;
   if (Number.isSafeInteger(delay)) error.providerRetryAfterMs = delay;
   error.transportRetrySchedule = {
     event_type: 'session.status', session_id: sessionID,
@@ -155,9 +156,10 @@ function scheduledRetryError(status, sessionID) {
       server_commit: '53d1eabb61e21162157817bf677da0a4ad3332e3',
       source_file: 'packages/opencode/src/session/retry.ts',
       max_scheduled_retries: 5,
-      canceled_before_scheduled_retry: true,
-      note: 'The provider request that produced this status has already occurred. The bridge stops the session at the first retry schedule; collector retries are a separate budget.'
-    }
+      canceled_before_scheduled_retry: false,
+      note: 'The provider request that produced this status has already occurred. The bridge attempts to abort the scheduled retry; collector retries are a separate budget.'
+    },
+    retry_cancellation: { attempted: false, succeeded: false }
   };
   return error;
 }
@@ -663,7 +665,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         try {
           const ready = await withAbort(withTimeout(errorWatch.ready, cleanupTimeoutMs,
             'OpenCode event stream bootstrap'), signal, 'OpenCode event stream bootstrap');
-          if (ready.available) errorEventMode = `official SDK SSE stream established before prompt (HTTP ${ready.status}; ${ready.contentType}); matching-session session.error observed concurrently`;
+          if (ready.available) errorEventMode = `official SDK SSE stream established before prompt (HTTP ${ready.status}; ${ready.contentType}); matching-session errors and retry status monitored concurrently`;
           else {
             errorEventMode = `prompt-authoritative fallback; event stream unavailable (${ready.reason})`;
             await errorWatch.stop();
@@ -706,9 +708,23 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       }
       if (outcome.kind === 'session_retry_scheduled') {
         promptController.abort(outcome.error);
+        const retrySchedule = outcome.error.transportRetrySchedule;
         if (client.session.abort) {
-          try { await withTimeout(client.session.abort({ sessionID: session.id, directory }), cleanupTimeoutMs,
-            'OpenCode scheduled-retry abort'); } catch {}
+          retrySchedule.retry_cancellation.attempted = true;
+          try {
+            const abortResult = await withTimeout(client.session.abort({ sessionID: session.id, directory }),
+              cleanupTimeoutMs, 'OpenCode scheduled-retry abort');
+            const aborted = unwrapSdkResult(abortResult, 'scheduled-retry abort') === true;
+            retrySchedule.retry_cancellation.succeeded = aborted;
+            if (!aborted) retrySchedule.retry_cancellation.result = 'server returned false';
+            outcome.error.sdkRetrySuppressed = aborted;
+            retrySchedule.sdk_retry_policy.canceled_before_scheduled_retry = aborted;
+          } catch (abortError) {
+            retrySchedule.retry_cancellation.error = redactCredentialLikeText(
+              (abortError instanceof Error ? `${abortError.name}: ${abortError.message}` : String(abortError)).slice(0, 160));
+          }
+        } else {
+          retrySchedule.retry_cancellation.error = 'session.abort endpoint unavailable';
         }
         throw outcome.error;
       }

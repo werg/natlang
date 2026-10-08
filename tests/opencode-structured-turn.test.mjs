@@ -193,6 +193,7 @@ test('a matching retry schedule cancels OpenCode internal retry and surfaces bri
     assert.equal(body.error.transport_diagnostic.retry_schedule.upstream_http_status, null);
     assert.equal(body.error.transport_diagnostic.retry_schedule.sdk_retry_policy.server_commit,
       '53d1eabb61e21162157817bf677da0a4ad3332e3');
+    assert.deepEqual(body.error.retry_cancellation, { attempted: true, succeeded: true });
     assert.deepEqual(calls, ['prompt', 'abort', 'delete']);
     const sidecarDir = join(directory, '.natlang-transport-failures');
     const { readdir } = await import('node:fs/promises');
@@ -201,6 +202,48 @@ test('a matching retry schedule cancels OpenCode internal retry and surfaces bri
     assert.equal(receipt.classification, 'provider_retry_scheduled');
     assert.equal(receipt.retry_schedule.attempt, 2);
     assert.equal(receipt.retry_schedule.upstream_http_status, null);
+  } finally {
+    await adapter.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('scheduled retry is not reported suppressed when the session abort endpoint returns false', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'opencode-scheduled-retry-abort-false-'));
+  let promptStartedResolve;
+  const promptStarted = new Promise(resolve => { promptStartedResolve = resolve; });
+  const client = {
+    tool: { ids: async () => ({ data: ['invalid'] }) },
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
+      await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
+      await promptStarted;
+      yield { type: 'session.status', properties: { sessionID: 'session-abort-false', status: {
+        type: 'retry', attempt: 1, next: Date.now() + 5000, message: 'Retry scheduled'
+      } } };
+      await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+    })() }) },
+    session: {
+      create: async () => ({ data: { id: 'session-abort-false' } }),
+      prompt: async (_args, { signal }) => new Promise((_, reject) => {
+        promptStartedResolve(); signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+      abort: async () => ({ data: false }),
+      messages: async () => ({ data: [] }),
+      delete: async () => ({ data: true })
+    }
+  };
+  const adapter = await createOpenCodeLoopbackChatAdapter({ client, providerID: 'opencode',
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
+  try {
+    const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'opencode/space-bunny-free', messages: [], tools: [], stream: true }) });
+    const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(body.error.sdk_retry_suppressed, false);
+    assert.deepEqual(body.error.retry_cancellation, { attempted: true, succeeded: false, result: 'server returned false' });
+    assert.equal(body.error.transport_diagnostic.retry_schedule.sdk_retry_policy.canceled_before_scheduled_retry, false);
   } finally {
     await adapter.close();
     await rm(directory, { recursive: true, force: true });

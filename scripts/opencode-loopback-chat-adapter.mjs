@@ -190,10 +190,11 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
           ...(error?.code === 'OPENCODE_RETRY_SCHEDULED' ? {
             bridge_status_code: 503,
             retry_origin: 'opencode_session_status',
-            sdk_retry_suppressed: true,
+            sdk_retry_suppressed: error.sdkRetrySuppressed === true,
             sdk_retry_limit: 5,
             collector_retry_budget: null,
-            collector_retry_budget_owner: 'requesting collector'
+            collector_retry_budget_owner: 'requesting collector',
+            retry_cancellation: error.transportRetrySchedule?.retry_cancellation ?? null
           } : {})
         } : {};
         const diagnostics = error?.transportDiagnostic && typeof error.transportDiagnostic === 'object' ?
