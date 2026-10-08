@@ -41,11 +41,29 @@ test('read_code shows the authentic built-in Neuralese type declaration', async 
   assert.match(declaration, /type Neuralese<T, D extends string = DefaultDialect>/);
   assert.match(declaration, /interface NeuraleseValue<T, D extends string>/);
   assert.match(declaration, /no semantic fields to inspect/);
+  assert.match(declaration, /neuralese\.read\(value\)/);
+  assert.match(declaration, /String\(value\)/);
+  assert.match(declaration, /read-only provenance metadata, not a method/);
   assert.equal(declaration, BUILT_IN_DOCS.Neuralese);
 
   const prompt = (await import('../dist/model/text-neuralese-emulation.js')).TEXT_NEURALESE_EMULATION_PROMPT;
   assert.match(prompt, /Use read_code\("Neuralese"\) to inspect its declaration/);
   assert.doesNotMatch(prompt, /do not redefine it or use read_code\("Neuralese"\)/);
+});
+
+test('read_code explains textReadSource as metadata and points to typed readout', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  const neuralese = { dialect: 'private', width: 384, bodies: { read: 'private body' },
+    textReadSource: { schema: 'natlang.text-read-source/1', export: 'read', bodyId: 'private-id', type: 'Neuralese<string>',
+      source: 'private source', sourceSha256: 'private hash', learnedVectors: false } };
+  const inspected = await script([['eval', { code: 'read_code("neuralese.textReadSource")' }],
+    ['return_result', { status: 'success', value: 'done' }]], 'string', { services: { neuralese } });
+  const docs = JSON.parse(inspected.results[0]);
+  assert.equal(docs, BUILT_IN_DOCS['neuralese.textReadSource']);
+  assert.match(docs, /read-only standard-library metadata, not a callable API/);
+  assert.match(docs, /neuralese\.read\(value\)/);
+  assert.match(docs, /String\(value\) for\s+Neuralese<string>/);
+  assert.match(docs, /read_code\("neuralese"\)/);
 });
 
 test('read_code documents the injected decide helper instead of asking for program source', async () => {

@@ -123,6 +123,12 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
+  'neuralese.textReadSource': `neuralese.textReadSource is read-only standard-library metadata, not a callable API or a value to invoke.
+  read_code("neuralese") shows the available host service declaration; read_code("Neuralese") shows the opaque compile-time type.
+The descriptor identifies the configured read instruction body (export: "read") and its provenance. Do not call
+neuralese.textReadSource.read or inspect/copy its fields to read a value. Use the supported typed operation
+neuralese.read(value) when available, or a supported JavaScript text-conversion context such as String(value) for
+Neuralese<string>. The runtime performs the configured typed readout; the descriptor itself does not perform it.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
   const decision = await decide(verdict, statement);
   decision.value                    the function's answer
@@ -1514,7 +1520,8 @@ export class NativeSession {
     }
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
-    if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested)) {
+    if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested) &&
+        !Object.hasOwn(BUILT_IN_DOCS, requested)) {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected:
         `a function of this program; ${service} is an external service: its declaration can be read, but it runs outside this program and cannot be changed` }]);
       const declaration = this.runtime.declarations[service]!;
