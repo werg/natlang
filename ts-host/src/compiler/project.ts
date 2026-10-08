@@ -278,12 +278,20 @@ export function compileProject(options: BuildOptions): BuildResult {
   const optimizationSources: Record<string, string> = {};
   const programId = options.programId ?? basename(root);
   // Compile every callable-folder module now so errors surface at build time rather than first call.
+  // A function listed in several functions' `uses:` (or also loaded as a named function) is described once.
+  const described = new Set<string>();
+  const describeNamed = (record: NatlangRecord) => {
+    if (described.has(record.source)) return;
+    described.add(record.source);
+    optimizationComponents.push(namedDescriptor(programId, record));
+  };
   const checkModules = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
       if (item.kind !== 'namespace') item.programId = programId;
       if (item.kind !== 'namespace') optimizationSources[item.source] = item.text;
-      if (item.kind === 'natlang') optimizationComponents.push(namedDescriptor(programId, item));
-      if (item.kind === 'module') {
+      if (item.kind === 'natlang') describeNamed(item);
+      if (item.kind === 'module' && !described.has(item.source)) {
+        described.add(item.source);
         try { compileModule(item, level, plans => optimizationComponents.push(...plans.map(plan => inlineDescriptor(programId, plan)))); }
         catch (error) { problem(item.source, error instanceof Error ? error.message : String(error)); }
       }
@@ -292,7 +300,7 @@ export function compileProject(options: BuildOptions): BuildResult {
   };
   for (const record of namedRecords.values()) {
     record.programId = programId;
-    optimizationSources[record.source] = record.text; optimizationComponents.push(namedDescriptor(programId, record)); checkModules(record.codebase);
+    optimizationSources[record.source] = record.text; describeNamed(record); checkModules(record.codebase);
   }
   for (const records of contextRecords.values()) checkModules(records);
 

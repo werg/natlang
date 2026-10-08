@@ -37,3 +37,21 @@ test('uses: a function calls the package items it lists, by base name, besides i
   write('loop/b.nl', '---\nreturns: number\nuses: [loop/a]\n---\nx\n');
   assert.throws(() => loadNatlang(join(root, 'loop/a.nl')), /cannot reach itself/);
 });
+
+test('uses: a project whose functions share a used item checks, the item described once', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { checkProject } = await import('../dist/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'uses-check-'));
+  const write = (path, text) => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); };
+  write('natlang.json', JSON.stringify({ schema: 'natlang.package/v2', name: 'uses-check', version: '0.0.0', include: ['.'], targets: {} }));
+  write('tsconfig.json', JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, skipLibCheck: true } }));
+  write('shared/twice.nl', '---\nargs:\n  n: number\nreturns: number\n---\nDouble n.\n');
+  write('shared/half.ts', 'export default function half(n: number): number { return n / 2; }\n');
+  write('a.nl', '---\nargs:\n  n: number\nreturns: number\nuses: [shared/twice, shared/half]\n---\nUse twice.\n');
+  write('b.nl', '---\nargs:\n  n: number\nreturns: number\nuses: [shared/twice, shared/half]\n---\nUse twice too.\n');
+  write('main.ts', "import a from './a.nl';\nimport b from './b.nl';\nexport const both = (n: number) => Promise.all([a(n), b(n)]);\n");
+  const result = checkProject(root);
+  assert.ok(result.ok, JSON.stringify(result.diagnostics));
+});
