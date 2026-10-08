@@ -474,15 +474,19 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     return windows
 
 
-def evaluation_batches(windows, limit):
-    """Batch equal geometry within one held stratum; retain every held window."""
+def evaluation_batches(windows, limit, max_tokens=None):
+    """Batch equal geometry within one held stratum; retain every held window.
+
+    With max_tokens, a batch of long windows holds no more tokens than that (at least one window), so held
+    evaluation never needs more activation memory than a training step on the same budget."""
     if limit<1:raise ValueError('positive evaluation batch required')
     buckets={}
     for window in windows:
         key=(window['prefix'],len(window['ids']),window['offset']==0)
         buckets.setdefault(key,[]).append(window)
-    for bucket in buckets.values():
-        for start in range(0,len(bucket),limit):yield bucket[start:start+limit]
+    for (_,length,_),bucket in buckets.items():
+        size=limit if max_tokens is None else max(1,min(limit,max_tokens//max(1,length)))
+        for start in range(0,len(bucket),size):yield bucket[start:start+size]
 
 
 def select_held_document_windows(windows, limit):
@@ -998,7 +1002,7 @@ def main(argv=None):
         nonlocal last_schedule_step,last_report
         strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
-            for batch in evaluation_batches(held,a.eval_batch):
+            for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
                 for _,m in objective(batch,3):
                     if m['pass_index']==2:

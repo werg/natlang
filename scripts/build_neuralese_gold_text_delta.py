@@ -75,7 +75,7 @@ def main():
     p.add_argument("--tokenizer", required=True, help="Pinned tokenizer ID or local snapshot")
     p.add_argument("--twin-of-text", type=Path,
                    help="the root-approved text whose tokenizer twin --base-text is: the receipt must bind it, and "
-                        "--base-text must carry the identical document ID/split sequence")
+                        "--base-text must carry the identical document ID/split/source-group/source-record sequence")
     p.add_argument("--renderer-package-root", type=Path,
                    help="Path containing natlang_neuralese/; use the reviewed renderer snapshot")
     args = p.parse_args()
@@ -98,11 +98,13 @@ def main():
                                                      and not manifest_binds(approved_text)):
         raise ValueError("base text root receipt does not approve/bind the exact text prefix")
     if args.twin_of_text:
-        def id_splits(path):
+        def identity(path):  # tokenizer-independent document identity: ID, split and the admitted source records
             with path.open("r", encoding="utf-8") as f:
-                return [(r["id"], r["split"]) for r in map(json.loads, filter(str.strip, f))]
-        if id_splits(args.twin_of_text) != id_splits(args.base_text):
-            raise ValueError("tokenizer twin does not carry the approved text's document IDs/splits in order")
+                return [(r["id"], r["split"], r.get("source_groups"), r.get("source_record_ids"))
+                        for r in map(json.loads, filter(str.strip, f))]
+        if identity(args.twin_of_text) != identity(args.base_text):
+            raise ValueError("tokenizer twin does not carry the approved text's document IDs, splits, source groups "
+                             "and source record IDs in order")
     source_approval = json.loads(args.source_approval.read_text())
     approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
