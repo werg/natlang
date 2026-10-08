@@ -6658,6 +6658,25 @@
       "derived_from": [
         "neuralese-v22-actual-action-preview-20261008-v1"
       ]
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "closed-raw-teacher-evidence-held-14-parent-accepted-2-rejected-no-action-graph-or-training-admission",
+      "include": [
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/campaign-v1/**/*",
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/dispatcher-v1.log",
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/dispatcher-v1-process.json",
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/launch-registration-v1.json",
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/root-authorization.json",
+        "neuralese-semantic-iterate-reducers-v24-20261008-v3/generation-review-v1/luna/plan.approved.json",
+        "neuralese-semantic-iterate-reducers-v24-closed-raw-review-20261008-v1/**/*"
+      ],
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v24-v3-static-generation-packet-20261008"
+      ],
+      "notes": "Closed raw V24 v3 Luna campaign, immutable source 9c71bfa327b4fe525c12237e7892c7b296d21d46f53bed181793cd9634a1d3e8, root-reviewed source and runtime reference proof. 16 source tasks: 14 parent accepted and 2 rejected. FLD-511 remains held as a semantic trajectory rejection. HAB-570 remains held because the authored metric format says hectares by ID/order but does not explicitly require bare digits, although exact expected output omits units; do not treat it as a semantic negative. All results, traces, raw job records, queue/journals, and logs are preserved. Parent acceptance and scripted proof do not grant action-graph or training admission. See closed-raw review report."
     }
   ],
   "coverage_backlog": [
