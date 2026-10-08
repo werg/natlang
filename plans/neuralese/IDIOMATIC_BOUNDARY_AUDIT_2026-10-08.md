@@ -325,3 +325,113 @@ rollback, eval-local callable captures including parameter defaults, nested
 lexical shadowing, and the current child-folder authority fence. The free-name
 check uses TypeScript's symbol resolution rather than a hand-maintained global
 value allowlist.
+
+## Follow-up: Luna and Bunny runtime surfaces — 2026-10-08
+
+### 11. Service openings must describe data as data
+
+**Priority: high; fixed in `0fd2d175`.** Luna V20 index 6 repeatedly treated
+`neuralese.bodies` and `neuralese.textReadSource` as callable methods. The
+actual `StandardLibrary` fields in `ts-host/src/neuralese/combinators.ts`
+are metadata values; callable operations live on the separately declared
+`natlang:neuralese` facade. `ts-host/src/native/agent.ts` previously rendered
+every enumerable service property as `Function`, so the opening itself taught
+the wrong API shape. The fix renders callable values as callable and metadata
+as readonly primitive/record types, never evaluates accessor properties, and
+does not print field contents. It does not invent metadata methods or expose
+private values. The V20 trace shows the repeated guesses and exhaustion; this
+finding is tied to that actual surface mismatch.
+
+### 12. Same-named inputs naturally shadow explicit captures
+
+**Priority: medium; fixed in `f707f973`.** Luna V20 index 9 produced repeated
+`nl-capture-parameter-collision` diagnostics for an ordinary
+`nl.with({ input, ... })` child whose parameter was also named `input`. The
+model's intended child input should use ordinary lexical shadowing. The
+compiler now marks that declared slot as shadowed, evaluates its initializer
+once in the original object-literal order, and leaves the input parameter as
+the sole child-visible binding. A shadowed live wrapper is constructed as
+written but its value is not dereferenced or installed in the child. A saved
+`.with` still validates the complete declared capture shape, while its
+shadowed values never enter child capture metadata or runtime snapshots. The
+scope index keeps the authored field for source validation but creates no
+binding for it. This change preserves authority and does not expose the old
+handle. Isolated TypeScript compilation and seven focused compiler/runtime
+regressions passed. A repository search found no remaining current
+`nl-capture-parameter-collision` diagnostic or rename instruction; the older
+dated handover entry describing the former help text is historical and is
+retained as history.
+
+### 13. The remaining Bunny result omission was synthesis, not conversion
+
+The Bunny V20 index 13 helper error and later ACT-R omission are distinct.
+The `revise` helper was declared in one eval and called in another, with a
+recorded `ReferenceError`; source-backed, capture-checked helper persistence
+already addresses that concrete friction (section 3 above). Later, the
+preserved ACT-R score 89 was read and present in earlier pass outputs, but a
+child note omitted it and a later child repeated the omission. The task files
+remain intact. This is a child evidence-synthesis failure, not a text readout,
+typed conversion, or missing source problem. No further coercion change is
+supported by that trace.
+
+### 14. Current native guidance review: await, optional arguments, and results
+
+The scoped eval wrapper is async, and normal TypeScript async/await behavior
+applies within it. The `neuralese-readout-sync` diagnostic is limited to a
+Neuralese-to-text conversion inside a non-async function; its guidance to make
+that function async or move conversion into async code follows from the
+existing awaited readout implementation. Automatically making arbitrary
+callbacks async would change their return type and call contract. The
+existing `await nl\`...\`` normalization handles the separate common case of
+awaiting the callable instead of invoking it; it does not relax ordinary
+non-async callback semantics. I found no current await diagnostic with a
+semantics-preserving implicit correction.
+
+Optional parameters are represented in the opening as `T | undefined`, and
+runtime invocation leaves omitted optional arguments absent; supplied values
+are checked against the parameter type in `ts-host/src/runtime/kernel.ts`.
+Exact parameter names, declared arity, and JSON-object dispatch remain
+intentional because guessing omitted values or mapping positional arrays would
+change call semantics. The paths reviewed do not support a new optional-arg
+rewrite.
+
+Typed result handling accepts an exact declared value or the configured
+Neuralese string writer/readout. Runtime record coercion removes omitted
+optional fields, rejects undeclared fields, and checks each declared field in
+`ts-host/src/native/values.ts`; those shape errors preserve the caller's
+result contract. The ordinary-string/Neuralese-string distinction is explicit
+in the opening and covered by typed text preflight. The local conditional
+readout fix above addresses all-soft and mixed Neuralese union coercion at
+String/template/concat/join sites while preserving crisp alternatives. I found
+no trace-backed case that justifies coercing arbitrary objects, arrays, or
+malformed JSON into declared results.
+
+**Disposition:** the source-backed helper loss, false callable service
+descriptions, and capture-name collision were concrete ergonomics defects and
+are fixed. The ACT-R omission was a child synthesis error. Other recent Luna
+exhaustions reviewed here ended at the 384-request whole-case budget; they do
+not establish a new language boundary failure. No additional evidenced
+coercion or authority relaxation is proposed.
+
+### 15. JSON serialization misses the existing conditional readout for unions
+
+**Priority: low/medium; prospective reproduced compiler mismatch, no
+historical trace found.** `checkNeuralese()` already requests readout of the
+first argument to the standard `JSON.stringify` when that expression is a
+single `Neuralese<T>` value. For a union, `neuraleseParts()` returns no value,
+and the JSON branch currently tests only `soft(value)`. Reproduction through
+`analyzeEvalSnippet('return JSON.stringify(value);', scope)` with
+`value: Neuralese<string> | Neuralese<number>` produces no diagnostic and no
+readout. The generated program directly calls `JSON.stringify(value)`, while
+the adjacent `String(value)` expression correctly generates
+`readNeuraleseIfReference(value)`. The former therefore serializes the opaque
+transport reference (including its ID/metadata) instead of its typed payload.
+
+A narrow candidate is to request conditional readout for the JSON value
+argument when its static union has a Neuralese arm, reusing
+`readNeuraleseIfReference`; crisp union arms would pass through unchanged and
+then keep native `JSON.stringify` behavior. Do not alter the replacer or space
+arguments, serialize arbitrary unknown values differently, or change JSON
+input/output coercion. This should receive a focused generated-runtime test
+before implementation because only direct type-checker reproduction currently
+supports it; no generation failure has been attributed to this expression.
