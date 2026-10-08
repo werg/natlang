@@ -11,6 +11,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { rejectedNatlangToolAttempt } from './opencode-invalid-tool-attempt.mjs';
 
 const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/7';
 const FAILURE_DIAGNOSTIC_VERSION = 'natlang.opencode_transport_failure/1';
@@ -553,24 +554,6 @@ function parseStructuredTurn(value, allowedNames, toolChoice) {
 
 function exactRecordKeys(value, keys) {
   return isPlainRecord(value) && Object.keys(value).sort().join(',') === [...keys].sort().join(',');
-}
-
-// OpenCode v1.18.35's pinned repair hook in session/llm.ts routes unavailable
-// provider tools to tool/invalid.ts. That handler only returns an error result;
-// it performs no I/O. Match its exact completed record and the Natlang tool
-// name it rejected. Pinned upstream source (tag commit 53d1eabb61e21162157817bf677da0a4ad3332e3):
-// https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/session/llm.ts
-// https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/tool/invalid.ts
-function rejectedNatlangToolAttempt(part, allowedNames) {
-  const state = part?.state;
-  const input = state?.input;
-  if (part?.tool !== 'invalid' || state?.status !== 'completed' || state.title !== 'Invalid Tool' ||
-      !exactRecordKeys(input, ['tool', 'error']) || typeof input.tool !== 'string' || !allowedNames.has(input.tool) ||
-      typeof input.error !== 'string' || !input.error.startsWith(`Model tried to call unavailable tool '${input.tool}'.`) ||
-      state.output !== `The arguments provided to the tool are invalid: ${input.error}` ||
-      !exactRecordKeys(state.metadata, [])) return undefined;
-  return { rejected_tool_name: input.tool, rejection: input.error, handler: 'OpenCode InvalidTool', status: 'completed',
-    protocol_record: part };
 }
 
 const NATLANG_ACTION_TOOL = 'natlang_action_bridge_submit_action';
