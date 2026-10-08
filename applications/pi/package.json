@@ -1,0 +1,15 @@
+{
+  "name": "@natlang/pi-app",
+  "private": true,
+  "type": "module",
+  "description": "Dependencies of the pi port: pi-durable's vendored source (vendor/durable, f10993b) needs pi-ai, Chord, diff and typebox.",
+  "dependencies": {
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "diff": "8.0.4",
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}
