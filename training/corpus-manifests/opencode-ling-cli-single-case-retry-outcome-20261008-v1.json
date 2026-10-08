@@ -1,0 +1,136 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-ling-cli-single-case-retry-outcome-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-ling-collector-smoke-20261008-v2/cli-route-v1",
+  "files": [
+    {
+      "path": "cli-server/action-mcp-calls.jsonl",
+      "bytes": 752,
+      "sha256": "3b49f61cd56f311ef7ff734de7972cba6606be832549105f82acbc2ae744973e",
+      "lines": 1
+    },
+    {
+      "path": "cli-server/bootstrap-config.json",
+      "bytes": 2105,
+      "sha256": "f7898ec41785df8e896e8477823060e17201d6e2c7a1a418dd87da38b55a62bc"
+    },
+    {
+      "path": "cli-server/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "429be622360aa0f8178ead5b50453941e27b8a857de78c5d8efd5b6a1d3631ba",
+      "lines": 10
+    },
+    {
+      "path": "cli-server/cli-invocations.jsonl",
+      "bytes": 1011,
+      "sha256": "40825ef15234bb4ac43aba5e425b42dbba548be94b89b5b262f7df556a99ab21",
+      "lines": 1
+    },
+    {
+      "path": "cli-server/cli-stdout.raw",
+      "bytes": 1840,
+      "sha256": "2d1baf0c75d4b279efb773a64ea9218b7f60152b4bcbf56a39dc62f9bca2bb81"
+    },
+    {
+      "path": "cli-server/lifecycle.json",
+      "bytes": 192,
+      "sha256": "37c73d8c5b9604d82b3c41eaff197f2840fb71057d6198ae728d70b863a56f16"
+    },
+    {
+      "path": "cli-server/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "cli-server/opencode-home/config/opencode/opencode.json",
+      "bytes": 759,
+      "sha256": "5dfbb10b27dcab24fc9dc910f543937f36c23326f775f18448423a5256a7d0b5"
+    },
+    {
+      "path": "cli-server/opencode-home/config/opencode/package-lock.json",
+      "bytes": 14633,
+      "sha256": "6388cae0310645c06fe325bdab634dce5dffb504027b82faa98c99862e18d1c6"
+    },
+    {
+      "path": "cli-server/opencode-home/config/opencode/package.json",
+      "bytes": 65,
+      "sha256": "d698235d85a27b2f0d621e816447e88a2b4269b7b6819158050a824ed9caad34"
+    },
+    {
+      "path": "cli-server/shutdown.request",
+      "bytes": 41,
+      "sha256": "03c7937d78c171099316f746eba9f5036cc95c26c273a48244c6e5f57a0d895d"
+    },
+    {
+      "path": "collector/cli-v1/control/case-events.jsonl",
+      "bytes": 737,
+      "sha256": "aaef936d9257e11a6c17a22d1bedb6789d4d8eddc25095cf4e50e061eb9d4610",
+      "lines": 2
+    },
+    {
+      "path": "collector/cli-v1/control/collector-launch.json",
+      "bytes": 1644,
+      "sha256": "631a78613e7fb57975566ca4d8c38bd5b68e72421d3e2ee93e5cace5ea0c0e9b"
+    },
+    {
+      "path": "collector/cli-v1/control/collector.stderr.raw",
+      "bytes": 158,
+      "sha256": "7a8bcad63d9bfc931c68379ec6558e5d9a9be93f4de7352cc0c3d7fb4b0228ff"
+    },
+    {
+      "path": "collector/cli-v1/control/collector.stdout.raw",
+      "bytes": 153,
+      "sha256": "4bef85d27f18e345f1259b7a5b3385a0d886899f5e2bda6ba8677a4f2bb24e78"
+    },
+    {
+      "path": "collector/cli-v1/control/launch-preflight.json",
+      "bytes": 2331,
+      "sha256": "4baa1e0871ac7fbbbcc474e7825fd93934f71df5ad060d35ff2f8781dc5534d4"
+    },
+    {
+      "path": "collector/cli-v1/control/smoke-outcome-v1.json",
+      "bytes": 16343,
+      "sha256": "2977a896fe47397e6a7a7724543c23fc32f2b7d93c31ee0535bea6da08359d0f"
+    },
+    {
+      "path": "collector/cli-v1/jobs/000000-e7a1407ce07fe82a.partial.json",
+      "bytes": 1764,
+      "sha256": "636b6df6cb016e73a4035fb4f5e0ebd5a6525d54de1ae9602449c06653710396"
+    },
+    {
+      "path": "collector/cli-v1/jobs/000000-e7a1407ce07fe82a.partial.json.evidence-a139d27d-d2ad-4f97-ac8b-8a448f72aafe.jsonl",
+      "bytes": 36488,
+      "sha256": "cd905cb32f0ea82c539ecd78a378f7905d94fd4fc84fa45a601d46b507aef18b",
+      "lines": 10
+    },
+    {
+      "path": "collector/cli-v1/jobs/000000.error.json",
+      "bytes": 343,
+      "sha256": "961bc94958f5949a720c8cdd200d251d53c3e1ceba6b2cfa583b508943e52ca8"
+    },
+    {
+      "path": "collector/cli-v1/results/case-000000.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "root-review-proposal.json",
+      "bytes": 13053,
+      "sha256": "24b01b29c4dc65155cdd8f70f94fe2eae5938df46c0a9f9e55b56c660fba6f01"
+    },
+    {
+      "path": "root-smoke-approval-v1.json",
+      "bytes": 1354,
+      "sha256": "d3fa3d432d366f75bf33a29a4d2b20acbe8f63a213bcc390675ab9e39376e798"
+    },
+    {
+      "path": "server-origin-amendment.json",
+      "bytes": 544,
+      "sha256": "eb4d48c4b8ba6b673289b51fecb28aa177e8f7c641cdf808720a752376f53845"
+    }
+  ],
+  "bytes": 97277
+}
