@@ -11,12 +11,14 @@ async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
   const markerPath = join(root, 'abort.marker');
+  const argvPath = join(root, 'argv.json');
   const cliPath = join(root, 'fake-cli.mjs');
   const script = `#!/usr/bin/env node
 import fs from 'node:fs';
 const sid = 'fake-session-1';
 const actions = JSON.parse(process.env.FAKE_TOOL_ACTIONS || '[]');
 const send = event => process.stdout.write(JSON.stringify(event) + '\\n');
+fs.writeFileSync(process.env.FAKE_ARGV, JSON.stringify(process.argv.slice(2)));
 send({ type: 'step_start', sessionID: sid, part: { type: 'step-start', sessionID: sid } });
 for (let i = 0; i < actions.length; i++) {
   const action = actions[i];
@@ -63,9 +65,9 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
     baseUrl: `http://127.0.0.1:${eventAddress.port}`, directory: root, outputDirectory,
     modelAlias: 'fixture/free', modelID: 'free', actionLogPath, timeoutMs, maxRequestMs: timeoutMs,
     env: { PATH: process.env.PATH, HOME: root, NATLANG_OPENCODE_ACTION_LOG: actionLogPath,
-      FAKE_ABORT_MARKER: markerPath, FAKE_TOOL_ACTIONS: JSON.stringify(actions),
+      FAKE_ABORT_MARKER: markerPath, FAKE_ARGV: argvPath, FAKE_TOOL_ACTIONS: JSON.stringify(actions),
       FAKE_EXTRA_EVENTS: JSON.stringify(extraEvents), FAKE_EXIT_CODE: String(exitCode) } });
-  return { root, adapter, eventServer, abortCalls, observedStatusArgs, actionLogPath, outputDirectory,
+  return { root, adapter, eventServer, abortCalls, observedStatusArgs, actionLogPath, outputDirectory, argvPath,
     async close() { await adapter.close(); eventServer.closeAllConnections(); await new Promise(resolve => eventServer.close(resolve)); await rm(root, { recursive: true, force: true }); } };
 }
 
@@ -80,6 +82,8 @@ test('completed audited action stops only its session after the tool-calls step'
   try {
     const response = await invoke(f.adapter); const body = await response.json();
     assert.equal(response.status, 200);
+    const argv = JSON.parse(await readFile(f.argvPath, 'utf8'));
+    assert.equal(argv[argv.indexOf('--title') + 1], 'Natlang teacher turn', 'explicit documented CLI title avoids auto-title generation from the full prompt');
     assert.equal(body.choices[0].message.content, null);
     assert.equal(body.choices[0].message.tool_calls.length, 1);
     assert.deepEqual(JSON.parse(body.choices[0].message.tool_calls[0].function.arguments), { value: 1 });

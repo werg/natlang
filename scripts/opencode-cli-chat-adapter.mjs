@@ -457,7 +457,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       };
       watcher = createEventWatcher({ baseUrl, directory, client,
         onViolation: value => { violation ??= value; diagnostics.violation = value; void stopChild(); } });
-      const args = ['run', '--format', 'json', '--model', modelName, '--dir', directory,
+      const args = ['run', '--format', 'json', '--model', modelName, '--title', 'Natlang teacher turn', '--dir', directory,
         '--pure', '--attach', baseUrl, userText];
       diagnostics.stdout_path = 'cli-stdout.raw'; diagnostics.stderr_path = 'cli-stderr.raw';
       diagnostics.stdout_start_bytes = fileSize(`${outputDirectory}/cli-stdout.raw`);
