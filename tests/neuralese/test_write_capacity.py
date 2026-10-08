@@ -71,6 +71,18 @@ def test_capacity_change_requires_declared_continuation_curriculum():
     validate_continuation(state, identity, allowed_changes=['max_write_vectors'])
 
 
+def test_member_term_joins_an_earlier_recurrence_only_as_declared_change():
+    from natlang_neuralese.train.trajectory_state import validate_continuation
+    state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+             'identity': {'options': {}, 'files': {'data': 'pinned'}}}
+    off = {'options': {'member_weight': 0., 'member_tokens': 2048, 'member_eval': 4}, 'files': {'data': 'pinned'}}
+    validate_continuation(state, off)  # defaults: an earlier checkpoint trained no member
+    on = {'options': {'member_weight': 0.25, 'member_tokens': 2048, 'member_eval': 4}, 'files': {'data': 'pinned'}}
+    with pytest.raises(ValueError, match='identical inputs'):
+        validate_continuation(state, on)
+    validate_continuation(state, on, allowed_changes=['member_weight'])
+
+
 def test_raw_content_transport_preserves_embeddings_and_input_gradient_without_reset():
     from natlang_neuralese.model.heads import ContentProjection, PortHeads
     content = ContentProjection(4)
