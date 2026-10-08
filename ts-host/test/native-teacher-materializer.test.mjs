@@ -901,11 +901,15 @@ test('materialization preserves same-call provider-expanded read provenance with
   assert.equal(repeatedReceipt.additional_read_turn_pairs.length, 1,
     'repeated reads in one invocation retain separate per-turn graph bindings');
   const duplicateRequestRef = structuredClone(row);
-  duplicateRequestRef.trajectory[0].context.push({ role: 'tool', content: [{ type: 'neuralese', id: noteId }] });
+  duplicateRequestRef.trajectory[0].context.push(
+    { role: 'tool', content: [{ type: 'neuralese', id: noteId }] },
+    { role: 'tool', content: `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}` });
   const duplicateRequestReceipt = materializeNativeRows([duplicateRequestRef]).turns[0].source_ref.provider_expanded_read_contexts
     .find(item => item.block.id === noteId);
   assert.equal(duplicateRequestReceipt.context_occurrences, 2,
-    'every exact same-run reference occurrence in the actual request is counted');
+    'only exact typed same-run references in the actual request count as reads');
+  assert.equal(duplicateRequestReceipt.serialized_literal_id_mentions, 1,
+    'a JSON string quoting the block ID is separately recorded as literal context, not a typed read');
 
   const legacy = structuredClone(row);
   const legacyWrite = legacy.outcome.execution_graph.find(event => event.kind === 'block_write' && event.block === noteId);

@@ -713,12 +713,13 @@ test('provider-expanded configured function and producer blocks become source-bo
   const row = { id: 'row-7', decision: { index: 4 }, source_ref: { trajectory_id: 'run-1', invocation_id: invocation,
     source_row_sha256: '1'.repeat(64), provider_expanded_read_contexts: [
       makeReceipt(functionId, 'Neuralese<(v: Neuralese<unknown>) => unknown>', functionBody, 'configured-function-definition'),
-      makeReceipt(noteId, 'Neuralese<string>', noteBody, 'same-run-producer'),
+      { ...makeReceipt(noteId, 'Neuralese<string>', noteBody, 'same-run-producer'), serialized_literal_id_mentions: 1 },
     ] }, provenance: { trace_sha256: '2'.repeat(64) }, messages: [
       { role: 'system', content: 'System.' }, { role: 'user', content: [{ type: 'text', text: 'Prompt: ' },
         { type: 'neuralese', id: functionId }] },
       { role: 'tool', tool_call_id: 'scope_0', content: [{ type: 'text', text: 'note: ' },
         { type: 'neuralese', id: noteId }] },
+      { role: 'tool', tool_call_id: 'debug', content: `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}` },
     ], target: { role: 'assistant', content: 'done' } };
   const { record: out, pieces } = convertTrajectory(row);
   assert.equal(out.messages[0].role, 'system');
@@ -733,6 +734,12 @@ test('provider-expanded configured function and producer blocks become source-bo
     item.qualification_certificate === false && item.training_admission === false));
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).learner_representation,
     'typed-read-linked-to-existing-writer');
+  assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).context_occurrences, 1,
+    'only the structured typed reference remains a Neuralese read');
+  assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).serialized_literal_id_mentions, 1,
+    'serialized debug ID mentions remain separately observable');
+  assert.equal(out.messages[3].content, `console: {"$neuralese":{"type":"Neuralese<string>","id":"${noteId}"}}`,
+    'quoted JSON text remains literal rather than becoming a vector read');
   assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === functionId).learner_representation,
     'crisp-external-function-context');
   assert.ok(pieces.every(piece => piece.kind !== 'function-body'), 'external context does not create soft function-body targets');

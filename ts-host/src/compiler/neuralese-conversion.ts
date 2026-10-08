@@ -1414,6 +1414,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       })(),
       writer_source_class: value.receipt.writer_source_class,
       context_occurrences: value.receipt.context_occurrences,
+      ...(Number.isSafeInteger(value.receipt.serialized_literal_id_mentions) ? {
+        serialized_literal_id_mentions: value.receipt.serialized_literal_id_mentions } : {}),
       ...(value.receipt.writer_witness ? { writer_witness: value.receipt.writer_witness } : {}),
       writer_target_selected: value.receipt.writer_target_selected === false ? false : null,
       learner_representation: value.receipt.writer_target_selected === false ?

@@ -409,6 +409,36 @@ function neuraleseReference(value: unknown): Dict | undefined {
   return typeof record.id === 'string' && typeof record.type === 'string' ? record : undefined;
 }
 
+/** Count typed Neuralese references without treating quoted IDs as reads. */
+function countTypedNeuraleseReferences(value: unknown, id: string): number {
+  if (Array.isArray(value)) return value.reduce((count, item) => count + countTypedNeuraleseReferences(item, id), 0);
+  if (!value || typeof value !== 'object') return 0;
+  const item = value as Dict;
+  let count = item.type === 'neuralese' && item.id === id ? 1 : 0;
+  for (const [key, child] of Object.entries(item)) {
+    if (key === 'arguments' && typeof child === 'string') {
+      try { count += countTypedNeuraleseReferences(JSON.parse(child), id); } catch { /* Preserve opaque arguments. */ }
+    } else count += countTypedNeuraleseReferences(child, id);
+  }
+  return count;
+}
+
+/** Track ID mentions in text leaves separately; they are diagnostic text, not typed reads. */
+function countLiteralNeuraleseIdMentions(value: unknown, id: string): number {
+  if (Array.isArray(value)) return value.reduce((count, item) => count + countLiteralNeuraleseIdMentions(item, id), 0);
+  if (typeof value === 'string') return value.split(id).length - 1;
+  if (!value || typeof value !== 'object') return 0;
+  const item = value as Dict;
+  let count = 0;
+  for (const [key, child] of Object.entries(item)) {
+    if (key === 'arguments' && typeof child === 'string') {
+      try { count += countLiteralNeuraleseIdMentions(JSON.parse(child), id); }
+      catch { count += child.split(id).length - 1; }
+    } else if (key !== 'id' || item.type !== 'neuralese') count += countLiteralNeuraleseIdMentions(child, id);
+  }
+  return count;
+}
+
 function valueAtPath(value: unknown, path: readonly (string | number)[]): unknown {
   let current = value;
   for (const part of path) {
@@ -625,7 +655,8 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
         typeof block.type !== 'string' || !block.type.startsWith('Neuralese<') ||
         typeof block.body !== 'string' || block.body.includes('<|neuralese|>') || block.body.includes('<|/neuralese|>') ||
         hexDigest(block.body) !== block.body_sha256 || block.learned_vectors !== false) continue;
-    const visibleCount = context.reduce((count, message) => count + (canonical(message).match(new RegExp(blockId, 'g'))?.length ?? 0), 0);
+    const visibleCount = countTypedNeuraleseReferences(context, blockId);
+    const literalIdMentions = countLiteralNeuraleseIdMentions(context, blockId);
     const reads = graph.filter(event => event.kind === 'block_read' && event.call_id === invocationId && event.block === blockId);
     if (!reads.length || reads.some(event => typeof event.node !== 'string')) continue;
     const readTurnPairs = reads.map(read => ({ read, turn: graph.find(event => event.kind === 'model_turn' &&
@@ -769,6 +800,7 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       ...(orderedReadTurnPairs.length > 1 ? { additional_read_turn_pairs: orderedReadTurnPairs.slice(1).map(pair => ({
         block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn) })) } : {}),
       context_occurrences: visibleCount,
+      serialized_literal_id_mentions: literalIdMentions,
       producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
       ...(origin === 'same-run-producer' ? { writer_target_selected: false,
         writer_source_class: writers.length === 1 ? writerSourceClass(writers[0]!) : null,
