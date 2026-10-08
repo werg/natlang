@@ -1,5 +1,5 @@
 /** Chat completions over HTTP: the shared adapter (chat-completion.ts) with the HTTP transport. */
-import { chatCompletionModelTurn, fetchModel, httpChatTransport, limitedTransport, promptLogprobDecider, requestLimit, type ChatExchange, type HttpChatOptions,
+import { chatCompletionModelTurn, fetchModel, httpChatTransport, limitedTransport, openAIEndpointRoot, promptLogprobDecider, requestLimit, type ChatExchange, type HttpChatOptions,
   type RequestLimit } from './chat-completion.js';
 import type { ModelTurnRequest } from '../contracts.js';
 export { fetchModel } from './chat-completion.js';
@@ -33,7 +33,7 @@ const tokens = (value: unknown) => typeof value === 'number' && Number.isInteger
 /** The model's context length as the server reports it: vLLM's max_model_len, llama.cpp's n_ctx, or a context_length field. */
 export async function serverContextWindow(http: HttpChatOptions): Promise<number | undefined> {
   if (!http.endpoint) return undefined;
-  const base = http.endpoint.replace(/\/$/, '').replace(/\/v1$/, '');
+  const base = openAIEndpointRoot(http.endpoint);
   const get = async (path: string): Promise<Record<string, unknown> | undefined> => {
     try {
       const response = await fetchModel(base + path, { signal: AbortSignal.timeout(5000),

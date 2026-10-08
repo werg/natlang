@@ -1,7 +1,29 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport } from '../dist/model/chat-completion.js';
+import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport, openAIEndpointRoot } from '../dist/model/chat-completion.js';
+
+test('HTTP endpoints accept server roots and API bases without duplicating v1', async () => {
+  const paths = [];
+  const instance = createServer((incoming, response) => {
+    paths.push(incoming.url);
+    incoming.resume();
+    incoming.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: 'ready' } }] }));
+    });
+  });
+  await new Promise(resolve => instance.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${instance.address().port}`;
+  try {
+    for (const suffix of ['', '/', '/v1', '/v1/', '/zen/v1/']) {
+      const turn = await chatCompletionModelTurn(httpChatTransport({ endpoint: origin + suffix, model: 'm', stream: false }))(request());
+      assert.equal(turn.text, 'ready');
+    }
+    assert.deepEqual(paths, ['/v1/chat/completions', '/v1/chat/completions', '/v1/chat/completions', '/v1/chat/completions', '/zen/v1/chat/completions']);
+    assert.equal(openAIEndpointRoot(origin + '/zen/v1///'), origin + '/zen');
+  } finally { await new Promise(resolve => instance.close(resolve)); }
+});
 
 test('a reply that is only the arguments of one offered tool, as JSON, is that call; prose and ambiguous JSON stay text', async () => {
   const tools = [

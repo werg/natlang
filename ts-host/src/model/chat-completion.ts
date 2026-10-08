@@ -344,10 +344,15 @@ export type HttpChatOptions = { endpoint: string; model: string; apiKey?: string
   /** Stream responses (default). Streaming sends headers at once, so no idle timeout on the way can fire. */
   stream?: boolean };
 
-/** Chat completions over HTTP (`POST {endpoint}/v1/chat/completions`), in Node and in browsers. */
+/** Accept a server root or the conventional OpenAI `/v1` API base. */
+export function openAIEndpointRoot(endpoint: string): string {
+  return endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
+}
+
+/** Chat completions over HTTP, in Node and in browsers. */
 export function httpChatTransport(options: HttpChatOptions): ChatTransport {
   if (!options.endpoint || !options.model) throw new Error('model endpoint and ID are required');
-  const url = options.endpoint.replace(/\/$/, '') + '/v1/chat/completions';
+  const url = openAIEndpointRoot(options.endpoint) + '/v1/chat/completions';
   const stream = options.stream ?? true;
   return async (body, signal) => {
     let response: Response;
