@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/assembled/delta-native-records.jsonl",
+      "bytes": 9108892,
+      "sha256": "016ca84e36856dd5ba9d2ebb66ee6ee6bfa55fd3c3fc17f55c53208539be3faf",
+      "lines": 47
+    },
+    {
+      "path": "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/proposal-review.json",
+      "bytes": 48240,
+      "sha256": "074d69b491a6228e174313760e3d418f81361d2bac8d8c9cb4928941049c653d"
+    },
+    {
+      "path": "neuralese-v24-v9-three-action-action47-proposal-20261008-v1/text-visibility-review.json",
+      "bytes": 59254,
+      "sha256": "9009b8218dfb75538c8d74fd50d52ebcb3ea2bc5a629b63f5736ec4511ca359f"
+    },
+    {
+      "path": "s1-question-collection-v8-action-second-source-review-20261008-v1/review.json",
+      "bytes": 253640,
+      "sha256": "e8aa900a033fc067a4c289d29a3f72d0e80715cce3e9ef90f94a72167ccc5fd2"
+    },
+    {
+      "path": "s1-question-collection-v8-root-selected-action-admission-20261008-v1/admission.json",
+      "bytes": 48119,
+      "sha256": "880d7920f6b725c44d6547edd6fded5103c0366695c78cdeef1d3824e4eed0a7"
+    }
+  ],
+  "bytes": 9518145
+}

@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+  "files": [
+    {
+      "path": "action45-text-delta-extraction.json",
+      "bytes": 1024,
+      "sha256": "2997606212f872d2b4c6c5e104f6b14954b4287566972cdb09f40fe0b0d24590"
+    },
+    {
+      "path": "action45-text-delta.jsonl",
+      "bytes": 3034218,
+      "sha256": "1f429f13923a59c51ade466cae3370f62880cf49482cc664f237837e0ab47885",
+      "lines": 45
+    },
+    {
+      "path": "assembled/delta-native-records.jsonl",
+      "bytes": 8469302,
+      "sha256": "1a0bdf592e00eda0c9f0db3e66c72b2ae3f5aa05fcf45c498a9975621f31594c",
+      "lines": 45
+    },
+    {
+      "path": "assembled/proposal-manifest.json",
+      "bytes": 13064,
+      "sha256": "d2e5500dbcf0cb1961bfcae01f00b92b4f9800ef11795f7e66a7fca037c7ba7f"
+    },
+    {
+      "path": "assembled/recurrence-audit.json",
+      "bytes": 4428,
+      "sha256": "9aecebc84c34e29e52d128d1142a62cb670325b0fe5480f2642cd7d4058c3da2"
+    },
+    {
+      "path": "base-prefix-binding.json",
+      "bytes": 1715,
+      "sha256": "843244e1b0a66142681a97c42aceb93fa97c6014104f35c4918cff8a39cd0b99"
+    },
+    {
+      "path": "decode_target_review.py",
+      "bytes": 6366,
+      "sha256": "cd4d427422e6e55ddc5fb3bfc9b97c09735a2dbdf5ad74a266474dd1edad1523"
+    },
+    {
+      "path": "decoded-target-review.json",
+      "bytes": 58689,
+      "sha256": "e0cabcad51ea40a00810d183bf269c8df3f25dae368c6c853da32b7cbdfa6c57"
+    },
+    {
+      "path": "draft-superseding-action-certificate.json",
+      "bytes": 46994,
+      "sha256": "02bb1e97b6357bcdc18b95b226834c8c27e9613d7f2a54a1bc9728f987ff7605"
+    },
+    {
+      "path": "empty-delta.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "proposal-review.json",
+      "bytes": 68976,
+      "sha256": "488490f6cb2145f74f86843e0d0476648ae812b57e23966717ccf56804dbd11c"
+    },
+    {
+      "path": "selected-actions-45.jsonl",
+      "bytes": 8455082,
+      "sha256": "c0ac9a3ac9051b93b77237b11ab84785220ea254a4e3ea49929f7019db0ee72d",
+      "lines": 45
+    },
+    {
+      "path": "text-append/README.md",
+      "bytes": 1438,
+      "sha256": "a08c00f540932187a2edbf47e1dce49dc6cc716f159c532fa4283559da545dab"
+    },
+    {
+      "path": "text-append/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "text-append/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "text-append/output-manifest.json",
+      "bytes": 1272,
+      "sha256": "8a02a1973cfbb9b0f91e414acce1f1352d472a7ddefadde590f464d9b2e9b460"
+    },
+    {
+      "path": "text-append/packet-manifest.json",
+      "bytes": 1683,
+      "sha256": "1ca2f0446599c6b5d8062770be4056db95d6630b1327436b12ed1cb5a124e61f"
+    },
+    {
+      "path": "text-append/provenance.jsonl",
+      "bytes": 3992770,
+      "sha256": "7d17ee52686336d644281419105281fc1bf38824ee6b0516a0de568159d7a91a",
+      "lines": 4544
+    },
+    {
+      "path": "text-append/receipt.json",
+      "bytes": 4665,
+      "sha256": "56bbf493da03cb936cdd27e72dd648e54bea0bd1c022bff3d57ce9bbf606a41f"
+    },
+    {
+      "path": "text-append/source-coverage.jsonl",
+      "bytes": 21550,
+      "sha256": "50c1c43108c201f24bf4fb602e520d196a0f34be25b49073b84afdc9c8e6d01c",
+      "lines": 45
+    }
+  ],
+  "bytes": 24183688
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-action45-root-integration-review-20261008-v1",
+  "files": [
+    {
+      "path": "admission.json",
+      "bytes": 56688,
+      "sha256": "703ec82f59ee52872a9f1344804fb6e11fbb4e5478f81393ec7c371a02a9ba19"
+    },
+    {
+      "path": "mechanical-review.json",
+      "bytes": 551,
+      "sha256": "c3e70c0816e163524a026456cf1fed484e00e269b07c615e18682c7ae637c20b"
+    },
+    {
+      "path": "selected-action-admission.json",
+      "bytes": 47714,
+      "sha256": "f174e72f92fdf6756f90fefd31bbe9e2740eb2f6423f908425a1cbdf5977d13f"
+    }
+  ],
+  "bytes": 104953
+}
