@@ -68,6 +68,65 @@ export async function readSessionText(client, sessionID, directory) {
 const canonicalJson = value => Array.isArray(value) ? `[${value.map(canonicalJson).join(',')}]` :
   isObject(value) ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}` : JSON.stringify(value);
 
+function readActionRows(logPath, startBytes) {
+  return readFileSync(logPath).subarray(startBytes).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+}
+
+function validateActionRows(rows, allowedNames) {
+  const allowed = new Set(allowedNames);
+  for (const [index, row] of rows.entries())
+    if (!isObject(row) || typeof row.name !== 'string' || !allowed.has(row.name) || !isObject(row.arguments))
+      throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
+  return rows;
+}
+
+async function withBoundedTimeout(promise, timeoutMs, label) {
+  let timer;
+  try {
+    return await Promise.race([Promise.resolve(promise), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs} ms`)), timeoutMs);
+      timer.unref?.();
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+/** Abort and confirm one observed session through the official SDK's v1 path/query shape. */
+export async function abortOpenCodeSession(client, sessionID, directory, { timeoutMs = 2000, pollMs = 50 } = {}) {
+  if (typeof sessionID !== 'string' || !sessionID) return { ok: false, status: 'missing_session_id' };
+  if (typeof client?.session?.abort !== 'function') return { ok: false, status: 'abort_unavailable' };
+  const deadline = Date.now() + timeoutMs;
+  if (typeof client.session.status === 'function') {
+    const before = await withBoundedTimeout(client.session.status({ query: { directory } }),
+      Math.max(1, Math.min(500, deadline - Date.now())), 'OpenCode session status');
+    if (before?.error) return { ok: false, status: 'status_error', error: safeError(before.error) };
+    if (!['busy', 'retry'].includes(before?.data?.[sessionID]?.type)) return { ok: true, status: 'not_busy' };
+  }
+  const abortResponse = await withBoundedTimeout(client.session.abort({ path: { id: sessionID }, query: { directory } }),
+    Math.max(1, deadline - Date.now()), 'OpenCode session abort');
+  if (abortResponse?.error) return { ok: false, status: 'abort_error', error: safeError(abortResponse.error) };
+  if (abortResponse?.data !== true) return { ok: false, status: 'abort_not_confirmed', data: abortResponse?.data ?? null };
+  if (typeof client.session.status !== 'function') return { ok: true, status: 'abort_confirmed_status_unavailable' };
+  while (Date.now() < deadline) {
+    const statusResponse = await withBoundedTimeout(client.session.status({ query: { directory } }),
+      Math.max(1, Math.min(500, deadline - Date.now())), 'OpenCode session status');
+    if (statusResponse?.error) return { ok: false, status: 'status_error', error: safeError(statusResponse.error) };
+    if (!['busy', 'retry'].includes(statusResponse?.data?.[sessionID]?.type)) return { ok: true, status: 'idle', abort_confirmed: true };
+    await new Promise(resolve => setTimeout(resolve, Math.min(pollMs, Math.max(1, deadline - Date.now()))));
+  }
+  return { ok: false, status: 'still_busy', abort_confirmed: true };
+}
+
+async function readActionRowsAfterWrite(logPath, startBytes, expectedCount, timeoutMs = 300) {
+  const deadline = Date.now() + timeoutMs;
+  let rows = [];
+  do {
+    try { rows = readActionRows(logPath, startBytes); } catch { rows = []; }
+    if (rows.length >= expectedCount) return rows;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  } while (Date.now() < deadline);
+  return rows;
+}
+
 export function parseOpenCodeEnvelope(text, names, recordedActions) {
   let value;
   try { value = JSON.parse(text); }
@@ -238,9 +297,11 @@ function createEventWatcher({ baseUrl, directory, client, onViolation }) {
             permissionRejections.push(record);
           } else if (event.type === 'session.status' && event.properties?.status?.type === 'retry') {
             const sessionID = event.properties.sessionID;
-            retryEvents.push({ sessionID, attempt: event.properties.status.attempt ?? null,
-              message: String(event.properties.status.message ?? '').slice(0, 300) });
-            try { await client.session.abort({ sessionID, directory }); } catch {}
+            const retry = { sessionID, attempt: event.properties.status.attempt ?? null,
+              message: String(event.properties.status.message ?? '').slice(0, 300) };
+            retryEvents.push(retry);
+            try { retry.abort_result = await abortOpenCodeSession(client, sessionID, directory, { timeoutMs: 1000 }); }
+            catch (error) { retry.abort_result = { ok: false, status: 'abort_error', error: safeError(error) }; }
             onViolation({ kind: 'provider_retry', sessionID });
           } else if (event.type === 'session.error') {
             sessionErrors.push({ sessionID: event.properties?.sessionID ?? null,
@@ -314,14 +375,15 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
     if (cliTurnCount >= maxCliTurns) { jsonResponse(res, 429, { error: { message: 'CLI turn budget exhausted', code: 'cli_turn_budget' } }); return; }
     if (active) { jsonResponse(res, 429, { error: { message: 'only one active CLI request is allowed', code: 'overloaded' } }); return; }
     active = true;
-    let timedOut = false;
-    const cancelRequest = () => { void boundedKill(activeChild); };
+    let timedOut = false, clientCancelled = false, childStopPromise;
+    const stopChild = () => !activeChild ? Promise.resolve() : (childStopPromise ??= boundedKill(activeChild));
+    const cancelRequest = () => { clientCancelled = true; void stopChild(); };
     req.once('aborted', cancelRequest);
     res.once('close', () => { if (!res.writableEnded) cancelRequest(); });
     let watcher;
     let diagnostics = { request_id: randomUUID(), started_at: new Date().toISOString(), action_log_start_bytes: null };
     let stdout = '', stderr = '', exit = null, violation, invocationWritten = false;
-    const timer = setTimeout(() => { timedOut = true; void boundedKill(activeChild); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; void stopChild(); }, timeoutMs);
     timer.unref?.();
     try {
       const body = validateRequest(await readJson(req), modelName);
@@ -341,8 +403,60 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.user_text_sha256 = sha256(userText);
       diagnostics.user_text_bytes = Buffer.byteLength(userText);
       diagnostics.allowed_tool_names = allowedNames;
+      const observedSessionIDs = new Set();
+      const actionCallIDsBySession = new Map();
+      const bridgeCallIDs = new Set();
+      let nonBridgeToolUseCount = 0, streamBuffer = '', streamQueue = Promise.resolve(), terminalActionBoundary = null;
+      const actionToolNames = new Set(['natlang_action_bridge_submit_action', 'submit_action']);
+      const handleStreamEvent = async event => {
+        const part = event?.part ?? {};
+        const sessionID = event?.sessionID ?? part.sessionID;
+        if (typeof sessionID === 'string' && sessionID) observedSessionIDs.add(sessionID);
+        if ((event?.type === 'step_start' || part.type === 'step-start') && terminalActionBoundary?.session_id === sessionID)
+          terminalActionBoundary.continued_after_submit = true;
+        const isToolEvent = String(event?.type ?? '').toLowerCase().includes('tool') || part.type === 'tool';
+        if (isToolEvent) {
+          const name = part.tool ?? part.name ?? event?.tool ?? event?.name;
+          const callID = part.callID ?? part.callId ?? event?.callID ?? event?.callId;
+          const completed = part.state?.status === 'completed' || event?.state?.status === 'completed';
+          if (typeof name === 'string' && !actionToolNames.has(name)) nonBridgeToolUseCount++;
+          if (completed && actionToolNames.has(name) && typeof callID === 'string' && typeof sessionID === 'string') {
+            bridgeCallIDs.add(callID);
+            const ids = actionCallIDsBySession.get(sessionID) ?? new Set();
+            ids.add(callID); actionCallIDsBySession.set(sessionID, ids);
+          }
+        }
+        const stepFinished = event?.type === 'step_finish' || part.type === 'step-finish';
+        const reason = part.reason ?? event?.reason;
+        if (!stepFinished || reason !== 'tool-calls' || terminalActionBoundary || nonBridgeToolUseCount > 0 ||
+            watcher?.sessionErrors?.length || typeof sessionID !== 'string') return;
+        const sessionCalls = actionCallIDsBySession.get(sessionID);
+        if (!sessionCalls?.size) return;
+        const rows = await readActionRowsAfterWrite(logPath, startBytes, bridgeCallIDs.size);
+        if (rows.length !== bridgeCallIDs.size || rows.length === 0) return;
+        try { validateActionRows(rows, allowedNames); }
+        catch (error) { diagnostics.terminal_action_boundary_error = safeError(error); return; }
+        terminalActionBoundary = { session_id: sessionID, step_finish_reason: reason,
+          bridge_call_ids: [...bridgeCallIDs], action_record_count: rows.length, status: 'abort_pending' };
+        try {
+          const result = await abortOpenCodeSession(client, sessionID, directory, { timeoutMs: 2000 });
+          terminalActionBoundary.abort_result = result;
+          terminalActionBoundary.status = result.ok ? (result.status === 'not_busy' ? 'already_idle' : 'aborted') : 'abort_not_confirmed';
+        } catch (error) {
+          terminalActionBoundary.abort_result = { ok: false, status: 'abort_error', error: safeError(error) };
+          terminalActionBoundary.status = 'abort_error';
+        }
+      };
+      const queueStreamChunk = chunk => {
+        streamBuffer += chunk.toString();
+        const lines = streamBuffer.split(/\r?\n/); streamBuffer = lines.pop() ?? '';
+        for (const line of lines) if (line.trim()) streamQueue = streamQueue.then(() => {
+          try { return handleStreamEvent(JSON.parse(line)); }
+          catch (error) { diagnostics.stream_event_error = safeError(error); }
+        });
+      };
       watcher = createEventWatcher({ baseUrl, directory, client,
-        onViolation: value => { violation ??= value; diagnostics.violation = value; void boundedKill(activeChild); } });
+        onViolation: value => { violation ??= value; diagnostics.violation = value; void stopChild(); } });
       const args = ['run', '--format', 'json', '--model', modelName, '--dir', directory,
         '--pure', '--attach', baseUrl, userText];
       diagnostics.stdout_path = 'cli-stdout.raw'; diagnostics.stderr_path = 'cli-stderr.raw';
@@ -353,28 +467,59 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       activeChild = child;
       const stdoutPath = `${outputDirectory}/cli-stdout.raw`;
       const stderrPath = `${outputDirectory}/cli-stderr.raw`;
-      child.stdout.on('data', chunk => { stdout += chunk.toString(); appendFileSync(stdoutPath, chunk); });
+      child.stdout.on('data', chunk => { stdout += chunk.toString(); appendFileSync(stdoutPath, chunk); queueStreamChunk(chunk); });
       child.stderr.on('data', chunk => { stderr += chunk.toString(); appendFileSync(stderrPath, chunk); });
+      if (clientCancelled || timedOut || violation) void stopChild();
       exit = await new Promise((resolve, reject) => {
         child.once('error', reject);
         child.once('close', (code, signal) => resolve({ code, signal }));
       });
+      await streamQueue.catch(() => {});
+      if (childStopPromise) await childStopPromise;
       diagnostics.stdout_end_bytes = fileSize(stdoutPath); diagnostics.stderr_end_bytes = fileSize(stderrPath);
       const events = parseJsonLines(stdout);
       const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_event_count = events.length;
-      diagnostics.cli_session_ids = [...new Set(events.map(event => event?.sessionID).filter(id => typeof id === 'string'))];
+      diagnostics.cli_session_ids = [...new Set([...observedSessionIDs,
+        ...events.map(event => event?.sessionID ?? event?.part?.sessionID).filter(id => typeof id === 'string')])];
       diagnostics.provider_step_telemetry = audit.steps;
       diagnostics.cli_tool_use_audit = audit.toolUses;
       diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge).length;
+      diagnostics.terminal_action_boundary = terminalActionBoundary;
+      const cleanupReason = timedOut ? 'timeout' : clientCancelled ? 'client_cancelled' : violation?.kind;
+      if (cleanupReason && diagnostics.cli_session_ids.length) {
+        diagnostics.server_session_cleanup = [];
+        for (const sessionID of diagnostics.cli_session_ids) {
+          try { diagnostics.server_session_cleanup.push({ session_id: sessionID,
+            ...(await abortOpenCodeSession(client, sessionID, directory, { timeoutMs: 1500 })) }); }
+          catch (error) { diagnostics.server_session_cleanup.push({ session_id: sessionID,
+            ok: false, status: 'abort_error', error: safeError(error) }); }
+        }
+        diagnostics.server_session_cleanup_reason = cleanupReason;
+      }
+      const cliEventErrors = events.filter(event => event?.type === 'error').map(event => ({
+        name: event.error?.name ?? 'Error', message: safeError(event.error?.message ?? event.error ?? 'OpenCode CLI error') }));
+      diagnostics.cli_event_errors = cliEventErrors;
       if (timedOut) throw Object.assign(new Error(`OpenCode CLI request exceeded ${timeoutMs} ms`), { code: 'REQUEST_TIMEOUT' });
+      if (clientCancelled) throw Object.assign(new Error('OpenCode CLI request was cancelled by the client'), { code: 'CLIENT_CANCELLED' });
       if (violation) throw Object.assign(new Error(`OpenCode CLI stopped after ${violation.kind}`), { code: violation.kind });
       if (exit.code !== 0) throw Object.assign(new Error(`OpenCode CLI exited ${exit.code ?? exit.signal}`), { code: 'CLI_EXIT' });
       diagnostics.cli_exit_code = exit.code; diagnostics.cli_signal = exit.signal;
       const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
+      if (cliEventErrors.length) throw Object.assign(new Error('OpenCode CLI emitted provider error event(s)'), {
+        code: 'CLI_EVENT_ERROR', cliEventErrors });
+      if (terminalActionBoundary?.continued_after_submit) throw Object.assign(new Error(
+        'OpenCode session started another model step after a completed audited action'), { code: 'TERMINAL_BOUNDARY_LATE' });
+      await watcher.close();
+      const sessionErrors = watcher.sessionErrors.filter(error =>
+        !(terminalActionBoundary?.status === 'aborted' &&
+          error.sessionID === terminalActionBoundary.session_id && /^aborted$/i.test(String(error.message ?? ''))));
+      diagnostics.session_errors = watcher.sessionErrors;
+      if (sessionErrors.length) throw Object.assign(new Error('OpenCode CLI emitted session error event(s)'), {
+        code: 'SESSION_ERROR', sessionErrors });
       const rawLog = readFileSync(logPath);
       const actionRows = rawLog.subarray(startBytes).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
       const recordedActions = actionRows.map(row => ({ name: row.name, arguments: row.arguments }));
@@ -431,13 +576,14 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.stdout_bytes = Buffer.byteLength(stdout); diagnostics.stderr_bytes = Buffer.byteLength(stderr);
       diagnostics.permission_rejections = watcher?.permissionRejections ?? [];
       if (error?.toolUses) diagnostics.cli_tool_use_audit = error.toolUses;
+      diagnostics.session_errors = watcher?.sessionErrors ?? [];
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_turn_limit = maxCliTurns;
       diagnostics.provider_retries = watcher?.retryEvents ?? [];
       diagnostics.event_stream_errors = watcher?.sessionErrors ?? [];
       diagnostics.finished_at = new Date().toISOString();
       try { if (!invocationWritten) appendFileSync(`${outputDirectory}/cli-invocations.jsonl`, JSON.stringify(diagnostics) + '\n', { mode: 0o600 }); } catch {}
-      const status = Number.isInteger(error?.status) ? error.status : error?.code === 'REQUEST_TIMEOUT' ? 504 :
+      const status = Number.isInteger(error?.status) ? error.status : timedOut || error?.code === 'REQUEST_TIMEOUT' ? 504 :
         error?.code === 'provider_retry' ? 503 : 502;
       jsonResponse(res, status, { error: { message: String(error?.message ?? error).slice(0, 500), code: error?.code ?? 'cli_bridge_error' } });
     } finally {
