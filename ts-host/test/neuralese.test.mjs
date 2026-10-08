@@ -628,6 +628,11 @@ test('string conversions read typed Neuralese values with native method ordering
     assert.fail('crisp separators do not need typed readout');
   });
   assert.equal(crispSeparator.value, 'a|b');
+  const chunkBoundaryValues = new Array(65537).fill('x');
+  assert.equal((await joinNeuralese(chunkBoundaryValues, Array.prototype.join, ['|'], async () => 'unused')).value,
+    chunkBoundaryValues.join('|'), 'chunked assembly preserves separators across the scratch boundary');
+  assert.equal((await joinNeuralese(new Array(65536).fill(null), Array.prototype.join, [''], async () => 'unused')).value,
+    '', 'empty chunks with an empty separator contribute no output');
   const failedSeparatorOrder = [];
   const failedSeparatorItems = new Proxy(['first', 'second'], {
     get(target, property, receiver) {
@@ -640,6 +645,48 @@ test('string conversions read typed Neuralese values with native method ordering
     failedSeparatorOrder.push('separator-read'); throw new Error('separator unavailable');
   }), /separator unavailable/);
   assert.deepEqual(failedSeparatorOrder, ['length', 'separator-read'], 'a failed separator read precedes all indexed gets');
+
+  for (const [reportedLength, expected, expectedIndices] of [
+    [2.9, 'one|two', ['0', '1']], ['2', 'one|two', ['0', '1']],
+    [undefined, '', []], [-3, '', []],
+  ]) {
+    const lengthEvents = [];
+    const lengthProxy = new Proxy([
+      neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll'),
+      neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm'),
+    ], {
+      get(target, property, receiver) {
+        if (property === 'length') { lengthEvents.push('length'); return reportedLength; }
+        if (property === '0' || property === '1') lengthEvents.push(`item:${property}`);
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const joinedLength = await joinNeuralese(lengthProxy, Array.prototype.join, [softSeparator], async () => {
+      lengthEvents.push('read');
+      const id = lengthEvents.at(-2);
+      return id === 'length' ? '|' : id === 'item:0' ? 'one' : 'two';
+    });
+    assert.equal(joinedLength.value, expected);
+    const expectedEvents = ['length', 'read'];
+    for (const index of expectedIndices) expectedEvents.push(`item:${index}`, 'read');
+    assert.deepEqual(lengthEvents, expectedEvents);
+  }
+
+  for (const invalidLength of [1n, Symbol('length'), Object(1n), { valueOf() { return 1n; } }]) {
+    const invalidLengthEvents = [];
+    const invalidLengthProxy = new Proxy(['one'], {
+      get(target, property, receiver) {
+        if (property === 'length') { invalidLengthEvents.push('length'); return invalidLength; }
+        if (property === '0') invalidLengthEvents.push('item:0');
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    await assert.rejects(() => joinNeuralese(invalidLengthProxy, Array.prototype.join, [softSeparator], async () => {
+      invalidLengthEvents.push('separator-read'); return '|';
+    }), TypeError);
+    assert.deepEqual(invalidLengthEvents, ['length'], 'ToLength errors happen before separator or indexed gets');
+  }
+
   const coercionOrder = [];
   const customJoined = (await joinNeuralese([{ toString() { coercionOrder.push('object-before'); return 'before'; } },
     neuraleseRef('Neuralese<number>', 'nz1_eeeeeeeeeeeeeeeeeeee'),

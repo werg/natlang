@@ -56,24 +56,46 @@ const ARRAY_JOIN = Array.prototype.join;
 const ARRAY_TO_STRING = Array.prototype.toString;
 const OBJECT_TO_STRING = Object.prototype.toString;
 
+/** ECMAScript ToLength for the array-like length read by Array#join. */
+function toLength(value: unknown): number {
+  // Unary plus uses abstract ToNumber, including ToPrimitive order and BigInt/Symbol errors.
+  const number = +(value as number);
+  if (Number.isNaN(number) || number <= 0) return 0;
+  if (number === Infinity) return Number.MAX_SAFE_INTEGER;
+  return Math.min(Math.trunc(number), Number.MAX_SAFE_INTEGER);
+}
+
 /** Preserve custom join dispatch; only the native Array join gets typed async element reads. */
 export async function joinNeuralese(receiver: unknown, method: unknown, args: readonly unknown[],
   read: (value: unknown) => Promise<unknown>): Promise<{ value: unknown }> {
   if (method !== ARRAY_JOIN)
     return { value: Reflect.apply(method as (...values: unknown[]) => unknown, receiver, args) };
   const values = receiver as ArrayLike<unknown>;
-  const length = values.length;
+  const length = toLength(values.length);
   const separator = args[0];
   const resolvedSeparator = isNeuraleseRef(separator) ? await read(separator) : separator;
   const delimiter = separator === undefined ? ',' : toStringValue(resolvedSeparator);
-  const parts = new Array<string>(length);
+  const parts: string[] = [];
+  const chunks: string[] = [];
+  const flush = () => {
+    const chunk = parts.join(delimiter);
+    // With an empty separator an all-empty chunk contributes no output; discarding it
+    // avoids imposing Array's 2^32-1 element ceiling on a Proxy-reported ToLength.
+    if (chunk !== '' || delimiter !== '') chunks.push(chunk);
+    parts.length = 0;
+  };
   for (let index = 0; index < length; index++) {
     const value = values[index];
-    if (value === null || value === undefined) { parts[index] = ''; continue; }
-    const resolved = isNeuraleseRef(value) ? await read(value) : value;
-    parts[index] = resolved === null || resolved === undefined ? '' : toStringValue(resolved);
+    if (value === null || value === undefined) parts.push('');
+    else {
+      const resolved = isNeuraleseRef(value) ? await read(value) : value;
+      parts.push(resolved === null || resolved === undefined ? '' : toStringValue(resolved));
+    }
+    if (parts.length === 65536) flush();
   }
-  return { value: parts.join(delimiter) };
+  if (chunks.length === 0) return { value: parts.join(delimiter) };
+  if (parts.length === 0) return { value: chunks.join(delimiter) };
+  return { value: `${chunks.join(delimiter)}${delimiter}${parts.join(delimiter)}` };
 }
 
 /** Preserve Array#toString's dynamic join dispatch while reading direct soft elements only for intrinsic join. */

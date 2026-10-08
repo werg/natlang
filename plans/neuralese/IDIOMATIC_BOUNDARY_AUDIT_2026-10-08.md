@@ -576,17 +576,42 @@ and compiled-module tests cover mixed soft/crisp separators, effects order,
 custom method behavior, and read failure before indexed gets in commit
 `8758493b`.
 
-Do not lower `Array#toString`, `String(array)`, or template interpolation by
-blindly rewriting them to `joinNeuralese`. Native `Array#toString` fetches and
-calls the receiver's current `join`; `String(array)` and template coercion
-first honor `Symbol.toPrimitive` and custom `toString`. A prospective narrow
-design for explicit `.toString()` would capture the receiver and resolved
-method, use async direct-element joining only when the runtime methods are the
-standard Array `toString` and `join`, and otherwise invoke the captured method
-with native arguments. `String(array)` and template support would need to
-reproduce their full ToPrimitive method lookup order or stay out of scope.
-Neither path should recursively read nested arrays or object graphs. The
-existing `.join()` idiom is the currently supported route.
+Explicit `.toString()` now has a narrow typed readout in `d2dbe1a8`; this does
+not rewrite the call blindly to `joinNeuralese`. The compiler selects it only
+for statically typed array/tuple receivers whose direct element type has a
+Neuralese arm. Runtime lowering captures the receiver, resolved `toString`
+method, and arguments once in source order. If the resolved method is custom,
+it calls that method with the original receiver and arguments and boxes the
+result so a thenable is not accidentally awaited. For the native
+`Array.prototype.toString`, it fetches the current `join` once: a custom join is
+called unchanged, a non-callable join uses native `Object.prototype.toString`
+fallback, and only intrinsic `Array.prototype.join` takes the existing typed
+element-read path. The tests exercise sparse arrays, inherited indexes,
+soft/crisp direct elements, custom methods/getters, thenables, thrown errors,
+and opaque nested arrays. This preserves method lookup and native fallback
+semantics without recursive reads.
+
+The shared intrinsic-join path now also applies ECMAScript `ToLength` to its
+single `length` read before resolving the separator. Unary plus preserves
+abstract `ToNumber` conversion and its Symbol/BigInt errors; the result is
+truncated and clamped to `[0, Number.MAX_SAFE_INTEGER]`. Bounded scratch chunks
+avoid imposing JavaScript Array's `2^32-1` storage ceiling as an extra limit.
+Tests use soft array elements behind Proxy lengths `2.9`, `'2'`, `undefined`,
+and a negative value, and confirm direct/boxed BigInt and Symbol fail before
+separator or index reads. They also cross the scratch-chunk boundary. No
+arbitrary iteration cap was added; an extreme host-reported length can still
+consume the same kind of time/output resources as native `join`.
+
+`String(array)` and template interpolation remain deferred. Both first perform
+string-hint `ToPrimitive`: lookup and call `Symbol.toPrimitive` when present,
+otherwise try `toString` and then `valueOf`, preserving getter/call side effects,
+the primitive-result requirement, and thrown errors. A safe narrow lowering
+would need to emulate that whole protocol and only read direct array elements
+if the selected path reaches the native Array `toString` → intrinsic `join`
+sequence. The explicit `.toString()` coverage does not justify silently
+changing those broader coercion paths. Neither path should recursively read
+nested arrays or object graphs. Explicit `.join()` remains the direct choice
+when callers want to control the separator.
 
 The new String-method allowlist deliberately covers methods whose supported
 argument slots are text-only (`includes`, `startsWith`, `endsWith`, `indexOf`,
@@ -631,3 +656,39 @@ handle. This is a bounded ergonomics cost for the current small evidence
 folders; the child receives only the single file handle and the nested runtime
 still constrains its scope to that file. No dedicated single-file snapshot
 API was added.
+
+## Final reviewed boundary disposition — 2026-10-08
+
+The additional V20–V22 finish, result, tool-call, async, and capture traces did
+not establish another transparent normalization. Three concrete Luna failures
+remain honest contract errors. In
+`runs/neuralese-semantic-iterate-reducers-v22-20261008-v5/generation-review-v1/luna/luna-campaign-v1/slot-01/jobs/000000-9d5661c7178ae3fc.trace.jsonl`,
+seq 37 returns a `Draft` where the invocation requires `Neuralese<string>`;
+treating it as text would discard the declared record shape. In
+`runs/neuralese-semantic-iterate-reducers-v22-20261008-v5/generation-review-v1/luna/luna-campaign-v1/slot-04/jobs/000003-6b2c1b6239688ff2.trace.jsonl`,
+seq 9 logs a local `answer` but finishes without a result expression or
+explicit return; selecting the last logged/local value would invent a result
+rule. In
+`runs/neuralese-semantic-iterate-reducers-v22-20261008-v5/generation-review-v1/luna/luna-campaign-v1/slot-05/jobs/000012-346598160e2be594.trace.jsonl`,
+seq 9 calls `await decide(input)` although `decide` is a record, not a
+function. Choosing a reducer from that record would invent dispatch semantics.
+These paths should retain clear type/finish diagnostics.
+
+No recent trace reviewed here showed a legitimate error caused by omitted
+optional arguments, implicit Promise awaiting, or an async collection callback;
+no evidence supports making arbitrary callbacks async or automatically
+awaiting tool returns. The source-backed helper persistence, explicit capture
+shape, parameter-shadowing rule, typed return contract, and per-handle file
+authority cover the actual cross-eval, capture, and effect boundaries. The
+array `toString` case above is a reproduced prospective runtime mismatch, not
+a claim about a past model failure. No recent actual generation failure was
+found for `String(array)`, array template interpolation, or the excluded
+RegExp/callback-capable `replace`, `split`, `match`, and `search` methods. Those
+remain deferred protocol work: revisit them when a preserved trace shows a
+specific typed value at a native conversion position, then require exact
+declaration/overload recognition and ordering tests for crisp RegExp/callback
+arms, `Symbol.match`, custom methods, getters, and errors. No missing function,
+missing return, or absent capture in the examined traces is treated as an
+implicit-value conversion opportunity. The only capture-name collision
+evidence is recorded in §12's Luna V20/V34/V35 traces; the corrected
+parameter-shadowing behavior is not a reason to infer unspecified captures.
