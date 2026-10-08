@@ -6,7 +6,7 @@ import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-gu
 import { worlds as v20Worlds } from './semantic-iterate-reducers-v20-counterfactual-data.mjs';
 import { worlds as v18Worlds } from './semantic-iterate-reducers-v18-novel-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v20/4-note-only-child-context';
+export const REVISION = 'authored-semantic-iterate-reducers-v20/5-saved-note-context-captures';
 const canonical = value => JSON.stringify(value);
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))

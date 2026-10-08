@@ -32,3 +32,16 @@ test('guided note children receive decision semantics, not parent file-write ins
   assert.match(code, /await folder\.file\(task\.output_path\)\.writeText\(JSON\.stringify\(finalDraft\)\)/);
   assert.match(code, /const saved = await folder\.file\(task\.output_path\)\.readJson\(\)/);
 });
+
+test('saved .with children rebind the same narrow note context', () => {
+  const world = worlds.find(candidate => candidate.slug.includes('lab-authorized-permit-tie'));
+  assert.ok(world);
+  const row = makeGuidedSoftIterateCase(world, 0, { revision: 'saved-note-context-check', savedWith: true });
+  const code = row.curriculum.reference.root[0][1].code;
+  assert.match(code, /const stepTemplate = nl\.with<[\s\S]*?\{ current, decisionContext \}\)`/);
+  assert.match(code, /const step = stepTemplate\.with\(\{ current, decisionContext \}\)/);
+  const stepStart = code.indexOf('const revise = async');
+  const finalStart = code.indexOf('const completed =');
+  const stepCode = code.slice(stepStart, finalStart);
+  assert.doesNotMatch(stepCode, /task\.instruction|output_contract|outputPath|writable_paths|evidence_files/);
+});

@@ -5,7 +5,7 @@ import { worlds as authoredWorlds } from './semantic-iterate-worlds-v15-data.mjs
 import { makeSoftIterateCase } from './semantic-iterate-worlds-v15-soft-builder.mjs';
 import { validateIterateWorlds } from './authored-iterate-source-builder.mjs';
 
-export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/15-note-only-child-context';
+export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/16-saved-note-context-captures';
 const canonical = value => JSON.stringify(value);
 const marker = text => `<|neuralese|>${text}<|/neuralese|>`;
 
@@ -134,8 +134,8 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     : `const current = task.passes[progress.pass];
   const evidence = await folder.file(current.evidence_path);`;
   const stepDeclaration = savedWith
-    ? `const stepTemplate = nl<${stepType}>\`${stepPrompt}\`;
-  const step = stepTemplate.with({ current });`
+    ? `const stepTemplate = nl.with<${stepType}>({ current, decisionContext })\`${stepPrompt}\`;
+  const step = stepTemplate.with({ current, decisionContext });`
     : `const step: Neuralese<${stepType}> = nl.with<Neuralese<string>>(${stepCaptures})\`${stepPrompt}\`;`;
   const code = guidedRootTemplate
     .replace('__STEP_SETUP__', stepSetup)
