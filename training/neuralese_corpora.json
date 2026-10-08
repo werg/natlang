@@ -7891,6 +7891,33 @@
         "s1-question-collection-v8-action-source-audit-20261008-v1"
       ],
       "notes": "47-action derivative excludes questionable source items qa_quality_mcq:32 and :34. Shared native materializer and gold-text renderer outputs match the included V5 rows exactly; no source-ID/action duplicates against admitted V9 and V24 append. Five V5 conversion omissions remain held/outside scope. No training, DPO, trace, soft-writer, recurrence, or independent-world admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v18-answer-key-v2-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-source-generation; teacher-and-training-held",
+      "derived_from": [
+        "s1-full-final-20261003",
+        "verified-reasoning-pools-20261008-v17"
+      ],
+      "notes": "32 derived task variants over 128 existing S1 Reasoning Gym train records in eight solver families. Original source groups/splits retained, zero new independent-world credit. Independent S1 verifier and frozen CPU runtime reference proof included. Includes failed pre-fix bd433 proof as historical runtime evidence. No teacher observations or training admission."
+    },
+    {
+      "id": "verified-reasoning-runtime-v17-carry8-bbaa0847-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-v17-carry8-case20-bbaa0847-source/frozen-runtime",
+      "include": [
+        "**/*"
+      ],
+      "admission": "immutable-frozen-runtime-dependency; no-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1"
+      ],
+      "notes": "Frozen bbaa0847 shared runtime snapshot used by V18 answer-key v2 CPU reference proof and prior V17 carry recovery. Exact runtime receipt and compiled dist included; preserved as a dependency only, not a qualification certificate or training admission."
     }
   ],
   "coverage_backlog": [
