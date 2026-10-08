@@ -28,9 +28,16 @@ teacher trajectories ─► normalize to pi transcripts ─► reconstruct envir
 ### 1.1 Sources
 
 - Public coding-agent trajectories with executable environments: SWE-bench-family tasks, which come with a
-  repository, a commit, an environment and tests. Candidate releases include SWE-Gym, SWE-smith and Nebius'
-  SWE-agent trajectory sets. Availability and licence are checked at registration and recorded per record
-  (programme decision: restrictive licences are acceptable, and the licence is always recorded).
+  repository, a commit, an environment and tests. Availability and licence are checked at registration and recorded
+  per record (programme decision: restrictive licences are acceptable, and the licence is always recorded).
+  Candidates found on 2026-10-09, with the dataset cards' own descriptions:
+  - `nebius/SWE-rebench-openhands-trajectories`: 67,074 OpenHands (v0.54) trajectories by Qwen3-Coder-480B-A35B on
+    SWE-rebench issues from 1,823 Python repositories, about 64 turns each, OpenAI-format tool calls, CC-BY-4.0.
+    SWE-rebench publishes an environment image per task, so steps can be replayed (§1.3). This is the first source.
+  - `nvidia/SWE-Zero-openhands-trajectories` (318k) and `nvidia/SWE-Hero-openhands-trajectories` (34k): OpenHands
+    trajectories by Qwen3-Coder-480B on SWE-Gym, R2E-Gym and SWE-rebench issues from permissively licensed
+    repositories; `nvidia/Nemotron-SWE-v1`.
+  - SWE-Gym's and SWE-smith's own released trajectories.
 - Our own teachers through the pi port: the local Qwen3.6 on the DGX and the paid teachers (Luna, Bunny), running in pi
   on eval tasks and SWE environments. These trajectories are already in pi's transcript form, and every step is
   recorded in the call store.
