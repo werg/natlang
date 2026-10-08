@@ -5,6 +5,7 @@ import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -162,6 +163,50 @@ async function main(): Promise<void> {
   const source = await readFile(ir);
   const outputHash = createHash('sha256');
   for await (const chunk of createReadStream(output)) outputHash.update(chunk);
+  const requestTotals = { rows_with_telemetry: 0, rows_without_telemetry: 0, collector_attempts: 0,
+    collector_retry_attempts: 0, collector_sender_starts: 0,
+    planner_starts: 0, planner_retry_starts: 0, action_starts: 0, judge_starts: 0,
+    chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+    planner_chat_transport_starts: 0, action_chat_transport_starts: 0, judge_chat_transport_starts: 0,
+    planner_provider_sdk_turn_starts: 0, action_provider_sdk_turn_starts: 0, judge_provider_sdk_turn_starts: 0,
+    planned_action_turns: 0, planner_fallback_turns: 0,
+    sender_completed: 0, sender_failed: 0, authored_synthetic_root_actions: 0 };
+  const requestStream = createInterface({ input: createReadStream(output), crlfDelay: Infinity });
+  for await (const line of requestStream) {
+    if (!line.trim()) continue;
+    const row = JSON.parse(line) as { request_telemetry?: { attempt_ids?: string[]; starts?: Array<{ attempt_id?: string; purpose?: string; role?: string;
+      planner_attempt?: number | null; plan_status?: string | null; status?: string; http_transport_starts?: number;
+      http_transport_retry_starts?: number; provider_sdk_turn_starts?: number }>;
+      authored_synthetic_root_actions?: number } };
+    const telemetry = row.request_telemetry;
+    if (!telemetry) { requestTotals.rows_without_telemetry++; continue; }
+    requestTotals.rows_with_telemetry++;
+    requestTotals.authored_synthetic_root_actions += telemetry.authored_synthetic_root_actions ?? 0;
+    const attempts = new Set([...(telemetry.attempt_ids ?? []), ...(telemetry.starts ?? [])
+      .map(start => start.attempt_id).filter(Boolean)]);
+    requestTotals.collector_attempts += attempts.size;
+    requestTotals.collector_retry_attempts += Math.max(0, attempts.size - 1);
+    for (const start of telemetry.starts ?? []) {
+      requestTotals.collector_sender_starts++;
+      requestTotals.chat_transport_starts += start.http_transport_starts ?? 0;
+      requestTotals.chat_transport_retry_starts += start.http_transport_retry_starts ?? 0;
+      requestTotals.provider_sdk_turn_starts += start.provider_sdk_turn_starts ?? 0;
+      const purpose = start.purpose === 'planner' ? 'planner' : start.purpose === 'judge' || start.role === 'judge' ? 'judge' : 'action';
+      requestTotals[`${purpose}_chat_transport_starts`] += start.http_transport_starts ?? 0;
+      requestTotals[`${purpose}_provider_sdk_turn_starts`] += start.provider_sdk_turn_starts ?? 0;
+      if (start.purpose === 'planner') {
+        requestTotals.planner_starts++;
+        if ((start.planner_attempt ?? 0) > 1) requestTotals.planner_retry_starts++;
+      } else if (start.purpose === 'judge' || start.role === 'judge') requestTotals.judge_starts++;
+      else {
+        requestTotals.action_starts++;
+        if (start.plan_status === 'planned') requestTotals.planned_action_turns++;
+        if (start.plan_status === 'fallback') requestTotals.planner_fallback_turns++;
+      }
+      if (start.status === 'completed') requestTotals.sender_completed++;
+      if (start.status === 'failed') requestTotals.sender_failed++;
+    }
+  }
   await writeAtomic(`${output}.manifest.json`, JSON.stringify({
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
@@ -169,7 +214,10 @@ async function main(): Promise<void> {
     text_neuralese_transport: config.textNeuraleseEmulation ? TEXT_NEURALESE_EMULATION_VERSION : null,
     text_neuralese_prompt_revision: config.textNeuraleseEmulation ? TEXT_NEURALESE_PROMPT_REVISION : null,
     workers: config.workers, completed: result.completed,
-    missing: result.missing, output_sha256: outputHash.digest('hex') }) + '\n');
+    missing: result.missing, output_sha256: outputHash.digest('hex'),
+    request_telemetry: { schema: 'natlang.collector_request_manifest/1',
+      scope: 'successful terminal rows; exact collector sender invocations and ChatTransport calls; provider SDK entries are turn starts, not physical network counts',
+      ...requestTotals } }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);
   if (result.missing.length) process.exitCode = 2;
 }

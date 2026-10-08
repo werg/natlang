@@ -634,10 +634,15 @@ function observedTrajectoryContract(record: ProgramRecord, runId: string, run: P
 type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?: string;
   requested_at?: string; observed_at?: string;
   last_tool_observation?: { content_preview: string; content_sha256: string; truncated: boolean } };
+type CollectorRequestStart = { attempt_id: string; case_sequence: number; request_ordinal: number;
+  role: 'teacher' | 'judge'; purpose: 'planner' | 'action' | 'judge'; logical_turn: number | null;
+  planner_attempt: number | null; plan_status: 'planned' | 'fallback' | 'not_configured' | null;
+  http_transport_starts: number; http_transport_retry_starts: number; provider_sdk_turn_starts: number;
+  status: 'started' | 'completed' | 'failed' };
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
 type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[];
-  evidence_snapshots?: PartialEvidenceSnapshot[] };
+  evidence_snapshots?: PartialEvidenceSnapshot[]; request_starts?: CollectorRequestStart[]; request_attempt_ids?: string[] };
 
 type PartialExecutionSnapshot = { schema: 'natlang.partial_execution_snapshot/1'; run_id: string;
   failure_reason: string; root_events: Record<string, unknown>[];
@@ -808,6 +813,30 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let judgeReady: Promise<unknown> | undefined;
     let judgeSent = 0;
     let sent = 0;
+    const evidenceAttemptId = randomUUID();
+    // Counts collector sender invocations after every local admission gate. This is exact at
+    // the adapter boundary, but cannot see retries hidden inside a provider SDK or server.
+    const requestTelemetry = {
+      schema: 'natlang.collector_request_telemetry/1',
+      scope: 'admitted sender(request) invocations plus ChatTransport calls; excludes provider preparation and opaque provider SDK/server network retries',
+      attempt_ids: [] as string[], starts: [] as CollectorRequestStart[], authored_synthetic_root_actions: 0,
+    };
+    type SendContext = { purpose: 'planner' | 'action' | 'judge'; logicalTurn: number | null;
+      plannerAttempt: number | null; planStatus: 'planned' | 'fallback' | 'not_configured' | null };
+    let persistRequestStart: (entry: CollectorRequestStart) => Promise<void> = async () => {};
+    let persistTransportStart: (entry: CollectorRequestStart, transportKind: 'chat_transport' | 'provider_sdk_turn',
+      retryIndex: number) => Promise<void> = async () => {};
+    const activeSendEntries = new WeakMap<ModelTurnRequest, CollectorRequestStart>();
+    const activeInvocationEntries = new Map<string, CollectorRequestStart>();
+    const entryForRequest = (request: ModelTurnRequest) => activeSendEntries.get(request) ??
+      (request.invocation_id ? activeInvocationEntries.get(request.invocation_id) : undefined);
+    const recordHttpTransportStart = async (request: ModelTurnRequest, retryIndex: number) => {
+      const entry = entryForRequest(request);
+      if (!entry) return;
+      entry.http_transport_starts++;
+      if (retryIndex > 0) entry.http_transport_retry_starts++;
+      await persistTransportStart(entry, 'chat_transport', retryIndex);
+    };
     let persistProviderExchange: (request: ModelTurnRequest, response: ModelTurn | undefined,
       role: 'teacher' | 'judge', ordinal: number, error?: unknown) => Promise<void> = async () => {};
     let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
@@ -846,17 +875,22 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         parentSignal, call: () => session.prepare() }));
       return withProviderRequestDeadline({ role: 'teacher', provider: config.provider!, phase: 'provider_turn', requestOrdinal,
         timeoutMs: config.providerRequestTimeoutMs, parentSignal,
-        call: requestSignal => session.turn(request, requestSignal,
-          progress => logProviderStreamProgress('teacher', config.provider!, requestOrdinal, progress)) });
+        call: async requestSignal => {
+          const entry = entryForRequest(request);
+          if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
+          return session.turn(request, requestSignal,
+            progress => logProviderStreamProgress('teacher', config.provider!, requestOrdinal, progress));
+        } });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
-      request: config.request });
+      request: config.request, onRequestStart: recordHttpTransportStart });
     const send = textNeuralese ? textNeuralese.wrap(rawSend as (request: ModelTurnRequest) => Promise<ModelTurn>) : rawSend;
     let evidenceHandle: Awaited<ReturnType<typeof open>> | undefined;
     try {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
       new Error('collection cancelled');
     const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false,
-      actionSignal = providerParentSignal(), role: 'teacher' | 'judge' = 'teacher') => {
+      actionSignal = providerParentSignal(), role: 'teacher' | 'judge' = 'teacher',
+      sendContext?: SendContext) => {
       throwIfCollectionFatal();
       if (actionSignal?.aborted) throw interrupted(actionSignal);
       if (slots && !ownsSlot) await slots.acquire(1);
@@ -874,22 +908,63 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           }
           sent++;
           const requestOrdinal = sent;
+          const entry: CollectorRequestStart = { attempt_id: evidenceAttemptId,
+            case_sequence: requestTelemetry.starts.length + 1, request_ordinal: requestOrdinal, role,
+            purpose: sendContext?.purpose ?? (role === 'judge' ? 'judge' as const : 'action' as const),
+            logical_turn: sendContext?.logicalTurn ?? null, planner_attempt: sendContext?.plannerAttempt ?? null,
+            plan_status: sendContext?.planStatus ?? null,
+            http_transport_starts: 0, http_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+            status: 'started' };
+          requestTelemetry.starts.push(entry);
+          await persistRequestStart(entry);
+          activeSendEntries.set(request, entry);
+          if (request.invocation_id) activeInvocationEntries.set(request.invocation_id, entry);
           let response: ModelTurn;
           try { response = await sender(request); }
           catch (error) {
+            activeSendEntries.delete(request);
+            if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
+              activeInvocationEntries.delete(request.invocation_id);
+            entry.status = 'failed';
             await persistProviderExchange(request, undefined, role, requestOrdinal, error);
             throw rememberProviderDeadline(error);
           }
+          activeSendEntries.delete(request);
+          if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
+            activeInvocationEntries.delete(request.invocation_id);
+          entry.status = 'completed';
           await persistProviderExchange(request, response, role, requestOrdinal);
           return response;
         } finally { if (kv) kv.release(need); }
       } finally { if (slots && !ownsSlot) slots.release(1); }
     };
-    const teacherSend = (request: ModelTurnRequest, actionSignal = providerParentSignal()) =>
-      admittedSend(request, (value: ModelTurnRequest) => send(value, actionSignal), true, actionSignal);
+    const teacherSend = (request: ModelTurnRequest, actionSignal = providerParentSignal(), context?: SendContext) =>
+      admittedSend(request, (value: ModelTurnRequest) => send(value, actionSignal), true, actionSignal, 'teacher', context);
+    let sampledTurnOrdinal = 0;
     const teacherTurn = (request: ModelTurnRequest, actionSignal = providerParentSignal()) => {
-      const action = config.executionPlans ? withExecutionPlans((value: ModelTurnRequest) => teacherSend(value, actionSignal),
-        { maxTokens: config.executionPlanTokens }) : (value: ModelTurnRequest) => teacherSend(value, actionSignal);
+      const logicalTurn = ++sampledTurnOrdinal;
+      let plannerAttempt = 0;
+      let context: SendContext;
+      const sendTurn = (value: ModelTurnRequest) => {
+        const planner = value.tools.length === 1 &&
+          (value.tools[0] as { function?: { name?: unknown } } | undefined)?.function?.name === 'execution_plan';
+        if (planner) {
+          context = { purpose: 'planner', logicalTurn, plannerAttempt: ++plannerAttempt, planStatus: null };
+        } else {
+          let planStatus: SendContext['planStatus'] = config.executionPlans ? 'fallback' : 'not_configured';
+          if (config.executionPlans) {
+            // withExecutionPlans submits the action only after a nonempty plan, unless planning fell back.
+            const planSucceeded = plannerAttempt > 0 && value.messages.some(message =>
+              typeof message === 'object' && message !== null && (message as { role?: unknown }).role === 'tool' &&
+              (message as { content?: unknown }).content === 'Plan recorded. Now take the planned next step.');
+            if (planSucceeded) planStatus = 'planned';
+          }
+          context = { purpose: 'action', logicalTurn, plannerAttempt: null, planStatus };
+        }
+        return teacherSend(value, actionSignal, context);
+      };
+      const action = config.executionPlans ? withExecutionPlans(sendTurn,
+        { maxTokens: config.executionPlanTokens }) : sendTurn;
       return action(request);
     };
     const transport = async (request: ModelTurnRequest, persist: (response: ModelTurn) => Promise<void>) => {
@@ -914,12 +989,17 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         parentSignal, call: () => judgeSession.prepare() }));
       return withProviderRequestDeadline({ role: 'judge', provider: judgeConfig.provider!, phase: 'provider_turn', requestOrdinal,
         timeoutMs: config.providerRequestTimeoutMs, parentSignal,
-        call: requestSignal => judgeSession.turn(request, requestSignal,
-          progress => logProviderStreamProgress('judge', judgeConfig.provider!, requestOrdinal, progress)) });
-    } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
+        call: async requestSignal => {
+          const entry = entryForRequest(request);
+          if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
+          return judgeSession.turn(request, requestSignal,
+            progress => logProviderStreamProgress('judge', judgeConfig.provider!, requestOrdinal, progress));
+        } });
+    } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId,
+      onRequestStart: recordHttpTransportStart }) : undefined;
     const judge = judgeTransport ? async (input: Parameters<ReturnType<typeof modelOracleJudge>>[0]) => {
       const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>
-        admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal, 'judge'))(input);
+      admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal, 'judge'))(input);
       return judgeConfig!.provider ? providerActionCycle({ role: 'judge', provider: judgeConfig!.provider,
         parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(providerParentSignal());
     } : undefined;
@@ -928,7 +1008,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const saved = await loadPartial(partialPath, item, expected);
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
-    const evidenceAttemptId = randomUUID();
+    partial.request_starts ??= [];
+    partial.request_attempt_ids ??= [];
+    if (!partial.request_attempt_ids.includes(evidenceAttemptId)) partial.request_attempt_ids.push(evidenceAttemptId);
+    requestTelemetry.attempt_ids = partial.request_attempt_ids;
+    requestTelemetry.starts = partial.request_starts;
     const evidencePath = join(config.jobs, `${basename(partialPath)}.evidence-${evidenceAttemptId}.jsonl`);
     let evidenceHash = createHash('sha256'), evidenceRecords = 0, evidenceBytes = 0;
     let evidenceManifest: PartialEvidenceSnapshot | undefined;
@@ -976,6 +1060,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       });
       return journalWrites;
     };
+    persistRequestStart = entry => appendEvidence([{ kind: 'collector_request_started', ...entry }]);
+    persistTransportStart = (entry, transportKind, retryIndex) => appendEvidence([{ kind: 'collector_transport_start',
+      attempt_id: entry.attempt_id, case_sequence: entry.case_sequence, request_ordinal: entry.request_ordinal,
+      role: entry.role, purpose: entry.purpose, logical_turn: entry.logical_turn,
+      transport_kind: transportKind, retry_index: retryIndex }]);
     persistProviderExchange = (request, response, role, ordinal, error) => appendEvidence([{
       kind: 'provider_exchange', role, request_ordinal: ordinal,
       request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))),
@@ -1028,6 +1117,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           await persist(response, replayed ? 'handoff_replay' : 'seeded_failure');
         } else if (authoredRoot && !authoredRootUsed && request.invocation_id === runId) {
           authoredRootUsed = true;
+          requestTelemetry.authored_synthetic_root_actions++;
           response = { calls: [['eval', { code: authoredRoot.code, finish: true }]],
             raw_response: { natlang_action_provenance: { kind: 'authored_reference_root_eval', source: 'curriculum.reference.root',
               source_program_id: item.record.id, code_sha256: authoredRoot.sha256, sampled: false } }, completion_tokens: 0 };
@@ -1049,7 +1139,17 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
     const trajectoryReview = observedTrajectoryContract(item.record, runId, run);
+    requestTelemetry.authored_synthetic_root_actions = partial.turns.filter(turn =>
+      (turn.response.raw_response?.natlang_action_provenance as Record<string, unknown> | undefined)?.kind ===
+        'authored_reference_root_eval').length;
+    const logicalTurns = new Set(requestTelemetry.starts.filter(entry => entry.logical_turn !== null)
+      .map(entry => `${entry.attempt_id}:${entry.logical_turn}`));
+    const actionStarts = requestTelemetry.starts.filter(entry => entry.purpose === 'action');
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory, {
+      request_telemetry: { ...requestTelemetry, sampled_logical_turns: logicalTurns.size,
+        planned_action_turns: actionStarts.filter(entry => entry.plan_status === 'planned').length,
+        planner_fallback_turns: actionStarts.filter(entry => entry.plan_status === 'fallback').length,
+        starts: requestTelemetry.starts.map(entry => ({ ...entry })) },
       ...(trajectoryReview ? { trajectory_review: trajectoryReview, collection_guidance: {
         root_action: { kind: 'authored_reference_eval', source: 'curriculum.reference.root',
           source_program_id: item.record.id, code_sha256: authoredRoot!.sha256, sampled: false,
