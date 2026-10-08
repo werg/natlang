@@ -7212,6 +7212,63 @@
         "neuralese-maple-native-gold-text-corpus-20261008-v6"
       ],
       "notes": "Maple twin of V9 gold text (luna-v17-v9-portable-context-proposal-20261008 text-proposal-26-v3): Maple packet v6 (V17 twin) as byte prefix + the same 26-record V9 delta (assembled-v3 delta-native-records, context-bound-delta pieces, text-source-selection-26) through build_neuralese_gold_text_delta.py --twin-of-text (V17 text-prefix-receipt v2), V9's exact renderer snapshot (commit 4a66b7eb: text_corpus d07812c5, chat e263a479), Maple tokenizer e90b9305. 4496 docs (2792 train/1704 held), 0 omitted; identical IDs/splits/source groups/source records to V9; same 29 hash-bound reader contexts and 7 capture augmentations. Inherits V9 root admission scope (runs/neuralese-v9-root-review-20261008-v1). Supersedes Maple packet v6."
+    },
+    {
+      "id": "neuralese-v24-v9-three-action-native-text-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-three-action-integration-20261008-v2",
+      "include": [
+        "README.md",
+        "integration-review.json",
+        "packet-manifest.json",
+        "native-append/*",
+        "text-append/*"
+      ],
+      "admission": "root-admitted-three-exact-native-sft-and-ordinary-gold-text-delta; no new recurrence rows or channel qualification",
+      "notes": "Root integration admission receipt cdcf22eb4ec39cac02f19cdd6b0ea6e770e9b6782cbdc5ef613233c952eb6056 approves exactly 3 train native actions and their 3 ordinary gold-text documents. Exact V9 native/text prefixes retained; recurrence records/pieces are byte-identical V9 copies, with no new recurrence rows/edges. Historical per-row preview admission flags remain unchanged; root receipt controls only these exact final artifact paths. No runtime/foundation/DPO/autonomous-stopping qualification and no active training input change. See derived V1 diagnostic corpus for converter inputs and initial two-row omission evidence.",
+      "derived_from": [
+        "luna-v17-v9-portable-context-proposal-20261008",
+        "neuralese-v24-root-action-admission-20261008-v1",
+        "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+        "neuralese-v24-v9-v1-context-render-omission-diagnostic-20261008"
+      ]
+    },
+    {
+      "id": "neuralese-v24-v9-integration-root-admission-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-integration-admission-20261008-v1",
+      "include": [
+        "admission.json"
+      ],
+      "admission": "root-integration-admission-receipt; native-sft-and-ordinary-text-facets-only",
+      "notes": "Root-authorized scope-limited receipt for exact V2 final paths. It grants no additional recurrence, runtime replay, foundation, DPO, or autonomous stopping qualification.",
+      "derived_from": [
+        "neuralese-v24-v9-three-action-native-text-20261008-v2"
+      ]
+    },
+    {
+      "id": "neuralese-v24-v9-v1-context-render-omission-diagnostic-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-three-action-integration-20261008-v1",
+      "include": [
+        "input/selected-preview-native.jsonl",
+        "input/empty-recurrence.jsonl",
+        "input/empty-pieces.jsonl",
+        "conversion/*",
+        "text-append/README.md",
+        "text-append/anchor-selection.json",
+        "text-append/omissions.jsonl",
+        "text-append/output-manifest.json",
+        "text-append/packet-manifest.json",
+        "text-append/receipt.json",
+        "text-append/source-coverage.jsonl"
+      ],
+      "admission": "historical-conversion-and-text-omission-diagnostic-only; no-training-admission",
+      "notes": "Preserves the initial unconverted gold-text render evidence: ARC-531 and BB-540 were omitted because expected converter external_context_inputs were absent, while ARC-530 rendered. Also preserves the exact selected native preview, converter/13 output and pieces used in V2. The full superseded text stream is reproducible from the admitted V9 text prefix plus that V1 output; this diagnostic manifest includes the omission receipts and coverage rather than duplicating a 216 MB prefix.",
+      "derived_from": [
+        "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+        "neuralese-v24-root-action-admission-20261008-v1"
+      ]
     }
   ],
   "coverage_backlog": [

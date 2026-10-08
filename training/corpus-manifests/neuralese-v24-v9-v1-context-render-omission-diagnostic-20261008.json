@@ -1,0 +1,81 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-v9-v1-context-render-omission-diagnostic-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-integration-20261008-v1",
+  "files": [
+    {
+      "path": "conversion/conversion-summary.json",
+      "bytes": 1263,
+      "sha256": "62c46d48db9272accc98e6108ca03b0059d0e20c04786a4d6d413f20fe58f8a8"
+    },
+    {
+      "path": "conversion/converted-native.jsonl",
+      "bytes": 371612,
+      "sha256": "1a8cdfacad97c935ffcc84151e034bdc1eb27eccdaa7a9a0250d6e5faa552da3",
+      "lines": 3
+    },
+    {
+      "path": "conversion/converted-pieces.jsonl",
+      "bytes": 39212,
+      "sha256": "9e4e3a03c891258ef013e01ef110c2388c7c3088304785a55d4db669dcb22ac0",
+      "lines": 6
+    },
+    {
+      "path": "input/empty-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "input/empty-recurrence.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "input/selected-preview-native.jsonl",
+      "bytes": 420307,
+      "sha256": "5c564372fe4aa86862f682095d8421c986aa5640d941074decfd89cad78e5c9e",
+      "lines": 3
+    },
+    {
+      "path": "text-append/README.md",
+      "bytes": 1436,
+      "sha256": "bf812fd4ff1641d155533b6134763f0eb80e1ec5347287ab7b47c340ac9557c5"
+    },
+    {
+      "path": "text-append/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "text-append/omissions.jsonl",
+      "bytes": 528,
+      "sha256": "1e3f3f169709ca999615ce85b0a88dded88416b387113f9f4fd3cc11053d1927",
+      "lines": 2
+    },
+    {
+      "path": "text-append/output-manifest.json",
+      "bytes": 1273,
+      "sha256": "123d188c03934a9af6e3009b0e39a4307585ef6f459f6210381f32ac2df922ac"
+    },
+    {
+      "path": "text-append/packet-manifest.json",
+      "bytes": 1724,
+      "sha256": "acb335558c5b364161d7548ad20ee50f5d0d389db25cb68906ddc98d7314a138"
+    },
+    {
+      "path": "text-append/receipt.json",
+      "bytes": 5259,
+      "sha256": "aa7ccbce025b475d02a74ee70bb2f53e8cbc1d11be852f1e3a2b8289b82fb057"
+    },
+    {
+      "path": "text-append/source-coverage.jsonl",
+      "bytes": 1837,
+      "sha256": "c015bc222d9da9b595d3c25df754f469ddeeeacd45a8baf9802c435e7678b2a8",
+      "lines": 3
+    }
+  ],
+  "bytes": 844903
+}
