@@ -311,6 +311,27 @@ test('retains exact typed final-result write receipts for native and gold-text c
   assert.equal(jsonCall.outcome.typed_result_writes[0].body_source, jsonBody,
     'canonical JSON body is recomputed from the exact provider value and checked against runtime SHA');
 
+  const jsonTextRaw = '{"count":4,"flag":true}', jsonTextBlock = `nz1_${'f'.repeat(32)}`;
+  const parsedJson = make({ id: 'typed-json-text-result', args: { status: 'success', value: jsonTextRaw },
+    writes: [{ block: jsonTextBlock, source_kind: 'typed-json-result', source: 'return_result', marker_context: 'return-result',
+      result_type: 'Neuralese<{ count: number, flag: boolean }>', text_body_sha256: sha(jsonBody) }],
+    hostValue: { $neuralese: { id: jsonTextBlock, type: 'Neuralese<{ count: number, flag: boolean }>' } } });
+  const parsedReceipt = materializeNativeRows([parsedJson]).turns[0].decision.assistant.calls[0].outcome.typed_result_writes[0];
+  assert.equal(parsedReceipt.body_source, jsonBody,
+    'JSON text is normalized only when a concrete non-string Neuralese result type and runtime body digest prove parsing');
+  assert.equal(parsedReceipt.body_source_basis, 'parsed-json-string-for-concrete-neuralese-result-type');
+  assert.equal(parsedReceipt.raw_model_value_sha256, sha(JSON.stringify(jsonTextRaw)),
+    'the raw provider text remains independently hash-bound');
+
+  const jsonStringBlock = `nz1_${'e'.repeat(32)}`;
+  const jsonString = make({ id: 'typed-string-containing-json', args: { status: 'success', value: jsonTextRaw },
+    writes: [{ block: jsonStringBlock, source_kind: 'typed-text-result', source: 'return_result', marker_context: 'return-result',
+      result_type: 'Neuralese<string>', text_body_sha256: sha(jsonTextRaw) }],
+    hostValue: { $neuralese: { id: jsonStringBlock, type: 'Neuralese<string>' } } });
+  const jsonStringReceipt = materializeNativeRows([jsonString]).turns[0].decision.assistant.calls[0].outcome.typed_result_writes[0];
+  assert.equal(jsonStringReceipt.body_source, jsonTextRaw, 'JSON-looking string values remain literal for Neuralese<string>');
+  assert.equal(jsonStringReceipt.body_source_basis, 'exact-raw-model-result-string');
+
   const repeatedBlock = `nz1_${'c'.repeat(32)}`, repeatedBody = 'same emitted note';
   const nestedArgs = { status: 'success', value: { nested: { first: repeatedBody }, final: repeatedBody } };
   const nested = make({ id: 'typed-text-fields', args: nestedArgs, writes: [

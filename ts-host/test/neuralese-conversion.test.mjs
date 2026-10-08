@@ -100,6 +100,40 @@ test('typed final-result receipts become exact nested native/R write leaves', ()
     block_id: block, type: 'Neuralese<string>', source: body });
   assert.equal(converted.neuralese_conversion.sites['typed-result-write'].converted, 2);
 
+  const jsonText = '{"x":1}', canonicalBody = '{"x":1}', jsonTextBlock = `nz1_${'e'.repeat(52)}`;
+  const jsonTextArgs = { status: 'success', value: jsonText };
+  const jsonTextReceipt = { schema: 'natlang.typed-result-write/1', trajectory_id: 'json-run',
+    source_row_sha256: 'json-row-sha', invocation_id: 'json-call', writer_call_id: 'json-call',
+    writer_node: 'json-call#8', block_id: jsonTextBlock, source_kind: 'typed-json-result', source: 'return_result',
+    result_type: 'Neuralese<{ x: number }>', result_path: ['return'], model_turn_node: 'json-call#2', action_seq: 9,
+    body_sha256: cryptoCreateHash('sha256').update(canonicalBody).digest('hex'), body_source: canonicalBody,
+    body_source_basis: 'parsed-json-string-for-concrete-neuralese-result-type',
+    raw_model_value_sha256: cryptoCreateHash('sha256').update(JSON.stringify(jsonText)).digest('hex') };
+  const jsonTextRow = record();
+  jsonTextRow.id = 'json-row';
+  jsonTextRow.source_ref = { trajectory_id: 'json-run', invocation_id: 'json-call', source_row_sha256: 'json-row-sha' };
+  jsonTextRow.decision = { index: 4, assistant: { calls: [{ source_tool: 'return_result', arguments: jsonTextArgs,
+    outcome: { name: 'return_result', arguments: jsonTextArgs, typed_result_writes: [jsonTextReceipt] } }] } };
+  jsonTextRow.target = { role: 'assistant', tool_calls: [{ id: 'json-return', type: 'function',
+    function: { name: 'return_result', arguments: JSON.stringify(jsonTextArgs) } }] };
+  const normalizedJson = convertTrajectory(jsonTextRow).record;
+  assert.equal(JSON.parse(normalizedJson.target.tool_calls[0].function.arguments).value.$write.source, canonicalBody,
+    'the authenticated normalized body is trained as a write while the receipt retains the raw JSON text hash');
+
+  const stringRow = structuredClone(jsonTextRow);
+  stringRow.id = 'string-row';
+  stringRow.source_ref = { ...jsonTextRow.source_ref, trajectory_id: 'string-run', invocation_id: 'string-call', source_row_sha256: 'string-row-sha' };
+  stringRow.decision.assistant.calls[0].arguments = { status: 'success', value: jsonText };
+  stringRow.decision.assistant.calls[0].outcome.arguments = { status: 'success', value: jsonText };
+  stringRow.decision.assistant.calls[0].outcome.typed_result_writes = [{ ...jsonTextReceipt,
+    trajectory_id: 'string-run', source_row_sha256: 'string-row-sha', invocation_id: 'string-call', writer_call_id: 'string-call',
+    source_kind: 'typed-text-result', result_type: 'Neuralese<string>', body_sha256: cryptoCreateHash('sha256').update(jsonText).digest('hex'),
+    body_source: jsonText, body_source_basis: 'exact-raw-model-result-string', raw_model_value_sha256: undefined }];
+  stringRow.target.tool_calls[0].function.arguments = JSON.stringify({ status: 'success', value: jsonText });
+  const literalJsonText = convertTrajectory(stringRow).record;
+  assert.equal(JSON.parse(literalJsonText.target.tool_calls[0].function.arguments).value.$write.source, jsonText,
+    'a JSON-looking Neuralese<string> value stays an exact literal string');
+
   const tampered = structuredClone(input);
   tampered.target.tool_calls[0].function.arguments = JSON.stringify({ ...args, value: { ...args.value, notes: 'different' } });
   const held = convertTrajectory(tampered).record;

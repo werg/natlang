@@ -289,7 +289,18 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
       body = model.value; bodyBasis = 'exact-raw-model-result-string';
     } else if (exactRawValue && write.source_kind === 'typed-json-result' && write.result_path === undefined &&
         type !== 'Neuralese<string>') {
-      body = typedJsonBody(model.value); bodyBasis = 'canonical-json-of-exact-raw-model-result';
+      const direct = typedJsonBody(model.value);
+      if (direct !== undefined && hexDigest(direct) === bodySha) {
+        body = direct; bodyBasis = 'canonical-json-of-exact-raw-model-result';
+      } else if (typeof model.value === 'string') {
+        try {
+          const parsed = JSON.parse(model.value) as unknown;
+          const normalized = typedJsonBody(parsed);
+          if (normalized !== undefined && hexDigest(normalized) === bodySha) {
+            body = normalized; bodyBasis = 'parsed-json-string-for-concrete-neuralese-result-type';
+          }
+        } catch { /* Invalid JSON text is not an alternate typed JSON source. */ }
+      }
     } else if (exactRawValue && write.source_kind === 'typed-text-result-field' && type === 'Neuralese<string>' &&
         Array.isArray(write.result_path) && write.result_path[0] === 'return' && write.result_path.length > 1 &&
         write.result_path.slice(1).every(part => typeof part === 'string' || Number.isSafeInteger(part))) {
@@ -316,6 +327,8 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
       model_turn_node: sourceNodes[0], action_seq: actionEvent.seq, body_sha256: bodySha,
       request_sha256: typeof requestSha256 === 'string' ? requestSha256 : null,
       raw_response_sha256: typeof rawResponseSha256 === 'string' ? rawResponseSha256 : null,
+      ...(write.source_kind === 'typed-json-result' && exactRawValue ?
+        { raw_model_value_sha256: hexDigest(canonical(model.value)) } : {}),
       ...(body === undefined ? {} : { body_source: body }), body_source_basis: bodyBasis } });
   }
   const receipts = [...refs.values()].map(entry => entry.receipt);

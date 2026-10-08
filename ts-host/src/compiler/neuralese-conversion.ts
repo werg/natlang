@@ -803,7 +803,13 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             const rawValue = exactPathGet(args.value, tail);
             if (receipt.source_kind === 'typed-text-result' || receipt.source_kind === 'typed-text-result-field')
               return receipt.result_type === 'Neuralese<string>' && typeof rawValue === 'string' && rawValue === receipt.body_source;
-            return stableJson(rawValue) === receipt.body_source;
+            if (receipt.body_source_basis === 'parsed-json-string-for-concrete-neuralese-result-type') {
+              if (typeof rawValue !== 'string' || typeof receipt.raw_model_value_sha256 !== 'string' ||
+                  createHash('sha256').update(stableJson(rawValue) ?? '').digest('hex') !== receipt.raw_model_value_sha256) return false;
+              try { return stableJson(JSON.parse(rawValue)) === receipt.body_source; } catch { return false; }
+            }
+            return receipt.body_source_basis === 'canonical-json-of-exact-raw-model-result' &&
+              stableJson(rawValue) === receipt.body_source;
           });
           if (typedReceipts.length) {
             const uniqueReceipts = typedReceipts.map(item => item.receipt).filter((receipt, at, all) => all.findIndex(other =>
