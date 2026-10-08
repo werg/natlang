@@ -115,7 +115,7 @@ test('failure evidence retains matching-session retry status without inferring H
     event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
       await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.status', properties: { sessionID: 'session-retry', status: {
-        type: 'retry', attempt: 3, message: 'Provider rate limit; retrying shortly',
+        type: 'retry', attempt: 3, next: 1791439200000, message: 'Provider rate limit; retrying shortly',
         action: { provider: 'opencode', label: 'Retry', message: 'Please retry after delay' }
       } } };
       await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
@@ -135,11 +135,72 @@ test('failure evidence retains matching-session retry status without inferring H
       const eventStream = error.transportDiagnostic.event_stream;
       assert.equal(eventStream.latest_session_status.type, 'retry');
       assert.equal(eventStream.latest_session_status.attempt, 3);
+      assert.equal(eventStream.latest_session_status.next_at_ms, 1791439200000);
       assert.equal(eventStream.latest_session_status.action.provider, 'opencode');
       assert.equal(error.providerStatusCode, undefined, 'retry prose is not an HTTP status');
       return true;
     });
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a matching retry schedule cancels OpenCode internal retry and surfaces bridge-level 503 metadata', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'opencode-scheduled-retry-'));
+  const calls = [];
+  let promptStartedResolve;
+  const promptStarted = new Promise(resolve => { promptStartedResolve = resolve; });
+  const client = {
+    tool: { ids: async () => ({ data: ['invalid'] }) },
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
+      await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
+      await promptStarted;
+      yield { type: 'session.status', properties: { sessionID: 'session-scheduled', status: {
+        type: 'retry', attempt: 2, next: Date.now() + 7000,
+        message: 'Provider rate limit; retrying shortly', action: { provider: 'opencode', reason: 'rate_limit' }
+      } } };
+      await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+    })() }) },
+    session: {
+      create: async () => ({ data: { id: 'session-scheduled' } }),
+      prompt: async (_args, { signal }) => new Promise((_, reject) => {
+        calls.push('prompt'); promptStartedResolve();
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+      abort: async () => { calls.push('abort'); return { data: true }; },
+      messages: async () => ({ data: [] }),
+      delete: async () => { calls.push('delete'); return { data: true }; }
+    }
+  };
+  const adapter = await createOpenCodeLoopbackChatAdapter({ client, providerID: 'opencode',
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
+  try {
+    const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'opencode/space-bunny-free', messages: [], tools: [], stream: true }) });
+    const body = await response.json();
+    assert.equal(response.status, 503, '503 describes bridge service unavailability, not provider HTTP status');
+    assert.equal(body.error.code, 'provider_retry_scheduled');
+    assert.equal(body.error.provider_status_code, null);
+    assert.equal(body.error.provider_retryable, true);
+    assert.ok(body.error.retry_after_ms >= 0 && body.error.retry_after_ms <= 7000);
+    assert.equal(body.error.retry_origin, 'opencode_session_status');
+    assert.equal(body.error.sdk_retry_suppressed, true);
+    assert.equal(body.error.sdk_retry_limit, 5);
+    assert.equal(body.error.collector_retry_budget, null, 'the caller owns and records the separate collector retry budget');
+    assert.equal(body.error.transport_diagnostic.retry_schedule.attempt, 2);
+    assert.equal(body.error.transport_diagnostic.retry_schedule.upstream_http_status, null);
+    assert.deepEqual(calls, ['prompt', 'abort', 'delete']);
+    const sidecarDir = join(directory, '.natlang-transport-failures');
+    const { readdir } = await import('node:fs/promises');
+    const [sidecar] = await readdir(sidecarDir);
+    const receipt = JSON.parse(await readFile(join(sidecarDir, sidecar), 'utf8'));
+    assert.equal(receipt.classification, 'provider_retry_scheduled');
+    assert.equal(receipt.retry_schedule.attempt, 2);
+    assert.equal(receipt.retry_schedule.upstream_http_status, null);
+  } finally {
+    await adapter.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

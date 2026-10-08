@@ -75,6 +75,7 @@ function failureDiagnostic({ classification, providerID, modelID, sessionID, dat
     parts: partRows,
     parts_preview_bytes: partRows.reduce((sum, part) => sum + part.bytes, 0),
     ...(error?.transportUpstreamError ? { upstream_error: error.transportUpstreamError } : {}),
+    ...(error?.transportRetrySchedule ? { retry_schedule: error.transportRetrySchedule } : {}),
     ...(error?.transportEventStream ? { event_stream: error.transportEventStream } : {}),
     error: redactCredentialLikeText((error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, 128))
   };
@@ -126,11 +127,37 @@ function safeSessionStatus(event, sessionID) {
   return {
     type: 'retry',
     ...(Number.isSafeInteger(status.attempt) ? { attempt: status.attempt } : {}),
+    ...(Number.isSafeInteger(status.next) ? { next_at_ms: status.next } : {}),
     ...(typeof status.message === 'string' ? { message: redactCredentialLikeText(status.message).slice(0, 512) } : {}),
     ...(action ? { action: Object.fromEntries(['reason', 'provider', 'title', 'message', 'label']
       .filter(key => typeof action[key] === 'string')
       .map(key => [key, redactCredentialLikeText(action[key]).slice(0, 160)])) } : {})
   };
+}
+
+function scheduledRetryError(status, sessionID) {
+  if (status?.type !== 'retry') return undefined;
+  const delay = Number.isSafeInteger(status.next_at_ms) ? Math.max(0, status.next_at_ms - Date.now()) : undefined;
+  const error = new Error('OpenCode scheduled an internal provider retry; the bridge stopped it to preserve the configured request retry budget');
+  error.code = 'OPENCODE_RETRY_SCHEDULED';
+  error.providerRetryable = true;
+  if (Number.isSafeInteger(delay)) error.providerRetryAfterMs = delay;
+  error.transportRetrySchedule = {
+    event_type: 'session.status', session_id: sessionID,
+    ...(Number.isSafeInteger(status.attempt) ? { attempt: status.attempt } : {}),
+    ...(Number.isSafeInteger(status.next_at_ms) ? { next_at_ms: status.next_at_ms } : {}),
+    ...(Number.isSafeInteger(delay) ? { delay_ms: delay } : {}),
+    ...(typeof status.message === 'string' ? { message: status.message } : {}),
+    ...(status.action ? { action: status.action } : {}),
+    upstream_http_status: null,
+    sdk_retry_policy: {
+      source: 'OpenCode session processor retry policy (pinned server version)',
+      max_scheduled_retries: 5,
+      canceled_before_scheduled_retry: true,
+      note: 'The provider request that produced this status has already occurred. The bridge stops the session at the first retry schedule; collector retries are a separate budget.'
+    }
+  };
+  return error;
 }
 
 function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis.fetch) {
@@ -190,6 +217,15 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
       for await (const event of subscription.stream) {
         if (controller.signal.aborted) return;
         latestSessionStatus = safeSessionStatus(event, sessionID) ?? latestSessionStatus;
+        if (latestSessionStatus?.type === 'retry') {
+          const retry = scheduledRetryError(latestSessionStatus, sessionID);
+          if (retry) {
+            retry.transportEventStream = { directory: streamHandshake?.directory ?? directory,
+              status: streamHandshake?.status ?? null, content_type: streamHandshake?.contentType ?? null };
+            resolveMatch(retry);
+            return;
+          }
+        }
         const error = safeSessionApiError(event, { sessionID });
         if (error) {
           error.transportUpstreamError.event_stream = {
@@ -240,6 +276,7 @@ function failWithDiagnostic(message, context, classification, cause) {
 }
 
 function classifyFailure(error, phase) {
+  if (error?.code === 'OPENCODE_RETRY_SCHEDULED') return 'provider_retry_scheduled';
   if (error?.code === 'OPENCODE_PROVIDER_ERROR') return 'provider_request_failure';
   if (error?.code === 'REQUEST_TIMEOUT') return 'request_timeout';
   if (phase === 'tool_inventory' || phase === 'session_create') return 'opencode_setup_failure';
@@ -288,6 +325,7 @@ async function persistFailureDiagnostic(error, directory) {
     parts: full.parts,
     parts_bytes: full.parts_bytes,
     ...(full.upstream_error ? { upstream_error: full.upstream_error } : {}),
+    ...(full.retry_schedule ? { retry_schedule: full.retry_schedule } : {}),
     ...(full.event_stream ? { event_stream: full.event_stream } : {}),
     ...(full.failure_phase ? { failure_phase: full.failure_phase } : {}),
     error: full.error,
@@ -652,13 +690,23 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       }, { signal: promptController.signal }), promptController.signal, 'OpenCode session prompt')
         .then(result => ({ kind: 'prompt', result }), error => ({ kind: 'prompt_error', error }));
       const outcome = errorWatch
-        ? await Promise.race([promptPromise, errorWatch.matchingError.then(error => ({ kind: 'session_error', error }))])
+        ? await Promise.race([promptPromise, errorWatch.matchingError.then(error => ({
+          kind: error?.code === 'OPENCODE_RETRY_SCHEDULED' ? 'session_retry_scheduled' : 'session_error', error
+        }))])
         : await promptPromise;
       if (outcome.kind === 'session_error') {
         promptController.abort(outcome.error);
         if (client.session.abort) {
           try { await withTimeout(client.session.abort({ sessionID: session.id, directory }), cleanupTimeoutMs,
             'OpenCode failed-session abort'); } catch {}
+        }
+        throw outcome.error;
+      }
+      if (outcome.kind === 'session_retry_scheduled') {
+        promptController.abort(outcome.error);
+        if (client.session.abort) {
+          try { await withTimeout(client.session.abort({ sessionID: session.id, directory }), cleanupTimeoutMs,
+            'OpenCode scheduled-retry abort'); } catch {}
         }
         throw outcome.error;
       }

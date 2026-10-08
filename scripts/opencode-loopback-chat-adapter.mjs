@@ -111,6 +111,7 @@ function statusFor(error) {
   if (error?.code === 'MODEL_MISMATCH') return 409;
   if (error?.code === 'OVERLOADED') return 429;
   if (error?.code === 'REQUEST_TIMEOUT') return 504;
+  if (error?.code === 'OPENCODE_RETRY_SCHEDULED') return 503;
   if (error?.code === 'OPENCODE_PROVIDER_ERROR' && Number.isInteger(error.providerStatusCode) &&
       error.providerStatusCode >= 400 && error.providerStatusCode <= 599)
     return error.providerStatusCode;
@@ -180,11 +181,20 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
           error?.code === 'UNSUPPORTED_SCORING' ? 'decision_unsupported' :
             error?.code === 'UNSUPPORTED_TOOL_CHOICE' ? 'unsupported_tool_choice' :
             error?.code === 'OVERLOADED' ? 'overloaded' :
-              error?.code === 'OPENCODE_PROVIDER_ERROR' ? 'provider_error' : 'opencode_bridge_error';
-        const providerError = error?.code === 'OPENCODE_PROVIDER_ERROR' ? {
+              error?.code === 'OPENCODE_RETRY_SCHEDULED' ? 'provider_retry_scheduled' :
+                error?.code === 'OPENCODE_PROVIDER_ERROR' ? 'provider_error' : 'opencode_bridge_error';
+        const providerError = error?.code === 'OPENCODE_PROVIDER_ERROR' || error?.code === 'OPENCODE_RETRY_SCHEDULED' ? {
           provider_status_code: Number.isSafeInteger(error.providerStatusCode) ? error.providerStatusCode : null,
           provider_retryable: typeof error.providerRetryable === 'boolean' ? error.providerRetryable : null,
-          ...(Number.isSafeInteger(error.providerRetryAfterMs) ? { retry_after_ms: error.providerRetryAfterMs } : {})
+          ...(Number.isSafeInteger(error.providerRetryAfterMs) ? { retry_after_ms: error.providerRetryAfterMs } : {}),
+          ...(error?.code === 'OPENCODE_RETRY_SCHEDULED' ? {
+            bridge_status_code: 503,
+            retry_origin: 'opencode_session_status',
+            sdk_retry_suppressed: true,
+            sdk_retry_limit: 5,
+            collector_retry_budget: null,
+            collector_retry_budget_owner: 'requesting collector'
+          } : {})
         } : {};
         const diagnostics = error?.transportDiagnostic && typeof error.transportDiagnostic === 'object' ?
           { transport_diagnostic: error.transportDiagnostic } : {};
