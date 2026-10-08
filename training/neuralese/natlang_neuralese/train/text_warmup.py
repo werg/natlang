@@ -878,12 +878,14 @@ def main(argv=None):
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens):
+    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
         ce,training_ce,prediction,close_probability,token_losses=chunked_readout(
             backbone,top,span,backbone.controls.close_id,chunk_size=readout_chunk_tokens,
             gradients=not bootstrap,position_weights=weights)
+        if evaluation and out['pass_index']==0 and projected_observer is not None:
+            projected_observer(out,prediction)
         target=backbone.embed(span).detach()
         embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target)
         embedding,sketch=embedding_positions.mean(),sketch_positions.mean()
@@ -933,10 +935,10 @@ def main(argv=None):
             metrics=materialize_objective_metrics([metrics])[0][0]
         return loss,metrics
 
-    def objective(w,passes,bootstrap=False,readout_chunk_tokens=128):
+    def objective(w,passes,bootstrap=False,readout_chunk_tokens=128,projected_observer=None):
         prefix,span,weights=ids_for(w);baseline={}
         for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
-            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens)
+            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer)
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
@@ -1000,11 +1002,22 @@ def main(argv=None):
     last_report=None
     def evaluate():
         nonlocal last_schedule_step,last_report
-        strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
+        strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
-                for _,m in objective(batch,3):
+                prefix,span,_=ids_for(batch)
+                def observe_projected_history(completion,live_tokens):
+                    from ..eval.projected_history import projected_history_metrics
+                    diagnostic=projected_history_metrics(backbone,heads,prefix,span,
+                        completion=completion,live_tokens=live_tokens,
+                        consumers=('full_projection','live_greedy'),per_window=True)
+                    for window,window_scores in zip(batch,diagnostic['windows']):
+                        matched_history_rows.append({'document_sha256':window['document'],
+                            'source_groups':window['groups'],'offset':window['offset'],
+                            'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
+                            'scores':window_scores})
+                for _,m in objective(batch,3,projected_observer=observe_projected_history):
                     if m['pass_index']==2:
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
@@ -1037,6 +1050,31 @@ def main(argv=None):
                 'held_probe_selection':held_selection_eval,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
+        matched_summary={}
+        for consumer in ('full_projection','live_greedy'):
+            matched_summary[consumer]={}
+            for region in ('whole','last256'):
+                scores=[row['scores'][consumer][region] for row in matched_history_rows]
+                token_count=sum(score['tokens'] for score in scores)
+                history_count=sum(score['history_positions'] for score in scores)
+                fields=('ce','gold_accuracy','ce_delta_from_live_greedy','argmax_agreement_with_live_greedy')
+                aggregate={'tokens':token_count,'history_positions':history_count}
+                for field in fields:
+                    aggregate[field]=sum(score[field]*score['tokens'] for score in scores)/token_count
+                mse_values=[(score['read_history_mse_vs_live_greedy'],score['history_positions'])
+                            for score in scores if score['history_positions']]
+                if mse_values:
+                    aggregate['read_history_mse_vs_live_greedy']=sum(value*count for value,count in mse_values)/sum(count for _,count in mse_values)
+                matched_summary[consumer][region]=aggregate
+        report['matched_projected_history']={'schema':'natlang.text-warmup-matched-history/1',
+            'weights_digest':report['weights_digest'],'held_probe_selection':held_selection_eval,
+            'consumer_pair':['full_projection','live_greedy'],
+            'read_interface':'heads.read_embeddings(backbone, payload[:, :-1])',
+            'producer_reuse':'pass-zero gold-history top states and crisp next-token predictions from the same held batch',
+            'batch_policy':{'eval_batch':a.eval_batch,'max_window_tokens':a.tokens,
+                'selected_windows':len(held),'diagnostic_forward_passes_per_batch':2},
+            'future_gold_inputs':False,'windows':matched_history_rows,'weighted_summary':matched_summary,
+            'changes_qualification_gates':False}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);last_report=report;return report

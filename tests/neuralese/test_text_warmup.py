@@ -709,6 +709,32 @@ def _tiny_warmup_run_inputs(tmp_path, monkeypatch, *, steps=3):
     return text_warmup,args,engines
 
 
+def test_held_evaluation_records_matched_projection_and_crisp_history_without_changing_gates(tmp_path,monkeypatch):
+    import json
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=1)
+    module.main(args)
+    report=json.loads((tmp_path/'run'/'report.json').read_text())
+    diagnostic=report['matched_projected_history']
+    assert diagnostic['schema']=='natlang.text-warmup-matched-history/1'
+    assert diagnostic['weights_digest']==report['weights_digest']
+    assert diagnostic['consumer_pair']==['full_projection','live_greedy']
+    assert diagnostic['held_probe_selection']==report['held_probe_selection']
+    assert diagnostic['batch_policy']['diagnostic_forward_passes_per_batch']==2
+    assert diagnostic['future_gold_inputs'] is False
+    assert diagnostic['changes_qualification_gates'] is False
+    assert len(diagnostic['windows'])==1
+    window=diagnostic['windows'][0]
+    projected=window['scores']['full_projection']
+    crisp=window['scores']['live_greedy']
+    assert projected['whole']['tokens']==window['target_tokens']
+    assert projected['last256']['tokens']==window['target_tokens']
+    assert 0<=projected['whole']['argmax_agreement_with_live_greedy']<=1
+    assert projected['whole']['read_history_mse_vs_live_greedy']>=0
+    assert crisp['whole']['read_history_mse_vs_live_greedy']==0
+    assert 'alignment_gate_passed' in report
+
+
 def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkeypatch):
     import json
     from natlang_neuralese.train import text_warmup

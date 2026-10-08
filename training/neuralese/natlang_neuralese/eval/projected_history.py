@@ -22,57 +22,114 @@ from ..train.text_warmup import (
 
 
 @torch.no_grad()
-def projected_history_metrics(backbone, heads, prefix, span):
+def projected_history_metrics(backbone, heads, prefix, span, *, completion=None, live_tokens=None,
+                              consumers=None, per_window=False):
     if prefix.ndim != 2 or span.ndim != 2 or not prefix.shape[1] or not span.shape[1]:
         raise ValueError('nonempty aligned prefix and targets required')
     if prefix.shape[0] != span.shape[0]:
         raise ValueError('prefix and target batches must match')
     if heads.read_markers:
         raise ValueError('token-aligned history diagnostic requires the raw read profile')
-    completed = gold_completion(backbone, heads, prefix, span)
+    completed = gold_completion(backbone, heads, prefix, span) if completion is None else completion
+    if not isinstance(completed, dict) or 'top' not in completed:
+        raise ValueError('a reusable completion must contain top states')
     top = completed['top']
-    projected = heads.content(torch.zeros_like(top), top)
-    reference = heads.content.reference(top)
-    gold = backbone.embed(span)
-    _, _, live_tokens, _, _ = chunked_readout(
-        backbone, top, span, backbone.controls.close_id, gradients=False)
-    live_greedy = backbone.embed(live_tokens)
+    if live_tokens is None:
+        _, _, live_tokens, _, _ = chunked_readout(
+            backbone, top, span, backbone.controls.close_id, gradients=False)
+    if live_tokens.shape != span.shape:
+        raise ValueError('reused live predictions must align with target tokens')
+    available = {'gold','live_greedy','reference','full_projection'}
+    if 'sketches' in completed:
+        available.add('sketch_projection')
+    selected = tuple(('gold','live_greedy','reference','full_projection','sketch_projection')
+                     if consumers is None and 'sketch_projection' in available else
+                     ('gold','live_greedy','reference','full_projection') if consumers is None else consumers)
+    if not selected or len(set(selected)) != len(selected) or any(name not in available for name in selected):
+        raise ValueError('consumers must select distinct available history payloads')
+    if 'live_greedy' not in selected:
+        raise ValueError('matched history consumers require live_greedy as the comparison control')
+    all_payloads={}
+    for name in selected:
+        if name=='gold':all_payloads[name]=backbone.embed(span)
+        elif name=='live_greedy':all_payloads[name]=backbone.embed(live_tokens)
+        elif name=='reference':all_payloads[name]=heads.content.reference(top)
+        elif name=='full_projection':all_payloads[name]=heads.content(torch.zeros_like(top),top)
+        else:all_payloads[name]=completed['sketches']
     prefix_embeddings = backbone.embed(prefix)
     scores = {}
-    for name, payload in (('gold', gold), ('live_greedy', live_greedy), ('reference', reference),
-                          ('full_projection', projected), ('sketch_projection', completed['sketches'])):
+    history_inputs = {}
+    expected_history_shape=next(iter(all_payloads.values()))[:, :-1].shape
+    for name in selected:
+        payload = all_payloads[name]
         # Projection at j predicts span[j]; it is used as an input only while
         # predicting span[j+1]. The last prediction is never supplied as input.
         history = heads.read_embeddings(backbone, payload[:, :-1])
-        if history.shape != gold[:, :-1].shape:
+        if history.shape != expected_history_shape:
             raise ValueError('read transport changed aligned history geometry')
         out = backbone.forward_embeds(torch.cat((prefix_embeddings, history), 1), logits=False)
         states = out['h_final'][:, prefix.shape[1]-1:]
         _, _, prediction, _, losses = chunked_readout(
             backbone, states, span, backbone.controls.close_id, gradients=False)
         scores[name] = (prediction, losses)
+        history_inputs[name] = history
         del out, states
-    baseline_prediction, baseline_losses = scores['gold']
+    baseline_prediction, baseline_losses = scores.get('gold', (None, None))
     crisp_prediction, crisp_losses = scores['live_greedy']
+    crisp_history = history_inputs['live_greedy']
     rows = {}
     for name, (prediction, losses) in scores.items():
         rows[name] = {}
         for region, start in (('whole', 0), ('last256', max(0, span.shape[1]-256))):
             actual = losses[:, start:]
-            rows[name][region] = {
+            region_result = {
                 'tokens': actual.numel(), 'ce': float(actual.mean()),
-                'ce_delta_from_gold': float((actual-baseline_losses[:, start:]).mean()),
                 'gold_accuracy': float((prediction[:, start:]==span[:, start:]).float().mean()),
-                'argmax_agreement_with_gold': float((prediction[:, start:]==baseline_prediction[:, start:]).float().mean()),
                 'ce_delta_from_live_greedy': float((actual-crisp_losses[:, start:]).mean()),
                 'argmax_agreement_with_live_greedy': float((prediction[:, start:]==crisp_prediction[:, start:]).float().mean()),
             }
-    rows['producer_controls'] = {
-        'reference_equal_live_greedy': bool(torch.equal(reference, live_greedy)),
-        'reference_vs_live_greedy_mse': float((reference.float()-live_greedy.float()).square().mean()),
-        'live_greedy_gold_accuracy': float((live_tokens==span).float().mean()),
-        'live_greedy_gold_accuracy_last256': float((live_tokens[:, -256:]==span[:, -256:]).float().mean()),
-    }
+            if baseline_losses is not None:
+                region_result.update(
+                    ce_delta_from_gold=float((actual-baseline_losses[:, start:]).mean()),
+                    argmax_agreement_with_gold=float((prediction[:, start:]==baseline_prediction[:, start:]).float().mean()))
+            history_start=max(0, start-1)
+            history=history_inputs[name][:, history_start:]
+            control_history=crisp_history[:, history_start:]
+            region_result['history_positions']=history.numel() // max(1,history.shape[-1])
+            if history.shape[1]:
+                region_result['read_history_mse_vs_live_greedy']=float((history.float()-control_history.float()).square().mean())
+            rows[name][region] = region_result
+    if 'reference' in all_payloads and 'live_greedy' in all_payloads:
+        reference=all_payloads['reference'];live_greedy=all_payloads['live_greedy']
+        rows['producer_controls'] = {
+            'reference_equal_live_greedy': bool(torch.equal(reference, live_greedy)),
+            'reference_vs_live_greedy_mse': float((reference.float()-live_greedy.float()).square().mean()),
+            'live_greedy_gold_accuracy': float((live_tokens==span).float().mean()),
+            'live_greedy_gold_accuracy_last256': float((live_tokens[:, -256:]==span[:, -256:]).float().mean()),
+        }
+    if per_window:
+        rows['windows'] = []
+        for index in range(span.shape[0]):
+            item = {}
+            for name, (prediction, losses) in scores.items():
+                item[name] = {}
+                for region, start in (('whole', 0), ('last256', max(0, span.shape[1]-256))):
+                    actual=losses[index, start:]
+                    result={'tokens':actual.numel(),'ce':float(actual.mean()),
+                        'gold_accuracy':float((prediction[index, start:]==span[index, start:]).float().mean()),
+                        'ce_delta_from_live_greedy':float((actual-crisp_losses[index, start:]).mean()),
+                        'argmax_agreement_with_live_greedy':float((prediction[index, start:]==crisp_prediction[index, start:]).float().mean())}
+                    if baseline_losses is not None:
+                        result.update(ce_delta_from_gold=float((actual-baseline_losses[index, start:]).mean()),
+                            argmax_agreement_with_gold=float((prediction[index, start:]==baseline_prediction[index, start:]).float().mean()))
+                    history_start=max(0,start-1)
+                    history=history_inputs[name][index,history_start:]
+                    control_history=crisp_history[index,history_start:]
+                    result['history_positions']=history.shape[0]
+                    if history.shape[0]:
+                        result['read_history_mse_vs_live_greedy']=float((history.float()-control_history.float()).square().mean())
+                    item[name][region]=result
+            rows['windows'].append(item)
     return rows
 
 
