@@ -159,14 +159,22 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.joins?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
           ts.isPropertyAccessExpression(node.expression)) {
+        const receiver = f.createUniqueName('__natlang_join_receiver');
+        const method = f.createUniqueName('__natlang_join_method');
+        const args = f.createUniqueName('__natlang_join_args');
         const value = f.createUniqueName('__natlang_join_value');
         const reader = f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
           [f.createParameterDeclaration(undefined, undefined, value)], undefined, undefined, readNeuralese(value));
-        const args = [ts.visitNode(node.expression.expression, visit) as ts.Expression,
-          ...node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression)];
-        if (args.length === 1) args.push(f.createIdentifier('undefined'));
-        args.push(reader);
-        return f.createAwaitExpression(f.createCallExpression(runtime('joinNeuralese'), undefined, args));
+        const helper = f.createCallExpression(runtime('joinNeuralese'), undefined, [receiver, method, args, reader]);
+        const body = f.createPropertyAccessExpression(f.createAwaitExpression(helper), 'value');
+        const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, method), f.createParameterDeclaration(undefined, undefined, args)],
+          undefined, undefined, body)), undefined, [f.createPropertyAccessExpression(receiver, 'join'),
+          f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        const lower = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, invoke)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        return f.createAwaitExpression(lower);
       }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.concats?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
           ts.isPropertyAccessExpression(node.expression)) {

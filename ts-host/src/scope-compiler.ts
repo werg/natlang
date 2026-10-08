@@ -777,9 +777,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         joins.has(`${rel(node).start}:${rel(node).end}`)) {
       const receiver = rel(node.expression.expression);
-      const separator = node.arguments[0] ? lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end) : 'undefined';
-      primitive.push({ ...rel(node), text: `await __live.joinNeuralese((${lowerSpan(receiver.start, receiver.end)}), ${separator}, ` +
-        `async (__natlang_join_value: any) => await __live.readNeuralese(__natlang_join_value))` });
+      lowerNodes(node.expression.expression);
+      for (const argument of node.arguments) lowerNodes(argument);
+      const receiverName = `__natlang_join_receiver_${rel(node).start}`;
+      const methodName = `__natlang_join_method_${rel(node).start}`;
+      const argsName = `__natlang_join_args_${rel(node).start}`;
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      primitive.push({ ...rel(node), text: `(await ((${receiverName}: any) => (async (${methodName}: any, ${argsName}: any[]) => ` +
+        `(await __live.joinNeuralese(${receiverName}, ${methodName}, ${argsName}, async (__natlang_join_value: any) => ` +
+        `await __live.readNeuralese(__natlang_join_value))).value)(${receiverName}.join, [${args}]))(${lowerSpan(receiver.start, receiver.end)}))` });
       return;
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with' &&

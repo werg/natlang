@@ -52,20 +52,25 @@ export async function concatNeuralese(receiver: unknown, method: (...values: unk
   return Reflect.apply(method, receiver, converted) as string;
 }
 
-/** Array.join with async reads, retaining JavaScript index and hole order. */
-export async function joinNeuralese(values: ArrayLike<unknown>, separator: string | undefined,
-  read: (value: unknown) => Promise<unknown>): Promise<string> {
+const ARRAY_JOIN = Array.prototype.join;
+
+/** Preserve custom join dispatch; only the native Array join gets typed async element reads. */
+export async function joinNeuralese(receiver: unknown, method: unknown, args: readonly unknown[],
+  read: (value: unknown) => Promise<unknown>): Promise<{ value: unknown }> {
+  if (method !== ARRAY_JOIN)
+    return { value: Reflect.apply(method as (...values: unknown[]) => unknown, receiver, args) };
+  const values = receiver as ArrayLike<unknown>;
   const length = values.length;
+  const separator = args[0];
   const delimiter = separator === undefined ? ',' : toStringValue(separator);
   const parts = new Array<string>(length);
   for (let index = 0; index < length; index++) {
-    if (!(index in values)) { parts[index] = ''; continue; }
     const value = values[index];
     if (value === null || value === undefined) { parts[index] = ''; continue; }
     const resolved = isNeuraleseRef(value) ? await read(value) : value;
     parts[index] = resolved === null || resolved === undefined ? '' : toStringValue(resolved);
   }
-  return parts.join(delimiter);
+  return { value: parts.join(delimiter) };
 }
 
 /** Portable natlang type text for a target descriptor; host objects become `Live<...>`. */
