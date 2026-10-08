@@ -72,6 +72,33 @@
         "no new recurrence rows or channel qualification",
         "no writer/trajectory/runtime/foundation/DPO admission",
         "no active GPU training-input change"
+      ],
+      "canonical_full_facets": "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+      "canonical_full_facets_paths": [
+        "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/assembled/native-records.jsonl",
+        "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/text-append/text.jsonl"
+      ]
+    },
+    "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1": {
+      "source_run": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
+      "status": "closed-clean-at-step22272",
+      "snapshot": "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
+      "artifact_count": 134,
+      "checkpoint": "train-continuation/checkpoint.pt",
+      "heads": [
+        "train-continuation/heads.pt",
+        "train-continuation/best-heads.pt"
+      ],
+      "best_checkpoint": "train-continuation/best-checkpoint.pt",
+      "diagnostics": [
+        "held-ar-probe-v1",
+        "runtime-wide-probe-v1",
+        "runtime"
+      ],
+      "qualification": "text alignment only; runtime and task stopping unqualified",
+      "remaining": [
+        "archival diagnostic only; separate from active action45 resume",
+        "Pop original checkpoint and heads remain local; not offloaded"
       ]
     }
   },
