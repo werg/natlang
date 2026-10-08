@@ -395,7 +395,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const receipt = candidate as Record<string, unknown>;
       const block = receipt.block as Record<string, unknown> | undefined;
       const invocation = invocationOf(record as Record<string, unknown>);
-      if (receipt.schema !== 'natlang.provider-expanded-read-context/1' || receipt.invocation_id !== invocation ||
+      if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
+          receipt.invocation_id !== invocation ||
           receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
           receipt.trace_sha256 !== ((record as Record<string, unknown>).provenance as Record<string, unknown> | undefined)?.trace_sha256 ||
           receipt.learned_vectors !== false || receipt.qualification_certificate !== false || receipt.training_admission !== false ||
@@ -419,6 +420,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           !/^[0-9a-f]{64}$/.test(String(receipt.raw_request_sha256)) ||
           !/^[0-9a-f]{64}$/.test(String(receipt.rendered_request_sha256)))
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
+      if (receipt.schema === 'natlang.provider-expanded-read-context/2' &&
+          (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
+           (receipt.parent_invocation_id !== null && typeof receipt.parent_invocation_id !== 'string')))
+        throw new Error(`provider-expanded context-only writer receipt is incomplete for ${id}`);
       if (receipt.origin === 'configured-function-definition') {
         const readout = receipt.readout as Record<string, unknown> | undefined;
         const definition = receipt.definition as Record<string, unknown> | undefined;
@@ -431,13 +436,32 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       } else {
         const writer = receipt.producer_write as Record<string, unknown> | null;
         const readInputs = Array.isArray(read.inputs) ? read.inputs as Record<string, unknown>[] : [];
+        // Trace seq is invocation-local. The explicit writer node on this read's input is the cross-call causal link.
+        const writerSourceValid = receipt.schema === 'natlang.provider-expanded-read-context/2' ?
+          writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
+          writer?.learned_vectors === false;
         if (!writer || writer.kind !== 'block_write' || writer.block !== id ||
-            !Number.isSafeInteger(writer.seq) || !Number.isSafeInteger(read.seq) || Number(writer.seq) >= Number(read.seq) ||
             writer.call_id === invocation || typeof writer.node !== 'string' ||
             !readInputs.some(input => input.node === writer.node && input.block === id) ||
-            writer.truncated !== false || writer.learned_vectors !== false || writer.result_type !== block.type ||
+            writer.truncated !== false || !writerSourceValid || writer.result_type !== block.type ||
             writer.text_body_sha256 !== block.body_sha256)
           throw new Error(`provider-expanded producer context lacks an earlier writer: ${id}`);
+        if (receipt.schema === 'natlang.provider-expanded-read-context/2') {
+          const pairs = receipt.additional_read_turn_pairs ?? [];
+          if (!Array.isArray(pairs) || pairs.some(value => {
+            if (!value || typeof value !== 'object') return true;
+            const pair = value as Record<string, unknown>;
+            const pairRead = pair.block_read as Record<string, unknown> | undefined;
+            const pairTurn = pair.model_turn as Record<string, unknown> | undefined;
+            const pairInputs = Array.isArray(pairRead?.inputs) ? pairRead.inputs as Record<string, unknown>[] : [];
+            const turnInputs = Array.isArray(pairTurn?.inputs) ? pairTurn.inputs as Record<string, unknown>[] : [];
+            return !pairRead || pairRead.kind !== 'block_read' || pairRead.call_id !== invocation ||
+              pairRead.block !== id || typeof pairRead.node !== 'string' ||
+              !pairInputs.some(input => input.node === writer.node && input.block === id) ||
+              !pairTurn || pairTurn.kind !== 'model_turn' || pairTurn.call_id !== invocation ||
+              !turnInputs.some(input => input.node === pairRead.node && input.port === 'read' && input.block === id);
+          })) throw new Error(`provider-expanded context has an invalid repeated read/turn binding: ${id}`);
+        }
       }
     externalBodies.set(id, { body: block.body, type: block.type, receipt });
   }
@@ -995,13 +1019,26 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     block_id: (value.receipt.block as Record<string, unknown>).id,
     type: value.type, body_sha256: createHash('sha256').update(value.body).digest('hex'),
     invocation_id: value.receipt.invocation_id,
+    parent_invocation_id: value.receipt.parent_invocation_id ?? null,
     transport_provenance_sha256: value.receipt.transport_provenance_sha256,
+    raw_request_sha256: value.receipt.raw_request_sha256,
+    rendered_request_sha256: value.receipt.rendered_request_sha256,
     source_row_sha256: value.receipt.source_row_sha256,
-    read_node: (value.receipt.block_read as Record<string, unknown>).node,
+    trace_sha256: (record as Record<string, unknown>).provenance &&
+      ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
+      read_node: (value.receipt.block_read as Record<string, unknown>).node,
     model_turn_node: (value.receipt.model_turn as Record<string, unknown>).node,
+    ...(Array.isArray(value.receipt.additional_read_turn_pairs) ? { additional_read_nodes:
+      (value.receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
+        ((pair.block_read as Record<string, unknown>).node)), additional_model_turn_nodes:
+      (value.receipt.additional_read_turn_pairs as Record<string, unknown>[]).map(pair =>
+        ((pair.model_turn as Record<string, unknown>).node)) } : {}),
     ...(value.receipt.origin === 'same-run-producer' ? { producer_write_node:
       (value.receipt.producer_write as Record<string, unknown>).node,
-      learner_representation: 'typed-read-linked-to-existing-writer' } :
+      producer_call_id: (value.receipt.producer_write as Record<string, unknown>).call_id,
+      writer_target_selected: value.receipt.writer_target_selected === false ? false : null,
+      learner_representation: value.receipt.writer_target_selected === false ?
+        'typed-read-from-authenticated-runtime-writer-event-context-only' : 'typed-read-linked-to-existing-writer' } :
       { learner_representation: 'crisp-external-function-context' }),
     learned_vectors: false, qualification_certificate: false, training_admission: false,
   }));

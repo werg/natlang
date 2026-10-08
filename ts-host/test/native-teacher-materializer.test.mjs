@@ -833,6 +833,7 @@ test('materialization preserves same-call provider-expanded read provenance with
   row.trajectory = [source];
   row.outcome.action_ledger = [{ seq: 12, call_id: invocation, name: 'write', arguments: firstCall.arguments,
     outcome: 'ok', result_text: 'stored value' }];
+  row.outcome.invocation_ledger = [{ invocation_id: invocation, parent_invocation_id: 'parent-call' }];
   source.context = [system, { ...opening, content: [{ type: 'text', text: opening.content }, { type: 'neuralese', id: noteId }] }];
   source.model_response = { transport_provenance: { learned_vectors: false, qualification_certificate: false,
     training_admission: false, raw_request_sha256: 'c'.repeat(64), rendered_request_sha256: 'd'.repeat(64),
@@ -845,7 +846,8 @@ test('materialization preserves same-call provider-expanded read provenance with
     { kind: 'invocation', phase: 'start', seq: 1, call_id: invocation,
       definition: { id: `nz-fn:${functionId}` }, signature: '(v: Neuralese<string>) => string' },
     { kind: 'block_write', seq: 2, call_id: 'producer-call', block: noteId, node: 'producer-call#5',
-      truncated: false, learned_vectors: false, result_type: noteBlock.type, text_body_sha256: noteBlock.body_sha256 },
+      truncated: false, producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+      result_type: noteBlock.type, text_body_sha256: noteBlock.body_sha256 },
     { kind: 'block_read', seq: 3, call_id: invocation, block: functionId, node: `${invocation}#6` },
     { kind: 'block_read', seq: 4, call_id: invocation, block: noteId, node: `${invocation}#7`,
       inputs: [{ node: 'producer-call#5', block: noteId, port: 'block' }] },
@@ -857,9 +859,28 @@ test('materialization preserves same-call provider-expanded read provenance with
   assert.equal(receipt.length, 2);
   assert.deepEqual(receipt.map(item => [item.block.id, item.origin]), [
     [functionId, 'configured-function-definition'], [noteId, 'same-run-producer']]);
+  assert.equal(receipt[1].schema, 'natlang.provider-expanded-read-context/2');
+  assert.equal(receipt[1].parent_invocation_id, 'parent-call');
+  assert.equal(receipt[1].writer_target_selected, false,
+    'the raw writer event authenticates context without creating a selected writer target');
   for (const item of receipt) {
     assert.equal(item.learned_vectors, false);
     assert.equal(item.qualification_certificate, false);
     assert.equal(item.training_admission, false);
   }
+  const corrupt = structuredClone(row);
+  corrupt.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body_sha256 = 'f'.repeat(64);
+  const corruptReceipt = materializeNativeRows([corrupt]).turns[0].source_ref.provider_expanded_read_contexts;
+  assert.equal(corruptReceipt.some(item => item.block.id === noteId), false,
+    'a mismatched provider body digest cannot become context provenance');
+  const repeated = structuredClone(row);
+  repeated.outcome.execution_graph.push(
+    { kind: 'block_read', seq: 8, call_id: invocation, block: noteId, node: `${invocation}#8`,
+      inputs: [{ node: 'producer-call#5', block: noteId, port: 'block' }] },
+    { kind: 'model_turn', seq: 9, call_id: invocation, node: `${invocation}#turn2`,
+      inputs: [{ node: `${invocation}#8`, port: 'read', block: noteId }] });
+  const repeatedReceipt = materializeNativeRows([repeated]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(repeatedReceipt.additional_read_turn_pairs.length, 1,
+    'repeated reads in one invocation retain separate per-turn graph bindings');
 });
