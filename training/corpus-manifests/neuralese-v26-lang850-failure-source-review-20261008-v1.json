@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v26-lang850-failure-source-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v26-lang850-failure-source-review-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1039,
+      "sha256": "0432cf5f8692b6fd7ff637388bdd94320ba6f0ddbd7b894def0c64398e971c3e"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 648,
+      "sha256": "0a26dc721c3ad42cd1740292e812ad3ea5c7565f42b8b59d201b73d10cce70a7"
+    },
+    {
+      "path": "review.json",
+      "bytes": 8657,
+      "sha256": "64940028c9d4289754f7b0218eadc829dc1fe65e7d4416d599438e6ed3613e48"
+    }
+  ],
+  "bytes": 10344
+}

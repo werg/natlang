@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v25-actual-action-review-20261008-v8",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-source-action-review-20261008-v8",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1610,
+      "sha256": "a18383495d140ed0be567a691ff92c2b2b753ff34f614549ad310210f1b88929"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 486,
+      "sha256": "b6356af54e0fc5a86867c413bf16fcf2a99548fc917bdc1f9710ada1363e0692"
+    },
+    {
+      "path": "review.json",
+      "bytes": 375916,
+      "sha256": "d6410022d6fa22bdf58852a6fa8b6a56bced02c968b1bf11d3603f1721a075eb"
+    }
+  ],
+  "bytes": 378012
+}

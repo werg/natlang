@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v25-target-output-role-audit-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-target-output-role-audit-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1621,
+      "sha256": "1272904c305df504c280341b66fbf77c6090279ca1d9c264b62b2f0e105e14fa"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1267,
+      "sha256": "d0a038e0d133cc9e88ba53c1841ef9aa07bf534f8ddca20c997451c06cec0fc1"
+    },
+    {
+      "path": "roles.jsonl",
+      "bytes": 206699,
+      "sha256": "d917cccee994baada19aaaedb3eec152e46f9c9174f3147e80f717dbfb5d953e",
+      "lines": 56
+    }
+  ],
+  "bytes": 209587
+}

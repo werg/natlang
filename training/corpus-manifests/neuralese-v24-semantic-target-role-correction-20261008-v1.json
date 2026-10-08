@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-semantic-target-role-correction-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-role-correction-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1577,
+      "sha256": "4a27f2f287c49a20b9a1f61201908bedfa69b9ac79f898d2f0aba842487dcf7a"
+    },
+    {
+      "path": "role-correction.json",
+      "bytes": 146577,
+      "sha256": "c762a6f402df104277d09113bca8cebb1a14c3e11801485e476e86923608a55f"
+    }
+  ],
+  "bytes": 148154
+}
