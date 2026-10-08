@@ -1487,7 +1487,10 @@ export class NativeSession {
       const scope = this.runtime.serviceScopes[name];
       return !scope || scope.some(path => path.endsWith('/**') ? chain.includes(`nl:${path.slice(0,-3)}`) : chain.at(-1)===`nl:${path}`);
     }).map(([name, service]) => [name, name === 'neuralese' && service && typeof service === 'object' ?
-      { ...service, read: (value: unknown) => readNeuraleseForCurrentTask(value) } : service]));
+      Object.create(Object.getPrototypeOf(service), {
+        // Descriptors, not a spread: a getter stays lazy (it is never read for a declaration) and prototype methods stay.
+        ...Object.getOwnPropertyDescriptors(service),
+        read: { value: (value: unknown) => readNeuraleseForCurrentTask(value), enumerable: true, configurable: true, writable: false } }) : service]));
   }
 
   /** read_code, edit_code, diff_code over the codebase record tree. */
