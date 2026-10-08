@@ -4,7 +4,7 @@
  * cases and the links between cases and calls live in the same database (§7.2). Node only.
  */
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { DatabaseSync as Database } from 'node:sqlite';
@@ -12,6 +12,14 @@ import { hexDigest } from '../native/hash.js';
 import type { IterationStatisticsStore, SiteStatistics } from '../runtime/iterate.js';
 import { DEFAULT_SETTINGS, type CallRecord, type CallStoreSettings, type CaseRole, type CaseStats, type CaseTier,
   type CompilationRow, type DeclineReason, type DeclineRow, type ValueRef, type Verdict } from './types.js';
+
+/** This process's boot and PID namespace (`boot:namespace`), so a PID is only checked where it means something. */
+const PROCESS_SCOPE = (() => {
+  let boot = '', namespace = '';
+  try { boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch { /* not Linux */ }
+  try { namespace = readlinkSync('/proc/self/ns/pid').replace(/\D/g, ''); } catch { /* not Linux */ }
+  return `${boot}:${namespace}`;
+})();
 
 const require = createRequire(import.meta.url);
 let DatabaseSync: typeof Database | undefined;
@@ -109,17 +117,28 @@ export class CallStore {
     this.db.exec(SCHEMA);
     const columns = (this.db.prepare('PRAGMA table_info(calls)').all() as { name: string }[]).map(column => column.name);
     if (!columns.includes('pid')) this.db.exec('ALTER TABLE calls ADD COLUMN pid INTEGER');
+    if (!columns.includes('process_scope')) this.db.exec('ALTER TABLE calls ADD COLUMN process_scope TEXT');
     this.markInterrupted();
   }
 
-  /** Calls left `running` by a process that is gone become `interrupted`. */
+  /**
+   * Calls left `running` by a process that is gone become `interrupted`. A process is known gone when its row is from an
+   * earlier boot, or from this PID namespace and no process has its PID. A row from another namespace (a container)
+   * stays `running` until its record arrives: its PID means nothing here.
+   */
   markInterrupted(): number {
-    const rows = this.db.prepare("SELECT call_id, pid FROM calls WHERE outcome = 'running'").all() as { call_id: string; pid: number | null }[];
+    const [boot, namespace] = PROCESS_SCOPE.split(':');
+    const rows = this.db.prepare("SELECT call_id, pid, process_scope FROM calls WHERE outcome = 'running'").all() as
+      { call_id: string; pid: number | null; process_scope: string | null }[];
     let marked = 0;
     for (const row of rows) {
-      let alive = row.pid !== null;
-      if (row.pid !== null) try { process.kill(row.pid, 0); } catch (error) { alive = (error as NodeJS.ErrnoException).code === 'EPERM'; }
-      if (alive) continue;
+      const [rowBoot, rowNamespace] = (row.process_scope ?? '').split(':');
+      let gone = false;
+      if (rowBoot && boot && rowBoot !== boot) gone = true;
+      else if (row.pid !== null && (rowNamespace ? rowNamespace === namespace : !row.process_scope)) {
+        try { process.kill(row.pid, 0); } catch (error) { gone = (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+      }
+      if (!gone) continue;
       this.db.prepare("UPDATE calls SET outcome = 'interrupted' WHERE call_id = ? AND outcome = 'running'").run(row.call_id);
       marked++;
     }
@@ -212,10 +231,10 @@ export class CallStore {
     programRoot: string | null; definition: { id: string; name: string; source: string | null; key: string; interface: string; site: string };
     modelId: string | null; startedAt: string; auditOf: string | null }): void {
     this.db.prepare(`INSERT OR IGNORE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, program_root, definition_id,
-      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash, pid)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '', ?)`).run(row.callId, row.parentCallId, row.parentActionIndex,
+      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash, pid, process_scope)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '', ?, ?)`).run(row.callId, row.parentCallId, row.parentActionIndex,
       row.taskId, row.programId, row.programRoot, row.definition.id, row.definition.name, row.definition.source, row.definition.key,
-      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf, process.pid);
+      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf, process.pid, PROCESS_SCOPE);
   }
 
   /** The trace events so far of a running call (written every so often while it runs). */

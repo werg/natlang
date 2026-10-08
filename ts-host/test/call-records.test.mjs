@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -260,6 +260,26 @@ test('a call shows as running in the store until its record arrives', async () =
     await createNatlangRuntime({ model, calls: store }).run(() => price('a'));
     assert.deepEqual(seen, ['running']);
     assert.deepEqual(store.calls().map(call => call.outcome), ['done']);
+  } finally { done(store); }
+});
+
+test('a running call becomes interrupted only when its process is known to be gone', async () => {
+  const store = freshStore();
+  try {
+    const price = loadVirtualNatlang({ 'price.nl': PRICE }, 'price.nl');
+    for (const request of ['a', 'b', 'c'])
+      await createNatlangRuntime({ model: async () => ({ calls: [['return_result', { status: 'success', value: 1 }]] }), calls: store }).run(() => price(request));
+    const [here, container, rebooted] = store.calls().map(call => call.call_id);
+    const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    const namespace = readlinkSync('/proc/self/ns/pid').replace(/\D/g, '');
+    const scope = `${boot}:${namespace}`;
+    const set = store.db.prepare("UPDATE calls SET outcome = 'running', pid = ?, process_scope = ? WHERE call_id = ?");
+    set.run(2 ** 22 + 7, scope, here);                         // this namespace, no such process
+    set.run(2 ** 22 + 7, `${boot}:${namespace}0`, container);  // another namespace: its PID means nothing here
+    set.run(process.pid, `not-${boot}:${namespace}`, rebooted); // an earlier boot
+    assert.equal(store.markInterrupted(), 2);
+    const outcome = id => store.db.prepare('SELECT outcome FROM calls WHERE call_id = ?').get(id).outcome;
+    assert.deepEqual([outcome(here), outcome(container), outcome(rebooted)], ['interrupted', 'running', 'interrupted']);
   } finally { done(store); }
 });
 
