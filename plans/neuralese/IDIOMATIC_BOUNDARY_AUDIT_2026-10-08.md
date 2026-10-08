@@ -828,6 +828,20 @@ contradicts itself by claiming no recorded authorization. The final Draft is
 `runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-7306a12d697fdb93.trace.jsonl`
 (authority child `task-1-555247/13`, eval action sequence 32).
 
+A later V25 BURS-761 trace shows a related loss one stage earlier. The running
+notes stringify to a Draft-shaped JSON object with candidate IDs, imprecise
+measure prose, and `hold`, but no enrollment, documentation, duplicate-award,
+or committee-approval facts. The final interpreter's early attempt is blocked
+because the notes omit those facts; it also later reports that it cannot
+determine them from the notes. The pass evidence itself is present in the
+folder. Trace:
+`runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000011-c00d1c7716a0f364.trace.jsonl`
+(notes and interpreter invocation `task-1-7d9y29/33`, especially actions
+10, 20, 29, 46, and 54). The saved result later contains a correctly formatted
+`APP-57; APP-52` / `2200; 1700` / `hold` result, so this is evidence of a
+repeated recoverable note-retention failure, not evidence that the entire
+request ended without a result.
+
 VAX-720 is a useful contrast: its pass-04 release names request VAX-720, the
 note records that as the required authority, and the final result correctly
 selects SHIP-C7 and SHIP-C4 with measures 3100 and 2400 and `dispatch`.
@@ -847,6 +861,15 @@ does not infer authority from source facts or alter gold outcomes. V25 frozen
 source and result artifacts were not changed. This is a successor-pool source
 authoring improvement, not a compiler/runtime repair and not evidence of an
 agent tool boundary failure.
+
+The shared guided note scaffold now asks each pass to keep a complete running
+evidence record in prose, including observed eligibility findings, exact
+metrics with units, and the named authority prerequisite and its observed
+status. It explicitly says not to replace that record with only a Draft-shaped
+JSON summary or selected IDs/measures. The final interpreter still decides
+from accumulated evidence and the declared contract. The wording change is
+prospective guidance based on the BURS-761 trace; it does not add file access,
+infer missing facts, change authority, or rewrite frozen V25 artifacts.
 
 ### Separate `nl.with` capture and child types — 2026-10-08
 

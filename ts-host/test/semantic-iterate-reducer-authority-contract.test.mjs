@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { caseFromWithAuthority } from '../scripts/inline-curriculum/semantic-iterate-reducer-authority-builder.mjs';
+import { caseFrom } from '../scripts/inline-curriculum/semantic-iterate-reducers-v18-novel-data.mjs';
 
-const makeCase = (authorizationRule, requestId = 'FISH-730', authorized = true) => caseFromWithAuthority({
+const makeCase = (authorizationRule, requestId = 'FISH-730', authorized = true) => caseFrom({
   slug: 'authority-scope-test', sourceGroup: 'authority-scope-test:world', domain: 'fixture review',
   owner: 'Review desk', requestId,
   requestText: 'Select one eligible item.',

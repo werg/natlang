@@ -1,6 +1,10 @@
+import { authorizationContract } from './semantic-iterate-reducer-selection-contract.mjs';
+
 const joinIds = rows => rows.length ? rows.map(row => row.id).join('; ') : 'none';
 
 export function caseFrom(spec) {
+  if (spec.authorizationRule && (typeof spec.selectionInstruction !== 'string' || !spec.selectionInstruction.trim()))
+    throw new Error(`${spec.slug}: explicit authorization metadata requires a selection instruction`);
   const rows = spec.candidates;
   const ordered = [...rows].sort(spec.compare);
   const provisional = spec.provisional(ordered);
@@ -9,11 +13,22 @@ export function caseFrom(spec) {
   const measure = spec.measure(selected), provisionalMeasure = spec.measure(provisional);
   const authorized = typeof spec.authorized === 'function' ? spec.authorized(selected) : spec.authorized;
   const decision = selected.length === 0 ? spec.noAction : (authorized ? spec.approvedAction : 'hold');
+  const authorization = spec.authorizationRule ? authorizationContract({
+    action: spec.approvedAction, noAction: spec.noAction, requestId: spec.requestId,
+    requirement: spec.authorizationRule.requirement, scope: spec.authorizationRule.scope,
+  }) : undefined;
+  if (authorization && (!spec.ruleText || /selection cardinality:|decision mapping:/i.test(spec.ruleText)))
+    throw new Error(`${spec.slug}: provide a base rule only; selection and authority mapping are added by the shared builder`);
+  if (authorization && !spec.ruleText.toLowerCase().includes(spec.authorizationRule.requirement.toLowerCase()))
+    throw new Error(`${spec.slug}: authorizationRule requirement must match the named prerequisite in the base rule`);
+  const decisionRule = authorization
+    ? `${spec.ruleText} Selection cardinality: ${spec.selectionInstruction} ${authorization.ruleText}`
+    : spec.ruleText;
   const fields = {
     caseId: `Exact request identifier for the ${spec.domain} decision.`,
     selectedItems: spec.selectionFormat,
     measure: spec.measureFormat,
-    decision: spec.decisionFormat ?? `Final disposition: exactly ${spec.finalDecisions.join(', ')}. Selection and authorization are separate; do not change selectedItems merely because authorization is absent.`,
+    decision: authorization?.decisionFormat ?? spec.decisionFormat ?? `Final disposition: exactly ${spec.finalDecisions.join(', ')}. Selection and authorization are separate; do not change selectedItems merely because authorization is absent.`,
   };
   const initial = { caseId: 'UNKNOWN', selectedItems: 'pending', measure: 'pending', decision: 'pending' };
   const passStates = [
@@ -23,7 +38,7 @@ export function caseFrom(spec) {
     { ...initial, caseId: spec.requestId, selectedItems, measure, decision },
   ];
   const evidence = {
-    'pass-01-request.md': `${spec.owner} opened ${spec.domain} request ${spec.requestId}. ${spec.requestText} Decision rule: ${spec.ruleText}`,
+    'pass-01-request.md': `${spec.owner} opened ${spec.domain} request ${spec.requestId}. ${spec.requestText} Decision rule: ${decisionRule}`,
     'pass-02-register.md': `${spec.registerHeading} for ${spec.requestId}:\n${rows.map(spec.registerLine).join('\n')}`,
     'pass-03-conditions.md': `${spec.auditHeading} for ${spec.requestId}:\n${rows.map(spec.auditLine).join('\n')}\n${spec.exceptionText}`,
     'pass-04-authority.md': `${spec.authorityHeading} for ${spec.requestId}. ${spec.authorityText}`,
@@ -32,7 +47,7 @@ export function caseFrom(spec) {
     { name:'request scope and rule', evidence_path:'pass-01-request.md', allowed_fields:['caseId'], constraint:'Copy the complete request identifier and preserve the complete decision rule, including the empty-selection and authorization branches.', source_scope:`request ${spec.requestId}` },
     { name:'candidate register', evidence_path:'pass-02-register.md', allowed_fields:['selectedItems','measure'], constraint:'Make a provisional ordering or worklist from registered metrics only. Eligibility, exceptions, and authorization have not yet been checked; keep it provisional.', source_scope:`register for ${spec.requestId}` },
     { name:'conditions and exceptions', evidence_path:'pass-03-conditions.md', allowed_fields:['selectedItems','measure'], constraint:'Apply every stated condition and scoped exception to the candidates. Recompute the selected set and measure; add no unstated conditions.', source_scope:`condition audit for ${spec.requestId}` },
-    { name:'execution authority', evidence_path:'pass-04-authority.md', allowed_fields:['decision'], constraint:`Keep the evidence-derived selection and measure. Apply authority only to a nonempty selection; an empty eligible selection remains ${spec.noAction}.`, source_scope:`authority record for ${spec.requestId}` },
+    { name:'execution authority', evidence_path:'pass-04-authority.md', allowed_fields:['decision'], constraint:authorization?.passConstraint ?? `Keep the evidence-derived selection and measure. Apply authority only to a nonempty selection; an empty eligible selection remains ${spec.noAction}.`, source_scope:`authority record for ${spec.requestId}` },
   ];
   const changed=['selectedItems','measure'].find(field=>passStates[1][field]!==passStates[2][field]);
   if (!changed) throw new Error(`${spec.slug}: no source-derived provisional correction`);
@@ -42,7 +57,7 @@ export function caseFrom(spec) {
     initial,passes,passStates,evidence,
     instruction:`${spec.instruction}\n\nUse task.json and the four named source records. The candidate register supports only a provisional result. Apply the full condition audit, including scoped exceptions, before fixing selectedItems and measure. Apply authorization only to decision: selection evidence and permission to execute are distinct. Follow the exact tie rule and output formats. If nothing qualifies, use ${spec.noAction}. Do not infer facts absent from current and accumulated source records.`,
     justified_revision:{pass:3,field:changed,reason:`Pass-three source facts revise the provisional result (${provisionalItems}) to the qualified result (${selectedItems}) under the explicit rule.`},
-    decision_rule:spec.ruleText,
+    decision_rule:decisionRule,
     source_summary:{requestId:spec.requestId,candidates:rows.map(row=>({...row})),selectedItems,measure,decision,authorized},
   };
 }

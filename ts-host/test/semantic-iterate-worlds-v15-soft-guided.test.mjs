@@ -36,12 +36,14 @@ test('guided V15 source preserves authored data and declares actual Neuralese so
       assert.match(code, /nl\.with<Neuralese<string>>/);
       assert.match(code, /nl\.with<Draft>/);
       assert.match(code, /task\.passes\[progress\.pass\]/);
-      assert.match(code, /folder\.file\(current\.evidence_path\)/);
-      assert.match(code, /Preserve all supported earlier facts relevant to the decisionRule and outputContract/);
+      assert.match(code, /folder\.snapshot\(\)\.file\(current\.evidence_path\)/);
+      assert.match(code, /Maintain a complete running evidence record in readable prose, not a Draft-shaped JSON summary/);
+      assert.match(code, /preserve each eligibility finding and the exact metric with its unit/);
+      assert.match(code, /exact named authority prerequisite and its status when observed/);
       assert.match(code, /Keep historical events \(what already happened\) distinct from the requested decision/);
-      assert.match(code, /Determine the requested decision now by applying exactly the explicit decisionRule/);
+      assert.match(code, /Apply its explicit decision rule to the supported facts and return the requested decision now/);
       assert.match(code, /Do not require evidence that the requested decision has already been executed/);
-      assert.match(code, /do not add eligibility, authorization, or other prerequisites absent from the explicit decisionRule/);
+      assert.match(code, /do not add eligibility, authorization, or other prerequisites absent from the rule/);
       assert.doesNotMatch(code, /folder\.file\([^)]*pass-0[234]/);
       assert.doesNotMatch(code, /type Neuralese\s*=|type Neuralese</);
       assert.match(rootFile, /Suggested eval scaffold|Use this scaffold/);
