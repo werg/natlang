@@ -107,6 +107,43 @@ test('request timeout diagnostics are classified as infrastructure timeouts', as
   }
 });
 
+test('failure evidence retains matching-session retry status without inferring HTTP metadata', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'opencode-session-retry-status-'));
+  const timeout = Object.assign(new Error('OpenCode turn timed out'), { code: 'REQUEST_TIMEOUT' });
+  const client = {
+    tool: { ids: async () => ({ data: ['invalid'] }) },
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
+      await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
+      yield { type: 'session.status', properties: { sessionID: 'session-retry', status: {
+        type: 'retry', attempt: 3, message: 'Provider rate limit; retrying shortly',
+        action: { provider: 'opencode', label: 'Retry', message: 'Please retry after delay' }
+      } } };
+      await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+    })() }) },
+    session: {
+      create: async () => ({ data: { id: 'session-retry' } }),
+      prompt: async () => { await new Promise(resolve => setTimeout(resolve, 10)); throw timeout; },
+      messages: async () => ({ data: [] }),
+      delete: async () => ({ data: true })
+    }
+  };
+  const backend = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode',
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
+  try {
+    await assert.rejects(backend({ messages: [], tools: [], tool_choice: 'auto' }), error => {
+      const eventStream = error.transportDiagnostic.event_stream;
+      assert.equal(eventStream.latest_session_status.type, 'retry');
+      assert.equal(eventStream.latest_session_status.attempt, 3);
+      assert.equal(eventStream.latest_session_status.action.provider, 'opencode');
+      assert.equal(error.providerStatusCode, undefined, 'retry prose is not an HTTP status');
+      return true;
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('OpenCode session.error from another session does not replace the prompt result', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'opencode-event-scope-'));
   const final = { info: { id: 'assistant-final', role: 'assistant' }, parts: [

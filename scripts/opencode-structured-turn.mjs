@@ -117,6 +117,22 @@ function safeSessionApiError(event, context) {
   return error;
 }
 
+function safeSessionStatus(event, sessionID) {
+  if (event?.type !== 'session.status' || event.properties?.sessionID !== sessionID) return undefined;
+  const status = event.properties?.status;
+  if (!status || !['idle', 'busy', 'retry'].includes(status.type)) return undefined;
+  if (status.type !== 'retry') return { type: status.type };
+  const action = status.action && typeof status.action === 'object' ? status.action : undefined;
+  return {
+    type: 'retry',
+    ...(Number.isSafeInteger(status.attempt) ? { attempt: status.attempt } : {}),
+    ...(typeof status.message === 'string' ? { message: redactCredentialLikeText(status.message).slice(0, 512) } : {}),
+    ...(action ? { action: Object.fromEntries(['reason', 'provider', 'title', 'message', 'label']
+      .filter(key => typeof action[key] === 'string')
+      .map(key => [key, redactCredentialLikeText(action[key]).slice(0, 160)])) } : {})
+  };
+}
+
 function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis.fetch) {
   const controller = new AbortController();
   let resolveMatch;
@@ -127,6 +143,7 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
   let readyResult;
   let streamState = 'connecting';
   let streamHandshake;
+  let latestSessionStatus;
   const settleReady = result => {
     if (readySettled) return;
     readySettled = true;
@@ -172,6 +189,7 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
       }
       for await (const event of subscription.stream) {
         if (controller.signal.aborted) return;
+        latestSessionStatus = safeSessionStatus(event, sessionID) ?? latestSessionStatus;
         const error = safeSessionApiError(event, { sessionID });
         if (error) {
           error.transportUpstreamError.event_stream = {
@@ -208,7 +226,8 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
           status: streamHandshake.status,
           content_type: streamHandshake.contentType,
           directory: streamHandshake.directory
-        } } : {})
+        } } : {}),
+        ...(latestSessionStatus ? { latest_session_status: latestSessionStatus } : {})
       };
     }
   };
