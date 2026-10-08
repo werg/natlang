@@ -24,10 +24,11 @@ import { activeSystemPrompts, softenMessages } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
-  'documentation for eval built-ins (nl, iterateOn, transcript); a declaration for an external service or importable package ' +
+  'documentation for eval built-ins (nl, iterateOn, transcript, decide); a declaration for an external service or importable package ' +
   '("pkg" lists its exports, "pkg.name" shows one); the type-only member shape of a host service object visible to this call; ' +
   'or the exact schema and instructions of a native tool currently offered to this call. Tool schemas and service shapes are ' +
-  'metadata, not program function source or service implementation.';
+  'metadata, not program function source or service implementation. Standard JavaScript built-ins and methods are used directly ' +
+  'through their TypeScript library types; read_code does not show their library implementation.';
 export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase: replace one exact or uniquely fuzzy span of its source. ' +
   'The function is validated before the edit becomes live.';
 /**
@@ -52,10 +53,10 @@ export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "s
   'require an invalid or contradictory operation), give the reason instead of a value.';
 
 /** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
-export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each.';
+export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn, transcript and decide; read_code shows how to use each.';
 /** Inline children have the same delegation tools as named calls. */
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
-export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn and transcript; read_code shows how to use each. ' +
+export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' +
   'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
@@ -559,7 +560,7 @@ export class NativeToolAgent {
     const ownCode = Object.keys(session.lam.codebase).length > 0;
     // Built-in documentation is always there to read, so read_code is always offered; editing needs code of the program's own.
     const readCode = tool('read_code', canGenerateNl(session.runtime.frame) ? READ_CODE_DESCRIPTION :
-      READ_CODE_DESCRIPTION.replace('(nl, iterateOn, transcript)', '(iterateOn, transcript)'), { name: { type: 'string' } }, ['name']);
+      READ_CODE_DESCRIPTION.replace('(nl, iterateOn, transcript, decide)', '(iterateOn, transcript, decide)'), { name: { type: 'string' } }, ['name']);
     if (!ownCode) tools.splice(2, 0, readCode);
     if (ownCode) tools.splice(2, 0,
       readCode,

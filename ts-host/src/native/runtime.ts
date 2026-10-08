@@ -21,6 +21,7 @@ import type { PythonHost } from './folder-python.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
+import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
@@ -120,6 +121,16 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   'The child returns Draft; the TypeScript step returns Progress.\n';
 
 export const BUILT_IN_DOCS: Record<string, string> = {
+  Neuralese: NEURALESE_TYPE_DOCUMENTATION,
+  decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
+  const decision = await decide(verdict, statement);
+  decision.value                    the function's answer
+  decision.probabilities            { value, probability }[] for its finite result choices
+  decision.confidence               probability of the returned answer
+  decision.scored                   whether the model supplied a scored distribution
+The first argument must be a callable function in scope, such as a natural-language function with a finite result
+type; the remaining arguments are passed to it in order. When the model driver has no decision scorer, the function
+still runs normally and the result has one probability-1 answer with scored=false.`,
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
 instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
@@ -1412,9 +1423,11 @@ export class NativeSession {
   /** What eval code in this call can use, for a model looking for something it does not have. */
   private scopeGuide(): string {
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const captures = Object.keys(this.lam.captures ?? {});
     const locals = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
     const helperNames = [...this.persistentScopeHelpers.keys()];
-    const names = [...new Set([...inputs, ...locals, ...helperNames, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
+    const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
+      ...Object.keys(this.availableServices())])];
     return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }

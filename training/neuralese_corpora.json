@@ -7114,6 +7114,50 @@
         "neuralese-workflowevals-folder-iterate-v27-frozen-runtime-20261008-v2"
       ],
       "notes": "Closed raw V27 Luna campaign with all 30 distinct source variants claimed and terminal, all 30 parent results accepted with exact oracle, zero transport retries. Preserves the full campaign tree including raw per-invocation result/trace files, collector logs, result manifests, journals, queues, dispatch claim ledger, launch record, and per-case closure index. Indices 1 and 5 each have one scope failure despite accepted exact parent results; keep these two trajectories held for action/trace review. The remaining 28 have no scope failures. Thirty are derived task variants across inherited WorkflowEvals groups, with zero independent-world credit. No training, trace, DPO, or action admission."
+    },
+    {
+      "id": "neuralese-v24-root-semantic-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-root-semantic-review-20261008-v1",
+      "include": [
+        "review.json"
+      ],
+      "admission": "held-semantic-review-only-no-training-admission",
+      "derived_from": [
+        "neuralese-v24-actual-action-review-20261008-v1",
+        "neuralese-v24-semantic-target-candidate-proposal-20261008-v1"
+      ],
+      "notes": "Root manually reviewed27train note texts and3typed final targets for source-grounded semantics. Caught readout-copy versus author-target role mismatch. Does not review33testtargets or certify writer identity/runtime replay/foundation/DPO. Preserve alongside subsequent exhaustive role correction; correctness does not grant admission."
+    },
+    {
+      "id": "neuralese-v24-root-authored-target-candidates-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-root-authored-target-candidates-20261008-v2",
+      "include": [
+        "README.md",
+        "review.json"
+      ],
+      "admission": "held-root-review-candidate-only-no-training-admission",
+      "derived_from": [
+        "neuralese-v24-root-semantic-review-20261008-v1",
+        "neuralese-v24-semantic-target-role-correction-20261008-v1",
+        "neuralese-v24-semantic-target-candidate-materialization-20261008-v1"
+      ],
+      "notes": "Three exact train-split native SFT candidates after corrected V24 role review: ARC-531 plain-string eval-composed return, BB-540 structured interpreter return, ARC-530 structured interpreter return. Exact provider-rendered prompts and selected target/raw-action binding are preserved. Shared Python context hydration validation passed for all three; two Neuralese inputs are context-only (not learned writers), ARC-530 has none. No readout copies, forwarded outputs, test rows, recurrence edges, runtime qualification, or admission."
+    },
+    {
+      "id": "neuralese-v24-root-action-admission-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-root-action-admission-20261008-v1",
+      "include": [
+        "admission.json"
+      ],
+      "admission": "root-reviewed-exact-three-native-SFT-train-actions-only-not-full-trajectories",
+      "derived_from": [
+        "neuralese-v24-root-authored-target-candidates-20261008-v2",
+        "neuralese-v24-root-semantic-review-20261008-v1"
+      ],
+      "notes": "Exact selection by immutable IDs/target hashes: ARC531 plain-string request-rule summary, BB540 structured final decision, ARC530 structured authorization update. Root rechecked original raw files, actions, contexts and decoded targets after source semantic review and shared context validation. No learned-writer, recurrence, runtime replay, foundation, autonomous-stopping or DPO qualification. Integration pending; current GPU inputs unchanged."
     }
   ],
   "coverage_backlog": [

@@ -31,6 +31,34 @@ test('shared result guidance shows computed Neuralese text return and static mar
   assert.match(SEMANTIC_RESULT_PROMPT, /for computed Neuralese<string> output, return the computed string/);
 });
 
+test('read_code shows the authentic built-in Neuralese type declaration', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  const inspected = await script([['eval', { code: 'read_code("Neuralese")' }],
+    ['return_result', { status: 'success', value: 'done' }]]);
+  const declaration = JSON.parse(inspected.results[0]);
+  assert.match(declaration, /Built-in compile-time type declaration/);
+  assert.match(declaration, /type Neuralese<T, D extends string = DefaultDialect>/);
+  assert.match(declaration, /interface NeuraleseValue<T, D extends string>/);
+  assert.match(declaration, /no semantic fields to inspect/);
+  assert.equal(declaration, BUILT_IN_DOCS.Neuralese);
+
+  const prompt = (await import('../dist/model/text-neuralese-emulation.js')).TEXT_NEURALESE_EMULATION_PROMPT;
+  assert.match(prompt, /Use read_code\("Neuralese"\) to inspect its declaration/);
+  assert.doesNotMatch(prompt, /do not redefine it or use read_code\("Neuralese"\)/);
+});
+
+test('read_code documents the injected decide helper instead of asking for program source', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  const inspected = await script([['eval', { code: 'read_code("decide")' }],
+    ['return_result', { status: 'success', value: 'done' }]]);
+  const docs = JSON.parse(inspected.results[0]);
+  assert.equal(docs, BUILT_IN_DOCS.decide);
+  assert.match(docs, /decide\(fn, \.\.\.args\)/);
+  assert.match(docs, /first argument must be a callable function in scope/);
+  assert.match(docs, /one probability-1 answer with scored=false/);
+  assert.match(READ_CODE_DESCRIPTION, /eval built-ins \(nl, iterateOn, transcript, decide\)/);
+});
+
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {
   const { results } = await script([['eval', { code: 'return_result({ status: "success", value: "Hello, " + name })' }]]);
   assert.match(results[0], /Staged "Hello, Ada" as the result/);
@@ -47,6 +75,18 @@ test('a value of the return type shaped like a request stays a value', async () 
 test('reaching for what the scope lacks is answered with what it has', async () => {
   const { results } = await script([['eval', { code: 'const fs = require("fs");\nfs' }], ['eval', { code: 'missingThing + 1' }]]);
   for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, iterateOn and transcript/);
+});
+
+test('scope feedback names declared captures separately from properties of the input record', async () => {
+  const { session: open } = await import('./support/natlang.mjs');
+  const { session } = open({ type: '(input: { context: string, evidence: string, current: string, constraint: string }) => string',
+    instructions: 'Revise the note.' });
+  session.lam.captures = Object.fromEntries(['context', 'evidence'].map(name => [name,
+    { name, type: 'string', mutable: false, get: () => name }]));
+  const guide = session.scopeGuide();
+  assert.match(guide, /has input, context, evidence,/);
+  assert.doesNotMatch(guide, /\bcurrent\b|\bconstraint\b/,
+    'record fields are not standalone lexical names unless passed as arguments or captures');
 });
 
 test("redeclaring an input says it already holds the caller's value", async () => {
@@ -86,6 +126,7 @@ test('read_code accepts its name or native-tool argument shape in eval and remai
 test('read_code discovers only currently offered native tool schemas and visible host service types', async () => {
   assert.match(READ_CODE_DESCRIPTION, /exact schema and instructions of a native tool currently offered/);
   assert.match(READ_CODE_DESCRIPTION, /metadata, not program function source or service implementation/);
+  assert.match(READ_CODE_DESCRIPTION, /Standard JavaScript built-ins and methods are used directly/);
   const toolInspection = await script([
     ['eval', { code: 'read_code("return_result")' }],
     ['return_result', { status: 'success', value: 'done' }],
