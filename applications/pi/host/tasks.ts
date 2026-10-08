@@ -14,6 +14,7 @@ import { defineTask } from '../vendor/durable/src/tasks.ts';
 import type { RunningTask, TaskRuntime } from '../vendor/durable/src/types.ts';
 import type { Agent as PiAgent, AnyTask, Settings as PiSettings } from '../vendor/durable/src/harness/types.ts';
 import { ensureProviderSessionId } from '../vendor/durable/src/harness/provider.ts';
+import { LiveDoc } from '../vendor/durable/src/harness/live.ts';
 import type { Agent, PhaseFacts, Settings } from '../types.ts';
 import { AI_DECLARATION, aiService } from './ai.ts';
 import { DURABLE_DECLARATION, durableService, type PhaseState, plain, type DurableHost } from './durable.ts';
@@ -53,6 +54,21 @@ export function settingsFacts(settings: PiSettings): Settings {
 
 const stateKey = (record: { state: unknown } | undefined) => JSON.stringify(record?.state ?? null);
 
+/**
+ * Aborted tool tasks of one round write their results in call order, as pi-durable's (synchronous) abort handlers do:
+ * an abort waits, a bounded time, until every earlier slot of the round is done. Mechanism only; the abort itself is
+ * the natural-language phase.
+ */
+async function awaitEarlierSlots(task: RunningTask<unknown, unknown, unknown>, runtime: Runtime, context: Context): Promise<void> {
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline && !runtime.signal.aborted) {
+    const slots = ((await runtime.snapshot(LiveDoc, task.conversationId, context)) as { tools?: { taskId?: number; status: string }[] } | undefined)?.tools ?? [];
+    const mine = slots.findIndex(slot => slot.taskId === task.id);
+    if (mine <= 0 || slots.slice(0, mine).every(slot => slot.status === 'done' || slot.taskId === undefined)) return;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+}
+
 async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task: RunningTask<unknown, unknown, unknown>, runtime: Runtime, context: Context) {
   const agent = await runtime.agent(context);
   const checkpoint = task.state.checkpoint as { phase?: string };
@@ -70,6 +86,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
     services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId);
     serviceDeclarations.tools = TOOLS_DECLARATION;
   }
+  if (task.kind === 'pi.tool' && mode === 'abort') await awaitEarlierSlots(task, runtime, context);
   const before = stateKey(task);
   const attempts = Math.max(1, host.attempts ?? 2);
   const phase = mode === 'abort' ? 'abort' : String(checkpoint.phase);
