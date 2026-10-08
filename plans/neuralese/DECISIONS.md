@@ -1089,3 +1089,23 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   The full projection works on gold-derived history (matched control) but collapses when it reads its own outputs;
   nothing in training exposes it to its own autoregressive drift. Relevant to the planned cutover: autoregressive
   initialization is far from usable, and the parallel-sketch route is the near-term path.
+
+## 2026-10-08 — Owner: replace the sketch rollout with a token-to-Neuralese input map
+
+- Why: Jacobi sketch passes rerun the shallow 4-layer stack over the whole sequence and compound errors with depth
+  (v9 at step 4864: pass ΔCE 2.25 / 3.03 / 4.92 for passes 1–3, ~7.5 at pass 7), and each update pays 4+ passes.
+- Considered first: multi-token prediction in embedding space (one small shared block drafts K inputs from the top
+  state; probe `eval/mtp_draft_probe.py`, run `runs/mtp-draft-probe-20261008-v1`). Owner: good idea, but too
+  inefficient at training time. Kept as an option for inference-time block initialization.
+- Decision: Neuralese positions in training read `f(tokens) = E[tok] + causal depthwise conv + low-rank residual`
+  (`model/input_map.py`, trainer `--neuralese-input map`).
+  - Residuals start at zero, so f starts exactly at the crisp history.
+  - f is fitted to the model's own stop-gradient projection at the same slot (self-consistency, no extra pass);
+    the consumer reads f detached, so f models the drift and the backbone learns to read it.
+  - Two passes per update (gold text, then one parallel mapped-history pass) instead of 4–8.
+  - The projection keeps its manifold loss toward the token embedding (goal 1 of the warm-up).
+- Caveat recorded with the owner: f can only carry what the tokens determine. The residual between the model's
+  projection and f is the measure of what Neuralese carries beyond tokens; when it grows, blend in genuinely
+  self-generated (AR-block) inputs. That replaces "cut over at crisp parity" as the cutover signal. AR controls
+  (with survival for projection and sketch rollouts, 92951796) keep measuring the exposure gap.
+- Training-only: exported serving heads omit the map (stored separately as `neuralese_input_map`).

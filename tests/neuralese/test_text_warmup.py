@@ -1404,3 +1404,46 @@ def test_document_windows_keep_context_tokens_out_of_targets():
     assert targets(plain)==tokens+[2]
     assert targets(masked)==tokens[20:]+[2]
     for w in masked:assert w['ids'][:w['prefix']]==([1]+tokens+[2])[w['start']:w['start']+w['prefix']]
+
+
+def test_mapped_completions_fit_the_map_to_the_projection_and_read_it_detached():
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    from natlang_neuralese.train.text_warmup import mapped_completions
+    backbone,heads=tiny_student()
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
+    with torch.no_grad():
+        identity=heads.input_map(backbone.embed(span))
+    assert torch.equal(identity,backbone.embed(span))  # zero residuals: starts at the crisp history
+    passes=list(mapped_completions(backbone,heads,prefix,span))
+    assert [p['pass_index'] for p in passes]==[0,1]
+    for out in passes:
+        assert out['sketches'].shape==out['sketch_target'].shape==out['top'].shape
+        assert not out['sketch_target'].requires_grad
+    consumer=passes[1]
+    heads.input_map.zero_grad()
+    consumer['top'].float().pow(2).sum().backward(retain_graph=True)
+    assert all(q.grad is None or not q.grad.abs().sum() for q in heads.input_map.parameters())
+    (consumer['sketches']-consumer['sketch_target']).float().pow(2).sum().backward()
+    assert heads.input_map.up.weight.grad.abs().sum()>0 and heads.input_map.conv.weight.grad.abs().sum()>0
+    assert len(list(mapped_completions(backbone,heads,prefix,span,passes=1)))==1
+
+
+def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp_path,monkeypatch):
+    import json
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=8)
+    args=[x for x in args]
+    args[args.index('--eval-every')+1]='1'
+    args+=['--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
+           '--neuralese-input','map','--input-map-kernel','2','--input-map-rank','4']
+    module.main(args)
+    run=tmp_path/'run'
+    rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
+    assert any(r['sketch_gradient_norm']>0 for r in rows)
+    assert all(r['schedule']['sequence_passes']<=3 for r in rows)
+    evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
+    assert {str(k) for k in evals[-1]['pass_ce_deltas']}=={'0','1'}
+    exported=torch.load(run/'heads.pt',weights_only=False)
+    assert exported['neuralese_input_map'] and not any(k.startswith('input_map.') for k in exported['heads'])
+    state=torch.load(run/'checkpoint.pt',weights_only=False)
+    assert any(k.startswith('input_map.') for k in state['heads'])
