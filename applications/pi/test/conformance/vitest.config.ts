@@ -8,9 +8,11 @@ const testing = fileURLToPath(new URL('../../vendor/durable/src/testing/index.ts
 export default defineConfig({
   test: {
     environment: 'node',
+    // pi's waitFor helper allows 5 s, sized for crisp tasks; the port's phases are model calls.
+    env: { PI_WAIT_MS: process.env.PI_WAIT_MS ?? '3600000' },
     root: fileURLToPath(new URL('../../vendor/durable', import.meta.url)),
     include: ['test/harness-{generation,generation-recovery,compaction,context,prompt,inbox,submissions,tools,tools-recovery,structured,tasks}.test.ts'],
-    testTimeout: 1_800_000,
+    testTimeout: 7_200_000,
     hookTimeout: 600_000,
     fileParallelism: process.env.PI_FILE_PARALLEL === "1",
     maxWorkers: Number(process.env.PI_WORKERS ?? 1),
