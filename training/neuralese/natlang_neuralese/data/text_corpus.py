@@ -81,13 +81,30 @@ def _soft_writer_sources(records, source_hashes):
     producer target. They hydrate matching reader context; they do not create
     extra target rows or independent gold labels.
     """
+    records = list(records)
     sources = {}
+
+    def add_source(block_id, attestation):
+        same_writer = [item for item in sources.setdefault(block_id, [])
+                       if item.get("writer_record_id") == attestation.get("writer_record_id")
+                       and item.get("body_sha256") == attestation.get("body_sha256")
+                       and item.get("body") == attestation.get("body")]
+        occurrence = {key: attestation[key] for key in
+                      ("writer_write_node", "result_path", "write_name", "source_kind") if key in attestation}
+        if len(same_writer) == 1:
+            same_writer[0].setdefault("write_occurrences", []).append(occurrence)
+        else:
+            attestation["write_occurrences"] = [occurrence]
+            sources[block_id].append(attestation)
+
     def add_write(write, record):
         if (isinstance(write, dict) and isinstance(write.get("name"), str)
                 and write["name"].startswith("soft-state:")
                 and write.get("type") == "Neuralese<string>"
                 and isinstance(write.get("source"), str)):
-            block_id = write["name"].split(":", 1)[1]
+            block_id = write.get("block_id") or write["name"].split(":", 1)[1]
+            if not isinstance(block_id, str) or not block_id.startswith("nz1_"):
+                return
             attestation = {"body": write["source"], "writer_record_id": record.get("id"),
                            "writer_record_sha256": source_hashes.get(record.get("id")),
                            "writer_source_row_sha256": ((record.get("source_ref") or {}).get("source_row_sha256")),
@@ -95,7 +112,7 @@ def _soft_writer_sources(records, source_hashes):
                            "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
                                                                 if isinstance(g, str) and g)),
                            "write_name": write["name"], "body_sha256": _sha(write["source"].encode("utf-8"))}
-            sources.setdefault(block_id, []).append(attestation)
+            add_source(block_id, attestation)
 
     def visit(value, record):
         if isinstance(value, dict):
@@ -127,6 +144,75 @@ def _soft_writer_sources(records, source_hashes):
                 if checked.valid:
                     for write in checked.value.writes:
                         add_write({"name": write.name, "type": write.type, "source": write.source}, record)
+
+        source_ref = record.get("source_ref") or {}
+        for call in ((decision.get("assistant") or {}).get("calls") or []):
+            for receipt in ((call.get("outcome") or {}).get("typed_result_writes") or []):
+                if (not isinstance(receipt, dict)
+                        or receipt.get("schema") != "natlang.typed-result-write/1"
+                        or receipt.get("invocation_id") != source_ref.get("invocation_id")
+                        or receipt.get("source_row_sha256") != source_ref.get("source_row_sha256")
+                        or receipt.get("source_kind") not in {"typed-text-result", "typed-text-result-field"}
+                        or receipt.get("result_type") != "Neuralese<string>"
+                        or not isinstance(receipt.get("writer_node"), str)
+                        or not isinstance(receipt.get("block_id"), str)
+                        or not receipt["block_id"].startswith("nz1_")
+                        or not isinstance(receipt.get("body_source"), str)
+                        or not isinstance(receipt.get("body_sha256"), str)
+                        or _sha(receipt["body_source"].encode("utf-8")) != receipt["body_sha256"]
+                        or not isinstance(receipt.get("result_path"), list)
+                        or not receipt["result_path"] or receipt["result_path"][0] != "return"):
+                    continue
+                add_source(receipt["block_id"], {"body": receipt["body_source"],
+                    "writer_record_id": record.get("id"), "writer_record_sha256": source_hashes.get(record.get("id")),
+                    "writer_source_row_sha256": source_ref.get("source_row_sha256"),
+                    "writer_split": record.get("split"),
+                    "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
+                                                         if isinstance(g, str) and g)),
+                    "write_name": "soft-state:" + receipt["block_id"], "body_sha256": receipt["body_sha256"],
+                    "writer_invocation_id": receipt["invocation_id"], "writer_write_node": receipt["writer_node"],
+                    "result_path": receipt["result_path"], "source_kind": "runtime-typed-result-write"})
+
+    rows_by_invocation = {}
+    for record in records:
+        source_ref = record.get("source_ref") or {}
+        rows_by_invocation.setdefault((source_ref.get("trajectory_id"), source_ref.get("invocation_id")), []).append(record)
+    for reader in records:
+        reader_ref = reader.get("source_ref") or {}
+        for context in reader_ref.get("provider_expanded_read_contexts") or []:
+            if not isinstance(context, dict) or context.get("origin") != "same-run-producer":
+                continue
+            writer_event, block = context.get("producer_write"), context.get("block")
+            if not isinstance(writer_event, dict) or not isinstance(block, dict):
+                continue
+            writer_call, writer_node = writer_event.get("call_id"), writer_event.get("node")
+            block_id, body, body_sha = block.get("id"), block.get("body"), block.get("body_sha256")
+            if (not isinstance(writer_call, str) or not isinstance(writer_node, str)
+                    or not isinstance(block_id, str) or not isinstance(body, str)
+                    or not isinstance(body_sha, str) or _sha(body.encode("utf-8")) != body_sha
+                    or writer_event.get("block") != block_id or writer_event.get("text_body_sha256") != body_sha):
+                continue
+            for writer_record in rows_by_invocation.get((reader_ref.get("trajectory_id"), writer_call), []):
+                writer_ref = writer_record.get("source_ref") or {}
+                if writer_ref.get("source_row_sha256") != reader_ref.get("source_row_sha256"):
+                    continue
+                receipts = [receipt for call in ((((writer_record.get("decision") or {}).get("assistant") or {}).get("calls")) or [])
+                            for receipt in ((call.get("outcome") or {}).get("typed_result_writes") or [])
+                            if isinstance(receipt, dict) and receipt.get("writer_node") == writer_node
+                            and receipt.get("block_id") == block_id and receipt.get("body_sha256") == body_sha]
+                if len(receipts) != 1 or receipts[0].get("body_source") is not None:
+                    continue
+                receipt = receipts[0]
+                add_source(block_id, {"body": body, "writer_record_id": writer_record.get("id"),
+                    "writer_record_sha256": source_hashes.get(writer_record.get("id")),
+                    "writer_source_row_sha256": writer_ref.get("source_row_sha256"),
+                    "writer_split": writer_record.get("split"),
+                    "writer_source_groups": sorted(set(g for g in (writer_record.get("source_groups") or [])
+                                                         if isinstance(g, str) and g)),
+                    "write_name": "soft-state:" + block_id, "body_sha256": body_sha,
+                    "writer_invocation_id": writer_call, "writer_write_node": writer_node,
+                    "result_path": receipt.get("result_path"),
+                    "source_kind": "same-run-provider-expanded-writer-context"})
     return sources
 
 
@@ -213,6 +299,13 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     and (set(writer.get("writer_source_groups") or []) & set(source_groups)
                          or (isinstance(reader_source_row, str) and reader_source_row
                              and writer.get("writer_source_row_sha256") == reader_source_row))
+                    and ((writer.get("writer_write_node") is None and
+                          not any(isinstance(item, dict) and item.get("writer_write_node") is not None
+                                  for item in writer.get("write_occurrences", []))) or
+                         writer.get("writer_write_node") == item.get("producer_write_node") or
+                         any(isinstance(occurrence, dict) and
+                             occurrence.get("writer_write_node") == item.get("producer_write_node")
+                             for occurrence in writer.get("write_occurrences", [])))
                     and writer.get("body_sha256") == body_sha256
                     and writer.get("body") == body]
         if len(eligible) != 1:

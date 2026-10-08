@@ -190,6 +190,138 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   });
 }
 
+function neuraleseReference(value: unknown): Dict | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const ref = (value as Dict).$neuralese;
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) return;
+  const record = ref as Dict;
+  return typeof record.id === 'string' && typeof record.type === 'string' ? record : undefined;
+}
+
+function valueAtPath(value: unknown, path: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const part of path) {
+    if (typeof part === 'number') {
+      if (!Array.isArray(current) || !Number.isSafeInteger(part) || part < 0 || part >= current.length) return undefined;
+      current = current[part];
+    } else {
+      if (!current || typeof current !== 'object' || Array.isArray(current) || !Object.hasOwn(current, part)) return undefined;
+      current = (current as Dict)[part];
+    }
+  }
+  return current;
+}
+
+function typedJsonBody(value: unknown, active = new Set<object>()): string | undefined {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return Number.isFinite(value) ? Object.is(value, -0) ? '-0' : String(value) : undefined;
+  if (Array.isArray(value)) {
+    if (active.has(value)) return undefined;
+    active.add(value);
+    try {
+      const values = value.map(item => typedJsonBody(item, active));
+      return values.some(item => item === undefined) ? undefined : `[${values.join(',')}]`;
+    } finally { active.delete(value); }
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    if (active.has(value)) return undefined;
+    active.add(value);
+    try {
+      const fields = Object.keys(value as Dict).sort().map(key => {
+        const child = typedJsonBody((value as Dict)[key], active);
+        return child === undefined ? undefined : `${JSON.stringify(key)}:${child}`;
+      });
+      return fields.some(item => item === undefined) ? undefined : `{${fields.join(',')}}`;
+    } finally { active.delete(value); }
+  }
+  return undefined;
+}
+
+/** Prove direct typed-result rewrites from the exact model call, writer event, and captured invocation result. */
+function typedResultActionProof(modelArguments: unknown, actionArguments: unknown, row: NativeRow,
+  invocationId: string | undefined, actionEvent: Dict, requestSha256?: unknown,
+  rawResponseSha256?: unknown): Dict[] | undefined {
+  if (!invocationId || !['return_result', 'eval'].includes(String(actionEvent.name)) ||
+      !['ok', 'completed'].includes(String(actionEvent.outcome))) return;
+  const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
+  const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
+  if ((actionEvent.name === 'return_result' && !Object.hasOwn(model, 'value')) || canonical(model) !== canonical(action)) return;
+  const ledger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+  const outputs = ledger.filter(item => item.invocation_id === invocationId && item.host_result &&
+    typeof item.host_result === 'object').map(item => item.host_result as Dict);
+  if (outputs.length !== 1) return;
+  const host = outputs[0]!;
+  if (host.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== invocationId ||
+      host.complete !== true || host.terminal_action_seq !== actionEvent.seq || !Object.hasOwn(host, 'value')) return;
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const allowedSources = actionEvent.name === 'return_result' ? ['return_result'] : ['eval-return', 'eval-finish'];
+  const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === invocationId &&
+    ['typed-text-result', 'typed-json-result', 'typed-text-result-field'].includes(String(event.source_kind)) &&
+    allowedSources.includes(String(event.source)) && event.marker_context === 'return-result');
+  if (!writes.length) return;
+  const refs = new Map<string, { ref: Dict; receipt: Dict }>();
+  const pathKeys = new Set<string>();
+  const ambiguousPaths = new Set<string>();
+  for (const write of writes) {
+    const block = write.block, node = write.node, type = write.result_type, bodySha = write.text_body_sha256;
+    if (typeof block !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(block) || typeof node !== 'string' ||
+        typeof type !== 'string' || !type.startsWith('Neuralese<') || typeof bodySha !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(bodySha) || write.truncated !== false || !Number.isSafeInteger(write.seq) ||
+        !Number.isSafeInteger(actionEvent.seq) || Number(write.seq) >= Number(actionEvent.seq)) continue;
+    const inputs = Array.isArray(write.inputs) ? write.inputs as Dict[] : [];
+    const sourceNodes = inputs.filter(input => input.port === 'result-source' && typeof input.node === 'string')
+      .map(input => input.node as string);
+    if (sourceNodes.length !== 1) continue;
+    const sourceTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+      event.node === sourceNodes[0] && Number.isSafeInteger(event.seq) && Number(event.seq) < Number(write.seq));
+    if (sourceTurns.length !== 1) continue;
+    const precedingTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+      Number.isSafeInteger(event.seq) && Number(event.seq) < Number(write.seq)).sort((a, b) => Number(a.seq) - Number(b.seq));
+    if (precedingTurns.at(-1)?.node !== sourceNodes[0]) continue;
+    let body: string | undefined;
+    let bodyBasis = 'authenticated-final-host-output-reference';
+    const exactRawValue = actionEvent.name === 'return_result' &&
+      (model.status === undefined || model.status === 'success') && Object.hasOwn(model, 'value');
+    if (exactRawValue && write.source_kind === 'typed-text-result' && type === 'Neuralese<string>' && write.result_path === undefined &&
+        typeof model.value === 'string') {
+      body = model.value; bodyBasis = 'exact-raw-model-result-string';
+    } else if (exactRawValue && write.source_kind === 'typed-json-result' && write.result_path === undefined &&
+        type !== 'Neuralese<string>') {
+      body = typedJsonBody(model.value); bodyBasis = 'canonical-json-of-exact-raw-model-result';
+    } else if (exactRawValue && write.source_kind === 'typed-text-result-field' && type === 'Neuralese<string>' &&
+        Array.isArray(write.result_path) && write.result_path[0] === 'return' && write.result_path.length > 1 &&
+        write.result_path.slice(1).every(part => typeof part === 'string' || Number.isSafeInteger(part))) {
+      const value = valueAtPath(model.value, write.result_path.slice(1) as (string | number)[]);
+      if (typeof value !== 'string') continue;
+      body = value; bodyBasis = 'exact-raw-model-result-field';
+    }
+    if (body !== undefined && hexDigest(body) !== bodySha) continue;
+    if (body === undefined && exactRawValue) continue;
+    const outputPath = Array.isArray(write.result_path) ? write.result_path[0] === 'return' ?
+      write.result_path.slice(1) as (string | number)[] : undefined : [];
+    if (!outputPath) continue;
+    const capturedRef = neuraleseReference(valueAtPath(host.value, outputPath));
+    if (!capturedRef || capturedRef.id !== block || capturedRef.type !== type) continue;
+    const pathKey = JSON.stringify(outputPath);
+    if (pathKeys.has(pathKey)) { refs.delete(pathKey); ambiguousPaths.add(pathKey); continue; }
+    if (ambiguousPaths.has(pathKey)) continue;
+    pathKeys.add(pathKey);
+    const ref = { $neuralese: { id: block, type } };
+    refs.set(pathKey, { ref, receipt: { schema: 'natlang.typed-result-write/1', trajectory_id: row.id,
+      source_row_sha256: nativeRowDigest(row), invocation_id: invocationId, writer_call_id: invocationId,
+      writer_node: node, block_id: block, source_kind: write.source_kind,
+      source: write.source, result_type: type, result_path: write.result_path ?? ['return'],
+      model_turn_node: sourceNodes[0], action_seq: actionEvent.seq, body_sha256: bodySha,
+      request_sha256: typeof requestSha256 === 'string' ? requestSha256 : null,
+      raw_response_sha256: typeof rawResponseSha256 === 'string' ? rawResponseSha256 : null,
+      ...(body === undefined ? {} : { body_source: body }), body_source_basis: bodyBasis } });
+  }
+  const receipts = [...refs.values()].map(entry => entry.receipt);
+  return receipts.length ? receipts : undefined;
+}
+
 /** A bounded diagnostic preview is never executable data unless the exact value came from a raw model call. */
 function containsIncompleteDiagnostic(value: unknown): boolean {
   const pending = [value], seen = new Set<object>(); let visited = 0;
@@ -600,11 +732,14 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           const eventArguments = containsIncompleteDiagnostic(event.arguments) ? normalized.arguments : event.arguments;
           const softBodyMode = exactRaw && event.name === 'eval' ?
             softBodyActionMatch(normalized.arguments, event.arguments) : undefined;
+          const typedResultWrites = exactRaw ? typedResultActionProof(normalized.arguments, event.arguments, row,
+            invocation, event, source.request_sha256, source.raw_response_sha256) : undefined;
           const eventDiagnostics = Array.isArray(event.diagnostics) ? structuredClone(event.diagnostics) : [];
           normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
             ...(typeof event.tool_call_id === 'string' ? { tool_call_id: event.tool_call_id } : {}),
             name: event.name, arguments: structuredClone(eventArguments ?? {}),
             ...(containsIncompleteDiagnostic(event.arguments) ? { arguments_source: 'exact_raw_model_call' } : {}),
+            ...(typedResultWrites?.length ? { typed_result_writes: structuredClone(typedResultWrites) } : {}),
             status: event.outcome ?? null, result: event.result_text ?? null,
             diagnostics: [...eventDiagnostics,
               ...(softBodyMode === 'truncated' ? ['coerced-truncated-neuralese-marker'] : []),

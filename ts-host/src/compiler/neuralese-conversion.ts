@@ -102,6 +102,50 @@ export type ValidatedSoftStateEdgeSet = {
   edges: ValidatedSoftStateEdge[];
 };
 
+function exactPathGet(value: unknown, path: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (typeof key === 'number') {
+      if (!Array.isArray(current) || !Number.isSafeInteger(key) || key < 0 || key >= current.length) return undefined;
+      current = current[key];
+    } else {
+      if (!current || typeof current !== 'object' || Array.isArray(current) || !Object.hasOwn(current, key)) return undefined;
+      current = (current as Record<string, unknown>)[key];
+    }
+  }
+  return current;
+}
+
+function exactPathSet<T>(value: T, path: readonly (string | number)[], replacement: unknown): T {
+  if (!path.length) return replacement as T;
+  const [head, ...tail] = path;
+  if (head === undefined) throw new Error('typed result path is absent');
+  if (typeof head === 'number') {
+    if (!Array.isArray(value) || head < 0 || head >= value.length) throw new Error('typed result path is absent');
+    const copy = value.slice();
+    copy[head] = exactPathSet(copy[head], tail, replacement);
+    return copy as T;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.hasOwn(value, head))
+    throw new Error('typed result path is absent');
+  return { ...(value as Record<string, unknown>), [head]: exactPathSet((value as Record<string, unknown>)[head], tail, replacement) } as T;
+}
+
+function stableJson(value: unknown): string | undefined {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? (Object.is(value, -0) ? '-0' : JSON.stringify(value)) : undefined;
+  if (Array.isArray(value)) {
+    const items = value.map(stableJson);
+    return items.some(item => item === undefined) ? undefined : `[${items.join(',')}]`;
+  }
+  if (!value || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return undefined;
+  const fields = Object.keys(value as Record<string, unknown>).sort().map(key => {
+    const child = stableJson((value as Record<string, unknown>)[key]);
+    return child === undefined ? undefined : `${JSON.stringify(key)}:${child}`;
+  });
+  return fields.some(item => item === undefined) ? undefined : `{${fields.join(',')}}`;
+}
+
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
   renderings: string[]; order?: number };
 type ChildResultOutput = { invocation: string; tool_call_id: string; text: string; argument: boolean; order?: number };
@@ -346,9 +390,15 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             writer.text_body_sha256 !== block.body_sha256)
           throw new Error(`provider-expanded producer context lacks an earlier writer: ${id}`);
       }
-      externalBodies.set(id, { body: block.body, type: block.type, receipt });
-    }
+    externalBodies.set(id, { body: block.body, type: block.type, receipt });
   }
+  }
+  const typedResultReceipts = (((decision?.assistant as Record<string, unknown> | undefined)?.calls as Record<string, unknown>[] | undefined) ?? [])
+    .flatMap(action => {
+      const outcome = action.outcome as Record<string, unknown> | undefined;
+      return Array.isArray(outcome?.typed_result_writes) ?
+        (outcome.typed_result_writes as Record<string, unknown>[]).map(receipt => ({ action, outcome, receipt })) : [];
+    });
   const edges = options.softStateEdges?.edges ?? [];
   const matchingEdge = (role: 'writer' | 'reader') => edges.filter(edge =>
     role === 'writer' ? edge.writer_call_id === invocationOf(record as Record<string, unknown>) &&
@@ -732,6 +782,45 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
           const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&
             candidate.writer_call_id === invocationOf(record as Record<string, unknown>));
+          const sourceSha = sourceRef?.source_row_sha256;
+          const typedReceipts = typedResultReceipts.filter(({ action, outcome: actionOutcome, receipt }) => {
+            if (receipt.schema !== 'natlang.typed-result-write/1' || receipt.invocation_id !== invocation ||
+                receipt.writer_call_id !== invocation || receipt.source_row_sha256 !== sourceSha ||
+                !['typed-text-result', 'typed-text-result-field', 'typed-json-result'].includes(String(receipt.source_kind)) ||
+                typeof receipt.block_id !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(receipt.block_id) ||
+                typeof receipt.writer_node !== 'string' || typeof receipt.result_type !== 'string' ||
+                !receipt.result_type.startsWith('Neuralese<') || typeof receipt.body_sha256 !== 'string' ||
+                !/^[0-9a-f]{64}$/.test(receipt.body_sha256) || typeof receipt.body_source !== 'string' ||
+                createHash('sha256').update(receipt.body_source).digest('hex') !== receipt.body_sha256 ||
+                !Array.isArray(receipt.result_path) || receipt.result_path[0] !== 'return' ||
+                !receipt.result_path.slice(1).every(part => typeof part === 'string' || Number.isSafeInteger(part))) return false;
+            if (action.source_tool !== 'return_result' || actionOutcome.name !== 'return_result' ||
+                stableJson(actionOutcome.arguments) !== stableJson(args)) return false;
+            const tail = receipt.result_path.slice(1) as (string | number)[];
+            const rawValue = exactPathGet(args.value, tail);
+            if (receipt.source_kind === 'typed-text-result' || receipt.source_kind === 'typed-text-result-field')
+              return receipt.result_type === 'Neuralese<string>' && typeof rawValue === 'string' && rawValue === receipt.body_source;
+            return stableJson(rawValue) === receipt.body_source;
+          });
+          if (typedReceipts.length) {
+            const uniqueReceipts = typedReceipts.map(item => item.receipt).filter((receipt, at, all) => all.findIndex(other =>
+              stableJson(other.result_path) === stableJson(receipt.result_path)) === at);
+            const changedArgs = uniqueReceipts.reduce((current, receipt) => {
+              const resultPath = receipt.result_path as (string | number)[];
+              const tail = resultPath.slice(1);
+              const selectedEdge = edge && edge.writer_node === receipt.writer_node && edge.block_id === receipt.block_id;
+              const name = selectedEdge ? blockName(edge!) :
+                `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
+              const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
+                source: receipt.body_source } };
+              return { ...current, value: exactPathSet(current.value, tail, write) };
+            }, args);
+            if (changedArgs !== args) {
+              changed = true;
+              count('typed-result-write', undefined, uniqueReceipts.length);
+              return { ...call, function: { ...call.function, arguments: JSON.stringify(changedArgs) } };
+            }
+          }
           if (edge) {
             const parsed = markerBody(edge);
             if (!parsed) throw new Error(`soft-state writer ${rowId} has no validated marker body`);

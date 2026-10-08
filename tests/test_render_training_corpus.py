@@ -197,6 +197,101 @@ def test_target_prefix_and_end_token_are_required():
         render_turn(row, MockTokenizer(), '<eos>')
 
 
+def test_typed_result_write_receipts_hydrate_only_hash_bound_same_split_context():
+    import hashlib
+    from training.neuralese.natlang_neuralese.data.text_corpus import (
+        _attested_neuralese_message_bodies, _soft_writer_sources,
+    )
+
+    block = 'nz1_' + 'a' * 32
+    body = 'the exact emitted note'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    receipts = [{
+                'schema': 'natlang.typed-result-write/1', 'invocation_id': 'writer-call',
+                'source_row_sha256': 'row-sha', 'writer_node': 'writer-call#8', 'block_id': block,
+                'source_kind': 'typed-text-result-field', 'source': 'return_result',
+                'result_type': 'Neuralese<string>', 'result_path': ['return', 'notes', 0],
+                'body_sha256': body_sha, 'body_source': body,
+                'body_source_basis': 'exact-raw-model-result-field',
+            }, {
+                'schema': 'natlang.typed-result-write/1', 'invocation_id': 'writer-call',
+                'source_row_sha256': 'row-sha', 'writer_node': 'writer-call#9', 'block_id': block,
+                'source_kind': 'typed-text-result-field', 'source': 'return_result',
+                'result_type': 'Neuralese<string>', 'result_path': ['return', 'other'],
+                'body_sha256': body_sha, 'body_source': body,
+                'body_source_basis': 'exact-raw-model-result-field',
+            }]
+    writer = {
+        'id': 'writer-decision', 'split': 'train', 'source_groups': ['case-group'],
+        'source_ref': {'trajectory_id': 'trajectory-1', 'source_row_sha256': 'row-sha',
+                       'invocation_id': 'writer-call'},
+        'training_admission': {'approved': True}, 'decision': {'training_approved': True, 'failed_action': False,
+            'assistant': {'calls': [{'outcome': {'typed_result_writes': receipts}}]}},
+    }
+    reader = {
+        'id': 'reader-decision', 'split': 'train', 'source_groups': ['case-group'],
+        'source_ref': {'trajectory_id': 'trajectory-1', 'source_row_sha256': 'row-sha',
+                       'invocation_id': 'reader-call'},
+        'messages': [{'role': 'user', 'content': [{'type': 'neuralese', 'id': block}]}],
+    }
+    writers = _soft_writer_sources([writer, reader], {'writer-decision': 'decision-sha'})
+    assert len(writers[block]) == 1, 'two real writes of identical content remain two occurrences on one body source'
+    assert {item['writer_write_node'] for item in writers[block][0]['write_occurrences']} == {
+        'writer-call#8', 'writer-call#9'}
+    hydrated, evidence = _attested_neuralese_message_bodies(
+        reader, writers, split='train', source_groups=['case-group'])
+    assert hydrated[block] == f'<|neuralese|>{body}<|/neuralese|>'
+    assert evidence[0]['writer_record_id'] == 'writer-decision'
+
+    with pytest.raises(ValueError, match='no unique same-split'):
+        _attested_neuralese_message_bodies(reader, writers, split='test', source_groups=['case-group'])
+
+
+def test_eval_result_write_body_requires_same_run_reader_attestation():
+    import hashlib
+    from training.neuralese.natlang_neuralese.data.text_corpus import (
+        _attested_neuralese_message_bodies, _soft_writer_sources,
+    )
+
+    block, body = 'nz1_' + 'b' * 32, 'computed from the eval result'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    receipt = {
+                'schema': 'natlang.typed-result-write/1', 'invocation_id': 'eval-call',
+                'source_row_sha256': 'row-2', 'writer_node': 'eval-call#8', 'block_id': block,
+                'source_kind': 'typed-text-result-field', 'source': 'eval-finish',
+                'result_type': 'Neuralese<string>', 'result_path': ['return', 'note'],
+                'body_sha256': body_sha, 'body_source_basis': 'authenticated-final-host-output-reference',
+    }
+    writer = {'id': 'eval-writer', 'split': 'train', 'source_groups': ['same'],
+        'source_ref': {'trajectory_id': 'trajectory-2', 'source_row_sha256': 'row-2', 'invocation_id': 'eval-call'},
+        'training_admission': {'approved': True}, 'decision': {'training_approved': True, 'failed_action': False,
+            'assistant': {'calls': [{'outcome': {'typed_result_writes': [receipt]}}]}}}
+    reader = {'id': 'eval-reader', 'split': 'train', 'source_groups': ['same'],
+        'source_ref': {'trajectory_id': 'trajectory-2', 'source_row_sha256': 'row-2', 'invocation_id': 'reader-call',
+            'provider_expanded_read_contexts': [{
+                'origin': 'same-run-producer',
+                'producer_write': {'kind': 'block_write', 'call_id': 'eval-call', 'node': 'eval-call#8',
+                                   'block': block, 'text_body_sha256': body_sha},
+                'block': {'id': block, 'type': 'Neuralese<string>', 'body': body, 'body_sha256': body_sha},
+            }]},
+        'messages': [{'role': 'user', 'content': [{'type': 'neuralese', 'id': block}]}]}
+    writers = _soft_writer_sources([writer, reader], {'eval-writer': 'writer-sha'})
+    assert writers[block][0]['body'] == body
+    assert writers[block][0]['source_kind'] == 'same-run-provider-expanded-writer-context'
+    assert writers[block][0]['writer_write_node'] == 'eval-call#8'
+    hydrated, _ = _attested_neuralese_message_bodies(reader, writers, split='train', source_groups=['same'])
+    assert hydrated[block] == f'<|neuralese|>{body}<|/neuralese|>'
+
+    wrong = {**reader, 'source_ref': {**reader['source_ref'], 'provider_expanded_read_contexts': [{
+        **reader['source_ref']['provider_expanded_read_contexts'][0],
+        'producer_write': {**reader['source_ref']['provider_expanded_read_contexts'][0]['producer_write'],
+                           'node': 'different-writer#2'},
+    }]}}
+    wrong_writers = _soft_writer_sources([writer, wrong], {'eval-writer': 'writer-sha'})
+    with pytest.raises(ValueError, match='no unique same-split'):
+        _attested_neuralese_message_bodies(wrong, wrong_writers, split='train', source_groups=['same'])
+
+
 def test_code_sft_inputs_render_offline_and_preserve_source_quality_and_split(tmp_path):
     source, output = tmp_path / "code.jsonl", tmp_path / "rendered.jsonl"
     rows = [

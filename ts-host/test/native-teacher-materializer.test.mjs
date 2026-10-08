@@ -265,6 +265,92 @@ test('links a soft return marker only to its exact typed runtime block write and
   assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
 });
 
+test('retains exact typed final-result write receipts for native and gold-text consumers', () => {
+  const make = ({ id, tool = 'return_result', args, runtimeArgs = args, writes, hostValue, terminal = 9 }) => {
+    const row = nativeRow(id);
+    const callId = `call-${id}`, turnNode = `${callId}#turn1`;
+    row.outcome.action_ledger = [{ seq: terminal, call_id: callId, name: tool, arguments: runtimeArgs,
+      outcome: tool === 'return_result' ? 'completed' : 'ok', result_text: 'completed' }];
+    row.outcome.execution_graph = [
+      { kind: 'model_turn', seq: 5, call_id: callId, node: turnNode, turn: 1,
+        inputs: [{ node: `call:${callId}`, port: 'invocation' }] },
+      ...writes.map((write, index) => ({ kind: 'block_write', seq: 6 + index, call_id: callId,
+        node: `${callId}#${6 + index}`, turn: turnNode,
+        inputs: [{ node: turnNode, port: 'result-source' }], truncated: false, ...write })),
+    ];
+    row.outcome.invocation_ledger = [{ invocation_id: callId, host_result: { kind: 'host_capture',
+      capture_kind: 'invocation_output', call_id: callId, complete: true, value: hostValue,
+      terminal_action_seq: terminal } }];
+    row.trajectory = [{ phase: 'action', invocation_id: callId, context: [system, opening], tools_offered: schema,
+      assistant: { content: '', reasoning: 'Return the typed result.', calls: [{ tool, source_tool: tool,
+        arguments: args, call_id: 'raw-result' }] },
+      model_response: { raw_calls: [{ function: { name: tool, arguments: JSON.stringify(args) } }] },
+      raw_response_sha256: `raw-${id}` }];
+    return row;
+  };
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const block = `nz1_${'a'.repeat(32)}`;
+  const scalar = make({ id: 'typed-text-result', args: { status: 'success', value: 'exact final note' },
+    writes: [{ block, source_kind: 'typed-text-result', source: 'return_result', marker_context: 'return-result',
+      result_type: 'Neuralese<string>', text_body_sha256: sha('exact final note') }],
+    hostValue: { $neuralese: { id: block, type: 'Neuralese<string>' } } });
+  const scalarTurn = materializeNativeRows([scalar]).turns[0];
+  const scalarCall = scalarTurn.decision.assistant.calls[0];
+  assert.equal(scalarTurn.target.tool_calls[0].function.arguments,
+    JSON.stringify({ status: 'success', value: 'exact final note' }), 'provider target remains its actual plain text');
+  assert.deepEqual(scalarCall.outcome.typed_result_writes.map(({ body_source, body_source_basis, result_path }) =>
+    ({ body_source, body_source_basis, result_path })), [{ body_source: 'exact final note',
+      body_source_basis: 'exact-raw-model-result-string', result_path: ['return'] }]);
+
+  const jsonBody = '{"count":4,"flag":true}', jsonBlock = `nz1_${'b'.repeat(32)}`;
+  const json = make({ id: 'typed-json-result', args: { status: 'success', value: { flag: true, count: 4 } },
+    writes: [{ block: jsonBlock, source_kind: 'typed-json-result', source: 'return_result', marker_context: 'return-result',
+      result_type: 'Neuralese<{ count: number, flag: boolean }>', text_body_sha256: sha(jsonBody) }],
+    hostValue: { $neuralese: { id: jsonBlock, type: 'Neuralese<{ count: number, flag: boolean }>' } } });
+  const jsonCall = materializeNativeRows([json]).turns[0].decision.assistant.calls[0];
+  assert.equal(jsonCall.outcome.typed_result_writes[0].body_source, jsonBody,
+    'canonical JSON body is recomputed from the exact provider value and checked against runtime SHA');
+
+  const repeatedBlock = `nz1_${'c'.repeat(32)}`, repeatedBody = 'same emitted note';
+  const nestedArgs = { status: 'success', value: { nested: { first: repeatedBody }, final: repeatedBody } };
+  const nested = make({ id: 'typed-text-fields', args: nestedArgs, writes: [
+    { block: repeatedBlock, source_kind: 'typed-text-result-field', source: 'return_result',
+      marker_context: 'return-result', result_type: 'Neuralese<string>', result_path: ['return', 'nested', 'first'],
+      text_body_sha256: sha(repeatedBody) },
+    { block: repeatedBlock, source_kind: 'typed-text-result-field', source: 'return_result',
+      marker_context: 'return-result', result_type: 'Neuralese<string>', result_path: ['return', 'final'],
+      text_body_sha256: sha(repeatedBody) },
+  ], hostValue: { nested: { first: { $neuralese: { id: repeatedBlock, type: 'Neuralese<string>' } } },
+    final: { $neuralese: { id: repeatedBlock, type: 'Neuralese<string>' } } } });
+  const nestedCall = materializeNativeRows([nested]).turns[0].decision.assistant.calls[0];
+  assert.deepEqual(nestedCall.outcome.typed_result_writes.map(write => write.result_path),
+    [['return', 'nested', 'first'], ['return', 'final']], 'same-body writes at distinct paths stay distinct');
+  assert.equal(new Set(nestedCall.outcome.typed_result_writes.map(write => write.writer_node)).size, 2);
+
+  const evalBlock = `nz1_${'d'.repeat(32)}`;
+  const evalRow = make({ id: 'eval-finish-result', tool: 'eval', args: { code: 'return { note: buildNote() };', finish: true },
+    writes: [{ block: evalBlock, source_kind: 'typed-text-result-field', source: 'eval-finish',
+      marker_context: 'return-result', result_type: 'Neuralese<string>', result_path: ['return', 'note'],
+      text_body_sha256: sha('runtime-authored note') }],
+    hostValue: { note: { $neuralese: { id: evalBlock, type: 'Neuralese<string>' } } } });
+  const evalReceipt = materializeNativeRows([evalRow]).turns[0].decision.assistant.calls[0].outcome.typed_result_writes[0];
+  assert.equal(evalReceipt.body_source, undefined, 'an eval expression is not misrepresented as literal provider output');
+  assert.equal(evalReceipt.body_source_basis, 'authenticated-final-host-output-reference');
+  assert.equal(evalReceipt.source, 'eval-finish');
+
+  for (const mutate of [
+    row => { row.outcome.execution_graph[1].text_body_sha256 = 'f'.repeat(64); },
+    row => { row.outcome.execution_graph[1].result_path = ['return', 'wrong']; },
+    row => { row.outcome.execution_graph[1].inputs[0].port = 'turn'; },
+    row => { row.outcome.invocation_ledger[0].host_result.value.$neuralese.id = `nz1_${'e'.repeat(32)}`; },
+  ]) {
+    const invalid = structuredClone(scalar); mutate(invalid);
+    const result = materializeNativeRows([invalid]);
+    assert.equal(result.turns[0].decision.assistant.calls[0].outcome.typed_result_writes, undefined,
+      'unbound writer/body/path evidence is not promoted to a portable write receipt');
+  }
+});
+
 test('links runtime-truncated Neuralese markers only by the exact EOF rewrite and keeps that malformed action held', () => {
   const malformed = '<|neuralese|>note body|neuralese.textReadSource(prior); return note;';
   const row = softEvalRow({ marker: malformed, actionCode: `const note: Neuralese<string> = ${softSentinel}` });

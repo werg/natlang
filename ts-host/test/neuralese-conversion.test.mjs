@@ -73,6 +73,40 @@ test('runtime soft-state conversion supports an exact nested typed member and re
     /does not expose exact input.outputContract/);
 });
 
+test('typed final-result receipts become exact nested native/R write leaves', () => {
+  const body = 'one exact generated note';
+  const block = `nz1_${'c'.repeat(52)}`;
+  const bodySha = cryptoCreateHash('sha256').update(body).digest('hex');
+  const args = { status: 'success', value: { notes: body, other: body } };
+  const receipts = ['notes', 'other'].map((field, index) => ({
+    schema: 'natlang.typed-result-write/1', trajectory_id: 'typed-run', source_row_sha256: 'typed-row-sha',
+    invocation_id: 'typed-call', writer_call_id: 'typed-call', writer_node: `typed-call#${index + 4}`,
+    block_id: block, source_kind: 'typed-text-result-field', source: 'return_result', result_type: 'Neuralese<string>',
+    result_path: ['return', field], model_turn_node: 'typed-call#2', action_seq: 8,
+    body_sha256: bodySha, body_source: body, body_source_basis: 'exact-raw-model-result-field',
+  }));
+  const input = record();
+  input.id = 'typed-row';
+  input.source_ref = { trajectory_id: 'typed-run', invocation_id: 'typed-call', source_row_sha256: 'typed-row-sha' };
+  input.decision = { index: 3, assistant: { calls: [{ source_tool: 'return_result', arguments: args,
+    outcome: { name: 'return_result', arguments: args, typed_result_writes: receipts } }] } };
+  input.target = { role: 'assistant', tool_calls: [{ id: 'return-1', type: 'function',
+    function: { name: 'return_result', arguments: JSON.stringify(args) } }] };
+  const converted = convertTrajectory(input).record;
+  const target = JSON.parse(converted.target.tool_calls[0].function.arguments);
+  assert.deepEqual(target.value.notes.$write, { name: `typed-result:${block}:${createHash(JSON.stringify([receipts[0].writer_node, receipts[0].result_path]))}`,
+    block_id: block, type: 'Neuralese<string>', source: body });
+  assert.deepEqual(target.value.other.$write, { name: `typed-result:${block}:${createHash(JSON.stringify([receipts[1].writer_node, receipts[1].result_path]))}`,
+    block_id: block, type: 'Neuralese<string>', source: body });
+  assert.equal(converted.neuralese_conversion.sites['typed-result-write'].converted, 2);
+
+  const tampered = structuredClone(input);
+  tampered.target.tool_calls[0].function.arguments = JSON.stringify({ ...args, value: { ...args.value, notes: 'different' } });
+  const held = convertTrajectory(tampered).record;
+  assert.equal(JSON.parse(held.target.tool_calls[0].function.arguments).value.notes, 'different',
+    'a raw target value that no longer matches its receipt remains unchanged');
+});
+
 const createHash = text => {
   // Match the converter's stable 12-hex content identity without depending on implementation exports.
   return cryptoCreateHash('sha256').update(text).digest('hex').slice(0, 12);
