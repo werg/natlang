@@ -55,6 +55,7 @@ function failureDiagnostic({ classification, providerID, modelID, sessionID, dat
   return {
     version: FAILURE_DIAGNOSTIC_VERSION,
     classification,
+    ...(error?.transportFailurePhase ? { failure_phase: error.transportFailurePhase } : {}),
     provider_id: typeof providerID === 'string' ? providerID.slice(0, 128) : null,
     model_id: typeof modelID === 'string' ? modelID.slice(0, 128) : null,
     session_id: typeof sessionID === 'string' ? sessionID.slice(0, 128) : null,
@@ -74,6 +75,7 @@ function failureDiagnostic({ classification, providerID, modelID, sessionID, dat
     parts: partRows,
     parts_preview_bytes: partRows.reduce((sum, part) => sum + part.bytes, 0),
     ...(error?.transportUpstreamError ? { upstream_error: error.transportUpstreamError } : {}),
+    ...(error?.transportEventStream ? { event_stream: error.transportEventStream } : {}),
     error: redactCredentialLikeText((error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, 128))
   };
 }
@@ -122,10 +124,13 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
   let resolveReady;
   const ready = new Promise(resolve => { resolveReady = resolve; });
   let readySettled = false;
+  let readyResult;
+  let streamState = 'connecting';
   let streamHandshake;
   const settleReady = result => {
     if (readySettled) return;
     readySettled = true;
+    readyResult = result;
     resolveReady(result);
   };
   const task = (async () => {
@@ -139,13 +144,16 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
         const contentType = response.headers.get('content-type') ?? '';
         streamHandshake = { status: response.status, contentType: contentType.slice(0, 96), directory };
         if (response.ok && response.body && contentType.toLowerCase().includes('text/event-stream')) {
+          streamState = 'established';
           settleReady({ available: true, status: response.status, contentType: contentType.slice(0, 96) });
         } else {
+          streamState = 'unavailable';
           settleReady({ available: false, reason: `event endpoint returned HTTP ${response.status} (${contentType.slice(0, 64) || 'no content type'})` });
         }
         return response;
       };
       const onSseError = error => {
+        streamState = 'error';
         settleReady({ available: false,
           reason: error instanceof Error ? error.message.slice(0, 160) : 'event stream connection failed' });
       };
@@ -158,6 +166,7 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
         onSseError
       });
       if (!subscription?.stream || typeof subscription.stream[Symbol.asyncIterator] !== 'function') {
+        streamState = 'unavailable';
         settleReady({ available: false, reason: 'event subscription returned no async stream' });
         return;
       }
@@ -174,7 +183,9 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
           return;
         }
       }
+      if (!controller.signal.aborted) streamState = 'closed';
     } catch (error) {
+      streamState = 'error';
       // The prompt response remains authoritative if the optional diagnostic
       // stream disconnects. It must not turn an SSE problem into a model error.
       settleReady({ available: false, reason: error instanceof Error ? error.message.slice(0, 160) : 'event subscription failed' });
@@ -185,7 +196,20 @@ function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis
     ready,
     async stop() {
       controller.abort();
+      streamState = 'aborted';
       await withTimeout(task.catch(() => {}), 500, 'OpenCode event stream stop').catch(() => {});
+    },
+    snapshot() {
+      return {
+        state: streamState,
+        ready: readyResult?.available ?? false,
+        ...(readyResult?.reason ? { reason: redactCredentialLikeText(String(readyResult.reason)).slice(0, 160) } : {}),
+        ...(streamHandshake ? { handshake: {
+          status: streamHandshake.status,
+          content_type: streamHandshake.contentType,
+          directory: streamHandshake.directory
+        } } : {})
+      };
     }
   };
 }
@@ -245,6 +269,8 @@ async function persistFailureDiagnostic(error, directory) {
     parts: full.parts,
     parts_bytes: full.parts_bytes,
     ...(full.upstream_error ? { upstream_error: full.upstream_error } : {}),
+    ...(full.event_stream ? { event_stream: full.event_stream } : {}),
+    ...(full.failure_phase ? { failure_phase: full.failure_phase } : {}),
     error: full.error,
     ...(persisted.path ? { evidence_path: persisted.path, evidence_bytes: persisted.bytes, evidence_sha256: persisted.sha256 } : {}),
     ...(persisted.write_error ? { evidence_write_error: persisted.write_error } : {})
@@ -697,6 +723,12 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       // Session history is removed in finally, so preserve bounded, secret-redacted
       // response evidence on the transport error before cleanup completes.
       if (error && typeof error.message === 'string') {
+        error.transportFailurePhase = failurePhase;
+        error.transportEventStream = {
+          mode: redactCredentialLikeText(String(errorEventMode)).slice(0, 256),
+          failure_phase: failurePhase,
+          ...(errorWatch?.snapshot() ?? { state: 'unavailable', ready: false })
+        };
         if (!error.transportDiagnosticFull) error.transportDiagnosticFull = failureDiagnostic({ providerID, modelID,
           sessionID: session.id, data: assistantData, classification: classifyFailure(error, failurePhase), error });
         await persistFailureDiagnostic(error, directory);

@@ -97,6 +97,9 @@ test('request timeout diagnostics are classified as infrastructure timeouts', as
     await assert.rejects(backend({ messages: [], tools: [], tool_choice: 'auto' }), error => {
       assert.equal(error.code, 'REQUEST_TIMEOUT');
       assert.equal(error.transportDiagnostic.classification, 'request_timeout');
+      assert.equal(error.transportDiagnostic.failure_phase, 'session_prompt');
+      assert.equal(error.transportDiagnostic.event_stream.mode, 'SDK event subscription unavailable');
+      assert.equal(error.transportDiagnostic.event_stream.ready, false);
       return true;
     });
   } finally {
