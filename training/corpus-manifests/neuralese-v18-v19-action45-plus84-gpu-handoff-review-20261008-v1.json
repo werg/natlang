@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1/README.md",
+      "bytes": 1501,
+      "sha256": "8e76b81ce06db787a3dbd232276ca9f9ce0453099817d3be892970548fe6567f"
+    },
+    {
+      "path": "neuralese-v18-v19-action45-plus84-gpu-handoff-review-20261008-v1/gpu-handoff-review-packet-v1.json",
+      "bytes": 17402,
+      "sha256": "5a610ba0eed54bc6e93885ce3e4c7756fe9e490bc6a8be0887249f9201726195"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/action45-root-admitted84-integration-v1/root-integration-adoption-v1.json",
+      "bytes": 1424,
+      "sha256": "0d2658722bc3ea06d2cdf34f8e458cc4d9bd3c758a300ddde26d709567925feb"
+    }
+  ],
+  "bytes": 20327
+}
