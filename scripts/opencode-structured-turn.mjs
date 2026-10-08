@@ -99,6 +99,8 @@ function safeSessionApiError(event, context) {
   if (typeof data.isRetryable === 'boolean') error.providerRetryable = data.isRetryable;
   if (Number.isSafeInteger(retryAfterMs)) error.providerRetryAfterMs = retryAfterMs;
   error.transportUpstreamError = {
+    event_type: 'session.error',
+    event_session_id: event.properties.sessionID.slice(0, 128),
     name: 'APIError',
     ...(Number.isSafeInteger(data.statusCode) ? { status_code: data.statusCode } : {}),
     ...(typeof data.isRetryable === 'boolean' ? { retryable: data.isRetryable } : {}),
@@ -113,29 +115,69 @@ function safeSessionApiError(event, context) {
   return error;
 }
 
-function watchSessionErrors(client, sessionID) {
+function watchSessionErrors(client, sessionID, directory, fetchImpl = globalThis.fetch) {
   const controller = new AbortController();
   let resolveMatch;
   const matchingError = new Promise(resolve => { resolveMatch = resolve; });
   let resolveReady;
   const ready = new Promise(resolve => { resolveReady = resolve; });
+  let readySettled = false;
+  let streamHandshake;
+  const settleReady = result => {
+    if (readySettled) return;
+    readySettled = true;
+    resolveReady(result);
+  };
   const task = (async () => {
     try {
-      const subscription = await client.event.subscribe({ signal: controller.signal });
+      // The pinned SDK's legacy /event endpoint takes directory in the first
+      // argument and request options (including signal/fetch) in the second.
+      // Its SSE result is lazy: subscribe() returns before the first fetch.
+      // Mark ready only after that fetch has returned a valid event-stream.
+      const eventFetch = async request => {
+        const response = await fetchImpl(request);
+        const contentType = response.headers.get('content-type') ?? '';
+        streamHandshake = { status: response.status, contentType: contentType.slice(0, 96), directory };
+        if (response.ok && response.body && contentType.toLowerCase().includes('text/event-stream')) {
+          settleReady({ available: true, status: response.status, contentType: contentType.slice(0, 96) });
+        } else {
+          settleReady({ available: false, reason: `event endpoint returned HTTP ${response.status} (${contentType.slice(0, 64) || 'no content type'})` });
+        }
+        return response;
+      };
+      const onSseError = error => {
+        settleReady({ available: false,
+          reason: error instanceof Error ? error.message.slice(0, 160) : 'event stream connection failed' });
+      };
+      const subscription = await client.event.subscribe({ directory }, {
+        signal: controller.signal,
+        fetch: eventFetch,
+        sseMaxRetryAttempts: 1,
+        sseDefaultRetryDelay: 0,
+        sseSleepFn: async () => {},
+        onSseError
+      });
       if (!subscription?.stream || typeof subscription.stream[Symbol.asyncIterator] !== 'function') {
-        resolveReady({ available: false, reason: 'event subscription returned no async stream' });
+        settleReady({ available: false, reason: 'event subscription returned no async stream' });
         return;
       }
-      resolveReady({ available: true });
       for await (const event of subscription.stream) {
         if (controller.signal.aborted) return;
         const error = safeSessionApiError(event, { sessionID });
-        if (error) { resolveMatch(error); return; }
+        if (error) {
+          error.transportUpstreamError.event_stream = {
+            directory: streamHandshake?.directory ?? directory,
+            status: streamHandshake?.status ?? null,
+            content_type: streamHandshake?.contentType ?? null
+          };
+          resolveMatch(error);
+          return;
+        }
       }
     } catch (error) {
       // The prompt response remains authoritative if the optional diagnostic
       // stream disconnects. It must not turn an SSE problem into a model error.
-      resolveReady({ available: false, reason: error instanceof Error ? error.message.slice(0, 160) : 'event subscription failed' });
+      settleReady({ available: false, reason: error instanceof Error ? error.message.slice(0, 160) : 'event subscription failed' });
     }
   })();
   return {
@@ -152,6 +194,17 @@ function failWithDiagnostic(message, context, classification, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.transportDiagnosticFull = failureDiagnostic({ ...context, classification, error });
   return error;
+}
+
+function classifyFailure(error, phase) {
+  if (error?.code === 'OPENCODE_PROVIDER_ERROR') return 'provider_request_failure';
+  if (error?.code === 'REQUEST_TIMEOUT') return 'request_timeout';
+  if (phase === 'tool_inventory' || phase === 'session_create') return 'opencode_setup_failure';
+  if (phase === 'event_stream_bootstrap') return 'event_stream_bootstrap_failure';
+  if (phase === 'session_prompt') return 'provider_prompt_failure';
+  if (phase === 'assistant_validation') return 'assistant_response_validation_failure';
+  if (phase === 'session_history_audit') return 'session_history_audit_failure';
+  return 'bridge_failure';
 }
 
 async function persistFailureDiagnostic(error, directory) {
@@ -478,7 +531,7 @@ function extractAssistantResult(data, allowedNames, context) {
  * is read and every listed native tool is disabled except the pure `invalid`
  * rejection handler.
  */
-export function createOpenCodeStructuredTurnBackend({ client, providerID, modelID, agent, directory,
+export function createOpenCodeStructuredTurnBackend({ client, providerID, modelID, agent, directory, eventFetchImpl,
   cleanupTimeoutMs = 2_000 } = {}) {
   if (!client?.tool?.ids || !client?.session?.create || !client?.session?.prompt || !client?.session?.messages || !client?.session?.delete)
     throw new TypeError('an OpenCode SDK v2 client with tool inventory and session create, prompt, messages, and delete is required');
@@ -488,14 +541,18 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     throw new TypeError('an absolute isolated OpenCode scratch directory is required');
   if (!Number.isSafeInteger(cleanupTimeoutMs) || cleanupTimeoutMs < 1)
     throw new RangeError('cleanupTimeoutMs must be a positive integer');
+  if (eventFetchImpl !== undefined && typeof eventFetchImpl !== 'function')
+    throw new TypeError('eventFetchImpl must be a function when supplied');
 
   return async function turn(request, signal) {
     signal?.throwIfAborted();
     const prompt = buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent });
+    let failurePhase = 'tool_inventory';
     const toolInventoryResult = await withAbort(client.tool.ids({ directory }, { ...(signal ? { signal } : {}) }),
       signal, 'OpenCode tool inventory');
     const openCodeToolIds = unwrapSdkResult(toolInventoryResult, 'tool inventory');
     const openCodeTools = buildOpenCodeToolPolicy(openCodeToolIds);
+    failurePhase = 'session_create';
     const createResult = await withAbort(client.session.create({
       model: { providerID, id: modelID }, ...(agent ? { agent } : {}), directory,
       title: 'Natlang JSON text action turn'
@@ -509,15 +566,19 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     let promptController;
     let removeExternalAbort;
     let errorEventMode = 'SDK event subscription unavailable';
-    let failurePhase = 'session_prompt';
     try {
       signal?.throwIfAborted();
       if (typeof client.event?.subscribe === 'function') {
-        errorWatch = watchSessionErrors(client, session.id);
+        failurePhase = 'event_stream_bootstrap';
+        // Preserve the fetch configured on the official SDK client (headers,
+        // auth, and local routing); the test seam only replaces that transport.
+        const sdkFetch = client.event.client?.getConfig?.().fetch;
+        errorWatch = watchSessionErrors(client, session.id, directory,
+          eventFetchImpl ?? sdkFetch ?? globalThis.fetch);
         try {
           const ready = await withAbort(withTimeout(errorWatch.ready, cleanupTimeoutMs,
             'OpenCode event stream bootstrap'), signal, 'OpenCode event stream bootstrap');
-          if (ready.available) errorEventMode = 'official SDK SSE stream established before prompt; matching-session session.error observed concurrently';
+          if (ready.available) errorEventMode = `official SDK SSE stream established before prompt (HTTP ${ready.status}; ${ready.contentType}); matching-session session.error observed concurrently`;
           else {
             errorEventMode = `prompt-authoritative fallback; event stream unavailable (${ready.reason})`;
             await errorWatch.stop();
@@ -539,6 +600,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           removeExternalAbort = () => signal.removeEventListener('abort', forwardAbort);
         }
       }
+      failurePhase = 'session_prompt';
       const promptPromise = withAbort(client.session.prompt({
         sessionID: session.id, directory, model: { providerID, modelID }, agent,
         system: prompt.body.system, parts: prompt.body.parts, tools: openCodeTools
@@ -636,9 +698,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       // response evidence on the transport error before cleanup completes.
       if (error && typeof error.message === 'string') {
         if (!error.transportDiagnosticFull) error.transportDiagnosticFull = failureDiagnostic({ providerID, modelID,
-          sessionID: session.id, data: assistantData,
-          classification: error.code === 'OPENCODE_PROVIDER_ERROR' ? 'provider_request_failure' :
-            failurePhase === 'session_history_audit' ? 'session_history_audit_failure' : 'bridge_validation_failure', error });
+          sessionID: session.id, data: assistantData, classification: classifyFailure(error, failurePhase), error });
         await persistFailureDiagnostic(error, directory);
       }
       if (signal?.aborted && client.session.abort) {

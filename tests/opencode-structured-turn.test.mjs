@@ -23,11 +23,14 @@ test('matching OpenCode session.error surfaces provider 429 before the prompt de
   };
   const client = {
     tool: { ids: async () => ({ data: ['bash', 'invalid'] }) },
-    event: { subscribe: async ({ signal }) => {
-      await new Promise(resolve => setTimeout(resolve, 30));
-      subscriptionReady = true;
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch, sseMaxRetryAttempts }) => {
+      assert.equal(eventDirectory, directory);
+      assert.equal(sseMaxRetryAttempts, 1);
       calls.push('subscribed');
       return { stream: (async function* () {
+      const response = await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
+      assert.equal(response.status, 200);
+      subscriptionReady = true;
       yield { type: 'session.error', properties: { sessionID: 'unrelated', error: providerError.properties.error } };
       await promptStarted;
       yield providerError;
@@ -48,7 +51,8 @@ test('matching OpenCode session.error surfaces provider 429 before the prompt de
     }
   };
   const backend = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode',
-    modelID: 'space-bunny-free', directory });
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
 
   try {
     await assert.rejects(backend({ messages: [], tools: [], tool_choice: 'auto' }), error => {
@@ -57,6 +61,10 @@ test('matching OpenCode session.error surfaces provider 429 before the prompt de
       assert.equal(error.providerRetryable, true);
       assert.equal(error.transportDiagnostic.classification, 'provider_request_failure');
       assert.equal(error.transportDiagnostic.upstream_error.status_code, 429);
+      assert.equal(error.transportDiagnostic.upstream_error.event_type, 'session.error');
+      assert.equal(error.transportDiagnostic.upstream_error.event_session_id, 'session-target');
+      assert.equal(error.transportDiagnostic.upstream_error.event_stream.status, 200);
+      assert.equal(error.transportDiagnostic.upstream_error.event_stream.directory, directory);
       return true;
     });
     assert.deepEqual(calls, ['subscribed', 'prompt', 'abort', 'delete']);
@@ -71,6 +79,31 @@ test('matching OpenCode session.error surfaces provider 429 before the prompt de
   }
 });
 
+test('request timeout diagnostics are classified as infrastructure timeouts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'opencode-request-timeout-'));
+  const timeout = Object.assign(new Error('OpenCode turn timed out'), { code: 'REQUEST_TIMEOUT' });
+  const client = {
+    tool: { ids: async () => ({ data: ['invalid'] }) },
+    session: {
+      create: async () => ({ data: { id: 'session-timeout' } }),
+      prompt: async () => { throw timeout; },
+      messages: async () => ({ data: [] }),
+      delete: async () => ({ data: true })
+    }
+  };
+  const backend = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode',
+    modelID: 'space-bunny-free', directory });
+  try {
+    await assert.rejects(backend({ messages: [], tools: [], tool_choice: 'auto' }), error => {
+      assert.equal(error.code, 'REQUEST_TIMEOUT');
+      assert.equal(error.transportDiagnostic.classification, 'request_timeout');
+      return true;
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('OpenCode session.error from another session does not replace the prompt result', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'opencode-event-scope-'));
   const final = { info: { id: 'assistant-final', role: 'assistant' }, parts: [
@@ -78,7 +111,8 @@ test('OpenCode session.error from another session does not replace the prompt re
   ] };
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
-    event: { subscribe: async ({ signal }) => ({ stream: (async function* () {
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
+      await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.error', properties: { sessionID: 'other', error: {
         name: 'APIError', data: { message: 'Rate limit exceeded', statusCode: 429, isRetryable: true }
       } } };
@@ -92,7 +126,8 @@ test('OpenCode session.error from another session does not replace the prompt re
     }
   };
   const backend = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode',
-    modelID: 'space-bunny-free', directory });
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
   try {
     const result = await backend({ messages: [], tools: [], tool_choice: 'auto' });
     assert.equal(result.text, 'ok');
@@ -105,7 +140,8 @@ test('loopback preserves provider 429 and Retry-After for the collector retry po
   const directory = await mkdtemp(join(tmpdir(), 'opencode-http-retry-'));
   const client = {
     tool: { ids: async () => ({ data: ['invalid'] }) },
-    event: { subscribe: async ({ signal }) => ({ stream: (async function* () {
+    event: { subscribe: async ({ directory: eventDirectory }, { signal, fetch }) => ({ stream: (async function* () {
+      await fetch(new Request(`http://opencode.test/event?directory=${encodeURIComponent(eventDirectory)}`));
       yield { type: 'session.error', properties: { sessionID: 'session-http', error: {
         name: 'APIError', data: { message: 'Rate limit exceeded', statusCode: 429, isRetryable: true,
           responseHeaders: { 'retry-after': '7' }, responseBody: '{"error":"rate limited"}' }
@@ -123,7 +159,8 @@ test('loopback preserves provider 429 and Retry-After for the collector retry po
     }
   };
   const adapter = await createOpenCodeLoopbackChatAdapter({ client, providerID: 'opencode',
-    modelID: 'space-bunny-free', directory });
+    modelID: 'space-bunny-free', directory,
+    eventFetchImpl: async () => new Response('', { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
   try {
     const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
       headers: { 'content-type': 'application/json' },

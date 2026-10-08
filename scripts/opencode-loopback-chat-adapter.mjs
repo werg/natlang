@@ -138,7 +138,8 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
     throw new TypeError('an absolute isolated OpenCode scratch directory is required');
   const modelAlias = options.modelAlias ?? `${options.providerID}/${options.modelID}`;
   const backend = createOpenCodeStructuredTurnBackend({ client: options.client, providerID: options.providerID,
-    modelID: options.modelID, agent: options.agent, directory: options.directory, cleanupTimeoutMs });
+    modelID: options.modelID, agent: options.agent, directory: options.directory,
+    eventFetchImpl: options.eventFetchImpl, cleanupTimeoutMs });
   let active = 0, closing = false;
   const activeControllers = new Set();
   const server = createServer(async (request, response) => {
