@@ -42,5 +42,3 @@ Work in eval: the steps are exact and the lists can be long.
    name (present: replaced in its position; new: at the end). tools = the map's declarations in order.
 
 Return { head, entries: active, contributions, messages, sections, tools }.
-
-Return a result that is not null from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.

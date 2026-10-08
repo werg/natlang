@@ -24,5 +24,3 @@ true.
    checkpoint.thinkingLevel, sessionId: facts.sessionId }, { attempt: checkpoint.attempt }). The host streams the
    partial answer into pi.live while it runs.
 5. Return message unchanged: store nothing yourself; classify decides what it means.
-
-Return the message from eval, exactly as computed: end with an eval whose code is `return <the variable that holds it>;` and set finish true. Never write it out in return_result: it carries model text and provider data that must stay byte for byte.

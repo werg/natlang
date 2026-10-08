@@ -14,8 +14,8 @@
  *   --scheduler natural-language            the scheduler's policy in natural language (default crisp)
  *   --admission natural-language            admission in natural language (default crisp)
  *   --pure                                  all three in natural language
- *   --executor-context N                    the executor's context budget in tokens (default 57344; natlang's
- *                                           default of 16384 makes the harness functions compact constantly)
+ *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
+ *                                           the window the executor's server reports)
  *   --quiet                                 no phase log on stderr
  * `natlang run applications/pi -- eval [NAME...] [--out DIR] [--minutes N] [options]`: the tasks in tasks/, each on a
  * fresh git copy of its repository, judged by its check command.
@@ -82,13 +82,15 @@ function implementations(args: string[]): { context: Implementation; scheduler: 
 const textOf = (message: AssistantMessage | undefined) =>
   (message?.content ?? []).flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim();
 
-/** The launcher's runtime with the executor's context budget set. */
+/** The launcher's runtime, with the executor's context budget when --executor-context sets it. */
 function executor(target: TargetContext, args: string[]): NatlangRuntime {
+  const budget = option(args, '--executor-context');
+  if (budget === undefined) return target.runtime;
   const configured = target.runtime.options.model;
   const base = typeof configured === 'object' && configured ? configured : {};
   const driver = typeof configured === 'function' ? configured : (configured as { driver?: unknown } | undefined)?.driver ?? target.model;
   return new NatlangRuntime({ ...target.runtime.options,
-    model: { ...base, driver, contextTokens: Number(option(args, '--executor-context') ?? 57344) } as never });
+    model: { ...base, driver, contextTokens: Number(budget) } as never });
 }
 
 export type RunResult = { status: string; answer: string; reason?: string; ms: number };

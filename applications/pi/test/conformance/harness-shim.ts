@@ -22,7 +22,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const natlang = createNatlangRuntime({
   model: { driver: openAICompatibleModelTurn({ endpoint: process.env.PI_EXECUTOR_ENDPOINT ?? 'http://127.0.0.1:8083',
     model: process.env.PI_EXECUTOR_MODEL ?? 'nvidia/Qwen3.6-35B-A3B-NVFP4', concurrency: Number(process.env.PI_EXECUTOR_CONCURRENCY ?? 4) }),
-    contextTokens: Number(process.env.PI_EXECUTOR_CONTEXT ?? 57344) },
+    // The context budget follows the window the executor's server reports unless PI_EXECUTOR_CONTEXT sets it.
+    ...(process.env.PI_EXECUTOR_CONTEXT ? { contextTokens: Number(process.env.PI_EXECUTOR_CONTEXT) } : {}) },
   codeEdits: 'deny',
   ...(process.env.PI_TRACE_DIR ? { trace: fileTraceSink(process.env.PI_TRACE_DIR) } : {}),
 });
