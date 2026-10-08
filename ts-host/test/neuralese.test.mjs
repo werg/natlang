@@ -145,7 +145,21 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(codes('function show(String: (x: unknown) => string) { return String(plan); }'), []);
   assert.deepEqual(codes('const same = plan === plan;'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('JSON.stringify(plan)'), []);
-  assert.deepEqual(readouts('JSON.stringify(plan, (_key, value) => value, 2)'), ['plan']);
+  const typedJson = analyzeEvalSnippet('return JSON.stringify(value);', {
+    ...SCOPE, inputs: [{ name: 'value', type: 'Neuralese<string> | Neuralese<number>' }], returns: 'string',
+  });
+  assert.deepEqual(typedJson.diagnostics, []);
+  assert.deepEqual(typedJson.readouts.map(item => [item.kind, item.conditional]), [['json', true]]);
+  const crispJson = analyzeEvalSnippet('return JSON.stringify(value);', {
+    ...SOFT_STRING_UNION_SCOPE, returns: 'string',
+  });
+  assert.deepEqual(crispJson.diagnostics, []);
+  assert.deepEqual(crispJson.readouts.map(item => [item.kind, item.conditional]), [['json', true]]);
+  const directJson = analyzeEvalSnippet('return JSON.stringify(plan, (_key, value) => value, 2);', { ...SCOPE, returns: 'string' });
+  assert.deepEqual(directJson.diagnostics, []);
+  assert.deepEqual(directJson.readouts.map(item => [item.kind, item.conditional]), [['json', undefined]]);
+  assert.deepEqual(directJson.readouts.map(item => 'return JSON.stringify(plan, (_key, value) => value, 2);'.slice(item.start, item.end)),
+    ['JSON.stringify(plan, (_key, value) => value, 2)']);
   assert.deepEqual(codes('function show(JSON: any) { return JSON.stringify(plan); }'), []);
   assert.deepEqual(codes('const copy = { ...plan };'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('for (const key in plan) {}'), ['neuralese-opaque-access']);
@@ -222,6 +236,24 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.match(unionCompiled.program, /readNeuraleseIfReference/);
   assert.equal(await readNeuraleseIfReference('plain'), 'plain');
 
+  const jsonScope = { ...SCOPE, inputs: [{ name: 'value', type: 'Neuralese<string> | Neuralese<number> | string' }], returns: 'string' };
+  const jsonCompiled = compileScopeSnippet('return JSON.stringify(value);', { inputBindings: ['value'], neuralese: true,
+    analyze: source => analyzeEvalSnippet(source, jsonScope) });
+  assert.equal(jsonCompiled.ok, true, JSON.stringify(jsonCompiled.diagnostics));
+  assert.match(jsonCompiled.program, /readNeuraleseIfReference/);
+  assert.match(jsonCompiled.program, /\.stringify\], \[value\]\)/);
+  let scopeJsonReads = 0;
+  const runJsonScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${jsonCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      scopeJsonReads++;
+      return value.$neuralese.type === 'Neuralese<number>' ? 17 : 'scope payload';
+    } });
+  assert.equal(await runJsonScope({ value: neuraleseRef('Neuralese<string>', 'nz1_qqqqqqqqqqqqqqqqqqqq') }, {}, {}), '"scope payload"');
+  assert.equal(await runJsonScope({ value: 'crisp scope value' }, {}, {}), '"crisp scope value"');
+  assert.equal(scopeJsonReads, 1);
+
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {
       return text.toString() + ''.concat(text) + values.join('|');
@@ -249,6 +281,43 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(await showMixed('ordinary'), 'value=ordinary');
   assert.equal(await showMixed(neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll')),
     'value=read:nz1_llllllllllllllllllll');
+
+  const jsonModule = compileModule({ kind: 'module', id: 'json-soft-union', name: 'jsonSoftUnion', source: 'jsonSoftUnion.ts', revision: 'r1',
+    text: `export async function show(value: Neuralese<string> | Neuralese<number> | string) {
+      return JSON.stringify(value);
+    }
+    export async function ordered(value: Neuralese<string> | string, events: string[]) {
+      return JSON.stringify((events.push('value'), value),
+        (events.push('replacer-argument'), (key, item) => (events.push('replacer:' + key), item)),
+        (events.push('space'), 0));
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(jsonModule, /readNeuraleseIfReference/);
+  const jsonEvents = [];
+  const orderedEvents = [];
+  const jsonExports = {};
+  const jsonFns = new Function('exports', '__natlang', `${jsonModule}; return exports;`)(jsonExports, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      jsonEvents.push(`read:${value.$neuralese.type}`);
+      orderedEvents.push(`read:${value.$neuralese.type}`);
+      if (value.$neuralese.type === 'Neuralese<number>') return 17;
+      return { answer: 'soft payload' };
+    },
+  });
+  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm')), '{"answer":"soft payload"}');
+  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn')), '17');
+  assert.equal(await jsonFns.show('crisp'), '"crisp"');
+  jsonEvents.length = 0;
+  orderedEvents.length = 0;
+  assert.equal(await jsonFns.ordered(neuraleseRef('Neuralese<string>', 'nz1_oooooooooooooooooooo'), orderedEvents),
+    '{"answer":"soft payload"}');
+  assert.deepEqual(orderedEvents, ['value', 'replacer-argument', 'space', 'read:Neuralese<string>', 'replacer:', 'replacer:answer']);
+  assert.deepEqual(jsonEvents, ['read:Neuralese<string>']);
+  const failedJson = new Function('exports', '__natlang', `${jsonModule}; return exports.show;`)({}, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async () => { throw new Error('typed JSON read failed'); },
+  });
+  await assert.rejects(() => failedJson(neuraleseRef('Neuralese<string>', 'nz1_pppppppppppppppppppp')),
+    /typed JSON read failed/);
 
   const orderedModule = compileModule({ kind: 'module', id: 'concat-order', name: 'ordered', source: 'ordered.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, events: string[], receiver: () => string, later: () => Promise<string>) {

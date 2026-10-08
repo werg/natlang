@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 import { BUILT_INS_LINE } from '../dist/native/agent.js';
+import { SEMANTIC_RESULT_PROMPT } from '../dist/native/prompt.js';
 
 /** Run a call of greet(name) with scripted root calls; returns the opening, each tool result, and the value. */
 async function script(calls, returns = 'string') {
@@ -22,6 +23,12 @@ async function script(calls, returns = 'string') {
 test('the opening names the built-ins and where their documentation is', async () => {
   const { opening } = await script([['return_result', { status: 'success', value: 'hi' }]]);
   assert.ok(opening.includes(BUILT_INS_LINE));
+});
+
+test('shared result guidance shows computed Neuralese text return and static marker bodies', () => {
+  assert.match(SEMANTIC_RESULT_PROMPT, /When this call's declared result is exactly Neuralese<string>/);
+  assert.match(SEMANTIC_RESULT_PROMPT, /marker body is literal payload written before eval runs/);
+  assert.match(SEMANTIC_RESULT_PROMPT, /for computed Neuralese<string> output, return the computed string/);
 });
 
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {

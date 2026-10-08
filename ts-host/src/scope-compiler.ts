@@ -691,6 +691,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${analysisSource.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
+  const jsonReadouts = new Map(readouts.filter(readout => readout.kind === 'json')
+    .map(readout => [`${readout.start}:${readout.end}`, readout]));
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
       const site = rebindAt.get(`${rel(node).start}:${rel(node).end}`);
@@ -702,6 +704,29 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           `${lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end)}, ${JSON.stringify(site.captureSources)})` });
         return;
       }
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        jsonReadouts.has(`${rel(node).start}:${rel(node).end}`)) {
+      const readout = jsonReadouts.get(`${rel(node).start}:${rel(node).end}`)!;
+      // Capture the callable and evaluate every argument left-to-right before awaiting the typed value's readout.
+      // This preserves JSON.stringify's ordinary call boundary while letting its first value be a crisp union arm.
+      for (const argument of node.arguments) lowerNodes(argument);
+      const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
+      const args = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end));
+      const reader = readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese';
+      const fresh = (base: string): string => {
+        let name = base, suffix = 0;
+        while (analysisSource.includes(name)) name = `${base}_${++suffix}`;
+        return name;
+      };
+      const receiverName = fresh(`__natlang_json_receiver_${rel(node).start}`);
+      const callName = fresh(`__natlang_json_call_${rel(node).start}`);
+      const argsName = fresh(`__natlang_json_args_${rel(node).start}`);
+      primitive.push({ ...rel(node), text: `((${receiverName}: any) => (async (${callName}: [any, any], ${argsName}: any[]) => ` +
+        `${callName}[1].call(${callName}[0], await __live.${reader}(${argsName}[0])` +
+        `${args.slice(1).map((_arg, index) => `, ${argsName}[${index + 1}]`).join('')}` +
+        `))([${receiverName}, ${receiverName}.stringify], [${args.join(', ')}]))(${receiver})` });
+      return;
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         concats.has(`${rel(node).start}:${rel(node).end}`)) {

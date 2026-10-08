@@ -20,6 +20,8 @@ test('guided note children receive decision semantics, not parent file-write ins
   assert.match(stepCode, /passConstraint/);
   assert.match(stepCode, /allowedFields/);
   assert.match(stepCode, /This note child does not write files; the parent owns the final decision\.json write\./);
+  assert.match(stepCode, /For computed text, build an ordinary string in eval and return it directly; marker bodies are literal/);
+  assert.match(code, /Return ordinary prose as the Neuralese<string> result/);
   assert.doesNotMatch(stepCode, /task\.instruction|output_contract|outputPath|writable_paths|evidence_files/);
 
   assert.match(code, /format: task\.output_contract\.format/);
@@ -43,5 +45,6 @@ test('saved .with children rebind the same narrow note context', () => {
   const stepStart = code.indexOf('const revise = async');
   const finalStart = code.indexOf('const completed =');
   const stepCode = code.slice(stepStart, finalStart);
+  assert.match(stepCode, /For computed text, build an ordinary string in eval and return it directly/);
   assert.doesNotMatch(stepCode, /task\.instruction|output_contract|outputPath|writable_paths|evidence_files/);
 });

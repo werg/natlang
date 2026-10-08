@@ -24,6 +24,8 @@ export type LowerOptions = {
   joins?: ReadonlySet<string>;
   /** Call spans of string concatenations whose arguments include typed Neuralese values. */
   concats?: ReadonlySet<string>;
+  /** Call spans of JSON.stringify whose first value argument needs typed Neuralese readout. */
+  jsons?: ReadonlySet<string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -67,10 +69,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       return count === 1 ? base : `${base}@${count}`;
     };
     const original = (node: ts.Node) => ts.getOriginalNode(node);
-    const readNeuralese = (expression: ts.Expression): ts.Expression => {
-      const lowered = ts.visitEachChild(expression, visit, context) as ts.Expression;
-      const conditional = options.conditionalReadouts?.has(`${original(expression).getStart(file)}:${original(expression).getEnd()}`);
-      const result = f.createCallExpression(runtime(conditional ? 'readNeuraleseIfReference' : 'readNeuralese'), undefined, [lowered]);
+    const readNeuraleseValue = (value: ts.Expression, conditional: boolean | undefined): ts.Expression => {
+      const result = f.createCallExpression(runtime(conditional ? 'readNeuraleseIfReference' : 'readNeuralese'), undefined, [value]);
       if (options.browser) {
         const bound = f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier('globalThis'), '__natlang_bindAwait'),
           undefined, [result]);
@@ -78,9 +78,37 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       }
       return f.createAwaitExpression(result);
     };
+    const readNeuralese = (expression: ts.Expression): ts.Expression => {
+      const lowered = ts.visitEachChild(expression, visit, context) as ts.Expression;
+      const conditional = options.conditionalReadouts?.has(`${original(expression).getStart(file)}:${original(expression).getEnd()}`);
+      return readNeuraleseValue(lowered, conditional);
+    };
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.jsons?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
+          ts.isPropertyAccessExpression(node.expression) && node.arguments.length > 0) {
+        const readoutCall = `${source.getStart(file)}:${source.getEnd()}`;
+        const conditional = options.conditionalReadouts?.has(readoutCall);
+        const receiver = f.createUniqueName('__natlang_json_receiver');
+        const call = f.createUniqueName('__natlang_json_call');
+        const args = f.createUniqueName('__natlang_json_args');
+        const softValue = f.createElementAccessExpression(args, f.createNumericLiteral(0));
+        const read = readNeuraleseValue(softValue, conditional);
+        const invoke = f.createCallExpression(f.createPropertyAccessExpression(f.createElementAccessExpression(call, 1), 'call'), undefined,
+          [f.createElementAccessExpression(call, 0), read,
+            ...node.arguments.slice(1).map((_argument, index) => f.createElementAccessExpression(args, index + 1))]);
+        const inner = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)],
+          undefined, [f.createParameterDeclaration(undefined, undefined, call), f.createParameterDeclaration(undefined, undefined, args)],
+          undefined, undefined, invoke)), undefined, [
+          f.createArrayLiteralExpression([receiver, f.createPropertyAccessExpression(receiver, 'stringify')]),
+          f.createArrayLiteralExpression(node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression))]);
+        const lower = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, inner)), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        // The receiver, method, and argument values are captured in native order before awaiting the soft value.
+        return f.createAwaitExpression(lower);
+      }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.joins?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
           ts.isPropertyAccessExpression(node.expression)) {
         const value = f.createUniqueName('__natlang_join_value');

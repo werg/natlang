@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat'; conditional?: true };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' | 'json'; conditional?: true };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -170,7 +170,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'JSON' &&
           callee.name.text === 'stringify' && isDefaultGlobal(checker, callee.expression)) {
         const [value, ...options] = node.arguments;
-        if (value && soft(value)) readout(value);
+        if (value && hasSoftAlternative(checker, checker.getTypeAtLocation(value)))
+          readout(node, 'json', !soft(value));
         if (options.some(argument => soft(argument))) opaque(node, 'its payload cannot be serialised');
       }
       if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'concat' && standardMethod(callee, ['String']) &&

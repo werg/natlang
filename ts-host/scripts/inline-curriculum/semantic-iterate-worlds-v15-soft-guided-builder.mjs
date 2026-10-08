@@ -5,7 +5,7 @@ import { worlds as authoredWorlds } from './semantic-iterate-worlds-v15-data.mjs
 import { makeSoftIterateCase } from './semantic-iterate-worlds-v15-soft-builder.mjs';
 import { validateIterateWorlds } from './authored-iterate-source-builder.mjs';
 
-export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/16-saved-note-context-captures';
+export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/17-soft-result-boundary-guidance';
 const canonical = value => JSON.stringify(value);
 const marker = text => `<|neuralese|>${text}<|/neuralese|>`;
 
@@ -20,7 +20,7 @@ const decisionContext = JSON.stringify({
   enum_contract: task.output_contract.enum_contract ?? ''
 });
 
-const seed: Neuralese<(initialDraft: __INITIAL_DRAFT_TYPE__) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`Create a brief readable prose note from the supplied initialDraft. State that it is only a placeholder and no evidence has been reviewed. Do not infer facts or a decision. Return Neuralese<string> prose only.\`;
+const seed: Neuralese<(initialDraft: __INITIAL_DRAFT_TYPE__) => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})\`Create a brief readable prose note from the supplied initialDraft. State that it is only a placeholder and no evidence has been reviewed. Do not infer facts or a decision. Return ordinary prose as the Neuralese<string> result. When text is computed in eval, return that string directly; marker bodies are literal text, not JavaScript interpolation.\`;
 const initialNotes = await seed(task.initialDraft);
 
 const revise = async (progress: Progress): Promise<Progress> => {
@@ -120,8 +120,8 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
 
   const stepType = '(source: FileHandle, priorNotes: Neuralese<string>) => Promise<Neuralese<string>>';
   const stepPrompt = savedWith
-    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as Neuralese<string> to the caller. This note child does not write files; the parent owns the final decision.json write.'
-    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string> to the caller. This note child does not write files; the parent owns the final decision.json write.';
+    ? 'Use the captured current pass name, passConstraint, allowedFields, and decisionContext. Read only the supplied current-pass FileHandle and priorNotes. Preserve supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events distinct from the requested decision. Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return it directly; marker bodies are literal, so ${...} inside a marker does not interpolate. This note child does not write files; the parent owns the final decision.json write.'
+    : 'Read only the supplied current-pass FileHandle and priorNotes. Preserve all supported earlier facts relevant to the decisionContext; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as the Neuralese<string> result to the caller. For computed text, build an ordinary string in eval and return it directly; marker bodies are literal, so ${...} inside a marker does not interpolate. This note child does not write files; the parent owns the final decision.json write.';
   const stepCaptures = `{
     decisionContext, passName: current.name,
     passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
