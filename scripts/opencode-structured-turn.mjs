@@ -151,7 +151,9 @@ function scheduledRetryError(status, sessionID) {
     ...(status.action ? { action: status.action } : {}),
     upstream_http_status: null,
     sdk_retry_policy: {
-      source: 'OpenCode session processor retry policy (pinned server version)',
+      source: 'OpenCode session processor retry policy',
+      server_commit: '53d1eabb61e21162157817bf677da0a4ad3332e3',
+      source_file: 'packages/opencode/src/session/retry.ts',
       max_scheduled_retries: 5,
       canceled_before_scheduled_retry: true,
       note: 'The provider request that produced this status has already occurred. The bridge stops the session at the first retry schedule; collector retries are a separate budget.'

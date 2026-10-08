@@ -191,6 +191,8 @@ test('a matching retry schedule cancels OpenCode internal retry and surfaces bri
     assert.equal(body.error.collector_retry_budget, null, 'the caller owns and records the separate collector retry budget');
     assert.equal(body.error.transport_diagnostic.retry_schedule.attempt, 2);
     assert.equal(body.error.transport_diagnostic.retry_schedule.upstream_http_status, null);
+    assert.equal(body.error.transport_diagnostic.retry_schedule.sdk_retry_policy.server_commit,
+      '53d1eabb61e21162157817bf677da0a4ad3332e3');
     assert.deepEqual(calls, ['prompt', 'abort', 'delete']);
     const sidecarDir = join(directory, '.natlang-transport-failures');
     const { readdir } = await import('node:fs/promises');
