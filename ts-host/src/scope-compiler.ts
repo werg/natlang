@@ -169,6 +169,63 @@ function namesOf(name: ts.BindingName): ts.Identifier[] {
   return name.elements.flatMap(element => ts.isOmittedExpression(element) ? [] : namesOf(element.name));
 }
 
+/** Static type-only projections for destructured bindings; never run these expressions at runtime. */
+function bindingInitializerProjections(name: ts.BindingName, initializer: string): Map<string, string> {
+  const projections = new Map<string, string>();
+  const file = ts.createSourceFile('initializer.ts', initializer, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const root = file.statements.find(ts.isExpressionStatement)?.expression;
+  const staticScopePath = (node: ts.Expression): boolean => {
+    if (ts.isIdentifier(node)) return true;
+    if (ts.isPropertyAccessExpression(node)) return staticScopePath(node.expression);
+    if (ts.isElementAccessExpression(node)) return !!node.argumentExpression &&
+      (ts.isStringLiteral(node.argumentExpression) || ts.isNumericLiteral(node.argumentExpression)) &&
+      staticScopePath(node.expression);
+    return false;
+  };
+  // scopeInitializerType can follow these static paths. Calls, awaits, and other expressions
+  // must be inferred from the extracted runtime value, since the whole call's return type is not
+  // the type of a destructured field.
+  if (!root || !staticScopePath(root)) return projections;
+  const access = (base: string, key: string): string | undefined => {
+    if (/^[A-Za-z_$][\w$]*$/.test(key)) return `${base}.${key}`;
+    if (/^\d+$/.test(key)) return `${base}[${key}]`;
+    return;
+  };
+  const propertyKey = (element: ts.BindingElement): string | undefined => {
+    const property = element.propertyName;
+    if (!property) return ts.isIdentifier(element.name) ? element.name.text : undefined;
+    if (ts.isIdentifier(property) || ts.isStringLiteral(property) || ts.isNumericLiteral(property)) return property.text;
+    if (ts.isComputedPropertyName(property) && (ts.isStringLiteral(property.expression) || ts.isNumericLiteral(property.expression)))
+      return property.expression.text;
+    return;
+  };
+  const visit = (pattern: ts.BindingName, base: string): void => {
+    if (ts.isIdentifier(pattern)) { projections.set(pattern.text, base); return; }
+    if (ts.isObjectBindingPattern(pattern)) {
+      for (const element of pattern.elements) {
+        if (element.dotDotDotToken) continue; // Object rest is inferred from its actual extracted value.
+        if (element.initializer) continue; // A default may supply a different type when the projected field is absent.
+        const key = propertyKey(element), child = key === undefined ? undefined : access(base, key);
+        if (child) visit(element.name, child);
+      }
+      return;
+    }
+    let index = 0;
+    for (const element of pattern.elements) {
+      if (ts.isOmittedExpression(element)) { index++; continue; }
+      if (element.dotDotDotToken) {
+        if (ts.isIdentifier(element.name)) projections.set(element.name.text, `${base}.slice(${index})`);
+        continue;
+      }
+      if (element.initializer) { index++; continue; }
+      visit(element.name, `${base}[${index}]`);
+      index++;
+    }
+  };
+  visit(name, initializer);
+  return projections;
+}
+
 /** Translate ordinary TypeScript annotations to the portable natlang type tree. */
 function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | undefined {
   const primitive = new Map<number, string>([
@@ -459,6 +516,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const flags = statement.declarationList.flags;
       const kind: ScopeBinding['kind'] = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : 'var';
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
+        const initializerText = declaration.initializer?.getText(file);
+        const bindingInitializer = declaration.initializer && initializerText ? ts.isIdentifier(declaration.name) ? initializerText :
+          bindingInitializerProjections(declaration.name, initializerText).get(name.text) : undefined;
         let initial = declaration.initializer;
         while (initial && (ts.isAwaitExpression(initial) || ts.isParenthesizedExpression(initial) || ts.isPropertyAccessExpression(initial))) initial = initial.expression;
         const transient = !!(initial && ((ts.isArrowFunction(initial) || ts.isFunctionExpression(initial)) ||
@@ -468,9 +528,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           false));
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(transient ? { transient: true } : {}),
-          ...(declaration.type && portableAnnotation(declaration.type, file) ?
+          ...(ts.isIdentifier(declaration.name) && declaration.type && portableAnnotation(declaration.type, file) ?
             { annotation: portableAnnotation(declaration.type, file) } : {}),
-          ...(declaration.initializer ? { initializer: declaration.initializer.getText(file) } : {}),
+          ...(bindingInitializer ? { initializer: bindingInitializer } : {}),
           start: span(name).start, end: span(name).end });
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {

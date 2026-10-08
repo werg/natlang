@@ -33,6 +33,81 @@ test('optional undefined properties in unknown evidence do not poison the next e
  assert.equal(second.kind,'ok',second.text);assert.equal(lam.return,1);
 });
 
+test('destructured eval bindings infer their projected and extracted types across evals', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Return the number of observed bindings.' });
+  const declared = await session.applyAsync('eval', { code: `
+    let initializerCalls = 0;
+    const task: {
+      instruction: string;
+      output_path: string;
+      output_contract: { format: string; fields: { caseId: string; decision: string } };
+      initialDraft: { caseId: string };
+      passes: { name: string }[];
+      metadata?: { label: string };
+      version?: string;
+    } = {
+      instruction: 'Review.', output_path: 'decision.json',
+      output_contract: { format: 'JSON', fields: { caseId: 'id', decision: 'disposition' } },
+      initialDraft: { caseId: 'PROC-1' },
+      passes: [{ name: 'request' }, { name: 'register' }, { name: 'conditions' }, { name: 'authority' }],
+    };
+    task;
+  ` });
+  assert.equal(declared.kind, 'ok', declared.text);
+
+  const destructured = await session.applyAsync('eval', { code: `
+    function makeTypedSource(): { nested: { format: string } } {
+      initializerCalls++;
+      return { nested: { format: 'typed call' } };
+    }
+    const { output_contract, ...rest } = task;
+    const { format: outputFormat, fields: { decision: decisionDescription } } = output_contract;
+    const { metadata = { label: 'fallback' }, version = 0 } = task;
+    const [firstPass, , thirdPass, ...laterPasses] = task.passes;
+    const { selected } = (() => { initializerCalls++; return { selected: 7 }; })();
+    const { nested: { format: callFormat } } = makeTypedSource();
+    console.log(outputFormat, decisionDescription, rest.initialDraft.caseId, metadata.label,
+      firstPass.name, thirdPass.name, laterPasses[0]?.name, selected, version, callFormat);
+  ` });
+  assert.equal(destructured.kind, 'ok', destructured.text);
+  assert.match(destructured.text, /JSON disposition PROC-1 fallback request conditions authority 7 0 typed call/);
+
+  const persisted = await session.applyAsync('eval', { code: `
+    const verify = output_contract.format === outputFormat &&
+      output_contract.fields.decision === decisionDescription &&
+      rest.initialDraft.caseId === 'PROC-1' && metadata.label === 'fallback' &&
+      firstPass.name === 'request' && thirdPass.name === 'conditions' &&
+      laterPasses[0]?.name === 'authority' && selected === 7 && version === 0 &&
+      callFormat === 'typed call' && initializerCalls === 2;
+    const defaultNumeric = version + 1;
+    return verify && defaultNumeric === 1 ? 1 : 0;
+  ` });
+  assert.equal(persisted.kind, 'ok', persisted.text);
+  assert.equal(persisted.value, 1);
+});
+
+test('readJson object destructuring projects the V23 output contract type across evals', async () => {
+  const folder = Folder.fromFiles({ 'task.json': JSON.stringify({
+    instruction: 'Review the release.', output_path: 'decision.json',
+    output_contract: { format: 'JSON', fields: { caseId: 'request ID', decision: 'disposition' } },
+    initialDraft: { caseId: 'API-821' }, passes: [{ name: 'scope' }],
+  }) });
+  const { lam, session } = open({ type: '() => number', subtype: 'directory-reducer', instructions: 'Return a count.' });
+  lam.projectTransaction = await folder.beginTransaction();
+  const loaded = await session.applyAsync('eval', { code: "const task = await folder.file('task.json').readJson(); task;" });
+  assert.equal(loaded.kind, 'ok', loaded.text);
+  const destructured = await session.applyAsync('eval', {
+    code: 'const { output_contract, ...rest } = task; console.log({ rest, output_contract });',
+  });
+  assert.equal(destructured.kind, 'ok', destructured.text);
+  const persisted = await session.applyAsync('eval', {
+    code: 'return output_contract.format.length + rest.initialDraft.caseId.length;',
+  });
+  assert.equal(persisted.kind, 'ok', persisted.text);
+  assert.equal(persisted.value, 11);
+  lam.projectTransaction.abort();
+});
+
 test('a final expression is only shown; a top-level return stages a value of the declared type', async () => {
   const { lam, session } = open({ type: '() => number', instructions: 'Return nine.' });
   const shown = await session.applyAsync('eval', { code: '9' });
