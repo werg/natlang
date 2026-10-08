@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({ options: { source: { type: 'string' }, corpus: { type: 'string' }, out: { type: 'string' } } });
@@ -84,7 +84,12 @@ for (const row of cases) {
     assert.equal(item.source_record_id, source.id);
     assert.equal(item.question, question, `${row.id}/${path}: source question changed`);
     assert.equal(item.evidence, evidence, `${row.id}/${path}: visible source evidence changed`);
-    assert.equal(expected[key], source.target.value, `${row.id}/${path}: gold differs from source target`);
+    assert.equal(expected[key], source.target.value, `${row.id}/${path}: gold differs from the original source target`);
+    const qaMap = ['qa_extractive', 'qa_multihop'].includes(source.family) && row.generation.generator.endsWith('/3');
+    assert.equal(row.generation.answer_normalization, qaMap ? 'squad-token-map/1' :
+      row.generation.generator.endsWith('/3') ? 'source-exact/1' : undefined);
+    assert.equal(item.answer_format.includes('SQuAD-style canonical form'), false,
+      `${row.id}/${path}: task prompts must leave the answer in natural wording`);
     assert.equal(source.outcome.label, 'gold');
     if (source.family === 'qa_extractive' || source.family === 'qa_multihop')
       assert(evidence.includes(source.target.value), `${row.id}/${path}: extractive label must be an exact evidence substring`);
@@ -104,13 +109,32 @@ for (const row of cases) {
   assert.equal(row.generation.training_admission, false);
   assert.equal(row.generation.provider_calls, 0);
 }
-assert.equal(cases.length, 16);
-const report = { schema: 's1-question-collection-independent-verification/1',
+assert(cases.length > 0, 'at least one source-derived task variant is required');
+const answerModes = cases.map(row => row.generation.answer_payload_mode ?? 'crisp');
+assert(answerModes.every(mode => ['crisp', 'soft'].includes(mode)), 'every task needs an explicit supported answer mode');
+for (const row of cases) {
+  const mode = row.generation.answer_payload_mode ?? 'crisp';
+  const code = row.curriculum.reference.root.find(call => call[0] === 'eval')?.[1]?.code ?? '';
+  assert(code.includes(mode === 'soft' ? 'nl<Neuralese<string>>' : 'nl<string>'), `${row.id}: inline result mode differs from source metadata`);
+  assert(code.includes(mode === 'soft' ? 'String(answer)' : 'const answerText = answer'), `${row.id}: answer handling differs from source mode`);
+  const softChildren = row.curriculum.reference.children.filter(child => child.soft_output);
+  assert.equal(softChildren.length, mode === 'soft' ? row.curriculum.reference.children.length : 0,
+    `${row.id}: every child output must follow its declared mode`);
+}
+const sourceProofPath = resolve(dirname(sourcePath), 'source-proof.json');
+const sourceProof = JSON.parse(await readFile(sourceProofPath, 'utf8'));
+assert.equal(sourceProof.source_cases_sha256, sha(bytes));
+assert.equal(sourceProof.task_variants, cases.length);
+assert.equal(sourceProof.answer_mode_counts?.crisp ?? cases.length, answerModes.filter(mode => mode === 'crisp').length);
+assert.equal(sourceProof.answer_mode_counts?.soft ?? 0, answerModes.filter(mode => mode === 'soft').length);
+const report = { schema: 's1-question-collection-independent-verification/2',
   source_cases_sha256: sha(bytes), source_records_verified: sourceRows.size, task_variants_verified: cases.length,
+  answer_mode_counts: { crisp: answerModes.filter(mode => mode === 'crisp').length,
+    soft: answerModes.filter(mode => mode === 'soft').length },
   original_groups_verified: seenGroups.size, split_counts: Object.fromEntries([...new Set(cases.map(row => row.split))]
     .map(split => [split, cases.filter(row => row.split === split).length])),
   source_file_sha256: Object.fromEntries(filePins), source_manifest_sha256: sha(manifestBytes),
-  exact_source_questions_and_evidence: true, exact_source_targets: true, no_gold_payload_fields: true,
+  exact_source_questions_and_evidence: true, original_source_targets_retained_with_family_scoped_squad_map_grader: true, no_gold_payload_fields: true,
   no_duplicate_selected_source_record_or_group: true, independent_world_credit: 0,
   provider_calls: 0, teacher_observations: 0, training_admission: false, semantic_admission: false };
 await writeFile(outPath, JSON.stringify(report, null, 2) + '\n');
