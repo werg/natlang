@@ -10,6 +10,7 @@ import hashlib
 import fnmatch
 import os
 import json
+import re
 from pathlib import Path, PurePosixPath
 import shlex
 import shutil
@@ -252,6 +253,35 @@ def local_references(paths, proc_root=Path('/proc')):
     """Return open-FD and live-process references visible from this host."""
     targets = {str(path.resolve()) for path in paths}
     open_fds, jobs, inaccessible = [], [], 0
+
+    def canonical_operand(value, cwd):
+        # argv has already had shell quoting removed; environment values may not.
+        value = value.strip().strip('"\'')
+        if not value or '\x00' in value or value.startswith(('http://', 'https://', 'file://')):
+            return None
+        candidate = Path(value)
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        try:
+            return candidate.resolve()
+        except (OSError, RuntimeError):
+            return None
+
+    def path_operands(values, cwd, *, equals=False):
+        for value in values:
+            operand = value
+            if equals and operand.startswith('-') and '=' in operand:
+                operand = operand.split('=', 1)[1]
+            path = canonical_operand(operand, cwd)
+            if path is not None:
+                yield path
+
+    def contains_exact_path(text, target):
+        # Keep noticing paths embedded in e.g. `python -c` source, without
+        # treating a sibling such as checkpoint.pt.bak as checkpoint.pt.
+        return re.search(r'(?<![A-Za-z0-9._/-])' + re.escape(target) +
+                         r'(?![A-Za-z0-9._/-])', text) is not None
+
     try:
         processes = list(proc_root.iterdir())
     except OSError as error:
@@ -277,16 +307,26 @@ def local_references(paths, proc_root=Path('/proc')):
         try:
             if (process.stat().st_uid != os.getuid()):
                 continue
-            command = (process / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='replace')
-            environment = (process / 'environ').read_bytes().replace(b'\0', b' ').decode(errors='replace')
-            cwd = os.readlink(process / 'cwd')
+            argv = [value.decode(errors='replace') for value in (process / 'cmdline').read_bytes().split(b'\0') if value]
+            environment = [value.decode(errors='replace') for value in (process / 'environ').read_bytes().split(b'\0') if value]
+            cwd = Path(os.readlink(process / 'cwd')).resolve()
         except OSError:
             continue
+
+        # Only explicit path operands can establish a directory reference.
+        # A file operand's lexical parent is not an implicit directory use.
+        operands = list(path_operands(argv, cwd, equals=True))
+        env_operands = list(path_operands((value.split('=', 1)[1] for value in environment if '=' in value), cwd))
+        directory_operands = [operand for operand in (*operands, *env_operands) if operand.is_dir()]
+        command_text = ' '.join(argv)
+        environment_text = ' '.join(environment)
         for resolved in targets:
-            parent = str(Path(resolved).parent)
-            if resolved in command or resolved in environment or cwd == resolved:
+            parent = Path(resolved).parent
+            if (resolved in {str(operand) for operand in (*operands, *env_operands)} or
+                    contains_exact_path(command_text, resolved) or contains_exact_path(environment_text, resolved) or
+                    cwd == Path(resolved)):
                 jobs.append({'pid': int(pid), 'path': resolved, 'source': 'process-arguments-or-environment'})
-            elif parent in command or parent in environment or cwd == parent:
+            elif any(Path(resolved).is_relative_to(directory) for directory in directory_operands) or cwd == parent:
                 jobs.append({'pid': int(pid), 'path': resolved, 'source': 'artifact-directory-reference'})
     return {'open_fds': open_fds, 'live_job_references': jobs,
             'inaccessible_fd_directories': inaccessible}
