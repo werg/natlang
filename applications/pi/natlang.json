@@ -1,10 +1,10 @@
 {
   "schema": "natlang.package/v2",
   "name": "@natlang/pi",
-  "version": "0.1.0",
-  "description": "pi's coding agent as a natlang program: the agent (pi.nl) on a big model calls pi's tools, natural-language functions on a small model that gate commands, digest output, review edits, watch progress and check answers. agent.ts is the optimized harness: the same judgments around a TypeScript loop.",
-  "include": ["README.md", "main.ts", "pure.ts", "services.ts", "agent.ts", "tools.ts", "types.ts", "pi.nl", "pi", "harness", "tasks", "tsconfig.json"],
-  "targets": { "pi": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands", "network:model"], "commands": ["bash", "git", "diff"],
-    "description": "natlang run applications/pi -- [-p] [--fast] TASK... | eval [NAME...] [--variants pure,plain,system-one,codemode,route]" } },
-  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+  "version": "0.2.0",
+  "description": "pi's durable coding agent harness, ported to natlang: pi-durable (vendored) hosts conversations and durable tasks; the harness's behaviour — each generation, tool and compaction phase, context and prompt planning, the tool-call policy, admission and the scheduler's policy — is natural-language functions run by the executor, and pi's coding tools and subagent are natural-language functions too. The agent is a provider model reached through pi-ai.",
+  "include": ["README.md", "PORT.md", "port", "main.ts", "index.ts", "types.ts", "ops.ts", "host", "generation.nl", "generation", "tool.nl", "tool", "compaction.nl", "compaction", "admit.nl", "harness", "scheduler", "extensions", "vendor", "tasks", "package.json", "package-lock.json", "tsconfig.json"],
+  "targets": { "pi": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands", "network:model"], "commands": ["bash", "git"],
+    "description": "natlang run applications/pi -- [--agent-endpoint URL --agent-model ID] [--pure] TASK... | eval [NAME...]" } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.19.0" }
 }

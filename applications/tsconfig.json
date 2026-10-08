@@ -1,15 +1,29 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
+    "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": false,
+    "allowImportingTsExtensions": true,
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "rewriteRelativeImportExtensions": true
   },
-  "include": ["*/**/*.ts"],
-  "exclude": ["dist", "package_targets"]
+  "include": [
+    "*/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "package_targets",
+    "**/node_modules",
+    "**/.natlang",
+    "pi/vendor/durable/test",
+    "pi/vendor/durable/src/testing",
+    "pi/vendor/durable/src/storage/sqlite/cloudflare.ts",
+    "pi/test"
+  ]
 }

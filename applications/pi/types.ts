@@ -164,7 +164,7 @@ export type ContextView = {
 export type ToolDiagnostic = { severity: "info" | "warn" | "error"; message: string; code?: string };
 
 /** What a tool result asks of the run after its round: add tools, end the run (`terminate`), or start over (`handoff`). */
-export type ToolControl = { addTools?: string[]; terminate?: true; handoff?: string };
+export type ToolControl = { addTools?: string[]; terminate?: boolean; handoff?: string };
 
 /**
  * A tool's result. `content` omitted: its retained output becomes the content. `details` is for UIs. `diagnostics` are
@@ -388,25 +388,8 @@ export type GenerationCheckpoint =
   | { phase: "poll"; attempt: number; compacted?: number; model: ModelRef; cutoff: number; handle: DeferredHandle; pollAt: number }
   | { phase: "tools"; assistant: number; tools: number[]; pending: string[] };
 
-/** A summary request pinned at selection: the model, the token cap, the tail entry it reads to, and the first entry kept. */
-export type SummaryRequest = {
-  attempt: number;
-  model: ModelRef;
-  thinkingLevel: ThinkingLevel;
-  streamOptions: StreamOptions;
-  maxTokens: number;
-  tail: number;
-  firstKept: number;
-};
-
 /** The compaction task's input: why it runs and the user's focus for a manual one. */
 export type CompactionInput = { reason: CompactionReason; instructions?: string };
-
-/** The compaction task's checkpoint: choose the cut ("select"), summarize with the pinned request, or wait to retry. */
-export type CompactionCheckpoint =
-  | { phase: "select" }
-  | { phase: "summarize"; request: SummaryRequest }
-  | { phase: "retry"; request: SummaryRequest; until: number };
 
 /**
  * What every task-kind entry function receives: the task as reserved, whether this invocation runs a phase ("run") or
@@ -490,3 +473,59 @@ export type Expect = { run?: number | null; inbox?: number[]; tail?: number };
 
 /** What a commit created, by `as` name, and the user IDs a `place` operation placed. */
 export type CommitResult = { ids: Record<string, number>; placed: number[] };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Compaction (appended by the compaction port)
+
+/**
+ * The compaction task's checkpoints as pi-durable stores them: the summary request's fields sit beside `phase`
+ * ("retry" adds `until`). summarize: ask the pinned model for the summary of the entries before `firstKept`, reading
+ * the context as of entry `tail`; retry: wait until `until`, then summarize again with attempt + 1.
+ */
+export type CompactionPhase =
+  | { phase: "select" }
+  | { phase: "summarize"; attempt: number; model: ModelRef; thinkingLevel: ThinkingLevel; streamOptions: StreamOptions; maxTokens: number; tail: number; firstKept: number }
+  | { phase: "retry"; attempt: number; model: ModelRef; thinkingLevel: ThinkingLevel; streamOptions: StreamOptions; maxTokens: number; tail: number; firstKept: number; until: number };
+
+/**
+ * A summary for the compaction entry to place: its text, the first entry it keeps, and the usage of the summarization
+ * response that wrote it under `usageKey` ("provider/model"), when a model wrote it.
+ */
+export type SummaryToPlace = { summary: string; firstKept: number; usageKey?: string; usage?: Usage };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Admission (`admit`, spec §6, appendix 2 R1)
+
+/**
+ * A conversation's admission facts, read at one committed point: `run`, the task that owns `pi.live.run` (null: the
+ * conversation is idle); `inbox`, the queued items in ID order; `activeStart`, the newest head marker's `head` (null when
+ * there is none); the queue modes now in effect.
+ */
+export type AdmissionState = { run: number | null; inbox: InboxItem[]; activeStart: number | null; steeringMode: QueueMode; followUpMode: QueueMode };
+
+/**
+ * One write of admission, applied by `admission.commit` in one commit, in order:
+ * - queue: create a queued submission for `draft` and append its inbox item at the end ("write" for a write; for an
+ *   input, "steer" when whenBusy is "steer", otherwise "followUp");
+ * - boundary: place `selection` (see BoundarySelection) and, when it placed user items, start a run for them. ID 0 in
+ *   the selection stands for the submission the queue operation of this commit created;
+ * - write: append `draft.entry` as drafted and create a "done" write submission with that entry;
+ * - stale: create an "unanswered" write submission with reason "stale"; no entry is appended;
+ * - input: append a "pi.user" entry with `draft.content`, create a "placed" input submission with it, and start a run
+ *   for it.
+ */
+export type AdmissionOp =
+  | { op: "queue"; draft: SubmissionDraft }
+  | { op: "boundary"; selection: BoundarySelection }
+  | { op: "write"; draft: SubmissionDraft }
+  | { op: "stale"; draft: SubmissionDraft }
+  | { op: "input"; draft: SubmissionDraft };
+
+/**
+ * Guards of an admission commit: `run` and `inbox` as read (see AdmissionState), and `requestAbsent`, a request ID no
+ * submission of the conversation may carry yet.
+ */
+export type AdmissionExpect = { run: number | null; inbox: number[]; requestAbsent?: string };
+
+/** What admission concluded: the submission's ID, or the conversation is busy and rejects the input, or a request conflict. */
+export type AdmitResult = { id?: number; busy?: boolean; conflict?: string };

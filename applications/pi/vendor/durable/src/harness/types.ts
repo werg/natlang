@@ -29,11 +29,13 @@ import type {
 	JsonObject,
 	Page,
 	Session,
+	Storage,
 	SubmissionId,
 	SubmissionRecord,
 	Task,
 	TaskId,
 	TaskOptions,
+	TaskOutcome,
 	TaskRecord,
 	TaskState,
 	Tx,
@@ -466,6 +468,14 @@ export type HarnessOptions<Tool extends ToolRegistration = ToolRegistration> = {
 	readonly now?: () => number;
 	/** Receives extension failures that do not fail the calling operation. Must not throw. */
 	readonly onReport?: (error: unknown) => void;
+	/**
+	 * PATCH (natlang port): the scheduler's policy (what runs next, step precedence, cascades, abort). Absent: pi-durable's
+	 * own inline policy. A given policy decides outside the commit line from facts read on it; the scheduler commits its
+	 * decisions with guards on the records they read and decides again when a guard fails.
+	 */
+	readonly schedulerPolicy?: SchedulerPolicy;
+	/** PATCH (natlang port): admission of submissions (spec §6). Absent: pi-durable's `admitSubmission` in one commit. */
+	readonly admission?: AdmissionPolicy;
 };
 
 /** Live task and what the scheduler would do with it under the current registry. */
@@ -676,4 +686,209 @@ export interface CompactionHooks {
 		api: HookApi,
 		context: Context,
 	): HookResult<{ readonly decline: true } | { readonly summary: string }>;
+}
+
+// ─── PATCH (natlang port): pluggable scheduler policy and admission ───────────
+
+/** Why no registered definition can take a task (spec §5.1, R4a). */
+export type BlockedReason = "missing_task" | "task_too_old" | "migration_failed";
+
+/**
+ * One step of a walk up the ownership tree (spec §5.5). A task's parent is its owner task, or else its conversation; a
+ * conversation's parent is its owner task, or none for an ownerless root. `kind` "task": an owner task with its
+ * background flag, its status (`terminal` once it ended) and, when live, its abort mark and held outcome; "conversation":
+ * a conversation; "unknown": an owner edge or node that is not loaded, where the walk stops.
+ */
+export type OwnerStep = {
+	readonly kind: "task" | "conversation" | "unknown";
+	readonly id?: number;
+	readonly background?: boolean;
+	readonly status?: "pending" | "running" | "waiting" | "completing" | "terminal";
+	readonly abortRequested?: boolean;
+	/** The held (`completing`) or final (`terminal`) outcome's status. */
+	readonly outcome?: TaskOutcome<JsonValue>["status"];
+};
+
+/** A live task (pending, running, waiting, or completing) as the scheduler's policy sees it. */
+export type TaskFact = {
+	readonly id: number;
+	readonly conversationId: number;
+	readonly kind: string;
+	/** The definition version the record was stored with. */
+	readonly version: number;
+	readonly status: "pending" | "running" | "waiting" | "completing";
+	readonly abortRequested: boolean;
+	readonly background: boolean;
+	readonly owner?: number;
+	/** `waiting`: the tasks it waits for and its join policy. */
+	readonly on?: readonly number[];
+	readonly policy?: "allSettled" | "failFast";
+	/** `completing`: the held outcome's status, and its error message or orphan reason. */
+	readonly outcome?: TaskOutcome<JsonValue>["status"];
+	readonly message?: string;
+	readonly reason?: string;
+	/** The in-memory invocation running it, if any. */
+	readonly invocation: "run" | "abort" | null;
+	/** The walk up from its parent: its owner task, or its conversation, and on up to an ownerless conversation. */
+	readonly above: readonly OwnerStep[];
+};
+
+/** A registered definition for a kind present among the live tasks. */
+export type DefinitionFact = { readonly kind: string; readonly version: number; readonly migrate: boolean };
+
+export type PassFacts = {
+	/** Every live task, in mirror order. */
+	readonly tasks: readonly TaskFact[];
+	/** The registry snapshot's definitions, by kind; a kind without one is absent. */
+	readonly definitions: readonly DefinitionFact[];
+	/** Tasks whose migration already failed under the definition now registered for their kind. */
+	readonly migrationFailed: readonly number[];
+	/** Idle scopes someone waits for: a conversation, or `null` for every ownerless conversation. */
+	readonly idleScopes: readonly (number | null)[];
+};
+
+export type PassDecision = {
+	readonly reserve: readonly { readonly id: number; readonly mode: "run" | "abort"; readonly migrate: boolean }[];
+	/** Abort-marked tasks no definition can take; `cleanup` is the host cleanup to apply when it becomes terminal. */
+	readonly orphan: readonly { readonly id: number; readonly reason: BlockedReason; readonly cleanup?: unknown }[];
+	readonly idle: readonly { readonly scope: number | null; readonly idle: boolean }[];
+};
+
+export type StepFacts = {
+	readonly mode: "run" | "abort";
+	/** The task as committed now; `null` when it no longer exists or is terminal. */
+	readonly task: {
+		readonly id: number;
+		readonly conversationId: number;
+		readonly kind: string;
+		readonly status: "pending" | "running" | "waiting" | "completing";
+		readonly abortRequested: boolean;
+		readonly checkpoint?: JsonValue;
+	} | null;
+	readonly closing: boolean;
+	/**
+	 * The phase that just returned (run mode), or the abort handler's result (abort mode); `null` before the first phase.
+	 * `unchanged`: the checkpoint after the phase equals the one it started with, by structure (key order ignored).
+	 */
+	readonly previous: {
+		readonly phase?: string;
+		readonly error?: string;
+		readonly unchanged?: boolean;
+	} | null;
+	/** The registry's current definition for the task's kind, compared with the one this invocation runs. */
+	readonly definition: { readonly same: boolean; readonly exists: boolean; readonly canReserve: boolean };
+	/** That definition was already reported as unable to take over. */
+	readonly reported: boolean;
+};
+
+export type StepDecision = {
+	readonly kind: "continue" | "stop" | "fault" | "handover";
+	readonly message?: string;
+	/** Report this once: the task keeps running under its old definition. */
+	readonly report?: string;
+	readonly cleanup?: unknown;
+};
+
+export type ReconcileFacts = {
+	readonly tasks: readonly TaskFact[];
+	/** `failFast` waiters flagged for a check, still waiting, with the state of each member of their `on`. */
+	readonly failFast: readonly {
+		readonly id: number;
+		readonly members: readonly {
+			readonly id: number;
+			readonly live: boolean;
+			readonly status: "pending" | "running" | "waiting" | "completing" | "terminal" | "missing";
+			readonly abortRequested: boolean;
+			readonly outcome?: TaskOutcome<JsonValue>["status"];
+		}[];
+	}[];
+	/** Conversations with queued submissions (loaded only when a cascade is pending), with the walk up from each. */
+	readonly queued: readonly { readonly conversation: number; readonly above: readonly OwnerStep[] }[];
+};
+
+export type ReconcileDecision = {
+	readonly mark: readonly number[];
+	readonly withdraw: readonly number[];
+	/** In order: each finalized task frees its owner, so later entries may depend on earlier ones. */
+	readonly finalize: readonly { readonly id: number; readonly cleanup?: unknown }[];
+};
+
+export type AbortTaskFacts = {
+	readonly id: number;
+	readonly task: (Omit<TaskFact, "invocation" | "status"> & {
+		readonly status: TaskFact["status"] | "terminal";
+	}) | null;
+	readonly invocation: "run" | "abort" | null;
+	/** Every live task, for the task's live ordinary owned work. */
+	readonly tasks: readonly TaskFact[];
+	/** Whether the registered definition can take the task (R4a, a migration attempted): `null` fits. */
+	readonly blocked: BlockedReason | null;
+};
+
+export type AbortTaskDecision = {
+	readonly kind: "reject" | "terminal" | "orphan" | "mark";
+	readonly message?: string;
+	readonly reason?: BlockedReason;
+	/** Wait for the active run invocation to end. */
+	readonly join: boolean;
+	readonly cleanup?: unknown;
+};
+
+export type AbortConversationFacts = {
+	readonly conversation: number;
+	readonly background: boolean;
+	readonly tasks: readonly TaskFact[];
+	readonly queued: readonly { readonly conversation: number; readonly above: readonly OwnerStep[] }[];
+};
+
+export type AbortConversationDecision = {
+	readonly mark: readonly number[];
+	readonly withdraw: readonly number[];
+	readonly waitFor: readonly number[];
+};
+
+/**
+ * The scheduler's policy points (spec §5). Every method decides from facts and writes nothing; the scheduler applies
+ * the decision in a commit guarded on the records the facts came from.
+ */
+export interface SchedulerPolicy {
+	pass(facts: PassFacts, context: Context): PassDecision | Promise<PassDecision>;
+	step(facts: StepFacts, context: Context): StepDecision | Promise<StepDecision>;
+	reconcile(facts: ReconcileFacts, context: Context): ReconcileDecision | Promise<ReconcileDecision>;
+	abortTask(facts: AbortTaskFacts, context: Context): AbortTaskDecision | Promise<AbortTaskDecision>;
+	abortConversation(
+		facts: AbortConversationFacts,
+		context: Context,
+	): AbortConversationDecision | Promise<AbortConversationDecision>;
+	/**
+	 * Apply a decision's `cleanup` for a `faulted` or `orphaned` task becoming terminal, inside the scheduler's commit.
+	 * Absent, or a decision without cleanup: pi-durable's `settleSchedulerOutcome`.
+	 */
+	applyCleanup?(
+		tx: Tx,
+		record: TaskRecord<JsonValue, JsonValue, JsonValue>,
+		cleanup: unknown,
+		context: Context,
+	): Promise<void>;
+}
+
+/** What admission may use: committed reads on the Session line, Storage reads there, and commits. */
+export interface AdmissionSession {
+	read<T>(job: () => Promise<T>): Promise<T>;
+	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context): Promise<T>;
+	readonly storage: Storage;
+	snapshot(token: unknown, conversationId: ConversationId, context: Context): Promise<unknown>;
+}
+
+export type AdmissionRequest = {
+	readonly conversationId: ConversationId;
+	readonly draft: SubmissionDraft;
+	readonly now: number;
+	readonly queueModes: { readonly steeringMode: QueueMode; readonly followUpMode: QueueMode };
+	readonly session: AdmissionSession;
+};
+
+/** Admission (spec §6): returns the submission ID, or rejects (`ConversationBusy`, a request-type conflict). */
+export interface AdmissionPolicy {
+	admit(request: AdmissionRequest, context: Context): Promise<SubmissionId>;
 }

@@ -4,9 +4,10 @@ args:
   facts: PhaseFacts
 returns: string
 ---
-You carry out one phase of a generation task. facts.task.checkpoint is a GenerationCheckpoint, facts.task.id is
-this task, and facts.agent and facts.settings are fixed for this phase. Every branch ends with this task's next state
+You carry out one phase of a generation task. checkpoint = facts.task.checkpoint, a GenerationCheckpoint;
+facts.task.id is this task, and facts.agent and facts.settings are fixed for this phase. Every branch ends with this task's next state
 committed through durable.commit (a list of Op ending with a next operation), by you or by the function you call.
+The functions of your folder do their own commits; call them with await and pass what they need.
 Return one line saying what was committed. If a commit rejects because this task was aborted or the invocation
 ended, stop at once and return "stopped": someone else owns the state now.
 

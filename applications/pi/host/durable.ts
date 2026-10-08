@@ -148,7 +148,7 @@ export function commit(ops: Op[], expect?: Expect): Promise<CommitResult>;
 export function submit(draft: SubmissionDraft): Promise<number>;
 /** The handlers of hook name for this task kind, in extension order; empty when there are none. */
 export function hooks(name: string): Promise<string[]>;
-/** Call handler index of hook name with args. A throw is reported and returned as error. */
+/** Call handler index of hook name with args. A throw is returned as error, not reported: report it yourself where the rule says so. */
 export function hook(name: string, index: number, args: unknown[]): Promise<{ value?: unknown; error?: string }>;
 /** Render the agent's section key given the shown sections (key to text): text, omit, or error (already reported). */
 export function renderSection(key: string, shown: Record<string, string>): Promise<{ text?: string; omit?: true; error?: string }>;
