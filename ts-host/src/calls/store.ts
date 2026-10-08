@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { DatabaseSync as Database } from 'node:sqlite';
 import { hexDigest } from '../native/hash.js';
+import type { IterationStatisticsStore, SiteStatistics } from '../runtime/iterate.js';
 import { DEFAULT_SETTINGS, type CallRecord, type CallStoreSettings, type CaseRole, type CaseStats, type CaseTier,
   type CompilationRow, type DeclineReason, type DeclineRow, type ValueRef, type Verdict } from './types.js';
 
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS declines (definition_key TEXT PRIMARY KEY, definition
 CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, case_hash TEXT NOT NULL, call_id TEXT NOT NULL,
   status TEXT NOT NULL, enqueued_at TEXT NOT NULL, done_at TEXT, verdict TEXT, detail TEXT, UNIQUE (kind, case_hash, call_id));
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS iteration_statistics (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
 `;
 
 const now = () => new Date().toISOString();
@@ -487,6 +489,21 @@ export class CallStore {
     return this.db.prepare(`SELECT * FROM jobs ${caseHash ? 'WHERE case_hash = ?' : ''} ORDER BY id DESC LIMIT ?`)
       .all(...(caseHash ? [caseHash, limit] : [limit])) as (AuditJob & { status: string; verdict: string | null; detail: string | null })[];
   }
+
+  /** iterateOn site statistics kept in the store (runtime/iterate.ts), shared by every runtime on the machine. */
+  iterationStatistics(): IterationStatisticsStore {
+    return this.statistics ??= {
+      read: key => { const row = this.db.prepare('SELECT value FROM iteration_statistics WHERE key = ?').get(key) as { value: string } | undefined;
+        return row ? JSON.parse(row.value) as SiteStatistics : undefined; },
+      write: (key, value) => { this.db.prepare(`INSERT INTO iteration_statistics (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).run(key, JSON.stringify(value), now()); },
+      reset: (prefix = '') => { this.db.prepare("DELETE FROM iteration_statistics WHERE key LIKE ? ESCAPE '\\'")
+        .run(`${prefix.replace(/[\\%_]/g, character => `\\${character}`)}%`); },
+      export: () => Object.fromEntries((this.db.prepare('SELECT key, value FROM iteration_statistics').all() as { key: string; value: string }[])
+        .map(row => [row.key, JSON.parse(row.value) as SiteStatistics])),
+    };
+  }
+  private statistics?: IterationStatisticsStore;
 
   /** Bytes on disk of the database and blobs (for `natlang traces status`). */
   diskBytes(): number {

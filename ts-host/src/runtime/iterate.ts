@@ -249,7 +249,7 @@ export class Iteration<T> {
     const stepId = stepMeta?.definition.id ?? (this.step.name || 'step');
     const siteId = this.siteId ?? this.compilerSite ?? `unsited:${stepId}`;
     const persistent = !!(this.siteId ?? this.compilerSite);
-    const store = task.runtime.options.statistics ?? defaultStatistics;
+    const store = task.runtime.options.statistics ?? task.runtime.callStore()?.iterationStatistics?.() ?? defaultStatistics;
     const statsKey = `${siteId}|${stepId}|${doneMeta?.definition.id ?? 'predicate'}`;
     const stats = persistent ? await store.read(statsKey) : undefined;
     const judge = this.judge ?? task.runtime.options.progressJudge ?? defaultProgressJudge;

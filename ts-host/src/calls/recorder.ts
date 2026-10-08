@@ -18,6 +18,8 @@ export interface CallStoreLike {
   currentCompilation(definitionKey: string): (CompilationRow & { cases: CaseStats[] }) | undefined;
   caseServed(caseHash: string, callId: string, handedOff: boolean): void;
   enqueue(kind: 'audit' | 'shadow', caseHash: string, callId: string): void;
+  /** Iteration statistics kept with the machine's records, so iterateOn sites learn across processes. */
+  iterationStatistics?(): import('../runtime/iterate.js').IterationStatisticsStore;
 }
 
 const reported = new WeakSet<object>();
