@@ -6,7 +6,7 @@ its evaluation are one implementation:
 
 - ``family_members``/``private_parameters``: the members of a loaded student and their private parts (router rows,
   norm gain corrections, private attention LoRA).
-- ``member_loss``: one member's joint-phase objective on a token window, CE on the supervised targets plus
+- ``member_backward``: one member's joint-phase objective on a token window, CE on the supervised targets plus
   KL(full ‖ member) to the current full model (detached teacher), exactly ``nested_train.member_step``'s terms.
 - ``evaluate_members``: held CE and KL for the full model (KL to adapters-off original) and every member.
 """
@@ -37,15 +37,25 @@ def window_labels(ids: torch.Tensor, prefix: int) -> torch.Tensor:
     return labels
 
 
-def member_loss(backbone, member, ids: torch.Tensor, labels: torch.Tensor, *, kl_weight: float = 1.0,
-                chunk: int = 256):
-    """``CE_member + kl_weight · KL(full ‖ member)`` over the labelled positions; the full model is the detached
-    teacher (it is trained by the stage's own objective). Returns (loss, LossParts)."""
-    head = backbone.hf.get_output_embeddings().weight
+def member_backward(backbone, member, ids: torch.Tensor, labels: torch.Tensor, *, weight: float,
+                    kl_weight: float = 1.0, chunk: int = 256):
+    """Backpropagate ``weight · (CE_member + kl_weight · KL(full ‖ member))`` over the labelled positions; the full
+    model is the detached teacher (the stage's own objective trains it). The member stays selected through backward,
+    because checkpointed layers recompute their forward then and must route as the member did. Returns LossParts."""
+    hf = backbone.hf
+    head = hf.get_output_embeddings().weight
     with torch.no_grad():
-        full = run(backbone.hf, None, ids).last_hidden_state
-    hidden = run(backbone.hf, member, ids).last_hidden_state
-    return chunked_ce_kl(hidden, head, labels, full, head, kl_weight=kl_weight, chunk=chunk)
+        full = run(hf, None, ids).last_hidden_state
+    hf.set_member(member.key, experts=member.experts, layers=member.layers)
+    try:
+        hidden = hf.model(input_ids=ids).last_hidden_state
+        loss, parts = chunked_ce_kl(hidden, head, labels, full, head, kl_weight=kl_weight, chunk=chunk)
+        if not torch.isfinite(loss):
+            raise RuntimeError(f"nonfinite member loss ({member.key})")
+        (weight * loss).backward()
+    finally:
+        hf.set_member(None)
+    return parts
 
 
 @torch.no_grad()
