@@ -8204,6 +8204,54 @@
         "s1-question-collection-v8-action-source-audit-20261008-v1"
       ],
       "notes": "Immutable review evidence for the superseded47 selected-action proposal: old root action47 admission, exact selected delta, prior proposal review, second source audit, and model-visible-context review. The later visibility review found two insufficient answer-grounding excerpts (qa_quality_mcq:24 and :26); action45 admission excludes both. The old47 root certificate and outputs remain preserved as history and are not current training admission. No full cumulative native/text copies are selected here."
+    },
+    {
+      "id": "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+      "include": [
+        "assembled/native-records.jsonl",
+        "assembled/recurrence-records.jsonl",
+        "assembled/native-pieces.jsonl",
+        "assembled/recurrence-pieces.jsonl",
+        "assembled/proposal-manifest.json",
+        "text-append/text.jsonl",
+        "text-append/receipt.json",
+        "text-append/output-manifest.json",
+        "proposal-review.json",
+        "decoded-target-review.json"
+      ],
+      "admission": "root-admitted-exact45-native-sft-and-ordinary-gold-text-full-facets; recurrence-is-unchanged-v9-prefix",
+      "derived_from": [
+        "neuralese-v24-v9-three-action-native-text-20261008-v2",
+        "neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseding-admission-20261008-v1",
+        "neuralese-v24-v9-three-action-action45-superseded-hold-evidence-20261008-v1"
+      ],
+      "notes": "Canonical full native/text output files at the exact paths named by the root action45 integration admission are included so they are immediately available on DGX without reconstruction. The compact action45 proposal entry separately provides nonduplicative delta/provenance. Full facets contain 5,290 native rows and 4,544 text documents; the exact45 new action/text delta is covered by root admission. V24 native/text prefixes and V9 recurrence/pieces remain byte exact. Two visible-context holds are excluded. No recurrence additions, runtime/trajectory/foundation qualification, or active training-input change."
+    },
+    {
+      "id": "neuralese-lfm-input-map-refinement-22272-closed-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
+      "include": [
+        "closure.json",
+        "recipe.json",
+        "train-launch.json",
+        "train-launch.prepared.json",
+        "train-continuation/*",
+        "runtime-wide-launch.json",
+        "runtime-wide-probe-v1/*",
+        "held-ar-probe-v1/*",
+        "runtime/**/*",
+        "runtime/*"
+      ],
+      "admission": "closed-step22272-text-alignment-refinement-and-frozen-diagnostics; no-active-training-admission-or-input-change",
+      "derived_from": [
+        "neuralese-lfm-input-map-completed-state-20261008-v2",
+        "neuralese-lfm-input-map-refinement-launch-20261008-v1"
+      ],
+      "notes": "Closed continuation at step 22272 with full optimizer/RNG checkpoint, current and best heads/checkpoints, baseline, train/eval logs, plan/report, closure, frozen launch provenance, frozen runtime snapshot and exact held AR/runtime-wide diagnostics. Root closure states text alignment only qualified and task-stopping/runtime qualification false. These files are archival diagnostics and not the separate new active action45 resume. Keep the full checkpoint and heads local on Pop; sync provides a verified DGX copy only and does not offload or alter local files."
     }
   ],
   "coverage_backlog": [
