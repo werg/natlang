@@ -164,14 +164,14 @@ function validateReboundCaptures(plan: InlineLambdaPlan, next: Record<string, un
   const env = new TypeEnv(Object.fromEntries(Object.entries(aliases).map(([name, text]) => [name, parseType(text)])));
   const classes = new Map<string, Function>();
   env.classes = classes;
-  for (const capture of plan.captures) if (capture.type.host?.kind === 'class') {
+  for (const capture of plan.captures) if (!capture.shadowedByParameter && capture.type.host?.kind === 'class') {
     const original = accessors[capture.name]?.[0]();
     if (original && (typeof original === 'object' || typeof original === 'function')) {
       const constructor = (original as { constructor?: unknown }).constructor;
       if (typeof constructor === 'function') classes.set(capture.type.host.name, constructor);
     }
   }
-  return Object.fromEntries(plan.captures.map(capture => [capture.name,
+  return Object.fromEntries(plan.captures.map(capture => [capture.name, capture.shadowedByParameter ? next[capture.name] :
     coerce(next[capture.name], parseType(targetType(capture.type)), env, `capture/${capture.name}`)]));
 }
 
@@ -246,6 +246,13 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
     const accessor = accessors[capture.name];
     if (!accessor) continue;
     const type = targetType(capture.type);
+    // A parameter wins by lexical shadowing. Evaluate a snapshot initializer once at creation, but never
+    // turn its discarded value into a child-visible capture or runtime snapshot. A shadowed live capture
+    // has no read at all because its value would never be observed.
+    if (capture.shadowedByParameter) {
+      if (capture.mode !== 'live') accessor[0]();
+      continue;
+    }
     if (capture.mode === 'live' && !functionTyped(capture.type, type)) {
       listed[capture.name] = live(accessor[0], accessor[1]);
       cells[capture.name] = { name: capture.name, type, mutable: !!accessor[1], get: accessor[0], ...(accessor[1] ? { set: accessor[1] } : {}) };

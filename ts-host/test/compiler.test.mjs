@@ -69,22 +69,23 @@ test('missing, synchronous, any-typed and colliding signatures produce precise d
   assert.equal(spread.diagnostics[0].code, 'nl-spread');
 });
 
-test('explicit nl.with captures cannot collide with inferred or annotated input names', () => {
+test('an input parameter shadows a same-named explicit nl.with capture', () => {
   const inferred = analyze(`async function f(currentDraft: string) {
     const result: boolean = await nl.with({ currentDraft })
       \`Judge the supplied currentDraft.\`(currentDraft);
   }`);
-  assert.equal(inferred.plans.length, 0);
-  assert.equal(inferred.diagnostics[0].code, 'nl-capture-parameter-collision');
-  assert.match(inferred.diagnostics[0].message, /Rename the capture or the call argument/);
+  assert.equal(inferred.diagnostics.length, 0);
+  assert.equal(inferred.plans.length, 1);
+  assert.deepEqual(inferred.plans[0].parameters.map(parameter => parameter.name), ['currentDraft']);
+  assert.deepEqual(inferred.plans[0].captures.map(capture => [capture.name, capture.shadowedByParameter]), [['currentDraft', true]]);
 
   const annotated = analyze(`async function f(currentDraft: string) {
     const judge = nl.with<(currentDraft: string) => Promise<boolean>>({ currentDraft })
       \`Judge the supplied currentDraft.\`;
     await judge(currentDraft);
   }`);
-  assert.equal(annotated.plans.length, 0);
-  assert.equal(annotated.diagnostics[0].code, 'nl-capture-parameter-collision');
+  assert.deepEqual(annotated.diagnostics, []);
+  assert.deepEqual(annotated.plans[0].captures.map(capture => [capture.name, capture.shadowedByParameter]), [['currentDraft', true]]);
 
   const disjoint = analyze(`async function f(currentDraft: string) {
     const policy = 'Use the current policy.';

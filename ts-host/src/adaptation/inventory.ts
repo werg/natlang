@@ -28,7 +28,9 @@ export function inlineDescriptor(program: string, plan: InlineLambdaPlan): Compo
   return descriptor(componentKey(program, plan.sourceSpan.file, site + ':instructions'), 'authored-inline',
     { kind: 'lambda.instructions', template: { segments: plan.strings, slotIds: slots } },
     { ...baseContract(), parameters: plan.parameters, returns: plan.returns, openParameters: !!plan.openParameters,
-      captures: plan.captures.map(({ name, type, mutable }) => ({ name, type, mutable })).sort((a, b) => a.name.localeCompare(b.name)), slots, visibleBindings, slotBindings },
+      captures: plan.captures.map(({ name, type, mutable, shadowedByParameter }) =>
+        ({ name, type, mutable, ...(shadowedByParameter ? { shadowedByParameter: true } : {}) }))
+        .sort((a, b) => a.name.localeCompare(b.name)), slots, visibleBindings, slotBindings },
     { definitionId: plan.definitionId, source: { path: plan.sourceSpan.file, start: plan.sourceSpan.start,
       end: plan.sourceSpan.end, templateStart: location.templateStart, templateEnd: location.templateEnd, expressions } });
 }

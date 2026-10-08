@@ -75,6 +75,6 @@ test('nl help distinguishes result annotations, capture snapshots and changing i
   assert.match(BUILT_IN_DOCS.nl, /nl<T>`instructions`\.with\(\{ policy \}\)\(item\)/);
   assert.match(BUILT_IN_DOCS.nl, /applies directly to the preceding\s+inline nl template/);
   assert.match(BUILT_IN_DOCS.nl, /T describes the result, not the capture object/);
-  assert.match(BUILT_IN_DOCS.nl, /Capture and parameter names must be distinct/);
+  assert.match(BUILT_IN_DOCS.nl, /parameter shadows the capture inside the child/);
   assert.match(BUILT_IN_DOCS.nl, /pass changing state as an argument/);
 });

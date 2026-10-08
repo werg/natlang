@@ -350,12 +350,21 @@ function validTemplateSource(code: string, span: { start: number; end: number },
 function attestSnapshotBody(site: Dict, code: string, span: { start: number; end: number }, parent: Row, child: Row,
   bodyId?: string): { valid: true; plan: CaptureBindingPlan; bodySource: string; bodyCodeSource: string } |
     { valid: false; reason: string } {
-  const captures = Array.isArray(site.captures) ? site.captures.map(asDict) : [];
-  if (!captures.length || captures.some(capture => !capture)) return { valid: false, reason: 'unsupported-capture-contract' };
-  const names = captures.map(capture => stringAt(capture, 'name'));
+  const rawDeclaredCaptures = Array.isArray(site.captures) ? site.captures.map(asDict) : [];
+  if (rawDeclaredCaptures.some(capture => !capture)) return { valid: false, reason: 'unsupported-capture-contract' };
+  const declaredCaptures = rawDeclaredCaptures as Dict[];
+  const names = declaredCaptures.map(capture => stringAt(capture, 'name'));
   if (names.some(name => !name) || new Set(names).size !== names.length) return { valid: false, reason: 'capture-descriptors-ambiguous' };
+  const parameterNames = new Set((Array.isArray(site.parameters) ? site.parameters.map(asDict) : [])
+    .map(parameter => stringAt(parameter, 'name')).filter((name): name is string => !!name));
+  if (declaredCaptures.some(capture => capture.shadowedByParameter === true &&
+      !parameterNames.has(stringAt(capture, 'name') ?? '')))
+    return { valid: false, reason: 'shadowed-capture-parameter-mismatch' };
+  // Keep the authored capture record shape above for source validation, but bind only names that are actually
+  // visible in the child. A callable parameter shadows its matching captured initializer.
+  const captures = declaredCaptures.filter(capture => capture.shadowedByParameter !== true);
   const runtime = asDict(site.runtime_captures);
-  if (!runtime) return { valid: false, reason: 'runtime-capture-attestation-missing' };
+  if (!runtime && captures.length) return { valid: false, reason: 'runtime-capture-attestation-missing' };
   const bodySource = bodyId ? stringAt(site, 'raw_body_source') : (site.template_segments as string[])[0];
   const bodyHash = bodyId ? stringAt(site, 'raw_body_source_sha256') : typeof bodySource === 'string' ? hexDigest(bodySource) : undefined;
   if (!bodySource || bodyHash !== hexDigest(bodySource) || /[\\`]|\$\{/.test(bodySource))
@@ -411,7 +420,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   if (snapshotEnvelope && (!snapshots || snapshots.length !== captures.length || snapshots.some(item => !item) ||
       new Set(snapshots.map(item => item!.name)).size !== captures.length))
     return { valid: false, reason: 'runtime-capture-snapshots-incomplete-or-ambiguous' };
-  if (!bodyId && !snapshots) return { valid: false, reason: 'literal-capture-snapshot-attestation-missing' };
+  if (!bodyId && !snapshots && captures.length) return { valid: false, reason: 'literal-capture-snapshot-attestation-missing' };
   const bindingRows: CaptureBindingPlan['captures'] = [];
   let hasTruncatedPreview = false;
   for (const capture of captures as Dict[]) {
@@ -429,13 +438,13 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
         (hostTypedDescriptor && (!snapshot || snapshot.declared_type !== declaredType)) ||
         (literalDescriptor && (literalDescriptor.type !== type || !Object.is(literalDescriptor.value, snapshot?.value))))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
-    const runtimeCapture = asDict(runtime[name]);
+    const runtimeCapture = asDict(runtime?.[name]);
     // Literal captures keep their literal declaration. For host-attested unknown/any captures,
     // some runtime plans preserve that declaration while the exact snapshot records the evaluated
     // primitive type. Accept either spelling only when the snapshot above authenticates it.
     const runtimeTypes = literalDescriptor ? [declaredType] : hostTypedDescriptor ? [declaredType, type] : [type];
     if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || !runtimeTypes.includes(stringAt(runtimeCapture, 'type')) ||
-        Object.keys(runtime).length !== captures.length)
+        Object.keys(runtime ?? {}).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
     const childCode = childScopeDeclarations(child);
     let childValue = visiblePrimitive(childCode, name, type!, true, hostTypedDescriptor ? declaredType : undefined);

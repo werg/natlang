@@ -8,7 +8,7 @@ export type Candidate = Readonly<Record<string, ComponentValue>>;
 export type FrozenComponentContract = {
   parameters: readonly { name: string; type: unknown; optional?: boolean }[]; returns: unknown;
   types: Readonly<Record<string, string>>; subtype: string; openParameters: boolean;
-  captures: readonly { name: string; type: unknown; mutable: boolean }[];
+  captures: readonly { name: string; type: unknown; mutable: boolean; shadowedByParameter?: boolean }[];
   slots: readonly string[]; helpers: readonly string[]; servicesHash: string; protocol: number;
   /** Lexical value names available at the authored site, and captures provided by unchanged slots. */
   visibleBindings: readonly string[]; slotBindings: readonly string[];

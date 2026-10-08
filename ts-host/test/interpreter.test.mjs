@@ -619,6 +619,59 @@ test('nl tag suffix .with uses explicit snapshot and live capture semantics afte
   assert.equal(lam.let.counter, 1, 'live capture writes the child update back to the parent binding');
 });
 
+test('a parameter shadows a same-named capture while creation evaluates then discards its initializer', async () => {
+  const calls = [];
+  const { lam, session } = open({ type: '() => string[]', instructions: 'Create a child and return its input.' }, {
+    agent: child => {
+      calls.push({ args: { ...child.lam.args }, captures: Object.keys(child.lam.captures ?? {}).sort() });
+      child.lam.return = child.lam.args.input;
+    },
+  });
+  const result = await session.applyAsync('eval', { code:
+    'const order: string[] = []; const oldHandle = { secret: "must stay private" }; ' +
+    'const child = nl.with<(input: string) => Promise<string>>({ ' +
+    'first: (order.push("first"), "one"), input: (order.push("shadow"), oldHandle), ' +
+    'last: (order.push("last"), "two") })`Use input, first, and last.`; ' +
+    'const answer = await child("fresh"); return [answer, order.join(",")];' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.deepEqual(lam.return, ['fresh', 'first,shadow,last']);
+  assert.deepEqual(calls, [{ args: { input: 'fresh' }, captures: ['first', 'last'] }]);
+});
+
+test('saved inline .with keeps shadowed capture fields in its shape but never exposes their values', async () => {
+  const calls = [];
+  const { lam, session } = open({ type: '() => string[]', instructions: 'Rebind the child and return its input.' }, {
+    agent: child => {
+      calls.push({ args: { ...child.lam.args }, captures: Object.keys(child.lam.captures ?? {}).sort() });
+      child.lam.return = child.lam.args.input;
+    },
+  });
+  const result = await session.applyAsync('eval', { code:
+    'const order: string[] = []; const oldHandle = { secret: "must stay private" }; ' +
+    'const saved = nl.with<(input: string) => Promise<string>>({ input: (order.push("create"), oldHandle) })`Use input.`; ' +
+    'const rebound = saved.with({ input: (order.push("rebind"), oldHandle) }); ' +
+    'const answer = await rebound("fresh"); return [answer, order.join(",")];' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.deepEqual(lam.return, ['fresh', 'create,rebind']);
+  assert.deepEqual(calls, [{ args: { input: 'fresh' }, captures: [] }]);
+});
+
+test('a shadowed live capture is not installed in the child or read back as context', async () => {
+  const calls = [];
+  const { lam, session } = open({ type: '() => string[]', instructions: 'Call the child with fresh input.' }, {
+    agent: child => {
+      calls.push({ args: { ...child.lam.args }, captures: Object.keys(child.lam.captures ?? {}) });
+      child.lam.return = child.lam.args.input;
+    },
+  });
+  const result = await session.applyAsync('eval', { code:
+    'let input = "old parent value"; const child = nl.with<(input: string) => Promise<string>>({ input: live(input) })`Use input.`; ' +
+    'const answer = await child("fresh"); return [answer, input];' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.deepEqual(lam.return, ['fresh', 'old parent value']);
+  assert.deepEqual(calls, [{ args: { input: 'fresh' }, captures: [] }]);
+});
+
 test('a saved inline nl value can be rebound with the same finite captures and keeps interpolation snapshots', async () => {
   let childCalls = 0;
   const { lam, session } = open({ type: '() => boolean', instructions: 'Create a rebound child and verify it.' }, {

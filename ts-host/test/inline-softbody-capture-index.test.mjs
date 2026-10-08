@@ -23,9 +23,10 @@ const block = 'nz1_abcdefghijklmnopqrstuv';
 const body = 'Return the supplied policySnapshot exactly as written.';
 const policy = 'Only use details stated in the note.';
 
-function fixture({ childPolicy = policy, capture = {}, codeOverride } = {}) {
+function fixture({ childPolicy = policy, capture = {}, codeOverride, shadowed = false } = {}) {
   const sentinel = `\uE000${block}\uE001`;
-  const code = codeOverride ?? `const checker: Neuralese<(note: string) => Promise<boolean>> = nl.with({ policy })\`${sentinel}\`; return await checker(note);`;
+  const parameter = shadowed ? 'policy' : 'note';
+  const code = codeOverride ?? `const checker: Neuralese<(${parameter}: string) => Promise<boolean>> = nl.with({ policy })\`${sentinel}\`; return await checker(${parameter});`;
   const rawSpanStart = code.indexOf(`\`${sentinel}\``);
   const rawSpan = { start: rawSpanStart, end: rawSpanStart + sentinel.length + 2 };
   const checked = desugarNlCalls(sourceWithLiteralCalls(code));
@@ -35,10 +36,11 @@ function fixture({ childPolicy = policy, capture = {}, codeOverride } = {}) {
     type: { text: 'string', natlang: 'string' } };
   const site = { schema: 'natlang.inline_instruction_site/1', definition_id: 'checker-definition',
     template_span: rawSpan, checked_template_span: checkedSpan, template_segments: [''], interpolations: [],
-    parameters: [{ name: 'note', type: { text: 'string', natlang: 'string' } }],
-    returns: { text: 'boolean', natlang: 'boolean' }, captures: [{ ...capturePlan, ...capture }],
+    parameters: [{ name: parameter, type: { text: 'string', natlang: 'string' } }],
+    returns: { text: 'boolean', natlang: 'boolean' }, captures: [{ ...capturePlan, ...capture,
+      ...(shadowed ? { name: 'policy', shadowedByParameter: true } : {}) }],
     explicit_captures: true, soft_body_id: block, raw_body_source: body, raw_body_source_sha256: sha(body),
-    runtime_captures: { policy: { mode: 'snapshot', type: 'string' } },
+    runtime_captures: shadowed ? {} : { policy: { mode: 'snapshot', type: 'string' } },
     origin: { parentInvocationId: 'parent', toolCallId: 'eval-call', actionOrdinal: 0,
       writtenCodeSha256: sha(code), checkedCodeSha256: sha(checked), sourceTemplateSpan: rawSpan } };
   const parent = { id: 'trajectory:decision:0000', source_ref: { trajectory_id: 'trajectory', invocation_id: 'parent' },
@@ -69,6 +71,15 @@ test('indexes a compiler-checked soft body with an explicit primitive snapshot c
   assert.equal(result.writers[0].body_code_source, `\uE000${block}\uE001`);
   assert.equal(result.writers[0].plan.capture_binding_plan.captures[0].value, policy);
   assert.match(result.reads[0].capture_binding_plan.parent_scope_sha256, /^[a-f0-9]{64}$/);
+});
+
+test('source validation retains the declared shadowed capture slot but indexes no child capture binding', () => {
+  const { parent, child } = fixture({ shadowed: true });
+  const result = buildInlineInstructionIndex([child, parent]);
+  assert.equal(result.held.length, 0, JSON.stringify(result.held));
+  assert.equal(result.writers.length, 1);
+  assert.equal(result.reads.length, 1);
+  assert.deepEqual(result.reads[0].capture_binding_plan.captures, []);
 });
 
 test('holds snapshot captures when visibility, binding contract, or checked span is changed', () => {

@@ -10,7 +10,7 @@ export type InlineRebindSite = { start: number; end: number; templateStart: numb
 
 export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
-    'nl-parameter-collision' | 'nl-capture-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
+    'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
@@ -31,6 +31,8 @@ export type CapturePlan = {
    * binding at each call and writes it back. Implicit captures have no mode: data lets are live, functions by value.
    */
   mode?: 'snapshot' | 'live';
+  /** Explicit capture is evaluated at creation but hidden when a callable parameter has the same name. */
+  shadowedByParameter?: true;
 };
 
 export type InlineLambdaPlan = {
@@ -574,15 +576,10 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const softBody = softBodyOf(template);
     if (withCall || softBody) {
       // Explicit captures: exactly the listed ones (none for a bare soft literal); nothing is captured by mention.
-      const captures = withCall ? explicitCaptures(withCall, node) : [];
-      if (!captures) return;
-      const collision = captures.find(capture => explicit.has(capture.name));
-      if (collision) {
-        report(withCall ?? node, 'nl-capture-parameter-collision',
-          `The \`nl.with\` capture ${JSON.stringify(collision.name)} conflicts with an input parameter of the same name. ` +
-          'Rename the capture or the call argument/annotated parameter so captures and inputs have distinct names.');
-        return;
-      }
+      const listedCaptures = withCall ? explicitCaptures(withCall, node) : [];
+      if (!listedCaptures) return;
+      const captures = listedCaptures.map(capture => explicit.has(capture.name) ?
+        { ...capture, shadowedByParameter: true as const } : capture);
       const listed = new Set([...captures.map(capture => capture.name), ...explicit]);
       if (!softBody) for (const part of literalParts) for (const match of part.text.matchAll(BACKTICK_MENTION)) {
         const name = match[1]!;

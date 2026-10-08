@@ -137,8 +137,9 @@ creates a fresh callable with the same instructions and already-evaluated interp
 same named captures from the new finite record; a const alias of that function can be rebound too. For example,
 nl<string>\`Write the complete explanation using authorization and authText2.\`.with({ authorization, authText2 })(item)
 returns a string while snapshotting those two captures. Pass changing iteration state as an argument when each call needs a
-different value. Capture and parameter names must be distinct; omit a redundant capture or rename it so the child can
-distinguish its fixed context from its current input. Ordinary functions and opaque soft function values cannot be rebound this way.
+different value. If a capture and input parameter share a name, the parameter shadows the capture inside the child; the
+capture initializer is still evaluated when the callable is created, but the captured value is not exposed to the child.
+Ordinary functions and opaque soft function values cannot be rebound this way.
 Examples:
   const verdicts = await Promise.all(items.map(item => nl.with<boolean>({ policy })\`Decide whether item meets policy.\`(item)));
   const kept = items.filter((item, i) => verdicts[i] === true);
@@ -1685,7 +1686,10 @@ export class NativeSession {
         [blockInput(literal.id, 'block'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
       for (const plan of compiled.plans ?? []) if (plan.softBody) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
         block: plan.softBody, type: `Neuralese<(${plan.parameters.map(item => `${item.name}: ${item.type.natlang ?? item.type.text}`).join(', ')}) => ${plan.returns.natlang ?? plan.returns.text}>`,
-        expression: `__neuralese.body(${JSON.stringify(plan.softBody)})`, captures: plan.captures.map(capture => capture.name) },
+        expression: `__neuralese.body(${JSON.stringify(plan.softBody)})`,
+        captures: plan.captures.filter(capture => !capture.shadowedByParameter).map(capture => capture.name),
+        shadowed_capture_initializers: plan.captures.filter(capture => capture.shadowedByParameter)
+          .map(({ name, mode }) => ({ name, mode: mode ?? 'snapshot' })) },
         [blockInput(plan.softBody, 'body'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
     }
     if (!compiled.ok || !compiled.program) {
@@ -1746,6 +1750,7 @@ export class NativeSession {
         if (!plan) throw new Error('internal error: unknown inline plan');
         const bound = { ...accessors };
         for (const capture of plan.captures) {
+          if (capture.shadowedByParameter) continue;
           if (!capture.mutable || capture.source === 'block' ||
               !(localNames.includes(capture.name) || compiled.bindings.some(binding => binding.name === capture.name))) continue;
           const accessor = accessors[capture.name] as [() => unknown, ((value: unknown) => void)?];
