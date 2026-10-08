@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
-import { BUILT_INS_LINE } from '../dist/native/agent.js';
+import { BUILT_INS_LINE, READ_CODE_DESCRIPTION } from '../dist/native/agent.js';
 import { SEMANTIC_RESULT_PROMPT } from '../dist/native/prompt.js';
 
 /** Run a call of greet(name) with scripted root calls; returns the opening, each tool result, and the value. */
-async function script(calls, returns = 'string') {
+async function script(calls, returns = 'string', runtimeOptions = {}) {
   const results = [];
   let opening = '', step = 0;
   const model = async request => {
@@ -13,7 +13,7 @@ async function script(calls, returns = 'string') {
     const call = calls[step++];
     return call ? { calls: [call] } : { calls: [['return_result', { status: 'failed', reason: 'The scripted test has no more calls.' }]] };
   };
-  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
+  const runtime = createNatlangRuntime({ ...runtimeOptions, model, seed: { mode: 'backend' } });
   const fn = loadVirtualNatlang({ 'root.nl': `---\nargs: { name: string }\nreturns: ${returns}\n---\nGreet name.\n` }, 'root.nl');
   let value;
   try { value = await runtime.run(() => fn('Ada')); } catch {}
@@ -81,6 +81,62 @@ test('read_code accepts its name or native-tool argument shape in eval and remai
 
   const toolRead = await script([['read_code', { name: 'nl' }], ['return_result', { status: 'success', value: 'done' }]]);
   assert.match(toolRead.results[0], /nl: create a natural-language function inside eval code/);
+});
+
+test('read_code discovers only currently offered native tool schemas and visible host service types', async () => {
+  assert.match(READ_CODE_DESCRIPTION, /exact schema and instructions of a native tool currently offered/);
+  assert.match(READ_CODE_DESCRIPTION, /metadata, not program function source or service implementation/);
+  const toolInspection = await script([
+    ['eval', { code: 'read_code("return_result")' }],
+    ['return_result', { status: 'success', value: 'done' }],
+  ]);
+  assert.match(toolInspection.results[0], /Native tool definition \(not program function source\): return_result/);
+  assert.match(toolInspection.results[0], /Finish the call/);
+  assert.match(toolInspection.results[0], /\\"enum\\": \[\\n\s+\\"success\\",\\n\s+\\"blocked\\",\\n\s+\\"failed\\"/);
+  assert.match(toolInspection.results[0], /value/);
+  assert.match(toolInspection.results[0], /Invoke this as a separate tool action/);
+
+  const nativeToolInspection = await script([
+    ['read_code', { name: 'return_result' }],
+    ['return_result', { status: 'success', value: 'done' }],
+  ]);
+  assert.match(nativeToolInspection.results[0], /Native tool definition \(not program function source\): return_result/);
+  assert.match(nativeToolInspection.results[0], /Argument schema \(JSON Schema\)/);
+
+  let getterCalls = 0;
+  const neuralese = {
+    dialect: 'private-dialect-value', width: 384,
+    bodies: { read: 'private learned body text' },
+  };
+  Object.defineProperty(neuralese, 'privateKey', { enumerable: true, get() {
+    getterCalls++;
+    return 'must not be read';
+  } });
+  const serviceInspection = await script([
+    ['eval', { code: 'read_code("neuralese")' }],
+    ['return_result', { status: 'success', value: 'done' }],
+  ], 'string', { services: { neuralese } });
+  assert.match(serviceInspection.results[0], /Host service object declaration \(type only, not implementation or field values\)/);
+  assert.match(serviceInspection.results[0], /readonly \\"dialect\\": string/);
+  assert.match(serviceInspection.results[0], /readonly \\"width\\": number/);
+  assert.match(serviceInspection.results[0], /readonly \\"bodies\\": Readonly/);
+  assert.match(serviceInspection.results[0], /readonly \\"privateKey\\": unknown/);
+  assert.doesNotMatch(serviceInspection.results[0], /private-dialect-value|private learned body text|must not be read/);
+  assert.equal(getterCalls, 0);
+
+  const hiddenTool = await script([
+    ['eval', { code: 'read_code("write_file")' }],
+    ['return_result', { status: 'success', value: 'done' }],
+  ]);
+  assert.match(hiddenTool.results[0], /write_file is a native tool name but is not offered in this call/);
+  assert.doesNotMatch(hiddenTool.results[0], /Argument schema|Create or replace a text file/);
+
+  const scopedService = await script([
+    ['eval', { code: 'read_code("neuralese")' }],
+    ['return_result', { status: 'success', value: 'done' }],
+  ], 'string', { services: { neuralese }, serviceScopes: { neuralese: ['other.nl'] } });
+  assert.match(scopedService.results[0], /no-such-function/);
+  assert.doesNotMatch(scopedService.results[0], /Host service object declaration|privateKey|private learned body text/);
 });
 
 test('an arrow that returns an uncalled nl is named as such', async () => {

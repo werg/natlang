@@ -4,6 +4,7 @@ import type { Type, TypeEnv } from './types.js';
 import { MISSING, isLive, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
+import { undeclaredServiceType } from './introspection.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
@@ -22,9 +23,11 @@ import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import { activeSystemPrompts, softenMessages } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
-export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
-  'by its listed name; the documentation of a built-in of eval (nl, iterateOn, transcript); or the declaration of an external ' +
-  'service or an importable package ("pkg" lists its exports, "pkg.name" shows one).';
+export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but does not show: source of a function in the program\'s codebase; ' +
+  'documentation for eval built-ins (nl, iterateOn, transcript); a declaration for an external service or importable package ' +
+  '("pkg" lists its exports, "pkg.name" shows one); the type-only member shape of a host service object visible to this call; ' +
+  'or the exact schema and instructions of a native tool currently offered to this call. Tool schemas and service shapes are ' +
+  'metadata, not program function source or service implementation.';
 export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase: replace one exact or uniquely fuzzy span of its source. ' +
   'The function is validated before the edit becomes live.';
 /**
@@ -62,29 +65,6 @@ export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the 
 export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): number {
   return messages.filter(message => message.role === 'assistant' &&
     !((message.tool_calls as { id?: string }[] | undefined) ?? []).some(call => String(call.id).startsWith('scope_'))).length;
-}
-
-/** A value-only TypeScript view of an undeclared host service; never evaluate accessors or show field values. */
-function undeclaredServiceType(value: unknown, depth = 0): string {
-  if (typeof value === 'function') return '(...args: unknown[]) => unknown';
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return 'readonly unknown[]';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ||
-      typeof value === 'bigint' || typeof value === 'symbol' || typeof value === 'undefined') return typeof value;
-  if (typeof value !== 'object' || depth >= 2) return 'unknown';
-
-  // Read descriptors rather than properties so getters are not run while rendering an opening. If an exotic
-  // service refuses descriptor inspection, expose a read-only unknown record and let its declaration provide detail.
-  let descriptors: PropertyDescriptorMap;
-  try { descriptors = Object.getOwnPropertyDescriptors(value); }
-  catch { return 'Readonly<Record<string, unknown>>'; }
-  const entries = Object.entries(descriptors).filter(([, descriptor]) => descriptor.enumerable);
-  if (!entries.length || entries.length > 64) return 'Readonly<Record<string, unknown>>';
-  const fields = entries.map(([key, descriptor]) => {
-    const type = Object.hasOwn(descriptor, 'value') ? undeclaredServiceType(descriptor.value, depth + 1) : 'unknown';
-    return `readonly ${JSON.stringify(key)}: ${type}`;
-  });
-  return `Readonly<{ ${fields.join('; ')} }>`;
 }
 
 export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
@@ -625,6 +605,7 @@ export class NativeToolAgent {
 
   tools(session: NativeSession): unknown[] {
     const tools=this.toolsScope(session);
+    session.rememberOfferedTools(tools);
     return tools;
   }
 

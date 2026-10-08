@@ -893,3 +893,13 @@ Eval-scope, compiler, and module regressions exercise the separate input and cap
 parameter shadowing, and missing/unknown/wrongly typed fields (`ts-host/test/compiler.test.mjs` and
 `ts-host/test/neuralese.test.mjs`). This implementation addresses the observed refusal; no claim is made about
 whether it changes generation success rates.
+
+### `read_code` discovery for current native tools and visible host objects — 2026-10-08
+
+V25 generated two honest but unhelpful inspection dead ends. Slot 04 trace
+`runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-1bcf5388b6b31200.trace.jsonl`, seq 46, child `task-1-thcshg/39`, asked `read_code({name:"neuralese"})` and got `no-such-function`. Slot 01 trace
+`runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000005-c42ca00e318cef1a.trace.jsonl`, seq 39, child `task-1-umqgdt/9`, asked to read `return_result` and received the same broad source-lookup dead end. The first name is a host metadata object; the second is a native action tool, not a program function.
+
+`read_code` now returns truthful discovery metadata for both cases. The agent records the exact native tool schemas it offered to the current session turn; `read_code("return_result")` or `read_code({name:"return_result"})` returns that tool's description and JSON Schema, explicitly labeled as a separate action rather than function source. Schemas for tools not offered in the current call are not returned. For a host service object, `read_code("neuralese")` reports a type-only declaration using the same own-property descriptor formatter as the opening; it does not invoke getters or print values. The lookup uses `availableServices()` for the current call, so an out-of-scope service name receives no metadata. Declared external service/package lookup and actual program-function source lookup retain their existing meaning.
+
+The tool schema cache is filled from `NativeToolAgent.tools()` using the definitions already sent to the model. The shared service type formatter lives in `ts-host/src/native/introspection.ts` and is used by both the opening and `read_code`. Eval and native `read_code` tests cover the real offered `return_result` schema, the `neuralese` member types, omitted getter/value contents, and an unoffered file tool and out-of-scope service. The isolated TypeScript build and `eval-guidance` suite passed (12/12). No canonical `dist` was rebuilt or changed.

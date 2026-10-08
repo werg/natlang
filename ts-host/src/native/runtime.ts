@@ -29,6 +29,7 @@ import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from 
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
+import { undeclaredServiceType } from './introspection.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -927,8 +928,27 @@ export class NativeSession {
   private localTypes: Record<string, Type> = {};
   /** Authenticated source for top-level helpers from successful evals; never stores closures or host handles. */
   private readonly persistentScopeHelpers = new Map<string, PersistentScopeHelper>();
+  /** Exact native tool schemas offered by NativeToolAgent for this call's current turn. */
+  private readonly offeredToolDocs = new Map<string, { description: string; parameters: unknown }>();
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
+
+  rememberOfferedTools(tools: readonly unknown[]): void {
+    this.offeredToolDocs.clear();
+    for (const candidate of tools) {
+      if (!isPlainRecord(candidate) || !isPlainRecord(candidate.function)) continue;
+      const fn = candidate.function;
+      if (typeof fn.name !== 'string' || typeof fn.description !== 'string' || !Object.hasOwn(fn, 'parameters')) continue;
+      this.offeredToolDocs.set(fn.name, { description: fn.description, parameters: fn.parameters });
+    }
+  }
+
+  private toolDocumentation(name: string): string | undefined {
+    const tool = this.offeredToolDocs.get(name);
+    if (!tool) return;
+    return `Native tool definition (not program function source): ${name}\n${tool.description}\n\nArgument schema (JSON Schema):\n` +
+      `${JSON.stringify(tool.parameters, null, 2)}\n\nInvoke this as a separate tool action; it is not callable from eval.`;
+  }
 
   /** Whether the model declared this persistent local with let (true) or const. */
   localMutable(name: string): boolean { return this.scopeLocalMutability.get(name) ?? true; }
@@ -1464,11 +1484,21 @@ export class NativeSession {
       return { kind: 'ok', text: this.show(packaged), value: packaged };
     }
     if (!found) {
+      const toolDocumentation = name === 'read_code' ? this.toolDocumentation(requested) : undefined;
+      if (toolDocumentation !== undefined) return { kind: 'ok', text: toolDocumentation, value: toolDocumentation };
+      const availableServices = this.availableServices();
+      if (name === 'read_code' && Object.hasOwn(availableServices, requested)) {
+        const declaration = `Host service object declaration (type only, not implementation or field values):\n` +
+          `declare const ${requested}: ${undeclaredServiceType(availableServices[requested])};\n\n` +
+          `These members are available to this call under its current service scope. Inspect the value in eval when needed.`;
+        return { kind: 'ok', text: declaration, value: declaration };
+      }
       // Say what the name is when it is not the program's: a model asks for the source of its tools and built-ins.
       const own = listCodebase(this.lam.codebase);
       const readable = own.length ? `a function of this program: ${own.join(', ')}` : 'a function of this program, and this program has none of its own';
-      const what = NATIVE_TOOLS.includes(requested) ?
-        `${requested} is one of your tools, not a function of this program; call it directly` : undefined;
+      const what = NATIVE_TOOLS.includes(requested) ? this.offeredToolDocs.has(requested) ?
+        `${requested} is one of your currently offered tools, not a function of this program; call it directly` :
+        `${requested} is a native tool name but is not offered in this call` : undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
     const view = this.runtime.frame?.task.programView;
