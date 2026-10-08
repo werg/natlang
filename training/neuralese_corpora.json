@@ -7269,6 +7269,19 @@
         "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
         "neuralese-v24-root-action-admission-20261008-v1"
       ]
+    },
+    {
+      "id": "s1-question-collection-v7-luna-closed-raw-20261008",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-candidates-20261008-v7/generation-review-v1/luna/campaign-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-raw-generation-evidence-no-training-or-dpo-admission",
+      "notes": "Closed Luna V7 actual campaign raw evidence: per-case partials/results/errors/traces, journals, claim and launch ledger, collector/supervisor logs, manifests and closeout source-to-output review. 15 cases exported host results; index 15 is infrastructure connection failure with no result row. Closeout compares all answers against exact source targets; host completion is not acceptance. Preserves all completed and failed action evidence; no training, trace or DPO admission.",
+      "derived_from": [
+        "s1-question-collection-v7-generation-source-20261008"
+      ]
     }
   ],
   "coverage_backlog": [
