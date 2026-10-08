@@ -52,11 +52,11 @@ def audit_record(record):
         if not isinstance(text, str):
             continue
         reasons = []
-        ok, value = parsed(text)
+        ok, _ = parsed(text)
         if (substantive and name in declared_outputs and ok
                 and same_content(text, json.dumps(expected, ensure_ascii=False))):
             reasons.append('declared-output-initially-contains-exact-final-result')
-        if (isinstance(expected_files, dict)
+        if (name in declared_outputs and isinstance(expected_files, dict)
                 and isinstance(expected_files.get(name), str)
                 and same_content(text, expected_files[name])):
             reasons.append('initial-file-already-matches-expected-final-file')

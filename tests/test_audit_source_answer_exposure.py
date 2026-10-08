@@ -36,3 +36,9 @@ def test_gold_elsewhere_or_substring_is_not_declared_output_match():
     source = record('{}')
     source['semantics']['folder_files']['reference.json'] = '{"answer":42}'
     assert not module.audit_record(source)
+
+
+def test_unchanged_context_files_are_not_output_exposure():
+    source = record('{}')
+    source['semantics']['expected_files'] = {'task.json': source['semantics']['folder_files']['task.json']}
+    assert not module.audit_record(source)
