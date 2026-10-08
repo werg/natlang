@@ -16,7 +16,7 @@ import { judge, recordedBehavior, type Behavior } from './judge.js';
 import { definitionKey } from './recorder.js';
 import { recordedArguments, replay, subtreeEffects } from './replay.js';
 import type { AuditJob, CallStore } from './store.js';
-import type { CallRecord, Verdict } from './types.js';
+import { isModelEvidence, type CallRecord, type Verdict } from './types.js';
 
 /** The definition a record ran: loaded from its program when the source still matches, else rebuilt from the record. */
 export function definitionFor(store: CallStore, record: CallRecord): { definition: CallableDefinition; loaded: boolean } {
@@ -92,6 +92,7 @@ export async function runJob(runtime: NatlangRuntime, store: CallStore, job: Aud
   const item = caseFor(store, record.definition.key, job.case_hash, definition);
   if (!item) return { status: 'skipped', detail: 'the case is no longer in the current compilation' };
   if (job.kind === 'shadow') {
+    if (!isModelEvidence(record)) return { status: 'skipped', detail: 'the call did not run a declared model (a scripted or undeclared executor)' };
     const crisp = await replayCaseOn(runtime, store, item, record);
     if ('skipped' in crisp) return { status: 'skipped', detail: crisp.skipped };
     const { verdict, differences } = await verdictFor(runtime, store, definition, record, recordedBehavior(store, record), crisp);

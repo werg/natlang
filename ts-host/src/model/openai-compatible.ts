@@ -24,7 +24,7 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
   const transport = (settings: typeof http) => limit ? limitedTransport(httpChatTransport(settings), limit) : httpChatTransport(settings);
   let window: Promise<number | undefined> | undefined;
   return Object.assign(chatCompletionModelTurn(transport(http), { toolAliases, request, onExchange, onRequestStart }),
-    { decide: promptLogprobDecider(transport({ ...http, stream: false }), { request }),
+    { model: http.model, decide: promptLogprobDecider(transport({ ...http, stream: false }), { request }),
       contextWindow: () => window ??= serverContextWindow(http) });
 }
 

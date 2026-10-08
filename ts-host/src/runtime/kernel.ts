@@ -516,7 +516,7 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       parentActionIndex: parentTrace ? parentTrace.events.filter(event => event.kind === 'action').length : null,
       taskId: task.id, programId: view.program?.id ?? null, buildHash: view.program?.buildHash ?? null,
       programRoot: task.runtime.options.programRoot ?? null, definition: identity,
-      model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? (model.driver.name || null) : null,
+      model: { id: model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? undeclaredExecutor(model.driver.name) : null,
         revision: model?.revision ?? null },
       exclude: task.runtime.options.recording?.exclude });
     identity.instructions = capture.ref(body);
@@ -541,6 +541,14 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
 }
 
 /** The model named by the runtime's executor identity (the CLI's profile), when there is one. */
+/**
+ * A driver that declares no model (a scripted test agent, an ad-hoc function) is recorded by its function name under
+ * `undeclared:`, so mining never learns from it as if a model had run (calls/types.ts isModelExecutor).
+ */
+function undeclaredExecutor(name: string): string {
+  return `undeclared:${name || 'anonymous'}`;
+}
+
 function executorModel(task: Frame['task']): string | undefined {
   const identity = task.runtime.options.executorIdentity;
   const configured = identity?.configuration?.model;
