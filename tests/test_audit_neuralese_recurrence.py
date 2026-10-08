@@ -157,6 +157,7 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
     assert audit['authenticated_external_context_roots'] == []
     assert audit['failures']['missing_producers'] == [
         {'reader': 'reader', 'name': 'soft-state:block-1'}]
+    assert not audit['structurally_closed']
     context['body_sha256'] = body_sha
     receipt['producer_write'].pop('call_id')
     context.pop('producer_call_id')
@@ -172,17 +173,27 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
 def test_old_modern_context_receipts_and_mixed_source_classes_are_bound_per_block():
     audit = _load_recurrence_audit()
 
-    def make(block_id, body, invocation, writer, reader, *, legacy=False, include_class=True):
+    def make(block_id, body, invocation, writer, reader, *, legacy=False,
+             legacy_finish=False, include_class=True):
         digest = hashlib.sha256(body.encode()).hexdigest()
         hashes = {key: hashlib.sha256((key + block_id).encode()).hexdigest()
                   for key in ('source', 'trace', 'transport', 'raw', 'rendered')}
         producer = {'kind': 'block_write', 'call_id': writer, 'node': writer + '#4',
                     'block': block_id, 'truncated': False, 'result_type': 'Neuralese<string>',
                     'text_body_sha256': digest}
-        source_class = 'legacy-text-marker-standin-eval-code' if legacy else None
+        source_class = ('legacy-text-marker-standin-eval-finish' if legacy_finish else
+                        'legacy-text-marker-standin-eval-code' if legacy else None)
+        witness = None
         if legacy:
             producer.update({'emulation_version': 'text-marker-standin/2',
                              'marker_context': 'eval-code', 'learned_vectors': False})
+        elif legacy_finish:
+            source_class = 'legacy-text-marker-standin-eval-finish'
+            witness = {'kind': 'completed-eval-finish-host-reference', 'source': 'eval-finish',
+                       'host_result_call_id': writer, 'host_result_type': 'Neuralese<string>',
+                       'host_result_value_sha256': hashlib.sha256((block_id + ' value').encode()).hexdigest()}
+            producer.update({'producer': 'text-marker-emulation', 'source_kind': 'typed-text-result',
+                             'source': 'eval-finish', 'marker_context': 'return-result'})
         else:
             producer.update({'producer': 'text-marker-emulation', 'source_kind': 'typed-text-result'})
             if include_class:
@@ -203,6 +214,8 @@ def test_old_modern_context_receipts_and_mixed_source_classes_are_bound_per_bloc
                 'inputs': [{'node': read_node, 'block': block_id}]}}
         if source_class is not None:
             receipt['writer_source_class'] = source_class
+        if witness is not None:
+            receipt['writer_witness'] = witness
         metadata = {'schema': 'natlang.external-context-input/1', 'origin': 'same-run-producer',
             'block_id': block_id, 'type': 'Neuralese<string>', 'body_sha256': digest,
             'invocation_id': reader, 'parent_invocation_id': 'root/1',
@@ -214,9 +227,12 @@ def test_old_modern_context_receipts_and_mixed_source_classes_are_bound_per_bloc
             'learner_representation': 'typed-read-from-authenticated-runtime-writer-event-context-only'}
         if source_class is not None:
             metadata['writer_source_class'] = source_class
+        if witness is not None:
+            metadata['writer_witness'] = witness
         return receipt, metadata
 
-    legacy = make('block-legacy', 'legacy body', 'reader/legacy', 'writer/legacy', 'reader/legacy', legacy=True)
+    legacy = make('block-legacy', 'legacy body', 'reader/legacy', 'writer/legacy', 'reader/legacy',
+                  legacy_finish=True)
     modern_old_v2 = make('block-modern-v2', 'modern body', 'reader/modern', 'writer/modern',
                          'reader/modern', include_class=False)
     modern = make('block-modern', 'modern newer body', 'reader/new-modern', 'writer/new-modern',
@@ -233,3 +249,7 @@ def test_old_modern_context_receipts_and_mixed_source_classes_are_bound_per_bloc
     forged['source_ref']['provider_expanded_read_contexts'][1]['producer_write']['source_kind'] = 'untyped'
     assert audit.authenticated_external_context_names(forged) == {
         'soft-state:block-legacy', 'soft-state:block-modern-v2'}
+    forged = json.loads(json.dumps(row))
+    forged['source_ref']['provider_expanded_read_contexts'][2]['writer_witness']['host_result_call_id'] = 'other'
+    assert audit.authenticated_external_context_names(forged) == {
+        'soft-state:block-modern-v2', 'soft-state:block-modern'}

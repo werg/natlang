@@ -224,7 +224,8 @@ def _soft_writer_sources(records, source_hashes):
     return sources
 
 
-def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups):
+def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups,
+                                       authenticated_context_bodies=None):
     """Map exact message blocks to hash-bound writer or creation source text."""
     messages = record.get("messages") or []
     message_block_ids = list(_message_neuralese_ids(messages))
@@ -253,6 +254,10 @@ def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, so
                            "source_kind": "hash_bound_creation_body"}
         elif writer is not None:
             attestation = {**writer, "source_kind": "approved_writer_target_source"}
+        elif isinstance(authenticated_context_bodies, dict) and block_id in authenticated_context_bodies:
+            context = authenticated_context_bodies[block_id]
+            attestation = {key: value for key, value in context.items() if key != "body"} | {
+                "body": context["body"], "source_kind": "provider_expanded_context_only_input"}
         else:
             raise ValueError(f"message neuralese body has no unique same-split, same-source hash-bound source: {block_id}")
         bodies[block_id] = f"<|neuralese|>{attestation['body']}<|/neuralese|>"
@@ -279,6 +284,23 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     if not metadata:
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
+    def context_ref_count(value, block_id):
+        if isinstance(value, dict):
+            own = ((value.get("type") == "neuralese" and value.get("id") == block_id) or
+                   (value.get("type") == "read" and value.get("name") == "soft-state:" + block_id))
+            count = int(own)
+            for key, child in value.items():
+                if key == "arguments" and isinstance(child, str):
+                    try:
+                        count += context_ref_count(json.loads(child), block_id)
+                    except json.JSONDecodeError:
+                        pass
+                else:
+                    count += context_ref_count(child, block_id)
+            return count
+        if isinstance(value, list):
+            return sum(context_ref_count(child, block_id) for child in value)
+        return 0
     attestations = []
     reader_source_row = ((record.get("source_ref") or {}).get("source_row_sha256"))
     reader_invocation = ((record.get("source_ref") or {}).get("invocation_id"))
@@ -299,10 +321,10 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             raise ValueError("provider-expanded read context metadata is incomplete")
         name = "soft-state:" + block_id
         matches = [part for part in reads if part.get("name") == name]
-        if len(matches) != 1 or not isinstance(matches[0].get("source"), str):
-            raise ValueError("provider-expanded read does not have one exact typed source")
+        if not matches or any(not isinstance(part.get("source"), str) for part in matches):
+            raise ValueError("provider-expanded read does not have an exact typed source")
         body = matches[0]["source"]
-        if _sha(body.encode("utf-8")) != body_sha256:
+        if any(part["source"] != body for part in matches) or _sha(body.encode("utf-8")) != body_sha256:
             raise ValueError("provider-expanded read source digest mismatch")
         eligible = [writer for writer in (writer_sources or {}).get(block_id, [])
                     if writer.get("writer_split") == split
@@ -325,7 +347,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 "read_node": item["read_node"], "model_turn_node": item["model_turn_node"],
                 "producer_write_node": item["producer_write_node"],
                 "transport_provenance_sha256": item["transport_provenance_sha256"],
-                "writer_target_selected": item.get("writer_target_selected"),
+                "writer_target_selected": item.get("writer_target_selected"), "body": body,
                 "source_kind": "provider-expanded-same-run-read"})
             continue
         if eligible:
@@ -343,9 +365,14 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         write = receipt.get("producer_write") or {}
         read = receipt.get("block_read") or {}
         turn = receipt.get("model_turn") or {}
+        source_binding_fields = (receipt.get("source_action_target_sha256"),
+                                 receipt.get("source_trajectory_index"),
+                                 receipt.get("source_request_sha256"),
+                                 receipt.get("source_response_sha256"))
+        source_binding_present = any(value is not None for value in source_binding_fields)
         writer_source_class = receipt.get("writer_source_class")
         writer_source_valid = (
-            writer_source_class == "modern-typed-text-result"
+            writer_source_class in (None, "modern-typed-text-result")
             and write.get("producer") == "text-marker-emulation"
             and write.get("source_kind") == "typed-text-result"
         ) or (
@@ -378,6 +405,21 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
             and receipt["writer_witness"].get("host_result_type") == block.get("type")
             and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
+        ) or (
+            writer_source_class == "legacy-text-marker-standin-eval-return"
+            and write.get("producer") == "text-marker-emulation"
+            and write.get("source_kind") == "typed-text-result"
+            and write.get("source") == "eval-return"
+            and write.get("marker_context") == "return-result"
+            and isinstance(receipt.get("writer_witness"), dict)
+            and receipt["writer_witness"].get("kind") == "completed-eval-return-host-reference"
+            and receipt["writer_witness"].get("source") == "eval-return"
+            and receipt["writer_witness"].get("host_result_call_id") == write.get("call_id")
+            and receipt["writer_witness"].get("host_result_type") == block.get("type")
+            and receipt["writer_witness"].get("completion_status") == "done"
+            and receipt["writer_witness"].get("completion_source") == "execution_graph"
+            and receipt["writer_witness"].get("completion_detail") == f"\uE000{block_id}\uE001"
+            and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
         )
         repeated_pairs = receipt.get("additional_read_turn_pairs") or []
         body = matches[0].get("source")
@@ -387,6 +429,9 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                            receipt.get("trace_sha256"), receipt.get("transport_provenance_sha256"),
                            receipt.get("raw_request_sha256"), receipt.get("rendered_request_sha256"),
                            block.get("body_sha256"), write.get("text_body_sha256"))
+        if source_binding_present:
+            required_hashes += (receipt.get("source_action_target_sha256"), receipt.get("source_request_sha256"),
+                                receipt.get("source_response_sha256"))
         valid_repeated_pairs = isinstance(repeated_pairs, list) and all(
             isinstance(pair, dict) and isinstance(pair.get("block_read"), dict)
             and isinstance(pair.get("model_turn"), dict)
@@ -457,6 +502,30 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or item.get("transport_provenance_sha256") != receipt.get("transport_provenance_sha256")
                 or item.get("parent_invocation_id") != receipt.get("parent_invocation_id")):
             raise ValueError("context-only provider read receipt does not authenticate exact body and graph")
+        if source_binding_present:
+            if (type(receipt.get("source_trajectory_index")) is not int
+                    or receipt.get("source_trajectory_index") != (record.get("decision") or {}).get("index")
+                    or receipt.get("source_action_target_sha256") != _sha(_canonical(record.get("target")).encode("utf-8"))
+                    or item.get("source_action_target_sha256") != receipt.get("source_action_target_sha256")
+                    or item.get("source_trajectory_index") != receipt.get("source_trajectory_index")
+                    or item.get("source_request_sha256") != receipt.get("source_request_sha256")
+                    or item.get("source_response_sha256") != receipt.get("source_response_sha256")):
+                raise ValueError("provider-expanded context selected-action binding mismatch")
+        actual_context_occurrences = context_ref_count(record.get("messages") or [], block_id)
+        receipt_context_occurrences = receipt.get("context_occurrences")
+        metadata_context_occurrences = item.get("context_occurrences")
+        if type(receipt_context_occurrences) is not int or receipt_context_occurrences < 1:
+            raise ValueError("provider-expanded context occurrence count is not an exact positive integer")
+        if metadata_context_occurrences is None:
+            # Older authenticated schema/2 receipts predate this converter
+            # metadata field. Recover only the unambiguous single-reference
+            # case from the exact typed messages and provider receipt.
+            if receipt_context_occurrences != 1 or actual_context_occurrences != 1:
+                raise ValueError("legacy provider context occurrence count is not a single exact typed reference")
+        elif (type(metadata_context_occurrences) is not int or
+              metadata_context_occurrences != receipt_context_occurrences or
+              actual_context_occurrences != receipt_context_occurrences):
+            raise ValueError("provider-expanded context occurrence count does not match exact typed references")
         attestations.append({"block_id": block_id, "reader_record_id": record.get("id"),
             "writer_record_id": None, "writer_source_row_sha256": reader_source_row,
             "writer_invocation_id": write.get("call_id"), "writer_write_node": write.get("node"),
@@ -466,7 +535,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             "raw_request_sha256": item.get("raw_request_sha256"),
             "rendered_request_sha256": item.get("rendered_request_sha256"),
             "parent_invocation_id": item.get("parent_invocation_id"),
-            "body_sha256": body_sha256, "source_kind": "provider-expanded-context-only-same-run-read"})
+            "body_sha256": body_sha256, "body": body,
+            "source_kind": "provider-expanded-context-only-same-run-read"})
     return attestations
 
 
@@ -564,10 +634,16 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             continue
         try:
             notes = handover_notes(record)
-            neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
+            provider_context_attestations = _attested_provider_expanded_reads(
                 record, writer_sources, split=split, source_groups=groups)
-            context_attestations.extend(_attested_provider_expanded_reads(
-                record, writer_sources, split=split, source_groups=groups))
+            provider_context_bodies = {item["block_id"]: item for item in provider_context_attestations
+                                       if isinstance(item.get("body"), str)}
+            neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
+                record, writer_sources, split=split, source_groups=groups,
+                authenticated_context_bodies=provider_context_bodies)
+            for item in provider_context_attestations:
+                item.pop("body", None)
+            context_attestations.extend(provider_context_attestations)
             message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
             messages = crisp_messages(message_inputs, piece_map, notes,
                                       neuralese_bodies=neuralese_bodies)
@@ -655,7 +731,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
         "format": "natlang.gold_text_packet_receipt/1",
-        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks may be hydrated only from one approved, successful, hash-bound writer target source in the same split and with a shared source group or matching source-row hash, with attestations in provenance; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
+        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
         "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,

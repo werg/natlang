@@ -453,7 +453,7 @@ function hasExactRawModelCall(source: Dict, call: Dict): boolean {
  * evidence to its source-row and trace digests below.
  */
 function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha256: string,
-  invocationId: string | undefined): Dict[] {
+  invocationId: string | undefined, trajectoryIndex: number, target: Dict): Dict[] {
   if (!invocationId) return [];
   const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
   const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
@@ -467,6 +467,27 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       typeof transport.rendered_request_sha256 !== 'string' || typeof row.provenance.trace_sha256 !== 'string') return [];
   const context = Array.isArray(source.context) ? source.context : [];
   const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const currentTurnNumber = row.trajectory.slice(0, trajectoryIndex + 1)
+    .filter(step => step && typeof step === 'object' && (step as Dict).invocation_id === invocationId).length;
+  const currentTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+    event.turn === currentTurnNumber);
+  if (currentTurns.length !== 1 || typeof currentTurns[0]!.node !== 'string') return [];
+  const responseCalls = Array.isArray(response.calls) ? response.calls as unknown[] : [];
+  const graphCalls = Array.isArray(currentTurns[0]!.calls) ? currentTurns[0]!.calls : [];
+  const responseCallNames = responseCalls.map(value => Array.isArray(value) && typeof value[0] === 'string' ? value[0] : null);
+  if (canonical(responseCallNames) !== canonical(graphCalls)) return [];
+  const targetCalls = Array.isArray(target.tool_calls) ? target.tool_calls as Dict[] : [];
+  const targetActionsAuthentic = targetCalls.every(item => {
+    const fn = item.function && typeof item.function === 'object' ? item.function as Dict : {};
+    if (typeof fn.name !== 'string' || typeof fn.arguments !== 'string') return false;
+    try { return hasExactRawModelCall(source, { source_tool: fn.name, arguments: JSON.parse(fn.arguments) }); }
+    catch { return false; }
+  });
+  if (!targetActionsAuthentic) return [];
+  const sourceRequestSha256 = source.request_sha256;
+  const sourceResponseSha256 = source.raw_response_sha256;
+  if (typeof sourceRequestSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sourceRequestSha256) ||
+      typeof sourceResponseSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sourceResponseSha256)) return [];
   const receipts: Dict[] = [];
   for (const block of blocks) {
     const blockId = block.id;
@@ -482,7 +503,11 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
         input.node === read.node && input.port === 'read' && input.block === blockId)) })).
       filter((pair): pair is { read: Dict; turn: Dict } => !!pair.turn);
     if (readTurnPairs.length !== reads.length) continue;
-    const primaryPair = readTurnPairs[0]!;
+    const selectedTurnPairs = readTurnPairs.filter(pair => pair.turn.node === currentTurns[0]!.node);
+    if (!selectedTurnPairs.length) continue;
+    const primaryPair = selectedTurnPairs[0]!;
+    const orderedReadTurnPairs = [...selectedTurnPairs,
+      ...readTurnPairs.filter(pair => !selectedTurnPairs.includes(pair))];
     const definition = graph.filter(event => event.kind === 'invocation' && event.phase === 'start' &&
       event.call_id === invocationId && event.definition && typeof event.definition === 'object' &&
       (event.definition as Dict).id === `nz-fn:${blockId}`);
@@ -515,6 +540,12 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
         witness: { kind: 'completed-eval-finish-host-reference', source: 'eval-finish',
           host_result_call_id: event.call_id, host_result_type: block.type,
           host_result_value_sha256: host.value_sha256 } };
+      if (event.source === 'eval-return') return { writerSourceClass: 'legacy-text-marker-standin-eval-return',
+        witness: { kind: 'completed-eval-return-host-reference', source: 'eval-return',
+          host_result_call_id: event.call_id, host_result_type: block.type,
+          host_result_value_sha256: host.value_sha256,
+          completion_status: entry.completion_status, completion_source: entry.completion_source,
+          completion_detail: entry.completion_detail } };
       if (event.source !== 'return_result' || block.type !== 'Neuralese<string>') return;
       const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === event.call_id);
       if (steps.length !== 1) return;
@@ -557,8 +588,8 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       event.truncated === false && writerSourceClass(event) !== undefined && event.result_type === block.type &&
       event.text_body_sha256 === block.body_sha256);
     const origin = readoutMatch && definition.length === 1 && visibleCount <= 1 ? 'configured-function-definition' :
-      writers.length === 1 && visibleCount === 1 ? 'same-run-producer' : undefined;
-    if (!origin || (origin === 'same-run-producer' && visibleCount !== 1)) continue;
+      writers.length === 1 && visibleCount >= 1 ? 'same-run-producer' : undefined;
+    if (!origin || (origin === 'same-run-producer' && visibleCount < 1)) continue;
     const invocationLedger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
     const invocationEntry = invocationLedger.find(item => item.invocation_id === invocationId);
     receipts.push({ schema: origin === 'same-run-producer' ? 'natlang.provider-expanded-read-context/2' :
@@ -567,12 +598,14 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
       source_row_sha256: sourceRowSha256, trace_sha256: row.provenance.trace_sha256,
       transport_provenance_sha256: hexDigest(canonical(transport)),
       raw_request_sha256: transport.raw_request_sha256, rendered_request_sha256: transport.rendered_request_sha256,
+      source_request_sha256: sourceRequestSha256, source_response_sha256: sourceResponseSha256,
+      source_trajectory_index: trajectoryIndex, source_action_target_sha256: nativeDecisionTargetDigest(target),
       prompt_revision: transport.prompt_revision ?? null, origin,
       readout: readoutMatch ? structuredClone(readout) : null, block: structuredClone(block),
       definition: definition.length === 1 ? structuredClone(definition[0]!.definition) : null,
       signature: definition.length === 1 ? definition[0]!.signature ?? null : null,
       block_read: structuredClone(primaryPair.read), model_turn: structuredClone(primaryPair.turn),
-      ...(readTurnPairs.length > 1 ? { additional_read_turn_pairs: readTurnPairs.slice(1).map(pair => ({
+      ...(orderedReadTurnPairs.length > 1 ? { additional_read_turn_pairs: orderedReadTurnPairs.slice(1).map(pair => ({
         block_read: structuredClone(pair.read), model_turn: structuredClone(pair.turn) })) } : {}),
       context_occurrences: visibleCount,
       producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
@@ -975,7 +1008,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
       const decisionApproved = !semanticHold && !afterChunkCutoff && (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
-      const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation);
+      const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target);
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,

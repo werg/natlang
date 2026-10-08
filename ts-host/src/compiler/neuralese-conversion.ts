@@ -46,6 +46,7 @@
  * from a summarising call. Their texts are collected once in `pieces`.
  */
 import { createHash } from 'node:crypto';
+import { canonical } from '../adaptation/identity.js';
 import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
@@ -395,6 +396,11 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const receipt = candidate as Record<string, unknown>;
       const block = receipt.block as Record<string, unknown> | undefined;
       const invocation = invocationOf(record as Record<string, unknown>);
+      const sourceBindingPresent = receipt.source_action_target_sha256 !== undefined ||
+        receipt.source_trajectory_index !== undefined || receipt.source_request_sha256 !== undefined ||
+        receipt.source_response_sha256 !== undefined;
+      const sourceActionDigest = record.target === undefined ? undefined :
+        createHash('sha256').update(canonical(record.target)).digest('hex');
       if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
           receipt.invocation_id !== invocation ||
           receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
@@ -411,6 +417,12 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             input.node === (receipt.block_read as Record<string, unknown>).node && input.port === 'read' && input.block === block.id) ||
           !['configured-function-definition', 'same-run-producer'].includes(String(receipt.origin)))
         throw new Error(`provider-expanded context provenance mismatch for ${rowId}`);
+      if (sourceBindingPresent &&
+          (!Number.isSafeInteger(receipt.source_trajectory_index) || receipt.source_trajectory_index !== decisionIndex ||
+           typeof sourceActionDigest !== 'string' || receipt.source_action_target_sha256 !== sourceActionDigest ||
+           !/^[0-9a-f]{64}$/.test(String(receipt.source_request_sha256)) ||
+           !/^[0-9a-f]{64}$/.test(String(receipt.source_response_sha256))))
+        throw new Error(`provider-expanded context selected-action binding mismatch for ${rowId}`);
       const id = block.id as string;
       if (externalBodies.has(id)) throw new Error(`duplicate provider-expanded context block ${id}`);
       const read = receipt.block_read as Record<string, unknown>;
@@ -422,8 +434,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (receipt.schema === 'natlang.provider-expanded-read-context/2' &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
-           !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
-             'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish']
+          !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
+             'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
+             'legacy-text-marker-standin-eval-return']
              .includes(String(receipt.writer_source_class)) ||
            (receipt.parent_invocation_id !== null && typeof receipt.parent_invocation_id !== 'string')))
         throw new Error(`provider-expanded context-only writer receipt is incomplete for ${id}`);
@@ -463,6 +476,15 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               writer.source === 'eval-finish' && writer.marker_context === 'return-result' &&
               witness?.kind === 'completed-eval-finish-host-reference' && witness.source === 'eval-finish' &&
               witness.host_result_call_id === writer.call_id && witness.host_result_type === block.type &&
+              /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
+          receipt.schema === 'natlang.provider-expanded-read-context/2' &&
+          receipt.writer_source_class === 'legacy-text-marker-standin-eval-return' ?
+            writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' &&
+              writer.source === 'eval-return' && writer.marker_context === 'return-result' &&
+              witness?.kind === 'completed-eval-return-host-reference' && witness.source === 'eval-return' &&
+              witness.host_result_call_id === writer.call_id && witness.host_result_type === block.type &&
+              witness.completion_status === 'done' && witness.completion_source === 'execution_graph' &&
+              witness.completion_detail === `\uE000${id}\uE001` &&
               /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
           writer?.learned_vectors === false;
         if (!writer || writer.kind !== 'block_write' || writer.block !== id ||
@@ -1000,12 +1022,22 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         { type: 'text', text: external.body };
     }) };
   });
+  const countReferences = (value: unknown, id: string): number => {
+    if (Array.isArray(value)) return value.reduce((count, item) => count + countReferences(item, id), 0);
+    if (!value || typeof value !== 'object') return 0;
+    const item = value as Record<string, unknown>;
+    let count = item.type === 'neuralese' && item.id === id ? 1 : 0;
+    for (const [key, child] of Object.entries(item)) {
+      if (key === 'arguments' && typeof child === 'string') {
+        try { count += countReferences(JSON.parse(child), id); } catch { /* Preserve opaque arguments. */ }
+      } else count += countReferences(child, id);
+    }
+    return count;
+  };
   for (const [id, external] of externalBodies) {
-    let occurrences = 0;
-    for (const message of record.messages) if (Array.isArray(message.content))
-      occurrences += (message.content as Record<string, unknown>[]).filter(part => part.type === 'neuralese' && part.id === id).length;
-    if (external.receipt.origin === 'same-run-producer' && occurrences !== 1)
-      throw new Error(`provider-expanded producer block lacks one exact context occurrence: ${id}`);
+    const occurrences = record.messages.reduce<number>((count, message) => count + countReferences(message, id), 0);
+    if (external.receipt.origin === 'same-run-producer' && occurrences < 1)
+      throw new Error(`provider-expanded producer block lacks an exact context occurrence: ${id}`);
     if (external.receipt.origin === 'configured-function-definition' && occurrences > 1)
       throw new Error(`configured function block has ambiguous message occurrences: ${id}`);
     if (Number(external.receipt.context_occurrences) !== occurrences)
@@ -1048,6 +1080,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     transport_provenance_sha256: value.receipt.transport_provenance_sha256,
     raw_request_sha256: value.receipt.raw_request_sha256,
     rendered_request_sha256: value.receipt.rendered_request_sha256,
+    ...(value.receipt.source_request_sha256 ? { source_request_sha256: value.receipt.source_request_sha256 } : {}),
+    ...(value.receipt.source_response_sha256 ? { source_response_sha256: value.receipt.source_response_sha256 } : {}),
+    ...(value.receipt.source_trajectory_index !== undefined ? { source_trajectory_index: value.receipt.source_trajectory_index } : {}),
+    ...(value.receipt.source_action_target_sha256 ? { source_action_target_sha256: value.receipt.source_action_target_sha256 } : {}),
     source_row_sha256: value.receipt.source_row_sha256,
     trace_sha256: (record as Record<string, unknown>).provenance &&
       ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
@@ -1062,6 +1098,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       (value.receipt.producer_write as Record<string, unknown>).node,
       producer_call_id: (value.receipt.producer_write as Record<string, unknown>).call_id,
       writer_source_class: value.receipt.writer_source_class,
+      context_occurrences: value.receipt.context_occurrences,
       ...(value.receipt.writer_witness ? { writer_witness: value.receipt.writer_witness } : {}),
       writer_target_selected: value.receipt.writer_target_selected === false ? false : null,
       learner_representation: value.receipt.writer_target_selected === false ?

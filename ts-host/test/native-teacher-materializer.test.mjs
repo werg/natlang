@@ -830,12 +830,16 @@ test('materialization preserves same-call provider-expanded read provenance with
   const noteBlock = { id: noteId, type: 'Neuralese<string>', body: noteBody, body_sha256: sha(noteBody), learned_vectors: false };
   const source = row.trajectory[0];
   source.invocation_id = invocation;
+  source.request_sha256 = 'a'.repeat(64);
+  source.raw_response_sha256 = 'b'.repeat(64);
   row.trajectory = [source];
   row.outcome.action_ledger = [{ seq: 12, call_id: invocation, name: 'write', arguments: firstCall.arguments,
     outcome: 'ok', result_text: 'stored value' }];
   row.outcome.invocation_ledger = [{ invocation_id: invocation, parent_invocation_id: 'parent-call' }];
   source.context = [system, { ...opening, content: [{ type: 'text', text: opening.content }, { type: 'neuralese', id: noteId }] }];
-  source.model_response = { transport_provenance: { learned_vectors: false, qualification_certificate: false,
+  source.model_response = { calls: [['write', firstCall.arguments]],
+    raw_calls: [{ function: { name: 'write', arguments: JSON.stringify(firstCall.arguments) } }],
+    transport_provenance: { learned_vectors: false, qualification_certificate: false,
     training_admission: false, raw_request_sha256: 'c'.repeat(64), rendered_request_sha256: 'd'.repeat(64),
     expanded_input_blocks: [functionBlock, noteBlock],
     text_template_readout: { schema: 'natlang.text-template-readout/1', call: 'return_result', value: 'decode',
@@ -851,7 +855,7 @@ test('materialization preserves same-call provider-expanded read provenance with
     { kind: 'block_read', seq: 3, call_id: invocation, block: functionId, node: `${invocation}#6` },
     { kind: 'block_read', seq: 4, call_id: invocation, block: noteId, node: `${invocation}#7`,
       inputs: [{ node: 'producer-call#5', block: noteId, port: 'block' }] },
-    { kind: 'model_turn', seq: 5, call_id: invocation, node: `${invocation}#turn1`, inputs: [
+    { kind: 'model_turn', seq: 5, call_id: invocation, turn: 1, calls: ['write'], node: `${invocation}#turn1`, inputs: [
       { node: `${invocation}#6`, port: 'read', block: functionId }, { node: `${invocation}#7`, port: 'read', block: noteId }] },
   ];
   const turns = materializeNativeRows([row]).turns;
@@ -861,6 +865,11 @@ test('materialization preserves same-call provider-expanded read provenance with
     [functionId, 'configured-function-definition'], [noteId, 'same-run-producer']]);
   assert.equal(receipt[1].schema, 'natlang.provider-expanded-read-context/2');
   assert.equal(receipt[1].parent_invocation_id, 'parent-call');
+  assert.equal(receipt[1].source_trajectory_index, 0);
+  assert.equal(receipt[1].source_request_sha256, 'a'.repeat(64));
+  assert.equal(receipt[1].source_response_sha256, 'b'.repeat(64));
+  assert.equal(receipt[1].model_turn.node, `${invocation}#turn1`,
+    'the provider receipt binds to the exact model turn that made the selected action');
   assert.equal(receipt[1].writer_target_selected, false,
     'the raw writer event authenticates context without creating a selected writer target');
   for (const item of receipt) {
@@ -873,16 +882,30 @@ test('materialization preserves same-call provider-expanded read provenance with
   const corruptReceipt = materializeNativeRows([corrupt]).turns[0].source_ref.provider_expanded_read_contexts;
   assert.equal(corruptReceipt.some(item => item.block.id === noteId), false,
     'a mismatched provider body digest cannot become context provenance');
+  const wrongSelectedTurn = structuredClone(row);
+  wrongSelectedTurn.outcome.execution_graph.find(event => event.kind === 'model_turn' && event.call_id === invocation).turn = 2;
+  assert.equal(materializeNativeRows([wrongSelectedTurn]).turns[0].source_ref.provider_expanded_read_contexts, undefined,
+    'a read from a different turn cannot be attached to the selected model action');
+  const wrongRawAction = structuredClone(row);
+  wrongRawAction.trajectory[0].model_response.raw_calls[0].function.arguments = JSON.stringify({ path: 'other' });
+  assert.equal(materializeNativeRows([wrongRawAction]).turns[0].source_ref.provider_expanded_read_contexts, undefined,
+    'the raw provider response must contain the exact selected action');
   const repeated = structuredClone(row);
   repeated.outcome.execution_graph.push(
     { kind: 'block_read', seq: 8, call_id: invocation, block: noteId, node: `${invocation}#8`,
       inputs: [{ node: 'producer-call#5', block: noteId, port: 'block' }] },
-    { kind: 'model_turn', seq: 9, call_id: invocation, node: `${invocation}#turn2`,
+    { kind: 'model_turn', seq: 9, call_id: invocation, turn: 2, calls: ['write'], node: `${invocation}#turn2`,
       inputs: [{ node: `${invocation}#8`, port: 'read', block: noteId }] });
   const repeatedReceipt = materializeNativeRows([repeated]).turns[0].source_ref.provider_expanded_read_contexts
     .find(item => item.block.id === noteId);
   assert.equal(repeatedReceipt.additional_read_turn_pairs.length, 1,
     'repeated reads in one invocation retain separate per-turn graph bindings');
+  const duplicateRequestRef = structuredClone(row);
+  duplicateRequestRef.trajectory[0].context.push({ role: 'tool', content: [{ type: 'neuralese', id: noteId }] });
+  const duplicateRequestReceipt = materializeNativeRows([duplicateRequestRef]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(duplicateRequestReceipt.context_occurrences, 2,
+    'every exact same-run reference occurrence in the actual request is counted');
 
   const legacy = structuredClone(row);
   const legacyWrite = legacy.outcome.execution_graph.find(event => event.kind === 'block_write' && event.block === noteId);
@@ -933,4 +956,35 @@ test('materialization preserves same-call provider-expanded read provenance with
   const unfinishedReceipt = materializeNativeRows([unfinished]).turns[0].source_ref.provider_expanded_read_contexts
     .find(item => item.block.id === noteId);
   assert.equal(unfinishedReceipt, undefined, 'failed finish cannot authenticate a legacy context root');
+
+  const evalReturn = withLegacyResult('eval-return', false);
+  const evalReturnReceipt = materializeNativeRows([evalReturn]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId);
+  assert.equal(evalReturnReceipt.writer_source_class, 'legacy-text-marker-standin-eval-return');
+  assert.equal(evalReturnReceipt.writer_witness.kind, 'completed-eval-return-host-reference');
+  assert.equal(evalReturnReceipt.writer_witness.completion_status, 'done');
+  assert.equal(evalReturnReceipt.writer_witness.completion_source, 'execution_graph');
+  assert.equal(evalReturnReceipt.writer_witness.completion_detail, `\uE000${noteId}\uE001`);
+
+  const failedEvalReturn = withLegacyResult('eval-return', false);
+  failedEvalReturn.outcome.invocation_ledger.at(-1).completion_status = 'failed';
+  assert.equal(materializeNativeRows([failedEvalReturn]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'failed eval-return cannot authenticate a context');
+  const wrongEvalReturnHost = withLegacyResult('eval-return', false);
+  wrongEvalReturnHost.outcome.invocation_ledger.at(-1).host_result.call_id = 'different-call';
+  assert.equal(materializeNativeRows([wrongEvalReturnHost]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'eval-return host identity must match the writer call');
+  const wrongEvalReturnRef = withLegacyResult('eval-return', false);
+  wrongEvalReturnRef.outcome.invocation_ledger.at(-1).host_result.value.$neuralese.id = `nz1_${'c'.repeat(32)}`;
+  assert.equal(materializeNativeRows([wrongEvalReturnRef]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'eval-return host reference must match the written block');
+  const wrongEvalReturnType = withLegacyResult('eval-return', false);
+  wrongEvalReturnType.outcome.invocation_ledger.at(-1).host_result.value.$neuralese.type = 'Neuralese<number>';
+  assert.equal(materializeNativeRows([wrongEvalReturnType]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'eval-return host type must match the written block');
+  const wrongEvalReturnBody = withLegacyResult('eval-return', false);
+  wrongEvalReturnBody.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body = 'other note';
+  wrongEvalReturnBody.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body_sha256 = sha('other note');
+  assert.equal(materializeNativeRows([wrongEvalReturnBody]).turns[0].source_ref.provider_expanded_read_contexts
+    .find(item => item.block.id === noteId), undefined, 'eval-return body must match the graph write digest');
 });

@@ -693,6 +693,16 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   assert.deepEqual(context.additional_model_turn_nodes, [turn2.node]);
   assert.equal(converted.neuralese_conversion.sites['typed-result-write'], undefined,
     'context hydration does not create a model writer target');
+  const repeatedContext = structuredClone(row);
+  repeatedContext.source_ref.provider_expanded_read_contexts[0].context_occurrences = 2;
+  repeatedContext.messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'scope_0', type: 'function',
+    function: { name: 'scope', arguments: JSON.stringify([{ type: 'neuralese', id }]) } }] });
+  const repeatedConverted = convertTrajectory(repeatedContext).record;
+  assert.equal(repeatedConverted.neuralese_conversion.external_context_inputs[0].context_occurrences, 2,
+    'the receipt counts both the ordinary message reference and nested tool-argument reference');
+  assert.deepEqual(repeatedConverted.messages[0].content[1], { type: 'read', name: `soft-state:${id}`, source: body });
+  assert.match(repeatedConverted.messages[1].tool_calls[0].function.arguments, new RegExp(id),
+    'native tool transcript remains raw for source faithful replay; text rendering hydrates the same bound occurrence');
   const corrupt = structuredClone(row);
   corrupt.source_ref.provider_expanded_read_contexts[0].block.body = 'changed';
   assert.throws(() => convertTrajectory(corrupt), /provider-expanded context provenance mismatch/);
@@ -740,4 +750,25 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   const mismatchedFinish = structuredClone(legacyFinish);
   mismatchedFinish.source_ref.provider_expanded_read_contexts[0].writer_witness.host_result_call_id = 'other-call';
   assert.throws(() => convertTrajectory(mismatchedFinish), /provider-expanded producer context lacks an earlier writer/);
+
+  const legacyEvalReturn = structuredClone(row);
+  const evalReturnReceipt = legacyEvalReturn.source_ref.provider_expanded_read_contexts[0];
+  Object.assign(evalReturnReceipt.producer_write, { producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+    source: 'eval-return', marker_context: 'return-result' });
+  evalReturnReceipt.writer_source_class = 'legacy-text-marker-standin-eval-return';
+  evalReturnReceipt.writer_witness = { kind: 'completed-eval-return-host-reference', source: 'eval-return',
+    host_result_call_id: write.call_id, host_result_type: 'Neuralese<string>',
+    host_result_value_sha256: '9'.repeat(64), completion_status: 'done', completion_source: 'execution_graph',
+    completion_detail: `\uE000${id}\uE001` };
+  const evalReturnConverted = convertTrajectory(legacyEvalReturn).record;
+  assert.equal(evalReturnConverted.neuralese_conversion.external_context_inputs[0].writer_witness.kind,
+    'completed-eval-return-host-reference');
+  for (const patch of [
+    { completion_status: 'failed' }, { completion_source: 'model' },
+    { completion_detail: `\uE000nz1_${'e'.repeat(52)}\uE001` }, { host_result_call_id: 'other-call' },
+  ]) {
+    const mismatch = structuredClone(legacyEvalReturn);
+    Object.assign(mismatch.source_ref.provider_expanded_read_contexts[0].writer_witness, patch);
+    assert.throws(() => convertTrajectory(mismatch), /provider-expanded producer context lacks an earlier writer/);
+  }
 });
