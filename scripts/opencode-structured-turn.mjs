@@ -12,7 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/6';
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/7';
 const FAILURE_DIAGNOSTIC_VERSION = 'natlang.opencode_transport_failure/1';
 const FAILURE_TEXT_PREVIEW_BYTES = 16 * 1024;
 const FAILURE_INLINE_TEXT_PREVIEW_BYTES = 256;
@@ -373,7 +373,8 @@ const SYSTEM_INSTRUCTIONS = [
   'The user message contains the complete serialized Natlang request, including its ordered message history and tool schemas.',
   'Treat that serialized history as the conversation context. Do not use built-in OpenCode tools. When a declared Natlang action is needed, call the natlang_action_bridge submit_action MCP tool with the exact Natlang function name and object arguments. This tool records a candidate action for the Natlang host and does not execute it. Do not invent or execute any other action.',
   'Return exactly one JSON text object matching the response_schema included in the user payload. Do not add markdown, fences, commentary, or extra keys.',
-  'The object contains content, which is the assistant text, and toolCalls, which must be an empty array. The host obtains declared action calls only from the isolated submit_action MCP tool record.',
+  'When possible, submit declared actions through the isolated submit_action MCP tool; its audit record is preferred and authoritative. If you return a JSON text envelope instead, toolCalls may contain only calls to the declared Natlang tools, with object arguments. The host validates and labels these as prompt-directed text actions, never as MCP/provider-native calls.',
+  'The object contains content, which is assistant text, and toolCalls, an array that may be empty only when no declared action is needed.',
   'This is prompt-directed JSON text, not provider-enforced JSON Schema output. The Natlang host validates the recorded tool name and arguments, executes the action, and owns the next turn.'
 ].join(' ');
 

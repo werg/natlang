@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { buildOpenCodeStructuredPrompt } from './opencode-structured-turn.mjs';
 
-const ID = 'natlang-opencode-cli-chat-adapter/1';
+const ID = 'natlang-opencode-cli-chat-adapter/2';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -127,26 +127,30 @@ async function readActionRowsAfterWrite(logPath, startBytes, expectedCount, time
   return rows;
 }
 
-export function parseOpenCodeEnvelope(text, names, recordedActions) {
+export function parseOpenCodeEnvelope(text, names) {
   let value;
   try { value = JSON.parse(text); }
   catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
   if (!isObject(value) || Object.keys(value).sort().join(',') !== 'content,toolCalls' ||
       typeof value.content !== 'string' || !Array.isArray(value.toolCalls))
     throw new Error('OpenCode CLI response must have exactly content and toolCalls fields');
-  if (value.toolCalls.length) {
-    const echoedActions = value.toolCalls.map(call => ({ name: call?.name, arguments: call?.arguments }));
-    if (echoedActions.length !== recordedActions.length || canonicalJson(echoedActions) !== canonicalJson(recordedActions))
-      throw new Error('OpenCode CLI response toolCalls did not match audited MCP action records');
-  }
   const allowed = new Set(names);
-  return { content: value.content, allowed };
+  const calls = value.toolCalls.map((call, index) => {
+    if (!isObject(call) || Object.keys(call).sort().join(',') !== 'arguments,name' ||
+        typeof call.name !== 'string' || !allowed.has(call.name) || !isObject(call.arguments))
+      throw new Error(`OpenCode text action ${index} did not match a declared Natlang tool`);
+    return { name: call.name, arguments: call.arguments };
+  });
+  const fingerprints = calls.map(call => canonicalJson(call));
+  if (new Set(fingerprints).size !== fingerprints.length)
+    throw new Error('OpenCode text action envelope contains ambiguous duplicate calls');
+  return { content: value.content, calls };
 }
 
 /**
  * Build the collector response from the action MCP audit when actions exist.
  * OpenCode's post-tool assistant text is not authoritative for those calls;
- * with no audited actions, retain the strict JSON envelope requirement.
+ * with no audited actions, accept validated prompt-directed text-envelope calls.
  */
 export function buildAuditedCompletion({ responseText, names, recordedActions, cliExitCode = 0, nonBridgeToolUses = 0 }) {
   if (cliExitCode !== 0) throw new Error(`OpenCode CLI exited ${cliExitCode}`);
@@ -159,8 +163,13 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
     return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
   });
   if (!calls.length) {
-    const envelope = parseOpenCodeEnvelope(responseText, names, recordedActions);
-    return { content: envelope.content || null, calls, finalTextStatus: 'strict_json_envelope_no_actions' };
+    const envelope = parseOpenCodeEnvelope(responseText, names);
+    const textCalls = envelope.calls.map(row => ({ id: `call_${randomUUID()}`, type: 'function',
+      function: { name: row.name, arguments: JSON.stringify(row.arguments) } }));
+    return { content: textCalls.length ? null : (envelope.content || null), calls: textCalls,
+      finalTextStatus: textCalls.length ? 'validated_prompt_directed_text_actions' : 'strict_json_envelope_no_actions',
+      actionRoute: textCalls.length ? 'prompt_directed_text_envelope' : 'strict_json_text_no_actions',
+      actionFidelity: textCalls.length ? 'prompt_directed_text' : 'none' };
   }
 
   let finalTextStatus = 'empty_final_text_ignored';
@@ -177,7 +186,7 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
       }
     } catch { finalTextStatus = 'invalid_json_final_text_ignored'; }
   }
-  return { content: null, calls, finalTextStatus };
+  return { content: null, calls, finalTextStatus, actionRoute: 'audited_mcp', actionFidelity: 'mcp_audit' };
 }
 
 function parseJsonLines(stdout) {
@@ -537,6 +546,8 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
         cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
       diagnostics.final_text_status = completion.finalTextStatus;
+      diagnostics.action_route = completion.actionRoute;
+      diagnostics.action_fidelity = completion.actionFidelity;
       const calls = completion.calls;
       diagnostics.action_log_end_bytes = rawLog.length;
       diagnostics.action_record_count = calls.length;
@@ -555,6 +566,9 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
           event_stream_errors: watcher.sessionErrors, permission_rejections: watcher.permissionRejections,
           provider_retries: watcher.retryEvents, user_text_sha256: sha256(userText), user_text_bytes: Buffer.byteLength(userText),
           action_log_byte_range: [startBytes, rawLog.length], action_record_count: calls.length,
+          final_text_sha256: diagnostics.final_text_sha256, final_text_bytes: diagnostics.final_text_bytes,
+          final_text_status: completion.finalTextStatus, action_route: completion.actionRoute,
+          action_fidelity: completion.actionFidelity,
           route: 'official OpenCode CLI run --attach; default tool inventory; local action MCP',
           cli_turn_number: cliTurnCount, cli_turn_limit: maxCliTurns,
           provider_step_telemetry: audit.steps, cli_tool_use_audit: audit.toolUses,

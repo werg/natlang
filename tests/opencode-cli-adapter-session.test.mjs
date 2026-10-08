@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { buildOpenCodeStructuredPrompt } from '../scripts/opencode-structured-turn.mjs';
 import { buildAuditedCompletion, extractSessionText, parseOpenCodeEnvelope, readSessionText } from '../scripts/opencode-cli-chat-adapter.mjs';
 
 test('session messages recover the final assistant text when CLI JSON events omit it', () => {
@@ -20,15 +24,16 @@ test('session text fallback uses the official SDK path parameter shape', async (
   assert.deepEqual(call, { path: { id: 'ses_example' }, query: { directory: '/isolated/scratch' } });
 });
 
-test('an echoed tool call is accepted only when it matches the audited MCP action', () => {
+test('text envelope parser validates calls against declared tools', () => {
   const recorded = [{ name: 'probe_tool', arguments: { status: 'ready' } }];
   const parsed = parseOpenCodeEnvelope(JSON.stringify({
     content: 'Call recorded.', toolCalls: [{ name: 'probe_tool', arguments: { status: 'ready' } }]
-  }), ['probe_tool'], recorded);
+  }), ['probe_tool']);
   assert.equal(parsed.content, 'Call recorded.');
   assert.throws(() => parseOpenCodeEnvelope(JSON.stringify({
     content: 'Call recorded.', toolCalls: [{ name: 'probe_tool', arguments: { status: 'forged' } }]
-  }), ['probe_tool'], recorded), /did not match audited MCP action records/);
+  }), ['other_tool']), /declared Natlang tool/);
+  assert.equal(recorded.length, 1);
 });
 
 test('validated audited MCP actions are authoritative with empty or plain text final output', () => {
@@ -73,4 +78,53 @@ test('zero audited actions keep the strict JSON envelope protocol', () => {
   assert.equal(result.content, 'answer');
   assert.deepEqual(result.calls, []);
   assert.equal(result.finalTextStatus, 'strict_json_envelope_no_actions');
+});
+
+const exactV8Text = readFileSync(fileURLToPath(new URL('./fixtures/opencode-step5-v8-text-envelope.json', import.meta.url)), 'utf8');
+
+test('exact v8 declared envelope is accepted as prompt-directed text with raw/context pins', () => {
+  const rawHash = createHash('sha256').update(exactV8Text).digest('hex');
+  const context = '{"messages":[{"role":"user","content":"case"}]}';
+  const contextHash = createHash('sha256').update(context).digest('hex');
+  const result = buildAuditedCompletion({ responseText: exactV8Text, names: ['execution_plan'], recordedActions: [] });
+  assert.equal(result.actionRoute, 'prompt_directed_text_envelope');
+  assert.equal(result.actionFidelity, 'prompt_directed_text');
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0].function.name, 'execution_plan');
+  assert.ok(JSON.parse(result.calls[0].function.arguments).plan.startsWith('Evidence:'));
+  assert.equal(rawHash, '8421a21620e44563b0a9ac62c4db71eef5dc3d19981b381285139a0eedf993d4');
+  assert.match(contextHash, /^[a-f0-9]{64}$/);
+});
+
+test('the structured prompt permits validated text actions without claiming MCP fidelity', () => {
+  const prompt = buildOpenCodeStructuredPrompt({ messages: [{ role: 'user', content: 'case' }],
+    tools: [{ type: 'function', function: { name: 'probe_tool', parameters: { type: 'object' } } }],
+    tool_choice: 'required' });
+  assert.match(prompt.body.system, /audit record is preferred and authoritative/);
+  assert.match(prompt.body.system, /never as MCP\/provider-native calls/);
+  assert.doesNotMatch(prompt.body.system, /toolCalls.*must be an empty array/);
+  assert.equal(prompt.responseSchema.properties.toolCalls.minItems, 1);
+});
+
+test('text envelopes reject malformed, ambiguous, unknown, and undeclared actions', () => {
+  const envelope = call => JSON.stringify({ content: '', toolCalls: [call] });
+  for (const text of [
+    '{bad',
+    JSON.stringify({ content: '', toolCalls: [{ name: 'unknown', arguments: {} }] }),
+    envelope({ name: 'probe_tool', arguments: [] }),
+    envelope({ name: 'probe_tool', arguments: {}, extra: true }),
+    JSON.stringify({ content: '', toolCalls: [
+      { name: 'probe_tool', arguments: { x: 1 } }, { name: 'probe_tool', arguments: { x: 1 } }
+    ] })
+  ]) assert.throws(() => buildAuditedCompletion({ responseText: text, names: ['probe_tool'], recordedActions: [] }));
+});
+
+test('audited MCP calls remain authoritative over text envelope actions', () => {
+  const result = buildAuditedCompletion({ responseText: JSON.stringify({ content: '', toolCalls: [
+    { name: 'probe_tool', arguments: { status: 'different' } }
+  ] }), names: ['probe_tool'], recordedActions: [{ name: 'probe_tool', arguments: { status: 'ready' } }] });
+  assert.equal(result.actionRoute, 'audited_mcp');
+  assert.equal(result.actionFidelity, 'mcp_audit');
+  assert.deepEqual(JSON.parse(result.calls[0].function.arguments), { status: 'ready' });
+  assert.equal(result.finalTextStatus, 'inconsistent_echo_ignored');
 });
