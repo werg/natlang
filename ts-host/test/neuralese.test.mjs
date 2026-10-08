@@ -341,11 +341,99 @@ test('explicit Number and Boolean read only scalar Neuralese alternatives after 
   assert.ok(opaque.diagnostics.some(item => item.code === 'neuralese-opaque-access'));
   const condition = analyzeEvalSnippet('if (flag) return 1;', { ...scope,
     inputs: [{ name: 'flag', type: 'Neuralese<boolean> | boolean' }], returns: 'number' });
-  assert.ok(condition.diagnostics.some(item => item.code === 'neuralese-condition'),
-    'mixed soft/crisp conditionals cannot branch on wrapper truthiness');
+  assert.deepEqual(condition.diagnostics, []);
+  assert.deepEqual(condition.readouts.map(item => item.conditional), [true],
+    'mixed soft/crisp boolean guards read references and preserve crisp truthiness');
   const shadowed = analyzeEvalSnippet('function f(Number: (x: unknown) => number) { return Number(value); }', {
     ...scope, inputs: [{ name: 'value', type: 'Neuralese<number>' }], returns: 'number' });
   assert.deepEqual(shadowed.readouts, [], 'shadowed constructors keep their declared call semantics');
+});
+
+test('boolean Neuralese is read only at actual asynchronous control-flow guards', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'flag', type: 'Neuralese<boolean> | boolean' }, { name: 'events', type: 'string[]' },
+  ], locals: [], captures: [], imports: [], returns: 'number' };
+  const source = `let result = 0;
+    if (flag && (events.push('rhs'), true)) { events.push('body'); result = 1; }
+    return result;`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => [source.slice(item.start, item.end), item.conditional]), [['flag', true]]);
+  const compiled = compileScopeSnippet(source, { inputBindings: ['flag', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  const events = [];
+  let flagValue = false;
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      events.push('read'); return flagValue;
+    } });
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 0);
+  assert.deepEqual(events, ['read'], 'a false soft left operand short-circuits before the right side');
+  events.length = 0;
+  flagValue = true;
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 1);
+  assert.deepEqual(events, ['read', 'rhs', 'body']);
+
+  const escaped = analyzeEvalSnippet('const value = flag && true; return 1;', scope);
+  assert.ok(escaped.diagnostics.some(item => item.code === 'neuralese-condition'));
+  assert.deepEqual(escaped.readouts, [], 'value-producing logical expressions keep their existing boundary');
+  const wrongPayload = analyzeEvalSnippet('if (text) return 1;', { ...scope,
+    inputs: [{ name: 'text', type: 'Neuralese<string>' }] });
+  assert.ok(wrongPayload.diagnostics.some(item => item.code === 'neuralese-condition'),
+    'no boolean meaning is inferred for soft text');
+  const sync = analyzeEvalSnippet('function sync(flag: Neuralese<boolean>) { if (flag) return 1; return 0; }', scope);
+  assert.ok(sync.diagnostics.some(item => item.code === 'neuralese-readout-sync'));
+  for (const loopSource of ['while (flag) {}', 'for (let i = 0; flag && i < 3; i++) {}']) {
+    const loopGuards = analyzeEvalSnippet(loopSource, scope);
+    assert.deepEqual(loopGuards.diagnostics, []);
+    assert.deepEqual(loopGuards.readouts.map(item => loopSource.slice(item.start, item.end)), ['flag']);
+  }
+
+  const module = compileModule({ kind: 'module', id: 'boolean-guard-readout', name: 'booleanGuards', source: 'booleanGuards.ts', revision: 'r1',
+    text: `export async function andGuard(first: Neuralese<boolean> | boolean, second: Neuralese<boolean>, events: string[]) {
+      if (first && (events.push('rhs'), second)) { events.push('body'); return 1; }
+      return 0;
+    }
+    export async function choose(flag: Neuralese<boolean> | boolean, events: string[]) {
+      return flag ? (events.push('yes'), 1) : (events.push('no'), 0);
+    }
+    export async function nestedGuard(first: Neuralese<boolean> | boolean, second: Neuralese<boolean>,
+      third: Neuralese<boolean>, events: string[]) {
+      if (first && (events.push('middle'), second || (events.push('third'), third))) { events.push('nestedBody'); return 1; }
+      return 0;
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const moduleEvents = [];
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)({}, {
+    guard: (_id, fn) => fn(),
+    readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      moduleEvents.push(`read:${value.$neuralese.id}`);
+      return value.$neuralese.id.endsWith('c') ? false : true;
+    },
+    readNeuralese: async value => {
+      moduleEvents.push(`read:${value.$neuralese.id}`); return !value.$neuralese.id.endsWith('c');
+    },
+  });
+  assert.equal(await moduleFns.andGuard(neuraleseRef('Neuralese<boolean>', 'nz1_cccccccccccccccccccc'),
+    neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 0);
+  assert.deepEqual(moduleEvents, ['read:nz1_cccccccccccccccccccc'], 'false short-circuit skips the right soft operand');
+  moduleEvents.length = 0;
+  assert.equal(await moduleFns.andGuard(true, neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['rhs', 'read:nz1_dddddddddddddddddddd', 'body']);
+  moduleEvents.length = 0;
+  assert.equal(await moduleFns.choose(neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['read:nz1_dddddddddddddddddddd', 'yes']);
+  moduleEvents.length = 0;
+  assert.equal(await moduleFns.choose(false, moduleEvents), 0);
+  assert.deepEqual(moduleEvents, ['no'], 'crisp union arms keep native truthiness without a read');
+  moduleEvents.length = 0;
+  assert.equal(await moduleFns.nestedGuard(neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'),
+    neuraleseRef('Neuralese<boolean>', 'nz1_cccccccccccccccccccc'),
+    neuraleseRef('Neuralese<boolean>', 'nz1_eeeeeeeeeeeeeeeeeeee'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['read:nz1_dddddddddddddddddddd', 'middle', 'read:nz1_cccccccccccccccccccc',
+    'third', 'read:nz1_eeeeeeeeeeeeeeeeeeee', 'nestedBody']);
 });
 
 test('string conversions read typed Neuralese values with native method ordering', async () => {

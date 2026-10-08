@@ -133,6 +133,99 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         !standardMethod(call.expression, ['Object', 'Array', 'ReadonlyArray'])) return;
     return arrayJoinKind(call.expression.expression);
   };
+  const softBooleanAlternatives = (expression: ts.Expression): boolean => {
+    const type = checker.getTypeAtLocation(expression);
+    const alternatives = type.isUnion() ? type.types : [type];
+    let found = false;
+    for (const alternative of alternatives) {
+      const parts = neuraleseParts(checker, alternative);
+      if (!parts) continue;
+      found = true;
+      const members = parts.element.isUnion() ? parts.element.types : [parts.element];
+      if (!members.length || members.some(member => !(member.flags & ts.TypeFlags.BooleanLike))) return false;
+    }
+    return found;
+  };
+  const guardExpressions = new WeakSet<ts.Expression>();
+  const plannedGuardReadouts = new Set<string>();
+  const validGuardDiscarded = (expression: ts.Expression): boolean => {
+    if (ts.isParenthesizedExpression(expression)) return validGuardDiscarded(expression.expression);
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken)
+      return validGuardDiscarded(expression.left) && validGuardDiscarded(expression.right);
+    if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind))
+      return validGuardTruthiness(expression.left) && validGuardDiscarded(expression.right);
+    if (ts.isConditionalExpression(expression))
+      return validGuardTruthiness(expression.condition) && validGuardDiscarded(expression.whenTrue) &&
+        validGuardDiscarded(expression.whenFalse);
+    return true;
+  };
+  const validGuardTruthiness = (expression: ts.Expression): boolean => {
+    if (ts.isParenthesizedExpression(expression)) return validGuardTruthiness(expression.expression);
+    if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken)
+      return validGuardTruthiness(expression.operand);
+    if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind))
+      return validGuardTruthiness(expression.left) && validGuardTruthiness(expression.right);
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken)
+      return validGuardDiscarded(expression.left) && validGuardTruthiness(expression.right);
+    if (ts.isConditionalExpression(expression))
+      return validGuardTruthiness(expression.condition) && validGuardTruthiness(expression.whenTrue) &&
+        validGuardTruthiness(expression.whenFalse);
+    return !hasSoftAlternative(checker, checker.getTypeAtLocation(expression)) || softBooleanAlternatives(expression);
+  };
+  const planGuardTruthiness = (expression: ts.Expression): void => {
+    guardExpressions.add(expression);
+    if (ts.isParenthesizedExpression(expression)) return planGuardTruthiness(expression.expression);
+    if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken)
+      return planGuardTruthiness(expression.operand);
+    if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind)) {
+      planGuardTruthiness(expression.left);
+      planGuardTruthiness(expression.right);
+      return;
+    }
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+      planGuardDiscarded(expression.left);
+      planGuardTruthiness(expression.right);
+      return;
+    }
+    if (ts.isConditionalExpression(expression)) {
+      planGuardTruthiness(expression.condition);
+      planGuardTruthiness(expression.whenTrue);
+      planGuardTruthiness(expression.whenFalse);
+      return;
+    }
+    if (!hasSoftAlternative(checker, checker.getTypeAtLocation(expression))) return;
+    const key = `${expression.getStart(file)}:${expression.getEnd()}`;
+    if (plannedGuardReadouts.has(key)) return;
+    plannedGuardReadouts.add(key);
+    readout(expression, undefined, !soft(expression));
+  };
+  const planGuardDiscarded = (expression: ts.Expression): void => {
+    guardExpressions.add(expression);
+    if (ts.isParenthesizedExpression(expression)) return planGuardDiscarded(expression.expression);
+    if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+      planGuardDiscarded(expression.left);
+      planGuardDiscarded(expression.right);
+      return;
+    }
+    if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind)) {
+      planGuardTruthiness(expression.left);
+      planGuardDiscarded(expression.right);
+      return;
+    }
+    if (ts.isConditionalExpression(expression)) {
+      planGuardTruthiness(expression.condition);
+      planGuardDiscarded(expression.whenTrue);
+      planGuardDiscarded(expression.whenFalse);
+    }
+  };
+  const planControlGuards = (node: ts.Node): void => {
+    const guards: ts.Expression[] = [];
+    if (ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)) guards.push(node.expression);
+    else if (ts.isForStatement(node) && node.condition) guards.push(node.condition);
+    else if (ts.isConditionalExpression(node)) guards.push(node.condition);
+    for (const guard of guards) if (validGuardTruthiness(guard)) planGuardTruthiness(guard);
+    ts.forEachChild(node, planControlGuards);
+  };
   const scalarSoftAlternatives = (type: ts.Type | undefined): boolean => {
     if (!type) return false;
     const alternatives = type.isUnion() ? type.types : [type];
@@ -208,7 +301,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         (hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)) ||
           hasSoftAlternative(checker, checker.getTypeAtLocation(node.right)))) {
       const kind = node.operatorToken.kind;
-      if (CONDITIONAL.has(kind) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.left))) condition(node.left);
+      if (CONDITIONAL.has(kind) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)) &&
+          !guardExpressions.has(node)) condition(node.left);
       else if ((kind === ts.SyntaxKind.PlusToken || kind === ts.SyntaxKind.PlusEqualsToken) &&
           [node.left, node.right].some(side => checker.getTypeAtLocation(side).flags & ts.TypeFlags.StringLike)) {
         // `text += soft` coerces the right-hand value. A soft left side is not
@@ -220,14 +314,16 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       }
       else if (ARITHMETIC.has(kind)) opaque(node, 'it cannot be computed with or compared');
     } else if (ts.isPrefixUnaryExpression(node) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.operand))) {
-      if (node.operator === ts.SyntaxKind.ExclamationToken) condition(node.operand); else opaque(node, 'it cannot be computed with');
+      if (node.operator === ts.SyntaxKind.ExclamationToken) {
+        if (!guardExpressions.has(node)) condition(node.operand);
+      } else opaque(node, 'it cannot be computed with');
     } else if ((ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)) &&
         hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
-      condition(node.expression);
+      { if (!guardExpressions.has(node.expression)) condition(node.expression); }
     else if (ts.isForStatement(node) && node.condition && hasSoftAlternative(checker, checker.getTypeAtLocation(node.condition)))
-      condition(node.condition);
+      { if (!guardExpressions.has(node.condition)) condition(node.condition); }
     else if (ts.isConditionalExpression(node) && hasSoftAlternative(checker, checker.getTypeAtLocation(node.condition)))
-      condition(node.condition);
+      { if (!guardExpressions.has(node.condition)) condition(node.condition); }
     else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) &&
         hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
       readout(node.expression, undefined, !soft(node.expression));
@@ -310,6 +406,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     literals.push({ file: file.fileName, start, end: node.getEnd(), line: position.line + 1, column: position.character + 1,
       id: argument.text, type: text });
   };
+  planControlGuards(file);
   visit(file);
   if (options.recursiveTypes) for (const statement of file.statements) visitAliases(statement);
   return literals;

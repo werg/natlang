@@ -713,14 +713,20 @@ truthiness, read errors, shadowing, and unsupported record payloads
 (`ts-host/test/neuralese.test.mjs`; commit `c61f79ab`).
 
 Mixed soft/crisp values in branch conditions previously escaped the pure-soft
-condition diagnostic, allowing wrapper truthiness. The checker now reports the
-same `neuralese-condition` for mixed arms. It still does not auto-read branch
-conditions. A future safe case is limited to `Neuralese<boolean>` alternatives
-in actual branch/short-circuit positions, with readout only when execution is
-in an async function and with each logical operand read before its truthiness
-test. Wrapping an entire `a && b` result after evaluation would be wrong: a
-soft false wrapper is truthy and could cause `b` to run. No Boolean meaning is
-inferred for soft strings, numbers, or records.
+condition diagnostic, allowing wrapper truthiness. The compiler now conditionally
+reads only declared `Neuralese<boolean>` alternatives in actual `if`, `while`,
+`do/while`, `for`, and ternary condition positions; crisp arms retain native
+truthiness. In nested `&&`/`||`, operands are read immediately before their
+short-circuit truthiness test, so a soft false skips the right side. Ternary
+conditions and selected branch values are handled recursively when the whole
+ternary result is itself a guard. Readout still requires an async function;
+synchronous contexts receive the async-read diagnostic. Value-producing
+logical expressions outside guards retain the existing error, and soft strings,
+numbers, objects, and mixed payloads with nonboolean soft arms are not given
+Boolean meaning. Eval/module regressions cover short-circuit order, crisp
+alternatives, nested logical guards, ternaries, and sync rejection. This is a
+prospective ergonomics change; no historical condition failure or generation
+success-rate effect is claimed.
 
 There is one actual `replace` attempt: Luna V20 trace
 `runs/neuralese-semantic-iterate-reducers-v20-20261008-v8/generation-review-v3/luna/luna-campaign-v3/slot-05/jobs/000004-0bfdbbf2984e99ac.trace.jsonl`,
