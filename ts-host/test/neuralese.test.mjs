@@ -436,6 +436,44 @@ test('boolean Neuralese is read only at actual asynchronous control-flow guards'
     'third', 'read:nz1_eeeeeeeeeeeeeeeeeeee', 'nestedBody']);
 });
 
+test('discarded unary negation in a guard comma expression reads only soft booleans', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'flag', type: 'Neuralese<boolean>' }, { name: 'text', type: 'Neuralese<string>' },
+    { name: 'events', type: 'string[]' },
+  ], locals: [], captures: [], imports: [], returns: 'number' };
+  const source = `if ((events.push('before'), !flag, (events.push('after'), true))) events.push('body'); return events.length;`;
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => source.slice(item.start, item.end)), ['flag']);
+
+  const compiled = compileScopeSnippet(source, { inputBindings: ['flag', 'text', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  const events = [];
+  let reads = 0;
+  const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      reads++;
+      events.push('read');
+      return false;
+    }, readNeuralese: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      reads++;
+      events.push('read');
+      return false;
+    } });
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'),
+    text: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events }, {}, {}), 4);
+  assert.deepEqual(events, ['before', 'read', 'after', 'body']);
+  assert.equal(reads, 1, 'the discarded ! operand is read once at its native evaluation point');
+
+  const wrongPayload = analyzeEvalSnippet('if ((!text, true)) return 1;', scope);
+  assert.ok(wrongPayload.diagnostics.some(item => item.code === 'neuralese-condition'),
+    'a comma expression cannot hide unsupported opaque-text truthiness behind discarded !');
+  assert.deepEqual(wrongPayload.readouts, [], 'invalid discarded conditions are not partially rewritten');
+});
+
 test('string conversions read typed Neuralese values with native method ordering', async () => {
   const toString = analyzeText('return text.toString();');
   assert.deepEqual(toString.diagnostics, []);

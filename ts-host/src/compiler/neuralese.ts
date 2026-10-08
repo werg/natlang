@@ -152,6 +152,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (ts.isParenthesizedExpression(expression)) return validGuardDiscarded(expression.expression);
     if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken)
       return validGuardDiscarded(expression.left) && validGuardDiscarded(expression.right);
+    if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken)
+      return validGuardTruthiness(expression.operand);
     if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind))
       return validGuardTruthiness(expression.left) && validGuardDiscarded(expression.right);
     if (ts.isConditionalExpression(expression))
@@ -205,6 +207,10 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken) {
       planGuardDiscarded(expression.left);
       planGuardDiscarded(expression.right);
+      return;
+    }
+    if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+      planGuardTruthiness(expression.operand);
       return;
     }
     if (ts.isBinaryExpression(expression) && CONDITIONAL.has(expression.operatorToken.kind)) {
