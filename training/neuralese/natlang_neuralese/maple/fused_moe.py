@@ -279,8 +279,10 @@ def _gather_sum(src: torch.Tensor, position: torch.Tensor, tokens: int, top_k: i
     return picked.sum(1)
 
 
-def _swiglu(gate_up: torch.Tensor, ff: int, clamp: float) -> torch.Tensor:
+def _swiglu(gate_up: torch.Tensor, ff: int, clamp: float | None) -> torch.Tensor:
     gate, up = gate_up[:, :ff], gate_up[:, ff:]
+    if clamp is None:  # Mellum: unclamped SwiGLU
+        return (F.silu(gate) * up).contiguous()
     return (F.silu(gate.clamp(max=clamp)) * up.clamp(-clamp, clamp)).contiguous()
 
 
@@ -315,7 +317,7 @@ def _dump_call(x, index, gate_up_w, down_w):
                 'down': weight(down_w)}, os.path.join(directory, f'call-{x.shape[0]}-{os.getpid()}.pt'))
 
 
-def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, clamp: float,
+def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, clamp: float | None,
                   projections: tuple[Weights, Weights]) -> torch.Tensor:
     """sum_slot weight * expert(x) for routed (token, expert) pairs; ``experts`` is a ``TernaryExperts``."""
     tokens, top_k = index.shape
