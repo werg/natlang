@@ -6375,6 +6375,50 @@
       ],
       "admission": "generation-source-or-scripted-reference-no-training-admission",
       "notes": "Closed isolated frozen6f55d503 authored reference proof24/24,288successfulactions,96reads. Scripted StandIn port, zero provider calls; no automatic training/trace admission."
+    },
+    {
+      "id": "luna-v17-actual-quality-proposal-v4-20261008",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v4",
+      "include": [
+        "README.md",
+        "assembled-final3/delta-native-records.jsonl",
+        "assembled-final3/native-pieces.jsonl",
+        "assembled-final3/native-records.jsonl",
+        "assembled-final3/proposal-manifest.json",
+        "assembled-final3/recurrence-audit.json",
+        "assembled-final3/recurrence-pieces.jsonl",
+        "assembled-final3/recurrence-records.jsonl",
+        "build/case6-materialized.jsonl",
+        "build/context-enriched-converter-input.jsonl",
+        "build/wetland-materialized.jsonl",
+        "delta-inputs/delta-native-records.jsonl",
+        "delta-inputs/delta-pieces.jsonl",
+        "inputs/bunny-recovery-launch.json",
+        "inputs/candidate-selection.json",
+        "inputs/case-000006.results.jsonl",
+        "inputs/text-source-selection-for-derivation.json",
+        "inputs/v3-delta-native-records.jsonl",
+        "inputs/wetland-launch.json",
+        "inputs/wetland-source-case.jsonl",
+        "inputs/wetland-source-run.results.jsonl",
+        "review/authenticated-context-inputs.jsonl",
+        "review/context-hydration-delta-audit.json",
+        "text-proposal-v5/README.md",
+        "text-proposal-v5/anchor-selection.json",
+        "text-proposal-v5/omissions.jsonl",
+        "text-proposal-v5/output-manifest.json",
+        "text-proposal-v5/packet-manifest.json",
+        "text-proposal-v5/provenance.jsonl",
+        "text-proposal-v5/receipt.json",
+        "text-proposal-v5/source-coverage.jsonl",
+        "text-proposal-v5/text.jsonl"
+      ],
+      "admission": "held-expanded-action-and-context-hydration-proposal-root-review-required",
+      "derived_from": [
+        "luna-v17-actual-quality-proposal-v3-20261008"
+      ],
+      "notes": "Authoritative final3 native/R candidate27additionalactualtargets/8context-onlyroots, textv5 candidate13appendeddocs12train1test and14explicitportablebodyomissions; allprefixesunchanged. Superseded assembly/text preview directories explicitly excluded as obsolete in README. No new learned edges fabricated. Raw availability audit now finds14omissions repairable via historical eval-code writer provenance; separate V5repair underway, V4unchanged. Structural closure/sync do not grantadmission."
     }
   ],
   "coverage_backlog": [

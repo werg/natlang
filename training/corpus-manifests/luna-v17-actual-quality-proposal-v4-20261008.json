@@ -1,0 +1,188 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-actual-quality-proposal-v4-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v4",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2500,
+      "sha256": "96f2df51ce79b798ec07907064edd0f9deb2b2f59559030f5d5c05d61ac84f13"
+    },
+    {
+      "path": "assembled-final3/delta-native-records.jsonl",
+      "bytes": 3422985,
+      "sha256": "908985b8639e0c9d402dd0305779ea83870ec3885e2fe0c33482f242a0f498b7",
+      "lines": 27
+    },
+    {
+      "path": "assembled-final3/native-pieces.jsonl",
+      "bytes": 209590,
+      "sha256": "32134065a8b9e988e1de2e8d76bf5ab85968cf16500ac2a2d1a06c2a834fe362",
+      "lines": 159
+    },
+    {
+      "path": "assembled-final3/native-records.jsonl",
+      "bytes": 315793751,
+      "sha256": "8eec526dd9fa7143ef251cd5a2dd58cf4fc3dcd06566d24aa4dffa8ecda0cd63",
+      "lines": 5243
+    },
+    {
+      "path": "assembled-final3/proposal-manifest.json",
+      "bytes": 8713,
+      "sha256": "ce046f1fed6257ccb2ac50d2f7c3531a7f54e6957f790b45309a27dd38d63e50"
+    },
+    {
+      "path": "assembled-final3/recurrence-audit.json",
+      "bytes": 2110,
+      "sha256": "a44a5058ff64bc3edba31836ebaa07d2adc7ca0c383b0c8b839237459e057453"
+    },
+    {
+      "path": "assembled-final3/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "assembled-final3/recurrence-records.jsonl",
+      "bytes": 271278989,
+      "sha256": "2f53acf22ebb2b96501a86dd41afd8b6547c6bd42a4f0d56311b9453ff42e6e7",
+      "lines": 4962
+    },
+    {
+      "path": "build/case6-materialized.jsonl",
+      "bytes": 1629206,
+      "sha256": "75d089fee73b841a25f4ad93dbc234ce180aea33aa1bc11710846ab99f511dc5",
+      "lines": 13
+    },
+    {
+      "path": "build/context-enriched-converter-input.jsonl",
+      "bytes": 3404742,
+      "sha256": "472d6936670d09a0c5456ef63b048f8b00049232601becf882bfa5e5bcdcd54d",
+      "lines": 27
+    },
+    {
+      "path": "build/wetland-materialized.jsonl",
+      "bytes": 8250151,
+      "sha256": "2dcfa4cccb9185981d8a177650f1751d80b270b25cdc8f7c475cefccd1c1a060",
+      "lines": 71
+    },
+    {
+      "path": "delta-inputs/delta-native-records.jsonl",
+      "bytes": 3422985,
+      "sha256": "908985b8639e0c9d402dd0305779ea83870ec3885e2fe0c33482f242a0f498b7",
+      "lines": 27
+    },
+    {
+      "path": "delta-inputs/delta-pieces.jsonl",
+      "bytes": 37595,
+      "sha256": "0a3d745506fe3866759c662d3b9855c7f13faaf99ab210bf736a02ddb6f0fc91",
+      "lines": 7
+    },
+    {
+      "path": "inputs/bunny-recovery-launch.json",
+      "bytes": 4908,
+      "sha256": "221202f27fc85b5b94b8273c147c8da279238903cb7de36c34db62b0c531d61b"
+    },
+    {
+      "path": "inputs/candidate-selection.json",
+      "bytes": 6576,
+      "sha256": "eddf2f2e6f3d59932f812ba0b4637b7dbb819adec4bfb11b717d48649b3f482b"
+    },
+    {
+      "path": "inputs/case-000006.results.jsonl",
+      "bytes": 1003333,
+      "sha256": "0c070ed80df6e95601bb7c7a176582cac00c57ff7e5d232ffaa2d20dcd9781d1",
+      "lines": 1
+    },
+    {
+      "path": "inputs/text-source-selection-for-derivation.json",
+      "bytes": 8384,
+      "sha256": "ba087e4cbe7a1ccb772bdd782199dcd4db7656cfc8d61967bc231c2b01bec4b9"
+    },
+    {
+      "path": "inputs/v3-delta-native-records.jsonl",
+      "bytes": 3367822,
+      "sha256": "4af908d2b1bb6a77e1737fbcf38887101cbcc35956e7c51cf6820e1c6848c92d",
+      "lines": 27
+    },
+    {
+      "path": "inputs/wetland-launch.json",
+      "bytes": 5264,
+      "sha256": "b28dcb54d5b4a3848ef267394bf0762d16c4f39dc68633290c082ca25d57d4c5"
+    },
+    {
+      "path": "inputs/wetland-source-case.jsonl",
+      "bytes": 39050,
+      "sha256": "b907b55b26ddfdd67669639f76645c946d9dad125a467fadd6b4925e25e62838",
+      "lines": 1
+    },
+    {
+      "path": "inputs/wetland-source-run.results.jsonl",
+      "bytes": 4758754,
+      "sha256": "343da25e64ab0feec44f71817a4e4868c95858ed7869577fbc3f5dba34688e98",
+      "lines": 1
+    },
+    {
+      "path": "review/authenticated-context-inputs.jsonl",
+      "bytes": 47329,
+      "sha256": "b13465b1e62ad0d01ecf263ea6a3a7d1160b4857f941a9fde14d93d213e11e1f",
+      "lines": 8
+    },
+    {
+      "path": "review/context-hydration-delta-audit.json",
+      "bytes": 1072,
+      "sha256": "7f7f1c59673d336c70cdd3e7855cea6a4a7d4c2209cb5c5afe0c324f25d70c41"
+    },
+    {
+      "path": "text-proposal-v5/README.md",
+      "bytes": 1439,
+      "sha256": "dea39aaf7296d91c9c249e0a0f6f63ec77836861c9b87989a85c4ba8980a9710"
+    },
+    {
+      "path": "text-proposal-v5/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "text-proposal-v5/omissions.jsonl",
+      "bytes": 3626,
+      "sha256": "4ced53624a2595b9d7f92b79781cf36134346502660ff449831ccd3b3d36da9a",
+      "lines": 14
+    },
+    {
+      "path": "text-proposal-v5/output-manifest.json",
+      "bytes": 1275,
+      "sha256": "ab7cb51e29ce180d374973afcef0ac88f05f3dc002e9992ef4590e000da1c523"
+    },
+    {
+      "path": "text-proposal-v5/packet-manifest.json",
+      "bytes": 1729,
+      "sha256": "cccde6c2535063c0be39d847ce303a825dbf8d692f4bab8a307869ba4369b37d"
+    },
+    {
+      "path": "text-proposal-v5/provenance.jsonl",
+      "bytes": 3917466,
+      "sha256": "7c26e4296b664826426635ab18b430e61aeda9fefe3ce20e9e94daf22145dfca",
+      "lines": 4483
+    },
+    {
+      "path": "text-proposal-v5/receipt.json",
+      "bytes": 8661,
+      "sha256": "ead15d976bb323bf28dd705d8dceb3f4d6252f74a7b00b3dfd17eb7039a80533"
+    },
+    {
+      "path": "text-proposal-v5/source-coverage.jsonl",
+      "bytes": 12791,
+      "sha256": "4ea73db20950f90d6929f2f35ce88e907cb88883b40d197172fdc1e8b3bcee40",
+      "lines": 27
+    },
+    {
+      "path": "text-proposal-v5/text.jsonl",
+      "bytes": 214596988,
+      "sha256": "e3d74f8d335ecdf23c55b5af103f7d4428d3158f6d5bd42dc615b8cf53f8ba7e",
+      "lines": 4483
+    }
+  ],
+  "bytes": 835613215
+}
