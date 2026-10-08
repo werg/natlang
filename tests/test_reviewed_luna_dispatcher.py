@@ -59,6 +59,7 @@ def reviewed_plan(tmp_path):
         'reasoning_effort': 'low',
         'case_seconds': 120,
         'min_free_mib': 1,
+        'max_transport_retries': 0,
         'cases': [{'index': i, 'seed': 1000 + i} for i in range(3)],
     }
     plan_path = tmp_path / 'reviewed-plan.json'
@@ -83,7 +84,17 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     plan, identity = dispatcher.validate_plan(plan_path, plan_sha)
     assert plan['campaign_id'] == identity['campaign_id']
     assert identity['runtime_receipt_sha256'] == plan['runtime_receipt_sha256']
+    assert identity['max_transport_retries'] == 0
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
+
+
+def test_reviewed_plan_requires_explicit_nonnegative_retry_budget(reviewed_plan):
+    plan_path, _, _, plan = reviewed_plan
+    for value in (None, True, -1, '0'):
+        plan['max_transport_retries'] = value
+        plan_path.write_text(json.dumps(plan, sort_keys=True))
+        with pytest.raises(ValueError, match='max_transport_retries'):
+            dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
 
 
 def test_source_indices_match_queue_runner_physical_jsonl_lines(tmp_path):
@@ -147,6 +158,7 @@ def test_free_slot_pulls_next_case_and_reuses_failure_cooldown_journal(reviewed_
 
     monkeypatch.setattr(dispatcher.subprocess, 'Popen', FakeRunner)
     assert dispatcher.run_dispatcher(plan_path, plan_sha) == 0
+    assert all(runner.entry['transport_retries'] == 0 for runner in made)
     events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
     claims = [row for row in events if row.get('event') == 'claim']
     assert [(row['index'], row['slot']) for row in claims] == [(0, 1), (1, 2), (2, 1)]
@@ -209,6 +221,7 @@ def test_resume_tracks_live_orphan_without_serially_blocking_free_slot(reviewed_
     _, identity = dispatcher.validate_plan(plan_path, plan_sha)
     identity['identity_sha256'] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     entry, queue, queue_sha, journal, _, payload = dispatcher._claim_queue(plan, identity, 1, identity['cases'][0])
+    assert entry['transport_retries'] == 0
     dispatcher._write_claim_queue(queue, payload)
     dispatcher._append_event(identity['ledger'], {'event': 'campaign_open', 'identity': identity, 'opened_at': 'test'})
     claim = {'claim_id': entry['key'], 'index': 0, 'slot': 1, 'key': entry['key'], 'queue': queue,

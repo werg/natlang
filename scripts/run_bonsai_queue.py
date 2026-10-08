@@ -508,6 +508,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             while next_allowed_at > time.time():
                 time.sleep(min(30, next_allowed_at - time.time()))
         max_turns = entry.get('max_turns', 20)
+        transport_retries = entry.get('transport_retries', 1)
+        if type(transport_retries) is not int or transport_retries < 0:
+            raise ValueError(f'entry transport_retries must be a nonnegative integer: {entry.get("key")}')
         count = entry.get('count', 1)
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
             raise ValueError(f'entry count must be between one and {max_batch_cases}')
@@ -520,7 +523,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--model-id', model_id,
                    '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
-                   '--transport-retries', '1', '--file-tools', entry.get('surface', 'all')]
+                   '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
             '--server', 'http://127.0.0.1:8081', '--kv-tokens', '40000']
         if provider:

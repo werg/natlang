@@ -188,6 +188,9 @@ def validate_plan(plan_path, expected_sha256):
         raise ValueError('max_turns must be a positive integer')
     if plan.get('max_model_requests', 384) < 1 or type(plan.get('max_model_requests', 384)) is not int:
         raise ValueError('max_model_requests must be a positive integer')
+    transport_retries = plan.get('max_transport_retries')
+    if type(transport_retries) is not int or transport_retries < 0:
+        raise ValueError('max_transport_retries must be an explicit nonnegative integer')
     if type(plan.get('text_neuralese_emulation', False)) is not bool:
         raise ValueError('text_neuralese_emulation must be an explicit boolean')
     if 'provider_request_config' in plan:
@@ -203,6 +206,7 @@ def validate_plan(plan_path, expected_sha256):
                   'campaign_root': str(campaign_root), 'ledger': str(Path(plan['claim_ledger']).resolve()),
                   'launch_record': str(Path(plan['launch_record']).resolve()),
                   'authority': str(authority), 'slots': slots,
+                  'max_transport_retries': transport_retries,
                   'cases': normalized_cases}
 
 
@@ -397,6 +401,7 @@ def _claim_queue(plan, identity, slot, case):
         'max_model_requests': plan.get('max_model_requests', 384),
         'context_tokens': plan.get('context_tokens', 32768),
         'case_seconds': plan.get('case_seconds', 1800),
+        'transport_retries': identity['max_transport_retries'],
         'text_neuralese_emulation': bool(plan.get('text_neuralese_emulation', False)),
     }
     if plan.get('surface') is not None:
