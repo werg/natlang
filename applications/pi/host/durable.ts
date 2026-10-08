@@ -44,6 +44,9 @@ export function contextView(view: PiContextView): ContextView {
   }) as unknown as ContextView;
 }
 
+/** The port's view as pi-durable reads it: no head is `undefined` there, not `null`. */
+const piView = (view: ContextView): never => ({ ...view, head: view.head ?? undefined }) as never;
+
 /** What one phase invocation shares between its services: a failure after which it may commit nothing more. */
 export type PhaseState = { failed?: string };
 
@@ -58,11 +61,11 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
     async scan(at?: number) { return plain(await host.scan(conversationId, at, context)); },
     /** pi-durable's planSystemEntries, as the port's plan ({ message, edits? }); the crisp side of harness/planSystem. */
     planSystem(view: ContextView, desired: { key: string; text: string }[], tools: unknown[], now: number) {
-      const planned = planSystemEntries(view as never, new Map(desired.map(section => [section.key, section.text])), tools as never, now);
+      const planned = planSystemEntries(piView(view), new Map(desired.map(section => [section.key, section.text])), tools as never, now);
       return plain(planned.map(draft => ({ message: draft.model![0], ...(draft.edits?.length ? { edits: draft.edits } : {}) })));
     },
     /** pi-durable's estimateContext; the crisp side of harness/estimate. */
-    estimate(view: ContextView, extra: Message[]): number { return estimateContext(view as never, extra as never); },
+    estimate(view: ContextView, extra: Message[]): number { return estimateContext(piView(view), extra as never); },
     implementation(point: 'context' | 'scheduler' | 'admission' | 'planning') { return host.implementation(point); },
     async entry(id: number): Promise<EntryRecord | null> { return plain(await runtime.entry(id as EntryId, context)) as EntryRecord ?? null; },
     async task(id: number): Promise<TaskRecord | null> { return plain(await runtime.getTask(id as TaskId, context)) as unknown as TaskRecord ?? null; },
