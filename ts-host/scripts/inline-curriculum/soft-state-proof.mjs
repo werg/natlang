@@ -47,7 +47,9 @@ export function signatureHasExactArgumentPath(signatureValue, argumentPath, type
 }
 
 export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neuralese<string>', writerCallId,
-  consumerCallId, consumerArgument, writerNode, expectedBodySha256 }) {
+  consumerCallId, consumerArgument, writerNode, expectedBodySha256, argumentMode = 'capture' }) {
+  if (!['capture', 'typed_argument'].includes(argumentMode))
+    throw new Error(`unsupported Neuralese argument mode ${argumentMode}`);
   if (!actualValue || typeof actualValue !== 'object' || actualValue.$neuralese?.type !== expectedType ||
       typeof actualValue.$neuralese?.id !== 'string')
     throw new Error(`writer ${writerCallId} did not return ${expectedType}`);
@@ -60,7 +62,7 @@ export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neur
     input.port === `arg:${consumerArgument}`);
   if (!invocationEdge) throw new Error(`no exact ${consumerArgument} invocation edge from ${writer.node} to ${consumerCallId}`);
   const argumentParts = String(consumerArgument).split('.');
-  const capturePort = argumentParts.length === 2 ? `capture:${argumentParts[1]}` : undefined;
+  const capturePort = argumentMode === 'capture' && argumentParts.length === 2 ? `capture:${argumentParts[1]}` : undefined;
   const captureEdge = capturePort && invocation?.inputs?.find(input => input.node === writer.node && input.block === block &&
     input.port === capturePort);
   if (capturePort && !captureEdge) throw new Error(`no exact ${capturePort} capture edge from ${writer.node} to ${consumerCallId}`);
@@ -75,6 +77,7 @@ export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neur
   return { block, writer_call_id: writerCallId, writer_node: writer.node, consumer_call_id: consumerCallId,
     consumer_signature: signature, invocation_input_port: invocationEdge.port, block_read_node: read.node,
     ...(capturePort ? { capture_input_port: capturePort } : {}),
+    ...(argumentMode === 'capture' ? {} : { argument_mode: argumentMode }),
     ...(writer.text_body_sha256 === undefined ? {} : { writer_body_sha256: writer.text_body_sha256 }),
     exact_runtime_writer_to_reader_link: true };
 }

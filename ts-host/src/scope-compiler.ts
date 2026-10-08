@@ -132,6 +132,8 @@ const __natlang_settle = async (value: any, depth = 0): Promise<any> => {
 };
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
 const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
+const __natlang_finiteArrayIterator = (source: any, method: 'entries' | 'keys' | 'values', label?: string) =>
+  __live.finiteArrayIterator(source, method, label);
 const __natlang_finiteAsync = (source: any, label?: string) => __live.finiteAsync(source, label);
 const __natlang_guard = (id: string, fn: () => unknown, args?: unknown[]) => __live.guard(id, fn, args);
 // A counted loop's bound is read once, when the loop starts; the counter must advance toward it every iteration.
@@ -981,6 +983,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     }
     if (ts.isForOfStatement(node)) {
       const at = rel(node.expression);
+      let iterableExpression = node.expression;
+      while (ts.isParenthesizedExpression(iterableExpression) || ts.isAsExpression(iterableExpression) ||
+          ts.isTypeAssertionExpression(iterableExpression) || ts.isNonNullExpression(iterableExpression))
+        iterableExpression = iterableExpression.expression;
+      if (!node.awaitModifier && ts.isCallExpression(iterableExpression) && iterableExpression.arguments.length === 0 &&
+          ts.isPropertyAccessExpression(iterableExpression.expression) &&
+          ['entries', 'keys', 'values'].includes(iterableExpression.expression.name.text)) {
+        const method = iterableExpression.expression.name.text as 'entries' | 'keys' | 'values';
+        const receiver = iterableExpression.expression.expression;
+        lowerNodes(receiver);
+        primitive.push({ ...at, text: `__natlang_finiteArrayIterator(${lowerSpan(rel(receiver).start, rel(receiver).end)}, ` +
+          `${JSON.stringify(method)}, ${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
+        lowerNodes(node.statement);
+        return;
+      }
       primitive.push({ start: at.start, end: at.start, text: node.awaitModifier ? '__natlang_finiteAsync(' : '__natlang_finite(' },
         { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(analysisSource.slice(at.start, at.end)))})` });
     }

@@ -1027,7 +1027,9 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
                 row["capture_context_augmentation_attestations"])
     rows = list(dedup.values())
     same_split_dupes = n_before - excluded_train_held - len(rows)
-    if not any(row["split"] == "train" for row in rows) or not any(row["split"] == "test" for row in rows):
+    if (not preview_only and
+            (not any(row["split"] == "train" for row in rows) or
+             not any(row["split"] == "test" for row in rows))):
         raise ValueError("nonempty independent train and held text required")
 
     provenance = [{"id": row["id"], "split": row["split"], "source_groups": row["source_groups"],

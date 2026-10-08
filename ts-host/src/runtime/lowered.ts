@@ -410,6 +410,43 @@ export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
 }
 
 /**
+ * The bounded counterpart of `for (const item of array.entries()/keys()/values())`.
+ * The standard Array prototype methods use their native iterators under the array no-growth rule. A replacement
+ * method is still looked up and called once, then its result is classified by the existing finite-iteration policy
+ * (so an array/string/Map/Set result keeps its usual behavior). Native iterators preserve holes, inherited indexed
+ * values, and ordinary Array Iterator ordering.
+ */
+export function finiteArrayIterator<T>(source: unknown, method: 'entries' | 'keys' | 'values', label?: string): Iterable<T> {
+  const callable = (source as Record<string, unknown> | null | undefined)?.[method];
+  // Match the source expression's ordinary property lookup and call behavior, including getter effects and native
+  // TypeErrors for a non-callable property. In particular, do not inspect the method twice.
+  const iterator = Reflect.apply(callable as (...args: unknown[]) => unknown, source, []) as Iterator<T>;
+  if (!Array.isArray(source)) return finite(iterator as unknown as Iterable<T>, label);
+
+  // Eval scopes can create arrays in another realm, so compare against that array's own prototype method instead
+  // of this module's Array.prototype. A standard intrinsic method is still required; instance/subclass overrides
+  // follow the ordinary iterator policy below.
+  const prototype = Object.getPrototypeOf(source) as Record<string, unknown> | null;
+  const descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, method);
+  const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  const standardArrayPrototype = typeof constructor === 'function' && (constructor as { prototype?: unknown }).prototype === prototype &&
+    Function.prototype.toString.call(constructor) === 'function Array() { [native code] }';
+  const nativeMethod = standardArrayPrototype && descriptor?.value === callable && typeof callable === 'function' &&
+    (callable as Function).name === method && Function.prototype.toString.call(callable).includes('[native code]');
+  if (!nativeMethod) return finite(iterator as unknown as Iterable<T>, label);
+
+  const array = source as unknown[];
+  const length = array.length;
+  const next = iterator.next;
+  return { [Symbol.iterator]: () => ({
+    next: (): IteratorResult<T> => {
+      if (array.length > length) throw new RangeError('the array grew while it was being iterated; build a new array instead');
+      return Reflect.apply(next, iterator, []) as IteratorResult<T>;
+    },
+  }) };
+}
+
+/**
  * Runtime half of the policy for `for await`: an async iterable passes, since restricted code cannot define one (it
  * comes from the host: a response body, a service stream, a package, an iterateOn stream); anything else follows the
  * `for ... of` rules.

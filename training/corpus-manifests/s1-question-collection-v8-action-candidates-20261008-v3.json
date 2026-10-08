@@ -1,0 +1,94 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s1-question-collection-v8-action-candidates-20261008-v3",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-action-candidates-20261008-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2880,
+      "sha256": "92ae8fc4021f26452578f4f6e7063eddbd0566bc60d7f8a55e2792b32bc080b9"
+    },
+    {
+      "path": "converter-omissions.jsonl",
+      "bytes": 1224,
+      "sha256": "49910adb4f57ee9dff94312142ab18e381d0fb1388c4e51da0e183d2ec86aa2c",
+      "lines": 5
+    },
+    {
+      "path": "empty-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2477,
+      "sha256": "b7592d9e74abb1e0aa1f588b3d62c6e91d82e277889868f435fb5365369e5965"
+    },
+    {
+      "path": "native-actions.jsonl",
+      "bytes": 9927567,
+      "sha256": "f7ff02e8f251934b79b511a76b73977846112ad992289eec1d3b3b4d5b45b85f",
+      "lines": 49
+    },
+    {
+      "path": "packet-summary.json",
+      "bytes": 2024,
+      "sha256": "d6dcb08794f0fec84d171620ee7874221bb5747fe8b1e08da58d845ceb06d80d"
+    },
+    {
+      "path": "raw-action-receipts-convertible.jsonl",
+      "bytes": 312747,
+      "sha256": "2f3d2594cf0df8b11d40f0a318a7bbc296dbefa8be8bafa0c5646c56144347c8",
+      "lines": 49
+    },
+    {
+      "path": "raw-action-receipts.jsonl",
+      "bytes": 344905,
+      "sha256": "538d8685d6b38e03fd053cf5c83743445cb2ca59434a4f5d41f19a8e0ab74c2c",
+      "lines": 54
+    },
+    {
+      "path": "receipt-correction.json",
+      "bytes": 2722,
+      "sha256": "bc93c4cc73ffbe5546324cf994ceb72b7b5741830dc7c379130370fa80808495"
+    },
+    {
+      "path": "selected-actions-convertible.jsonl",
+      "bytes": 143464,
+      "sha256": "6fa741be8cf96c27b7c50ab3fd2c7e260f9d737d44f48cc77efc2f95bb770675",
+      "lines": 49
+    },
+    {
+      "path": "selected-actions.jsonl",
+      "bytes": 158217,
+      "sha256": "bcc704b092fc10600b39bc220bcf501533ff950258191ccdaf73bb46cd2fc041",
+      "lines": 54
+    },
+    {
+      "path": "text-preview/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "text-preview/provenance.jsonl",
+      "bytes": 37869,
+      "sha256": "b9e8c095d9c4b828fc40c2aa4f9436fce4190b732a7b558e381ea4ddcb614e15",
+      "lines": 49
+    },
+    {
+      "path": "text-preview/receipt.json",
+      "bytes": 2874,
+      "sha256": "1015dabfd3870700ea4b0b3a703e8ecfdebb63a8f4a450d93528252105eac351"
+    },
+    {
+      "path": "text-preview/text.jsonl",
+      "bytes": 3349038,
+      "sha256": "797ee6adaf0779fe60f6da88ea8d3a91541037acf1d3b2a2bcc2d0b4d33dd5c2",
+      "lines": 49
+    }
+  ],
+  "bytes": 14288008
+}

@@ -236,6 +236,24 @@ test('constrained source accepts finite iteration and rejects open-ended forms',
     assert.ok(policy(source).length, source);
 });
 
+test('constrained type checks admit the standard finite array iterator methods only for arrays', () => {
+  const source = `const records: { id: string }[] = [];
+    for (const [index, record] of records.entries()) { index; record.id; }
+    for (const index of records.keys()) index;
+    for (const record of records.values()) record.id;
+    const custom: Iterable<number> = { [Symbol.iterator]: function* () { yield 1; } };
+    for (const value of custom) value;`;
+  const program = createVirtualProgram({ '/scope/main.ts': source });
+  const file = program.getSourceFile('/scope/main.ts');
+  const diagnostics = checkConstrainedSource(file, { checker: program.getTypeChecker() });
+  assert.ok(diagnostics.length >= 2);
+  assert.ok(diagnostics.every(item => item.code === 'forbidden-loop'));
+  assert.ok(diagnostics.every(item => item.start >= source.indexOf('const custom:')),
+    'standard array entries/keys/values should not be diagnosed');
+  assert.ok(diagnostics.some(item => source.slice(item.start, item.end).includes('custom')),
+    'an arbitrary custom Iterable remains rejected');
+});
+
 test('inline instruction provenance retains checked interpolation spans and types', () => {
   const source = 'const limit = 17;\nreturn await nl<boolean>`Check ${note} against ${limit}.`(note);';
   const scope = { types: {}, inputs: [{ name: 'note', type: 'string' }], locals: [], captures: [], imports: [], returns: 'boolean' };

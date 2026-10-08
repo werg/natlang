@@ -6,6 +6,7 @@ import { renderValue } from '../dist/native/agent.js';
 import { deriveSeed } from '../dist/native/trace.js';
 import { MISSING } from '../dist/native/values.js';
 import { NativeTraceRecorder } from '../dist/native/trace.js';
+import { neuraleseRef } from '../dist/native/neuralese.js';
 import { interpreter, lambda, nl, session as open, ts } from './support/natlang.mjs';
 
 const run = (body, options) => interpreter(options).run(lambda(body));
@@ -519,6 +520,19 @@ test('eval allows finite iteration and rejects open-ended loops', async () => {
     enumerable.join(',') + '|' + Object.keys(record).join(',')` });
   assert.equal(propertyKeys.kind, 'ok', propertyKeys.text);
   assert.equal(propertyKeys.value, 'first,shared,second,inherited|first,shared,second');
+  const arrayIterators = await session.applyAsync('eval', { code: `
+    const records = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    let receiverCalls = 0;
+    const getRecords = () => { receiverCalls++; return records; };
+    const indexed: string[] = [];
+    for (const [index, record] of getRecords().entries()) indexed.push(index + ':' + record.id);
+    const keys: number[] = [];
+    for (const index of (records.keys())) keys.push(index);
+    const valueIds: string[] = [];
+    for (const record of records.values() as Iterable<{ id: string }>) valueIds.push(record.id);
+    indexed.join(',') + '|' + keys.join(',') + '|' + valueIds.join(',') + '|' + receiverCalls` });
+  assert.equal(arrayIterators.kind, 'ok', arrayIterators.text);
+  assert.equal(arrayIterators.value, '0:a,1:b,2:c|0,1,2|a,b,c|1');
   const repeated = await session.applyAsync('eval', { code:
     'let current: number = 0; for (let attempt = 0; attempt < 8; attempt++) { if (finished(current)) break; current = step(current); } current' });
   assert.equal(repeated.kind, 'ok'); assert.equal(repeated.value, 3);
@@ -529,6 +543,17 @@ test('eval allows finite iteration and rejects open-ended loops', async () => {
   }
   const grown = await session.applyAsync('eval', { code: 'const xs = [1]; for (const x of xs) { xs.push(x); } xs' });
   assert.equal(grown.kind, 'error'); assert.match(grown.text, /grew while it was being iterated/);
+  const grownEntries = await session.applyAsync('eval', { code:
+    'const xs = [1]; for (const [index, value] of xs.entries()) { xs.push(value); } xs' });
+  assert.equal(grownEntries.kind, 'error'); assert.match(grownEntries.text, /grew while it was being iterated/);
+  const overridden = await session.applyAsync('eval', { code: `
+    const xs: any = [1]; let calls = 0;
+    xs.entries = () => { calls++; return [[10, 'custom']]; };
+    let seen = '';
+    for (const [index, value] of xs.entries()) seen += index + ':' + value;
+    ({ seen, calls })` });
+  assert.equal(overridden.kind, 'ok', overridden.text);
+  assert.deepEqual(overridden.value, { seen: '10:custom', calls: 1 });
   // A function may call itself on a smaller argument; anything else fails when the call happens.
   const recursive = await session.applyAsync('eval', { code: 'function f(n: number): number { return n ? f(n - 1) : 0; } f(3)' });
   assert.equal(recursive.kind, 'ok', recursive.text); assert.equal(recursive.value, 0);
@@ -1135,6 +1160,59 @@ test('a saved inline function without parameters takes whatever each call passes
   // Called with a value its first call did not pass, it takes that too.
   const extra = await session.applyAsync('eval', { code: 'const m = await pick(3); m' });
   assert.equal(extra.kind, 'ok', extra.text); assert.deepEqual(seen.at(-1), { input: 3 });
+});
+
+test('a saved inline callable keeps its declared Neuralese scalar result for later text readout', async () => {
+  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  let childCalls = 0, readCalls = 0;
+  const { lam, session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
+    services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
+    neuralese: { store: { has: async id => id === readBody } },
+    agent: child => {
+      if (child.lam.type.returns.kind === 'neuralese') {
+        childCalls++;
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+      } else {
+        readCalls++;
+        child.lam.return = 'answer text';
+      }
+    },
+  });
+  const declaration = await session.applyAsync('eval', {
+    code: 'const child = nl<Neuralese<string>>`Return the answer as a soft string.`;',
+  });
+  assert.equal(declaration.kind, 'ok', declaration.text);
+  assert.equal(lam.letTypes.child.kind, 'lambda');
+  assert.equal(lam.letTypes.child.returns.kind, 'neuralese');
+  assert.equal(lam.letTypes.child.returns.element.name, 'string');
+
+  const conversion = await session.applyAsync('eval', {
+    code: 'const soft = await child({}); const text = await String(soft); text;',
+  });
+  assert.equal(conversion.kind, 'ok', conversion.text);
+  assert.equal(conversion.value, 'answer text');
+  assert.equal(lam.return, MISSING, 'the intermediate eval does not stage the declared task result');
+  assert.equal(childCalls, 1);
+  assert.equal(readCalls, 1, 'the existing typed readout ran exactly once');
+});
+
+test('a saved inline callable retains a general visible result signature', async () => {
+  const { lam, session } = open({ type: '() => number', instructions: 'Return a count.' }, {
+    agent: child => { child.lam.return = { label: 'ready' }; },
+  });
+  const declaration = await session.applyAsync('eval', {
+    code: 'const describe = nl<(item: number) => { label: string }>`Describe the item.`;',
+  });
+  assert.equal(declaration.kind, 'ok', declaration.text);
+  assert.equal(lam.letTypes.describe.kind, 'lambda');
+  assert.equal(lam.letTypes.describe.returns.kind, 'record');
+  assert.equal(lam.letTypes.describe.returns.fields[0].name, 'label');
+
+  const invocation = await session.applyAsync('eval', {
+    code: 'const rendered = await describe(3); rendered.label;',
+  });
+  assert.equal(invocation.kind, 'ok', invocation.text);
+  assert.equal(invocation.value, 'ready');
 });
 
 test('an external service is called and read by its declaration, and cannot be edited', async () => {

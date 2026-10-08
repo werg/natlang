@@ -40,6 +40,7 @@ export type NativeRuntimeHooks = {
   inline(session: NativeSession, plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>, origin?: InlineInstructionOrigin): unknown;
   iterateOn(session: NativeSession, step: unknown, initial: unknown, ...args: unknown[]): unknown;
   finite(source: unknown, label?: string): unknown;
+  finiteArrayIterator(source: unknown, method: 'entries' | 'keys' | 'values', label?: string): unknown;
   finiteAsync(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
@@ -1624,6 +1625,23 @@ export class NativeSession {
 
   private inferScopeType(value: unknown): string { return inferValueType(value); }
 
+  /** Preserve a source-backed callable signature when it uses types visible in this call's scope. */
+  private async sourceCallableType(value: unknown, availableTypes: Record<string, Type>): Promise<Type | undefined> {
+    if (typeof value !== 'function') return;
+    const { callableMeta } = await import('../runtime/callable.js');
+    const meta = callableMeta(value);
+    if (!meta || !['inline', 'named'].includes(meta.kind)) return;
+    try {
+      const returns = parseType(meta.definition.returns);
+      const fields = meta.definition.params.map(parameter => {
+        return { name: parameter.name, type: parseType(parameter.type), optional: parameter.optional === true };
+      });
+      const signature: Type = { kind: 'lambda', params: { kind: 'record', fields }, returns };
+      this.env.child(availableTypes).checkNames(signature);
+      return signature;
+    } catch { return; }
+  }
+
 
   private scopePath(expression: string): string {
     const match = /^([A-Za-z_$][\w$]*)(.*)$/.exec(expression.trim());
@@ -1865,7 +1883,7 @@ export class NativeSession {
         }
         return hooks.inline(this, plan, values, bound, origin);
       },
-      finite: hooks.finite, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
+      finite: hooks.finite, finiteArrayIterator: hooks.finiteArrayIterator, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),
       finish: (value: unknown) => { finished = value; } };
     const prologue = [
@@ -1931,6 +1949,7 @@ export class NativeSession {
         const annotation = annotations.get(name);
         if (annotation) type = inlineDeclaredTypes(parseType(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
+        if (!type) type = await this.sourceCallableType(value, localTypes);
         if (!type) {
           try { type = parseType(this.inferScopeType(value)); }
           catch (error) {
