@@ -953,3 +953,22 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   against gold-history targets. The residual channel gap is the whole-window 0.06 CE.
 - No gate is changed or waived. The per-stratum gold-target gate on pass ≥1 tails may be unreachable by construction.
   A gate relative to the matched live-greedy control is proposed for review with Pop and the owner.
+
+## 2026-10-08 — Correction: the pass-1/2 tail gap is the shallow sketch producer, not history exposure
+
+- The earlier entry today ("history exposure, not channel drift") was wrong. Pop pointed out that the matched control
+  only covers the pass-0 (gold-history) producer.
+- Passes ≥ 1 are produced by `heads.feedback` on the shallow layers (cutoff 4), the sketch map. The matched
+  `full_projection` consumer reads the full-depth projection.
+- At step 4352 the two differ sharply on the last 256 tokens:
+
+  | History | CE | Gold accuracy |
+  |---|---|---|
+  | Pass-1 stratum (sketch history) | 2.42 | 0.63 |
+  | `full_projection` | 1.45 | 0.775 |
+  | crisp `live_greedy` | 1.44 | 0.784 |
+
+- So the full-depth channel is near crisp greedy; the pass ≥ 1 gate failures measure the shallow sketch map (held
+  sketch error ~0.76).
+- Added `sketch_projection` as a third matched consumer: pass 0's sketches are exactly the history pass 1 consumes.
+  Schema matched-history/2. No gate changed. The proposal to gate pass ≥ 1 against live_greedy is withdrawn.

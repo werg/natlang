@@ -367,6 +367,11 @@ def gold_completion(backbone, heads, prefix_ids, span_ids, *, auxiliary_scale=.0
             'sketches':heads.feedback(auxiliary)}
 
 
+# Held matched-history consumers. Pass 0's sketches are the history sequence pass 1 consumes, so sketch_projection
+# is pass 1's matched control; full_projection is the full-depth channel; live_greedy the crisp self-history control.
+MATCHED_CONSUMERS=('full_projection','sketch_projection','live_greedy')
+
+
 def sequence_completions(backbone, heads, prefix_ids, span_ids, *, passes=3,
                          fraction=1., group_size=16, auxiliary_scale=.05):
     """Repeated shared shallow-layer passes, with one-consumer sketch credit.
@@ -1019,7 +1024,7 @@ def main(argv=None):
                     from ..eval.projected_history import projected_history_metrics
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
                         completion=completion,live_tokens=live_tokens,
-                        consumers=('full_projection','live_greedy'),per_window=True)
+                        consumers=MATCHED_CONSUMERS,per_window=True)
                     for window,window_scores in zip(batch,diagnostic['windows']):
                         matched_history_rows.append({'document_sha256':window['document'],
                             'source_groups':window['groups'],'offset':window['offset'],
@@ -1059,7 +1064,7 @@ def main(argv=None):
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
         matched_summary={}
-        for consumer in ('full_projection','live_greedy'):
+        for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}
             for region in ('whole','last256'):
                 scores=[row['scores'][consumer][region] for row in matched_history_rows]
@@ -1074,13 +1079,15 @@ def main(argv=None):
                 if mse_values:
                     aggregate['read_history_mse_vs_live_greedy']=sum(value*count for value,count in mse_values)/sum(count for _,count in mse_values)
                 matched_summary[consumer][region]=aggregate
-        report['matched_projected_history']={'schema':'natlang.text-warmup-matched-history/1',
+        report['matched_projected_history']={'schema':'natlang.text-warmup-matched-history/2',
             'weights_digest':report['weights_digest'],'held_probe_selection':held_selection_eval,
-            'consumer_pair':['full_projection','live_greedy'],
+            'consumers':list(MATCHED_CONSUMERS),
+            'pass_correspondence':{'sketch_projection':'the shallow sketch history that sequence pass 1 consumes',
+                                   'full_projection':'full-depth projected history (deployed channel)'},
             'read_interface':'heads.read_embeddings(backbone, payload[:, :-1])',
             'producer_reuse':'pass-zero gold-history top states and crisp next-token predictions from the same held batch',
             'batch_policy':{'eval_batch':a.eval_batch,'max_window_tokens':a.tokens,
-                'selected_windows':len(held),'diagnostic_forward_passes_per_batch':2},
+                'selected_windows':len(held),'diagnostic_forward_passes_per_batch':len(MATCHED_CONSUMERS)},
             'future_gold_inputs':False,'windows':matched_history_rows,'weighted_summary':matched_summary,
             'changes_qualification_gates':False}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)

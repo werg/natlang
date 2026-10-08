@@ -716,17 +716,21 @@ def test_held_evaluation_records_matched_projection_and_crisp_history_without_ch
     module.main(args)
     report=json.loads((tmp_path/'run'/'report.json').read_text())
     diagnostic=report['matched_projected_history']
-    assert diagnostic['schema']=='natlang.text-warmup-matched-history/1'
+    assert diagnostic['schema']=='natlang.text-warmup-matched-history/2'
     assert diagnostic['weights_digest']==report['weights_digest']
-    assert diagnostic['consumer_pair']==['full_projection','live_greedy']
+    assert diagnostic['consumers']==['full_projection','sketch_projection','live_greedy']
     assert diagnostic['held_probe_selection']==report['held_probe_selection']
-    assert diagnostic['batch_policy']['diagnostic_forward_passes_per_batch']==2
+    assert diagnostic['batch_policy']['diagnostic_forward_passes_per_batch']==3
     assert diagnostic['future_gold_inputs'] is False
     assert diagnostic['changes_qualification_gates'] is False
     assert len(diagnostic['windows'])==1
     window=diagnostic['windows'][0]
     projected=window['scores']['full_projection']
     crisp=window['scores']['live_greedy']
+    sketch=window['scores']['sketch_projection']
+    assert sketch['whole']['tokens']==window['target_tokens']
+    assert 0<=sketch['whole']['argmax_agreement_with_live_greedy']<=1
+    assert set(report['matched_projected_history']['weighted_summary'])=={'full_projection','sketch_projection','live_greedy'}
     assert projected['whole']['tokens']==window['target_tokens']
     assert projected['last256']['tokens']==window['target_tokens']
     assert 0<=projected['whole']['argmax_agreement_with_live_greedy']<=1
