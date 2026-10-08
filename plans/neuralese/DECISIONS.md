@@ -1011,3 +1011,22 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   sequential sketch rollout exactly for the first N positions after the gold seed, and approximates it after that.
   Rollout depth vs Neuralese block length is therefore the efficiency/accuracy dial.
 - Sketch-only training ramps one pass per held plateau (d058e5ff), from 4 to 8 passes, then unfreezes the stack.
+
+## 2026-10-08 — Sketch cutoff: a budget choice, not a search; untied sketch tower proposed
+
+- Owner: raising the cutoff has diminishing returns. Its placement is a choice of what the sketch may cost, not an
+  empirical optimum, so no costly search.
+- Owner: the sketch only needs an output the full network can interpret at initialization; drift afterwards is fine.
+- The cutoff probe (afcd32a5, `eval/sketch_cutoff_probe.py`) was stopped (log `...-v1-stopped.log`) and is not
+  used for decisions. It ran on base Maple weights, which are unrepresentative: 30% held top-1 against 97% for the
+  warm-up weights. Its token-weighted accuracy is also dominated by template tokens.
+- Correction: I first called the probe's readout broken. It was not. The first warm-up's step-0 eval measured the
+  same base weights (full-v4 heads.pt) at 31.1% gold top-1 and text CE 5.07 on its held text.
+- Open concern: a working pretrained LM should not score CE 5 on chat-formatted text. The base ternary Maple appears
+  badly degraded, and the warm-up's whole-stack QAT training repaired it on the narrow natlang corpus. Its general
+  quality, and how much of the 97% is template memorization, are unmeasured.
+  Proposed checks: the bf16 preview on the same held set, and general text on the v8 weights.
+
+- Owner idea under consideration: untie the sketch from the main stack's first blocks. It would become a dedicated
+  initialization tower (initialized as a copy of those blocks) that can specialize in autoregressive pre-initialization
+  of the perceiver-style Neuralese encoder, with no trade-off against the main stack.
