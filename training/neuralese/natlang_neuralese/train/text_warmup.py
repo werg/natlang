@@ -51,12 +51,18 @@ TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION=.5
 
 
 _OBJECTIVE_METRIC_SCALARS = (
-    'ce', 'text_ce', 'ce_delta', 'relative_mse', 'sketch_mse',
+    'ce', 'text_ce', 'ce_delta', 'relative_mse',
     'text_embedding_mse', 'embedding_mse_delta', 'text_argmax_agreement',
     'gold_accuracy', 'close_targets', 'close_probability', 'close_top1',
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
-    'supervised_sketch_mse',
 )
+
+
+def objective_metric_scalars(secondary_projection='sketch'):
+    if secondary_projection not in {'sketch', 'input_map'}:
+        raise ValueError('unknown secondary projection')
+    return (*_OBJECTIVE_METRIC_SCALARS, secondary_projection+'_mse',
+            'supervised_'+secondary_projection+'_mse')
 
 
 class LinearModuleCallCounter:
@@ -100,7 +106,7 @@ class LinearModuleCallCounter:
                 for (name, class_name, shape, grad_enabled), count in sorted(self.counts.items())]
 
 
-def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1):
+def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, secondary_projection='sketch'):
     """Extract scalar objective metrics with one device-to-host read.
 
     The objective stores only reduced scalar tensors here; predictions, token
@@ -111,20 +117,21 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1):
         raise ValueError('at least one objective metric packet is required')
     if pass_losses is not None and len(pass_metrics) != len(pass_losses):
         raise ValueError('one scalar loss is required for every training pass')
+    metric_names = objective_metric_scalars(secondary_projection)
     packed = [metric[name].detach().reshape(())
-              for metric in pass_metrics for name in _OBJECTIVE_METRIC_SCALARS]
+              for metric in pass_metrics for name in metric_names]
     if pass_losses is not None:
         packed.extend(loss.detach().reshape(()) for loss in pass_losses)
     values = torch.stack(packed).to(device='cpu').tolist()
-    metric_values = values[:len(pass_metrics) * len(_OBJECTIVE_METRIC_SCALARS)]
+    metric_values = values[:len(pass_metrics) * len(metric_names)]
     loss_values = values[len(metric_values):] if pass_losses is not None else []
 
     materialized = []
-    width = len(_OBJECTIVE_METRIC_SCALARS)
+    width = len(metric_names)
     for index, metric in enumerate(pass_metrics):
         row = dict(metric)
         scalars = metric_values[index * width:(index + 1) * width]
-        row.update(zip(_OBJECTIVE_METRIC_SCALARS, scalars))
+        row.update(zip(metric_names, scalars))
         close_targets = int(row['close_targets'])
         if close_targets == 0:
             row['close_probability'] = None
@@ -255,12 +262,22 @@ RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_min
                                       'checkpoint_layers','cuda_reserved_cap_gb'})
 
 
-TEXT_SUPERVISION_POLICY={
+TEXT_POSITION_WEIGHT_POLICY={
     "all_positions_fraction": .5, "observed_suffix_fraction": .5,
     "unannotated_or_no_suffix_window": "uniform-all-positions",
-    "objectives": ["full_projection", "sketch_projection", "next_token_ce"],
     "qualification": "unweighted full-history complete-window and last256 strata",
 }
+
+
+def text_supervision_policy(neuralese_input):
+    if neuralese_input not in {'map', 'sketch'}:
+        raise ValueError('unknown Neuralese text input mode')
+    second = ('neuralese_input_map_self_consistency' if neuralese_input == 'map'
+              else 'shallow_feedback_projection')
+    return {**TEXT_POSITION_WEIGHT_POLICY,
+            'objectives':['full_projection', second, 'next_token_ce'],
+            'secondary_projection':second,
+            'trainable_secondary_head':'heads.input_map' if neuralese_input == 'map' else 'heads.feedback'}
 
 
 def balanced_position_weights(span, suffix_starts):
@@ -273,8 +290,8 @@ def balanced_position_weights(span, suffix_starts):
     starts=torch.tensor([span.shape[1] if start is None else start for start in suffix_starts],device=span.device)
     mask=torch.arange(span.shape[1],device=span.device)[None]>=starts[:,None]
     counts=mask.sum(1,keepdim=True)
-    weighted=(TEXT_SUPERVISION_POLICY["all_positions_fraction"]+
-              TEXT_SUPERVISION_POLICY["observed_suffix_fraction"]*mask.float()*span.shape[1]/counts.clamp_min(1)
+    weighted=(TEXT_POSITION_WEIGHT_POLICY["all_positions_fraction"]+
+              TEXT_POSITION_WEIGHT_POLICY["observed_suffix_fraction"]*mask.float()*span.shape[1]/counts.clamp_min(1)
              )
     return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
@@ -329,26 +346,27 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
             torch.cat(close_probabilities,dim=1),torch.cat(token_losses,dim=1))
 
 
-def projection_errors(heads, top, sketches, target, *, sketch_target=None):
+def projection_errors(heads, top, secondary_projection, target, *, secondary_target=None):
     """Full projection stays anchored to gold; an input map may have a separate detached target."""
     return (relative_mse_positions(heads.content(torch.zeros_like(top),top),target),
-            relative_mse_positions(sketches,target if sketch_target is None else sketch_target))
+            relative_mse_positions(secondary_projection,target if secondary_target is None else secondary_target))
 
 
-def projection_losses(heads, top, sketches, target):
+def projection_losses(heads, top, secondary_projection, target):
     """Both separate trainable maps see fixed gold embeddings immediately."""
-    full,shallow=projection_errors(heads,top,sketches,target)
-    return full.mean(),shallow.mean()
+    full,secondary=projection_errors(heads,top,secondary_projection,target)
+    return full.mean(),secondary.mean()
 
 
 @torch.no_grad()
 def alignment_region_metrics(losses, prediction, plain_losses, plain_prediction,
-                             embedding, sketch, reference, target, gold):
+                             embedding, secondary_projection, reference, target, gold,
+                             *, secondary_name='sketch'):
     """Score selected positions after the same full-history forward pass."""
     ce=losses.mean();plain_ce=plain_losses.mean()
     full_error=relative_mse(embedding,target);reference_error=relative_mse(reference,target)
     return {'ce':float(ce),'text_ce':float(plain_ce),'ce_delta':float(ce-plain_ce),
-            'relative_mse':float(full_error),'sketch_mse':float(relative_mse(sketch,target)),
+            'relative_mse':float(full_error),secondary_name+'_mse':float(relative_mse(secondary_projection,target)),
             'text_embedding_mse':float(reference_error),
             'embedding_mse_delta':float(full_error-reference_error),
             'text_argmax_agreement':float((prediction==plain_prediction).float().mean()),
@@ -368,8 +386,9 @@ def gold_completion(backbone, heads, prefix_ids, span_ids, *, auxiliary_scale=.0
             'sketches':heads.feedback(auxiliary)}
 
 
-# Held matched-history consumers. Pass 0's sketches are the history sequence pass 1 consumes, so sketch_projection
-# is pass 1's matched control; full_projection is the full-depth channel; live_greedy the crisp self-history control.
+# Held matched-history consumers. Sketch mode uses pass 0's feedback as pass 1's matched control. Map mode passes an
+# independent serving-feedback completion to this diagnostic, so its sketch_projection remains the actual feedback
+# channel rather than the training-only input map.
 MATCHED_CONSUMERS=('full_projection','sketch_projection','live_greedy')
 
 
@@ -433,7 +452,7 @@ def mapped_completions(backbone, heads, prefix_ids, span_ids, *, passes=2):
         with torch.no_grad():return heads.content(torch.zeros_like(top),top)
     ordinary=backbone.forward_ids(torch.cat([prefix_ids,span_ids[:,:-1]],1),cutoff=heads.cutoff,logits=False)
     top=ordinary['h_final'][:,start:]
-    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'sketch_target':projected(top),
+    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'secondary_target':projected(top),
            'pass_index':0}
     del ordinary,top
     if passes<2:return
@@ -441,8 +460,19 @@ def mapped_completions(backbone, heads, prefix_ids, span_ids, *, passes=2):
     history=heads.read_embeddings(backbone,mapped)
     out=backbone.forward_embeds(torch.cat([backbone.embed(prefix_ids),history],1),cutoff=heads.cutoff,logits=False)
     top=out['h_final'][:,start:]
-    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'sketch_target':projected(top),
+    yield {'top':top,'sketches':heads.input_map(backbone.embed(span_ids)),'secondary_target':projected(top),
            'pass_index':1}
+
+
+def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_completion, *, input_map):
+    """Use the serving shallow feedback projection for matched-history diagnostics.
+
+    A mapped warm-up's objective completion carries input-map outputs in its
+    ``sketches`` slot. The matched-history control instead measures the
+    independent serving ``heads.feedback`` projection at the corresponding
+    gold-history states.
+    """
+    return gold_completion(backbone, heads, prefix_ids, span_ids) if input_map else objective_completion
 
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
@@ -695,8 +725,8 @@ def same_foundation_context(previous, current):
     (owner: adopt new data at once): its crisp baseline is re-measured and
     qualification still needs consecutive passing evaluations on its held set.
     """
-    fields = ('target', 'text_history', 'sketch_gradient',
-              'sketch_target_backbone_scale', 'supervision_policy')
+    fields = ('target', 'text_history', 'secondary_projection',
+              'secondary_gradient_policy', 'secondary_target_backbone_gradient_scale', 'supervision_policy')
     if any(field not in previous or field not in current for field in fields):
         return False
     if any(previous[field] != current[field] for field in fields):
@@ -707,12 +737,12 @@ def same_foundation_context(previous, current):
     return not any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS)
 
 
-def configure_student(engine, policy='full', rank=16, sketch='feedback'):
+def configure_student(engine, policy='full', rank=16, secondary_head='feedback'):
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import configure_backbone_training
     backbone_named=configure_backbone_training(backbone,policy,rank=rank)
     for p in heads.parameters():p.requires_grad_(False)
-    for p in getattr(heads,sketch).parameters():p.requires_grad_(True)
+    for p in getattr(heads,secondary_head).parameters():p.requires_grad_(True)
     for p in heads.content.proj.parameters():p.requires_grad_(True)
     # Keep vocabulary/embedding coordinates and output normalization stable.
     backbone.hf.eval();heads.eval()
@@ -838,9 +868,10 @@ def main(argv=None):
               'text_history':('gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
                               if a.neuralese_input=='map' else
                               'gold seed; repeated shared shallow sequence passes with aligned predictions'),
-              'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
-              'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
-              'supervision_policy':TEXT_SUPERVISION_POLICY,
+              'secondary_projection':'neuralese_input_map' if a.neuralese_input=='map' else 'shallow_feedback',
+              'secondary_gradient_policy':'self_consistency_with_detached_consumer' if a.neuralese_input=='map' else 'local_stage',
+              'secondary_target_backbone_gradient_scale':0. if a.neuralese_input=='map' else .05,
+              'supervision_policy':text_supervision_policy(a.neuralese_input),
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
@@ -906,12 +937,14 @@ def main(argv=None):
                          else TEXT_WARMUP_FFN_CHUNKS)
     backbone.ffn_chunk_tokens=default_ffn_chunk_tokens
     input_map=a.neuralese_input=='map'
+    secondary_metric_name='input_map' if input_map else 'sketch'
+    projection_schedule_name='input_map' if input_map else 'shallow'
     if input_map:
         from ..model.input_map import NeuraleseInputMap
         heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
             kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
-    named=configure_student(engine,a.backbone_training,a.rank,sketch='input_map' if input_map else 'feedback')
-    sketch_prefix='heads.input_map.' if input_map else 'heads.feedback.'  # the trained Neuralese-input head
+    named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map' if input_map else 'feedback')
+    secondary_prefix='heads.input_map.' if input_map else 'heads.feedback.'
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
         backbone,heads,checkpointed=a.checkpoint_layers)
@@ -1043,9 +1076,10 @@ def main(argv=None):
         if evaluation and out['pass_index']==0 and projected_observer is not None:
             projected_observer(out,prediction)
         target=backbone.embed(span).detach()
-        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target,
-                                                               sketch_target=out.get('sketch_target'))
-        embedding,sketch=embedding_positions.mean(),sketch_positions.mean()
+        embedding_positions,secondary_positions=projection_errors(heads,top,out['sketches'],target,
+                                                               secondary_target=out.get('secondary_target'))
+        embedding,secondary=embedding_positions.mean(),secondary_positions.mean()
+        secondary_name='input_map' if input_map else 'sketch'
         if out['pass_index']==0:
             with torch.no_grad():
                 baseline.update(prediction=prediction,ce=ce.detach(),
@@ -1057,8 +1091,8 @@ def main(argv=None):
         # Both separate projections receive full-strength gold supervision from
         # the first update. CE joins only when the backbone is gently unfrozen.
         supervised_embedding=(embedding_positions*weights).mean()
-        supervised_sketch=(sketch_positions*weights).mean()
-        loss=a.embedding_weight*supervised_embedding+a.sketch_weight*supervised_sketch
+        supervised_secondary=(secondary_positions*weights).mean()
+        loss=a.embedding_weight*supervised_embedding+a.sketch_weight*supervised_secondary
         if not bootstrap:
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
@@ -1070,8 +1104,9 @@ def main(argv=None):
               'close_probability':close_probability[ending].mean().detach(),
               'close_top1':(prediction[ending]==backbone.controls.close_id).float().mean().detach(),
               'premature_close_top1':(prediction[~ending]==backbone.controls.close_id).float().mean().detach()}
+        secondary_name='input_map' if input_map else 'sketch'
         metrics={'ce':ce.detach(),'text_ce':plain_ce.detach(),'ce_delta':(ce-plain_ce).detach(),
-          'relative_mse':embedding.detach(),'sketch_mse':sketch.detach(),
+          'relative_mse':embedding.detach(),secondary_name+'_mse':secondary.detach(),
           'text_embedding_mse':plain_embedding.detach(),
           'embedding_mse_delta':(embedding-plain_embedding).detach(),
           'text_argmax_agreement':(prediction==plain_prediction).float().mean().detach(),
@@ -1079,7 +1114,7 @@ def main(argv=None):
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics,
           'supervised_ce':training_ce.detach(),
           'supervised_embedding_mse':supervised_embedding.detach(),
-          'supervised_sketch_mse':supervised_sketch.detach()}
+          'supervised_'+secondary_name+'_mse':supervised_secondary.detach()}
         metrics['pass_index']=out['pass_index']
         if evaluation and span.shape[1]>256:
             with torch.no_grad():
@@ -1087,9 +1122,10 @@ def main(argv=None):
                 metrics['regions']={'last256':alignment_region_metrics(
                     token_losses[:,-256:],prediction[:,-256:],baseline['token_losses'][:,-256:],
                     plain_prediction[:,-256:],heads.content(torch.zeros_like(tail_top),tail_top),
-                    out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:])}
+                    out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:],
+                    secondary_name=secondary_name)}
         if evaluation:
-            metrics=materialize_objective_metrics([metrics])[0][0]
+            metrics=materialize_objective_metrics([metrics],secondary_projection=secondary_name)[0][0]
             if roles is not None:
                 with torch.no_grad():
                     by_role={}
@@ -1114,10 +1150,11 @@ def main(argv=None):
         for out in completions:
             yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
-    step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
+    step=0;streak=0;best=None;updates={'backbone':False,secondary_metric_name:False,'full_projection':False}
     initial_text_ce={}
     remeasure_text_baseline=False
-    schedule=ProjectionFirstSchedule(min_evals=a.projection_min_evals,patience=a.projection_patience,
+    schedule=ProjectionFirstSchedule(heads=(projection_schedule_name,'full_depth'),
+        min_evals=a.projection_min_evals,patience=a.projection_patience,
         min_relative_improvement=a.projection_min_improvement,
         backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
     last_schedule_step=None
@@ -1163,7 +1200,7 @@ def main(argv=None):
             else:
                 # A changed depth/supervision objective starts a new plateau
                 # and must earn its own update and qualification evidence.
-                updates={'backbone':False,'sketch':False,'full_projection':False}
+                updates={'backbone':False,secondary_metric_name:False,'full_projection':False}
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
             else:
@@ -1205,6 +1242,7 @@ def main(argv=None):
     last_report=None
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
+        evaluation_passes=2 if input_map else max(3,a.rollout_passes)
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
         with torch.no_grad():
@@ -1222,15 +1260,17 @@ def main(argv=None):
                         ar_batch=(whole[:,:first],whole[:,first:])
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
+                    matched_completion=matched_history_completion(backbone,heads,prefix,span,
+                        completion,input_map=input_map)
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
-                        completion=completion,live_tokens=live_tokens,
+                        completion=matched_completion,live_tokens=live_tokens,
                         consumers=MATCHED_CONSUMERS,per_window=True)
                     for window,window_scores in zip(batch,diagnostic['windows']):
                         matched_history_rows.append({'document_sha256':window['document'],
                             'source_groups':window['groups'],'offset':window['offset'],
                             'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
                             'scores':window_scores})
-                for _,m in objective(batch,max(3,a.rollout_passes),projected_observer=observe_projected_history):
+                for _,m in objective(batch,evaluation_passes,projected_observer=observe_projected_history):
                     if m['pass_index']==(1 if input_map else 2):
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
@@ -1243,7 +1283,7 @@ def main(argv=None):
                         row['tokens']+=values['tokens']
                     key='pass-'+str(m['pass_index'])+'-length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
                     row=strata.setdefault(key,{'tokens':0})
-                    for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
+                    for n in ('ce','text_ce','ce_delta','relative_mse',secondary_metric_name+'_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                         row[n]=row.get(n,0.)+m[n]*m['tokens']
                     row['tokens']+=m['tokens']
                     for region,values in m.get('regions',{}).items():
@@ -1266,10 +1306,10 @@ def main(argv=None):
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
         projection_rows=[r for k,r in strata.items() if k.startswith('pass-0-') and not k.endswith('-last256')]
         total=sum(r['tokens'] for r in projection_rows)
-        errors={'shallow':sum(r['sketch_mse']*r['tokens'] for r in projection_rows)/total,
+        errors={projection_schedule_name:sum(r[secondary_metric_name+'_mse']*r['tokens'] for r in projection_rows)/total,
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
-        # The plateau metric covers the sketch-history passes being trained (1 .. depth-1); deeper evaluated
-        # passes are reported but would swamp it while untrained.
+        # The plateau metric covers the sequence-history passes being trained
+        # (1 .. depth-1); deeper evaluated passes would swamp it while untrained.
         trained_depth=rollout.controls()['passes'] if rollout is not None and schedule.plateau_reached else 3
         rollout_rows=[r for k,r in strata.items() if 1<=int(k.split('-')[1])<trained_depth and not k.endswith('-last256')]
         rollout_tokens=sum(r['tokens'] for r in rollout_rows)
@@ -1299,11 +1339,11 @@ def main(argv=None):
                     'system_prompt_mask_effective':bool(a.mask_system_prompt and role_start is not None),
                     'held_selection':held_selection_eval,
                     'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
-                    'evaluation_passes':max(3,a.rollout_passes)},
+                    'evaluation_passes':evaluation_passes},
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
-                'sketch_history_ce_delta':rollout_ce_delta,'pass_ce_deltas':pass_ce_deltas,
-                'evaluation_passes':max(3,a.rollout_passes)}
+                ('input_map_history_ce_delta' if input_map else 'sketch_history_ce_delta'):rollout_ce_delta,
+                'pass_ce_deltas':pass_ce_deltas,'evaluation_passes':evaluation_passes}
         if baseline_reason is not None:
             report['text_ce_baseline_remeasurement']={'reason':baseline_reason,
                 'schedule_observation':False,'model_or_optimizer_update':False,
@@ -1333,8 +1373,11 @@ def main(argv=None):
         report['matched_projected_history']={'schema':'natlang.text-warmup-matched-history/2',
             'weights_digest':report['weights_digest'],'held_probe_selection':held_selection_eval,
             'consumers':list(MATCHED_CONSUMERS),
-            'pass_correspondence':{'sketch_projection':'the shallow sketch history that sequence pass 1 consumes',
-                                   'full_projection':'full-depth projected history (deployed channel)'},
+            'pass_correspondence':{
+                'sketch_projection':('independent serving heads.feedback projection over pass-zero shallow states; '
+                                     'the training-only input map is not used here' if input_map else
+                                     'the shallow sketch history that sequence pass 1 consumes'),
+                'full_projection':'full-depth projected history (deployed channel)'},
             'read_interface':'heads.read_embeddings(backbone, payload[:, :-1])',
             'producer_reuse':'pass-zero gold-history top states and crisp next-token predictions from the same held batch',
             'batch_policy':{'eval_batch':a.eval_batch,'max_window_tokens':a.tokens,
@@ -1507,18 +1550,19 @@ def main(argv=None):
                     (loss/passes).backward();next_pass()
                     pass_losses.append(loss.detach());pass_metrics.append(metrics)
         wrapped_forward_backward_seconds=time.perf_counter()-wrapped_started
-        pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes)
+        pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes,
+                                                              secondary_projection=secondary_metric_name)
         metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
-        sketch_norm=gradient_norm(q for n,q in named if n.startswith(sketch_prefix))
+        secondary_norm=gradient_norm(q for n,q in named if n.startswith(secondary_prefix))
         clip_finite_gradients(parameters.values())
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
-                 for k,prefix in [('backbone','backbone.'),('sketch',sketch_prefix),
+                 for k,prefix in [('backbone','backbone.'),(secondary_metric_name,secondary_prefix),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
                 'started':started,'memory_start':memory_start,'backbone_norm':backbone_norm,
-                'sketch_norm':sketch_norm,'samples':samples,'before':before,'controls':controls,
+                'secondary_norm':secondary_norm,'samples':samples,'before':before,'controls':controls,
                 'memory_plan':memory_plan,'offload_stats':dict(offload_stats),
                 'wrapped_forward_backward_seconds':wrapped_forward_backward_seconds}
 
@@ -1753,7 +1797,8 @@ def main(argv=None):
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
                  phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
-                 sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
+                 updates=dict(updates))
+        m[secondary_metric_name+'_gradient_norm']=float(prepared['secondary_norm'])
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])
         if memory_record is not None:m['memory']=memory_record
@@ -1798,8 +1843,8 @@ def main(argv=None):
         pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
         try:
             for name,q in named:
-                q.requires_grad_(name.startswith(sketch_prefix) if sketch_only else
-                                 not bootstrap or name.startswith((sketch_prefix,'heads.content.proj.')))
+                q.requires_grad_(name.startswith(secondary_prefix) if sketch_only else
+                                 not bootstrap or name.startswith((secondary_prefix,'heads.content.proj.')))
             for group in optimizer.param_groups:
                 group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
             w=windows['train'][random.randrange(len(windows['train']))]

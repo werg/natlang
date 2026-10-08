@@ -464,17 +464,21 @@ Rendering and copying do not grant task admission or alignment qualification.
 
 ### Response-balanced gold-text supervision (2026-10-07)
 
-The sole shared text warm-up implementation declares its loss in
-`recipes/gold-text-warmup-v1.json` and records `TEXT_SUPERVISION_POLICY` in run
-identity. Native packets bind the actual assistant suffix to the first differing
+The sole shared text warm-up implementation declares position weighting in
+`recipes/gold-text-warmup-v1.json` and records its input-mode-specific
+`text_supervision_policy` in run identity. Native packets bind the actual assistant suffix to the first differing
 token between rendered context and rendered context plus target. Boundary tokens
 changed by the template are included; content escaping and exact token IDs remain
 unchanged. Each annotated window allocates half its loss to all positions and
 half to that observed suffix, including a real document close when present.
 Windows before the response and unannotated ordinary text remain uniform. This
-weights both separate gold embedding projections and differentiable next-token
-CE, without removing prompt context, adding a transformer pass, or using detached
-metrics as training loss. No alternate legacy loss mode is exposed.
+weights the full projection against fixed gold embeddings and applies the
+declared secondary objective: gold-embedding supervision for sketch mode, or
+detached-projection self-consistency for the training-only input map. It also
+uses differentiable next-token CE, without removing prompt context or using
+detached metrics as training loss. The run identity names the trainable
+secondary head and reports its metrics as `sketch_*` or `input_map_*` according
+to the selected mode.
 
 Qualification still uses unweighted metrics with full preceding history and
 requires both complete-window and final256 strata to pass unchanged thresholds.

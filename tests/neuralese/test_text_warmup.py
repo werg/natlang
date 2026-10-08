@@ -12,6 +12,8 @@ from natlang_neuralese.train.text_warmup import (
     sequence_completions,
     projection_losses,
     alignment_region_metrics,
+    objective_metric_scalars,
+    text_supervision_policy,
 )
 from natlang_neuralese.train.checkpoint_safety import (
     CheckpointDiskReserve,
@@ -1418,13 +1420,13 @@ def test_mapped_completions_fit_the_map_to_the_projection_and_read_it_detached()
     passes=list(mapped_completions(backbone,heads,prefix,span))
     assert [p['pass_index'] for p in passes]==[0,1]
     for out in passes:
-        assert out['sketches'].shape==out['sketch_target'].shape==out['top'].shape
-        assert not out['sketch_target'].requires_grad
+        assert out['sketches'].shape==out['secondary_target'].shape==out['top'].shape
+        assert not out['secondary_target'].requires_grad
     consumer=passes[1]
     heads.input_map.zero_grad()
     consumer['top'].float().pow(2).sum().backward(retain_graph=True)
     assert all(q.grad is None or not q.grad.abs().sum() for q in heads.input_map.parameters())
-    (consumer['sketches']-consumer['sketch_target']).float().pow(2).sum().backward()
+    (consumer['sketches']-consumer['secondary_target']).float().pow(2).sum().backward()
     assert heads.input_map.up.weight.grad.abs().sum()>0 and heads.input_map.conv.weight.grad.abs().sum()>0
     assert len(list(mapped_completions(backbone,heads,prefix,span,passes=1)))==1
 
@@ -1440,17 +1442,62 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     run=tmp_path/'run'
     rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
     bootstrap=[r for r in rows if r['schedule']['sequence_passes']==1]
-    assert bootstrap and all(r['sketch_gradient_norm']>0 for r in bootstrap)  # the map trains from the first update
-    assert any(r['sketch_gradient_norm']>0 for r in rows if r['schedule']['sequence_passes']>1)
+    assert bootstrap and all(r['input_map_gradient_norm']>0 for r in bootstrap)
+    assert any(r['input_map_gradient_norm']>0 for r in rows if r['schedule']['sequence_passes']>1)
+    assert all('sketch_gradient_norm' not in r and 'sketch_mse' not in r for r in rows)
+    assert all(r['updates'].get('input_map') for r in rows)
+    assert all('input_map_mse' in r and 'supervised_input_map_mse' in r for r in rows)
     assert any(r['supervised_embedding_mse']>0 for r in rows)
     assert all(r['schedule']['sequence_passes']<=3 for r in rows)
     evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
     assert {str(k) for k in evals[-1]['pass_ce_deltas']}=={'0','1'}
+    assert 'input_map' in evals[-1]['projection_held_errors']
+    assert 'shallow' not in evals[-1]['projection_held_errors']
+    identity=json.loads((run/'plan.json').read_text())['identity']
+    assert identity['supervision_policy']['objectives']==[
+        'full_projection','neuralese_input_map_self_consistency','next_token_ce']
+    report=evals[-1]['matched_projected_history']
+    assert 'independent serving heads.feedback projection' in report['pass_correspondence']['sketch_projection']
+    assert 'input map is not used here' in report['pass_correspondence']['sketch_projection']
     exported=torch.load(run/'heads.pt',weights_only=False)
     assert exported['neuralese_input_map'] and not any(k.startswith('input_map.') for k in exported['heads'])
     state=torch.load(run/'checkpoint.pt',weights_only=False)
     assert any(k.startswith('input_map.') for k in state['heads'])
     assert state['updates']['full_projection']
+    assert state['updates']['input_map']
+
+
+def test_input_map_reports_name_the_actual_secondary_projection():
+    names=objective_metric_scalars('input_map')
+    packet={name:torch.tensor(1.) for name in names}
+    packet['tokens']=1
+    metrics,_=materialize_objective_metrics([packet],secondary_projection='input_map')
+    assert metrics[0]['input_map_mse']==1.
+    assert metrics[0]['supervised_input_map_mse']==1.
+    assert 'sketch_mse' not in metrics[0]
+    policy=text_supervision_policy('map')
+    assert policy['objectives']==[
+        'full_projection','neuralese_input_map_self_consistency','next_token_ce']
+    assert policy['trainable_secondary_head']=='heads.input_map'
+
+
+def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_map():
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    from natlang_neuralese.train.text_warmup import (
+        mapped_completions, matched_history_completion, text_supervision_policy)
+    backbone,heads=tiny_student()
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
+    objective_completion=next(mapped_completions(backbone,heads,prefix,span))
+    matched=matched_history_completion(backbone,heads,prefix,span,objective_completion,input_map=True)
+    ordinary=backbone.forward_ids(torch.cat([prefix,span[:,:-1]],1),cutoff=heads.cutoff,logits=False)
+    start=prefix.shape[1]-1
+    expected=heads.feedback(ordinary['h_cut'][:,start:])
+    torch.testing.assert_close(matched['sketches'],expected,atol=0,rtol=0)
+    assert not torch.equal(matched['sketches'],objective_completion['sketches'])
+    policy=text_supervision_policy('map')
+    assert policy['trainable_secondary_head']=='heads.input_map'
+    assert policy['objectives'][1]=='neuralese_input_map_self_consistency'
 
 
 def test_input_map_self_consistency_does_not_replace_full_projection_gold_target():
@@ -1461,7 +1508,7 @@ def test_input_map_self_consistency_does_not_replace_full_projection_gold_target
     prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
     out=next(mapped_completions(backbone,heads,prefix,span))
     full,mapped=projection_errors(heads,out['top'],out['sketches'],backbone.embed(span).detach(),
-                                  sketch_target=out['sketch_target'])
+                                  secondary_target=out['secondary_target'])
     assert full.mean()>0
     (full.mean()+mapped.mean()).backward()
     assert heads.content.proj.weight.grad.abs().sum()>0
