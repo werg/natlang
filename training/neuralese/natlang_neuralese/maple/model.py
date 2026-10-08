@@ -54,11 +54,21 @@ class MapleConfig:
     max_position_embeddings: int = 131072
     tie_word_embeddings: bool = False
     bos_token_id: int | None = None  # the tokenizer declares none; raw ports start a context-free write here
+    # Same family, other checkpoints (Mellum 2.x): full rotary with per-layer-type RoPE (YaRN on global layers),
+    # no SwiGLU clamp, and BF16 experts (``dense_experts``) until QAT ternarizes them.
+    model_type: str = "maple"
+    swiglu_clamp: float | None = SWIGLU_CLAMP
+    rope_parameters: dict | None = None
+    dense_experts: bool = False
 
     @staticmethod
     def from_dir(path) -> "MapleConfig":
         data = json.loads((Path(path) / "config.json").read_text())
         names = MapleConfig.__dataclass_fields__
+        if data.get("model_type") == "mellum":
+            data = {"partial_rotary_factor": 1.0, "swiglu_clamp": None, **data}
+        if "num_experts" not in data and "num_local_experts" in data:  # transformers' serialized alias
+            data["num_experts"] = data["num_local_experts"]
         config = MapleConfig(**{k: v for k, v in data.items() if k in names})
         # Keys the model does not use (token ids such as pad_token_id, dropout, ...) stay readable as attributes, as on
         # an HF config: the port reads them through `backbone.config`.
@@ -130,6 +140,32 @@ class RotaryEmbedding(nn.Module):
         freqs = position_ids[..., None].float() * self.inv_freq.to(x.device).float()  # [B, T, dim/2]
         emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos().to(x.dtype), emb.sin().to(x.dtype)
+
+
+class LayerTypeRotary(nn.Module):
+    """Per-layer-type cos/sin (Mellum: default RoPE on sliding layers, YaRN on global layers): transformers' own
+    MellumRotaryEmbedding, so frequencies and the YaRN attention factor match the reference exactly. Returns a pair
+    of dicts keyed by layer type; the port picks each layer's entry."""
+
+    def __init__(self, config: MapleConfig):
+        super().__init__()
+        from transformers import MellumConfig
+        from transformers.models.mellum.modeling_mellum import MellumRotaryEmbedding
+
+        fields = {k: v for k, v in config.__dict__.items() if not k.startswith("_")}
+        self.inner = MellumRotaryEmbedding(MellumConfig(**fields))
+        self.layer_types = sorted(set(config.layer_types))
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        pairs = {t: self.inner(x, position_ids, t) for t in self.layer_types}
+        return {t: c for t, (c, _) in pairs.items()}, {t: s for t, (_, s) in pairs.items()}
+
+
+def rotary_embedding(config: MapleConfig) -> nn.Module:
+    # Only parameters keyed by layer type (Mellum) select per-type tables; Maple's flat rope_parameters do not.
+    per_type = isinstance(config.rope_parameters, dict) and set(config.layer_types) <= set(config.rope_parameters)
+    return LayerTypeRotary(config) if per_type else RotaryEmbedding(config)
 
 
 def _rotate_half(x):
@@ -253,8 +289,42 @@ class TernaryExperts(nn.Module):
     def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
         y = self._matmul(x, self.gate_up_codes, self.gate_up_scale, getattr(self, "gate_up_blocks", None), index)
         gate, up = y[..., :self.ff], y[..., self.ff:]
-        h = F.silu(gate.clamp(max=SWIGLU_CLAMP)) * up.clamp(-SWIGLU_CLAMP, SWIGLU_CLAMP)
+        h = swiglu(gate, up, getattr(self, "clamp", SWIGLU_CLAMP))
         return self._matmul(h, self.down_codes, self.down_scale, getattr(self, "down_blocks", None), index)
+
+
+def swiglu(gate, up, clamp):
+    if clamp is None:
+        return F.silu(gate) * up
+    return F.silu(gate.clamp(max=clamp)) * up.clamp(-clamp, clamp)
+
+
+class DenseExperts(nn.Module):
+    """All experts of one layer as BF16 weights [E, 2*ff, d] (gate rows then up rows) and [E, d, ff]: the exact
+    published checkpoint of a non-ternary family member (Mellum) before QAT, with the TernaryExperts interface."""
+
+    def __init__(self, experts: int, hidden: int, ff: int, clamp: float | None = None):
+        super().__init__()
+        self.ff, self.clamp = ff, clamp
+        self.register_buffer("gate_up", torch.zeros(experts, 2 * ff, hidden, dtype=torch.bfloat16))
+        self.register_buffer("down", torch.zeros(experts, hidden, ff, dtype=torch.bfloat16))
+
+    @torch.no_grad()
+    def set_expert(self, index: int, gate: torch.Tensor, up: torch.Tensor, down: torch.Tensor):
+        self.gate_up[index] = torch.cat([gate, up], 0).to(self.gate_up.dtype)
+        self.down[index] = down.to(self.down.dtype)
+
+    @torch.no_grad()
+    def permute(self, order: torch.Tensor):
+        for name in ("gate_up", "down"):
+            setattr(self, name, getattr(self, name)[order.to(getattr(self, name).device)].contiguous())
+
+    def weights(self, index, dtype):
+        return self.gate_up[index].to(dtype), self.down[index].to(dtype)
+
+    def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
+        y = x @ self.gate_up[index].to(x.dtype).T
+        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ self.down[index].to(x.dtype).T
 
 
 class SparseMoE(nn.Module):
@@ -262,7 +332,13 @@ class SparseMoE(nn.Module):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = TernaryExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size)
+        self.clamp = config.swiglu_clamp
+        if config.dense_experts:
+            self.experts = DenseExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size,
+                                        config.swiglu_clamp)
+        else:
+            self.experts = TernaryExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size)
+            self.experts.clamp = config.swiglu_clamp
         self.active_experts: int | None = None
         self.statistics: dict | None = None
         # Private router rows per family member (MAPLE_NESTED §4): a trainable copy of the rows of the member's
@@ -286,7 +362,8 @@ class SparseMoE(nn.Module):
     def _fused(self, x):
         """The fused grouped kernel (maple/fused_moe.py) for frozen experts on CUDA: their weights, or None (the
         reference loop below, which also trains learned block scales)."""
-        if not x.is_cuda or os.environ.get("NATLANG_MAPLE_FUSED_MOE", "1") == "0":
+        if (not x.is_cuda or isinstance(self.experts, DenseExperts)
+                or os.environ.get("NATLANG_MAPLE_FUSED_MOE", "1") == "0"):
             return None
         from .fused_moe import expert_weights
         return expert_weights(self.experts)
@@ -300,7 +377,7 @@ class SparseMoE(nn.Module):
         projections = self._fused(x)
         if projections is not None:
             from .fused_moe import fused_experts
-            return fused_experts(self.experts, x, index, weights, SWIGLU_CLAMP, projections).to(h.dtype).view(shape)
+            return fused_experts(self.experts, x, index, weights, self.clamp, projections).to(h.dtype).view(shape)
         flat = index.reshape(-1)
         order = flat.argsort()
         token = order // self.top_k
@@ -342,7 +419,7 @@ class MapleModel(nn.Module):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(DecoderLayer(config) for _ in range(config.num_hidden_layers))
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rotary_emb = RotaryEmbedding(config)
+        self.rotary_emb = rotary_embedding(config)
         self.active_layers: int | None = None  # depth-nested member: early exit after this many layers
 
     def forward(self, input_ids=None, inputs_embeds=None, capture=(), layers: int | None = None):
@@ -444,15 +521,19 @@ CHECKPOINT_RENAMES = {"model.word_embeddings.weight": "model.embed_tokens.weight
 
 
 def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool = True, layers: int | None = None,
-               experts: int | None = None, cache: str | Path | None = None) -> MapleForCausalLM:
+               experts: int | None = None, cache: str | Path | None = None,
+               dense_experts: bool | None = None) -> MapleForCausalLM:
     """Load the BF16 checkpoint into the deployed form: experts as ternary codes, attention ternarized unless
     ``ternary_attention=False`` (QAT keeps the latent). ``layers``/``experts`` load a truncated model (tests).
 
     ``cache``: a directory of converted-state shards (codes and scales, ~21 GB in ~1 GB files). Read when it exists
     (sequential reads instead of 18,651 memory-mapped tensors), written after a fresh conversion otherwise. The published checkpoint
     is already ternary, so the cached attention equals the latent and serves QAT too."""
+    if dense_experts is None:  # a published non-ternary checkpoint loads exactly unless asked to ternarize
+        dense_experts = MapleConfig.from_dir(path).model_type != "maple"
     if cache is not None and Path(cache).is_dir() and layers is None and experts is None:
         config = MapleConfig.from_dir(path)
+        config.dense_experts = dense_experts
         with torch.device("meta"):
             model = MapleForCausalLM(config)
         moved = {}
@@ -472,10 +553,10 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
             with open(shard, "rb") as handle:
                 os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
         model.load_state_dict(moved, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
-        model.model.rotary_emb = RotaryEmbedding(config).to(device)
+        model.model.rotary_emb = rotary_embedding(config).to(device)
         model.requires_grad_(False)
         return model.eval()
-    model = _convert(path, device, dtype, ternary_attention, layers, experts)
+    model = _convert(path, device, dtype, ternary_attention, layers, experts, dense_experts)
     if cache is not None and layers is None and experts is None:
         save_cache(model, cache)
     return model
@@ -496,11 +577,12 @@ def save_cache(model, cache, shard_bytes: int = 1 << 30):
         torch.save(shard, cache / f"shard-{index:04d}.pt")
 
 
-def _convert(path, device, dtype, ternary_attention, layers, experts) -> MapleForCausalLM:
+def _convert(path, device, dtype, ternary_attention, layers, experts, dense_experts=False) -> MapleForCausalLM:
     from safetensors import safe_open
 
     path = Path(path)
     config = MapleConfig.from_dir(path)
+    config.dense_experts = dense_experts
     if layers is not None:
         config.num_hidden_layers = layers
         config.layer_types = config.layer_types[:layers]
@@ -509,11 +591,13 @@ def _convert(path, device, dtype, ternary_attention, layers, experts) -> MapleFo
     with torch.device("meta"):
         model = MapleForCausalLM(config)
     model = model.to_empty(device=device)
-    model.model.rotary_emb = RotaryEmbedding(config).to(device)
+    model.model.rotary_emb = rotary_embedding(config).to(device)
     for buffer_owner in model.modules():
-        if isinstance(buffer_owner, TernaryExperts):
+        if isinstance(buffer_owner, (TernaryExperts, DenseExperts)):
             for name, buf in list(buffer_owner._buffers.items()):
-                buffer_owner._buffers[name] = torch.zeros_like(buf)
+                # Dense (BF16-published) experts load in the requested dtype, not rounded through BF16 first.
+                buffer_owner._buffers[name] = torch.zeros_like(
+                    buf, dtype=dtype if isinstance(buffer_owner, DenseExperts) else buf.dtype)
     index = json.loads((path / "model.safetensors.index.json").read_text())["weight_map"]
     by_file: dict[str, list[str]] = {}
     for name, file in index.items():
@@ -547,7 +631,7 @@ def _convert(path, device, dtype, ternary_attention, layers, experts) -> MapleFo
     if pending:
         raise ValueError(f"incomplete experts in the checkpoint: {sorted(pending)[:4]}")
     model.to(dtype=dtype)
-    model.model.rotary_emb = RotaryEmbedding(config).to(device)  # FP32 frequencies (BF16 would corrupt positions)
+    model.model.rotary_emb = rotary_embedding(config).to(device)  # FP32 frequencies (BF16 would corrupt positions)
     for layer in model.model.layers:
         layer.mlp.gate.weight.data = layer.mlp.gate.weight.data.float()
     if ternary_attention:
