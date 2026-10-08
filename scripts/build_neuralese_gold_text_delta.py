@@ -237,12 +237,16 @@ def adopted_text_prefix_metadata(binding, *, root: Path = ROOT):
             or any(manifest.get("composition", {}).get("text", {}).get(k) != counts[lookup]
                    for k, lookup in (("rows", "total"), ("train", "train"), ("test", "test")))):
         raise ValueError("root-adopted assembly manifest text hash, tokenizer, or counts do not match its review")
+    text_counts = json.loads(integration_path.read_text()).get("counts", {}).get("text", {})
     return {
         "schema": "natlang.root-adopted-text-prefix-metadata/1",
         "documents": counts["total"], "train_documents": counts["train"],
         "test_documents": counts["test"], "tokenizer_sha256": text_facts["tokenizer_sha256"],
         "status": "derived from exact root-adopted integration review and pinned assembly manifest",
-        "renderer_code": {}, "omitted_records": 0, "unresolved_omissions": [],
+        # The adoption review proves delta coverage, not the assembly's full
+        # historical omission inventory. Keep that distinction explicit.
+        "renderer_code": {}, "omitted_records": None, "unresolved_omissions": None,
+        "adopted_delta_omissions": text_counts.get("omissions_for_delta"),
         "duplicate_same_split_documents_deduplicated": 0,
         "excluded_train_exact_held_complete_documents": 0,
         "source_assembly_manifest": {"path": str(manifest_path), "sha256": expected},
@@ -255,6 +259,15 @@ def resolve_base_text_prefix_metadata(binding, receipt_path: Path, *, root: Path
         if sibling is None:
             raise ValueError("base text prefix requires its receipt.json or a verified root-adopted assembly manifest")
         return sibling
+    integration = json.loads(binding["integration_receipt"].read_text())
+    has_assembly_manifest = isinstance(integration.get("artifacts", {}).get("assembly_manifest"), dict)
+    if not has_assembly_manifest:
+        # Older verified adoption bindings predate consolidated assembly
+        # manifests. Continue to support their independently pinned receipt
+        # path; a sibling receipt alone does not become adoption evidence.
+        if sibling is None:
+            raise ValueError("root-adopted prefix without an assembly manifest requires its verified legacy receipt")
+        return sibling
     adopted = adopted_text_prefix_metadata(binding, root=root)
     if sibling is None:
         return adopted
@@ -262,16 +275,10 @@ def resolve_base_text_prefix_metadata(binding, receipt_path: Path, *, root: Path
               "test_documents": "test_documents", "tokenizer_sha256": "tokenizer_sha256"}
     if any(sibling.get(left) != adopted.get(right) for left, right in fields.items()):
         raise ValueError("base sibling receipt count/tokenizer metadata conflicts with root-adopted assembly manifest")
-    # Preserve auxiliary historical receipt fields only after the root-bound
-    # source facts have matched exactly.
-    return {**sibling, **adopted,
-            "renderer_code": sibling.get("renderer_code", adopted.get("renderer_code", {})),
-            "omitted_records": sibling.get("omitted_records", adopted.get("omitted_records", 0)),
-            "unresolved_omissions": sibling.get("unresolved_omissions", adopted.get("unresolved_omissions", [])),
-            "duplicate_same_split_documents_deduplicated": sibling.get(
-                "duplicate_same_split_documents_deduplicated", adopted.get("duplicate_same_split_documents_deduplicated", 0)),
-            "excluded_train_exact_held_complete_documents": sibling.get(
-                "excluded_train_exact_held_complete_documents", adopted.get("excluded_train_exact_held_complete_documents", 0))}
+    # Only the four fields above are adoption-bound. Keep an old sibling
+    # receipt available as explicitly unbound metadata; never merge its
+    # auxiliary claims into the root-adopted facts.
+    return {**adopted, "legacy_sibling_receipt_metadata": sibling}
 
 def selected_delta_omissions(omissions, delta_ids):
     return [item for item in omissions if item.get("id") in delta_ids]

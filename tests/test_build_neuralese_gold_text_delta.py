@@ -163,7 +163,8 @@ def test_root_adoption_checks_legacy_sibling_receipt_metadata(tmp_path):
                                    "renderer_code": {"old": "pin"}}))
     metadata = MODULE.resolve_base_text_prefix_metadata(binding, receipt, root=tmp_path)
     assert metadata["source_assembly_manifest"]["sha256"] == _sha(tmp_path / "assembly-manifest.json")
-    assert metadata["renderer_code"] == {"old": "pin"}
+    assert metadata["legacy_sibling_receipt_metadata"]["renderer_code"] == {"old": "pin"}
+    assert metadata["omitted_records"] is None
 
 
 def test_root_adoption_rejects_legacy_sibling_metadata_override(tmp_path):
@@ -178,6 +179,23 @@ def test_root_adoption_rejects_legacy_sibling_metadata_override(tmp_path):
         assert "conflicts with root-adopted" in str(exc)
     else:
         raise AssertionError("a mutable sibling receipt cannot override root-adopted tokenizer facts")
+
+
+def test_legacy_root_adoption_without_assembly_manifest_keeps_receipt_path(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    integration_path = tmp_path / adoption["integration_receipt"]
+    integration = json.loads(integration_path.read_text())
+    integration["artifacts"].pop("assembly_manifest")
+    integration_path.write_text(json.dumps(integration))
+    adoption["integration_receipt_sha256"] = _sha(integration_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    receipt_path = tmp_path / "receipt.json"
+    receipt = {"documents": 4612, "train_documents": 2908, "test_documents": 1704,
+               "tokenizer_sha256": "e" * 64, "omitted_records": 7,
+               "unresolved_omissions": [{"id": "old-omission"}]}
+    receipt_path.write_text(json.dumps(receipt))
+    metadata = MODULE.resolve_base_text_prefix_metadata(binding, receipt_path, root=tmp_path)
+    assert metadata == receipt
 
 
 def test_tokenizers_backend_snapshot_fallback_preserves_serialized_fast_tokenizer(tmp_path):
