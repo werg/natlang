@@ -65,6 +65,11 @@ observation is compared with the recorded one: equal steps are *verified*, and d
 example nondeterministic output or timestamps). This gives real states to run the companion on, rather than
 imagined ones.
 
+Platform: SWE-rebench's environment images are built for x86_64. Pop is x86_64 with Docker (12 cores, 14 GB). The
+DGX is aarch64, so it would need emulation there. Replay runs on Pop, or on the DGX under emulation for small slices.
+Replay needs no model, so it fits Pop's GPU-free capacity. The companion's offline runs (§1.4) need the executor and
+read the replayed workspace snapshots that replay exports.
+
 Trajectories without a reproducible environment are still usable, with lower trust. Their states are approximated
 from the recorded observations (files the agent printed), and the record says so.
 
