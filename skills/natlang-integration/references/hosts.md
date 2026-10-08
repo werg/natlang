@@ -29,7 +29,7 @@ const report = await runtime.run(() => handle(ticket));
 
 `natlang build [PROJECT]` type-checks the project, plans every `nl` expression, checks callable folders, generates `foo.d.nl.ts` for each `.nl` file, and emits JavaScript. `natlang check` does the same without emitting. `buildProject({ project, runtimeModule })` and `checkProject` are the programmatic forms; `compileVirtualProject({ files }, runtimeNamespace)` compiles an in-memory project (browser pages, workers, tests). Uncompiled `nl` calls fail.
 
-Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), `loadVirtualNatlang(files, 'review.nl')`, or `defineNatlang(nlSourceText)` for functions authored at run time (notebook cells, generated tools). `loadCallables('natlang.d')` loads a callable folder as a record.
+Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), `loadVirtualNatlang(files, 'review.nl')`, or `defineNatlang(nlSourceText)` for functions authored at run time (notebook cells, generated tools). `loadCallables('natlang.d')` loads a callable folder as a record. Tests that run application code importing `.nl` files under Vite or Vitest add `plugins: [natlangVitePlugin()]` (from `@natlang/node`): each `.nl` import loads as `loadNatlang` would, with the nearest `package.json` above it as the package root.
 
 ## Services
 
@@ -51,6 +51,8 @@ const runtime = createNatlangRuntime({ model, services: { records, tables },
   // tables is usable only in calls of answer/table_expert.nl and the calls they make; others see who can use it.
   serviceScopes: { tables: ['answer/table_expert.nl'] } });
 ```
+
+Arguments reach a service as host-realm plain data, never as eval-realm objects, so a service may persist or compare them directly. A method that is an external effect to perform once (a provider request, a payment, a sent message) is listed under `ONCE_EFFECTS` (exported by `@natlang/node`): `{ [ONCE_EFFECTS]: ['send'], send(...) {...} }`. A repeated call with the same arguments on the same service object, from a re-run eval or another call, returns the earlier result; a failed call may run again. Hand a fresh service object to each unit of work (a task phase, a request) that may repeat the effect on purpose, and never list reads.
 
 Both options also exist per task (`runtime.run(fn, { services, serviceDeclarations, serviceScopes })`). A service without a declaration is listed by its method names only. Scopes name functions by their source path relative to the loaded program. Importable packages need no declaration: `read_code("pkg")` reads a package's exports from its own type declarations.
 

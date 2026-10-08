@@ -222,6 +222,16 @@ runtime or a task. Callable-folder code imports them from `natlang:services`;
 eval exposes them as named, read-only bindings. Every service call is traced as
 an effect. Effects are not rolled back when a call fails; applications that must
 not repeat an effect record operation identities and reconcile unknown outcomes.
+Arguments reach a service as plain data of the host realm (eval runs in a realm
+of its own), so a service can store or compare them like any host value.
+
+A service lists the methods that are external effects to perform once under
+`ONCE_EFFECTS` (`{ [ONCE_EFFECTS]: ['send'], send(...) {...} }`): a call with the
+same arguments as an earlier call on the same service object returns the earlier
+result instead of acting again, whether an eval ran again or another call made
+it; a call that failed may run again. The service object's lifetime is the scope,
+so a host hands a fresh object to each unit of work that may repeat the effect on
+purpose. Reads are not listed: they must see the current state.
 
 A service may come with a declaration: the TypeScript declaration of its members,
 with their doc comments, as a declaration file would give them. The model is
@@ -344,7 +354,8 @@ copied into an eval fails to compile rather than running on part of the data.
 ## Conversation length
 
 A call keeps one conversation. Past three quarters of its context budget
-(`contextTokens`, default 16,384 prompt tokens) the next turn offers only
+(`contextTokens`; by default the context window the model's server reports,
+less an eighth for the reply, or 16,384 prompt tokens when it does not say) the next turn offers only
 `compact_history`, with a tool call required. Its `note` (at most 600 characters:
 what the model is doing, what it found, what is left) is kept after the opening,
 replacing any earlier note, and every older tool output and eval code is replaced
@@ -377,7 +388,13 @@ records, arrays, `Record<string, T>`, literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be
-coerced when the declared type is unambiguous. Recursive function types are
+coerced when the declared type is unambiguous. A value eval computed and returns
+(`return value;`, a final expression with `finish: true`) is assignable as in
+TypeScript: fields its declared record does not list are kept, so a service's or a
+callee's result is returned as it is; a literal written into `return_result` is
+checked exactly. A value that misses a union of records is reported at the field
+of the variant it matches (`checkpoint/cutoff: expected number`), not as the
+whole union. Recursive function types are
 rejected (see Iteration and termination).
 
 ## Directory reducers
