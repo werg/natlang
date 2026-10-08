@@ -752,3 +752,24 @@ concrete typed argument case and their RegExp, callback, and `Symbol.match`
 behavior can be preserved exactly. This actual `replace` trace supersedes the
 earlier statement that no recent trace had attempted it; no RegExp/callback
 overload failure is claimed.
+
+### Receiver-only standard String methods — 2026-10-08
+
+The declared `Neuralese<string>` surface now includes `trim`, `trimStart`,
+`trimEnd`, `toLowerCase`, and `toUpperCase`. The compiler accepts these only
+when the payload arms are statically strings and the selected member resolves
+to TypeScript's standard `String` declaration. Typed reads happen on the
+receiver expression; property lookup then runs on the resulting primitive,
+followed by the ordinary JavaScript method call. Crisp arms in a soft/crisp
+string union pass through without a trained read. Other payloads and
+same-named custom service methods remain opaque. These receiver-only methods
+share the ordinary readout path and add no per-method call lowering.
+
+Eval and module regressions cover all five recognized members, async-only
+readout, crisp union arms, failure before method lookup, customized prototype
+getter/method order, and a returned thenable object that remains unassimilated
+as an expression value. The recent V20–V24 traces reviewed did not attempt
+these direct receiver forms; this is prospective ergonomics support, not a
+claimed generation recovery. The `.replace` implementation remains separate
+because it also validates its current literal-string argument overload and
+preserves complete call evaluation order.
