@@ -150,7 +150,10 @@ def main(argv=None):
     ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted")
     ap.add_argument("--order", help="expert-order.pt from natlang_neuralese.maple.routing (N0)")
     ap.add_argument("--members", default="24x32,24x64,8x16")
-    ap.add_argument("--phase", choices=["bootstrap", "joint"], default="bootstrap")
+    ap.add_argument("--phase", choices=["bootstrap", "joint", "eval"], default="bootstrap",
+                    help="eval: evaluate every member on the held rows and exit (no update)")
+    ap.add_argument("--heads", help="eval: a Neuralese engine checkpoint (heads.pt): evaluate the family with that "
+                                    "run's backbone changes (its student state's members, its QAT deltas)")
     ap.add_argument("--resume", help="trainable state from a previous phase (nested-state.pt)")
     ap.add_argument("--data", required=True, help="natlang task rows")
     ap.add_argument("--sample-rows", type=int, default=0,
@@ -198,13 +201,22 @@ def main(argv=None):
     task, mixed = task[args.eval_rows:], mixed[args.eval_rows:]
 
     start = time.time()
-    model = load_maple(args.model, device="cuda", ternary_attention=False, cache=args.cache or None)
-    if args.order:
-        model.order_experts(torch.load(args.order)["orders"])
-    total_layers = model.config.num_hidden_layers
-    members = [Member.parse(m, total_layers) for m in args.members.split(",")]
-    adapters, scales, private = setup(model, members, args.rank, args.private_rank, not args.no_learned_scales,
-                                      not args.no_expert_scales)
+    if args.heads:
+        if args.phase != "eval":
+            raise ValueError("--heads evaluates a Neuralese run's family; training starts from --resume")
+        from ..serve import load_engine
+        model = load_engine(heads_checkpoint=args.heads, device="cuda").backbone.hf
+        total_layers = model.config.num_hidden_layers
+        members = model.members
+        adapters, scales, private = [], [], []
+    else:
+        model = load_maple(args.model, device="cuda", ternary_attention=False, cache=args.cache or None)
+        if args.order:
+            model.order_experts(torch.load(args.order)["orders"])
+        total_layers = model.config.num_hidden_layers
+        members = [Member.parse(m, total_layers) for m in args.members.split(",")]
+        adapters, scales, private = setup(model, members, args.rank, args.private_rank, not args.no_learned_scales,
+                                          not args.no_expert_scales)
     if args.resume:
         state = torch.load(args.resume, map_location="cuda")
         result = model.load_state_dict(state["trainable"], strict=False)
@@ -251,6 +263,10 @@ def main(argv=None):
                     "members": [m.key for m in members], "order": args.order, "phase": args.phase, "step": step,
                     "model": args.model, "args": vars(args)}, out / "nested-state.pt")
 
+    if args.phase == "eval":
+        emit({"event": "eval", "step": 0, "heads": args.heads, "resume": args.resume,
+              "members": [m.key for m in members], "eval": evaluate()})
+        return
     emit({"event": "start", "phase": args.phase, "members": [m.key for m in members], "args": vars(args),
           "load_seconds": round(time.time() - start, 1), "adapters": sum(p.numel() for p in adapters),
           "scales": sum(p.numel() for p in scales), "private": sum(p.numel() for p in private),
