@@ -392,12 +392,23 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
 def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
     from natlang_neuralese.data.text_corpus import _canonical, _protected_target_sidecar_equivalence, _sha
 
-    prefix, body, suffix = "const result = await nl<string>`", "approved", "`(input);"
-    code = prefix + body + suffix
+    block_id = "nz1_" + "a" * 52
+    prefix, body_source, code_source, suffix = "const fn = nl.with({input})`", "approved", "\ue000" + block_id + "\ue001", "`;"
+    code = prefix + code_source + suffix
+    site_name = "inline-site:test"
+    start = len(prefix) - 1
+    end = len(prefix) + len(code_source) + 1
+    plan = {"capture_binding_plan": {"schema": "natlang.inline-capture-binding-plan/1", "syntax": "nl.with",
+        "body_block_id": block_id, "body_source_sha256": _sha(body_source.encode()),
+        "parent_invocation_id": "parent", "parent_scope_sha256": "1" * 64,
+        "child_scope_sha256": "2" * 64,
+        "captures": [{"name": "input", "type": "string", "mode": "snapshot", "value": "visible"}]}}
     sidecar = {"schema": "natlang.inline-instruction-code/1", "code_sha256": _sha(code.encode()),
                "parts": [{"type": "text", "text": prefix},
-                         {"$write": {"name": "result", "type": "Neuralese<string>", "source": body}},
-                         {"type": "text", "text": suffix}]}
+                         {"$write": {"name": site_name, "type": "Neuralese<string>", "source": body_source,
+                                     "code_source": code_source}},
+                         {"type": "text", "text": suffix}],
+               "sites": [{"name": site_name, "code_span": {"start": start, "end": end}, "plan": plan}]}
     call = {"id": "scope-sidecar", "type": "function", "neuralese_code": sidecar,
             "function": {"name": "scope", "arguments": json.dumps({"code": code})}}
     target = {"role": "assistant", "content": None, "tool_calls": [call]}
@@ -428,3 +439,28 @@ def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
     extra_field = json.loads(json.dumps(record))
     extra_field["target"]["tool_calls"][0]["unexpected"] = True
     assert not _protected_target_sidecar_equivalence(extra_field, receipt, metadata)
+
+    def retarget(changed_sidecar):
+        changed = json.loads(json.dumps(record))
+        changed["target"]["tool_calls"][0]["neuralese_code"] = changed_sidecar
+        projected_changed = json.loads(json.dumps(changed["target"]))
+        del projected_changed["tool_calls"][0]["neuralese_code"]
+        projection_digest = _sha(_canonical(projected_changed).encode())
+        changed_adapter = json.loads(json.dumps(adapter))
+        changed_adapter.update({"protected_target_sha256": _sha(_canonical(changed["target"]).encode()),
+            "materializer_target_sha256": projection_digest, "projection_sha256": projection_digest,
+            "sidecar_sha256": _sha(_canonical(changed_sidecar).encode())})
+        return changed, {"source_action_target_sha256": projection_digest,
+                         "target_binding_adapter": changed_adapter}, {"source_action_target_sha256": projection_digest,
+                         "target_binding_adapter": changed_adapter}
+
+    for tamper in ("name", "type", "span"):
+        changed_sidecar = json.loads(json.dumps(sidecar))
+        if tamper == "name":
+            changed_sidecar["parts"][1]["$write"]["name"] = "renamed-site"
+        elif tamper == "type":
+            changed_sidecar["parts"][1]["$write"]["type"] = "Neuralese<number>"
+        else:
+            changed_sidecar["sites"][0]["code_span"]["start"] += 1
+        bad_record, bad_receipt, bad_metadata = retarget(changed_sidecar)
+        assert not _protected_target_sidecar_equivalence(bad_record, bad_receipt, bad_metadata), tamper

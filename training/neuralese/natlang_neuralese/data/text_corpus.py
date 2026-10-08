@@ -44,6 +44,22 @@ def _protected_target_sidecar_equivalence(record, receipt, metadata):
     checked = validate_inline_instruction_code(arguments, sidecar)
     if not checked.valid or checked.value is None:
         return False
+    writes = checked.value.writes
+    sites = sidecar.get("sites")
+    if not isinstance(sites, list) or len(sites) != len(writes):
+        return False
+    sites_by_name = {site.get("name"): site for site in sites if isinstance(site, dict)}
+    if len(sites_by_name) != len(sites) or set(sites_by_name) != {write.name for write in writes}:
+        return False
+    code = checked.value.code
+    for write in writes:
+        site = sites_by_name[write.name]
+        span = site.get("code_span")
+        if (not isinstance(span, dict) or type(span.get("start")) is not int
+                or type(span.get("end")) is not int or span["start"] != write.start - 1
+                or span["end"] != write.end + 1 or span["start"] < 0
+                or code[span["start"]:span["end"]] != "`" + (write.code_source or write.source) + "`"):
+            return False
     if (adapter.get("schema") != "natlang.protected-target-inline-sidecar-equivalence/1"
             or adapter.get("kind") != "remove-one-validated-neuralese-code-sidecar"
             or adapter.get("call_id") != call_id

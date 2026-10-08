@@ -712,14 +712,24 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   assert.throws(() => convertTrajectory(badGraph), /invalid repeated read\/turn binding/);
 
   const sidecarRow = structuredClone(row);
-  const sidecarCode = 'const result = await nl<string>`approved`(input);';
-  const sidecarPrefix = 'const result = await nl<string>`';
+  const sidecarBlockId = `nz1_${'a'.repeat(52)}`;
+  const sidecarCodeSource = `\uE000${sidecarBlockId}\uE001`;
+  const sidecarPrefix = 'const result = nl.with({input})`';
   const sidecarSuffix = '`(input);';
+  const sidecarCode = sidecarPrefix + sidecarCodeSource + sidecarSuffix;
+  const sidecarName = 'inline-site:adapter-fixture';
   const sidecarHash = value => cryptoCreateHash('sha256').update(value).digest('hex');
+  const sidecarSpan = { start: sidecarPrefix.length - 1,
+    end: sidecarPrefix.length + sidecarCodeSource.length + 1 };
+  const capturePlan = { capture_binding_plan: { schema: 'natlang.inline-capture-binding-plan/1', syntax: 'nl.with',
+    body_block_id: sidecarBlockId, body_source_sha256: sidecarHash('approved'), parent_invocation_id: 'parent',
+    parent_scope_sha256: '1'.repeat(64), child_scope_sha256: '2'.repeat(64),
+    captures: [{ name: 'input', type: 'string', mode: 'snapshot', value: 'visible' }] } };
   const sidecar = { schema: 'natlang.inline-instruction-code/1', code_sha256: sidecarHash(sidecarCode),
     parts: [{ type: 'text', text: sidecarPrefix },
-      { $write: { name: 'result', type: 'Neuralese<string>', source: 'approved' } },
-      { type: 'text', text: sidecarSuffix }] };
+      { $write: { name: sidecarName, type: 'Neuralese<string>', source: 'approved', code_source: sidecarCodeSource } },
+      { type: 'text', text: sidecarSuffix }],
+    sites: [{ name: sidecarName, code_span: sidecarSpan, plan: capturePlan }] };
   const targetCall = { id: 'scope-sidecar', type: 'function', neuralese_code: sidecar,
     function: { name: 'scope', arguments: JSON.stringify({ code: sidecarCode }) } };
   sidecarRow.target = { role: 'assistant', content: null, tool_calls: [targetCall] };
@@ -758,6 +768,21 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
     sidecarHash(canonical(extraRemovedField.target));
   assert.throws(() => convertTrajectory(extraRemovedField), /selected-action binding mismatch/,
     'the adapter removes only neuralese_code; an extra target change is not projected away');
+  for (const field of ['name', 'type', 'span']) {
+    const tampered = structuredClone(sidecarRow);
+    const changedSidecar = tampered.target.tool_calls[0].neuralese_code;
+    if (field === 'name') changedSidecar.parts[1].$write.name = 'renamed-site';
+    else if (field === 'type') changedSidecar.parts[1].$write.type = 'Neuralese<number>';
+    else changedSidecar.sites[0].code_span.start += 1;
+    const changedProjection = structuredClone(tampered.target);
+    delete changedProjection.tool_calls[0].neuralese_code;
+    const receipt = tampered.source_ref.provider_expanded_read_contexts[0];
+    const changedAdapter = receipt.target_binding_adapter;
+    changedAdapter.protected_target_sha256 = sidecarHash(canonical(tampered.target));
+    changedAdapter.sidecar_sha256 = sidecarHash(canonical(changedSidecar));
+    assert.throws(() => convertTrajectory(tampered), /selected-action binding mismatch/,
+      `rehashed ${field} tampering must fail sidecar validation`);
+  }
 
   const legacy = structuredClone(row);
   const legacyReceipt = legacy.source_ref.provider_expanded_read_contexts[0];

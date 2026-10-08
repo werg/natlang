@@ -188,20 +188,54 @@ function protectedTargetSidecarEquivalent(record: Record<string, unknown>, recei
   let args: unknown;
   try { args = JSON.parse(argsText); } catch { return false; }
   if (!args || typeof args !== 'object' || typeof (args as Record<string, unknown>).code !== 'string') return false;
+  const code = (args as Record<string, unknown>).code as string;
   let reconstructed = '';
+  let cursor = 0;
+  const writes: {name: string; start: number; end: number}[] = [];
+  const seenNames = new Set<string>();
   for (const rawPart of sidecar.parts) {
     if (!rawPart || typeof rawPart !== 'object') return false;
     const part = rawPart as Record<string, unknown>;
     if (part.type === 'text' && typeof part.text === 'string' && !Object.hasOwn(part, '$write')) {
       reconstructed += part.text;
+      cursor += part.text.length;
     } else if (part.$write && typeof part.$write === 'object') {
       const write = part.$write as Record<string, unknown>;
-      if (typeof write.source !== 'string') return false;
-      reconstructed += write.source;
+      const name = write.name;
+      if (typeof name !== 'string' || !name || seenNames.has(name) ||
+          write.type !== 'Neuralese<string>' || typeof write.source !== 'string' ||
+          write.source.includes('\\') || write.source.includes('`') || write.source.includes('${') ||
+          (write.code_source !== undefined && typeof write.code_source !== 'string')) return false;
+      const codeSource = typeof write.code_source === 'string' ? write.code_source : write.source;
+      const start = cursor, end = start + codeSource.length;
+      writes.push({name, start, end});
+      seenNames.add(name);
+      reconstructed += codeSource;
+      cursor = end;
     } else return false;
   }
-  if ((args as Record<string, unknown>).code !== reconstructed || sha256Text(reconstructed) !== sidecar.code_sha256)
+  const sites = sidecar.sites;
+  if (!writes.length || !Array.isArray(sites) || sites.length !== writes.length ||
+      code !== reconstructed || sha256Text(reconstructed) !== sidecar.code_sha256)
     return false;
+  const siteNames = new Set<string>();
+  for (const rawSite of sites) {
+    if (!rawSite || typeof rawSite !== 'object') return false;
+    const site = rawSite as Record<string, unknown>;
+    const name = site.name;
+    const span = site.code_span as Record<string, unknown> | undefined;
+    const plan = site.plan as Record<string, unknown> | undefined;
+    const binding = plan?.capture_binding_plan as Record<string, unknown> | undefined;
+    if (typeof name !== 'string' || siteNames.has(name) || !binding || binding.syntax !== 'nl.with' ||
+        !['natlang.inline-capture-binding-plan/1', 'natlang.inline-capture-binding-plan/2',
+          'natlang.inline-capture-binding-plan/3'].includes(String(binding.schema)) ||
+        typeof span?.start !== 'number' || !Number.isSafeInteger(span.start) ||
+        typeof span.end !== 'number' || !Number.isSafeInteger(span.end)) return false;
+    const write = writes.find(candidate => candidate.name === name);
+    if (!write || span.start !== write.start - 1 || span.end !== write.end + 1 || span.start < 0 ||
+        code.slice(span.start, span.end) !== '`' + code.slice(write.start, write.end) + '`') return false;
+    siteNames.add(name);
+  }
   const projection = structuredClone(target) as Record<string, unknown>;
   const projectedCalls = projection.tool_calls as Record<string, unknown>[];
   const projectedCall = projectedCalls[index];
