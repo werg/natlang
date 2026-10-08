@@ -145,6 +145,30 @@ function constNumericLiteralBefore(node: ts.ForStatement, name: string): number 
   return;
 }
 
+/** Locate the one canonical counter comparison in a bounded condition, optionally joined to an early-exit guard. */
+export function finiteCounterComparison(condition: ts.Expression | undefined, counter: string):
+  { comparison: ts.BinaryExpression; guard?: ts.Expression } | undefined {
+  const unwrapped = (expression: ts.Expression): ts.Expression => {
+    while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+    return expression;
+  };
+  const isCounterComparison = (expression: ts.Expression): expression is ts.BinaryExpression => {
+    const candidate = unwrapped(expression);
+    return ts.isBinaryExpression(candidate) && COMPARATORS.has(candidate.operatorToken.kind) &&
+      ((ts.isIdentifier(candidate.left) && candidate.left.text === counter) !==
+        (ts.isIdentifier(candidate.right) && candidate.right.text === counter));
+  };
+  if (!condition) return;
+  const root = unwrapped(condition);
+  if (isCounterComparison(root)) return { comparison: unwrapped(root) as ts.BinaryExpression };
+  if (!ts.isBinaryExpression(root) || root.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return;
+  const left = isCounterComparison(root.left);
+  const right = isCounterComparison(root.right);
+  if (left === right) return;
+  return left ? { comparison: unwrapped(root.left) as ts.BinaryExpression, guard: root.right } :
+    { comparison: unwrapped(root.right) as ts.BinaryExpression, guard: root.left };
+}
+
 /** Check whether a counter `for` loop has a canonical monotone finite form. */
 function canonicalFor(node: ts.ForStatement): string | undefined {
   const initializer = node.initializer;
@@ -155,13 +179,13 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return 'initialize a single named counter';
   const counter = declaration.name.text;
   const condition = node.condition;
-  if (!condition || !ts.isBinaryExpression(condition) || !COMPARATORS.has(condition.operatorToken.kind))
+  const boundedCondition = finiteCounterComparison(condition, counter);
+  if (!boundedCondition)
     return 'compare the counter with a bound using <, <=, > or >=';
-  const counterLeft = ts.isIdentifier(condition.left) && condition.left.text === counter;
-  const counterRight = ts.isIdentifier(condition.right) && condition.right.text === counter;
-  if (counterLeft === counterRight) return 'compare the counter itself with a bound';
-  const bound = counterLeft ? condition.right : condition.left;
-  const kind = condition.operatorToken.kind;
+  const comparison = boundedCondition.comparison;
+  const counterLeft = ts.isIdentifier(comparison.left) && comparison.left.text === counter;
+  const bound = counterLeft ? comparison.right : comparison.left;
+  const kind = comparison.operatorToken.kind;
   const upward = counterLeft ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
     kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
   const step = node.incrementor;
@@ -180,6 +204,11 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   const assigned = assignedIdentifiers(node.statement);
   if (assigned.has(counter)) return 'do not assign the counter inside the loop body';
   const boundRoot = rootIdentifier(bound);
+  if (boundedCondition.guard) {
+    const guardAssignments = assignedIdentifiers(boundedCondition.guard);
+    if (guardAssignments.has(counter)) return 'do not assign the counter in the early-exit condition';
+    if (boundRoot && guardAssignments.has(boundRoot)) return 'do not reassign the loop bound in the early-exit condition';
+  }
   if (boundRoot && assigned.has(boundRoot)) return 'do not reassign the loop bound inside the loop body';
   if (boundRoot && grownReceivers(node.statement).has(boundRoot))
     return 'do not grow the collection that bounds the loop inside its body';

@@ -6,6 +6,7 @@ import { analyzeInlineLambdas } from '../dist/compiler/inline.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { natlangTransformer } from '../dist/compiler/lower.js';
 import { checkConstrainedSource, authoredCallables } from '../dist/compiler/policy.js';
+import { numericProgress } from '../dist/runtime/lowered.js';
 
 function analyze(source, declarations = '') {
   const files = { '/scope/decls.ts': declarations, '/scope/main.ts': source };
@@ -234,6 +235,32 @@ test('constrained source accepts finite iteration and rejects open-ended forms',
     'function* g() {}', 'for (let i = 0; i < n; i--) {}', 'for (let i = 0; i < n; i++) { i++; }', 'for (let i = 0; i < xs.length; i++) { xs.push(1); }',
     'for (let i = 0; i < count(); i++) {}', 'eval("1")', 'new Function("")', 'import("x")'])
     assert.ok(policy(source).length, source);
+});
+
+test('finite counter loops retain a short-circuit early-exit guard', () => {
+  assert.deepEqual(policy(`for (let i = 0; i < 100 && y !== 0; i++) {}
+    for (let i = 0; ready() && i < 100; i++) {}`), []);
+  for (const source of [
+    'for (let i = 0; i < 100 || y !== 0; i++) {}',
+    'for (let i = 0; i < 100 && (i++, true); i++) {}',
+    'for (let i = 0; i < limit && (limit = 10, true); i++) {}',
+  ]) assert.ok(policy(source).length, source);
+
+  const source = `function gcd(a, b) {
+    let x = a, y = b;
+    for (let i = 0; i < 20 && y !== 0; i++) { const r = x % y; x = y; y = r; }
+    return x;
+  }`;
+  const file = ts.createSourceFile('guarded-loop.ts', source, ts.ScriptTarget.ES2022, true);
+  const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(), runtime: '__natlang', constrained: true,
+    guardPrefix: '__guard', modulePath: 'guarded-loop.ts' })]);
+  const printed = ts.createPrinter().printFile(transformed.transformed[0]);
+  transformed.dispose();
+  assert.match(printed, /__natlang_bound[^;]*;[\s\S]*?&& y !== 0/,
+    'the original short-circuit guard must remain after replacing only the bounded comparison');
+  const javascript = ts.transpileModule(printed, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const run = new Function('__natlang', `${javascript}; return gcd(7917, 9628);`);
+  assert.equal(run({ numericProgress }), 29);
 });
 
 test('constrained type checks admit the standard finite array iterator methods only for arrays', () => {

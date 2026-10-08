@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic, suffixWithCallOf } from './inline.js';
-import { authoredCallables, guardArguments, loopLabel, makesCalls } from './policy.js';
+import { authoredCallables, finiteCounterComparison, guardArguments, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
@@ -358,24 +358,33 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       // A numeric loop has a fixed finite bound and a strictly advancing counter.
       if (options.constrained && ts.isForStatement(node) && node.initializer &&
           ts.isVariableDeclarationList(node.initializer) && node.initializer.declarations.length === 1 &&
-          node.condition && ts.isBinaryExpression(node.condition)) {
+          node.condition) {
         const declaration = node.initializer.declarations[0]!;
         if (ts.isIdentifier(declaration.name)) {
           const counter = declaration.name;
-          const left = ts.isIdentifier(node.condition.left) && node.condition.left.text === counter.text;
+          const boundedCondition = finiteCounterComparison(node.condition, counter.text);
+          if (!boundedCondition) return ts.visitEachChild(node, visit, context);
+          const comparison = boundedCondition.comparison;
+          const left = ts.isIdentifier(comparison.left) && comparison.left.text === counter.text;
           const bound = f.createUniqueName('__natlang_bound');
           const progress = f.createUniqueName('__natlang_progress');
-          const kind = node.condition.operatorToken.kind;
+          const kind = comparison.operatorToken.kind;
           const upward = left ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
             kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
           const initializer = f.updateVariableDeclarationList(node.initializer, [
             ts.visitNode(declaration, visit) as ts.VariableDeclaration,
-            f.createVariableDeclaration(bound, undefined, undefined, ts.visitNode(left ? node.condition.right : node.condition.left, visit) as ts.Expression),
+            f.createVariableDeclaration(bound, undefined, undefined, ts.visitNode(left ? comparison.right : comparison.left, visit) as ts.Expression),
             f.createVariableDeclaration(progress, undefined, undefined,
               f.createCallExpression(runtime('numericProgress'), undefined, [counter, bound, upward ? f.createTrue() : f.createFalse()]))]);
           const body = ts.visitNode(node.statement, visit) as ts.Statement;
+          const condition = ts.visitNode(node.condition, function replaceBoundedComparison(child: ts.Node): ts.Node {
+            if (child === comparison)
+              return f.updateBinaryExpression(comparison, left ? counter : bound, comparison.operatorToken,
+                left ? bound : counter);
+            return ts.visitEachChild(child, replaceBoundedComparison, context);
+          }) as ts.Expression;
           return f.updateForStatement(node, initializer,
-            f.updateBinaryExpression(node.condition, left ? counter : bound, node.condition.operatorToken, left ? bound : counter),
+            condition,
             ts.visitNode(node.incrementor, visit) as ts.Expression | undefined,
             f.createBlock([f.createExpressionStatement(f.createCallExpression(progress, undefined, [counter])),
               ...(ts.isBlock(body) ? body.statements : [body])], true));
