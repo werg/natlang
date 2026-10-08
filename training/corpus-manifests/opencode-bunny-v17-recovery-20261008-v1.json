@@ -1,0 +1,80 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-v17-recovery-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v17-recovery-20261008-v1",
+  "files": [
+    {
+      "path": "events/case-000006.jsonl",
+      "bytes": 787,
+      "sha256": "ce43603ee0c79a802f3696c38cc4a8dcab617923bd5eec397b4e5cbc637e2458",
+      "lines": 2
+    },
+    {
+      "path": "events/case-000013.jsonl",
+      "bytes": 793,
+      "sha256": "9504a62092e43db272b3f4ea215a70eda89b61da987bb5513417ca496ca5a2cf",
+      "lines": 2
+    },
+    {
+      "path": "jobs/000006/000006-fb6402516352cf24.result.json",
+      "bytes": 1003333,
+      "sha256": "0c070ed80df6e95601bb7c7a176582cac00c57ff7e5d232ffaa2d20dcd9781d1"
+    },
+    {
+      "path": "jobs/000006/000006-fb6402516352cf24.trace.jsonl",
+      "bytes": 50676,
+      "sha256": "4408b4889bfab334aef01b21fa119a2f3b9a3e416bf09610f7040e44175c223e",
+      "lines": 23
+    },
+    {
+      "path": "jobs/000013/000013-e682160208da959d.result.json",
+      "bytes": 858805,
+      "sha256": "81eb6095127628c241bd6b51802a2a4d2e6915095a2dad90e867aa0fa6cd6168"
+    },
+    {
+      "path": "jobs/000013/000013-e682160208da959d.trace.jsonl",
+      "bytes": 53235,
+      "sha256": "877b055e2fa3bfa38c9f48949e7317a7334381d5f39339069a475dbf9894b8ba",
+      "lines": 29
+    },
+    {
+      "path": "launch.json",
+      "bytes": 4908,
+      "sha256": "221202f27fc85b5b94b8273c147c8da279238903cb7de36c34db62b0c531d61b"
+    },
+    {
+      "path": "logs/case-000006.log",
+      "bytes": 496,
+      "sha256": "e7f18fd880312c83958131aefc6f755ed2bb7d008940b57b6028761441cedda5"
+    },
+    {
+      "path": "logs/case-000013.log",
+      "bytes": 499,
+      "sha256": "b001652568b4d62451470b2abe77d8c0dfac0a6ee2cc3317bf293a382f097368"
+    },
+    {
+      "path": "results/case-000006.results.jsonl",
+      "bytes": 1003333,
+      "sha256": "0c070ed80df6e95601bb7c7a176582cac00c57ff7e5d232ffaa2d20dcd9781d1",
+      "lines": 1
+    },
+    {
+      "path": "results/case-000006.results.jsonl.manifest.json",
+      "bytes": 602,
+      "sha256": "0398b98197f2685441293b602d82ed1b5af0515d0f6436527eeb2f16b0ca0f70"
+    },
+    {
+      "path": "results/case-000013.results.jsonl",
+      "bytes": 858805,
+      "sha256": "81eb6095127628c241bd6b51802a2a4d2e6915095a2dad90e867aa0fa6cd6168",
+      "lines": 1
+    },
+    {
+      "path": "results/case-000013.results.jsonl.manifest.json",
+      "bytes": 603,
+      "sha256": "2462d46ba06b9047c87ebd70f35b93b0b74c8d603417bb7f421ca96862125e47"
+    }
+  ],
+  "bytes": 3836875
+}

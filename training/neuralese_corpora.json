@@ -5884,6 +5884,58 @@
         "**/*"
       ],
       "notes": "Immutable broader Luna idiomatic audit, observed fixes/direct aliases/chained inline capture snapshots and shared runtime validation; unresolved ordinary JS closure lifetime separated from proactive readout helpers. Root review binds exact packet and commits; no learned-channel qualification."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v18-source-v6-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v6",
+      "admission": "root-reviewed-authored-task-source-for-generation;scripted-reference-not-training-admitted",
+      "include": [
+        "source.cases.jsonl",
+        "source-manifest.json",
+        "source-proof.json",
+        "source-quality-review.json",
+        "README.md",
+        "runtime-reference-proof-summary.json",
+        "authored-reference-dc8031db/*"
+      ],
+      "exclude_dirs": [
+        "generation-review-v1"
+      ],
+      "notes": "Eight distinct operational worlds, four train/four test, source80e80f...7445. Root reviewed exact scoped exceptions, selection separate from authority, tie rules and no-action outputs. Corrected slot duration/end facts and requested privacy fields; public direct identifier exclusion remains decisive. CPU reference8/8,96actions,32reads,40softlinks is scripted structural evidence only. Three saved authored inline .with capture scaffolds exercise new surface. Active generation deliberately excluded."
+    },
+    {
+      "id": "semantic-next-runtime-20261008-dc8031db",
+      "owner": "pop",
+      "path": "runs/semantic-next-runtime-20261008-dc8031db",
+      "admission": "immutable-runtime-evidence-only;not-training-data",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "node_modules"
+      ],
+      "notes": "Stable committed runtime with saved inline/const alias/chained .with, shared capture validation, accurate eval read_code guidance, normalized typed-result converter/JSON replay parity. Isolated compilation and unchanged shared dependencies; frozen1025file receipt."
+    },
+    {
+      "id": "luna-v17-dynamic-recovery-20261008-v1",
+      "owner": "pop",
+      "path": "runs/luna-v17-dynamic-recovery-20261008-v1",
+      "admission": "held-actual-generation-evidence;no-automatic-action-admission-or-DPO",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Closed nine reviewed Luna claims on corrected V17 source. Seven accepted parents12,14,17,18,19,21,22;6 and13 actual semantic errors preserved. Finite immutable master queue/five rolling slots; source worlds/splits unchanged."
+    },
+    {
+      "id": "opencode-bunny-v17-recovery-20261008-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-v17-recovery-20261008-v1",
+      "admission": "held-actual-generation-evidence;no-automatic-action-admission-or-DPO",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Closed two cross-teacher attempts6/13 after actual provider READY recovery; both correct values/files, prior Luna failures retained separately. Same source/world/split, no new worlds, official bridge cap2 and unchanged request ceilings."
     }
   ],
   "coverage_backlog": [
@@ -5900,6 +5952,7 @@
     "V28 closed actual review adds 5 source-scope holds to initial8: dispatch load-release stronger than criterion, marked-transect positives not explicit. R3 ongoing observations remain raw; r4 source correction in progress. Preserve r1/r3 source history, no retroactive oracle mutation.",
     "V17 Bunny intermediate native/R proposals runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v1..v4 and ordinary text runs/neuralese-native-gold-text-corpus-20261008-v17-bunny-held-proposal-v1..v5 are deliberately superseded by admitted native/Rv5 and textv6 plus root review V1/prefix receiptsV2. Preserve local immutable history; exclude redundant cumulative copies from the target dataset and current artifact transfer. Their unique actual source/action evidence is retained in published raw/review/final packets. Early context omission and crisp-only azf link loss do not become DPO negatives.",
     "V17 new-source artifacts runs/neuralese-semantic-iterate-v17-guided-20261008-v1..v6 are superseded for generation by registered v7 (revision6 causal evidence). Earlier reference notes dropped necessary observed facts and eligibleIds enums revealed hidden ranking; those scripted trajectories are excluded from training, not labeled model failures. Original stopped actual campaign/frozen source evidence is registry-published; local source versions retained for course-change history.",
-    "Cross-eval ordinary JavaScript helper persistence is unresolved: function identity transport exists, but old lexical closures retain eval callbacks, inline plans and mutable cells outside staged-local transactions. ba34baa7 clarifies current behavior without claiming an ergonomic fix. Future design should specify saved closure lifetime and transaction/capture semantics."
+    "Cross-eval ordinary JavaScript helper persistence is unresolved: function identity transport exists, but old lexical closures retain eval callbacks, inline plans and mutable cells outside staged-local transactions. ba34baa7 clarifies current behavior without claiming an ergonomic fix. Future design should specify saved closure lifetime and transaction/capture semantics.",
+    "V18 authored source drafts runs/neuralese-semantic-iterate-reducers-v18-20261008-v1..v5 are superseded by generation-approved V6. Preserve draft history locally; exclude superseded scripted trajectories from training. Final V6 explicitly supplies slot duration/end times and requests all privacy schema fields while still excluding direct identifiers. Active V6 generation is separate from immutable task-source publication."
   ]
 }

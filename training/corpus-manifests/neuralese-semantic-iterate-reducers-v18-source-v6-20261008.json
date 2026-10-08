@@ -1,0 +1,115 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-iterate-reducers-v18-source-v6-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v6",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1331,
+      "sha256": "a53688004da248eddf4665e3542846cd2b8db45d02bdc7633a741999ff5cc869"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-000.reference.json",
+      "bytes": 3986421,
+      "sha256": "5f6c51100306970de98016a9e35885dbf103d2b6c5648ac20762d21fa8dbac79"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-001.reference.json",
+      "bytes": 4015713,
+      "sha256": "4c7c4381eb05af6b47028f85b708c2076dea11c178bacd389939577c467fc79a"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-002.reference.json",
+      "bytes": 3725227,
+      "sha256": "bd4cf21fa2059a061bf0b12daebebdc3cbf3a87ec8b971ee0969f04e4c343141"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-003.reference.json",
+      "bytes": 3775526,
+      "sha256": "9711a439f0088f9c4b52d88ae965aa62ef32e68452af46e15864cbed713574e3"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-004.reference.json",
+      "bytes": 4023909,
+      "sha256": "af0146334dd391e7846d612ad66d48d99cb80ded213acb48474f8af549b4ce3e"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-005.reference.json",
+      "bytes": 3972798,
+      "sha256": "d2b80bb72a0fd8803cbdee785cb41b5112f0d20f77d717e9a80d36711e2b33d4"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-006.reference.json",
+      "bytes": 3752739,
+      "sha256": "00c3b4681a2c02760d1187e6f06a5a60bb8b37495957c3c7b5b2a07597b2fefa"
+    },
+    {
+      "path": "authored-reference-dc8031db/case-007.reference.json",
+      "bytes": 4009958,
+      "sha256": "cb69fe92375c3bfaafc64e3863e425949ceea3b7e4dcd2bc151d0f99a79d0ed0"
+    },
+    {
+      "path": "authored-reference-dc8031db/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 43488,
+      "sha256": "9308f8e46d991abc205c071fd2f7cd614b8107679b33830394890ff23b52b515",
+      "lines": 96
+    },
+    {
+      "path": "authored-reference-dc8031db/native-decisions.jsonl",
+      "bytes": 12309221,
+      "sha256": "bb1fdae9413e4bf1ecda2127f4ce06302ad4b48b0501faac23d521bdba0c6fc8",
+      "lines": 96
+    },
+    {
+      "path": "authored-reference-dc8031db/reference-trajectories.jsonl",
+      "bytes": 4685561,
+      "sha256": "f799370f9e6ab79362c96b9326866d2796b88280cfc222a970d62f3a33e4f636",
+      "lines": 8
+    },
+    {
+      "path": "authored-reference-dc8031db/review-artifact-manifest.json",
+      "bytes": 2352,
+      "sha256": "b653ec252768cce791da562e9d311dedd59600c4cc90a389ab2768b5d3b68d48"
+    },
+    {
+      "path": "authored-reference-dc8031db/runtime-reference-proof.json",
+      "bytes": 188122,
+      "sha256": "0d6bb1514110d4cc2ceb827e4358f20117c73b1192188403cf3b577782a1d6e6"
+    },
+    {
+      "path": "authored-reference-dc8031db/source-action-review.jsonl",
+      "bytes": 173174,
+      "sha256": "223f684071fde8d3f83f22e4c04d808845d4e340452e63a19679c0c142af746b",
+      "lines": 96
+    },
+    {
+      "path": "authored-reference-dc8031db/source.cases.jsonl",
+      "bytes": 321019,
+      "sha256": "80e80f5696ba84d1d1d33c2f675755c5552be9e714394d1eb87e6dc3c7ca7445",
+      "lines": 8
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1067,
+      "sha256": "38ca4e3504b740f73b4a747eee36a41a7b620d3808f96f58c9f6a9438f1df295"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 13854,
+      "sha256": "e7f5158b4c095c61c723e5bf9c22b206da0fc282096b1edde0a3773a0802db74"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 5507,
+      "sha256": "fd580aa5e53db6aee7be216e7a00a96cf08f61bef23e001251e79a6b93b8c8cd"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 321019,
+      "sha256": "80e80f5696ba84d1d1d33c2f675755c5552be9e714394d1eb87e6dc3c7ca7445",
+      "lines": 8
+    }
+  ],
+  "bytes": 49328006
+}
