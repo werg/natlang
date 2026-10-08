@@ -6736,6 +6736,34 @@
         "local-recurrence-execution-baseline-20261005-v1"
       ],
       "notes": "Closed historical step256 full checkpoint preserved in an immutable DGX mirror before recoverable Pop eviction. Exact associated evaluation/deployment artifacts are already registered separately. Active V22 uses its own full-state checkpoint and does not read this file. This file grants neither training admission nor neuralese channel qualification; restore from this manifest before reuse."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v26-v2-static-source-reference-packet-20261008",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/source-pool/*",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/root-review-v1/*",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/runtime-reference-proof-62884d2a/*",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/plan.draft.json",
+        "neuralese-semantic-iterate-reducers-v26-20261008-v1/generation-review-v1/luna/source-index-catalog.json",
+        "neuralese-semantic-iterate-reducers-v26-runtime-20261008-62884d2a/frozen-runtime/**/*"
+      ],
+      "admission": "held-new-authored-source-root-reviewed-cpu-reference-only-no-provider-generation-or-training-admission",
+      "notes": "Immutable V26 sixteen-world eight-domain source pool, root semantic review, 1046-file frozen runtime from committed HEAD 62884d2a, and 16-case CPU-only authored reference proof. Proof records 192 native actions and 64 exact current-pass child reads, with zero provider/model calls. Includes an unapproved generation plan draft and reviewer-only index catalog; neither is passed to the model. No generation, action, trace, DPO, or training admission is granted."
+    },
+    {
+      "id": "neuralese-v25-direct-return-event-proof-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v25-direct-return-event-proof-20261008-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-review-only-no-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v25-luna-campaign-v1-raw-20261008"
+      ],
+      "notes": "Small held proof of two exact selected direct typed-text return_result events and three authenticated same-parent reader links. Recurrence audit retains three unresolved upstream context roots and is not structurally closed. RAIL-741 is only a source-grounded candidate for separate review; TREE-710 remains a semantic hold because its final target adds an unsupported item-specific authority requirement. No training or DPO admission."
     }
   ],
   "coverage_backlog": [

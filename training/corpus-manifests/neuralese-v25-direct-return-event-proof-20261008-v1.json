@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v25-direct-return-event-proof-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v25-direct-return-event-proof-20261008-v1",
+  "files": [
+    {
+      "path": "candidate-rows.jsonl",
+      "bytes": 683139,
+      "sha256": "9b4507f9888f26a8080c75a2b38952836925185bf7518a734527b3afea23aeba",
+      "lines": 5
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2085,
+      "sha256": "8790dce7edeacc341e467784cedeb6b504cf6a4b9d8f2914acedc784f9b92e00"
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 1537,
+      "sha256": "c68fc51272875747be024836c6e8d8ab37f7921dc75d32ae4b99f5e20a454d9c"
+    },
+    {
+      "path": "review.json",
+      "bytes": 15468,
+      "sha256": "135d9bb199d9227716c4a247385baa23db5d4973c2aebc2d70f0a53e5512638c"
+    }
+  ],
+  "bytes": 702229
+}
