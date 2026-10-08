@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v17-v8-gold-exposed-rejected-source-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-v17-v8-publication-20261008-v1/rejected-gold-exposed-v8-disposition-v1.json",
+      "bytes": 1394,
+      "sha256": "91d8c5ede5740400f476df072eeca5867a8bb9646547d1953a7ab11f9969e035"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-review-v1/README.md",
+      "bytes": 1242,
+      "sha256": "95e3edd11fe342ca8e9759624bf0355a9014adccb1889c6e37b8f45f0cde18d6"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-review-v1/luna-proposal-v1.json",
+      "bytes": 4510,
+      "sha256": "eca509b53c83ecc6f800a443e0babc5f02c8697792debaa5afd0822306080662"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-review-v1/source-review.json",
+      "bytes": 11947,
+      "sha256": "fa995f93d78be71d45584f0c2957b3ffb57a70b61522508a0dc03521399164aa"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-review-v1/source.cases.jsonl",
+      "bytes": 258362,
+      "sha256": "5df1922dd86e41f4814ee7ed4f624f60d3ecf578a137f36d3d05c7f4d3590717",
+      "lines": 6
+    }
+  ],
+  "bytes": 277455
+}
