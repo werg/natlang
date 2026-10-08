@@ -926,6 +926,111 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.deepEqual(indexReads, ['0', '1', '2']);
 });
 
+test('receiver-only String methods read declared soft strings before native lookup', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'text', type: 'Neuralese<string> | string' }, { name: 'events', type: 'unknown[]' },
+  ], locals: [], captures: [], imports: [], returns: 'number' };
+  for (const method of ['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase']) {
+    const source = `events.push(text.${method}()); return events.length;`;
+    const analysis = analyzeEvalSnippet(source, scope);
+    assert.deepEqual(analysis.diagnostics, [], method);
+    assert.deepEqual(analysis.readouts.map(item => source.slice(item.start, item.end)), ['text'], method);
+  }
+  const sync = analyzeEvalSnippet('function sync(text: Neuralese<string>) { return text.trim(); }', scope);
+  assert.ok(sync.diagnostics.some(item => item.code === 'neuralese-readout-sync'));
+  const opaque = analyzeEvalSnippet('return text.trim();', { ...scope,
+    inputs: [{ name: 'text', type: 'Neuralese<{ value: string }>' }, { name: 'events', type: 'unknown[]' }] });
+  assert.ok(opaque.diagnostics.some(item => item.code === 'neuralese-opaque-access'));
+
+  const source = 'events.push(text.trim()); return events.length;';
+  const compiled = compileScopeSnippet(source, { inputBindings: ['text', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.match(compiled.program, /readNeuraleseIfReference/);
+  const module = compileModule({ kind: 'module', id: 'soft-string-receiver', name: 'softStringReceiver',
+    source: 'softStringReceiver.ts', revision: 'r1',
+    text: `export async function apply(text: Neuralese<string> | string, events: unknown[]) {
+      events.push(text.trim()); return events.length;
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(module, /readNeuraleseIfReference/);
+  let observed = [];
+  const moduleExports = {};
+  const moduleFunctions = new Function('exports', '__natlang', `${module}; return exports;`)(moduleExports, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      observed.push('read'); return '  soft text  ';
+    },
+  });
+
+  const sentinel = {};
+  Object.defineProperty(sentinel, 'then', { get() { observed.push('then-get'); return undefined; } });
+  const original = Object.getOwnPropertyDescriptor(String.prototype, 'trim');
+  try {
+    const runScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+      output => output.result, { readNeuraleseIfReference: async value => {
+        if (!isNeuraleseRef(value)) return value;
+        observed.push('read'); return '  soft text  ';
+      }, readNeuralese: async value => value });
+    const normalEvents = [], normalTrace = [];
+    observed = normalTrace;
+    const normalScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+      output => output.result, { readNeuraleseIfReference: async value => {
+        if (!isNeuraleseRef(value)) return value;
+        observed.push('read'); return '  Soft Text  ';
+      }, readNeuralese: async value => value });
+    assert.equal(await normalScope({ text: neuraleseRef('Neuralese<string>', 'nz1_wwwwwwwwwwwwwwwwwwww'),
+      events: normalEvents }, {}, {}), 1);
+    assert.deepEqual(normalEvents, ['Soft Text']);
+    assert.deepEqual(normalTrace, ['read']);
+
+    Object.defineProperty(String.prototype, 'trim', { configurable: true, get() {
+      observed.push('lookup');
+      return function () { observed.push(`call:${String(this)}`); return sentinel; };
+    } });
+
+    const softEvents = [], softTrace = [];
+    observed = softTrace;
+    assert.equal(await runScope({ text: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events: softEvents }, {}, {}), 1);
+    assert.deepEqual(softEvents, [sentinel]);
+    assert.deepEqual(softTrace, ['read', 'lookup', 'call:  soft text  ']);
+
+    const moduleEvents = [], moduleTrace = [];
+    observed = moduleTrace;
+    const moduleRefs = moduleFunctions.apply(neuraleseRef('Neuralese<string>', 'nz1_uuuuuuuuuuuuuuuuuuuu'), moduleEvents);
+    assert.equal(await moduleRefs, 1);
+    assert.deepEqual(moduleEvents, [sentinel]);
+    assert.deepEqual(moduleTrace, ['read', 'lookup', 'call:  soft text  ']);
+
+    const crispEvents = [], crispTrace = [];
+    observed = crispTrace;
+    const crispScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+      output => output.result, { readNeuraleseIfReference: async value => {
+        if (!isNeuraleseRef(value)) return value;
+        crispEvents.push('read'); return 'unexpected';
+      }, readNeuralese: async value => value });
+    assert.equal(await crispScope({ text: 'ordinary', events: crispEvents }, {}, {}), 1);
+    assert.deepEqual(crispEvents, [sentinel]);
+    assert.deepEqual(crispTrace, ['lookup', 'call:ordinary'], 'crisp union arms keep native string dispatch without a trained read');
+
+    const failedEvents = [], failedTrace = [];
+    observed = failedTrace;
+    const failedScope = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+      output => output.result, { readNeuraleseIfReference: async () => {
+        observed.push('read'); throw new Error('string receiver read failed');
+      }, readNeuralese: async value => value });
+    await assert.rejects(() => failedScope({ text: neuraleseRef('Neuralese<string>', 'nz1_vvvvvvvvvvvvvvvvvvvv'),
+      events: failedEvents }, {}, {}), /string receiver read failed/);
+    assert.deepEqual(failedEvents, []);
+    assert.deepEqual(failedTrace, ['read'], 'a failed receiver read stops before native method lookup');
+  } finally {
+    Object.defineProperty(String.prototype, 'trim', original);
+  }
+});
+
 test('Array#toString preserves native and custom join dispatch while reading only direct soft elements', async () => {
   const inherited = Object.create(Array.prototype);
   inherited[1] = neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr');

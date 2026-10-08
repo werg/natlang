@@ -154,12 +154,15 @@ interface NlTag {
 type DefaultDialect = "DefaultDialect";
 /** Brand of a soft value. It has no semantic fields to inspect; typed string conversions use readout. */
 interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
+/** Native, receiver-only text operations available on typed soft strings. The compiler reads the payload first. */
+type NeuraleseStringMethods<T> = [T] extends [string] ? Pick<String,
+  'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase'> : {};
 /**
  * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
  * A Neuralese of a function type is callable with the function's parameters.
  */
 type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?
-  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D>;
+  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D> & NeuraleseStringMethods<T>;
 `;
 
 const FUNCTIONS = String.raw`

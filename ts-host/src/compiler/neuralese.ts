@@ -105,6 +105,26 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       property.name.text === 'toString' && standardMethod(property, ['Object']) &&
       (soft(property.expression) || hasSoftAlternative(checker, checker.getTypeAtLocation(property.expression)));
   };
+  const stringReceiverOnlyMethods = new Set(['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase']);
+  const softStringReceiverCall = (property: ts.PropertyAccessExpression): boolean => {
+    const call = property.parent;
+    if (!ts.isCallExpression(call) || call.expression !== property || call.arguments.length !== 0 ||
+        !stringReceiverOnlyMethods.has(property.name.text)) return false;
+    const receiver = checker.getTypeAtLocation(property.expression);
+    const alternatives = receiver.isUnion() ? receiver.types : [receiver];
+    let foundSoft = false;
+    for (const alternative of alternatives) {
+      const parts = neuraleseParts(checker, alternative);
+      if (parts) {
+        foundSoft = true;
+        const payloads = parts.element.isUnion() ? parts.element.types : [parts.element];
+        if (!payloads.length || payloads.some(payload => !(payload.flags & ts.TypeFlags.StringLike) ||
+            !standardDeclaration(checker.getPropertyOfType(payload, property.name.text), ['String']))) return false;
+      } else if (!(alternative.flags & ts.TypeFlags.StringLike) ||
+          !standardDeclaration(checker.getPropertyOfType(alternative, property.name.text), ['String'])) return false;
+    }
+    return foundSoft;
+  };
   const arrayJoinKind = (expression: ts.Expression): 'supported' | undefined => {
     const array = checker.getTypeAtLocation(expression);
     const alternatives = array.isUnion() ? array.types : [array];
@@ -295,7 +315,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       readout(node.expression, undefined, !soft(node.expression));
     else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       if (hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression))) {
-        if (ts.isPropertyAccessExpression(node) && stringToString(node))
+        if (ts.isPropertyAccessExpression(node) && (stringToString(node) || softStringReceiverCall(node)))
           readout(node.expression, undefined, !soft(node.expression));
         else if (ts.isPropertyAccessExpression(node) && stringReplaceKind(node)) { /* Lower the standard typed string call. */ }
         else opaque(node, 'it has no fields or elements to read');
