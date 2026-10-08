@@ -1,0 +1,75 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+  "owner": "pop",
+  "path": "runs/s1-question-collection-v8-action-supported-proposal-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1406,
+      "sha256": "1eea4f53a7b64cc0e4e640d5f9430dd2e6cfc6249d6bc43bb657632ac9dc771b"
+    },
+    {
+      "path": "input/raw-action-receipts.jsonl",
+      "bytes": 299712,
+      "sha256": "fa6085705f63d4f8304016cd54b9e0b5964d88cbfcdbd486f57bd89b4baa91ba",
+      "lines": 47
+    },
+    {
+      "path": "input/selected-actions.jsonl",
+      "bytes": 137651,
+      "sha256": "fb74807e868ea77f3a9935065a7675ae67b2a806ef8a8d9cf08ae8a03f2a20bb",
+      "lines": 47
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2353,
+      "sha256": "125aaa2c1f2bd630b990a6f3e41e33ef91feeaf2feed6ff055f06a561e645ceb"
+    },
+    {
+      "path": "materializer-run.json",
+      "bytes": 66700,
+      "sha256": "51b0e393791e28fc73c1ae52461717cf8dbbcf6fa3d6fe9448e41a35efc7e930"
+    },
+    {
+      "path": "materializer-verification.json",
+      "bytes": 514,
+      "sha256": "2a7ecfc0ffcf0582e3567d7bcf669216ad796f029ffbde71c5c85247d6f15b5d"
+    },
+    {
+      "path": "native-actions.jsonl",
+      "bytes": 9094040,
+      "sha256": "772b3febbeb65488927b87eb8b9c1f8daeefcf090ff5a6cb096d12a12c30f8db",
+      "lines": 47
+    },
+    {
+      "path": "proposal-review.json",
+      "bytes": 105536,
+      "sha256": "ecc888aeb1d2fd66a69002fb9c9936ba674ea13d441ceb799bc361b4f6b8e0ec"
+    },
+    {
+      "path": "text-preview/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "text-preview/provenance.jsonl",
+      "bytes": 36373,
+      "sha256": "7049973b79d13c5214da8f6e6013b62164d32654a9bb0b0bc0707efa83ca8d90",
+      "lines": 47
+    },
+    {
+      "path": "text-preview/receipt.json",
+      "bytes": 2874,
+      "sha256": "6884eb88dbe3ac197eda5eef4c8fa9b1d49a91bb6b82b8f548bf7712187b8485"
+    },
+    {
+      "path": "text-preview/text.jsonl",
+      "bytes": 3197107,
+      "sha256": "86ec23535892ff812d9f9f3b5f0832ace7ebb73c2c3dc725a04a8b2ef2541b05",
+      "lines": 47
+    }
+  ],
+  "bytes": 12944266
+}

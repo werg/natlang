@@ -7856,6 +7856,41 @@
         "verified-reasoning-pools-20261008-v17"
       ],
       "notes": "Closed nine-row V17 carry/case20 recovery campaign: six parent accepted and three rejected, no infrastructure failures in the recovery attempt. Includes original V17 case20 connection-refusal evidence. All outcomes remain held; no training, trace, DPO, or independent-world admission."
+    },
+    {
+      "id": "s1-question-collection-v8-action-source-audit-20261008-v1",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-source-audit-20261008-v1",
+      "include": [
+        "README.md",
+        "review.json"
+      ],
+      "admission": "held-independent-source-context-quality-review-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-candidates-20261008-v5"
+      ],
+      "notes": "Independent source/question/context audit of the 49 converted V8 action candidates. Flags source-quality holds for qa_quality_mcq:32 and :34 despite exact port-gold matches; parent failures remain unchanged. Review only, no training/DPO admission."
+    },
+    {
+      "id": "s1-question-collection-v8-action-supported-proposal-20261008-v1",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-supported-proposal-20261008-v1",
+      "include": [
+        "README.md",
+        "input/**",
+        "native-actions.jsonl",
+        "materializer-run.json",
+        "materializer-verification.json",
+        "text-preview/**",
+        "proposal-review.json",
+        "manifest.json"
+      ],
+      "admission": "held-47-source-reviewed-native-text-action-proposal-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-candidates-20261008-v5",
+        "s1-question-collection-v8-action-source-audit-20261008-v1"
+      ],
+      "notes": "47-action derivative excludes questionable source items qa_quality_mcq:32 and :34. Shared native materializer and gold-text renderer outputs match the included V5 rows exactly; no source-ID/action duplicates against admitted V9 and V24 append. Five V5 conversion omissions remain held/outside scope. No training, DPO, trace, soft-writer, recurrence, or independent-world admission."
     }
   ],
   "coverage_backlog": [
