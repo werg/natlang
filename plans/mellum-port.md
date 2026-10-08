@@ -37,9 +37,22 @@ and does acceptably at raw agentic coding in our harness out of the box. If adop
   - Same 23-task protected packet, limits and greedy decoding as the Maple/Ling comparison
     (`plans/student-candidate-comparison-20261005.md`).
 
+- Real-checkpoint parity (`scripts/mellum_parity.py`; weights verified against the HF LFS hashes,
+  `runs/mellum-evaluation-20261008/weights-verified.json`).
+  - In FP32, four layers: the port matches transformers to 1e-5 relative residual error.
+  - In BF16, the full model differs by ~0.4% per layer. Our router runs in FP32; the reference's runs in BF16, so
+    near-tie expert choices differ.
+  - On 2048 held tokens: CE 4.49 (transformers) vs 4.54 (ours), argmax agreement 0.88.
+  - Truncated loads (`layers=`) were fixed for the per-type rotary.
+- Neuralese markers: `family_controls` picks `<|extra_token_7|>`/`<|extra_token_8|>` (IDs 33/34) for Mellum and
+  keeps 151669/151670 for Maple. Used in `serve.load_engine` and `foundation_heads`.
+- Harness evaluation set up: `runs/mellum-evaluation-20261008/evaluation-plan-{thinking,no-thinking}-v1.json`.
+  - Same packet, runtime and limits as Maple/Ling.
+  - The pinned source review was recovered from git (02ff4cc2) because the live file has moved on.
+
 ## Next, in order
 
-1. Real-checkpoint parity on GPU: our loader vs transformers on the downloaded weights (first logits, held-text CE).
+1. (done) Real-checkpoint parity.
 2. Harness evaluation: vLLM BF16, thinking on (as Ling), then thinking off.
    - Baselines: Maple 12/23, Ling 11/23 / 10/23.
 3. Training speed:
