@@ -1,0 +1,544 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v17-carry8-case20-luna-closure-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v17/generation-review-v1/luna/campaign-v1/slot-02/jobs/000020-d62f95c7bb32e7ec.partial.json",
+      "bytes": 391970,
+      "sha256": "218e27fa788d2af4fe934c7e73229c1386eff602643f67970170799d7d847c0a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/generation-review-v1/luna/campaign-v1/slot-02/jobs/000020-d62f95c7bb32e7ec.partial.json.evidence-818bc088-eeca-46d0-90ec-9a1b9ac85dd4.jsonl",
+      "bytes": 2547139,
+      "sha256": "d030be51ee86d91371da407b437bb2998d7422890ea029e92f72a828af1fbb15",
+      "lines": 257
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/generation-review-v1/luna/campaign-v1/slot-02/jobs/000020.error.json",
+      "bytes": 397,
+      "sha256": "f50f27cc2d483a85ea558b9f1a7c22ce284f97dc36764ea1bfbf124ef987e6dd"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/closure-review-v1/README.md",
+      "bytes": 1551,
+      "sha256": "b42d01e508cc0bbd29adf1389a9a783a5e9a552b46f047582e40f26e1ea21082"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/closure-review-v1/authority-closure.json",
+      "bytes": 8667,
+      "sha256": "945a3cede51f8ea71b69de1355dc66eba0ff7ddaac1089f899b69c9e4fe070a2"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/closure-review-v1/terminal-tally.json",
+      "bytes": 22925,
+      "sha256": "f207558223d2c0635fbecfc6d6354d0e7cf0e347e8d0a8b8eb75969898d86945"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/composition-proof.json",
+      "bytes": 3061,
+      "sha256": "2b57ce2e0da809f41bedf4072d1d58e8e3988542476e4b304941797dd3b7d7a5"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/dispatch/claims.jsonl",
+      "bytes": 37965,
+      "sha256": "4f523dbf0ba891daf7a3673e5ff78f718b0e29145fb6cf5ff1d33e2e1ba798ac",
+      "lines": 29
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/dispatch/dispatcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/dispatch/external-launch-binding.json",
+      "bytes": 1745,
+      "sha256": "19173c76841c8ce9311bd2c6724cf9d7aedadeba138e7306c0a2c8e515ade3b8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/dispatch/launch.json",
+      "bytes": 2607,
+      "sha256": "f80acbf99919a25490d38fb362d8c43bd36b526895f471a5e456ef7c2ae1d580"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/dispatcher.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000000/queue.jsonl",
+      "bytes": 898,
+      "sha256": "6c877b50f830389d270631bfbe3b00826088cdcc981d799248c2eb0ac4a11bc6",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 129028,
+      "sha256": "e0f8c279c6593516af72ac1d3f75ec3d8e5d77da5dccb5affe4c4f4ed2a1c91f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-a26a2b9e8581e91b.result.json",
+      "bytes": 3150541,
+      "sha256": "abd9952071df8a34720bde480a2f1c0d5b72c46da340cdbc443264614483483f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-a26a2b9e8581e91b.trace.jsonl",
+      "bytes": 371697,
+      "sha256": "42adc07a8408faa594394690c7fb1758e9a7a8abb6951d8749b6c91940251815",
+      "lines": 578
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 11980,
+      "sha256": "5e2baab78b19f2cd4e32fd14322f257340dccaa2708bc3a936f10ba5957f4a12",
+      "lines": 13
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3150541,
+      "sha256": "abd9952071df8a34720bde480a2f1c0d5b72c46da340cdbc443264614483483f",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "8c81f2c502de6882bb179dd72773210f49e26a3cf3244a02178870acdf722cb7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 11980,
+      "sha256": "5e2baab78b19f2cd4e32fd14322f257340dccaa2708bc3a936f10ba5957f4a12"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000001/queue.jsonl",
+      "bytes": 898,
+      "sha256": "d859f80f6830ca71b910284eefcabfc0048322e253d8d67caf8c81733558165b",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 109139,
+      "sha256": "dd360c6edd0055d12064c3df55cedd463d01eaccdf76fc9659750383243cde0d"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-73e8bc77e7e634c9.result.json",
+      "bytes": 2899742,
+      "sha256": "2f4871ac67cc144fff5bdcb1a16cd3b9061ffc8ed54a795d4ca4f03fba365c74"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-73e8bc77e7e634c9.trace.jsonl",
+      "bytes": 419751,
+      "sha256": "0db4680afcd5f92dde38b4cdeb526609d85096c7966169e284d30719b8081930",
+      "lines": 632
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 9277,
+      "sha256": "0747a380af472f8137f6440c58d764b983bf99e2abc703d6ff6caf3ceb85461b",
+      "lines": 10
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 2899742,
+      "sha256": "2f4871ac67cc144fff5bdcb1a16cd3b9061ffc8ed54a795d4ca4f03fba365c74",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "3007efa4300e99653449af51aaf1aee3fb99a525307f36852ef6ff2bb2cea472"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 9277,
+      "sha256": "0747a380af472f8137f6440c58d764b983bf99e2abc703d6ff6caf3ceb85461b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000002/queue.jsonl",
+      "bytes": 898,
+      "sha256": "deb255206a9d57047a189087bd2ed552e34e833c4370aca592a718f82b1306ff",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000005/queue.jsonl",
+      "bytes": 898,
+      "sha256": "f2c72b0e974a89e5a3220b46923527710c62adf11fa958580b9eb759b4d28dc5",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000007/queue.jsonl",
+      "bytes": 898,
+      "sha256": "cdecda62dbdb9157859c3360c26ceef1afb9681633e8a837fd32035b463660c9",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 56775,
+      "sha256": "d9bdc079501017d2ca3f4093cb8551d42ba98aebf0776c9eaa5aab319b81f162"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000005.log",
+      "bytes": 34203,
+      "sha256": "0ba575858bf7a2ff36bce8eeb4b658e206e13f88c06f3d2df7ac1c3eb41f3372"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000007.log",
+      "bytes": 49654,
+      "sha256": "1118abf19374a7147081c676e3795406cdb655650fab0d2022cdb895ea069ce8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-793628b7ad0a2ed9.result.json",
+      "bytes": 1512221,
+      "sha256": "add45872feade1126ef782c4a51d3700e382ac449cd9aff9920ed8950910fd4a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-793628b7ad0a2ed9.trace.jsonl",
+      "bytes": 218896,
+      "sha256": "ea35f77849a79c4c859646c84d3415371f3e49e4ba82edbda6d21ef2969b1e73",
+      "lines": 339
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000005-18eb9a85100bdaea.result.json",
+      "bytes": 997991,
+      "sha256": "4ee49dbddbced9bed9278b808536de7f4f582e0c4e572a76184c88f9a6a9588e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000005-18eb9a85100bdaea.trace.jsonl",
+      "bytes": 211153,
+      "sha256": "c0fcd522d5a56d4fb054c326397e83f246b6dca85f2c5782d45a59e83ed59853",
+      "lines": 232
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000007-e17f303505873c4f.result.json",
+      "bytes": 1380945,
+      "sha256": "bc2733476a9790d164325029aa8a8b2b4c548ec7454e9e699d9e620dcb2d2150"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000007-e17f303505873c4f.trace.jsonl",
+      "bytes": 233961,
+      "sha256": "eb59b118815359b3dd8626fdb4c02193a6e8ec537415ac3fdf5ca0fcdd4229bc",
+      "lines": 312
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/journal.jsonl",
+      "bytes": 13480,
+      "sha256": "3e94d36140b5c2000d025199a463a89a36f11eca715730cdff3c2e2fbeeddafb",
+      "lines": 14
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 1512221,
+      "sha256": "add45872feade1126ef782c4a51d3700e382ac449cd9aff9920ed8950910fd4a",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "dc2bfd5b5ab7cbefe6ec889957cac5dc0664905abd93868ac606a1b71649efc3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000005.results.jsonl",
+      "bytes": 997991,
+      "sha256": "4ee49dbddbced9bed9278b808536de7f4f582e0c4e572a76184c88f9a6a9588e",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000005.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "2489ae404470b201168b899fcc1506a8053620d4a950c96527b0eea989cb5f9a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000007.results.jsonl",
+      "bytes": 1380945,
+      "sha256": "bc2733476a9790d164325029aa8a8b2b4c548ec7454e9e699d9e620dcb2d2150",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/results/case-000007.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "85b33d04b758d975317e51dea366c2f2bbba0021442430b6da1bc2c14b50d90c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-03/supervisor.log",
+      "bytes": 13480,
+      "sha256": "3e94d36140b5c2000d025199a463a89a36f11eca715730cdff3c2e2fbeeddafb"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000003/queue.jsonl",
+      "bytes": 898,
+      "sha256": "c1f7c1c3c6b206ce85144da46326ec89e9191f62b69ddcec5586cbe9ba6c8619",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000006/queue.jsonl",
+      "bytes": 898,
+      "sha256": "ee9fe9e98d8dfda0fcb900596f604b848184c03a06424aee62cdd7e45ee914f0",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 69897,
+      "sha256": "89eecae3cfa5478775cb0e84a25dd58a7fe3800035666537ef3aceb5af8305b1"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000006.log",
+      "bytes": 104836,
+      "sha256": "6832b61da310132eeb55c3d08fee106591f661e1ddc1a12ece820cf3c5c416d7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-a7f028c205b9e393.result.json",
+      "bytes": 2102423,
+      "sha256": "afb1b5252269a49aae9cb73cd958932d60e0e5e6c6337d1787b24c39fa626109"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-a7f028c205b9e393.trace.jsonl",
+      "bytes": 240873,
+      "sha256": "e33b999f57ba682f3a54fd96298287ec1fce84e16e40bda88cee5ad2a98ec808",
+      "lines": 321
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000006-be8b4eef8dcea9de.result.json",
+      "bytes": 2801306,
+      "sha256": "8e32b570a849ae67f327053206ab462bf4d040b0aa3a8490ed03f61110c48743"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/jobs/000006-be8b4eef8dcea9de.trace.jsonl",
+      "bytes": 498670,
+      "sha256": "2f54e37d471985a0919c63b2b553bf5f3abfb68a341e0f44a731fcc265ce2511",
+      "lines": 600
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/journal.jsonl",
+      "bytes": 17657,
+      "sha256": "286f0f48745f54566b6cb842d5eeb00a513a25955c36fe8f0227eaa1d2eee39d",
+      "lines": 19
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 2102423,
+      "sha256": "afb1b5252269a49aae9cb73cd958932d60e0e5e6c6337d1787b24c39fa626109",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "ed47a875856de9d010b8353c193e4f74019444ab26b514f5ad324c0e80fe1c2e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000006.results.jsonl",
+      "bytes": 2801306,
+      "sha256": "8e32b570a849ae67f327053206ab462bf4d040b0aa3a8490ed03f61110c48743",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/results/case-000006.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "f8659c2b4b9c3c0d82aca5b3f32ed009aefdd3a04d2d3a14cc1d66597e0d2b23"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-04/supervisor.log",
+      "bytes": 17657,
+      "sha256": "286f0f48745f54566b6cb842d5eeb00a513a25955c36fe8f0227eaa1d2eee39d"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000004/queue.jsonl",
+      "bytes": 898,
+      "sha256": "9c13e15e3f1603dc6b1ac489651708d563b58a896626db46821b1f34b7f71ade",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/claims/verified-reasoning-v17-carry8-case20-recovery-v1-luna-case-000008/queue.jsonl",
+      "bytes": 898,
+      "sha256": "6987aa7f3f5301482041f3ad7c5c5f6669e5f9bf43334a4f864752ebd7be4571",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 109519,
+      "sha256": "2d65e630ad84a22eb424821047d66bc138930c9ad956bea50b07c5ed766ca1e6"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000008.log",
+      "bytes": 43683,
+      "sha256": "112abedf3910f435335bf54876596079770c2d855e8a877b9e6e5ef23eb69e78"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-f4356c4ccb2137bb.result.json",
+      "bytes": 3126661,
+      "sha256": "d61b4620b6510e498ecf064dcd36acd318af13990cf4d0547ec46ff291eacc85"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-f4356c4ccb2137bb.trace.jsonl",
+      "bytes": 437336,
+      "sha256": "9cdce51e5d3115b41769212e61d44eefe395d373c13ca87f7bccd2f96057d420",
+      "lines": 642
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000008-d62f95c7bb32e7ec.result.json",
+      "bytes": 1081823,
+      "sha256": "f86fda9b1036d679e4eff0d2395bfbb46b5f8318490375078b570fd6f6e7a93e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000008-d62f95c7bb32e7ec.trace.jsonl",
+      "bytes": 169292,
+      "sha256": "017a15cc0f510cbaf067ca09265f4c433d8329ed44d4e5619ba1e0bbfefbdb80",
+      "lines": 241
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/journal.jsonl",
+      "bytes": 13163,
+      "sha256": "9a9ac8c9f3b0e6dc3010e1c0a36ef94023e7f5323fb4ab1ec362a1cfd6fafca3",
+      "lines": 14
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 3126661,
+      "sha256": "d61b4620b6510e498ecf064dcd36acd318af13990cf4d0547ec46ff291eacc85",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "8092c40df9108f6de31af176b2986e618da60f627a1773094ad1632e13052cdf"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000008.results.jsonl",
+      "bytes": 1081823,
+      "sha256": "f86fda9b1036d679e4eff0d2395bfbb46b5f8318490375078b570fd6f6e7a93e",
+      "lines": 1
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/results/case-000008.results.jsonl.manifest.json",
+      "bytes": 606,
+      "sha256": "83c78d757c5a6fa943fa56bb66915703452bee72dc29c7119f78edd8b9598af5"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/campaign-v1/slot-05/supervisor.log",
+      "bytes": 13163,
+      "sha256": "9a9ac8c9f3b0e6dc3010e1c0a36ef94023e7f5323fb4ab1ec362a1cfd6fafca3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/plan.approved.json",
+      "bytes": 20553,
+      "sha256": "555fff6e695e26fc46fba84234aa6150f77ffb6680604772705dcd9ed586ccbc"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/plan.draft.json",
+      "bytes": 20121,
+      "sha256": "66ae5115a4571a32a02d412698a9fcb04247068baf544de386d549348d1a23d6"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/generation-review-v1/luna/root-execution-authorization.json",
+      "bytes": 2107,
+      "sha256": "1e5cb234e191a99a2c4d21184ed40cc6051a6b16174072ff7f6d696682c3130a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/manifest.json",
+      "bytes": 320,
+      "sha256": "ae74955e76cd37839f3cec267a24b24b3e00634c0dbc6f7e21e2e62a56f08397"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-000.reference.json",
+      "bytes": 2531781,
+      "sha256": "2f01e0d97f28b8f93ba06f22cf91dd59326dae44f0ac4c3e027206791d8aa90b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-001.reference.json",
+      "bytes": 2508815,
+      "sha256": "54a09cdd85fd8814c9e37593d9a52380b2885c1e503fa05f57a3622688d914a4"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-002.reference.json",
+      "bytes": 2511949,
+      "sha256": "3c215855c3a7816d9b9324d8ff8f2ccedd4f033be969f2d0270aa51ac3ea5bc1"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-003.reference.json",
+      "bytes": 2512792,
+      "sha256": "c8bac9965e71d89d7ebbff7266a439a0713496b6636fc39ab64942f8a7894e12"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-004.reference.json",
+      "bytes": 2513184,
+      "sha256": "f4cfaffaadd3d3c8da03d767afbf166354fe8048a9d09b3f1a382678a3aeaa85"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-005.reference.json",
+      "bytes": 2638032,
+      "sha256": "01e6d1bd9bf38553e6eb8d04c3b29a166ced34be39a2104f8e0107fadc849305"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-006.reference.json",
+      "bytes": 2628274,
+      "sha256": "4844b256f45e7976c5fb7e11a1c80973d3c3b3011393c6674c74630fdacb4dc5"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-007.reference.json",
+      "bytes": 2525049,
+      "sha256": "bdd6a2c8750c88d00948a28db6f0a019f1767f94c27c8ee841e68858e3da27ec"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/case-008.reference.json",
+      "bytes": 2954347,
+      "sha256": "c7e49f378b9fb9a9ec000f40fd107802c59e5e20ec35276f6e0b56e89a5c7049"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 39508,
+      "sha256": "3321705368289c2d6e1c3f71fbdd2fb58c62f71299528b64451c1591c4894978",
+      "lines": 83
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/native-decisions.jsonl",
+      "bytes": 6567611,
+      "sha256": "9354fdbcbb5ae0a40ca5d8b548a509a98883446e4f6120684096731d6c7efb66",
+      "lines": 83
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/reference-trajectories.jsonl",
+      "bytes": 4509091,
+      "sha256": "30a001e003e313e9cddbb02a5419bcb957820bdbba6ded4b34e57bb55683a486",
+      "lines": 9
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/review-artifact-manifest.json",
+      "bytes": 2483,
+      "sha256": "21943d4fadc308f5fbbc6691594e9d98e73e161fb98daa05e01f219e37f365d8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/runtime-reference-proof.json",
+      "bytes": 158799,
+      "sha256": "78041c6f97fbcb22003796bdbd203621561116355641657f460dc4657c22b168"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/source-action-review.jsonl",
+      "bytes": 102374,
+      "sha256": "f1b358992607ce061cd0c3cd7b9c712c2c30b47e377d34a40e1bdc452efecff8",
+      "lines": 83
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/runtime-reference-proof-bbaa0847/source.cases.jsonl",
+      "bytes": 152978,
+      "sha256": "bbb4e59095f4042bea727c5f4146a9d3edaeec5f0a4501fc33c4a56a0989f3b7",
+      "lines": 9
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/source-index-catalog.json",
+      "bytes": 7119,
+      "sha256": "6df6e74321c8ec88ea86726d290bd0acaf060c362c3f5563b3563d80e118d5a9"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1/source.cases.jsonl",
+      "bytes": 152978,
+      "sha256": "bbb4e59095f4042bea727c5f4146a9d3edaeec5f0a4501fc33c4a56a0989f3b7",
+      "lines": 9
+    },
+    {
+      "path": "verified-reasoning-v17-carry8-case20-bbaa0847-source/frozen-runtime/frozen-runtime.json",
+      "bytes": 91338,
+      "sha256": "3b687307609a93c88a5057484df37542845dc681d1243fda372381fd01f95e3a"
+    }
+  ],
+  "bytes": 79929949
+}
