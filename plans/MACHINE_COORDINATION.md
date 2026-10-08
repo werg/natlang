@@ -89,7 +89,14 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    manifest files, rejects destination content collisions, never deletes, checks
    space before copying and writes SHA-256 verification receipts beneath
    `.coordination/corpus-receipts/`. Interrupted partials can resume. An explicit
-   `verify` reads bytes again; `status` only reports presence, not hash verification.
+   `verify` reads local bytes again; `status` only reports local presence, not hash verification.
+   `--machine` identifies the machine running the CLI; it never selects a remote
+   verification destination. Use `verify-remote --machine pop --host dgx --id ID`
+   to hash actual DGX files. Verification receipts name their scope, hostname and
+   repository. Before removing a local artifact copy, independently verify the
+   remote exact manifest and its hashes over SSH, as well as local hashes and
+   live references. A local receipt is never backup evidence. Stop if any remote
+   file is missing; preserve failed verification and unresolved loss explicitly.
 6. Announce snapshot IDs, source coverage, counts and admission state in the
    receiving inbox. Update the dataset coverage/handover. Train only after the
    normal source-policy, split/protected, native replay and quality gates.

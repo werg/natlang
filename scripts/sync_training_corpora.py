@@ -13,6 +13,7 @@ import json
 from pathlib import Path, PurePosixPath
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
 
@@ -108,7 +109,7 @@ def file_stat(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
 
 
-def verify(repo, manifest, receipt_group='corpus-receipts'):
+def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='local'):
     root = repo / relative(manifest['path'])
     errors, checked, stats = [], [], {}
     for item in manifest['files']:
@@ -126,12 +127,21 @@ def verify(repo, manifest, receipt_group='corpus-receipts'):
                 checked.append(item['path'])
                 stats[item['path']] = before
     receipt = {'id': manifest['id'], 'status': 'failed' if errors else 'verified', 'checked': len(checked),
+               'verification_scope': verification_scope, 'verified_hostname': socket.gethostname(),
+               'verified_repo': str(repo.resolve()),
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
     save(repo / '.coordination' / receipt_group / (manifest['id'] + '.json'), receipt)
     if errors:
         raise ValueError(json.dumps(receipt))
     print(json.dumps({k: v for k, v in receipt.items() if k != 'file_stats'}), flush=True)
+
+
+def verify_remote(manifest, args):
+    """Hash the actual SSH destination; --machine names this CLI's local role."""
+    remote_script = "import json,sys; from pathlib import Path; from sync_training_corpora import verify; verify(Path(sys.argv[1]),json.load(sys.stdin),verification_scope='ssh-remote')"
+    command = f'cd {shlex.quote(args.remote_repo + "/scripts")} && python3 -c {shlex.quote(remote_script)} {shlex.quote(args.remote_repo)}'
+    subprocess.run(['ssh', args.host, command], input=json.dumps(manifest), text=True, check=True)
 
 
 def sync(repo, entry, manifest, args):
@@ -196,16 +206,16 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
     if pull:
         verify(repo, manifest, receipt_group='corpus-restores' if selected else 'corpus-receipts')
     else:
-        remote_script = "import json,sys; from pathlib import Path; from sync_training_corpora import verify; verify(Path(sys.argv[1]),json.load(sys.stdin))"
-        command = f'cd {shlex.quote(args.remote_repo + "/scripts")} && python3 -c {shlex.quote(remote_script)} {shlex.quote(args.remote_repo)}'
-        subprocess.run(['ssh', args.host, command], input=json.dumps(manifest), text=True, check=True)
+        verify_remote(manifest, args)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['publish', 'verify', 'sync', 'restore', 'status'])
+    parser.add_argument('action', choices=['publish', 'verify', 'verify-remote', 'sync', 'restore', 'status'],
+                        help='verify hashes local files; verify-remote hashes files on --host over SSH')
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument('--machine', choices=['pop', 'dgx'], required=True)
+    parser.add_argument('--machine', choices=['pop', 'dgx'], required=True,
+                        help='identity of the machine running this command, not a verification destination')
     parser.add_argument('--id', action='append', dest='ids')
     parser.add_argument('--file', action='append', dest='files', help='restore only named manifest paths; does not grant a full-snapshot receipt')
     parser.add_argument('--host', default='dgx')
@@ -238,6 +248,8 @@ def main():
             raise ValueError('registry and snapshot identity differ')
         if args.action == 'verify':
             verify(args.repo, manifest)
+        elif args.action == 'verify-remote':
+            verify_remote(manifest, args)
         elif args.action in {'sync', 'restore'}:
             sync(args.repo, entry, manifest, args)
         else:
