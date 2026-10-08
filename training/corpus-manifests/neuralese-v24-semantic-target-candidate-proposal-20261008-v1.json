@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2296,
+      "sha256": "3e694f32bdef75860238a8e3facc2e9aeb71955025590e5d08487facfde2c4fc"
+    },
+    {
+      "path": "proposal.json",
+      "bytes": 140406,
+      "sha256": "670ae08da098cf5057b0d89f611631ef8cff09c04949151a2ac8c242a041a10e"
+    }
+  ],
+  "bytes": 142702
+}

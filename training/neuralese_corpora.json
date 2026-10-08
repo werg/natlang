@@ -6828,6 +6828,40 @@
         "neuralese-semantic-iterate-reducers-v26-luna-launch-binding-v1-20261008"
       ],
       "notes": "Closed raw V26 Luna campaign for all 16 reviewed source IDs. All 16 claims and results are terminal: 15 parents accepted, LANG-850 rejected on files/answer, zero infrastructure error sidecars. The LANG-850 trajectory's carried notes collapsed factual eligibility evidence into a proposed JSON draft; its final interpreter then returned no_action despite eligible LOCALE-B with 17 verified issues and request-level lead assignment. Keep as a held semantic trajectory rejection, not infrastructure. Preserves raw jobs, actions, graph, partials, journals, claims, launch attempts and exact runtime/source bindings. Neither acceptance nor CPU reference proof grants action trace, DPO or training admission."
+    },
+    {
+      "id": "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+      "include": [
+        "README.md",
+        "proposal.json"
+      ],
+      "admission": "held-candidate-selection-pending-root-no-training-admission",
+      "derived_from": [
+        "neuralese-v24-actual-action-review-20261008-v1",
+        "neuralese-semantic-iterate-reducers-v24-v3-closed-raw-20261008"
+      ],
+      "notes": "Reference-only V24 candidate proposal preserving exact actual generation event, split/group, action/request/response/context hashes and body/value hashes. Includes 55 direct unwrapped prose-note candidates (27 train, 28 test-only), 8 typed result candidates (3 train, 5 test-only), six wrapper-bearing notes in an adapter-review backlog because each contains new pass content, and explicit rejected/eval-produced targets. No materialized body copies, training admission, or DPO admission."
+    },
+    {
+      "id": "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+      "include": [
+        "README.md",
+        "conversion-summary.json",
+        "candidate-crosswalk.jsonl",
+        "selected-actions.jsonl",
+        "raw-receipts.jsonl",
+        "native.jsonl"
+      ],
+      "admission": "held-native-preview-no-training-admission",
+      "derived_from": [
+        "neuralese-v24-semantic-target-candidate-proposal-20261008-v1",
+        "neuralese-v24-actual-action-review-20261008-v1"
+      ],
+      "notes": "Materialized all 63 selected source-grounded V24 actions via the existing shared native held-preview builder: 55 prose notes and 8 typed final results, 30 train/33 test over 15 source groups. All target values and exact raw generation events matched crosswalk references; no omissions/missing contexts. All rows remain training_approved=false; 56 came from overall accepted source results and 7 from overall rejected source results. Six TRN-520 wrapper-bearing notes remain a separate adapter-review backlog. Native rows contain normal builder-produced context; selection/receipt/crosswalk carry references and hashes, not copied target/prefix bodies."
     }
   ],
   "coverage_backlog": [

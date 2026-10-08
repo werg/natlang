@@ -1,0 +1,43 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-semantic-target-candidate-materialization-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1640,
+      "sha256": "964203461e91df46d7e0c12c05bf64678a2ad83b0ce6d956fe61c0ea22a41855"
+    },
+    {
+      "path": "candidate-crosswalk.jsonl",
+      "bytes": 93879,
+      "sha256": "fdb30613ef03cc073d534f9289a2d5f6807341d92e41033adc0bff9df66a7718",
+      "lines": 63
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 3497,
+      "sha256": "554e8012de4529191a5a48119147c6f8dd8b512819cf69d320c428966ed5b0a4"
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 8052708,
+      "sha256": "74c8b675cf3accbc6b0a38e693142e3b03a54e4148de54f8d578945d926dfa8d",
+      "lines": 63
+    },
+    {
+      "path": "raw-receipts.jsonl",
+      "bytes": 64494,
+      "sha256": "55652bf968418ea34aa3bf85c1bf1e9f198cd930993fda2bd7d12214e4dc8933",
+      "lines": 63
+    },
+    {
+      "path": "selected-actions.jsonl",
+      "bytes": 77352,
+      "sha256": "28f6b11f03e1cc0d295d82e80163ffb174df61dbe64b2a32eef4b92157ca442b",
+      "lines": 63
+    }
+  ],
+  "bytes": 8293570
+}
