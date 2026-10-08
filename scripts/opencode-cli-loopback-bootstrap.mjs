@@ -172,7 +172,7 @@ async function main() {
       throw new Error('official default tool inventory is missing');
     await stage('default-tool-inventory-checked', { count: defaultTools.data.length });
     adapter = await createOpenCodeCliChatAdapter({ cliPath, client: sdkClient, baseUrl: serverUrl,
-      directory: scratch, outputDirectory: output, actionLogPath: actionLog, modelID: args['--model'], maxModelRequests: 384, contextTokens: 32768,
+      directory: scratch, outputDirectory: output, actionLogPath: actionLog, modelID: args['--model'], maxCliTurns: 384, contextTokens: 32768,
       maxRequestMs: args['--max-request-ms'], timeoutMs: args['--max-request-ms'], env: cliEnvironment });
     const receipt = { schema: 'natlang.opencode_cli_loopback_bootstrap/1', bootstrap_id: bootstrapId,
       official_cli: cliPath, official_cli_sha256: await shaFile(cliPath), official_cli_version: cliVersion,

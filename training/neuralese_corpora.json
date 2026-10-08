@@ -8315,6 +8315,43 @@
       "notes": "Exact one-case Ling 3.1 Flash Free collector attempt returned provider-retry-scheduled endpoint unavailable (503), with SDK retries canceled and no output actions/rows. Compared with separate official CLI and SDK plain READY controls plus an EXO UnknownError control. Requests differ in configuration/prompt path; observations do not establish temporal availability change, cause, sustained model availability, worker qualification, or data admission. Paid fallback false; prior 403 and all raw attempts preserved."
     },
     {
+      "id": "opencode-ling-cli-single-case-retry-outcome-20261008-v1",
+      "owner": "pop",
+      "path": "runs/opencode-ling-collector-smoke-20261008-v2/cli-route-v1",
+      "include": [
+        "root-review-proposal.json",
+        "root-smoke-approval-v1.json",
+        "server-origin-amendment.json",
+        "cli-server/bootstrap-config.json",
+        "cli-server/bootstrap-events.jsonl",
+        "cli-server/lifecycle.json",
+        "cli-server/mcp-handshake.jsonl",
+        "cli-server/action-mcp-calls.jsonl",
+        "cli-server/cli-stdout.raw",
+        "cli-server/cli-invocations.jsonl",
+        "cli-server/shutdown.request",
+        "cli-server/opencode-home/config/opencode/opencode.json",
+        "cli-server/opencode-home/config/opencode/package.json",
+        "cli-server/opencode-home/config/opencode/package-lock.json",
+        "collector/cli-v1/control/launch-preflight.json",
+        "collector/cli-v1/control/collector-launch.json",
+        "collector/cli-v1/control/collector.stdout.raw",
+        "collector/cli-v1/control/collector.stderr.raw",
+        "collector/cli-v1/control/case-events.jsonl",
+        "collector/cli-v1/control/smoke-outcome-v1.json",
+        "collector/cli-v1/results/case-000000.results.jsonl",
+        "collector/cli-v1/jobs/000000.error.json",
+        "collector/cli-v1/jobs/000000-e7a1407ce07fe82a.partial.json",
+        "collector/cli-v1/jobs/000000-e7a1407ce07fe82a.partial.json.evidence-a139d27d-d2ad-4f97-ac8b-8a448f72aafe.jsonl"
+      ],
+      "admission": "held-official-CLI-transport-and-single-source-error-evidence-only; no result-row, teacher-quality, trace, DPO, qualification, world-credit, or training admission",
+      "derived_from": [
+        "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+        "opencode-ling-sdk-collector-integration-closeout-20261008-v1"
+      ],
+      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported ‘Upstream request failed: Endpoint is unavailable.’ The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
+    },
+    {
       "id": "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
       "owner": "pop",
       "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2",
@@ -10483,6 +10520,23 @@
         "verified-reasoning-pools-v19-answer-key-v2-20261008-v1"
       ],
       "notes": "Immutable comparison packet preserves the earlier CLI/SDK READY controls, later SDK plain/structured/system/user-frame 503 responses, one canceled collector 503, and local CLI action-harness setup attempts that never reached a provider prompt. One prior exact READY per route does not establish sustained availability; the repeated 503s do not isolate an underlying cause or prove an SDK bug. User-frame no-side-effect action probe recorded zero actions. Official free model/client only, no direct provider bypass/header spoof, no paid fallback, no source-case rerun, no qualification, data, DPO, or training admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v20-luna-retry-campaign-v2-closed-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-20261008-v20-source-expansion-v2",
+      "include": [
+        "luna/campaign-v2/*",
+        "luna/campaign-v2/**/*",
+        "luna/retry-closeout-v2/*",
+        "luna/retry-closeout-v2/**/*"
+      ],
+      "admission": "held-provider-outcome-evidence-only-no-training-or-dpo-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
+        "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
+      ],
+      "notes": "Complete immutable Luna retry campaign-v2 raw tree (57 files) and exact seven-row pair closeout. Cases 3, 4, 8 and 10 passed the unchanged oracle; 19, 20 and 22 remain rejected. Same V20 source rows and program IR hashes as their prior attempts; zero new-world credit. Provider outcomes only; no source/gold mutation, action/trace/DPO/training admission, or automatic pairing."
     },
     {
       "id": "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1",
