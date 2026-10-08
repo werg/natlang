@@ -113,7 +113,7 @@ function solveRewrite(question) {
   const { rules, program } = parseRewriteQuestion(question);
   let state = [...program];
   const seen = new Set();
-  for (let step = 0; step < 10000; step++) {
+  for (;;) {
     const fingerprint = canonical(state);
     if (seen.has(fingerprint)) throw new Error('rewrite system entered a repeated state before reaching a terminal sequence');
     seen.add(fingerprint);
@@ -125,7 +125,6 @@ function solveRewrite(question) {
     }
     if (!applied) return state.length ? state.join(' ') : 'empty';
   }
-  throw new Error('rewrite system did not terminate within 10000 steps');
 }
 function targetFinalSequence(target) {
   const labels = [...target.matchAll(/(?:final state|final sequence|final program)\s*:?\s*/ig)];
@@ -300,12 +299,14 @@ function buildBatch(family, mode, entries) {
     plausibleActions: ['read source item', 'solve it using the question rules', 'record only the requested result'],
   });
   record.dataset = family;
+  record.source_groups = groupNames;
   record.dataset_records = sourceRows;
   record.source_revisions = [`s1-full-final-20261003/${family}`];
   record.generation = { ...(record.generation ?? {}), ...record.generation,
     generator: 'natlang.verified_reasoning_collection/1', source_snapshot: { id: 's1-full-final-20261003',
       manifest_sha256: sha(corpusManifestBytes), family_file: familyFiles[family], file_sha256: familyDigests[family].sha256 },
-    original_source_groups: groupNames, task_variant: true, independent_world_credit: 0,
+    original_source_groups: groupNames, source_bundle_group: sourceBundleGroup,
+    task_variant: true, independent_world_credit: 0,
     answer_payload_mode: mode, target_values_visible_to_model: false, provider_calls: 0,
     teacher_observations: 0, training_admission: false };
   record.semantics.oracle = 'exact';

@@ -211,6 +211,11 @@ def verify(args: argparse.Namespace) -> dict:
         expected_items = [path for path in files if path.startswith("items/") and path.endswith(".json")]
         if len(expected_items) != len(expected) or case["split"] != "train":
             raise ValueError(f"{case['id']}: item count/split mismatch")
+        original_groups = sorted({group for entry in case["dataset_records"] for group in entry["group"]})
+        if case["source_groups"] != original_groups or case["generation"].get("original_source_groups") != original_groups:
+            raise ValueError(f"{case['id']}: top-level source groups do not preserve the original source-group union")
+        if case["generation"].get("source_bundle_group") != case["curriculum"]["split_group"]:
+            raise ValueError(f"{case['id']}: task-variant bundle group is not recorded separately")
         computed = {}
         for path in expected_items:
             item = json.loads(files[path])
@@ -255,7 +260,7 @@ def verify(args: argparse.Namespace) -> dict:
         "case_count": len(cases), "source_record_count": len(all_ids), "cases": verified,
         "families": ["reasoning_gym", "reasoning_synlogic"], "original_corpus_manifest_sha256": digest((corpus / "manifest.json").read_bytes()),
         "solver": {"reasoning_gym": "parse visible directed rewrite rules, apply leftmost rule until stable, compare terminal sequence to original labeled final state",
-            "reasoning_synlogic": "infer all D4 orientations and global color maps from demonstrations; require known test colors and a unique predicted grid, then compare to original labeled grid"},
+            "reasoning_synlogic": "within the declared D4-orientation plus demonstration-derived global-color-function hypothesis class, require known test colors and one predicted grid, then compare to the original labeled grid; this does not establish global ARC-rule uniqueness"},
         "model_calls": 0, "provider_calls": 0, "training_admission": False, "generation_admission": "pending root review"}
 
 
