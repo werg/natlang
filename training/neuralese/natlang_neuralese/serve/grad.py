@@ -360,6 +360,11 @@ class GradSession:
     def decision_prepare(self, messages, tools, options: list[str], leaves: dict):
         """Shared state of a decision: the prompt run once (and the tokens every option shares at the start of the
         reply), and each option's own tokens. Returns (cache, last logits, own token lists)."""
+        prompt, rests = self.decision_render(messages, tools, options)
+        return self.decision_continue(*self.decision_prefill(prompt, leaves), rests)
+
+    def decision_render(self, messages, tools, options: list[str]):
+        """The rendered prompt items (identical for every option) and each option's reply tokens."""
         if not options:
             raise RequestError("neuralese-decision", "a decision needs at least one option")
         prompt, rests = None, []
@@ -373,12 +378,19 @@ class GradSession:
                 raise RequestError("neuralese-decision", "options must be text")
             prompt = before
             rests.append([value for _, value in rest])
+        return prompt, rests
+
+    def decision_prefill(self, prompt, leaves: dict):
+        """The prompt's cache and next-token logits (the part decisions over one prompt share)."""
+        out = self.backbone.forward_embeds(self._embed_items(prompt, leaves), logits=False)
+        return out["cache"], self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+
+    def decision_continue(self, cache, last, rests):
+        """Extend a prompt cache by the tokens every option shares; returns (cache, last logits, own tokens)."""
         shared = 0
         if len(rests) > 1:
             while all(len(r) > shared for r in rests) and all(r[shared] == rests[0][shared] for r in rests):
                 shared += 1
-        out = self.backbone.forward_embeds(self._embed_items(prompt, leaves), logits=False)
-        cache, last = out["cache"], self.backbone.logits(out["h_final"][:, -1:])[:, -1]
         if shared:
             step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device), cache=cache)
             cache, last = step["cache"], step["logits"][:, -1]
@@ -785,6 +797,44 @@ def decide(engine, body: dict) -> dict:
         scores, tokens = session.decision_logprobs(body.get("messages") or [], body.get("tools"),
                                                                body.get("options") or [], {})
     return {"log_probs": [float(v) for v in scores], "tokens": tokens}
+
+
+def decide_many(engine, body: dict) -> dict:
+    """`POST /v1/natlang/score` and `/v1/neuralese/decide_many` (plans/BATCHED_EXECUTION.md, scoring contract):
+    many decisions in one request. Items are grouped by adapters and rendered prompt, so each distinct prompt is
+    prefilled once (one cache alive at a time) and its options continue from that cache. Each result equals
+    `decide` on that item alone; an item that fails returns {"error"} and fails alone."""
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise RequestError("neuralese-decision", "items must be a list")
+    session = GradSession(engine)
+    results: list = [None] * len(items)
+    rendered = []
+    for index, item in enumerate(items):
+        try:
+            options = item.get("continuations", item.get("options"))
+            prompt, rests = session.decision_render(item.get("messages") or [], item.get("tools"), options or [])
+            adapters = item.get("adapters", body.get("adapters"))
+            rendered.append((json.dumps(adapters, sort_keys=True), json.dumps(prompt), index, adapters, prompt, rests))
+        except Exception as error:  # noqa: BLE001 — per-item failure is part of the contract
+            results[index] = {"error": f"{type(error).__name__}: {error}"[:500]}
+    rendered.sort(key=lambda r: (r[0], r[1], r[2]))
+    current, prefill = None, None
+    with torch.no_grad():
+        for adapter_key, prompt_key, index, adapters, prompt, rests in rendered:
+            try:
+                with session._adapted(adapters, {}):
+                    if current != (adapter_key, prompt_key):
+                        current, prefill = None, None
+                        prefill = session.decision_prefill(prompt, {})
+                        current = (adapter_key, prompt_key)
+                    cache, last, owns = session.decision_continue(*prefill, rests)
+                    scores = [float(session.option_logprob(cache, last, own)) for own in owns]
+                results[index] = {"log_probs": scores, "tokens": [len(own) for own in owns]}
+            except Exception as error:  # noqa: BLE001
+                current, prefill = None, None
+                results[index] = {"error": f"{type(error).__name__}: {error}"[:500]}
+    return {"results": results}
 
 
 # Optimisers --------------------------------------------------------------------------------------

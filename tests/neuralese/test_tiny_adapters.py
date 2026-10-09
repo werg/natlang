@@ -206,3 +206,26 @@ def test_adapter2_bases_have_fixed_signs_so_an_adapter_means_the_same_on_every_d
     signs = torch.sign(flipped_u.gather(0, flipped_u.abs().argmax(0, keepdim=True)))
     assert torch.allclose(flipped_u * signs, u_r, atol=1e-5) and torch.allclose(flipped_v * signs, v_r, atol=1e-5)
     assert torch.allclose((flipped_u * signs) @ core @ (flipped_v * signs).t(), u_r @ core @ v_r.t(), atol=1e-5)
+
+
+def test_batched_decisions_equal_each_decision_alone_and_fail_per_item(engine):
+    from natlang_neuralese.serve.grad import decide, decide_many
+
+    adapter = _random(engine, seed=3)[1].id
+    other = [{"role": "user", "content": "Is water wet? Answer yes or no."}]
+    items = [
+        {"messages": _ask(), "continuations": ["Paris", "Lyon"]},
+        {"messages": other, "continuations": ["yes", "no", "maybe"]},
+        {"messages": _ask(), "continuations": ["Paris", "Lyon", "Marseille"]},  # same prompt: one prefill
+        {"messages": _ask(), "continuations": []},  # fails alone
+        {"messages": _ask(), "options": ["Paris", "Lyon"], "adapters": [{"id": adapter}]},
+    ]
+    results = decide_many(engine, {"items": items})["results"]
+    assert "error" in results[3] and all("error" not in r for i, r in enumerate(results) if i != 3)
+    for item, result in zip(items, results):
+        if "error" in result:
+            continue
+        alone = decide(engine, {"messages": item["messages"], "options": item.get("continuations", item.get("options")),
+                                **({"adapters": item["adapters"]} if "adapters" in item else {})})
+        assert result["tokens"] == alone["tokens"]
+        assert all(abs(a - b) < 1e-4 for a, b in zip(result["log_probs"], alone["log_probs"]))

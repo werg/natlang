@@ -46,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
-from .grad import GradSession, decide, embed_text, encode_text, new_adapter, optim_step
+from .grad import GradSession, decide, decide_many, embed_text, encode_text, new_adapter, optim_step
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -157,6 +157,10 @@ def make_handler(engine: Engine):
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
                         return self._json(200, decide(engine, body))
+                if self.path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        return self._json(200, decide_many(engine, body))
                 if self.path == "/v1/neuralese/optim":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
