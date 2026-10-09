@@ -15,6 +15,7 @@ import sys
 import os
 from pathlib import Path
 
+from ..common.hashing import canonical_json_sha256_hex
 from .output_embedding_projection import sha
 
 
@@ -194,8 +195,115 @@ def effective_stage_parameters(stage, reports, recipe=None):
     return parameters
 
 
+DELETE_MARKER = '$delete'
+INHERITANCE_KEYS = ('extends', 'overrides')
+
+
+def _is_delete(value):
+    return isinstance(value, dict) and value == {DELETE_MARKER: True}
+
+
+def deep_merge(base, override):
+    """Merge ``override`` onto ``base`` without mutating either.
+
+    Objects merge key by key, recursively. Every other value (lists, strings, numbers, booleans, null) replaces the
+    base value whole: lists never concatenate. The object ``{"$delete": true}`` removes the key from the result.
+    """
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        return json.loads(json.dumps(override))
+    merged = json.loads(json.dumps(base))
+    for key, value in override.items():
+        if _is_delete(value):
+            if key not in merged:
+                raise ValueError('override deletes an absent key: ' + key)
+            del merged[key]
+        elif key in merged:
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = json.loads(json.dumps(value))
+    return merged
+
+
+def resolve_recipe_data(path, _chain=()):
+    """Return the canonical, fully inherited recipe object for ``path`` (``extends`` and ``overrides`` consumed).
+
+    ``extends`` names a recipe id; the parent is the sibling file in the same directory whose ``id`` equals it.
+    ``overrides`` is an object. Its ``stages`` member maps stage ids to objects deep-merged into the parent's stage of
+    that id (``{"$delete": true}`` drops the stage; an unknown id is an error); every other member deep-merges into the
+    top level. The child's own ``id`` and ``description`` always win. Resolution happens before validation, so the
+    handler parameter whitelist applies to the merged result.
+    """
+    path = Path(path).resolve()
+    recipe = json.loads(path.read_text())
+    if 'extends' not in recipe:
+        if 'overrides' in recipe:
+            raise ValueError('overrides without extends')
+        return recipe
+    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
+        raise ValueError('direct-stage recipes do not support extends')
+    parent_id, overrides = recipe['extends'], recipe.get('overrides', {})
+    if not isinstance(parent_id, str) or not isinstance(overrides, dict) or not isinstance(recipe.get('id'), str):
+        raise ValueError('extends must name a recipe id, overrides must be an object, and the recipe needs an id')
+    chain = _chain + (recipe['id'],)
+    if parent_id in chain:
+        raise ValueError('recipe extends cycle: ' + ' -> '.join(chain + (parent_id,)))
+    candidates = []
+    for sibling in sorted(path.parent.glob('*.json')):
+        try:
+            if json.loads(sibling.read_text()).get('id') == parent_id:
+                candidates.append(sibling)
+        except (ValueError, OSError):
+            continue
+    if len(candidates) != 1:
+        raise ValueError('extends must match exactly one recipe id in the same directory: ' + parent_id)
+    parent = resolve_recipe_data(candidates[0], chain)
+    if parent.get('schema') != recipe.get('schema') or not isinstance(parent.get('stages'), list):
+        raise ValueError('recipe and parent must share a multi-stage schema')
+    top = {key: value for key, value in overrides.items() if key != 'stages'}
+    for forbidden in ('id', 'schema', 'extends', 'overrides'):
+        if forbidden in top:
+            raise ValueError('overrides may not set ' + forbidden)
+    resolved = deep_merge(parent, top)
+    stage_overrides = overrides.get('stages', {})
+    if not isinstance(stage_overrides, dict):
+        raise ValueError('overrides.stages must map stage ids to objects')
+    known = {stage['id'] for stage in resolved['stages']}
+    if set(stage_overrides) - known:
+        raise ValueError('override for unknown stage: ' + ', '.join(sorted(set(stage_overrides) - known)))
+    stages = []
+    for stage in resolved['stages']:
+        change = stage_overrides.get(stage['id'])
+        if _is_delete(change):
+            continue
+        if change is not None and not isinstance(change, dict):
+            raise ValueError('stage override must be an object: ' + stage['id'])
+        if change is not None and 'id' in change:
+            raise ValueError('stage overrides may not change a stage id')
+        stages.append(deep_merge(stage, change) if change is not None else stage)
+    resolved['stages'] = stages
+    resolved['id'] = recipe['id']
+    if 'description' in recipe:
+        resolved['description'] = recipe['description']
+    else:
+        resolved.pop('description', None)
+    for key in INHERITANCE_KEYS:
+        resolved.pop(key, None)
+    return resolved
+
+
+def recipe_identity_sha256(path):
+    """The recipe hash recorded in plans, receipts and certificates.
+
+    A plain recipe keeps its file-bytes SHA-256 (receipts of earlier runs stay comparable). A recipe that uses
+    ``extends`` is hashed as the canonical JSON of its resolved content (natlang_neuralese.common.hashing).
+    """
+    if 'extends' in json.loads(Path(path).read_text()):
+        return canonical_json_sha256_hex(resolve_recipe_data(path))
+    return sha(path)
+
+
 def load_recipe(path):
-    recipe = json.loads(Path(path).read_text())
+    recipe = resolve_recipe_data(path)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
         validate_direct_stage_recipe(recipe)
         return recipe
@@ -515,7 +623,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
         parameters.pop('text_data', None)
     command += stage_parameter_args(parameters)
     plan = {'schema': 'natlang.neuralese-direct-stage-plan/1', 'recipe_id': recipe['id'],
-            'recipe_path': str(Path(recipe_path).resolve()), 'recipe_sha256': sha(recipe_path),
+            'recipe_path': str(Path(recipe_path).resolve()), 'recipe_sha256': recipe_identity_sha256(recipe_path),
             'stage': stage, 'inputs': inputs, 'device': device,
             'runtime_image': recipe['runtime']['image'], 'frozen_code': frozen_code,
             'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
@@ -589,6 +697,24 @@ def require_foundation(certificate, *, heads, checkpoint):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == 'resolve':
+        resolver = argparse.ArgumentParser(prog='recipe resolve', description='print the resolved recipe and its hash')
+        resolver.add_argument('recipe_id', help='recipe id or path to a recipe JSON file')
+        resolver.add_argument('--dir', type=Path, default=Path(__file__).parents[2] / 'recipes')
+        options = resolver.parse_args(argv[1:])
+        path = Path(options.recipe_id)
+        if not path.is_file():
+            matches = [f for f in sorted(options.dir.glob('*.json'))
+                       if json.loads(f.read_text()).get('id') == options.recipe_id]
+            if len(matches) != 1:
+                resolver.error('no unique recipe with id ' + options.recipe_id)
+            path = matches[0]
+        recipe = load_recipe(path)
+        print(json.dumps(recipe, indent=2, ensure_ascii=False))
+        print(json.dumps({'recipe_id': recipe['id'], 'recipe_sha256': recipe_identity_sha256(path),
+                          'source_file': str(path), 'inherits': 'extends' in json.loads(path.read_text())}))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', type=Path, required=True)
     parser.add_argument('--heads', type=Path,
@@ -644,11 +770,16 @@ def main(argv=None):
     frozen = args.out / 'runtime' / 'natlang_neuralese'
     plan_path = args.out / 'recipe-plan.json'
     plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
-            'recipe_sha256': sha(args.recipe), 'inputs': inputs, 'device': args.device}
+            'recipe_sha256': recipe_identity_sha256(args.recipe), 'inputs': inputs, 'device': args.device}
     if any('inputs' in stage for stage in recipe['stages']):
         plan['stage_inputs'] = stage_inputs
     if plan_path.exists():
         existing = json.loads(plan_path.read_text())
+        if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
+                'extends' in json.loads(args.recipe.read_text())):
+            # A recipe converted to extends/overrides after this lineage began: identical resolved content keeps the
+            # lineage and its originally recorded recipe hash.
+            plan['recipe_sha256'] = existing['recipe_sha256']
         if any(existing[key] != value for key, value in plan.items()):
             raise ValueError('recipe or input identity changed; use a new stage lineage')
         if {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')} != existing['code']:
@@ -668,7 +799,7 @@ def main(argv=None):
             raise ValueError('launch metadata path already exists; choose a fresh immutable sidecar')
         write_json(metadata, {'schema': 'natlang.neuralese-recipe-launch-intent/1',
                               'recipe_path': str(args.recipe.resolve()),
-                              'recipe_sha256': sha(args.recipe),
+                              'recipe_sha256': plan['recipe_sha256'],
                               'output_path': str(args.out),
                               'heads_path': str(args.heads),
                               'heads_sha256': sha(args.heads),

@@ -653,3 +653,17 @@ and evaluations bind selected document hashes/groups and the group-order digest.
 A bounded periodic probe does not establish comprehensive capability; use broader
 source-group coverage before release qualification. Active frozen runtimes retain
 their recorded probe policy; changed selection remeasures the crisp baseline.
+
+## Recipe inheritance (`extends` / `overrides`)
+
+A multi-stage recipe may declare `"extends": "<recipe id>"` (the parent is the sibling file in the same directory with
+that id) and `"overrides": {...}`. Merge rule: objects merge recursively by key; lists, strings, numbers, booleans and
+null replace the parent value whole (lists never concatenate); `{"$delete": true}` removes a key (or, under
+`overrides.stages`, a stage). `overrides.stages` maps a stage id to an object merged into that stage of the parent
+(unknown ids and id changes are errors); other `overrides` members merge into the top level. The child's `id` and
+`description` win; `extends`/`overrides` are consumed. Resolution precedes validation, so the handler parameter
+whitelist applies to the merged result; cycles are errors. For a recipe that uses `extends`, `recipe_sha256` in plans,
+launch intents, stage reports and certificates is the canonical-JSON SHA-256 of the resolved recipe; plain recipes keep
+their file-bytes hash. A resumed lineage whose recorded recipe content equals the resolved content keeps its original
+hash. `python -m natlang_neuralese.train.recipe resolve <id>` prints the resolved recipe and hash. Experiment history of
+converted recipes lives in `training/neuralese/recipes/HISTORY.md`.

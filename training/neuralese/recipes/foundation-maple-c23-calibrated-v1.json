@@ -1,39 +1,17 @@
 {
- "schema": "natlang.neuralese-training-recipe/1",
- "id": "token-preserving-foundation-maple-c23-calibrated-v1",
- "description": "foundation-maple-c23-ctx512 with the agreement bound calibrated for Maple (owner 2026-10-06: no bug -> move on). Diagnostic of c23-ctx512 (runs/maple-foundation-20261005/diagnostics/gate-diagnostic-c23.json): the readout is exact at initialization; agreement is 99.6-100% where Maple puts >=0.9 on its top token and 63-66% below 0.3; the projection's token is in Maple's top 5 at 98.6-98.8%; ~3% of positions are exact bf16 ties. Top-1 agreement on Maple is bounded by its own next-token entropy (source positions: 43% below 0.3), so the bound is 0.75 per stratum; KL keeps 0.25.",
- "stages": [
-  {
-   "id": "token_identity",
-   "kind": "token_identity",
-   "requires": [],
-   "parameters": {
-    "limit": 32,
-    "max_tokens": 512
-   }
-  },
-  {
-   "id": "embedding_distillation",
-   "kind": "causal_embedding_distillation",
-   "requires": [
-    "token_identity"
-   ],
-   "parameters": {
-    "cutoff": 23,
-    "steps": 8192,
-    "batch": 512,
-    "lr": 0.0003,
-    "tokens": 1024,
-    "contexts": 512,
-    "context_tokens": 1024,
-    "eval_every": 128,
-    "checkpoint_every": 128,
-    "agreement_gate": 0.75,
-    "kl_gate": 0.25,
-    "source_fraction": 0.25,
-    "argmax_weight": 0.1,
-    "seed": 0
-   }
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "token-preserving-foundation-maple-c23-calibrated-v1",
+  "extends": "token-preserving-foundation-maple-v1",
+  "description": "foundation-maple-c23-ctx512 with the agreement bound calibrated for Maple. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 23,
+          "contexts": 512,
+          "agreement_gate": 0.75
+        }
+      }
+    }
   }
- ]
 }
