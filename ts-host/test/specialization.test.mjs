@@ -7,6 +7,11 @@ import { createNatlangRuntime, loadVirtualNatlang, CallStore, ReplayServices, ap
   splitOf, study, crispDecline, approachHash, normalizeProgram, renderEvidence, verifyCases, saveAccepted, keepCases, runJobs, caseHashes, Folder,
   groupsOf, measure, assembleCases, renderGroup, renderFunction, detectFindings } from '../dist/index.js';
 
+// Call IDs embed a random UUID, and a call is held out by a hash of its ID (a fifth of calls). With random IDs a recording of 30
+// calls held out fewer than the two the assertions need about once in a hundred runs. Fix the IDs so the split is the same every run.
+let uuidSequence = 0;
+Object.defineProperty(globalThis.crypto, 'randomUUID', { configurable: true, value: () => `00000000-0000-4000-8000-${(++uuidSequence).toString(16).padStart(12, '0')}` });
+
 const freshStore = () => CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-spec-')));
 const done = store => { const root = store.root; store.close(); rmSync(root, { recursive: true, force: true }); };
 
