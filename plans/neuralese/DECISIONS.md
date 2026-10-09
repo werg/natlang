@@ -1170,3 +1170,15 @@ Changes (01166d32, 8ce3583c):
 
 Next launch: from v1@89 with the member term masked and anchored and the QAT latent rate checked by smoke. Pop's
 full-projection anchor joins when it lands; Pop found the same recurrence drift on LFM.
+
+## 2026-10-09 — Owner: switch the student backbone to Mellum
+
+The owner favors Mellum2.1-12B-A2.5B-Thinking over Maple either way; no training-speed comparison is needed. Harness
+results out of the box: Mellum 13/23 with thinking, 9/23 without (Maple 12/23, Ling 11/23). Mellum takes Maple's place in
+the pipeline:
+1. Aggressive full-latent QAT (BF16 latents, ternary codes re-derived every step).
+2. The nested family as real objectives in every stage.
+3. Foundation warm-up, runtime check, then recurrence.
+
+The Maple debugging lessons carry over: the member objective, the crisp anchor, QAT latent rates and default-aware
+resume. Maple recurrence v4 runs only until Mellum work needs the GPU.
