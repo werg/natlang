@@ -34,3 +34,26 @@ def test_combined_reader_loss_keeps_objective_and_gradient_with_one_student_pass
     ge = torch.autograd.grad(expected, student)[0]
     torch.testing.assert_close(ga, ge)
     assert calls == ['teacher', 'student']
+
+
+def test_misaligned_teacher_keeps_the_record_ce_and_counts_the_skipped_distillation():
+    student = torch.randn(4, 7, requires_grad=True)
+    teacher = torch.randn(6, 7)
+    targets = torch.tensor([0, 1, 3, 5])
+
+    class Session:
+        def _adapted(self, *args):
+            return nullcontext()
+
+        def _target_items(self, messages, tools, target):
+            return messages, target
+
+        def _score(self, prompt, rest, leaves, write_terms=False):
+            logits = teacher if prompt == 'teacher' else student
+            return {'token_logits': logits, 'token_logp': torch.log_softmax(logits, -1)[:4].gather(1, targets[:, None])[:, 0]}
+
+    session = Session()
+    actual = GradSession.supervised_text_loss(session, {'messages': 'student', 'target': {}}, {},
+                                              teacher_messages='teacher', distill_weight=.7)
+    torch.testing.assert_close(actual, torch.nn.functional.cross_entropy(student, targets))
+    assert session.distill_misaligned == 1

@@ -51,6 +51,7 @@ blocks and new optimiser-state blocks: nothing is updated in place.
 
 from __future__ import annotations
 
+import json
 import contextlib
 import math
 
@@ -522,9 +523,14 @@ class GradSession:
         if distill_weight:
             student = scored['token_logits']
             if student is None or teacher is None or student.shape != teacher.shape:
-                raise RequestError('neuralese-grad-term', 'student and teacher targets do not align: student '
-                                   f'{None if student is None else tuple(student.shape)}, teacher '
-                                   f'{None if teacher is None else tuple(teacher.shape)}')
+                # The crisp teacher renders the target differently (e.g. a Neuralese value in the target is text for
+                # the teacher, vector slots for the student): no position-wise KL exists. The record still trains
+                # on its CE terms instead of being dropped; the skip is counted and reported.
+                self.distill_misaligned = getattr(self, 'distill_misaligned', 0) + 1
+                print(json.dumps({'event': 'distill_misaligned', 'count': self.distill_misaligned,
+                                  'student': None if student is None else list(student.shape[:-1]),
+                                  'teacher': None if teacher is None else list(teacher.shape[:-1])}), flush=True)
+                return loss
             t = torch.log_softmax(teacher.float(), -1)
             s = torch.log_softmax(student.float(), -1)
             loss = loss + distill_weight * (t.exp() * (t - s)).sum(-1).mean()
