@@ -319,8 +319,18 @@ class _ChildSignalForwarder:
     def _handle(self, sig, _frame):
         self.stopped[0] = True
         child = self.child[0]
-        if child is not None and child.poll() is None:
-            child.send_signal(sig)
+        self._send_if_running(child, sig)
+
+    @staticmethod
+    def _send_if_running(child, sig):
+        if child is None:
+            return
+        try:
+            if child.poll() is None:
+                child.send_signal(sig)
+        except ProcessLookupError:
+            # The child can exit between poll() and send_signal().
+            pass
 
     def install(self):
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -331,8 +341,8 @@ class _ChildSignalForwarder:
         self.child[0] = child
         # A signal can arrive after the handler is installed but before Popen
         # returns. Deliver it once the process handle becomes available.
-        if self.stopped[0] and child.poll() is None:
-            child.send_signal(signal.SIGTERM)
+        if self.stopped[0]:
+            self._send_if_running(child, signal.SIGTERM)
         return child
 
     def detach(self, child):
@@ -343,6 +353,14 @@ class _ChildSignalForwarder:
         for sig, previous in self._previous.items():
             signal.signal(sig, previous)
         self._previous.clear()
+
+    def __enter__(self):
+        self.install()
+        return self
+
+    def __exit__(self, _type, _value, _traceback):
+        self.close()
+        return False
 
     def run(self, command, *, env=None):
         child = self.attach(subprocess.Popen(command, env=env))
@@ -443,12 +461,8 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
     print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
-    signal_forwarder = _ChildSignalForwarder()
-    signal_forwarder.install()
-    try:
+    with _ChildSignalForwarder() as signal_forwarder:
         result = signal_forwarder.run(command, env=environment)
-    finally:
-        signal_forwarder.close()
     stage_report = stage_output / 'report.json'
     report = json.loads(stage_report.read_text()) if stage_report.is_file() else None
     qualified = False
@@ -463,9 +477,13 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     write_json(output / 'direct-stage-result.json',
                {'schema': 'natlang.neuralese-direct-stage-result/1', 'recipe_id': recipe['id'],
                 'stage_id': stage['id'], 'process_exit_code': result.returncode,
-                'completed': result.returncode == 0, 'qualified': qualified,
+                'interrupted': signal_forwarder.stopped[0],
+                'completed': result.returncode == 0 and not signal_forwarder.stopped[0], 'qualified': qualified,
                 'gate_scope': recipe['lineage'].get('qualification_scope'),
                 'report': report, 'outputs': outputs})
+    if signal_forwarder.stopped[0]:
+        print(json.dumps({'status':'interrupted','stage':stage['id'],
+                          'child_exit_code':result.returncode}),flush=True)
     return result.returncode
 
 
@@ -585,115 +603,109 @@ def main(argv=None):
                               'recipe_plan_sha256': sha(plan_path),
                               'frozen_runtime_sha256': plan.get('code', {}),
                               'stage_inputs': stage_inputs})
-    signal_forwarder = _ChildSignalForwarder()
-    signal_forwarder.install()
-    stopped = signal_forwarder.stopped
-    reports = []
-    feedback_checkpoint = None
-    for stage in recipe['stages']:
-        if stopped[0]:
-            signal_forwarder.close()
-            print(json.dumps({'status': 'checkpointed_on_signal', 'stage': stage['id'],
-                              'before_child_start': True}), flush=True)
-            return
-        directory = args.out / stage['id']
-        report_path = args.out / (stage['id'] + '-report.json')
-        kind = stage['kind']
-        if report_path.exists():
-            report = json.loads(report_path.read_text())
-            require_gate(report['gate'], kind)
-            if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] != inputs:
-                raise ValueError('stage report belongs to another recipe/input lineage')
-            if sha(report['artifact']) != report['artifact_sha256']:
-                raise ValueError('qualified artifact changed')
-        else:
-            for dependency in stage['requires']:
-                predecessor = next(report for report in reports if report['id'] == dependency)
-                require_gate(predecessor['gate'], predecessor['kind'])
-            output = directory / HANDLERS[kind]['result']
-            stage_heads = args.heads
-            if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
-                stage_heads = stage_inputs[stage['id']]['heads']['path']
-            if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
-                has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
-                if has_exact_stage_heads:
-                    stage_heads = stage_inputs[stage['id']]['heads']['path']
-                elif kind == 'core_text_warmup':
-                    predecessor_kind = 'raw_runtime_qualification'
-                    predecessor = next(r for r in reversed(reports)
-                                       if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
-                    stage_heads = predecessor['artifact']
-                else:
-                    predecessor_kind = 'core_text_warmup'
-                    predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
-                    stage_heads=predecessor['artifact']
-            command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
-                       str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
-                       str(output if kind == 'token_identity' else directory), '--device', args.device]
-            if kind == 'raw_runtime_qualification':
-                command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
-            if kind == 'verified_heads_handoff':
-                raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
-                command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
-            stage_parameters = stage['parameters']
-            if 'text_data' in stage_inputs[stage['id']]:
-                stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
-            command += stage_parameter_args(stage_parameters)
-            environment = dict(os.environ)
-            environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
-            print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
-            result = signal_forwarder.run(command, env=environment)
-            code = result.returncode
+    with _ChildSignalForwarder() as signal_forwarder:
+        stopped = signal_forwarder.stopped
+        reports = []
+        feedback_checkpoint = None
+        for stage in recipe['stages']:
             if stopped[0]:
-                print(json.dumps({'status': 'checkpointed_on_signal', 'stage': stage['id']}), flush=True)
-                signal_forwarder.close()
+                print(json.dumps({'status': 'interrupted_before_child_start', 'stage': stage['id']}), flush=True)
                 return
-            if code:
-                raise RuntimeError('stage failed: ' + stage['id'])
-            if kind == 'token_identity':
-                gate = json.loads(output.read_text())
-            elif kind in ('raw_runtime_qualification','text_warmup_runtime'):
-                gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
-            elif kind=='verified_heads_handoff':
-                gate=json.loads((directory/'report.json').read_text())
-            elif kind=='core_text_warmup':
-                gate=json.loads((directory/'report.json').read_text())
+            directory = args.out / stage['id']
+            report_path = args.out / (stage['id'] + '-report.json')
+            kind = stage['kind']
+            if report_path.exists():
+                report = json.loads(report_path.read_text())
+                require_gate(report['gate'], kind)
+                if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] != inputs:
+                    raise ValueError('stage report belongs to another recipe/input lineage')
+                if sha(report['artifact']) != report['artifact_sha256']:
+                    raise ValueError('qualified artifact changed')
             else:
-                import torch
-                state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
-                if kind == 'raw_recurrence_training':
-                    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
-                        raise ValueError('wrong recurrence artifact schema')
-                    if state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
-                        raise ValueError('recurrence artifact runtime handoff differs')
-                    gate = {'training_stage_completed': state['step'] >= stage['parameters'].get('steps', 500),
-                            'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
+                for dependency in stage['requires']:
+                    predecessor = next(report for report in reports if report['id'] == dependency)
+                    require_gate(predecessor['gate'], predecessor['kind'])
+                output = directory / HANDLERS[kind]['result']
+                stage_heads = args.heads
+                if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
+                    stage_heads = stage_inputs[stage['id']]['heads']['path']
+                if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
+                    has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
+                    if has_exact_stage_heads:
+                        stage_heads = stage_inputs[stage['id']]['heads']['path']
+                    elif kind == 'core_text_warmup':
+                        predecessor_kind = 'raw_runtime_qualification'
+                        predecessor = next(r for r in reversed(reports)
+                                           if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
+                        stage_heads = predecessor['artifact']
+                    else:
+                        predecessor_kind = 'core_text_warmup'
+                        predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
+                        stage_heads=predecessor['artifact']
+                command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
+                           str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
+                           str(output if kind == 'token_identity' else directory), '--device', args.device]
+                if kind == 'raw_runtime_qualification':
+                    command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
+                if kind == 'verified_heads_handoff':
+                    raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
+                    command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
+                stage_parameters = stage['parameters']
+                if 'text_data' in stage_inputs[stage['id']]:
+                    stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
+                command += stage_parameter_args(stage_parameters)
+                environment = dict(os.environ)
+                environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+                print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
+                result = signal_forwarder.run(command, env=environment)
+                code = result.returncode
+                if stopped[0]:
+                    print(json.dumps({'status': 'interrupted', 'stage': stage['id'],
+                                      'child_exit_code': code}), flush=True)
+                    return
+                if code:
+                    raise RuntimeError('stage failed: ' + stage['id'])
+                if kind == 'token_identity':
+                    gate = json.loads(output.read_text())
+                elif kind in ('raw_runtime_qualification','text_warmup_runtime'):
+                    gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
+                elif kind=='verified_heads_handoff':
+                    gate=json.loads((directory/'report.json').read_text())
+                elif kind=='core_text_warmup':
+                    gate=json.loads((directory/'report.json').read_text())
                 else:
-                    gate = state['best']
-                    if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
-                        raise ValueError('bootstrap checkpoint backbone identity differs')
-            report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
-                      'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
-            write_json(args.out / (stage['id'] + '-attempt.json'), report)
-            require_gate(gate, kind)
-            write_json(report_path, report)
-        reports.append(report)
-        if kind == 'causal_embedding_distillation':
-            feedback_checkpoint = report['artifact']
-        if kind == 'causal_embedding_distillation':
-            certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
-                           'runtime_qualified': False, 'heads_sha256': sha(args.heads),
-                           'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
-                           'recipe_sha256': plan['recipe_sha256'],
-                           'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
-                                       'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
-            write_json(args.out / 'foundation-certificate.json', certificate)
-        if args.until == stage['id']:
-            signal_forwarder.close()
-            return
-    signal_forwarder.close()
+                    import torch
+                    state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
+                    if kind == 'raw_recurrence_training':
+                        if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
+                            raise ValueError('wrong recurrence artifact schema')
+                        if state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
+                            raise ValueError('recurrence artifact runtime handoff differs')
+                        gate = {'training_stage_completed': state['step'] >= stage['parameters'].get('steps', 500),
+                                'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
+                    else:
+                        gate = state['best']
+                        if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
+                            raise ValueError('bootstrap checkpoint backbone identity differs')
+                report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
+                          'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
+                write_json(args.out / (stage['id'] + '-attempt.json'), report)
+                require_gate(gate, kind)
+                write_json(report_path, report)
+            reports.append(report)
+            if kind == 'causal_embedding_distillation':
+                feedback_checkpoint = report['artifact']
+            if kind == 'causal_embedding_distillation':
+                certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
+                               'runtime_qualified': False, 'heads_sha256': sha(args.heads),
+                               'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
+                               'recipe_sha256': plan['recipe_sha256'],
+                               'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
+                                           'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
+                write_json(args.out / 'foundation-certificate.json', certificate)
+            if args.until == stage['id']:
+                return
     print(json.dumps({'status': 'recipe_completed', 'foundation_runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
-
 
 
 if __name__ == '__main__':

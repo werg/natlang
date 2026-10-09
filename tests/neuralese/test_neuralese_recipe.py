@@ -137,7 +137,6 @@ def test_named_input_binding_relocation_keeps_expected_content_identity(tmp_path
 
 
 def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_path, monkeypatch):
-    from types import SimpleNamespace
     from natlang_neuralese.train import recipe as runner
     from natlang_neuralese.train.output_embedding_projection import sha
 
@@ -171,14 +170,17 @@ def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_p
     loaded = load_recipe(recipe_path)
     assert loaded['schema'] == runner.DIRECT_STAGE_SCHEMA
 
-    def fake_run(command, env, check):
-        del env, check
-        stage_out = Path(command[command.index('--out') + 1])
-        (stage_out / 'report.json').write_text(json.dumps({'qualified': True}))
-        (stage_out / 'heads.pt').write_bytes(b'head artifact')
-        return SimpleNamespace(returncode=0)
+    class FakeChild:
+        def __init__(self, command, env):
+            del env
+            stage_out = Path(command[command.index('--out') + 1])
+            (stage_out / 'report.json').write_text(json.dumps({'qualified': True}))
+            (stage_out / 'heads.pt').write_bytes(b'head artifact')
 
-    monkeypatch.setattr(runner.subprocess, 'run', fake_run)
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(runner.subprocess, 'Popen', FakeChild)
     assert runner.run_declared_direct_stage(loaded, recipe_path, output, metadata, 'cpu') == 0
     plan = json.loads((output / 'direct-stage-plan.json').read_text())
     result = json.loads((output / 'direct-stage-result.json').read_text())
@@ -498,3 +500,32 @@ def test_child_signal_forwarder_handles_signal_before_child_attachment(tmp_path)
             child.kill()
             child.wait(timeout=3)
         forwarder.close()
+
+
+def test_child_signal_forwarder_restores_handlers_on_exception():
+    from natlang_neuralese.train.recipe import _ChildSignalForwarder
+
+    previous = signal.getsignal(signal.SIGTERM)
+    forwarder = _ChildSignalForwarder()
+    with pytest.raises(RuntimeError, match='stage failed'):
+        with forwarder:
+            assert signal.getsignal(signal.SIGTERM) == forwarder._handle
+            raise RuntimeError('stage failed')
+    assert signal.getsignal(signal.SIGTERM) == previous
+
+
+def test_child_signal_forwarder_tolerates_exit_between_poll_and_signal():
+    from natlang_neuralese.train.recipe import _ChildSignalForwarder
+
+    class ExitsDuringSignal:
+        def poll(self):
+            return None
+
+        def send_signal(self, _signal):
+            raise ProcessLookupError
+
+    forwarder = _ChildSignalForwarder()
+    forwarder.child[0] = ExitsDuringSignal()
+    forwarder._handle(signal.SIGTERM, None)
+    assert forwarder.stopped == [True]
+    forwarder.attach(ExitsDuringSignal())
