@@ -6,6 +6,8 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
+
+from .optim import named_optimizer_state, parameter_names
 import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
 from collections import Counter
 from collections.abc import Sequence
@@ -1330,15 +1332,11 @@ def main(argv=None):
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
             heads.load_state_dict(restored['heads'])
-            try:
-                optimizer.load_state_dict(restored['optimizer'])
-                if continuation:
-                    print(json.dumps({'event':'optimizer_state_restored',
-                                      'source_step':continuation['step'],
-                                      'parameter_groups':len(optimizer.param_groups)}),flush=True)
-            except ValueError as error:
-                # The trainable set grew (members' private parts joined): the optimizer starts fresh.
-                print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
+            from .optim import parameter_names, restore_optimizer_named
+            report=restore_optimizer_named(optimizer,restored['optimizer'],parameter_names(backbone=backbone,heads=heads))
+            print(json.dumps({'event':'optimizer_state_restored','source_step':restored['step'],
+                              'parameter_groups':len(optimizer.param_groups),**{k:(v if k in ('mode','reason','restored')
+                              else {'count':len(v),'first':v[:8]}) for k,v in report.items()}}),flush=True)
         step=restored['step'];updates=display_update_flags(restored['updates'])
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1644,7 +1642,7 @@ def main(argv=None):
                      and available is not None and available >= int(estimate*1.25))
         state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
           'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
-          'optimizer':optimizer.state_dict(),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
+          'optimizer':named_optimizer_state(optimizer,parameter_names(backbone=backbone,heads=heads)),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),

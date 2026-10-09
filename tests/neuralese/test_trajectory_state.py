@@ -398,3 +398,24 @@ def test_qat_latents_get_their_own_adamw_groups():
     assert len(groups) == 1 and groups[0]['lr'] == 5e-5 and len(groups[0]['params']) == 1
     assert not any(q is dense for g in optimizer.muon.param_groups for q in g['params'])
     assert any(q is other for g in optimizer.muon.param_groups for q in g['params'])
+
+
+def test_named_optimizer_restore_keeps_matching_moments_and_starts_only_new_parameters():
+    import torch
+    from natlang_neuralese.train.optim import named_optimizer_state, parameter_names, restore_optimizer_named
+
+    old = torch.nn.ModuleDict({"a": torch.nn.Linear(3, 3), "b": torch.nn.Linear(3, 2)})
+    opt = torch.optim.AdamW(old.parameters(), lr=1e-2)
+    old["a"](torch.randn(4, 3)).sum().backward(); old["b"](torch.randn(4, 3)).sum().backward(); opt.step()
+    saved = named_optimizer_state(opt, parameter_names(m=old))
+    new = torch.nn.ModuleDict({"a": torch.nn.Linear(3, 3), "c": torch.nn.Linear(3, 1), "b": torch.nn.Linear(3, 2)})
+    new.load_state_dict(old.state_dict(), strict=False)
+    regrouped = torch.optim.AdamW([{"params": list(new["c"].parameters())},
+                                   {"params": list(new["a"].parameters()) + list(new["b"].parameters())}], lr=1e-2)
+    report = restore_optimizer_named(regrouped, saved, parameter_names(m=new))
+    assert report["mode"] == "named" and report["restored"] == 4
+    assert sorted(report["added"]) == ["m.c.bias", "m.c.weight"] and report["dropped"] == []
+    assert torch.equal(regrouped.state[new["a"].weight]["exp_avg"], opt.state[old["a"].weight]["exp_avg"])
+    assert new["c"].weight not in regrouped.state
+    legacy = restore_optimizer_named(regrouped, opt.state_dict(), parameter_names(m=new))
+    assert legacy["mode"] == "fresh-legacy"
