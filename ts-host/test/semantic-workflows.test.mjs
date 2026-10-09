@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Folder,SourceEvaluator,checkTransformation,admitCounterexamples,CounterexampleSuite,counterexampleGuidedImprove,implementBehavior,composePortfolio} from '../dist/index.js';
 import {scriptedModel} from './support/natlang.mjs';
+import {stagedImprover} from './support/improver.mjs';
 import {UsageGateway} from '../dist/evaluation/usage.js';
 const contract={entry:'main.ts',exportName:'solve',programId:'semantic-workflows'};
 const cases=[{id:'train',group:'train',split:'train',args:[1],expected:2},{id:'validation',group:'validation',split:'validation',args:[2],expected:3},{id:'test',group:'test',split:'test',args:[3],expected:4}];
@@ -42,11 +43,10 @@ test('counterexample suite versions consume a shared finite oracle allowance wit
  assert.deepEqual(second.suite.cases.filter(row=>row.split!=='train'),cases.filter(row=>row.split!=='train'));
 });
 test('authored counterexample loop admits independent gold and executes the normal authored repair',async()=>{
- const model=scriptedModel(opening=>opening.includes('Perform one counterexample-guided')?
-  'const observed=await counterexamples.evidence(folder.snapshot());const suggestedInputs=await suggestCounterexamples(goal,observed);const admitted=await counterexamples.admit(suggestedInputs);const repaired=await counterexamples.repair(folder.snapshot());await folder.select(repaired.folder);return {round:state.round+1,done:repaired.eligible&&repaired.quality===1,suite:admitted.suite,remainingChecks:admitted.remainingChecks,quality:repaired.quality,reason:repaired.disposition};':
-  opening.includes('Propose at most four')?'return [[7]]':
-  opening.includes('Choose one coherent, evidenced hypothesis')?'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"repair",changed:["main.ts"],preserves:["number signature"]};':
-  'const before=folder.snapshot();const proposal=await folder.propose(rewriteProgram,{goal:policy.goal,mode:policy.mode,hypothesis:"increment",brief:"exact increment repair",sourceFiles:[],evidence:[],allowedFiles:policy.allowedFiles});const checked=await evaluator.check(proposal.folder);if(!checked.valid)throw Error(checked.diagnostics.join("\\n"));const report=await evaluator.evaluate(proposal.folder,{split:"validation"});await folder.accept(proposal);return {iteration:state.iteration+1,done:true,incumbent:folder.snapshot().digest,quality:report.quality,population:[],history:[{source:folder.snapshot().digest,parent:before.digest,accepted:true,selected:true,reason:"fixed"}],stopReason:"fixed"};');
+ const model=scriptedModel(stagedImprover({other:opening=>opening.includes('Perform one counterexample-guided')?
+  'const observed=await counterexamples.evidence(folder.snapshot());const suggestion=await suggestCounterexamples(goal,observed);const admitted=await counterexamples.admit(suggestion.inputs);const repaired=await counterexamples.repair(folder.snapshot());await folder.select(repaired.folder);return {round:state.round+1,done:repaired.eligible&&repaired.quality===1,suite:admitted.suite,remainingChecks:admitted.remainingChecks,quality:repaired.quality,reason:repaired.disposition};':
+  opening.includes('Suggest concrete deployment inputs')?'return {inputs:[[7]],reason:"probe a larger value"}':null,
+  edit:'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"repair",preserves:["number signature"]};'}));
  const folder=Folder.fromFiles({'main.ts':'export function solve(value:number):number{return value;}'});
  const result=await counterexampleGuidedImprove({folder,contract,cases,policy:{maxExperiments:1,maxPopulation:3,mode:'structural',strategy:'adaptive',goal:'increment',allowedFiles:['main.ts']},improver:model.driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget:{maxModelCalls:20,maxRollouts:24,maxProposals:3},oracle:{identity:'independent-increment',expected:async args=>args[0]+1},maxRounds:2,maxChecks:2});
  assert.equal(result.state.quality,1);assert.equal(result.state.round,1);assert.equal(result.suite.cases.length,4);
@@ -84,11 +84,7 @@ test('directory source grading checks edited files and supports finite exact Typ
 
 test('implementation workflow executes its specialized editor with prepared source and evidence',async()=>{
  let specialized=false;
- const model=scriptedModel(opening=>{
-  if(opening.includes('Implement the requested application in native natlang')){specialized=true;return 'if(request.sourceFiles[0].path!=="main.ts")throw Error("missing source");await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"implement increment",changed:["main.ts"],preserves:["number contract"]};';}
-  if(opening.includes('Plan one evidenced source change'))return 'return "Implement the missing increment from the observed train failure.";';
-  return 'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy);';
- });
+ const model=scriptedModel(stagedImprover({edit:()=>{specialized=true;return 'if(!request.transformation.includes("Implement the requested application in native natlang"))throw Error("missing transformation");if(request.sourceFiles[0].path!=="main.ts")throw Error("missing source");await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"implement increment",preserves:["number contract"]};';}}));
  const result=await implementBehavior({folder:Folder.fromFiles({'main.ts':'export function solve(value:number):number{return value;}'}),contract,cases,policy:{maxExperiments:2,maxPopulation:3,mode:'structural',strategy:'adaptive',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{maxModelCalls:20,maxRollouts:20,maxProposals:3}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(specialized,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,2);
+ assert.equal(result.disposition,'improved',result.error);assert.equal(specialized,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,4);
 });

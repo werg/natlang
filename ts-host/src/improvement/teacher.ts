@@ -7,7 +7,7 @@ import {SourceEvaluator,sourceFiles} from './host.js';
 import {UsageGateway} from '../evaluation/usage.js';
 import {isDeepStrictEqual} from 'node:util';
 import {callableMeta} from '../runtime/callable.js';
-import {EVALUATOR_DECLARATION} from './services.js';
+import {EVALUATOR_DECLARATION,PLANS_DECLARATION,planService} from './services.js';
 import {improveProgram} from './program.js';
 import type {ImproverCase} from './improver-execution.js';
 export const identity='natlang.improvement-collection/2';
@@ -27,7 +27,7 @@ export async function run(record:ProgramRecord,driver:Parameters<typeof executeP
   const gateway=new UsageGateway({maxModelCalls:104,maxRollouts:40,maxProposals:8,maxElapsedMs:600000});
   const target=fixture.caseDefinition;
   const evaluator=new SourceEvaluator(target.contract,target.cases,driver,gateway,{signal:options.signal,timeoutMs:fixture.executorTimeoutMs,executorId:fixture.executorId??'canonical-improvement-fixture',sourcePolicy:{baseline:target.files,mode:target.policy.mode,allowedFiles:target.policy.allowedFiles}});
-  const runtime=createNatlangRuntime({model:{driver,contextTokens:options.contextTokens,maxTurns:options.maxTurns??16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal:options.signal,seed:{mode:'derived',root:options.rootSeed},codeEdits:'deny',network:false,trace:trace=>traces.push(trace),services:{evaluator:{check:evaluator.check.bind(evaluator),evaluate:evaluator.evaluate.bind(evaluator),page:evaluator.page.bind(evaluator)}},serviceDeclarations:{evaluator:EVALUATOR_DECLARATION},serviceScopes:{evaluator:['improveStep.nl']}});
+  const runtime=createNatlangRuntime({model:{driver,contextTokens:options.contextTokens,maxTurns:options.maxTurns??16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal:options.signal,seed:{mode:'derived',root:options.rootSeed},codeEdits:'deny',network:false,trace:trace=>traces.push(trace),services:{evaluator:{check:evaluator.check.bind(evaluator),evaluate:evaluator.evaluate.bind(evaluator),page:evaluator.page.bind(evaluator)},plans:planService()},serviceDeclarations:{evaluator:EVALUATOR_DECLARATION,plans:PLANS_DECLARATION},serviceScopes:{evaluator:['improveStep.nl'],plans:['improveStep.nl']}});
   const reducer=loadVirtualNatlang(record.semantics.files,record.semantics.root);
   if(record.semantics.root!=='improveStep.nl'){
    const args=callableMeta(reducer)!.definition.params.map(param=>record.semantics.inputs[param.name]);

@@ -10,6 +10,7 @@ import { registerBuiltinModule, setModuleRealm, setPackageLoader } from './modul
 import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
 import { setPythonWatchdog, WATCHDOG_SCRIPT } from '../native/folder-python.js';
+import { gepaModule } from '../gepa/index.js';
 
 const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
@@ -24,6 +25,7 @@ setPythonWatchdog((buffer, ms) => new Worker(`const { workerData } = require('wo
 
 registerBuiltinModule('natlang:learning', () => learningModule);
 registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
+registerBuiltinModule('natlang:gepa', () => gepaModule);
 
 // Callable-folder modules load packages from the calling task's workspace.
 const packages = new Map<string, WorkspaceModules>();

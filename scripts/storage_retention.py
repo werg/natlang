@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import glob
 import json
 import os
 import re
@@ -170,11 +169,46 @@ def registered_files(policy: dict, repo: Path = REPO) -> set[str]:
     return found
 
 
+def expand(base: Path, pattern: str):
+    """Like glob, but never descends through a symlinked directory (hundreds of runs/ entries link into the busy
+    HDD; glob listed each of them). ``**`` matches any depth of real directories."""
+    parts = Path(pattern).parts
+    frontier = [base]
+    for index, part in enumerate(parts):
+        last = index == len(parts) - 1
+        following = []
+        for directory in frontier:
+            if part == '**':
+                stack = [directory]
+                while stack:
+                    current = stack.pop()
+                    following.append(current)
+                    try:
+                        with os.scandir(current) as entries:
+                            stack.extend(Path(e.path) for e in entries if e.is_dir(follow_symlinks=False))
+                    except OSError:
+                        pass
+                continue
+            try:
+                with os.scandir(directory) as entries:
+                    for e in entries:
+                        if not fnmatch.fnmatch(e.name, part):
+                            continue
+                        if last and e.is_file(follow_symlinks=False):
+                            following.append(Path(e.path))
+                        elif not last and e.is_dir(follow_symlinks=False):
+                            following.append(Path(e.path))
+            except OSError:
+                pass
+        frontier = following
+    return [str(p) for p in frontier]
+
+
 def reference_text(policy: dict, repo: Path = REPO, limit=4 << 20) -> str:
     """Run scripts, recipes, registries, plans, certificates and receipts concatenated: a path they name is kept."""
     chunks = []
     for pattern in policy['keep']['reference_texts']:
-        for name in glob.glob(str(repo / pattern), recursive=True):
+        for name in expand(repo, pattern):
             try:
                 if os.path.getsize(name) <= limit:
                     chunks.append(Path(name).read_text(errors='replace'))

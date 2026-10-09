@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { skillRoot, skillEpisodeFiles, supportSearchCases, authorSkillEpisode, checkTransferTarget } from '../dist/improvement/skill-authoring.js';
 import { scriptedModel } from './support/natlang.mjs';
+import { stagedImprover } from './support/improver.mjs';
 import { Folder, SourceEvaluator } from '../dist/index.js';
 import { UsageGateway } from '../dist/evaluation/usage.js';
 
@@ -57,9 +58,7 @@ test('continuous heldout quality is independently scored and paired without a bi
 test('authored skill edit improves a frozen target and query never enters author requests', async () => {
   const row = episode();
   const skill = '---\nname: task-procedure\ndescription: Increment numbers accurately.\n---\nReturn value plus one.\n';
-  const model = scriptedModel(opening => opening.includes('Choose one coherent, evidenced hypothesis') ?
-    `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return await bookkeeping.finish(folder,"teach increment",["target contract"]);` :
-    'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+  const model = scriptedModel(stagedImprover({edit:`await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return {summary:"teach increment",preserves:["target contract"]};`}));
   const author = async (request, signal) => {
     const turn = await model.driver(request, signal);
     for (const [name, args] of turn.calls ?? []) if (name === 'eval') args.finish = true;
@@ -99,9 +98,7 @@ test('description-only tuning can improve discovery without changing target code
   const newSkill = '---\nname: task-procedure\ndescription: Use when adding one to a number; not for text formatting.\n---' + body;
   row.provenance = {...row.provenance, selection_design:'metadata-tuning'};
   row.library = { kind: 'existing', skills: { 'task-procedure': { 'SKILL.md': oldSkill } } };
-  const model = scriptedModel(opening => opening.includes('Choose one coherent, evidenced hypothesis') ?
-    `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(newSkill)}); return await bookkeeping.finish(folder,"clarify applicability",["support discovery failure"]);` :
-    'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+  const model = scriptedModel(stagedImprover({edit:`await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(newSkill)}); return {summary:"clarify applicability",preserves:["support discovery failure"]};`}));
   const author = async (request, signal) => {
     const turn = await model.driver(request, signal);
     for (const [name, args] of turn.calls ?? []) if (name === 'eval') args.finish = true;
@@ -141,9 +138,7 @@ test('retained baseline skips sealed query, transfer and ablation inference', as
  const row=episode();row.transfer={family:'related',target:structuredClone(row.target),cases:[{id:'transfer-private',group:'transfer-private',args:[99],expected:100}]};
  row.source_groups.push('transfer-private');
  const skill='---\nname: task-procedure\ndescription: Increment numbers.\n---\nAdd one.\n';
- const authorModel=scriptedModel(opening=>opening.includes('Choose one coherent, evidenced hypothesis')?
-  `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return await bookkeeping.finish(folder,"redundant hint",["target contract"]);`:
-  'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+ const authorModel=scriptedModel(stagedImprover({edit:`await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return {summary:"redundant hint",preserves:["target contract"]};`}));
  const finish=driver=>async(request,signal)=>{const turn=await driver(request,signal);for(const [name,args] of turn.calls??[])if(name==='eval')args.finish=true;return turn;};
  const target=scriptedModel(()=>'return value+1');const scored=[];
  const result=await authorSkillEpisode({episode:row,author:finish(authorModel.driver),executor:finish(target.driver),executorId:'already-correct',
@@ -161,9 +156,7 @@ test('custom game execution stays pinned through support, sealed query, transfer
     cases:[{id:'transfer-private',group:'transfer-private',args:[22],expected:23}]};
   row.source_groups.push('transfer-private');
   const skill='---\nname: task-procedure\ndescription: Use for increments.\n---\nAdd one accurately.\n';
-  const model=scriptedModel(opening=>opening.includes('Choose one coherent, evidenced hypothesis')?
-    `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return await bookkeeping.finish(folder,"reusable procedure",["support diagnostics"]);`:
-    'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+  const model=scriptedModel(stagedImprover({edit:`await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return {summary:"reusable procedure",preserves:["support diagnostics"]};`}));
   const author=async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args] of turn.calls??[])if(name==='eval')args.finish=true;return turn;};
   const calls=[];
   const makeExecutor=identity=>Object.assign(async(folder,item)=>{

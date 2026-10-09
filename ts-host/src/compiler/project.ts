@@ -251,6 +251,30 @@ declare module 'natlang:learning' {
 }
 `;
 
+const GEPA_MODULE = '/__natlang__/gepa-module.d.ts';
+/** `natlang:gepa`: the GEPA selection math shared by the component-search engine and the program improver (src/gepa). */
+const GEPA_MODULE_SOURCE = `
+declare module 'natlang:gepa' {
+  export type Score = { caseId: string; quality: number };
+  export type Member = { id: string; quality: number; scores: readonly Score[]; cost?: number; modelCalls?: number };
+  export type Objective = 'quality' | 'source-size' | 'model-calls';
+  export type BetterRule<T> = { eligible?: (member: T) => boolean; measure?: (member: T) => number | null };
+  export function caseIds(members: readonly Member[]): string[];
+  export function frontier(members: readonly Member[]): string[];
+  export function frontierSet(members: readonly Member[]): Set<string>;
+  export function wonCases(members: readonly Member[]): Record<string, string[]>;
+  export function draw(seed: number): { value: number; next: number };
+  export function pick<T>(choices: readonly T[], value: number): T;
+  export function parentChoices(members: readonly Member[]): string[];
+  export function drawParent(members: readonly Member[], seed: number): { id: string; next: number };
+  export function better<T extends { quality: number | null }>(left: T, right: T, rule?: BetterRule<T>): boolean;
+  export function objectiveMeasure(objective?: Objective): ((member: { cost?: number; modelCalls?: number }) => number | null) | undefined;
+  export function leaders(members: readonly Member[], objective?: Objective): string[];
+  export function chooseIncumbent(members: readonly Member[], incumbent: string, objective?: Objective): string;
+  export function prune<T extends Member>(members: readonly T[], protectedIds: Iterable<string>, limit: number): T[];
+}
+`;
+
 function findTsconfig(files: ProjectFiles, project: string): { configPath?: string; root: string } {
   const absolute = normalize(project);
   if (files.isFile(absolute)) return { configPath: absolute, root: dirname(absolute) };
@@ -371,13 +395,15 @@ export function compileProject(options: BuildOptions): BuildResult {
   }
   const usesNeuraleseModules = rootNames.some(path => /['"]natlang:(neuralese|learning)['"]/.test(fs.read(path)));
   if (usesNeuraleseModules) virtual.set(NEURALESE_MODULES, NEURALESE_MODULES_SOURCE);
+  const usesGepa = rootNames.some(path => /['"]natlang:gepa['"]/.test(fs.read(path)));
+  if (usesGepa) virtual.set(GEPA_MODULE, GEPA_MODULE_SOURCE);
   const host = createNatlangCompilerHost({ options: compilerOptions, virtual, currentDirectory: root,
     files: fs.compiler ?? { readFile: path => fs.isFile(path) ? fs.read(path) : undefined, fileExists: path => fs.isFile(path),
       directoryExists: path => fs.isDirectory(path), getDirectories: path => fs.isDirectory(path) ?
         fs.list(path).filter(entry => fs.isDirectory(join(path, entry))) : [] } });
   const hasServicesDeclaration = rootNames.some(path => /declare\s+module\s+['"]natlang:services['"]/.test(fs.read(path)));
   const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, ...(hasServicesDeclaration ? [] : [SERVICES_FALLBACK]),
-    ...(usesNeuraleseModules ? [NEURALESE_MODULES] : []), ...rootNames],
+    ...(usesNeuraleseModules ? [NEURALESE_MODULES] : []), ...(usesGepa ? [GEPA_MODULE] : []), ...rootNames],
     options: compilerOptions, host });
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     if (diagnostic.category !== ts.DiagnosticCategory.Error) continue;

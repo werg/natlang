@@ -41,10 +41,9 @@ test('source editor receives rejected helper source and causal diagnostics in it
  const {AUTHORED_IMPROVER}=await import('../dist/improvement/authored-source.js');
  const {compileVirtualProject}=await import('../dist/runtime/virtual-project.js');
  const runtime=await import('../dist/runtime/node.js');
- const build=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},runtime,{constrained:true,target:'node'});
- assert.equal(build.ok,true);
+ const build=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts'],'transformations.ts':AUTHORED_IMPROVER['improveStep/transformations.ts']}},runtime,{constrained:true,target:'node'});
+ assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
  const feedback={sourceFiles:[{path:'workflow.ts',text:'wrongJoin();'}],training:[],diagnostics:['Train second: failed; wrong invoice joined.'],reason:'Candidate rejected: file effects differ.'};
- const request=build.require('main.ts').request({goal:'Join invoices by ID.',mode:'structural',allowedFiles:['workflow.ts']},'',[{passed:false,caseId:'second'}],[{path:'workflow.ts',text:'originalJoin();'}],[],feedback);
+ const request=build.require('main.ts').request({goal:'Join invoices by ID.',mode:'structural',allowedFiles:['workflow.ts']},{kind:'helper',statement:'The join uses the wrong key.',files:['workflow.ts'],predictedChange:'second passes'},{observations:[],pattern:'wrong join'},[{passed:false,caseId:'second'}],[{path:'workflow.ts',text:'originalJoin();'}],feedback);
  assert.match(request.brief,/Previous experiment: Candidate rejected/);assert.match(request.brief,/wrong invoice joined/);assert.match(request.brief,/Previous candidate workflow.ts:\nwrongJoin\(\)/);
- assert.equal(request.lastExperiment,feedback);
 });
