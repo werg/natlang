@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { abortOpenCodeSession, createOpenCodeCliChatAdapter } from '../scripts/opencode-cli-chat-adapter.mjs';
 
-async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], permissionEvent, exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant, agentName } = {}) {
+async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], permissionEvent, retryEvent, exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant, agentName } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-opencode-boundary-'));
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
@@ -41,8 +41,10 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
   const eventServer = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
     res.write(': connected\n\n'); eventClients.add(res); res.on('close', () => eventClients.delete(res));
-    if (permissionEvent) setTimeout(() => {
-      if (!res.destroyed) res.write(`data: ${JSON.stringify(permissionEvent)}\n\n`);
+    if (permissionEvent || retryEvent) setTimeout(() => {
+      if (res.destroyed) return;
+      if (permissionEvent) res.write(`data: ${JSON.stringify(permissionEvent)}\n\n`);
+      if (retryEvent) res.write(`data: ${JSON.stringify(retryEvent)}\n\n`);
     }, 25);
   });
   await new Promise(resolve => eventServer.listen(0, '127.0.0.1', resolve));
@@ -139,6 +141,30 @@ test('native permission event reaches the official SDK reply with its required r
       permission: 'bash', reply: 'reject', succeeded: true }]);
     assert.deepEqual(f.permissionCalls, [{ path: { id: 'fake-session-1', permissionID: 'per_native' },
       query: { directory: f.root }, body: { response: 'reject' } }]);
+  } finally { await f.close(); }
+});
+
+test('provider retry reports bridge 503 separately from unavailable upstream status', async () => {
+  const f = await fixture({ actions: [], retryEvent: { type: 'session.status', properties: {
+    sessionID: 'fake-session-1', status: { type: 'retry', attempt: 2, message: 'Upstream request failed: Endpoint is unavailable.' }
+  } } });
+  try {
+    const response = await invoke(f.adapter); const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(body.error.code, 'provider_retry');
+    assert.equal(body.error.status_scope, 'bridge');
+    assert.equal(body.error.bridge_status_code, 503);
+    assert.equal(body.error.provider_status_code, null);
+    assert.equal(body.error.upstream_http_status, null);
+    assert.equal(body.error.provider_retryable, true);
+    assert.equal(body.error.retry_origin, 'opencode_session_status');
+    assert.equal(body.error.provider_message, 'Upstream request failed: Endpoint is unavailable.');
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(diagnostic.provider_error_provenance.provider_id, 'opencode');
+    assert.equal(diagnostic.provider_error_provenance.status_scope, 'bridge');
+    assert.equal(diagnostic.provider_error_provenance.upstream_http_status, null);
+    assert.equal(diagnostic.provider_error_provenance.provider_status_code, null);
+    assert.equal(diagnostic.provider_error_provenance.bridge_status_code, 503);
   } finally { await f.close(); }
 });
 

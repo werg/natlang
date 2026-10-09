@@ -684,11 +684,30 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.cli_turn_limit = maxCliTurns;
       diagnostics.provider_retries = watcher?.retryEvents ?? [];
       diagnostics.event_stream_errors = watcher?.sessionErrors ?? [];
+      const retryEvidence = error?.code === 'provider_retry' ?
+        (watcher?.retryEvents ?? []).find(event => event.sessionID === violation?.sessionID) ?? null : null;
+      if (error?.code === 'provider_retry') {
+        diagnostics.provider_error_provenance = {
+          retry_origin: 'opencode_session_status',
+          provider_id: providerID,
+          model_id: modelID ?? modelName,
+          retry_attempt: Number.isSafeInteger(retryEvidence?.attempt) ? retryEvidence.attempt : null,
+          provider_message: retryEvidence ? safeError(retryEvidence.message) : null,
+          provider_status_code: null,
+          provider_retryable: true,
+          provider_retry_after_ms: null,
+          status_scope: 'bridge',
+          bridge_status_code: 503,
+          upstream_http_status: null,
+          upstream_status_reason: 'OpenCode CLI retry event did not expose an upstream HTTP status'
+        };
+      }
       diagnostics.finished_at = new Date().toISOString();
       try { if (!invocationWritten) appendFileSync(`${outputDirectory}/cli-invocations.jsonl`, JSON.stringify(diagnostics) + '\n', { mode: 0o600 }); } catch {}
       const status = Number.isInteger(error?.status) ? error.status : timedOut || error?.code === 'REQUEST_TIMEOUT' ? 504 :
         error?.code === 'provider_retry' ? 503 : 502;
-      jsonResponse(res, status, { error: { message: String(error?.message ?? error).slice(0, 500), code: error?.code ?? 'cli_bridge_error' } });
+      jsonResponse(res, status, { error: { message: String(error?.message ?? error).slice(0, 500), code: error?.code ?? 'cli_bridge_error',
+        ...(diagnostics.provider_error_provenance ?? {}) } });
     } finally {
       clearTimeout(timer);
       req.removeListener('aborted', cancelRequest);
