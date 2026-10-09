@@ -84,7 +84,7 @@ export class ModelTier implements Tier {
 
 /**
  * Tier 2: the student model under the specializer's recorded guidance (trace-specialized instructions or examples,
- * the compilation's `instructions.md`). The specializer does not write that file yet, so the tier appears in a ladder
+ * the compilation's `instructions.md`, written by the specializer's writeGuidance.nl). The tier appears in a ladder
  * only when a compilation carries it.
  */
 export class SpecializedTier implements Tier {

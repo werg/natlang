@@ -99,11 +99,15 @@ export type CallStoreSettings = {
    * `shadow` the crisp rule serves and the loop also asks the natural-language policy and records whether they agree.
    */
   promotionPolicy: 'crisp' | 'nl' | 'shadow';
+  /** Which definitions the specializer looks at (applications/specializer): `crisp` the count rule, `nl` worthLooking.nl, `shadow` both, crisp serves. */
+  targetPolicy: 'crisp' | 'nl' | 'shadow';
+  /** The stored text of a decline: `crisp` the joined group lines, `nl` summarizeDecline.nl, `shadow` both, crisp serves. No decision depends on it. */
+  declinePolicy: 'crisp' | 'nl' | 'shadow';
 };
 
 export const DEFAULT_SETTINGS: CallStoreSettings = { maxValueBytes: 1 << 20, maxStoreBytes: 50 * 2 ** 30, minFreeBytes: 20 * 2 ** 30, specialization: 'on',
   auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, promotionLiveComparisons: 3, minCalls: 20,
-  promotionPolicy: 'crisp' };
+  promotionPolicy: 'crisp', targetPolicy: 'crisp', declinePolicy: 'crisp' };
 
 export type CaseTier = 'shadow' | 'active' | 'demoted' | 'disabled';
 export type CaseRole = 'group' | 'training' | 'held-out' | 'counterexample' | 'shadow' | 'audit' | 'served' | 'handed-off';

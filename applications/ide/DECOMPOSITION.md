@@ -1,6 +1,6 @@
 # IDE: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented on main (2026-10-09, owner: finish and integrate); review after the fact in plans/OWNER_REVIEW.md. Question 1 (canonical scenario comparison) is done; questions 2 and 3 stay open. `proposeEdit` takes a `feedback` argument for the one retry; the anchor and file checks are plain crisp checks in `locate` and `requestEdit` (no `Is<>` judge calls).
 
 `IdeWorkbench` (`index.ts:23-114`) holds revisioned sources, checks, pinned runs, trace inspection and scenarios.
 All of it is exact and stays crisp. Two natural-language functions connect it to a person:
