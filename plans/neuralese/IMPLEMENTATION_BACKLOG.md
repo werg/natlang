@@ -77,7 +77,8 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | System-prompt bank: text-init plus trained | partial | LFM text-init banks registered (`system-prompt-bank-lfm2.5-350m-text-init-20261004-v1/v2`); `train.decision --soft-prompts` and `trajectories --bank` train and save `system-prompts.nz`; no Maple/Mellum bank yet (trajectory runs on Maple ran without `--bank`, so no bank was saved) |
 | M0 records/arms, M2 deltas, M4 adapters, M5 P/D projections | used (LFM) | `step-record.ts`, `deltas.ts`, `model/tiny_adapters.py`, `model/projections.py` |
 | M3 memetic optimiser (#15) | partial | `memetic-decision.mjs` |
-| Learned updater, gradient digests, query-trained updater, self-revision | not started | — |
+| Learned updater v0 | partial (LFM, unqualified) | 2026-10-09: `train/learned_updater.py` (U block + base skill + support view → write unroll → D delta, fit to recorded soft-gold deltas), `evaluate-soft-skills.mjs`; artifact `learned-updater-v0-lfm2.5-350m-20261009`. Held-out 4 families query quality: soft-init 0.607, updater 0.601, gradient 1 step 0.633, 8 steps 0.802 (does not beat matched-compute gradient; delta-space held-out cosine 0.12). Next: more step records, D stage-1 init, serve D |
+| Gradient digests, query-trained updater, self-revision | not started | — |
 | M6 reward-blind improver | partial | `improvement/blind-view.ts` (views only) |
 
 ## S7 RL
@@ -85,7 +86,8 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Deliverable | Class | Evidence |
 | --- | --- | --- |
 | Advantage-weighted `logLikelihood` objective | partial | `learning.ts`, `train/losses.py` |
-| Rollout task record, environment contract, rollout driver, importance ratios/clipping/KL, monitors | not started | — |
+| Rollout task record, environment contract, rollout driver, GRPO round (group advantages, sequence ratios, clipping, KL shaping) | used (LFM smoke) | 2026-10-09: `plans/neuralese/S7_ROLLOUT_CONTRACT.md`, `scripts/rl/rollout-episodes.mjs`, `scripts/rl/build-decision-episodes.mjs`, `rl/grpo.py`; smoke on LFM2.5-350M: SQL/scifact/contractnli 112 rollouts all reward 0 (no spread); yes/no decision episodes give spread (boolq [1,1,1,1,0,0]); one GRPO update applied (36 terms, adapter nz1_tlb7… → nz1_nv4c…), runs/s7-rl-smoke-20261009 on the HDD |
+| Token-level ratios, stale-round handling, monitors, rubric runner, research/CSP/selection families in rollouts | not started | research scorer: invalid host research reference; TS-helper families untested on a clean dist |
 
 ## S8 target and release
 
@@ -118,8 +120,8 @@ Out of 44 audited deliverables (updated 2026-10-09 after the artifact work and a
 | 6 | Operator/combinator training samples and operator training (S5 items 6–7) with law terms | backlog agent |
 | 7 | Reference server serving Mellum students (QAT-converted latents, read adapter) | Mellum session |
 | 8 | llama.cpp/wasm for Mellum (MoE + ternary) and refreshing the browser build to the fork pin | batched-scoring/fork agent |
-| 9 | S7 rollout task record, environment contract and rollout driver | unassigned |
-| 10 | Learned updater v0 (S6 items 6–8) from improvement-step records | unassigned |
+| 9 | S7 rollout task record, environment contract and rollout driver (smoke done 2026-10-09; next: monitors, multi-round on Mellum) | RL sub-agent |
+| 10 | Learned updater v0 (S6 items 6–8) from improvement-step records (v0 built, unqualified; next: more data, D init) | RL sub-agent |
 
 Canonical evaluator (`eval/self_feedback.py`, prefix metrics, `prepare_text_windows`): Pop. C2/C3 optimizer and
 recipe consolidation: dgx-claude-7351f337. Do not duplicate either.
