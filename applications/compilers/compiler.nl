@@ -19,8 +19,9 @@ The check for a function of the middle end is that the module with the new versi
 toolchain.verify, defines the same name, and gives the reference output on every input.
 
 Front end, with the stages of the program's language (c, python or rust):
-1. parse(source) builds the syntax tree. analyze(syntax) resolves names, infers types and checks the program. If either
-   reports diagnostics, stop and return them, with empty ir and assembly.
+1. checked = analyze(parse(source)): parse builds the syntax tree, and analyze resolves names, infers types and checks
+   the program. The diagnostics of both arrive in checked.diagnostics. If checked reports diagnostics, stop and return
+   them, with empty ir and assembly.
 2. declare(checked) lays out the module: the header (types, globals, constants, declarations) and each function's
    signature and tree. The header must pass toolchain.verify (checked and retried like every stage). When it declares runtime functions (`@rt_…`), runtime
    writes them, and they join the program's own functions; with the header they must pass toolchain.verify.

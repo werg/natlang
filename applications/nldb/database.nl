@@ -16,9 +16,10 @@ A schema request: folder.apply(define, request, catalog) designs the change, mig
 catalog. Return its report as kind schema.
 
 A question or a change goes through the query processor:
-1. parse(request, kind, catalog, today) reads it as a statement: the SQL it amounts to and a first plan.
-2. plan(statement, catalog) chooses how to run it: access paths, join order and methods, where filters go.
-3. A question: execute(folder, statement), called directly so that nothing it writes is kept. Return its rows as
+1. statement = plan(parse(request, kind, catalog, today), catalog). parse reads the request as a statement: the SQL it
+   amounts to and a first plan. plan chooses how to run it: access paths, join order and methods, where filters go.
+   statement is plan's answer; the SQL, the columns, the explanation and the assumptions come from it.
+2. A question: execute(folder, statement), called directly so that nothing it writes is kept. Return its rows as
    the answer, with the statement's columns, explanation and assumptions. No rows is an answer, not a failure.
    A change: folder.apply(execute, statement) runs it as one transaction: the changes are kept only if it
    succeeds. Return the report with the statement's sql as statements, the counts execute gives as changes, the

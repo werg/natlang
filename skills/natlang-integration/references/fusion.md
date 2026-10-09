@@ -13,9 +13,22 @@ reads it. It is a compilation decision: declared types stay `T`. Design and gate
   it and `fusion_shadow` records agreement), `on` (fused where certified, text otherwise).
 - `planner`: `crisp` (default, exact rules, no model), `nl` (the `applications/fusion-planner` program decides, a crisp
   verifier checks), `shadow` (both, crisp is served). `NATLANG_FUSION_PLANNER` points at another planner program.
+- `observed` (absent = off): `true` or `{ "minRuns": 20, "store": "<path>" }`. Readers the source does not prove are also read
+  from the eval code orchestrating models ran, as the call store (default: the machine's) recorded it for the orchestrator
+  exactly as it is now (same instructions, model-driven runs only). An edge fuses on that evidence only with at least
+  `minRuns` supporting runs and none that read the value elsewhere. Plans carry `evidence` (runs, minimum, store revision).
 - `natlang run` plans at launch and installs the runtime option. Embedded runtimes: `createNatlangRuntime({ fusion: {
   mode, edges, certificate, weights } })` with `edges` from `fusedEdges(facts, plan)` (the runtime package's `fusion` subpath:
   `fusionFacts`, `crispPlan`, `planFusion`, `verifyPlan`).
+
+## Crisp TypeScript orchestrators
+
+Hand-offs in your own TypeScript (`analyze(await parse(source))`, or `const tree = await parse(source)` used only as
+`analyze(tree)`) are analyzed by syntax. The project build marks the calls of such hand-offs (`__natlang.fuseSite`); with
+fusion off the mark only calls the function. A planned edge names the two call sites, and the runtime engages exactly
+those calls. Anything else that touches the value (a read, a second consumer, an `export`) keeps the edge as text. The
+declared types stay `T`: TypeScript code between the two calls would see a block, which is why nothing may sit between them.
+Embedded hosts compile their TypeScript with the project build (`buildProject`) for the marks to exist.
 
 ## When `on` engages
 
