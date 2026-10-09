@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "learned-updater-v0-lfm2.5-350m-20261009",
+  "kind": "operator",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/learned-updater-v0-lfm2.5-350m-20261009",
+  "files": [
+    {
+      "path": "summary.json",
+      "bytes": 4854,
+      "sha256": "d17c61ff132fe9e7d6f3bc39789a776089d383a21a8bbdd815fed936ba38d4b7"
+    },
+    {
+      "path": "updater.pt",
+      "bytes": 4230809,
+      "sha256": "a75f8e136bb6377dc8af277cae440494cbbf92bec0e94f614a394d1f4797fd72"
+    }
+  ],
+  "bytes": 4235663
+}

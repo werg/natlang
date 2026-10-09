@@ -3,7 +3,7 @@
 Status: translated (2026-10-08). The layout below is built, with these differences in names: callable items must be
 identifiers, so files are camelCase (`startToolRound.nl`, `planSystem.nl`, `deriveContext.nl`, `abortTask.nl`), and
 `tool/call.nl` is `tool/beginCall.nl` because `call` is a reserved callable property. Owner decision 4 is applied as
-recommended (the scheduler's policy is crisp by default; `--scheduler natural-language` or `--pure` selects the
+recommended (the scheduler's policy is crisp by default; `--scheduler nl` or `--pure` selects the
 functions). README.md has what runs and what has been verified.
 
 Owner review, 2026-10-07:
@@ -562,7 +562,7 @@ modules may import declared packages.
 through `uses:`.
 
 - With the default setting it returns pi-durable's crisp derivation.
-- With `context: "natural-language"` it scans the range and calls its sibling `harness/derive-context.nl`.
+- With `context: "nl"` it scans the range and calls its sibling `harness/derive-context.nl`.
 
 The scheduler's policy is selected the same way, in the host.
 

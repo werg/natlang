@@ -23,6 +23,7 @@ import hashlib
 import json
 import random
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -37,11 +38,30 @@ UPDATER_SYSTEM = ("You update a decision skill. Read the updater instructions, t
                   "their correct answers, then write the update that makes the skill give those answers.")
 
 
-def load_examples(arms_dir: str | Path, operator: str = "method-arm:soft-gold") -> tuple[str, list[dict]]:
-    """[{family, step, base [L, d], delta [L, d]}] from a run-method-arms output directory."""
+def server_block(server: str):
+    """A fetch for blocks a run did not save (the arms' shared soft-init skill): the model server's stored copy."""
+    def fetch(block_id: str):
+        from ..serve.store import decode_block
+
+        try:
+            with urllib.request.urlopen(f"{server.rstrip('/')}/v1/neuralese/blocks/{block_id}", timeout=600) as response:
+                block = decode_block(response.read())
+        except urllib.error.HTTPError:
+            return None
+        return block.payload.float(), block.dialect
+    return fetch
+
+
+def load_examples(arms_dir: str | Path, operator: str = "method-arm:soft-gold", fetch=None) -> tuple[str, list[dict]]:
+    """[{family, step, base [L, d], delta [L, d]}] from a run-method-arms output directory; blocks the run did not
+    save come from `fetch(block_id)` when given."""
     arms_dir = Path(arms_dir)
-    _, exports = read_nz(arms_dir / "artifacts.nz")
-    blocks = {e.block_id: (e.payload, e.dialect) for e in exports.values() if e.payload is not None}
+    # One bundle (older runs) or one file per family (artifacts/<family>.nz).
+    paths = [arms_dir / "artifacts.nz"] if (arms_dir / "artifacts.nz").exists() else sorted((arms_dir / "artifacts").glob("*.nz"))
+    blocks = {}
+    for path in paths:
+        _, exports = read_nz(path)
+        blocks.update({e.block_id: (e.payload, e.dialect) for e in exports.values() if e.payload is not None})
     examples, dialects = [], set()
     for line in open(arms_dir / "improvement-steps.jsonl"):
         step = json.loads(line)
@@ -49,6 +69,10 @@ def load_examples(arms_dir: str | Path, operator: str = "method-arm:soft-gold") 
             continue
         before = [r["id"] for r in step["before"] if r["kind"] == "soft-skill"]
         after = [r["id"] for r in step["after"] if r["kind"] == "soft-skill"]
+        if fetch is not None:
+            for block_id in before + after:
+                if block_id not in blocks and (found := fetch(block_id)) is not None:
+                    blocks[block_id] = found
         if len(before) != 1 or len(after) != 1 or before[0] not in blocks or after[0] not in blocks:
             continue
         (base, dialect), (changed, _) = blocks[before[0]], blocks[after[0]]
@@ -157,7 +181,7 @@ def main(argv=None):
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=False)
-    dialect, examples = load_examples(a.arms)
+    dialect, examples = load_examples(a.arms, fetch=server_block(a.server) if a.server else None)
     families = sorted({e["family"] for e in examples})
     if a.heldout_families:
         held_families = set(a.heldout_families.split(","))

@@ -5,7 +5,7 @@
  */
 import type { Context } from '@earendil-works/chord';
 import type { Message } from '@earendil-works/pi-ai';
-import { ONCE_EFFECTS } from '@natlang/node';
+import { ONCE_EFFECTS, type PluggableMode } from '@natlang/node';
 import { getCurrentTools } from '@earendil-works/pi-ai/utils/transcript';
 import type { ConversationId, EntryId, TaskId, TaskRuntime } from '../vendor/durable/src/types.ts';
 import type { Agent as PiAgent, ContextView as PiContextView, SubmissionDraft as PiSubmissionDraft } from '../vendor/durable/src/harness/types.ts';
@@ -23,8 +23,8 @@ export type DurableHost = {
   submission(id: number, context: Context): Promise<SubmissionRecord | undefined>;
   /** The raw active range through `at` (default: the newest entry): the newest head marker and every entry from its head on. */
   scan(conversationId: ConversationId, at: number | undefined, context: Context): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;
-  /** "crisp" or "natural-language", per pluggable point. */
-  implementation(point: 'context' | 'scheduler' | 'admission' | 'planning'): 'crisp' | 'natural-language';
+  /** The mode of each pluggable point: `crisp`, `nl` or `shadow`. */
+  implementation(point: 'context' | 'scheduler' | 'admission' | 'planning'): PluggableMode;
 };
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;

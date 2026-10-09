@@ -212,6 +212,30 @@ def test_decision_readout_agrees(servers):
         assert abs(a - b) <= ATOL_LOGPROB, (ref, fork)
 
 
+def test_batched_decision_scoring_agrees_and_fails_per_item(servers):
+    """POST /v1/natlang/score (plans/BATCHED_EXECUTION.md): each item equals /v1/neuralese/decide alone; items
+    with the same prompt share one prefill; a bad item fails alone; /v1/neuralese/decide_many is the same."""
+    france = [{"role": "user", "content": "Is Paris the capital of France? Reply with a JSON value."}]
+    water = [{"role": "user", "content": "Is water wet? Reply with a JSON value."}]
+    items = [{"messages": france, "continuations": ["true", "false"]},
+             {"messages": france, "continuations": ["\"yes\"", "\"no\"", "\"maybe\""]},
+             {"messages": water, "continuations": ["true", "false"]},
+             {"messages": france, "continuations": []}]
+    for path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
+        got = _both(servers, path, "POST", {"items": items})
+        (rs, ref), (fs, fork) = got["reference"], got["fork"]
+        assert rs == fs == 200, (ref, fork)
+        assert "error" in ref["results"][3] and "error" in fork["results"][3]
+        for item, a, b in zip(items[:3], ref["results"], fork["results"]):
+            alone = _both(servers, "/v1/neuralese/decide", "POST",
+                          {"messages": item["messages"], "options": item["continuations"]})
+            for name, batched in (("reference", a), ("fork", b)):
+                single = alone[name][1]
+                assert batched["tokens"] == single["tokens"], (name, batched, single)
+                assert all(abs(x - y) <= 1e-3 for x, y in zip(batched["log_probs"], single["log_probs"])), (name, batched, single)
+            assert all(abs(x - y) <= ATOL_LOGPROB for x, y in zip(a["log_probs"], b["log_probs"])), (a, b)
+
+
 def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/grad", "POST", {"terms": []})
     assert status == 501 and body["error"]["code"] == "neuralese-grad-unavailable"

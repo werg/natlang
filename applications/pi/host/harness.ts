@@ -4,7 +4,7 @@
  * admission policies. Shared by `openPi` and the conformance shim, so both open the same port.
  */
 import type { Context } from '@earendil-works/chord';
-import type { NatlangRuntime } from '@natlang/node';
+import { pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
 import type { Harness, HarnessOptions } from '../vendor/durable/src/index.ts';
 import type { ConversationId, EntryId, EntryRecord as PiEntryRecord, SubmissionId } from '../vendor/durable/src/types.ts';
 import { LiveDoc } from '../vendor/durable/src/harness/live.ts';
@@ -13,8 +13,11 @@ import { admissionPolicy, schedulerPolicy } from './policies.ts';
 import { substituteTasks } from './registry.ts';
 import { naturalLanguageTask, type Entry, type TaskHost } from './tasks.ts';
 
-export type Implementation = 'crisp' | 'natural-language';
-export type Implementations = { context: Implementation; scheduler: Implementation; admission: Implementation; planning: Implementation };
+/** The port's pluggable hot paths (PORT.md "Pluggable hot paths"). */
+export type PluggablePoint = 'context' | 'scheduler' | 'admission' | 'planning';
+export const PLUGGABLE_POINTS: readonly PluggablePoint[] = ['context', 'scheduler', 'admission', 'planning'];
+/** The setting of each pluggable point: `crisp` (the default), `nl` or `shadow` (admission: `crisp` or `nl`). */
+export type Implementations = Record<PluggablePoint, PluggableSetting>;
 
 /** The natural-language entries of the three task kinds. */
 export type Entries = { generation: Entry; tool: Entry; compaction: Entry };
@@ -35,7 +38,8 @@ export type PortOptions = {
 export function portOptions<T extends HarnessOptions>(options: T, port: PortOptions): { options: T; bind(harness: Harness): void } {
   let harness: Harness | undefined;
   const opened = () => { if (!harness) throw new Error('the Harness is not open yet'); return harness; };
-  const implementations: Implementations = { context: 'crisp', scheduler: 'crisp', admission: 'crisp', planning: 'crisp', ...port.implementations };
+  const modes = Object.fromEntries(PLUGGABLE_POINTS.map(point => [point, pluggableMode(port.implementations?.[point], 'crisp')])) as
+    Record<PluggablePoint, PluggableMode>;
   const conversation = async (id: ConversationId, context: Context) => {
     const found = await opened().conversation(id, context);
     if (!found) throw new Error(`Conversation ${id} does not exist`);
@@ -45,7 +49,7 @@ export function portOptions<T extends HarnessOptions>(options: T, port: PortOpti
     natlang: port.natlang,
     attempts: port.attempts,
     onPhase: port.onPhase,
-    implementation: point => implementations[point],
+    implementation: point => modes[point],
     async submit(conversationId: ConversationId, draft: SubmissionDraft, context: Context): Promise<number> {
       return (await (await conversation(conversationId, context)).submit(draft as never, context)).id;
     },
@@ -79,8 +83,8 @@ export function portOptions<T extends HarnessOptions>(options: T, port: PortOpti
   ];
   const policyHost = { natlang: port.natlang, now: port.now ?? options.now ?? Date.now,
     live: async (id: number, context: Context) => (await opened().snapshot(LiveDoc, id as ConversationId, context)) ?? {} };
-  const scheduler = schedulerPolicy(policyHost as never, implementations.scheduler);
-  const admission = admissionPolicy(policyHost as never, implementations.admission);
+  const scheduler = schedulerPolicy(policyHost as never, modes.scheduler);
+  const admission = admissionPolicy(policyHost as never, modes.admission);
   return {
     options: { ...options, registry: substituteTasks(options.registry, tasks),
       ...(scheduler ? { schedulerPolicy: scheduler } : {}), ...(admission ? { admission } : {}) },

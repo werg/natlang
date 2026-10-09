@@ -1094,7 +1094,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       onRequestStart: recordHttpTransportStart }) : undefined;
     const judge = judgeTransport ? async (input: Parameters<ReturnType<typeof modelOracleJudge>>[0]) => {
       const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>
-      admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal, 'judge'))(input);
+      admittedSend(request, (value: ModelTurnRequest) => judgeTransport(value, actionSignal), false, actionSignal, 'judge'))(input);
       return judgeConfig!.provider ? providerActionCycle({ role: 'judge', provider: judgeConfig!.provider,
         parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(providerParentSignal());
     } : undefined;
