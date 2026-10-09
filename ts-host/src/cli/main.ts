@@ -118,6 +118,7 @@ once per matching file and prints path<TAB>result. --filter prints matching inpu
   natlang traces list [--definition NAME] [--executor agent|crisp|crisp-agent] [--outcome X] [--since ISO] [--all]
   natlang traces show CALL [--events] [--json]
   natlang traces occupancy [--definition NAME] [--limit N]   Batch occupancy: requests in flight, batch size, queue wait.
+  natlang traces tiers [--definition NAME]                   Tiered engine: calls per tier, deopt rate, cost per tier.
   natlang traces export [--definition NAME] [--limit N]    One JSON record per line, values inlined.
   natlang traces pin|unpin CALL              Keep a call when the store evicts.
   natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.

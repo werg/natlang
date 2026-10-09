@@ -72,6 +72,33 @@ function describeCall(store: CallStore, record: CallRecord): string {
 }
 
 /**
+ * Per function and tier from the tier events kept with calls (calls/tiers.ts): calls served, deopts and their rate, the
+ * cost of a served call, tokens wasted by attempts that were then deoptimized, and the last state the events imply.
+ */
+export function tiersOf(events: { value: unknown; definition_name: string | null; tokens_in: number; tokens_out: number; wall_ms: number }[],
+  definition?: string) {
+  type Row = { function: string; tier: string; calls: number; deopts: number; deopt_rate: number; tokens_per_call: number; ms_per_call: number;
+    wasted_tokens: number; state: string; tokens: number; ms: number };
+  const rows = new Map<string, Row>();
+  for (const { value, tokens_in, tokens_out, wall_ms } of events) {
+    const ev = value as { fn?: string; tier?: string; event?: string; own?: boolean };
+    if (!ev?.fn || !ev.tier || (definition && ev.fn !== definition)) continue;
+    const key = `${ev.fn}\0${ev.tier}`;
+    const row = rows.get(key) ?? { function: ev.fn, tier: ev.tier, calls: 0, deopts: 0, deopt_rate: 0, tokens_per_call: 0, ms_per_call: 0,
+      wasted_tokens: 0, state: 'active', tokens: 0, ms: 0 };
+    rows.set(key, row);
+    const tokens = Number(tokens_in) + Number(tokens_out);
+    if (ev.event === 'served') { row.calls++; row.tokens += tokens; row.ms += Number(wall_ms); }
+    else if (ev.event === 'deopt') { row.deopts++; if (ev.own) row.wasted_tokens += tokens; }
+    else if (ev.event === 'promoted') row.state = 'active';
+    else if (ev.event === 'demoted') row.state = 'demoted';
+  }
+  return [...rows.values()].map(({ tokens, ms, ...row }) => ({ ...row, deopt_rate: row.calls + row.deopts ? Math.round(1000 * row.deopts / (row.calls + row.deopts)) / 1000 : 0,
+    tokens_per_call: row.calls ? Math.round(tokens / row.calls) : 0, ms_per_call: row.calls ? Math.round(ms / row.calls) : 0 }))
+    .sort((a, b) => a.function.localeCompare(b.function) || b.tier.localeCompare(a.tier));
+}
+
+/**
  * Batch occupancy of the model requests in a set of events (plans/BATCHED_EXECUTION.md §3.6): how many requests the
  * scheduler had in flight when each was sent, the size of the batch it left in, and how long it queued.
  */
@@ -145,6 +172,12 @@ export async function tracesCommand(argv: string[]): Promise<number> {
       table(per, ['call_id', 'definition_name', 'requests', 'scheduled', 'batches', 'mean_in_flight', 'max_in_flight', 'mean_batch_size', 'queue_wait_ms_p95'])].join('\n'), json);
     return 0;
   }
+  if (action === 'tiers') {
+    const rows = tiersOf(store.tierRows(), text(args, '--definition'));
+    print(json ? rows : rows.length ? table(rows, ['function', 'tier', 'calls', 'deopts', 'deopt_rate', 'tokens_per_call', 'ms_per_call', 'wasted_tokens', 'state']) :
+      'no tier events recorded (configure the tiered engine: plans/TIERED_ENGINE.md)', json);
+    return 0;
+  }
   if (action === 'export') {
     for (const row of store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), limit: number(args, '--limit', 1000),
       audits: args.options.has('--all') })) {
@@ -175,7 +208,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     return 0;
   }
   if (action === 'evict') { print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined)} bytes`, false); return 0; }
-  throw new Error('usage: natlang traces status|hot|list|show|occupancy|export|pin|unpin|annotate|config|evict');
+  throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|config|evict');
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */

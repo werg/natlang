@@ -111,6 +111,8 @@ export type NatlangRuntimeOptions = {
   recording?: { exclude?: string[] };
   /** How far compilations may serve this runtime's calls; the machine setting bounds it (default: the machine setting). */
   specialization?: SpecializationMode;
+  /** The tiered execution engine (plans/TIERED_ENGINE.md): functions it names run on a ladder of tiers. Absent: no change. */
+  tiers?: import('../calls/tiers.js').TierEngine;
   /**
    * Refinement checking for `Is<T, "predicate">` types (natlang.json `refinements`, plans/REFINEMENT_TYPES.md): the
    * threshold, uncertainty band and policy; `cache` holds verdicts by content (in memory by default) and `crisp`
