@@ -257,3 +257,30 @@ and `untrusted(value, source)`; the compile error `untrusted-instruction` (`comp
 template, including text built from an untrusted expression (`.nl` bodies splice nothing); the TypeScript brand in
 `intrinsics.ts`/`surface.ts` and the import in generated `.d.nl.ts`. Adopted in `applications/logs` and `applications/wiki`.
 Not done: eval-time one-shot ``nl(`${x}`)`` is not checked; derived strings lose their label at run time.
+
+## Adoption in the rebuilt applications (games, build, migration, scheduling, workflow)
+
+Each application's `DECOMPOSITION.md` records a decision per candidate: (a) crisp checker in the app's `refinements.ts`,
+(b) judge, proposed and awaiting live evaluation (none wired), (c) left to the commit or verifier that already enforces it,
+(d) not adopted because the value alone does not show the property. The refined result types are `Checked*` aliases in the
+app's `types.ts`, named in the `returns` of the stage that produces the value, so crisp code builds and passes the plain
+types. Limitations met:
+
+- **`types.ts` must `import type { Is } from '@natlang/node'`.** Without the import, the `Is` in `types.ts` and the `Is` that
+  the generated `.d.nl.ts` declarations import are two different brands (`Property '[natlangRefinement]' is missing`).
+  The ambient `Is` of `compiler/intrinsics.ts` and the exported `Is` of `runtime/surface.ts` declare separate unique symbols;
+  one declaration should serve both. Not fixed here.
+- **Refined fields on shared state types force casts in crisp code** (`as Settings`, `as Fighter[]`), because a plain `number`
+  does not fit `Is<number, "...">`. Refining the stage's `returns` through an alias avoids it for state that crisp code builds.
+- **A refinement failure that a stage never repairs inside a loop can exhaust memory.** With a scripted model that answers the
+  rejection with `failed` (build `step` inside `iterateOn`; games `settle` inside the economy's commit retry), the run
+  grew to the heap limit instead of ending in `refinement-unsatisfied`. Not diagnosed; reproduce with a stage override
+  whose result breaks its predicate and no repair answer.
+- **The default call store keeps judge verdicts across runs**, so a test that counts judge calls must pass `calls: false`.
+- **`refinements.ts` is loaded by `natlang run` for an app with a `targets` entry.** Applications run by an embedder
+  (scheduling, workflow) export their table from `index.ts` and the embedder passes it as `refinements.crisp`.
+- **Predicates that need the call's other arguments or the world** (a patch's `old` occurring once, a plan's edits matching
+  the classified sites) cannot be judged from the value; they stay with the verifier (category c) or are weakened to the
+  part the value shows.
+- Model-facing changes pending the live comparison of section 5: the `Is<...>` predicate texts of the `Checked*` aliases
+  listed at the end of each `DECOMPOSITION.md` "Refinements" section.
