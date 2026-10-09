@@ -32,7 +32,7 @@ def compare(backbone, heads, prefix, payload, steps):
     branch_diff = float((back["logits"].float() - control["logits"].float()).abs().max())
     tokens, cached = greedy_continue(backbone, back["cache"], back["logits"], steps=steps)
     close = torch.tensor([[backbone.controls.close_id]], device=device)
-    sequence = torch.cat([backbone.embed(ids), heads.interface(payload), backbone.embed(close),
+    sequence = torch.cat([backbone.embed(ids), heads.read_in(payload), backbone.embed(close),
                           backbone.embed(torch.tensor([tokens], device=device))], 1)
     start = ids.shape[1] + payload.shape[1]
     full = backbone.forward_embeds(sequence)["logits"][0, start:start + steps + 1].float()

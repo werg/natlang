@@ -559,7 +559,7 @@ def consumer_forward(backbone: PortBackbone, heads: PortHeads, before: list[int]
         pieces = [backbone.embed(tensor(before[:-1]))]
         rest = after[1:]
     else:
-        pieces = [backbone.embed(tensor(before if heads.read_markers else before[:-1])), heads.interface(payload.reshape(1, -1, payload.shape[-1]))]
+        pieces = [backbone.embed(tensor(before if heads.read_markers else before[:-1])), heads.read_in(payload.reshape(1, -1, payload.shape[-1]))]
         rest = after if heads.read_markers else after[1:]
     tail = rest + target[:-1]
     pieces.append(backbone.embed(tensor(tail)))
