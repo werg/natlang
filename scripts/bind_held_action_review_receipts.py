@@ -5,6 +5,12 @@ The output is a new, additive receipt pair. It never edits provider outcomes or
 the source review. The review-document, case-record, item-record, and derived
 selection-record digests have distinct fields from the raw result file/row
 digests.
+
+With `--row-reviews` every selected item must also have a receipt of the natlang
+row reviewer (source_review.py) whose gold and actual values equal the reviewed
+item's and whose explicit decision is hold or clear. The binding records the
+receipt id, reviewer hash, v7 category and disposition; the receipt grants no
+training admission.
 """
 import argparse
 import hashlib
@@ -14,6 +20,10 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
+_scripts = str(_Path(__file__).resolve().parent)
+if _scripts not in _sys.path:
+    _sys.path.insert(0, _scripts)
+from source_review import load_row_receipts, row_assessment  # noqa: E402
 
 
 def compact_sha(value) -> str:
@@ -24,7 +34,19 @@ def lines(path: Path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def bind(selections, receipts, summary, review_path: Path):
+def row_review_for(item: dict, row_receipts: dict) -> dict:
+    """The explicit row-review assessment for a reviewed item, bound to its exact gold and actual values."""
+    key = item.get("item_key")
+    receipt = row_receipts.get(key)
+    if receipt is None:
+        raise ValueError(f"no row-review receipt for reviewed item {key}")
+    row = receipt["subject"]["input"]["row"]
+    if row.get("gold") != item.get("gold_value") or row.get("actual") != item.get("actual_parent_outcome_value"):
+        raise ValueError(f"row-review receipt {receipt['id']} reviewed different gold/actual values than reviewed item {key}")
+    return row_assessment(receipt)
+
+
+def bind(selections, receipts, summary, review_path: Path, row_receipts: dict | None = None):
     review_bytes = review_path.read_bytes()
     review_sha = sha(review_bytes)
     review = json.loads(review_bytes)
@@ -155,6 +177,7 @@ def bind(selections, receipts, summary, review_path: Path):
         else:
             raise ValueError(f"selection {index} has unsupported target kind")
 
+        row_review = row_review_for(item, row_receipts) if row_receipts is not None else None
         review_binding = {
             "schema": "s1.held-action-review-binding/1",
             "review_document_path": str(review_path),
@@ -169,6 +192,8 @@ def bind(selections, receipts, summary, review_path: Path):
             "raw_result_file_sha256": sha(raw_bytes),
             "raw_result_row_sha256": receipt["raw_result_row_sha256"],
         }
+        if row_review is not None:
+            review_binding["row_review"] = row_review
         bound_selection = dict(selection)
         bound_selection["source_review_binding"] = review_binding
         bound_receipt = dict(receipt)
@@ -191,11 +216,14 @@ def main():
     parser.add_argument("--receipts", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     parser.add_argument("--review", type=Path, required=True)
+    parser.add_argument("--row-reviews", type=Path, default=None,
+                        help="row receipts written by source_review.py; each selected item needs an explicit one")
     parser.add_argument("--out-selections", type=Path, required=True)
     parser.add_argument("--out-receipts", type=Path, required=True)
     args = parser.parse_args()
     selections, receipts = bind(lines(args.selections), lines(args.receipts),
-                                json.loads(args.summary.read_text(encoding="utf-8")), args.review)
+                                json.loads(args.summary.read_text(encoding="utf-8")), args.review,
+                                load_row_receipts(args.row_reviews) if args.row_reviews else None)
     for path, rows in ((args.out_selections, selections), (args.out_receipts, receipts)):
         if path.exists():
             raise ValueError(f"output already exists: {path}")

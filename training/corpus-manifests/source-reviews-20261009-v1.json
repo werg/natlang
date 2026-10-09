@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.source-review-registry-manifest/1",
+  "id": "source-reviews-20261009-v1",
+  "previous": null,
+  "files": [
+    {
+      "path": "training/source-reviews/holds.jsonl",
+      "bytes": 102772,
+      "sha256": "72be504e9dec90418cf0be69b62d0be30c1822eaed2fd235850a1d92eccb4760",
+      "lines": 184
+    },
+    {
+      "path": "training/source-reviews/family-holds.json",
+      "bytes": 1191,
+      "sha256": "435c897f4ce3919f6656c9a6967fcdf36c844c6a2555967ac96a049a55e2e231"
+    },
+    {
+      "path": "training/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    }
+  ],
+  "record_count": 184,
+  "pending_count": 184,
+  "identity_count": 255,
+  "per_dataset": {
+    "anli": 7,
+    "banking77": 13,
+    "entailmentbank": 1,
+    "folio": 18,
+    "hotpotqa": 1,
+    "kqapro": 1,
+    "musique": 71,
+    "natlang-inline-curriculum": 5,
+    "scifact": 20,
+    "sms_spam": 4,
+    "sst2": 2,
+    "tatqa": 40,
+    "workflowevals:agent-trace-observability": 1
+  },
+  "family_hold_count": 3,
+  "training_admission": false,
+  "note": "A registry of source-review holds, not a training corpus; no entry grants admission."
+}

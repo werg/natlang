@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.source-review-datasets/1",
+  "familyDataset": {
+    "entailment_premises": "entailmentbank",
+    "kqapro_question": "kqapro",
+    "anli_batch": "anli",
+    "folio_batch": "folio",
+    "folio_entailment": "folio"
+  },
+  "displayNames": {
+    "HotpotQA distractor": "hotpotqa"
+  },
+  "identityFromSourceGroups": ["folio", "entailmentbank"],
+  "identityFromCurriculumShape": ["folio", "kqapro", "entailmentbank"]
+}
