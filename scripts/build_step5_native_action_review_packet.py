@@ -141,10 +141,16 @@ def main() -> None:
     missing_annotations = set(annotation_rows) - seen
     if missing_annotations:
         raise ValueError(f"annotations refer to absent native rows: {sorted(missing_annotations)}")
+    root_completed = result.get("outcome", {}).get("status") == "done" and result.get("outcome", {}).get("accepted") is True
+    case_provenance = (
+        "Per-action sampled outputs from a successfully completed Step 5 root call."
+        if root_completed else
+        "Per-action sampled outputs from a Step 5 root call that did not complete successfully."
+    )
     packet = {
         "schema": "natlang.step5-native-action-review-packet/1",
         "status": "review proposal; no training admission",
-        "provenance": "Per-action sampled outputs from a root-quiesced Step 5 case. Candidate labels below are human review recommendations, not admissions.",
+        "provenance": f"{case_provenance} Candidate labels below are human review recommendations, not admissions.",
         "controller_provenance": args.controller_provenance,
         "pins": {
             "result": file_pin(args.result),
@@ -174,6 +180,7 @@ def main() -> None:
             "request_telemetry_scope": result.get("request_telemetry"),
         },
         "collector_outcome": result.get("outcome", {}).get("status"),
+        "collector_accepted": result.get("outcome", {}).get("accepted") is True,
         "trajectory_review": result.get("trajectory_review"),
         "rows": packet_rows,
         "counts": {
@@ -183,7 +190,7 @@ def main() -> None:
             "rows_with_unrecorded_action": sum(any(call["recorded_status"] == "not_recorded" for call in item["exact_call_events"]) for item in packet_rows),
         },
         "limits": {
-            "parent_root_completed": False,
+            "parent_root_completed": root_completed,
             "authored_controller_synthesis_claim": False,
             "whole_trajectory_admission": False,
             "physical_network_request_count_known": False,
