@@ -58,6 +58,8 @@ def main() -> None:
                  "annotations", "source-cases", "launch-plan", "runtime-manifest", "output"):
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--source-row-index", required=True, type=int)
+    parser.add_argument("--controller-provenance", required=True,
+                         help="Explicitly identify whether the controller/root was authored or sampled")
     args = parser.parse_args()
     result = load_json(args.result)
     native_rows = read_jsonl(args.native_rows)
@@ -121,6 +123,7 @@ def main() -> None:
             "source_groups": row.get("source_groups"),
             "invocation_id": invocation_id,
             "parent_invocation_id": source_ref.get("parent_invocation_id"),
+            "materializer_source_row_sha256": source_ref.get("source_row_sha256"),
             "native_row_training_admission": row.get("training_admission"),
             "target_sha256_canonical_sorted_json": target_digest(row),
             "messages_sha256_canonical_sorted_json": canonical_digest(row.get("messages")),
@@ -142,6 +145,7 @@ def main() -> None:
         "schema": "natlang.step5-native-action-review-packet/1",
         "status": "review proposal; no training admission",
         "provenance": "Per-action sampled outputs from a root-quiesced Step 5 case. Candidate labels below are human review recommendations, not admissions.",
+        "controller_provenance": args.controller_provenance,
         "pins": {
             "result": file_pin(args.result),
             "trace": file_pin(args.trace),
@@ -158,6 +162,7 @@ def main() -> None:
             "row_bytes_including_line_feed": len(selected_source_line),
             "row_sha256_with_line_feed": sha(selected_source_line),
             "row_sha256_without_line_feed": sha(selected_source_line.rstrip(b"\r\n")),
+            "materializer_source_row_sha256_basis": "nativeRowDigest(result JSON object); intentionally distinct from physical source-cases JSONL row hashes",
             "case_id": source_record.get("id") or source_record.get("case_id"),
             "source_groups": source_record.get("source_groups") or source_record.get("groups"),
             "split": source_record.get("split"),
