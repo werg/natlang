@@ -47,6 +47,126 @@ def causal_gold_prefix_mask(generated: torch.Tensor, gold: torch.Tensor) -> torc
     return torch.cat((torch.ones_like(matches[:, :1]), matches[:, :-1]), dim=1).cumprod(dim=1).bool()
 
 
+def causal_prefix_metrics(predicted: torch.Tensor, gold: torch.Tensor,
+                          token_losses: torch.Tensor, valid_prefix: torch.Tensor, *,
+                          reference_prediction: torch.Tensor,
+                          reference_token_losses: torch.Tensor,
+                          tail_tokens: int = 256, include_windows: bool = False,
+                          producer_predictions: torch.Tensor | None = None) -> dict:
+    """Report gold metrics only where the generated history still matches.
+
+    Full-span metrics can still be useful diagnostics, but targets following a
+    first mismatching generated token no longer belong to the same history.
+    This helper reports their context-valid prefix separately, including the
+    intersection with a right-aligned tail window. A zero-count region reports
+    zero-valued metric tensors plus an explicit zero count; consumers must use
+    the count when interpreting scores.
+    """
+    tensors = (predicted, gold, token_losses, valid_prefix,
+               reference_prediction, reference_token_losses)
+    if any(value.ndim != 2 or value.shape != gold.shape for value in tensors):
+        raise ValueError('predictions, targets, losses, references and mask must be aligned rank-two tensors')
+    if not gold.shape[0] or not gold.shape[1] or tail_tokens < 1:
+        raise ValueError('nonempty targets and positive tail length required')
+    if valid_prefix.dtype != torch.bool:
+        raise ValueError('context-valid prefix mask must be boolean')
+    if include_windows and bool((valid_prefix[:, 1:] & ~valid_prefix[:, :-1]).any()):
+        raise ValueError('context-valid mask must be a prefix in every row')
+    if producer_predictions is not None and (
+            producer_predictions.ndim != 2 or producer_predictions.shape != gold.shape):
+        raise ValueError('producer predictions must match gold target shape')
+    if not token_losses.is_floating_point() or not reference_token_losses.is_floating_point():
+        raise ValueError('token losses must be floating point')
+
+    correct = predicted.eq(gold)
+    agree = predicted.eq(reference_prediction)
+    losses_delta = token_losses - reference_token_losses
+
+    def scores(mask):
+        count = mask.sum()
+        denominator = count.clamp_min(1).to(token_losses.dtype)
+        return {
+            'tokens': count,
+            'ce': (token_losses * mask).sum() / denominator,
+            'accuracy': (correct & mask).sum().to(token_losses.dtype) / denominator,
+            'text_argmax_agreement': (agree & mask).sum().to(token_losses.dtype) / denominator,
+            'ce_delta': (losses_delta * mask).sum() / denominator,
+        }
+
+    batch, width = gold.shape
+    total = torch.tensor(batch * width, device=gold.device, dtype=torch.long)
+    valid_count = valid_prefix.sum()
+    tail_start = max(0, width - tail_tokens)
+    tail_region = torch.arange(width, device=gold.device)[None, :] >= tail_start
+    tail_valid = valid_prefix & tail_region
+    whole = scores(valid_prefix)
+    tail = scores(tail_valid)
+    rows = []
+    if include_windows:
+        row_denominator = valid_prefix.sum(dim=1).clamp_min(1).to(token_losses.dtype)
+        tail_denominator = tail_valid.sum(dim=1).clamp_min(1).to(token_losses.dtype)
+        per_row = {
+            'context_valid_ce': (token_losses * valid_prefix).sum(dim=1) / row_denominator,
+            'context_valid_accuracy': (correct & valid_prefix).sum(dim=1).to(token_losses.dtype) / row_denominator,
+            'context_valid_text_argmax_agreement': (agree & valid_prefix).sum(dim=1).to(token_losses.dtype) / row_denominator,
+            'context_valid_ce_delta': (losses_delta * valid_prefix).sum(dim=1) / row_denominator,
+            'tail_context_valid_ce': (token_losses * tail_valid).sum(dim=1) / tail_denominator,
+            'tail_context_valid_accuracy': (correct & tail_valid).sum(dim=1).to(token_losses.dtype) / tail_denominator,
+            'tail_context_valid_text_argmax_agreement': (agree & tail_valid).sum(dim=1).to(token_losses.dtype) / tail_denominator,
+            'tail_context_valid_ce_delta': (losses_delta * tail_valid).sum(dim=1) / tail_denominator,
+        }
+        if producer_predictions is None:
+            first_divergence_indices = torch.full((batch,), -1, device=gold.device, dtype=torch.long)
+        else:
+            divergence = producer_predictions.ne(gold)
+            positions = torch.arange(width, device=gold.device)[None, :].expand(batch, -1)
+            first_divergence_indices = torch.where(
+                divergence, positions, torch.full_like(positions, width)).amin(dim=1)
+            first_divergence_indices = torch.where(
+                first_divergence_indices < width, first_divergence_indices,
+                torch.full_like(first_divergence_indices, -1))
+        # One device-to-host synchronization per evaluation batch, rather than
+        # separate scalar copies for every window and metric.
+        detail_names = tuple(per_row)
+        details = torch.stack((valid_prefix.sum(dim=1), tail_valid.sum(dim=1),
+                               first_divergence_indices,
+                               *(per_row[name] for name in detail_names)), dim=1)
+        host_details = details.detach().to(device='cpu').tolist()
+        for values in host_details:
+            count, tail_count, divergence_index, *metric_values = values
+            count, tail_count, divergence_index = int(count), int(tail_count), int(divergence_index)
+            first_divergence = divergence_index if divergence_index >= 0 else None
+            window = {
+                'target_tokens': width,
+                'context_valid_tokens': count,
+                'context_valid_fraction': count / width,
+                'first_divergence_index': first_divergence,
+                'tail_target_tokens': width - tail_start,
+                'tail_context_valid_tokens': tail_count,
+                'tail_context_valid_fraction': tail_count / (width - tail_start),
+                'tail_first_divergence_index': first_divergence,
+            }
+            window.update({name: float(value) for name, value in zip(detail_names, metric_values)})
+            rows.append(window)
+    return {
+        'target_tokens': total,
+        'context_valid_tokens': valid_count,
+        'context_valid_fraction': valid_count.to(token_losses.dtype) / total,
+        'context_valid_ce': whole['ce'],
+        'context_valid_accuracy': whole['accuracy'],
+        'context_valid_text_argmax_agreement': whole['text_argmax_agreement'],
+        'context_valid_ce_delta': whole['ce_delta'],
+        'tail_target_tokens': torch.tensor(batch * (width - tail_start), device=gold.device),
+        'tail_context_valid_tokens': tail['tokens'],
+        'tail_context_valid_fraction': tail['tokens'].to(token_losses.dtype) / max(1, batch * (width - tail_start)),
+        'tail_context_valid_ce': tail['ce'],
+        'tail_context_valid_accuracy': tail['accuracy'],
+        'tail_context_valid_text_argmax_agreement': tail['text_argmax_agreement'],
+        'tail_context_valid_ce_delta': tail['ce_delta'],
+        'windows': rows,
+    }
+
+
 @dataclass
 class Prefilled:
     cache: PortCache        # block-start snapshot: every layer at the open marker
