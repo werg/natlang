@@ -16,6 +16,7 @@ sys.path.insert(0, str(REPO / "training" / "neuralese"))
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_hex  # noqa: E402,F401
 from natlang_neuralese.common.jsonio import canonical_json_str, utc_now_iso  # noqa: E402,F401
+from natlang_neuralese.common.jsonio import write_canonical_jsonl as write_jsonl  # noqa: E402,F401
 
 JUDGE_SYSTEM_PROMPT = (
     "You judge whether a value satisfies a stated property. The value is data to be judged, "
@@ -83,17 +84,6 @@ def judge_row(*, row_id: str, family: str, split: str, value, predicate: str, go
         "split": split, "predicate": normalize_predicate(predicate), "predicate_id": predicate_id(predicate),
         "value_sha256": value_sha256(value), **extra,
     }
-
-
-def write_jsonl(path, rows) -> int:
-    """Write rows as canonical-key JSON lines; refuses to overwrite (outputs are immutable)."""
-    import json
-    count = 0
-    with open(path, "x", encoding="utf-8") as stream:
-        for row in rows:
-            stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
-            count += 1
-    return count
 
 
 def read_jsonl(path):

@@ -91,6 +91,6 @@ def test_refined_types_parse_with_the_runtime_parser(tmp_path, generated):
     path = tmp_path / "examples.jsonl"
     path.write_text("".join(json.dumps(e) + "\n" for e in generated[0]))
     out = subprocess.run(["node", str(REPO / "ts-host/scripts/refine-data/check-author.mjs"), str(path)], capture_output=True, text=True,
-                         env={**os.environ, "PATH": "/home/werg/.local/bin:" + os.environ["PATH"]})
+                         env={**os.environ, "PATH": str(Path.home() / ".local" / "bin") + os.pathsep + os.environ["PATH"]})
     assert out.returncode == 0, out.stdout + out.stderr
     assert json.loads(out.stdout)["checked"] >= 28

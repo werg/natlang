@@ -102,7 +102,7 @@ def test_prompt_parity_with_the_typescript_judge(tmp_path):
     pairs = tmp_path / "pairs.jsonl"
     pairs.write_text("".join(json.dumps(case, ensure_ascii=False) + "\n" for case in cases), encoding="utf-8")
     out = subprocess.run(["node", str(REPO / "ts-host/scripts/refine-data/cli.mjs"), "messages", "--in", str(pairs)], capture_output=True, text=True, check=True,
-                         env={**os.environ, "PATH": "/home/werg/.local/bin:" + os.environ["PATH"]})
+                         env={**os.environ, "PATH": str(Path.home() / ".local" / "bin") + os.pathsep + os.environ["PATH"]})
     typescript = {row["id"]: row["messages"] for row in map(json.loads, out.stdout.splitlines())}
     for case in cases:
         assert typescript[case["id"]] == judge_messages(case["value"], case["predicate"]), case["id"]
