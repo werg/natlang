@@ -76,3 +76,48 @@ test('Step 5 preflight verifies exact bridge receipt bytes and official client p
     provider: { ...pinnedPlan.provider, official_cli_sha256: 'wrong' } }, bootstrapConfig: pinnedConfig,
     bootstrapConfigText: bridgeText, collectorArgv: ['cli.js', '--model-id', alias] }), /official_cli_sha256/);
 });
+
+test('Step 5 preflight binds a post-readiness bridge port without weakening model or URL checks', () => {
+  const dynamicServer = 'http://127.0.0.1:{adapter-port}/v1';
+  const actualServer = 'http://127.0.0.1:33183/v1';
+  const pendingPlan = { ...plan,
+    provider: { bootstrap_config_sha256: null, bootstrap_config_binding: 'post-readiness',
+      fresh_bootstrap_config_path: 'runs/fresh/bridge/bootstrap-config.json' },
+    collector: { server: dynamicServer },
+    model: { ...plan.model, variant: 'low' },
+    command_templates: { bridge: 'node bridge --model step-5-preview-free --variant low',
+      collector: `node cli.js input jobs output --model-id ${alias} --server ${dynamicServer}` } };
+  const config = { ...bootstrapConfig, main_model: alias, small_model: alias, model_variant: 'low',
+    adapter_url: actualServer, official_cli: '/pinned/opencode', official_cli_sha256: 'cli-hash',
+    official_sdk_module: '/pinned/sdk.mjs', official_sdk_module_sha256: 'sdk-hash' };
+  const configText = JSON.stringify(config);
+  const argv = ['cli.js', 'input', 'jobs', 'output', '--model-id', alias, '--server', actualServer];
+  const verified = verifyStep5ModelPair({ plan: pendingPlan, bootstrapConfig: config,
+    bootstrapConfigText: configText, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv });
+  assert.equal(verified.ok, true);
+  assert.equal(verified.bootstrap_config_sha256_bound, createHash('sha256').update(configText).digest('hex'));
+
+  assert.throws(() => verifyStep5ModelPair({ plan: { ...pendingPlan,
+    provider: { ...pendingPlan.provider, bootstrap_config_binding: undefined } }, bootstrapConfig: config,
+    bootstrapConfigText: configText, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv }), /explicit post-readiness binding/);
+  assert.throws(() => verifyStep5ModelPair({ plan: pendingPlan, bootstrapConfig: config,
+    bootstrapConfigText: configText, bootstrapConfigPath: 'runs/other/bridge/bootstrap-config.json', collectorArgv: argv }),
+  /actual bootstrap config path does not match/);
+  assert.throws(() => verifyStep5ModelPair({ plan: pendingPlan, bootstrapConfig: config,
+    bootstrapConfigText: configText, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: ['cli.js', '--model-id', 'opencode/paid-model', '--server', actualServer] }),
+  /actual collector argv --model-id/);
+  assert.throws(() => verifyStep5ModelPair({ plan: pendingPlan, bootstrapConfig: config,
+    bootstrapConfigText: configText, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: ['cli.js', '--model-id', alias, '--server', 'http://127.0.0.1:36833/v1'] }),
+  /actual collector argv --server/);
+  assert.throws(() => verifyStep5ModelPair({ plan: pendingPlan,
+    bootstrapConfig: { ...config, adapter_url: 'http://example.com/v1' }, bootstrapConfigText: configText,
+    bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv }), /valid loopback/);
+  assert.throws(() => verifyStep5ModelPair({ plan: pendingPlan,
+    bootstrapConfig: { ...config, small_model: 'opencode/paid-model' }, bootstrapConfigText: configText,
+    bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv }), /immutable bridge main\/small model/);
+  const exactNewlineConfig = `${configText}\n`;
+  const newlineBound = verifyStep5ModelPair({ plan: pendingPlan, bootstrapConfig: config,
+    bootstrapConfigText: exactNewlineConfig, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv });
+  assert.equal(newlineBound.bootstrap_config_sha256_bound,
+    createHash('sha256').update(exactNewlineConfig).digest('hex'));
+});

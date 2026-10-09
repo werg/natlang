@@ -2,6 +2,7 @@
 /** Verify the collector's requested model matches the official isolated OpenCode bridge. */
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 
 function modelIdFromArgv(argv) {
   if (!Array.isArray(argv) || argv.some(value => typeof value !== 'string'))
@@ -12,7 +13,26 @@ function modelIdFromArgv(argv) {
   return argv[positions[0] + 1];
 }
 
-export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, bootstrapConfigText }) {
+function uniqueArgValue(argv, flag, { required = false } = {}) {
+  const positions = argv.flatMap((value, index) => value === flag ? [index] : []);
+  if (!positions.length && !required) return null;
+  if (positions.length !== 1 || positions[0] + 1 >= argv.length)
+    throw new Error(`collector argv must contain exactly one ${flag} value`);
+  return argv[positions[0] + 1];
+}
+
+function isLoopbackAdapterUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1' &&
+      /^[1-9][0-9]{0,4}$/.test(url.port) && Number(url.port) <= 65535 &&
+      url.pathname === '/v1' && !url.username && !url.password && !url.search && !url.hash;
+  } catch { return false; }
+}
+
+export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, bootstrapConfigText,
+  bootstrapConfigPath }) {
   const bridgeAlias = bootstrapConfig?.model_alias;
   if (typeof bridgeAlias !== 'string' || !bridgeAlias)
     throw new Error('bootstrap config lacks immutable model_alias');
@@ -30,9 +50,24 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, boo
   if (bootstrapConfig.main_model !== bridgeAlias || bootstrapConfig.small_model !== bridgeAlias)
     throw new Error('immutable bridge main/small model do not match model_alias');
   const providerPins = plan?.provider ?? {};
-  if (providerPins.bootstrap_config_sha256 !== undefined &&
-      (typeof bootstrapConfigText !== 'string' || createHash('sha256').update(bootstrapConfigText).digest('hex') !== providerPins.bootstrap_config_sha256))
-    throw new Error('bootstrap config bytes do not match the pinned plan hash');
+  let bootstrapConfigSha256Bound;
+  if (providerPins.fresh_bootstrap_config_path !== undefined &&
+      (typeof bootstrapConfigPath !== 'string' ||
+       resolve(bootstrapConfigPath) !== resolve(providerPins.fresh_bootstrap_config_path)))
+    throw new Error('actual bootstrap config path does not match the plan fresh config path');
+  if (providerPins.bootstrap_config_sha256 === null) {
+    if (providerPins.bootstrap_config_binding !== 'post-readiness' ||
+        typeof providerPins.fresh_bootstrap_config_path !== 'string' || !providerPins.fresh_bootstrap_config_path ||
+        typeof bootstrapConfigText !== 'string' || typeof bootstrapConfigPath !== 'string')
+      throw new Error('null bootstrap config hash requires an explicit post-readiness binding and exact config bytes');
+    bootstrapConfigSha256Bound = createHash('sha256').update(bootstrapConfigText).digest('hex');
+  } else if (providerPins.bootstrap_config_sha256 !== undefined) {
+    if (typeof providerPins.bootstrap_config_sha256 !== 'string' ||
+        typeof bootstrapConfigText !== 'string' ||
+        createHash('sha256').update(bootstrapConfigText).digest('hex') !== providerPins.bootstrap_config_sha256)
+      throw new Error('bootstrap config bytes do not match the pinned plan hash');
+    bootstrapConfigSha256Bound = providerPins.bootstrap_config_sha256;
+  }
   for (const [pin, field] of [['official_cli_sha256', 'official_cli_sha256'],
     ['official_sdk_module_sha256', 'official_sdk_module_sha256'], ['official_cli', 'official_cli'],
     ['official_sdk_module', 'official_sdk_module']])
@@ -41,6 +76,24 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, boo
   const plannedVariant = plan.model.variant ?? 'catalog_default';
   if ((bootstrapConfig.model_variant ?? 'catalog_default') !== plannedVariant)
     throw new Error('plan model variant does not match immutable bridge variant');
+  const actualAdapterUrl = bootstrapConfig.adapter_url;
+  if (actualAdapterUrl !== undefined) {
+    if (!isLoopbackAdapterUrl(actualAdapterUrl))
+      throw new Error('immutable bridge adapter_url is not a valid loopback /v1 endpoint');
+    const actualServer = uniqueArgValue(collectorArgv, '--server', { required: true });
+    if (actualServer !== actualAdapterUrl)
+      throw new Error('actual collector argv --server does not match immutable bridge adapter_url');
+    const plannedServer = plan?.collector?.server;
+    const dynamicServer = 'http://127.0.0.1:{adapter-port}/v1';
+    if (plannedServer !== undefined && plannedServer !== actualAdapterUrl &&
+        !(providerPins.bootstrap_config_sha256 === null && plannedServer === dynamicServer))
+      throw new Error('plan collector server does not match the exact bridge URL or approved post-readiness placeholder');
+    const templateServer = uniqueArgValue(
+      String(plan?.command_templates?.collector ?? '').split(/\s+/), '--server', { required: false });
+    if (templateServer !== null && templateServer !== actualAdapterUrl &&
+        !(providerPins.bootstrap_config_sha256 === null && templateServer === dynamicServer))
+      throw new Error('collector command template server does not match the exact bridge URL or approved post-readiness placeholder');
+  }
   const bridgeTemplate = plan.command_templates?.bridge;
   const variantFlag = typeof bridgeTemplate === 'string' && bridgeTemplate.match(/(?:^|\s)--variant\s+([^\s]+)/);
   if ((plannedVariant === 'catalog_default' && variantFlag) ||
@@ -65,6 +118,7 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, boo
     }
   }
   return { ok: true, model_alias: bridgeAlias, collector_model_id: actualArgvAlias,
+    ...(bootstrapConfigSha256Bound === undefined ? {} : { bootstrap_config_sha256_bound: bootstrapConfigSha256Bound }),
     ...(expectedToolSurface === undefined ? {} : { tool_surface_mode: expectedToolSurface }) };
 }
 
@@ -83,7 +137,8 @@ async function main(argv) {
     readFile(args.get('--collector-argv-json'), 'utf8')
   ]);
   process.stdout.write(`${JSON.stringify(verifyStep5ModelPair({ plan: JSON.parse(planText),
-    bootstrapConfig: JSON.parse(bootstrapConfigText), collectorArgv: JSON.parse(collectorArgvText), bootstrapConfigText }))}\n`);
+    bootstrapConfig: JSON.parse(bootstrapConfigText), collectorArgv: JSON.parse(collectorArgvText),
+    bootstrapConfigText, bootstrapConfigPath: args.get('--bootstrap-config') }))}\n`);
 }
 
 if (process.argv[1]?.endsWith('/opencode-step5-preflight.mjs'))
