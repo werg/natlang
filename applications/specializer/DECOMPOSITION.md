@@ -1,6 +1,6 @@
 # Specializer: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented on main (2026-10-09, owner: finish and integrate); review after the fact in plans/OWNER_REVIEW.md. Decisions made in the implementation: `targetPolicy` and `declinePolicy` are store settings next to `promotionPolicy`; the rounds loop is bounded by `rounds` and ends at a fixed point (`madeProgress`, policy.ts); `chooseCondition` and `writeBody` are two host-chained calls with the host measuring the condition (the `admits` claim is checked, not trusted, and `writeBody` returns `{ kind: "case" }` only); the `group` argument is renamed `groupId` because it shadowed the `group` service in the eval scope; `writeGuidance.nl` (tier 2) was added to the scope.
 `README.md` in this folder already lists the parts in one table; this document extends it unit by unit with
 line references, the policy that sits in `main.ts`, and the natural-language functions' steps.
 

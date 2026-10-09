@@ -250,7 +250,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     for (const pair of words) {
       const [key, value] = pair.split('=');
       if (!key || value === undefined) throw new Error('usage: natlang traces config [KEY=VALUE...]');
-      (changes as Record<string, unknown>)[key] = key === 'specialization' || key === 'promotionPolicy' ? value : Number(value);
+      (changes as Record<string, unknown>)[key] = ['specialization', 'promotionPolicy', 'targetPolicy', 'declinePolicy'].includes(key) ? value : Number(value);
     }
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
     return 0;

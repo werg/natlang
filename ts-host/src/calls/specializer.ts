@@ -297,7 +297,7 @@ export function keepCases(text: string, keep: readonly number[]): string {
  * to the calls it covers and its held-out verdicts counted toward promotion (§6.2).
  */
 export function saveAccepted(store: CallStore, subject: Study, text: string, checks: CaseCheck[], report: string,
-  meta: Record<string, unknown> = {}): { id: string; cases: number } | undefined {
+  meta: Record<string, unknown> = {}, extraFiles: Record<string, string> = {}): { id: string; cases: number } | undefined {
   const accepted = checks.filter(check => check.accepted).map(check => check.position);
   if (!accepted.length) return undefined;
   const finalText = accepted.length === checks.length ? text : keepCases(text, accepted);
@@ -311,7 +311,7 @@ export function saveAccepted(store: CallStore, subject: Study, text: string, che
   });
   const id = store.saveCompilation({ definitionKey: subject.key, definitionId: subject.definition.id, definitionName: subject.definition.name,
     definitionSource: subject.definition.source ?? null, interfaceHash: record.definition.interface, programRoot: record.program_root,
-    files: { 'cases.ts': finalText, 'report.md': report, 'meta.json': JSON.stringify({ definition: subject.definition.name, key: subject.key,
+    files: { ...extraFiles, 'cases.ts': finalText, 'report.md': report, 'meta.json': JSON.stringify({ definition: subject.definition.name, key: subject.key,
       source: subject.definition.source ?? null, interface: record.definition.interface, calls: subject.examples.length,
       created: new Date().toISOString(), ...meta }, null, 2) + '\n' },
     caseHashes: hashes, links });
