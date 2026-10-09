@@ -5,53 +5,35 @@ import { sourceReviewReason } from './source-review.js';
 import { markdownTerminalNewlineEqual } from '../evaluation/oracles.js';
 import '../benchmarks/builtin.js';
 import { runtimeFailureRulesFor } from '../benchmarks/registry.js';
+import { GENERATION_HOLD_RULES, QUARANTINE_RULES, RETIRED_FAMILY_NAMES, RUNTIME_FAILURE_RULES, firstReason, type RuleContext } from './curriculum-rules.js';
 
-// Untyped nl results now run open, so inline_type_repair no longer triggers its required compiler refusal.
-export const RETIRED_FAMILIES: ReadonlySet<string> = new Set(['inline_type_repair']);
+// Untyped nl results now run open, so inline_type_repair no longer triggers its required compiler refusal. The names are data
+// in curriculum-rules.ts (RETIRED_FAMILY_NAMES), with the rule ladders below.
+export const RETIRED_FAMILIES: ReadonlySet<string> = new Set(RETIRED_FAMILY_NAMES);
 export function retiredFamily(record: ProgramRecord): string | undefined {
   const curriculum = record.curriculum as { family?: string } | undefined;
   return curriculum?.family && RETIRED_FAMILIES.has(curriculum.family) ? curriculum.family : undefined;
 }
 
-/** Source counterfactuals whose labels cannot be established by deleting an annotated proof leaf. */
+/** What the ladders' named predicates and steps read; the rungs themselves are data (curriculum-rules.ts). */
+const contextOf = (record: ProgramRecord, row?: unknown): RuleContext => ({ record, curriculum: record.curriculum, row });
+
+/** Source counterfactuals whose labels cannot be established by deleting an annotated proof leaf. The ladder is QUARANTINE_RULES. */
 export function quarantineReason(record: ProgramRecord): string | undefined {
-  if (record.source === 'treedst' && !hasExistingTreeValueContract(record.semantics?.inputs?.state, record.semantics?.expected))
-    return 'unverified_tree_transition_contract';
-  const sourceReview = sourceReviewReason(record);
-  if (sourceReview) return sourceReview;
-  if (record.family === 'cb_highlighter' &&
-    (record.generation as { highlighter_quality_version?: number } | undefined)?.highlighter_quality_version !== 2)
-    return 'legacy_highlighter_oracle';
-  const curriculum = record.curriculum as { family?: string; family_version?: number; variant?: string; answer_evidence?: string[];
-    payment_scope_version?: number } | undefined;
-  if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 3)
-    return 'legacy_numeric_reference_contract';
-  if (curriculum?.family === 'commaqa_question' && curriculum.family_version === 3)
-    return 'unverified_movie_schema_contract';
-  if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
-    return 'unverified_counterfactual';
-  if (curriculum?.family === 'folder_extract' && (!record.semantics.files_oracle?.quote_sources ||
-      !record.semantics.files_oracle.return_count)) return 'legacy_extraction_contract';
-  if (curriculum?.family === 'folder_edit' && (!record.semantics.files_oracle?.rubric ||
-      !record.semantics.files_oracle.return_count)) return 'legacy_rewrite_contract';
-  if (curriculum?.family === 'folder_index' && (!record.semantics.files_oracle?.return_count ||
-      record.semantics.files_oracle.total === undefined)) return 'legacy_counts_contract';
-  if (curriculum?.family === 'folder_triage' && record.semantics.files_oracle?.compare !== 'moves')
-    return 'legacy_move_contract';
-  if (curriculum?.family === 'folder_find' && !curriculum.answer_evidence?.length)
-    return 'legacy_article_evidence_policy';
-  if (curriculum?.family === 'folder_mixed' && record.dataset === 'banking77' && curriculum.payment_scope_version !== 2)
-    return 'legacy_payment_scope';
+  return firstReason(QUARANTINE_RULES, contextOf(record), {
+    predicates: { 'no-tree-value-contract': () => !hasExistingTreeValueContract(record.semantics?.inputs?.state, record.semantics?.expected) },
+    steps: { 'source-review': () => sourceReviewReason(record) },
+  });
 }
 
 
 /** Unfair answer-span contracts must not consume live generation requests. Verified static reads remain useful. */
 export function generationHoldReason(record: ProgramRecord): string | undefined {
-  return record.source === 'qasper' ? 'awaiting_extractive_equivalence_oracle' : undefined;
+  return firstReason(GENERATION_HOLD_RULES, contextOf(record));
 }
 
 /** Exact old CommitPack false-negative shape: every non-target file and causal check still passes. */
-function legacyMarkdownTerminalNewlineFailure(row: { task?: Record<string, unknown>; outcome?: Record<string, unknown> }): boolean {
+export function legacyMarkdownTerminalNewlineFailure(row: { task?: Record<string, unknown>; outcome?: Record<string, unknown> }): boolean {
   const record = row.task?.program_ir as ProgramRecord | undefined, outcome = row.outcome;
   const generation = record?.generation as Record<string, unknown> | undefined;
   if (!record || record.source !== 'commitpack' || !outcome || outcome.accepted !== false ||
@@ -84,30 +66,29 @@ function legacyMarkdownTerminalNewlineFailure(row: { task?: Record<string, unkno
     !(filesCheck?.errors?.length) && !(filesCheck?.pending?.length);
 }
 
-/** Old infrastructure failures must not teach models that correct actions are bad decisions. */
+/** Old infrastructure failures must not teach models that correct actions are bad decisions. The ladder is RUNTIME_FAILURE_RULES. */
 export function runtimeFailureReason(row: { task: Record<string, unknown>; provenance?: Record<string, unknown>;
   outcome?: Record<string, unknown>; trajectory?: unknown[] }): string | undefined {
   if (row.outcome?.accepted !== false) return;
   const record = row.task.program_ir as ProgramRecord;
-  if (legacyMarkdownTerminalNewlineFailure(row)) return 'legacy_markdown_terminal_newline_oracle';
-  if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
-      record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
-  // Dataset-specific rules (e.g. benchmarks/tatqa) register by source name; sources are disjoint, so order is moot.
-  for (const rule of runtimeFailureRulesFor(String(record.source))) {
-    const reason = rule(row as Parameters<typeof rule>[0], record as unknown as Record<string, any>);
-    if (reason) return reason;
-  }
-  // Extractive annotations do not enumerate every semantically equivalent span boundary.
-  // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
-  if ((record.source === 'qasper' || record.source === 'musique') &&
-      (row.outcome?.rejection_reasons as string[] | undefined)?.includes('answer'))
-    return 'unreviewed_extractive_answer_equivalence';
-  if (Number(row.provenance?.runtime_contract_version ?? 0) >= 17) return;
-  const family = (record.curriculum as { family?: string } | undefined)?.family ?? record.family;
-  if (family === 'inline_late_binding' || (record.family === 'cb_reconciliation' &&
-      JSON.stringify(record.semantics.expected).includes('__proto__')) ||
-      (family === 'logic_proof_verifier' && JSON.stringify(row.trajectory).includes('bad character at')))
-    return 'obsolete_runtime_contract';
+  const effectiveFamily = () => (record.curriculum as { family?: string } | undefined)?.family ?? record.family;
+  return firstReason(RUNTIME_FAILURE_RULES, contextOf(record, row), {
+    predicates: {
+      'legacy-markdown-terminal-newline': () => legacyMarkdownTerminalNewlineFailure(row),
+      'treedst-oracle-not-named-tree': () => typeof record.semantics.oracle !== 'object' || record.semantics.oracle.normalization !== 'named-tree',
+      'effective-family-inline-late-binding': () => effectiveFamily() === 'inline_late_binding',
+      'effective-family-logic-proof-verifier': () => effectiveFamily() === 'logic_proof_verifier',
+    },
+    steps: {
+      // Dataset-specific rules (e.g. benchmarks/tatqa) register by source name; sources are disjoint, so order is moot.
+      'benchmark-rules': () => {
+        for (const rule of runtimeFailureRulesFor(String(record.source))) {
+          const reason = rule(row as Parameters<typeof rule>[0], record as unknown as Record<string, any>);
+          if (reason) return reason;
+        }
+      },
+    },
+  });
 }
 
 
