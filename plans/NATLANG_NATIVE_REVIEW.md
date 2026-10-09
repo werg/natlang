@@ -35,7 +35,7 @@ Ranked by value.
 
 | # | Where | Decision today | Natlang design |
 | --- | --- | --- | --- |
-| P1 | No code: the hourly check-in done by agents | Run health, cause, resume/replace/wait, next step | `diagnoseRun`, `planNext`, `triageInbox` over crisp read-only evidence. Actions go through an allowlist; it is advisory first and auto-applies only reversible actions |
+| P1 | No code: the hourly check-in done by agents | Run health, cause, resume/replace/wait, next step | Withdrawn (owner, 2026-10-10): the hourly check-in is an agent semantically controlling the work. Decoupled from the agent it is useless unless it triggers one, so it stays with the agents. The implementation was removed. |
 | P2 | teacher/source-review.ts:19-440 | About 400 lines of per-item review verdicts frozen as code | Verdicts move to a data file. `reviewSourceItem` recommends at intake; `resolved` stays an explicit decision |
 | P3 | calls/tiers.ts:203-225 | Tier promote/demote by magic thresholds | `decideTierState.nl`, pluggable, crisp hard bound. In progress |
 | P4 | optimization/authored-engine.ts, gepa.ts, applications/program-improver | Parent, component and composition choice (`iteration%4===3`), stop | `planExperiment.nl`, pluggable, with a journaled plan for resume (implemented 2026-10-09 as six pluggable policies and a journaled plan; see applications/program-improver/DECOMPOSITION.md) |

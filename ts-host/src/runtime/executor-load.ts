@@ -1,6 +1,6 @@
 /**
  * How busy a vLLM executor is, and waiting for it to be idle. Programs that run beside the executor they use (the
- * specializer, the heartbeat) call this so they do not compete with the programs it serves. Exported from `@natlang/node`
+ * specializer) call this so they do not compete with the programs it serves. Exported from `@natlang/node`
  * because callable folders may import only siblings and packages.
  */
 

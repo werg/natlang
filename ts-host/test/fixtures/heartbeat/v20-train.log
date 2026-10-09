@@ -1,4 +1,0 @@
-2026-10-09T11:01:12Z step 1200 loss 2.3101 tokens/s 8123
-2026-10-09T11:05:40Z step 1250 loss 2.2912 tokens/s 8101
-2026-10-09T11:06:02Z torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB
-Killed
