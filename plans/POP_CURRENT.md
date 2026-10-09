@@ -14,11 +14,15 @@ The sketch run `neuralese-foundation-text-4880-continuation-20261009-v1`
 was signalled to checkpoint and stop on 2026-10-09 after the user caught a
 regression to the superseded approach. Best saved step3328 remains unqualified;
 matching best checkpoint SHA `1c134d95729a5c68ccabe4a162ac4376fee23484cb3ca8325e2db73883073c91`.
-This run's raw gold-embedding anchor repair is useful work, but its repeated
+The signal saved full resumable step3391, checkpoint SHA
+`32e77b2b3a579ef7ca0e918a4ab06af724537b01b1bc3aa663bdd74d556d2a9f`;
+the older heads export remains step3328. This run's raw gold-embedding anchor
+repair is useful work, but its repeated
 sketch consumer objective is not the agreed training path.
 
-Next: restore the shared `gold-text-input-map-v1` mapped-input path with an
-explicit checkpoint/objective handoff on admitted target-bound text, then train
+Next: restore the shared `gold-text-input-map-v1` mapped-input path from the
+qualified same-map22272 full checkpoint with preserved optimizer/map/backbone/RNG
+and a fresh baseline on the corrected4880 admitted target-bound text, then train
 against actual full-depth autoregressive feedback. Verify the saved shutdown
 checkpoint before selecting a source. Neither mapped alignment nor AR controls
 alone qualify autonomous feedback, runtime transport, stopping or recurrence.
