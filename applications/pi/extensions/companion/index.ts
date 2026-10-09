@@ -22,6 +22,7 @@ import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
 import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
 import type { Implementation } from '../../host/harness.ts';
+import { transcriptText } from '../../host/natlang-provider.ts';
 import observe from './observe.nl';
 import shape from './shape.nl';
 
@@ -67,13 +68,17 @@ export function list(directory: string): Promise<string[]>;`;
 
 const hashOf = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
-/** The text of a message, compact: tool calls with their arguments, results cut. */
+/** A message part as the transcript reads it; Neuralese blocks (types.ts NeuraleseContent) are not in pi-ai's union. */
+type Part = { type: string; text?: string; id?: string };
+
+/** The text of a message, compact: tool calls with their arguments, results cut; a Neuralese block named by its ID. */
 function render(message: Message): string {
   const cut = (text: string, limit: number) => text.length > limit ? `${text.slice(0, limit)} …[${text.length - limit} more chars]` : text;
-  if (message.role === 'user') return `USER: ${cut(typeof message.content === 'string' ? message.content : message.content.map(part => part.type === 'text' ? part.text : '[image]').join(''), 2000)}`;
-  if (message.role === 'assistant') return message.content.map(part => part.type === 'text' ? `AGENT: ${cut(part.text, 1500)}` :
-    part.type === 'toolCall' ? `AGENT CALLS ${part.name} ${cut(JSON.stringify(part.arguments), 400)}` : '').filter(Boolean).join('\n');
-  if (message.role === 'toolResult') return `RESULT of ${message.toolName}${message.isError ? ' (error)' : ''}: ${cut(message.content.map(part => part.type === 'text' ? part.text : '[image]').join(''), 800)}`;
+  if (message.role === 'user') return `USER: ${cut(typeof message.content === 'string' ? message.content : (message.content as Part[]).map(transcriptText).join(''), 2000)}`;
+  if (message.role === 'assistant') return (message.content as Part[]).map(part => part.type === 'text' || part.type === 'neuralese' ?
+    `AGENT: ${cut(transcriptText(part), 1500)}` : part.type === 'toolCall' ? `AGENT CALLS ${(part as ToolCall).name} ` +
+    `${cut(JSON.stringify((part as ToolCall).arguments), 400)}` : '').filter(Boolean).join('\n');
+  if (message.role === 'toolResult') return `RESULT of ${message.toolName}${message.isError ? ' (error)' : ''}: ${cut((message.content as Part[]).map(transcriptText).join(''), 800)}`;
   return '';
 }
 

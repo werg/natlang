@@ -67,3 +67,9 @@ do not predict (base Mellum CE ~4.5 there vs 1.0-1.9 on prose/code); report role
 
 foundation-maple at cutoff 27 (Mellum: 28 layers) with 512 context windows, the Maple lesson (c12 0.54 → c23 0.854 held
 agreement: depth helps most) applied from the start.
+
+Update (2026-10-09 evening): the text warm-up gained `read_adapter` and `member_mask_system` (same semantics as the
+recurrence trainer; maple/family.leading_system_tokens). raw-recurrence-v2 declares `read_adapter` for
+core_text_warmup too, so the adapter trains from the first stage that reads Neuralese and carries into the recurrence;
+raw-recurrence-mellum-v1 declares both for its text warm-up stages. foundation-mellum-v1 has only the token-foundation
+stages (no text warm-up handler), so the options live in raw-recurrence-mellum-v1.

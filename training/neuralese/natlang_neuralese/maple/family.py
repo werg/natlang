@@ -37,6 +37,20 @@ def window_labels(ids: torch.Tensor, prefix: int) -> torch.Tensor:
     return labels
 
 
+def leading_system_tokens(ids, start: list[int], end: int, bos: int | None = None) -> int:
+    """Token count of a leading system message (through its end marker) when the window ``ids`` (a token list)
+    begins with ``start`` (the tokens of e.g. "<|im_start|>system", after an optional BOS); 0 otherwise. Member terms
+    keep it as context: a shared system prompt teaches members nothing but memorisation (MAPLE_NESTED §9.5)."""
+    ids = list(ids)
+    offset = 1 if bos is not None and ids[:1] == [bos] else 0
+    if not start or ids[offset:offset + len(start)] != list(start):
+        return 0
+    try:
+        return ids.index(end, offset + len(start)) + 1
+    except ValueError:
+        return len(ids)  # the window lies inside the system message
+
+
 def member_backward(backbone, member, ids: torch.Tensor, labels: torch.Tensor, *, weight: float,
                     kl_weight: float = 1.0, chunk: int = 256, full_weight: float = 0.0):
     """Backpropagate ``weight · (CE_member + kl_weight · KL(full ‖ member))`` over the labelled positions; the full

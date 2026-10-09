@@ -33,7 +33,11 @@ export { TypeEnv, TypeSyntaxError, parseType, formatType, fitsType } from './nat
 export { ONCE_EFFECTS } from './native/effects.js';
 export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
-export type { ModelTurn, ModelTurnRequest } from './contracts.js';
+export type { ModelTurn, ModelTurnRequest, ModelContentPart } from './contracts.js';
+export { neuraleseServerModelTurn } from './model/neuralese-server.js';
+export type { NeuraleseServerOptions } from './model/neuralese-server.js';
+export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
+export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from './native/neuralese.js';
 export type { NativeReviewOptions } from './native/agent.js';
 export { fetchModel, openAICompatibleModelTurn, chatCompletionModelTurn, httpChatTransport, assembleChatCompletion,
   modelTools, requestLimit, limitedTransport, createManagedModelSession, createResolvedModelSession, loadModelConfiguration,

@@ -34,6 +34,12 @@ export type ModelInfo = {
 export type TextContent = { type: "text"; text: string; textSignature?: string };
 export type ThinkingContent = { type: "thinking"; thinking: string; thinkingSignature?: string; redacted?: boolean };
 export type ImageContent = { type: "image"; data: string; mimeType: string };
+/**
+ * A Neuralese block in a message: the standard content part (ts-host contracts.ts `ModelContentPart`), not in pi-ai's
+ * own content union. It reaches the model as the block itself, never as text, so only an agent model whose declared
+ * reader is a Neuralese dialect can be sent it; any other model fails the request with neuralese-unsupported-backend.
+ */
+export type NeuraleseContent = { type: "neuralese"; id: string; value_type?: "string" | "unknown" };
 /** A call the model makes. `id` is unique within its assistant message. */
 export type ToolCall = { type: "toolCall"; id: string; name: string; arguments: JsonObject; thoughtSignature?: string };
 
@@ -67,8 +73,8 @@ export type SystemMessage = {
   toolsRemoved?: { name: string }[];
   timestamp: number;
 };
-/** User content: a string, or text and image items. */
-export type UserContent = string | (TextContent | ImageContent)[];
+/** User content: a string, or text, image and Neuralese items. */
+export type UserContent = string | (TextContent | ImageContent | NeuraleseContent)[];
 export type UserMessage = { role: "user"; content: UserContent; timestamp: number };
 /**
  * A provider response. Store it exactly as returned: it carries provider fields not listed here (responseId,
@@ -79,7 +85,7 @@ export type UserMessage = { role: "user"; content: UserContent; timestamp: numbe
  */
 export type AssistantMessage = {
   role: "assistant";
-  content: (TextContent | ThinkingContent | ToolCall)[];
+  content: (TextContent | ThinkingContent | ToolCall | NeuraleseContent)[];
   api: string;
   provider: string;
   model: string;
@@ -93,7 +99,7 @@ export type ToolResultMessage = {
   role: "toolResult";
   toolCallId: string;
   toolName: string;
-  content: (TextContent | ImageContent)[];
+  content: (TextContent | ImageContent | NeuraleseContent)[];
   details?: JsonValue;
   usage?: Usage;
   isError: boolean;
@@ -171,7 +177,7 @@ export type ToolControl = { addTools?: string[]; terminate?: boolean; handoff?: 
  * rendered for the model after the content. `usage` is the spend of the execution itself.
  */
 export type ToolExecutionResult = {
-  content?: (TextContent | ImageContent)[];
+  content?: (TextContent | ImageContent | NeuraleseContent)[];
   isError?: boolean;
   details?: JsonValue;
   diagnostics?: ToolDiagnostic[];

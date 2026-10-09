@@ -1631,3 +1631,44 @@ def test_mapped_checkpoint_continues_into_ar_feedback_with_full_state_preserved(
     full_target_tokens=sum(row['target_token_count']
                            for row in controls['input_token_id_fingerprints'])
     assert controls['scores']['gold']['tokens']==full_target_tokens
+
+
+def test_read_adapter_trains_in_the_text_warmup_and_a_continuation_may_add_it(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup
+    def load(*_args):
+        backbone,heads=tiny_student()
+        return SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,
+                               _tokens=lambda _text:[9,3,5,8]),None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':s,'split':split,'source_groups':[s]})
+                              for s,split in [('train','train'),('held','test')])+'\n')
+    args=['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+          '--out',str(tmp_path/'plain'),'--device','cpu','--steps','2','--tokens','8',
+          '--prefix-tokens','2','--batch','1','--eval-batch','1','--held-documents','1',
+          '--eval-every','1','--checkpoint-every','1','--optimizer','adamw','--backbone-training','full',
+          '--projection-patience','1','--projection-min-evals','2','--projection-min-improvement','1',
+          '--backbone-ramp-evals','1','--pass-ramp-evals','1']
+    text_warmup.main(args)
+    plain=torch.load(tmp_path/'plain'/'checkpoint.pt',weights_only=False)
+    assert not any(k.startswith('read_adapter.') for k in plain['heads'])
+    # A continuation that adds the read adapter: identity at start, declared added, trained.
+    added=list(args);added[added.index('--out')+1]=str(tmp_path/'added')
+    added[added.index('--steps')+1]='4'
+    added+=['--continue-from',str(tmp_path/'plain'/'checkpoint.pt'),'--read-adapter']
+    text_warmup.main(added)
+    saved=torch.load(tmp_path/'added'/'checkpoint.pt',weights_only=False)
+    rows=list(map(json.loads,(tmp_path/'added'/'train.jsonl').read_text().splitlines()))
+    assert max(r['schedule']['sequence_passes'] for r in rows)>=2  # the mapped history was read
+    proj=[k for k in saved['heads'] if k.startswith('read_adapter.proj.weight')]
+    assert proj and saved['heads'][proj[0]].abs().sum()>0  # zero-initialised, moved by training
+    serving=torch.load(tmp_path/'added'/'heads.pt',weights_only=False)
+    assert serving['port_config']['read_adapter']=='full-residual-v1'
+    assert any(k.startswith('read_adapter.') for k in serving['heads'])
+    assert any(n.startswith('heads.read_adapter.') for n in saved['student_parameters'])
+    # It resumes in place with the adapter.
+    text_warmup.main(added)

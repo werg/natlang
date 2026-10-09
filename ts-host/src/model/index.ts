@@ -22,4 +22,6 @@ export { localSlotPlan } from './local-server.js';
 export type { BatchingSettings } from './config.js';
 export type { ChatRequestMeta } from './chat-completion.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, encodeBlockBody, decodeBlockBody, requestBlockIds, referenceAdapterLoras } from './neuralese-server.js';
+export { neuraleseServerInfo, checkNeuraleseReader } from './neuralese-info.js';
+export type { NeuraleseServerInfo } from './neuralese-info.js';
 export type { NeuraleseServerOptions } from './neuralese-server.js';

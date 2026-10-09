@@ -360,7 +360,7 @@ def balanced_position_weights(span, suffix_starts):
     return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
-from ..maple.family import evaluate_members, member_backward, window_labels
+from ..maple.family import evaluate_members, leading_system_tokens, member_backward, window_labels
 from ..maple.model import eager_rms_norm
 
 
@@ -1064,6 +1064,10 @@ def main(argv=None):
                         'weight; members\' private parts become trainable. 0 disables (members still evaluated)')
     p.add_argument('--member-tokens',type=int,default=2048,help='members train and evaluate on the last N window tokens')
     p.add_argument('--member-eval-windows',type=int,default=4)
+    p.add_argument('--member-mask-system',action=argparse.BooleanOptionalAction,default=True,
+                   help='member windows keep a leading system message as context (as the recurrence trainer)')
+    p.add_argument('--read-adapter',action=argparse.BooleanOptionalAction,default=False,
+                   help='reader-side Neuralese input adaptation (heads.NeuraleseReadAdapter), trained with the heads')
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
@@ -1163,7 +1167,12 @@ def main(argv=None):
     from ..model.input_map import NeuraleseInputMap
     heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
         kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
+    if a.read_adapter:
+        heads.add_read_adapter()
     named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map')
+    if a.read_adapter:
+        for n,q in heads.read_adapter.named_parameters():
+            q.requires_grad_(True);named.append(('heads.read_adapter.'+n,q))
     secondary_prefix='heads.input_map.'
     from ..maple.family import family_members, private_parameters
     family=family_members(backbone)
@@ -1268,11 +1277,20 @@ def main(argv=None):
         ids=torch.tensor([list(r['ids']) for r in rows],device=a.device)
         span=ids[:,rows[0]['prefix']:]
         return ids[:,:rows[0]['prefix']],span,balanced_position_weights(span,[r.get('supervised_suffix_start') for r in rows])
+    mask_system=bool(a.member_weight and a.member_mask_system)
+    if mask_system:
+        system_start=engine.tokenizer('<|im_start|>system',add_special_tokens=False).input_ids
+        system_end=engine.tokenizer.convert_tokens_to_ids('<|im_end|>')
     def member_window(w):
-        """The last --member-tokens of a window, labelled on its supervised (non-context) positions."""
+        """The last --member-tokens of a window, labelled on its supervised (non-context) positions; with
+        --member-mask-system a leading system message is context too (as in the recurrence trainer)."""
         prefix,span,_=ids_for(w)
         ids=torch.cat([prefix,span],1)
-        labels=window_labels(ids,prefix.shape[1])
+        context=prefix.shape[1]
+        if mask_system:
+            context=max(context,leading_system_tokens(ids[0].tolist(),system_start,system_end,
+                                                      engine.tokenizer.bos_token_id))
+        labels=window_labels(ids,min(max(1,context),ids.shape[1]-1))
         return ids[:,-a.member_tokens:],labels[:,-a.member_tokens:]
     buckets={}
     for window in windows['train']:
@@ -1417,13 +1435,17 @@ def main(argv=None):
                 raise ValueError(f'continuation heads differ beyond the new input map: {missing} {unexpected}')
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
-            heads.load_state_dict(restored['heads'])
+            missing,unexpected=heads.load_state_dict(restored['heads'],strict=False)
+            if unexpected or any(not (a.read_adapter and k.startswith('read_adapter.')) for k in missing):
+                raise ValueError(f'restored heads differ beyond a new read adapter: {missing} {unexpected}')
+            # A read adapter new at this continuation starts at identity; its optimizer slots are declared added.
+            added_prefixes=list(a.optimizer_added)+(['heads.read_adapter.'] if missing else [])
             from .optim_restore import (restore_optimizer_state,declared_added_names,
                                         record_restore_report)
             # Named restore: unchanged groups load exactly as before; a grown/shrunk/rerouted trainable set is
             # refused unless declared (--optimizer-added PREFIX) or the reset is explicit (--optimizer-state fresh).
             restore_report=restore_optimizer_state(optimizer,restored['optimizer'],dict(named),
-                declared_added_names(named,a.optimizer_added),
+                declared_added_names(named,added_prefixes),
                 saved_names=restored.get('optimizer_param_names'),fresh=a.optimizer_state=='fresh' and not resumed)
             record_restore_report(restore_report,a.out,source=a.continue_from or 'resume')
             if continuation:

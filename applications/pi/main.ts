@@ -8,6 +8,12 @@
  *                                           profile endpoint and model); --agent-key-env VAR for its key;
  *                                           --context-window N (default 65536), --max-tokens N (default 16384)
  *   --thinking LEVEL                        the agent's thinking level (default off)
+ *   --agent-transport natlang               reach the agent model through natlang's own model transport, which speaks
+ *                                           the Neuralese wire standard as natlang programs do (host/natlang-provider.ts;
+ *                                           default: pi-ai's OpenAI-compatible provider)
+ *   --agent-reader text|DIALECT             with --agent-transport natlang: what the agent model reads (default text);
+ *                                           a Neuralese dialect is checked at startup against the server's
+ *                                           /v1/neuralese/info, and Neuralese parts then reach it as blocks
  *   --cwd DIR                               the agent's working directory (default: the workspace)
  *   --session FILE                          the SQLite session (default: a new one under the state directory)
  *   --context natural-language              context building in natural language (default crisp)
@@ -35,7 +41,8 @@ import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createModels, createProvider, type AssistantMessage, type Models } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
-import { NatlangRuntime, type TargetContext } from '@natlang/node';
+import { NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, type NeuraleseStore, type TargetContext } from '@natlang/node';
+import { declareReader, natlangApi, type AgentReader, type ModelDriver } from './host/natlang-provider.ts';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
 import type { EntryId } from './vendor/durable/src/types.ts';
 import { codingRegistry, createEnvs } from './extensions/index.ts';
@@ -47,6 +54,7 @@ import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
+  '--agent-transport', '--agent-reader',
   '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--out', '--minutes', '--in', '--repos'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
@@ -63,25 +71,47 @@ function profileEndpoint(): { endpoint: string; model: string } | undefined {
   } catch { return undefined; }
 }
 
-/** pi-ai models with one OpenAI-compatible provider, "agent", serving the agent model. */
-export function agentModels(args: string[], launcher?: { endpoint: string; model: string }): { models: Models; ref: { provider: string; modelId: string } } {
+/**
+ * pi-ai models with one provider, "agent", serving the agent model: pi-ai's OpenAI-compatible provider, or with
+ * `--agent-transport natlang` natlang's own transport, whose model declares its reader (`--agent-reader`, checked
+ * against the server here). `store`: the runtime's Neuralese store, which a Neuralese server's blocks are archived in.
+ */
+export async function agentModels(args: string[], launcher?: { endpoint: string; model: string }, store?: NeuraleseStore):
+    Promise<{ models: Models; ref: { provider: string; modelId: string } }> {
   // The launcher's own endpoint (the profile `natlang run --profile` selected) before the configured default profile.
   const profile = launcher ?? profileEndpoint();
   const endpoint = option(args, '--agent-endpoint') ?? process.env.PI_AGENT_ENDPOINT ?? profile?.endpoint;
   const modelId = option(args, '--agent-model') ?? process.env.PI_AGENT_MODEL ?? profile?.model;
   if (!endpoint || !modelId) throw new Error('name the agent model: --agent-endpoint URL --agent-model ID');
   const keyVariable = option(args, '--agent-key-env');
-  const baseUrl = `${endpoint.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1`;
+  const apiKey = keyVariable ? process.env[keyVariable] : undefined;
+  const root = endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
+  const baseUrl = `${root}/v1`;
+  const transport = option(args, '--agent-transport') ?? 'pi-ai';
+  if (transport !== 'pi-ai' && transport !== 'natlang') throw new Error(`--agent-transport is pi-ai or natlang, not ${transport}`);
+  if (transport !== 'natlang' && option(args, '--agent-reader')) throw new Error('--agent-reader needs --agent-transport natlang');
+  const reader: AgentReader = transport === 'natlang' ? await declareReader(option(args, '--agent-reader') ?? 'text', root, { apiKey }) :
+    { kind: 'text' };
+  // One natlang driver per thinking setting, sent as the template argument pi-ai's qwen-chat-template format sends.
+  const drivers = new Map<boolean, ModelDriver>();
+  const driver = (reasoning: boolean): ModelDriver => {
+    const settings = { endpoint: root, model: modelId, apiKey,
+      request: { chat_template_kwargs: { enable_thinking: reasoning, preserve_thinking: true } } };
+    if (!drivers.has(reasoning)) drivers.set(reasoning, reader.kind === 'neuralese' ?
+      neuraleseServerModelTurn({ ...settings, store }) : openAICompatibleModelTurn(settings));
+    return drivers.get(reasoning)!;
+  };
   const models = createModels();
   models.setProvider(createProvider({
     id: 'agent', name: 'Agent', baseUrl,
-    auth: { apiKey: { name: 'agent key', resolve: async () => ({ auth: { apiKey: (keyVariable ? process.env[keyVariable] : undefined) ?? 'none' } }) } },
-    models: [{ id: modelId, name: modelId, api: 'openai-completions', provider: 'agent', baseUrl, input: ['text'], reasoning: true,
+    auth: { apiKey: { name: 'agent key', resolve: async () => ({ auth: { apiKey: apiKey ?? 'none' } }) } },
+    models: [{ id: modelId, name: modelId, api: transport === 'natlang' ? 'natlang-model-turn' : 'openai-completions', provider: 'agent',
+      baseUrl, input: ['text'], reasoning: true, reader,
       contextWindow: Number(option(args, '--context-window') ?? 65536), maxTokens: Number(option(args, '--max-tokens') ?? 16384),
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       compat: { thinkingFormat: 'qwen-chat-template', supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
         maxTokensField: 'max_tokens' } } as never],
-    api: openAICompletionsApi(),
+    api: transport === 'natlang' ? natlangApi((_model, { reasoning }) => driver(reasoning)) : openAICompletionsApi(),
   }));
   return { models, ref: { provider: 'agent', modelId } };
 }
@@ -110,7 +140,8 @@ export type RunResult = { status: string; answer: string; reason?: string; ms: n
 /** Run one task to its answer on a session at `sessionPath`. */
 export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal): Promise<RunResult> {
   const started = Date.now();
-  const { models, ref } = agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint);
+  const { models, ref } = await agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint,
+    target.runtime.options.neuralese?.store);
   const quiet = args.includes('--quiet');
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);
