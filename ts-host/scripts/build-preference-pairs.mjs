@@ -20,18 +20,21 @@ import { handoffTurns, recorded } from '../dist/teacher/replay.js';
 import { pool, replayOptions, rowsOf } from './build-handoffs.mjs';
 import { classifyAdmissionReason, dpoHoldReasons } from './admission-dispositions.mjs';
 import { fileDigest } from './jsonl-stream.mjs';
+import { loadSourceDerivedRepairCandidates, sourceDerivedRepairReviewPair } from './source-derived-repair-pairs.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { handoffs: { type: 'string' },
-  variants: { type: 'string' }, parents: { type: 'string' }, workers: { type: 'string', default: '6' } } });
+  variants: { type: 'string' }, parents: { type: 'string' }, 'source-derived-repairs': { type: 'string' },
+  workers: { type: 'string', default: '6' } } });
 const [output] = positionals;
-if (!output || (!values.handoffs && !values.variants) || (!values.variants !== !values.parents))
-  throw new Error('usage: build-preference-pairs.mjs OUT.jsonl [--handoffs RESULTS,...] [--variants CORRECTED --parents ADMITTED]');
+if (!output || (!values.handoffs && !values.variants && !values['source-derived-repairs']) || (!values.variants !== !values.parents))
+  throw new Error('usage: build-preference-pairs.mjs OUT.jsonl [--handoffs RESULTS,...] [--variants CORRECTED --parents ADMITTED] [--source-derived-repairs HELD-PROPOSAL.json]');
 const workers=Number(values.workers);
 if(!Number.isInteger(workers)||workers<1)throw new Error('workers must be a positive integer');
 const runtimeIdentity=async()=>Object.fromEntries(await Promise.all(['native/runtime.js','teacher/handoff.js',
   'teacher/curriculum.js','teacher/curriculum-policy.js','teacher/source-conversion.js'].map(async name=>
     [name,createHash('sha256').update(await readFile(new URL('../dist/'+name,import.meta.url))).digest('hex')])));
 const replayRuntime=await runtimeIdentity();
+const sourceRepairBuilderSha256 = createHash('sha256').update(await readFile(new URL('./source-derived-repair-pairs.mjs', import.meta.url))).digest('hex');
 
 const jobs = [];
 for await (const row of rowsOf((values.handoffs ?? '').split(',').filter(Boolean))) {
@@ -53,7 +56,38 @@ if (values.variants) {
   }
 }
 const pairs = [], skipped = {}, audit = [];
+const heldRepairPairs = [];
 const skip = reason => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
+let sourceRepairInput = null;
+if (values['source-derived-repairs']) {
+  sourceRepairInput = await loadSourceDerivedRepairCandidates(values['source-derived-repairs']);
+  for (const item of sourceRepairInput.items) {
+    const candidate = sourceDerivedRepairReviewPair(item);
+    if (candidate.status !== 'held' || candidate.training_admission !== false || !candidate.pair) {
+      const reason = candidate.reason ?? 'source_derived_candidate_not_held';
+      skip(`source_repair:${reason}`);
+      audit.push({ id: item.id, source_id: item.source.source_id, decision_index: item.original_provider_decision.invocation_id,
+        result: 'held_source_repair_validation_failed', reasons: [reason] });
+      continue;
+    }
+    heldRepairPairs.push({ version: 'natlang.source_derived_repair_review/1', id: item.id,
+      status: 'held', training_admission: false, required_root_preference_admission_receipt: true,
+      root_preference_admission_receipt: null,
+      provenance: { proposal_path: values['source-derived-repairs'], proposal_sha256: sourceRepairInput.proposal_sha256,
+        audit_receipt: sourceRepairInput.proposal.audit_receipt, source_inventory: sourceRepairInput.proposal.source_inventory,
+        source_id: item.source.source_id, source_row_sha256_including_lf: item.source.source_row_sha256_including_lf,
+        request_sha256: item.original_provider_decision.request_sha256,
+        raw_result_sha256: item.original_provider_decision.raw_result_sha256,
+        raw_response_sha256: item.original_provider_decision.raw_response_sha256 },
+      disposition: candidate.disposition, synthetic_target: candidate.synthetic_target,
+      observed_rejected_target: candidate.observed_rejected_target,
+      runtime_or_hidden_state_equivalence: false, successful_task_completion_claimed: false,
+      pair: candidate.pair });
+    audit.push({ id: item.id, source_id: item.source.source_id,
+      decision_index: item.original_provider_decision.invocation_id, result: 'held_source_derived_repair_review',
+      reasons: ['root_preference_pair_admission_pending'] });
+  }
+}
 await pool(jobs, workers, async ({ row, index, rejected, kind, runId, evidence }) => {
   const candidateId = `${row.id}:preference:${index}`;
   const sourceParent = evidence.kind === 'handoff' ? evidence.source?.trajectory_id : evidence.parent;
@@ -102,6 +136,8 @@ audit.sort((a, b) => a.id.localeCompare(b.id));
 const auditBytes = audit.map(row => JSON.stringify(row)).join('\n') + (audit.length ? '\n' : '');
 await writeFile(output, pairBytes);
 await writeFile(`${output}.audit.jsonl`, auditBytes);
+const heldBytes = heldRepairPairs.map(pair => JSON.stringify(pair)).join('\n') + (heldRepairPairs.length ? '\n' : '');
+await writeFile(`${output}.held-source-derived.jsonl`, heldBytes);
 const kinds = {}, dispositions = {};
 for (const pair of pairs) kinds[`${pair.evidence.kind} ${pair.kind}`] = (kinds[`${pair.evidence.kind} ${pair.kind}`] ?? 0) + 1;
 for (const reason of Object.keys(skipped)) {
@@ -110,12 +146,19 @@ for (const reason of Object.keys(skipped)) {
   dispositions[disposition.category] = (dispositions[disposition.category] ?? 0) + skipped[reason];
 }
 const manifest = { version: 'natlang.preference_pair_build/1', output, audit: `${output}.audit.jsonl`,
+  held_source_derived_repairs: `${output}.held-source-derived.jsonl`,
   runtime_identity:replayRuntime,
-  inputs:await Promise.all([...new Set([...(values.handoffs??'').split(',').filter(Boolean),values.variants,values.parents].filter(Boolean))]
+  inputs:await Promise.all([...new Set([...(values.handoffs??'').split(',').filter(Boolean),values.variants,values.parents,
+    values['source-derived-repairs']].filter(Boolean))]
     .map(async path=>({path,sha256:await fileDigest(path)}))),
+  source_derived_repair_pins: sourceRepairInput ? { proposal_sha256: sourceRepairInput.proposal_sha256,
+    audit_sha256: sourceRepairInput.audit_sha256, source_inventory_sha256: sourceRepairInput.source_inventory_sha256,
+    candidate_builder_sha256: sourceRepairBuilderSha256, root_preference_admission_receipt_required: true } : null,
   pair_sha256: createHash('sha256').update(pairBytes).digest('hex'), audit_sha256: createHash('sha256').update(auditBytes).digest('hex'),
-  candidates: jobs.length, audited_candidates: audit.length,
+  held_source_derived_sha256: createHash('sha256').update(heldBytes).digest('hex'),
+  candidates: jobs.length + (sourceRepairInput?.items.length ?? 0), audited_candidates: audit.length,
   causally_verified_pairs: pairs.length, pair_labels_causally_verified:true,
+  held_source_derived_repair_candidates: heldRepairPairs.length,
   final_training_audited:false, labels_finalized: false, kinds, skipped, skipped_dispositions: dispositions,
   skipped_disposition_measure:'Reason occurrences; one candidate can have multiple reasons.' };
 await writeFile(`${output}.manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
