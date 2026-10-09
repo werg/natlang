@@ -66,6 +66,16 @@ The launcher's profile is the executor. The agent is any OpenAI-compatible serve
 launcher's endpoint (the `--profile` it runs with), else the default profile's. `--session FILE` keeps the SQLite session; `--thinking LEVEL` sets the agent's thinking
 level; `--quiet` hides the phase log.
 
+`--agent-transport natlang` reaches the agent model through natlang's own model transport instead of pi-ai's
+OpenAI provider (`host/natlang-provider.ts`): the request, content parts, tool-call decoding and token accounting are
+those of natlang programs, so the agent speaks the Neuralese wire standard (spec/NEURALESE_PORT.md) exactly as they
+do. `--agent-reader DIALECT` declares that the agent model reads that Neuralese dialect; it is checked at startup
+against the server's `/v1/neuralese/info` (a dialect the server does not speak is a startup error), and the model
+object carries it as `reader` (`{ kind: 'text' }` or `{ kind: 'neuralese', dialect }`), so code making a value for the
+agent can choose its representation (plans/neuralese/DECISIONS.md, 2026-10-09). A Neuralese block in a message
+(`{ type: 'neuralese', id }`, types.ts `NeuraleseContent`) reaches such a model unchanged; sent to any model that reads
+text, the request fails with `neuralese-unsupported-backend`. There is no text fallback.
+
 ## Verification
 
 - `npm test` in this directory: scripted wiring tests (25). The crisp helpers are compared with pi's own code on

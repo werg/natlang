@@ -14,6 +14,7 @@ import { streamResponse } from '../vendor/durable/src/harness/generation.ts';
 import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, ThinkingLevel } from '../types.ts';
 import { ONCE_EFFECTS } from '@natlang/node';
 import { plain } from './durable.ts';
+import { modelReader, NEURALESE_BLOCK_TOKENS, isNeuraleseContent, neuraleseBlocks } from './natlang-provider.ts';
 
 /**
  * A provider's message as the Session line stores it: strict JSON, or a rejection as pi-durable's commit would give
@@ -27,6 +28,15 @@ function storable(message: AssistantMessage, phase: { failed?: string }): Assist
       'so this request failed. Do not work around it, retry it, or build a message yourself: end this call with ' +
       'return_result status "failed" and this reason. The harness faults the generation.');
   }
+}
+
+/** The answer of a model that does not read Neuralese to a request whose messages hold blocks. */
+function unreadable(model: Model<Api>): AssistantMessage {
+  return { role: 'assistant', content: [], api: model.api, provider: model.provider, model: model.id,
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    stopReason: 'error', timestamp: Date.now(),
+    errorMessage: `neuralese-unsupported-backend: the messages hold Neuralese blocks, but ${model.provider}/${model.id} reads text ` +
+      '(declare a Neuralese reader for it: --agent-transport natlang --agent-reader DIALECT)' };
 }
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
@@ -64,6 +74,9 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
         'The context through the cutoff is never empty: check whether the eval cleared the list it was building from ' +
         '(for example messages.length = 0 on the same array it then copies back), and pass the context\'s messages.'));
       const resolved = resolve(model);
+      // A Neuralese block reaches only a model that reads its dialect (natlang-provider.ts); there is no text fallback.
+      if (modelReader(resolved).kind !== 'neuralese' && messages.some(message => neuraleseBlocks(message)))
+        return Promise.resolve(storable(unreadable(resolved), phase));
       const attempt = live?.attempt ?? streamAttempt?.();
       return (attempt !== undefined ? streamResponse(runtime as never, resolved, messages, options(turn), attempt, context) :
         runtime.models.completeSimple(resolved, { messages }, options(turn))).then(message => storable(message, phase));
@@ -79,7 +92,15 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
         retryable: message.stopReason === 'error' && isRetryableAssistantError(message) };
     },
     retryDelayMs(policy: RetryPolicy, attempt: number): number { return retryDelayMs(policy, attempt); },
-    estimateTokens(messages: Message[]): number[] { return messages.map(message => estimateMessageTokens(message)); },
+    estimateTokens(messages: Message[]): number[] {
+      // pi-ai's estimate knows text and images; a Neuralese block counts as NEURALESE_BLOCK_TOKENS.
+      return messages.map(message => {
+        const blocks = neuraleseBlocks(message);
+        if (!blocks) return estimateMessageTokens(message);
+        const text = { ...message, content: (message.content as unknown[]).filter(part => !isNeuraleseContent(part)) } as Message;
+        return estimateMessageTokens(text) + blocks * NEURALESE_BLOCK_TOKENS;
+      });
+    },
     validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string } {
       try {
         const call = { type: 'toolCall' as const, id: 'validate', name: toolName, arguments: args } as never;
@@ -99,7 +120,8 @@ export function model(ref: ModelRef): ModelInfo | null;
  * stopReason "error" with errorMessage, and cancelling the task gives "aborted". options: the pinned stream options plus
  * thinkingLevel, sessionId (the conversation's provider session) and an optional maxTokens. With live, the host
  * publishes the growing answer into pi.live.generation for that attempt, and finishes publishing before this returns.
- * Rejects only when the model is not in the catalog.
+ * Messages holding a Neuralese block, sent to a model that reads text, fail with "neuralese-unsupported-backend" (there
+ * is no text fallback). Rejects only when the model is not in the catalog.
  */
 export function turn(model: ModelRef, messages: Message[], options: StreamOptions & { thinkingLevel: ThinkingLevel; sessionId: string; maxTokens?: number }, live?: { attempt: number }): Promise<AssistantMessage>;
 /** Check a deferred response once; still pending: stopReason "deferred" with a new handle. */
@@ -110,7 +132,7 @@ export function cancel(model: ModelRef, handle: DeferredHandle): Promise<void>;
 export function failure(message: AssistantMessage): { overflow: boolean; retryable: boolean };
 /** The wait before retry attempt n: min(baseDelayMs * 2^(n-1), maxAgentDelayMs ?? 60000). */
 export function retryDelayMs(policy: RetryPolicy, attempt: number): number;
-/** pi's token estimate of each message: characters / 3.5, rounded up; an image counts as 4800 characters. */
+/** pi's token estimate of each message: characters / 3.5, rounded up; an image counts as 4800 characters, a Neuralese block as 64 tokens. */
 export function estimateTokens(messages: Message[]): number[];
 /** Validate and coerce tool arguments against the tool's JSON Schema parameters, as pi does; error is pi's exact message. */
 export function validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string };`;
