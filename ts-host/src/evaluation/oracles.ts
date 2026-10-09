@@ -1,16 +1,23 @@
 import { checkConstraints, type WritingConstraint } from './constraints.js';
+import { canonical, jsonStringRecordCanonical } from '../oracle-kit/json-record.js';
+import { decimalForms } from '../oracle-kit/decimal.js';
+import { assertKnownComparator, recordComparator } from '../oracle-kit/oracle-registry.js';
+export { jsonStringRecordCanonical };
 /** Answer checks used by generated and dataset-backed teacher cases. */
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
 /** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact';
+  threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | (string & {});
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
   /** Explicit answer-map keys whose lowercase strings are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
+const BUILTIN_NORMALIZATIONS = ['qa', 'qa-string-map', 'named-tree', 'json-string-record'] as const;
+const BUILTIN_FILE_COMPARES = ['content', 'exact', 'moves', 'rewrite', 'csv', 'counts', 'json-string-record', 'qa-string-map',
+  'markdown-terminal-newline'] as const;
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string;
   needs_review?: boolean; comparison_version?: string };
 
@@ -35,29 +42,6 @@ export function namedTreeCanonical(value: unknown): string | null {
   try { return JSON.stringify(visit(value, 0)); } catch { return null; }
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.entries(value as Record<string, unknown>)
-    .sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}`;
-  return JSON.stringify(value);
-}
-/** Formatting is irrelevant for JSON string records; duplicate keys and other shapes are invalid. */
-export function jsonStringRecordCanonical(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const string = String.raw`"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"`;
-  const pair = `${string}\\s*:\\s*${string}`;
-  if (!new RegExp(`^\\s*\\{\\s*(?:${pair}(?:\\s*,\\s*${pair})*)?\\s*\\}\\s*$`).test(value)) return null;
-  try {
-    const names = new Set<string>();
-    for (const match of value.matchAll(new RegExp(`(${string})\\s*:\\s*${string}`, 'g'))) {
-      const key = JSON.parse(match[1]!) as string;
-      if (names.has(key)) return null;
-      names.add(key);
-    }
-    return canonical(JSON.parse(value));
-  } catch { return null; }
-}
-
 /** JSON string maps keep exact values unless a source contract explicitly marks decimal-valued keys. */
 export function jsonStringRecordWithNumericKeysCanonical(value: unknown, numericKeys: unknown = []): string | null {
   if (!Array.isArray(numericKeys) || numericKeys.some(key => typeof key !== 'string') ||
@@ -80,13 +64,13 @@ export function jsonStringRecordWithNumericKeysCanonical(value: unknown, numeric
   } else return null;
 
   for (const key of numericKeys as string[]) {
-    if (!Object.hasOwn(record, key) || typeof record[key] !== 'string' || tatqaNumberForms(record[key] as string) === null)
+    if (!Object.hasOwn(record, key) || typeof record[key] !== 'string' || decimalForms(record[key] as string) === null)
       return null;
   }
   const selected = new Set(numericKeys as string[]);
   return JSON.stringify(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => {
     if (!selected.has(key)) return [key, { exact_string: entry }];
-    return [key, { exact_decimal: tatqaNumberForms(entry as string)!.exact }];
+    return [key, { exact_decimal: decimalForms(entry as string)!.exact }];
   }));
 }
 
@@ -142,76 +126,13 @@ function jsonStringRecordAnswerCanonical(value: unknown, numericKeys: unknown, r
     jsonStringRecordWithRadixFieldsCanonical(value, radixFields) : jsonStringRecordWithNumericKeysCanonical(value, numericKeys);
 }
 
-const TATQA_SCALES = new Set(['', 'percent', 'thousand', 'million', 'billion']);
-const TATQA_NUMERIC = /^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)$/;
-
-/** Canonical exact decimal, plus an optional 2dp form when rounding is unambiguous. */
-function tatqaNumberForms(value: string): { exact: string; rounded: string | null } | null {
-  if (value.length > 512 || !TATQA_NUMERIC.test(value)) return null;
-  const negative = value.startsWith('-');
-  const unsigned = value.replace(/^[+-]/, '').replace(/,/g, '');
-  const [wholeRaw = '0', fractionRaw = ''] = unsigned.split('.');
-  const whole = wholeRaw || '0';
-  const digits = `${whole}${fractionRaw}`.replace(/^0+(?=\d)/, '');
-  // Equivalent decimal encodings such as 12, 12.0 and +12.00 share one exact form.
-  const normalizedExact = (() => {
-    let d = digits, scale = fractionRaw.length;
-    while (scale > 0 && d.endsWith('0')) { d = d.slice(0, -1); scale--; }
-    if (!d) d = '0';
-    return `${negative && d !== '0' ? '-' : ''}${d}:${scale}`;
-  })();
-  const magnitude = BigInt(digits || '0');
-  if (fractionRaw.length <= 2) {
-    const cents = magnitude * 10n ** BigInt(2 - fractionRaw.length);
-    return { exact: normalizedExact, rounded: `${negative && cents !== 0n ? '-' : ''}${cents}` };
-  }
-  const scaleFactor = 10n ** BigInt(fractionRaw.length - 2);
-  let cents = magnitude / scaleFactor;
-  const remainder = magnitude % scaleFactor;
-  const half = scaleFactor / 2n;
-  // Exclude exact half-cent ties from rounded equality; exact decimal equality remains valid.
-  const tie = remainder === half;
-  if (remainder > half) cents++;
-  return { exact: normalizedExact,
-    rounded: tie ? null : `${negative && cents !== 0n ? '-' : ''}${cents}` };
-}
-
-/** TaTQA-only comparison: strict record schema and scale, with source scorer's numeric rounding. */
-export function tatqaAnswerRecordCanonical(value: unknown): string | null {
-  const recordText = jsonStringRecordCanonical(value);
-  if (recordText === null || typeof value !== 'string') return null;
-  try {
-    const record = JSON.parse(value) as Record<string, unknown>;
-    if (Object.keys(record).length !== 2 || !Object.hasOwn(record, 'answer') || !Object.hasOwn(record, 'scale') ||
-        typeof record.answer !== 'string' || typeof record.scale !== 'string' || !TATQA_SCALES.has(record.scale)) return null;
-    const numeric = tatqaNumberForms(record.answer);
-    return JSON.stringify({ answer: numeric ? { numeric: true, exact: numeric.exact, rounded: numeric.rounded } :
-      { numeric: false, text: record.answer },
-      scale: record.scale });
-  } catch { return null; }
-}
-
-export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown, numericComparison: 'rounded-2dp' | 'exact' = 'rounded-2dp'): boolean {
-  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
-  const left = tatqaAnswerRecordCanonical(actual), right = tatqaAnswerRecordCanonical(expected);
-  if (left === null || right === null) return false;
-  if (left === right) return true;
-  try {
-    const a = JSON.parse(left) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
-    const b = JSON.parse(right) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
-    if (a.scale !== b.scale || !a.answer.numeric || !b.answer.numeric) return false;
-    if (numericComparison === 'exact') return a.answer.exact === b.answer.exact;
-    return a.answer.exact === b.answer.exact || (!!a.answer.rounded && !!b.answer.rounded &&
-      a.answer.rounded === b.answer.rounded);
-  } catch { return false; }
-}
 function normalizeText(value: unknown): string {
   const text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
   const number = text.replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, '');
   if (number.length <= 512 && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(number)) {
     // Reuse only TaTQA's exact decimal representation; generic normalized answers must never
     // inherit its optional source-specific two-decimal rounding equivalence.
-    const exact = tatqaNumberForms(number)?.exact ?? (number.endsWith('.') ? tatqaNumberForms(`${number}0`)?.exact : undefined);
+    const exact = decimalForms(number)?.exact ?? (number.endsWith('.') ? decimalForms(`${number}0`)?.exact : undefined);
     if (exact !== undefined) return `number:${exact}`;
   }
   const date = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
@@ -252,7 +173,7 @@ function words(value: unknown, qa = false): string[] {
 export function spanF1(actual: unknown, expected: unknown, qa = false): number {
   if (qa) {
     const numbers = (value: unknown) => String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
-      tatqaNumberForms(token)?.exact ?? token).sort() ?? [];
+      decimalForms(token)?.exact ?? token).sort() ?? [];
     const goldNumbers = numbers(expected), gotNumbers = numbers(actual);
     if (goldNumbers.length && canonical(goldNumbers) !== canonical(gotNumbers)) return 0;
   }
@@ -296,7 +217,7 @@ export function agreement(actual: unknown, expected: unknown): number {
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'markdown-terminal-newline' | (string & {}); threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
@@ -406,6 +327,7 @@ export function markdownTerminalNewlineEqual(path: string, actual: string | unde
 
 export function checkFiles(actual: Record<string, string>, expected: Record<string, string>, input: Record<string, string>,
     spec: FilesOracle = {}, judgments: FilesVerdict['judgments'] = {}): FilesVerdict {
+  assertKnownComparator('compare', spec.compare, BUILTIN_FILE_COMPARES);
   const compare = spec.compare ?? 'exact', threshold = probability(spec.threshold ?? 0.9, 'files'),
     span = probability(spec.span ?? 0.5, 'files span');
   if (compare === 'content') {
@@ -485,9 +407,9 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
       item(path, path === 'answers.json' && parsed !== null && parsed === qaStringMapCanonical(want));
       continue;
     }
-    if (compare === 'tatqa-answer-record' || compare === 'tatqa-answer-record-exact') {
-      item(path, path === 'answer.json' && tatqaAnswerRecordsEqual(got, want,
-        compare === 'tatqa-answer-record-exact' ? 'exact' : 'rounded-2dp'));
+    const registered = recordComparator(compare);
+    if (registered) {
+      item(path, path === registered.answerFile && registered.equal(got, want));
       continue;
     }
     if (compare === 'csv') {
@@ -602,13 +524,10 @@ export function fileReturnValue(files: Record<string, string>, input: Record<str
   return csvRows(report).slice(1).filter(row => row[1]?.trim()).length;
 }
 export function checkFileReturn(actual: unknown, files: Record<string, string>, input: Record<string, string>, spec: FilesOracle): boolean {
-  if (spec.compare === 'tatqa-answer-record') {
-    const written = files['answer.json'];
-    return written !== undefined && tatqaAnswerRecordsEqual(actual, written);
-  }
-  if (spec.compare === 'tatqa-answer-record-exact') {
-    const written = files['answer.json'];
-    return written !== undefined && tatqaAnswerRecordsEqual(actual, written, 'exact');
+  const registered = recordComparator(spec.compare);
+  if (registered) {
+    const written = files[registered.answerFile];
+    return written !== undefined && registered.equal(actual, written);
   }
   if (spec.compare === 'json-string-record') {
     const answerFiles = ['answers.json', 'answer.json'].filter(path => Object.hasOwn(files, path));
@@ -651,10 +570,9 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
       comparison_version: spec.numeric_keys?.length ? 'json-string-record-decimal-fields/1' : spec.radix_fields?.length ?
         'json-string-record-radix-fields/1' : 'json-string-record-object/1' };
   }
-  if (level === 'normalized' && (spec.normalization === 'tatqa-answer-record' || spec.normalization === 'tatqa-answer-record-exact')) {
-    return { accepted: candidates.some(candidate => tatqaAnswerRecordsEqual(actual, candidate,
-      spec.normalization === 'tatqa-answer-record-exact' ? 'exact' : 'rounded-2dp')), level };
-  }
+  const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;
+  if (registered) return { accepted: candidates.some(candidate => registered.equal(actual, candidate)), level };
+  if (level === 'normalized') assertKnownComparator('normalization', spec.normalization, BUILTIN_NORMALIZATIONS);
   if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };
   if (level === 'agreement') {
     const threshold = probability('threshold' in spec ? spec.threshold ?? 0.9 : 0.9, 'agreement');
