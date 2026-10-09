@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Folder } from '../dist/index.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
-import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, TOOLS_PROMPT } from '../dist/native/prompt.js';
+import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, scopedFileToolNames, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
@@ -23,6 +24,32 @@ test('a directory reducer offers the file tools of its surface, and its prompt n
   assert.doesNotMatch(directoryReducerPrompt('editor'), /read_file|list_files|write_file/);
   assert.match(directoryReducerPrompt('editor'), /- editor\(command/);
   assert.doesNotMatch(directoryReducerPrompt('files'), /- bash|- editor/);
+});
+
+test('read-only scoped folders omit mutation tools while writable file and folder scopes retain them', async () => {
+  const makeAgent = transaction => new NativeToolAgent(async () => ({ calls: [] })).tools({
+    runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {},
+    lam: { codebase: {}, projectTransaction: transaction, type: { kind: 'prim', name: 'unknown' } },
+  }).map(item => item.function.name);
+  const readBase = Folder.fromFiles({ 'input.txt': 'evidence' }, 'read');
+  const readonlyTx = await readBase.beginFileTransaction('input.txt');
+  const readonlyNames = makeAgent(readonlyTx);
+  for (const name of ['write_file', 'edit_file', 'editor', 'bash', 'python']) assert.ok(!readonlyNames.includes(name), `${name} offered for read-only scope`);
+  for (const name of ['list_files', 'search_files', 'read_file', 'diff_files', 'delegate']) assert.ok(readonlyNames.includes(name), `${name} missing from read-only scope`);
+
+  const writableBase = Folder.fromFiles({ 'input.txt': 'evidence' }, 'write');
+  const writableFileTx = await writableBase.beginFileTransaction('input.txt');
+  const writableNames = makeAgent(writableFileTx);
+  for (const name of ['write_file', 'edit_file', 'editor', 'bash', 'python']) assert.ok(writableNames.includes(name), `${name} missing from writable file scope`);
+  const writableFolderTx = await Folder.fromFiles({ 'input.txt': 'evidence' }, 'write').beginTransaction();
+  assert.ok(makeAgent(writableFolderTx).includes('write_file'), 'writable Folder retains file mutation tools');
+
+  assert.deepEqual(scopedFileToolNames('all', false), ['list_files', 'search_files', 'read_file', 'diff_files', 'delegate']);
+  const readonlyPrompt = directoryReducerPrompt('all', true, false);
+  assert.match(readonlyPrompt, /- read_file\(/);
+  assert.match(readonlyPrompt, /- delegate\(/);
+  for (const name of ['write_file', 'edit_file', 'editor', 'bash(', 'python(']) assert.doesNotMatch(readonlyPrompt, new RegExp(name.replace(/[()]/g, '\\$&')));
+  assert.match(directoryReducerPrompt('all', true, true), /- write_file\(/);
 });
 
 test('directory reducers promote semantic per-file lambdas only while ad hoc calls are available', () => {

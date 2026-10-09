@@ -35,9 +35,16 @@ export function fileToolNames(surface: FileToolSurface = 'all'): string[] {
     surface === 'files' ? [...files, 'python', 'delegate'] : [...files, 'bash', 'python', 'delegate', 'editor'];
 }
 
-export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true): string {
+const MUTATING_FILE_TOOLS = new Set(['write_file', 'edit_file', 'editor', 'bash', 'python']);
+
+/** File tools filtered by the actual write authority of this call's scoped folder. */
+export function scopedFileToolNames(surface: FileToolSurface = 'all', writable = true): string[] {
+  return fileToolNames(surface).filter(name => writable || !MUTATING_FILE_TOOLS.has(name));
+}
+
+export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true, writable = true): string {
   const order = ['bash', 'python', 'delegate', 'editor', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
-  const names = new Set(fileToolNames(surface));
+  const names = new Set(scopedFileToolNames(surface, writable));
   if (!allowAdHoc) names.delete('delegate');
   return `
 This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.
@@ -52,7 +59,7 @@ Code in eval can use the current Folder value named folder:
 - A file handle has exists(), stat(), readText(), readBytes(), readJson(), writeText(content), writeBytes(content), writeJson(value), editText(find, replaceWith, fuzzy?), remove(), and moveTo(destination).
 - When a task returns a structured object or array, verify saved JSON with readJson<T>() and return that parsed value directly. Use readText() as the result only when the declared return type is string and the task asks for serialized JSON text; do not wrap JSON text in an object or array to imitate structured data.
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args). Patterns are relative to that handle: await team.files('items/*.md') lists that team's item files; '**/*.md' searches its descendants. Use the returned handles directly; their paths remain relative to their scoped view.
-Read a supplied FileHandle directly, for example await sourceFile.readText(). Its path is relative to its own scoped view; folder.file(sourceFile.path) may refer to a different view, especially when several handles are passed to a child. A child given one FileHandle can edit that file, but cannot create or edit sibling files through its folder. Pass an output FileHandle explicitly, pass the containing Folder when broader access is intended, or return the computed value for the parent to persist.
+Read a supplied FileHandle directly, for example await sourceFile.readText(). Its path is relative to its own scoped view; folder.file(sourceFile.path) may refer to a different view, especially when several handles are passed to a child. A child given one FileHandle can access only that file through its folder; it can write that file only when the scoped folder is writable. Pass an output FileHandle explicitly, pass the containing Folder when broader access is intended, or return the computed value for the parent to persist.
 Move the source handle into the destination: await folder.file("tickets/a.md").moveTo(folder.dir("archive")); then inspect folder.file("archive/a.md") or folder.diff(). Handles keep their original paths after a move; do not read the old source handle to verify its new location. A returned list of filenames alone does not perform the required file changes.
 Use these scoped handles for file computation in eval; Node filesystem modules and require are unavailable. To save a computed JSON object report and finish a string-returning reducer in one eval action: await folder.file("report.json").writeText(JSON.stringify(report)); return "done"; with finish:true. ${names.has('write_file') ? 'For literal text, use the ordinary write_file tool, then return_result with the declared result.' : 'For literal text, use folder.file(path).writeText(text) in eval, then return the declared result.'}
 

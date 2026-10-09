@@ -7,7 +7,7 @@ import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './
 import { undeclaredServiceType } from './introspection.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
+import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
 import { canGenerateNl } from '../runtime/context.js';
 import { adoptImportedBlocks } from './nz-file.js';
@@ -582,6 +582,7 @@ export class NativeToolAgent {
         ['name', 'find', 'replace_with']),
       tool('diff_code', DIFF_CODE_DESCRIPTION, {}, []));
     if (session.lam.projectTransaction) {
+      const writableFolder = session.lam.projectTransaction.folder.access !== 'read';
       const fileTools = [
       tool('list_files', 'List files in the current folder. Paths are relative.',
         { path: { type: 'string' }, pattern: { type: 'string' } }, []),
@@ -610,7 +611,8 @@ export class NativeToolAgent {
           start_line: { type: 'integer' }, end_line: { type: 'integer' }, file_text: { type: 'string' },
           old_str: { type: 'string' }, new_str: { type: 'string' }, insert_line: { type: 'integer' } },
         ['command', 'path'])];
-      const offered = fileToolNames(this.options.fileTools).filter(name => name !== 'delegate' || canGenerateNl(session.runtime.frame));
+      const offered = scopedFileToolNames(this.options.fileTools, writableFolder)
+        .filter(name => name !== 'delegate' || canGenerateNl(session.runtime.frame));
       tools.splice(2, 0, ...fileTools.filter(item => offered.includes(item.function.name))
         .sort((a, b) => offered.indexOf(a.function.name) - offered.indexOf(b.function.name)));
     }
@@ -862,7 +864,8 @@ export class NativeToolAgent {
       const allowAdHoc = canGenerateNl(session.runtime.frame);
       const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
+      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
+        session.lam.projectTransaction.folder.access !== 'read') : '') +
       programGuidance(this.options.programGuidance ?? '');
       if (this.options.programGuidance !== undefined) adaptedSystem = composed;
       return composed;
