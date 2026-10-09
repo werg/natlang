@@ -49,11 +49,7 @@ export function contextView(view: PiContextView): ContextView {
 const piView = (view: ContextView): never => ({ ...view, head: view.head ?? undefined }) as never;
 
 /** What one phase invocation shares between its services: a failure after which it may commit nothing more. */
-export type PhaseState = {
-  failed?: string;
-  /** The next state this phase committed (a phase commits its task's next state once). */
-  advanced?: string;
-};
+export type PhaseState = { failed?: string };
 
 export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent, phase: PhaseState = {}) {
   const conversationId = runtime.conversationId;
@@ -86,18 +82,12 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
     async commit(ops: Op[], expect?: Expect): Promise<CommitResult> {
       if (phase.failed) throw new Error(`This phase already failed (${phase.failed}); it commits nothing more. ` +
         'End this call with return_result status "failed" and that reason.');
-      const next = Array.isArray(ops) ? ops.find(op => op && (op as { op?: string }).op === 'next') as
-        { state?: { status?: string; checkpoint?: { phase?: string } } } | undefined : undefined;
-      if (next && phase.advanced) throw new Error(`This phase already committed the task's next state (${phase.advanced}); ` +
-        'a phase commits it once, and the function that committed it has done so. Return now with one line saying what was committed.');
       let result: CommitResult | undefined;
       await runtime.commit(async (tx, current) => {
         const applied = await applyOps(tx, scope, current as never, ops, expect);
         result = applied.result;
         return applied.next;
       }, context);
-      if (next) phase.advanced = next.state?.status === 'terminal' ? 'terminal' :
-        `${next.state?.status ?? 'next'}${next.state?.checkpoint?.phase ? ` in phase ${next.state.checkpoint.phase}` : ''}`;
       return result!;
     },
     async submit(draft: SubmissionDraft): Promise<number> { return host.submit(conversationId, draft, context); },
