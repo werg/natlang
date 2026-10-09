@@ -24,6 +24,7 @@ Work in these steps:
 4. Write one case per remaining group. Its when(args) is the condition. Its run(args) does what the executor did for that group, as plain TypeScript: the same service calls with the same arguments, and the same result. Leave every call that no condition describes to the natural-language function: that is the normal result, not a failure. A few correct cases are better than a case that is sometimes wrong.
 5. You may do better than the executor did: drop a wasted service call, make inconsistent groups consistent, or handle an input the executor often got wrong. Keep the effects the instructions ask for.
 6. When no group remains, write no cases and return kind "declined" with a reason: "no-clusters" (no approach repeats, or no condition separates them), "semantic" (the choice depends on meaning), "unstable" (the executor's results for similar inputs disagree), "effects" (the effects need judgment at each step), or "not-worth-it". Declining is a good result when it is the truth.
+7. Once cases.ts is written, return. The host runs every case on the recorded calls its guard admits. When a case fails, you get another round with the results in evidence/report.md, so you need not check each call yourself.
 
 cases.ts has this shape:
 
