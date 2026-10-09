@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.storage-policy/1",
+  "policy": "plans/STORAGE_POLICY.md. KEEP is never deleted. PRUNE-AUTO is deleted by scripts/storage_retention.py --apply (deletion manifest kept). PRUNE-ASK is listed for the owner and deleted only when named in an approval file. When in doubt a file is PRUNE-ASK.",
+  "roots": {
+    "scan": [
+      "/home/werg/natlang/runs",
+      "/home/werg/data",
+      "/mnt/external/natlang-development-data"
+    ],
+    "report_only": [
+      "/mnt/external",
+      "/home/werg/.cache"
+    ]
+  },
+  "archive": {
+    "root": "/mnt/external/natlang-development-data/archive",
+    "manifest": "/mnt/external/natlang-development-data/archive/manifest.jsonl"
+  },
+  "min_report_bytes": 1073741824,
+  "finished_after_days": 3,
+  "aborted_after_days": 7,
+  "leftover_after_days": 2,
+  "keep": {
+    "registries": [
+      "training/neuralese_corpora.json",
+      "training/neuralese_artifacts.json"
+    ],
+    "reference_texts": [
+      "runs/*.sh",
+      "runs/*/*.sh",
+      "training/neuralese/recipes/*.json",
+      "training/*.json",
+      "training/neuralese/*.json",
+      "plans/**/*.md",
+      "runs/*/*certificate*.json",
+      "runs/*/*/*certificate*.json",
+      "runs/*/*receipt*.json",
+      "runs/*/*/*receipt*.json",
+      "runs/*/*qualification*.json",
+      "runs/*/*/*qualification*.json"
+    ],
+    "name_patterns": [
+      "*.log",
+      "*.md",
+      "*receipt*",
+      "*certificate*",
+      "*qualification*",
+      "*labels*",
+      "*clef*",
+      "*human*"
+    ],
+    "path_patterns": [
+      "/home/werg/data/models/*",
+      "/home/werg/data/bird-sqlite/*",
+      "/home/werg/natlang-data-nvme/*"
+    ]
+  },
+  "checkpoint": {
+    "suffixes": [
+      ".pt",
+      ".pth",
+      ".safetensors",
+      ".bin",
+      ".ckpt"
+    ],
+    "name_patterns": [
+      "*checkpoint*",
+      "*ckpt*",
+      "*step*",
+      "*state*",
+      "*optimizer*",
+      "*latest*",
+      "*best*",
+      "*final*"
+    ],
+    "step_regex": "(?:step|ckpt|checkpoint)[-_]?(\\d+)|[-_](\\d{3,})(?:\\.[a-z]+)+$",
+    "best_patterns": [
+      "*best*"
+    ],
+    "final_patterns": [
+      "*final*",
+      "*export*"
+    ]
+  },
+  "aborted_run_markers": [
+    "aborted",
+    "guard-stopped",
+    "floor-stopped",
+    "failed",
+    "stopped-step"
+  ],
+  "leftover_patterns": [
+    "*.pending",
+    "*.tmp",
+    "*.partial"
+  ],
+  "prune_auto": [
+    "intermediate-checkpoint",
+    "aborted-run-checkpoint",
+    "leftover",
+    "docker-dangling"
+  ],
+  "checkpoint_cadence": {
+    "every_minutes": 45,
+    "on_sigterm": true,
+    "rolling_slots": 1,
+    "best_weights_only": true,
+    "drop_optimizer_at_end": true,
+    "disk_aware": true
+  }
+}
