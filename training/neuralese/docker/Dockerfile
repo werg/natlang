@@ -6,6 +6,6 @@
 # architecture digest while keeping one shared implementation on both machines.
 ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:26.09-py3
 FROM ${BASE_IMAGE}
-RUN pip install --no-cache-dir --upgrade transformers peft kernels accelerate safetensors pytest \
+RUN pip install --no-cache-dir --upgrade transformers peft kernels accelerate safetensors pytest py-spy \
       tree-sitter==0.26.0 tree-sitter-typescript==0.23.2
 ENV PYTHONUNBUFFERED=1
