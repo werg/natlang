@@ -160,8 +160,9 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
     empty: (): NeuraleseRef => neuraleseRef('Neuralese<unknown>', emptyId(library)),
     split: (v: NeuraleseRef) => call('split', [v]),
     splitList: (v: NeuraleseRef) => call('splitList', [v]),
-    /** Typed readout: the result is checked against the value's own element type. */
-    async read(v: NeuraleseRef): Promise<unknown> {
+    /** Typed readout; an ordinary string is already its own crisp value. */
+    async read(v: NeuraleseRef | string): Promise<unknown> {
+      if (typeof v === 'string') return v;
       if (!isNeuraleseRef(v)) throw new TypeError('read needs a Neuralese value');
       record('readout', { type: elementType(v), call_id: currentFrame()?.parentCallId ?? null }, [v]);
       const typed = softFunction({ type: `(v: ${v.$neuralese.type}) => ${elementType(v)}`, body: library.bodies.read, name: 'natlang.read',
@@ -186,6 +187,9 @@ export class NeuraleseReadoutCapabilityError extends Error {
 
 /** Compiler and eval `read(value)` plus JavaScript text coercion delegate to this typed readout. */
 export async function readNeuraleseForCurrentTask(value: unknown): Promise<unknown> {
+  // A crisp string is already the exact readable value. Keep this idempotent without
+  // treating numbers, records, or other arbitrary values as soft references.
+  if (typeof value === 'string') return value;
   if (!isNeuraleseRef(value)) throw new TypeError('typed Neuralese readout requires a Neuralese reference');
   const task = currentFrame()?.task;
   const library = (task?.services as Json | undefined)?.neuralese as StandardLibrary | undefined;

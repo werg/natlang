@@ -125,8 +125,8 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
-  read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. The value must be a genuine Neuralese reference; use FileHandle.readText() or FileHandle.readJson() for files.',
-  'neuralese.read': 'Compatibility access through the configured neuralese service. Prefer the shared eval builtin `await read(value)` for Neuralese<T>; it returns Promise<T> and records the ordinary typed readout in the execution graph. `neuralese.bodies.read` is only the configured reader body ID.',
+  read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. Already-crisp strings pass through unchanged; other non-reference values are rejected. Use FileHandle.readText() or FileHandle.readJson() for files.',
+  'neuralese.read': 'Compatibility access through the configured neuralese service. Prefer the shared eval builtin `await read(value)` for Neuralese<T>; it returns Promise<T> and records the ordinary typed readout in the execution graph. Already-crisp strings pass through unchanged; other non-reference values are rejected. `neuralese.bodies.read` is only the configured reader body ID.',
   'neuralese.textReadSource': `neuralese.textReadSource is read-only standard-library metadata, not a callable API or a value to invoke.
   read_code("neuralese") shows the available host service declaration; read_code("Neuralese") shows the opaque compile-time type.
 The descriptor identifies the configured read instruction body (export: "read") and its provenance. Do not call
