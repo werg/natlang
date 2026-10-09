@@ -120,3 +120,16 @@ def test_sync_revisions_are_ask_tier_and_an_approved_revision_directory_is_remov
                               manifest=str(tmp_path / 'deletions.jsonl'), no_docker=True)
     report = retention.run(args)
     assert not revision.exists() and report['deleted'][0]['bytes'] == 1000
+
+
+def test_reference_expansion_never_descends_through_symlinked_directories(tmp_path):
+    real = tmp_path / 'runs' / 'r1'
+    real.mkdir(parents=True)
+    (real / 'a-certificate.json').write_text('{}')
+    elsewhere = tmp_path / 'hdd' / 'r2'
+    elsewhere.mkdir(parents=True)
+    (elsewhere / 'b-certificate.json').write_text('{}')
+    os.symlink(elsewhere, tmp_path / 'runs' / 'r2')
+    found = retention.expand(tmp_path, 'runs/*/*certificate*.json')
+    assert found == [str(real / 'a-certificate.json')]
+    assert retention.expand(tmp_path, 'runs/**/*.json') == [str(real / 'a-certificate.json')]
