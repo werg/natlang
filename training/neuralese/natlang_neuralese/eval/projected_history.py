@@ -215,6 +215,27 @@ def _gold_reference_survival(prediction, losses, span):
     }
 
 
+def _token_id_window_fingerprints(prefix, span):
+    """Hash each exact token window after one combined device-to-host copy."""
+    if prefix.ndim != 2 or span.ndim != 2 or prefix.shape[0] != span.shape[0]:
+        raise ValueError('prefix and target token batches must be aligned rank-two tensors')
+    prefix_width = prefix.shape[1]
+    joined = torch.cat((prefix, span), dim=1).detach().to(device='cpu').contiguous()
+    prefix_header = f'natlang.ar-prefix-token-ids/1:{prefix.dtype}:{prefix_width}:'.encode()
+    target_header = f'natlang.ar-target-token-ids/1:{span.dtype}:{span.shape[1]}:'.encode()
+    output = []
+    for row in joined:
+        prefix_bytes = row[:prefix_width].numpy().tobytes()
+        target_bytes = row[prefix_width:].numpy().tobytes()
+        output.append({
+            'prefix_token_count': prefix_width,
+            'target_token_count': span.shape[1],
+            'prefix_token_ids_sha256': hashlib.sha256(prefix_header+prefix_bytes).hexdigest(),
+            'target_token_ids_sha256': hashlib.sha256(target_header+target_bytes).hexdigest(),
+        })
+    return output
+
+
 def _first_divergence_details(backbone, name, survival, generated_tokens, predictions,
                              token_diagnostics, payloads, span, control_divergences):
     """Compact evidence at the first bad emitted token, without another model pass."""
@@ -353,6 +374,7 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
     if steps < 2:
         raise ValueError('autoregressive controls need at least two target positions')
     span = span[:, :steps]
+    input_fingerprints = _token_id_window_fingerprints(prefix, span)
     payloads,generated_tokens,token_diagnostics = autoregressive_payloads(
         backbone, heads, prefix, steps, kinds, return_generated_tokens=True,
         return_token_diagnostics=True, gold_tokens=span)
@@ -390,6 +412,7 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
             row['gold_reference_after_divergence'] = survival
         rows[name] = row
     return {'schema': 'natlang.autoregressive-history-controls/2', 'steps': steps, 'windows': span.shape[0],
+            'input_token_id_fingerprints': input_fingerprints,
             'consumer': 'full stack over prefix + generated history, scored on gold-reference targets',
             'gold_reference_interpretation': 'after a rollout diverges, later gold tokens are not asserted to be valid next-token targets for that generated context',
             'scores': rows}

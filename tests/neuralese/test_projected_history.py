@@ -5,7 +5,8 @@ import pytest
 import torch
 
 from natlang_neuralese.eval.projected_history import (
-    _first_divergence_details, _gold_reference_survival, projected_history_metrics,
+    _first_divergence_details, _gold_reference_survival, _token_id_window_fingerprints,
+    projected_history_metrics,
 )
 
 
@@ -168,3 +169,17 @@ def test_first_divergence_details_bind_tokens_logits_and_payload_without_extra_f
     assert row['ar_greedy_control_first_divergence_index']==2
     assert row['ar_greedy_control_gold_prefix_valid_at_target'] is True
     assert 'through prior targets' in row['ar_greedy_control_comparability_scope']
+
+
+def test_autoregressive_input_fingerprints_are_stable_and_bind_target_ids():
+    prefix=torch.tensor([[1,2],[3,4]])
+    span=torch.tensor([[5,6,7],[8,9,10]])
+    first=_token_id_window_fingerprints(prefix,span)
+    assert _token_id_window_fingerprints(prefix.clone(),span.clone())==first
+    assert first[0]['prefix_token_count']==2
+    assert first[0]['target_token_count']==3
+    changed_span=span.clone();changed_span[0,0]=11
+    changed=_token_id_window_fingerprints(prefix,changed_span)
+    assert changed[0]['prefix_token_ids_sha256']==first[0]['prefix_token_ids_sha256']
+    assert changed[0]['target_token_ids_sha256']!=first[0]['target_token_ids_sha256']
+    assert changed[1]==first[1]
