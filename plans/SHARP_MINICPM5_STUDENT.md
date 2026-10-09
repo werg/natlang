@@ -1,5 +1,7 @@
 # Sharp-MiniCPM5 student candidate
 
+> **Retired (owner decision 2026-10-10):** `scripts/serve_minicpm.sh` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 ## Identity and acquisition
 
 The intended publisher has `peculiar-ragdoll/Sharp-MiniCPM5-2B-GGUF`, not a

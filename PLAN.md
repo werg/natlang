@@ -1,5 +1,7 @@
 # natlang: a small-model interpreter for natural-language programs
 
+> **Retired (owner decision 2026-10-10):** `scripts/watch_bonsai.sh` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 Design and execution plan. Status: draft, 2026-09-19.
 The normative language definition is `spec/SPEC.md` (v0.2-draft).
 Training, use cases, and datasets are covered in depth in `TRAINING.md`.

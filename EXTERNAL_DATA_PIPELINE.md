@@ -1,5 +1,7 @@
 # External decision data pipeline
 
+> **Retired (owner decision 2026-10-10):** `scripts/run_bulk_classifier.py` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 > **Status (2026-09-23):** historical. The decision-data adapters and materializer described here ran on the Python runtime and were removed with it. Bringing these sources back means writing `natlang.program/2` adapters; see [PROGRAM_IR_PIPELINE.md](PROGRAM_IR_PIPELINE.md#retired-sources).
 
 This is the executable companion to [DATASET_TRAJECTORIES_PLAN.md](DATASET_TRAJECTORIES_PLAN.md).

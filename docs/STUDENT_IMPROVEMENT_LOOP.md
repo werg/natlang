@@ -1,5 +1,7 @@
 # Student improvement loop
 
+> **Retired (owner decision 2026-10-10):** `scripts/create_model_swap_config.py`, `scripts/run_managed_improvement.py` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 The fastest useful path is a **single curriculum followed by repeated,
 execution-verified correction rounds**. Do not spend teacher tokens producing
 many interchangeable ideal traces for easy tasks. Spend them on states the

@@ -27,48 +27,48 @@ Owner asked whether legacy code goes too, after the Maple-Preview BF16 checkpoin
 | Sketch-era recipes `gold-text-warmup-lfm-cutoff8-rollout4-to8-v1`, `local-stage-sketch-credit-v1`, `gold-text-exposure-curriculum-v1` | historical per Pop (no current lineage); recipes are consolidated by the architecture session (C3): drop them there with the resolver tests |
 | Sketch modules above | after their callers in text_warmup/trajectories/text_warmup_runtime are refactored |
 
-## Ask owner
+## Removed by owner decision (2026-10-10)
 
-Scripts with no code, unit or recent-run reference and no change since 2026-10-02 (36 of 116 unreferenced scripts). Their lines are still listed as open choices in plans/HANDOVER.md (e.g. "Train Sharp-Spark on v5 (only when the user says so)"), so they are not removed without a decision:
+Owner: "You have my authorization to make the deletions of storage and old candidate code." The 36 unreferenced scripts unchanged since 2026-10-02 were removed in three commits: student candidates (Sharp-MiniCPM5, Spark-X2.5, Ling, LoRA overlay merge), Bonsai teacher and remote teacher hosts, pre-Neuralese crisp teacher/SFT polish and one-off source tooling. Instructional docs carry a removal note; dated historical plans are left as history. Data and storage were not part of this change.
 
-| Script | Line / purpose | Last change |
-|---|---|---|
-| `scripts/acquire_directory_sources.py` | crisp teacher/data pipeline or one-off tool | 2026-09-29 |
-| `scripts/acquire_workflowevals.py` | crisp teacher/data pipeline or one-off tool | 2026-09-29 |
-| `scripts/analyze_generation_throughput.py` | crisp teacher/data pipeline or one-off tool | 2026-09-21 |
-| `scripts/audit_recovered_sources.py` | crisp teacher/data pipeline or one-off tool | 2026-09-28 |
-| `scripts/audit_static_data.py` | crisp teacher/data pipeline or one-off tool | 2026-09-28 |
-| `scripts/build_teacher_coverage_selection.py` | crisp teacher/data pipeline or one-off tool | 2026-09-22 |
-| `scripts/clone_runtime_tree.py` | runtime-tree copies for remote installs | 2026-10-02 |
-| `scripts/combine_sft.py` | crisp teacher/data pipeline or one-off tool | 2026-09-29 |
-| `scripts/create_model_swap_config.py` | student/Bonsai sequential serving | 2026-09-23 |
-| `scripts/interleave_teacher_queue.py` | crisp teacher/data pipeline or one-off tool | 2026-09-29 |
-| `scripts/inventory_bonsai_attempt_identities.mjs` | Bonsai teacher attempts | 2026-10-01 |
-| `scripts/ling_grouped_experts.py` | Ling backbone candidate (Mellum chosen) | 2026-09-27 |
-| `scripts/materialize_studio_teacher.py` | crisp teacher/data pipeline or one-off tool | 2026-09-21 |
-| `scripts/merge_lora_overlay.py` | crisp teacher/data pipeline or one-off tool | 2026-09-27 |
-| `scripts/prepare_sharp_training_model.py` | Sharp-MiniCPM5 student candidate | 2026-10-02 |
-| `scripts/project_reviewed_leaf_pass.py` | crisp teacher/data pipeline or one-off tool | 2026-09-21 |
-| `scripts/prune_reviewed_leaf_references.py` | crisp teacher/data pipeline or one-off tool | 2026-09-21 |
-| `scripts/recover_native_evaluation.py` | crisp teacher/data pipeline or one-off tool | 2026-09-30 |
-| `scripts/refine_lfm_teacher.sh` | LFM teacher polish (crisp line) | 2026-09-21 |
-| `scripts/refine_lfm_teacher_action.sh` | LFM teacher polish (crisp line) | 2026-09-22 |
-| `scripts/remote_teacher_bootstrap.py` | remote teacher hosts (natlang-remote era) | 2026-10-02 |
-| `scripts/roll_teacher_runtime.py` | remote/queue teacher supervisors | 2026-09-30 |
-| `scripts/run_bulk_classifier.py` | crisp teacher/data pipeline or one-off tool | 2026-09-19 |
-| `scripts/run_managed_improvement.py` | student/Bonsai sequential serving | 2026-09-27 |
-| `scripts/select_sft.py` | crisp teacher/data pipeline or one-off tool | 2026-09-26 |
-| `scripts/select_teacher_polish.py` | crisp teacher/data pipeline or one-off tool | 2026-09-21 |
-| `scripts/select_teacher_programs.py` | crisp teacher/data pipeline or one-off tool | 2026-09-20 |
-| `scripts/self_improvement_data.py` | crisp teacher/data pipeline or one-off tool | 2026-10-01 |
-| `scripts/serve_minicpm.sh` | Sharp-MiniCPM5 student candidate | 2026-09-29 |
-| `scripts/spark_training_model.py` | Sharp-Spark-X2.5-4B student candidate | 2026-09-27 |
-| `scripts/start_reviewed_remote_successor.py` | remote teacher hosts (natlang-remote era) | 2026-10-02 |
-| `scripts/teacher_redo_loop.sh` | two-teacher redo loop (Bonsai era) | 2026-09-27 |
-| `scripts/train_and_publish_browser_docker.sh` | crisp LFM browser publication | 2026-09-22 |
-| `scripts/verify_completed_training_pipeline.py` | crisp teacher/data pipeline or one-off tool | 2026-10-02 |
-| `scripts/verify_source_audit_identities.py` | crisp teacher/data pipeline or one-off tool | 2026-09-30 |
-| `scripts/watch_bonsai.sh` | Bonsai teacher container watchdog | 2026-10-02 |
+- `scripts/acquire_directory_sources.py`
+- `scripts/acquire_workflowevals.py`
+- `scripts/analyze_generation_throughput.py`
+- `scripts/audit_recovered_sources.py`
+- `scripts/audit_static_data.py`
+- `scripts/build_teacher_coverage_selection.py`
+- `scripts/clone_runtime_tree.py`
+- `scripts/combine_sft.py`
+- `scripts/create_model_swap_config.py`
+- `scripts/interleave_teacher_queue.py`
+- `scripts/inventory_bonsai_attempt_identities.mjs`
+- `scripts/ling_grouped_experts.py`
+- `scripts/materialize_studio_teacher.py`
+- `scripts/merge_lora_overlay.py`
+- `scripts/prepare_sharp_training_model.py`
+- `scripts/project_reviewed_leaf_pass.py`
+- `scripts/prune_reviewed_leaf_references.py`
+- `scripts/recover_native_evaluation.py`
+- `scripts/refine_lfm_teacher.sh`
+- `scripts/refine_lfm_teacher_action.sh`
+- `scripts/remote_teacher_bootstrap.py`
+- `scripts/roll_teacher_runtime.py`
+- `scripts/run_bulk_classifier.py`
+- `scripts/run_managed_improvement.py`
+- `scripts/select_sft.py`
+- `scripts/select_teacher_polish.py`
+- `scripts/select_teacher_programs.py`
+- `scripts/self_improvement_data.py`
+- `scripts/serve_minicpm.sh`
+- `scripts/spark_training_model.py`
+- `scripts/start_reviewed_remote_successor.py`
+- `scripts/teacher_redo_loop.sh`
+- `scripts/train_and_publish_browser_docker.sh`
+- `scripts/verify_completed_training_pipeline.py`
+- `scripts/verify_source_audit_identities.py`
+- `scripts/watch_bonsai.sh`
+
+## Ask owner (remaining)
 
 The other 80 unreferenced scripts changed after 2026-10-02 (Neuralese era) and are kept as manual tools.
 
