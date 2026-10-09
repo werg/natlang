@@ -320,3 +320,36 @@ def test_maples_converted_cache_is_never_used_for_another_family_member(tmp_path
 
     assert student.default_cache(student.DEFAULT_MODEL) == student.DEFAULT_CACHE
     assert student.default_cache(str(tmp_path)) is None
+
+
+@pytest.mark.parametrize("form", ["dense", "exported-ternary"])
+def test_mellum_n0_ordering_keeps_the_full_model_and_lxe_members_run(tmp_path, form):
+    from natlang_neuralese.maple.qat_convert import install_full_latent_qat
+    from natlang_neuralese.maple.qat_export import export
+
+    source = tmp_path / "src"
+    source.mkdir()
+    tiny_mellum(source)
+    path = source
+    if form == "exported-ternary":
+        qat = load_maple(source, device="cpu", dtype=torch.float32, ternary_attention=False)
+        latents = install_full_latent_qat(qat)
+        torch.save({"step": 1, "latents": {n: q.detach().clone() for n, q in latents}}, tmp_path / "c.pt")
+        export(source, tmp_path / "c.pt", tmp_path / "out")
+        path = tmp_path / "out"
+    model = load_maple(path, device="cpu", dtype=torch.float32)
+    ids = torch.randint(0, 128, (1, 20))
+    stats = model.collect_routing()
+    with torch.no_grad():
+        before = model(ids).logits
+    model.collect_routing(False)
+    orders = [torch.argsort(s["mass"], descending=True) for s in stats]
+    assert any(not torch.equal(o, torch.arange(EXPERTS)) for o in orders)
+    model.order_experts(orders)
+    with torch.no_grad():
+        after = model(ids).logits
+        assert torch.allclose(after, before, atol=1e-5)  # a permutation of experts and router rows
+        model.set_member(f"{LAYERS // 2}x{EXPERTS // 2}", experts=EXPERTS // 2, layers=LAYERS // 2)
+        member = model(ids).logits
+        model.set_member(None)
+    assert torch.isfinite(member).all() and not torch.allclose(member, before)

@@ -73,6 +73,25 @@ def summarize(rows: list[dict]) -> dict:
             for family, metrics in sorted(families.items())}
 
 
+def register_bank(args, engine, path, out):
+    """Register a trained bank (natlang_neuralese.artifacts): its parent is the registered bank it started from."""
+    import subprocess
+
+    from .. import artifacts
+    from ..model.lfm2_port import DEFAULT_REVISION, resolve_base
+
+    parent = artifacts.find_by_sha(artifacts.digest(Path(args.soft_prompts))) if args.soft_prompts else None
+    base = args.base or resolve_base(None)
+    revision = args.backbone_revision or (DEFAULT_REVISION if args.base is None else None)
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=artifacts.REPO, capture_output=True, text=True).stdout.strip()
+    manifest = artifacts.register_output(
+        path, identity=args.register_artifact, kind="prompt-bank", dialect=engine.dialect,
+        backbone=artifacts.backbone_identity(engine.model_name or base, revision), trainer="natlang_neuralese.train.decision",
+        commit=commit, corpora=args.artifact_corpus, parent=parent[0] if parent else None, run=str(out.resolve()),
+        notes=f"prompts {args.prompts}; target {args.target}; steps {args.steps}; prompt_lr {args.prompt_lr}")
+    print(json.dumps({"registered_artifact": args.register_artifact, "bytes": manifest["bytes"]}), flush=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--prompts", required=True)
@@ -97,6 +116,11 @@ def main(argv=None):
     parser.add_argument("--soft-prompts", default=None,
                         help="system-prompt bank (.nz): its pieces in the prompts become trainable (DECISIONS.md 40)")
     parser.add_argument("--prompt-lr", type=float, default=1e-3, help="learning rate of the soft prompt pieces")
+    parser.add_argument("--register-artifact", default=None, metavar="ID",
+                        help="register the trained system-prompts.nz in training/neuralese_artifacts.json under ID")
+    parser.add_argument("--artifact-corpus", action="append", default=[],
+                        help="registered corpus id the prompts file comes from (repeatable)")
+    parser.add_argument("--backbone-revision", default=None, help="revision of --base when it cannot be detected")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ.get("NATLANG_CUDA_MEMORY_GB", 16)))
@@ -224,6 +248,8 @@ def main(argv=None):
                             {"kind": "system-prompt-bank", "init": args.soft_prompts, "trained_by": "natlang_neuralese.train.decision",
                              "pieces_trained": sorted(used), "steps": args.steps, "prompt_lr": args.prompt_lr})
         print(json.dumps({"system_prompts": str(out / "system-prompts.nz"), "trained": sorted(used)}), flush=True)
+        if args.register_artifact:
+            register_bank(args, engine, out / "system-prompts.nz", out)
 
     rows = []
     with torch.no_grad():

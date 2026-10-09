@@ -1,5 +1,6 @@
-"""N0/N1 of plans/neuralese/MAPLE_NESTED.md: expert routing statistics of full Maple on our corpus, the per-layer
-expert order, and what nested prefixes cost before any training.
+"""N0/N1 of plans/neuralese/MAPLE_NESTED.md: expert routing statistics of a full Maple-family model (Maple, Mellum) on
+our corpus, the per-layer expert order, and what nested prefixes and LxE members (``--members``) cost before any
+training.
 
     python -m natlang_neuralese.maple.routing --model /home/werg/data/models/maple-preview-bf16 \\
         --data runs/maple-joint-20261005/qwen3-render-v1.jsonl --out runs/maple-nested-20261005/n0-v1
@@ -40,7 +41,7 @@ def coverage(mass: torch.Tensor, sizes) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cache", default=resolve_str("models", "maple-preview-converted"),
+    ap.add_argument("--cache", default="default",
                     help="converted-model cache (read if present, written otherwise); empty to disable")
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
@@ -49,6 +50,9 @@ def main(argv=None):
     ap.add_argument("--max-rows", type=int, default=0)
     ap.add_argument("--sizes", default=",".join(map(str, SIZES)))
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--members", default="",
+                    help="family members LxE (first L layers, first E experts) also measured after the ordering, "
+                         "e.g. 28x16,28x24,28x32,14x16 for Mellum: depth members need their own numbers")
     args = ap.parse_args(argv)
     from transformers import AutoTokenizer
 
@@ -60,7 +64,10 @@ def main(argv=None):
     if args.max_rows:
         rows = rows[:args.max_rows]
     start = time.time()
-    model = load_maple(args.model, device=args.device, cache=args.cache or None)
+    from .student import default_cache
+
+    cache = default_cache(args.model) if args.cache == "default" else (args.cache or None)
+    model = load_maple(args.model, device=args.device, cache=cache)
     print(json.dumps({"event": "loaded", "seconds": round(time.time() - start, 1),
                       "gpu_gb": round(torch.cuda.memory_allocated() / 2**30, 1) if args.device == "cuda" else None}),
           flush=True)
@@ -117,6 +124,25 @@ def main(argv=None):
                 r["agree"] += int((top == full_top).sum())
                 r["tokens"] += parts.tokens
     model.set_active_experts(None)
+    members = [m for m in args.members.split(",") if m]
+    for spec in members:  # depth x width members (early exit after L layers, first E experts per layer)
+        depth, width = (int(v) for v in spec.lower().split("x"))
+        results[spec] = r = {"nll": 0.0, "kl_from_full": 0.0, "agree": 0, "tokens": 0}
+        with torch.no_grad():
+            for row in test_rows:
+                ids, labels = encode(row)
+                model.set_member(None)
+                full = model.model(input_ids=ids).last_hidden_state
+                mask = labels[0] != IGNORE
+                full_top = (full[0][mask].float() @ head.float().T).argmax(-1)
+                model.set_member(spec, experts=width, layers=depth)
+                h = model.model(input_ids=ids).last_hidden_state
+                _, parts = chunked_ce_kl(h, head, labels, full, head, kl_weight=1.0)
+                r["nll"] += parts.ce
+                r["kl_from_full"] += parts.kl
+                r["agree"] += int(((h[0][mask].float() @ head.float().T).argmax(-1) == full_top).sum())
+                r["tokens"] += parts.tokens
+        model.set_member(None)
     nested = {str(n): {"nll": round(r["nll"] / max(r["tokens"], 1), 4),
                        "kl_from_full": round(r["kl_from_full"] / max(r["tokens"], 1), 4),
                        "top1_agreement": round(r["agree"] / max(r["tokens"], 1), 4), "tokens": r["tokens"]}
