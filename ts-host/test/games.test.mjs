@@ -4,9 +4,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { createNatlangRuntime } from '../dist/index.js';
+import { readFileSync } from 'node:fs';
 import { Session, createArena, createEconomy, createVillage, crispSettings, defaultSettings, playTurn }
   from '../../applications/dist/games/index.js';
-import { scriptedModel } from './support/natlang.mjs';
+import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+
+const CRISP = await appCrisp('games');
 
 // ---------------------------------------------------------------- the crisp checks, loaded straight from their sources
 
@@ -169,8 +172,11 @@ function gameModel({ choose = actor => TRADES[actor], tactic, respond, remember 
     if (stage === 'tactic') return `return ${JSON.stringify(Object.fromEntries(['a', 'b', 'c'].map(id => [id, tactic(id)])))}[observation.actor];`;
     if (stage === 'respond') return `return ${JSON.stringify(respond)};`;
     if (stage === 'remember') return `return ${JSON.stringify(remember())};`;
+    if (corrupt === 'entries' && stage === 'settle')
+      return `${SCRIPTS.settle.replace('return { outcomes, entries };', '')} entries.push({ kind: 'cash', from: ordered[0].actor, to: ordered[0].actor, amount: 1 }); return { outcomes, entries };`;
     if (corrupt && stage === 'settle')
-      return `${SCRIPTS.settle.replace('return { outcomes, entries };', '')} if (problem === "" || ${corrupt === 'always'}) entries.push({ kind: 'cash', from: ordered[0].actor, to: ordered[0].actor, amount: 1 }); return { outcomes, entries };`;
+      // A trade below the seller's price, with entries that match it: the settlement is consistent, the commit refuses it.
+      return SCRIPTS.settle.replace('const made', 'if (outcome.status === "traded" && (problem === "" || ' + (corrupt === 'always') + ')) outcome.total -= 1;\n      const made');
     if (corrupt && stage === 'resolve')
       return `${SCRIPTS.resolve.replace('return { fighters: await recover(wounded, hits), hits, damage };', '')}
         const done = await recover(wounded, hits); if (problem === "" || ${corrupt === 'always'}) done[0].hp += 1; return { fighters: done, hits, damage };`;
@@ -181,7 +187,8 @@ function gameModel({ choose = actor => TRADES[actor], tactic, respond, remember 
 
 function play(scene, settings, options) {
   const model = gameModel(options);
-  const runtime = createNatlangRuntime({ model: model.driver });
+  model.judged = withJudge(model.driver);
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
   return runtime.run(() => playTurn(scene, settings)).then(report => ({ report, model }));
 }
 
@@ -237,6 +244,7 @@ test('the crisp implementations settle the same tick the same way, whatever orde
 test('shadow mode runs both implementations of a pluggable part, serves the natural-language one and records agreement', async () => {
   const traces = [];
   const model = gameModel();
+  withJudge(model.driver);
   const runtime = createNatlangRuntime({ model: model.driver, trace: trace => traces.push(trace) });
   const shadow = { validate: 'shadow', settle: 'shadow', resolve: 'shadow', remember: 'nl', narrate: 'nl' };
   const report = await runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, shadow));
@@ -276,7 +284,7 @@ test('a settlement the commit refuses is settled again with the problem; a secon
   assert.equal(balance(once.report.state, 'bob').cash, 6);
   const always = await play({ kind: 'economy', state }, defaultSettings, { corrupt: 'always' });
   assert.equal(always.report.ok, false);
-  assert.match(always.report.problem, /entries are the goods-then-cash pair/);
+  assert.match(always.report.problem, /offered price/);
   assert.deepEqual(always.report.state, state, 'a failed tick leaves the world as it was');
   assert.match(always.report.narration, /^The turn did not happen: /);
 });
@@ -356,7 +364,8 @@ test('the crisp resolution gives the natural-language result: guard, clamping, t
   // The same round played through the natural-language stages.
   const tactics = { a: hitting[0].plan, b: hitting[1].plan, c: hitting[2].plan };
   const model = gameModel({ tactic: id => tactics[id] });
-  const runtime = createNatlangRuntime({ model: model.driver });
+  withJudge(model.driver);
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
   const nl = await runtime.run(() => playTurn({ kind: 'combat', state }, { ...defaultSettings, validate: 'crisp' }));
   assert.deepEqual(nl.state.fighters, guarded.fighters);
   assert.equal(nl.state.round, 1);
@@ -486,4 +495,81 @@ test('initial worlds are validated at the boundary', () => {
   assert.throws(() => createArena([{ id: 'a', x: 9, hp: 1 }, { id: 'b', x: 1, hp: 1 }]), /invalid fighters/);
   assert.throws(() => createVillage([{ id: 'x y', inventory: {} }]), /invalid NPCs/);
   assert.deepEqual(createEconomy(MERCHANTS).initial, { cash: 10, goods: { apple: 2, bread: 2 } });
+});
+
+// ---------------------------------------------------------------- refinements
+
+/**
+ * The model of gameModel, except that a rejection by a refinement is answered with `fix`, the code of a corrected
+ * value; the feedback the model was sent is kept in `feedback`.
+ */
+function repairing(options, fix) {
+  const base = gameModel(options), feedback = [];
+  const driver = Object.assign(async request => {
+    const last = request.messages.at(-1);
+    if (last.role === 'tool' && /refinement-unsatisfied/.test(String(last.content))) {
+      feedback.push(String(last.content));
+      return { calls: [['eval', { code: fix }]] };
+    }
+    return base.driver(request);
+  }, {});
+  base.judged = withJudge(driver, options?.truth);
+  return { ...base, driver, feedback };
+}
+
+function playWith(model, scene, settings, extra = {}) {
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { ...extra }, trace: trace => traces.push(trace) });
+  return runtime.run(() => playTurn(scene, settings)).then(report => ({ report, traces }));
+}
+const checks = traces => traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
+
+test('every predicate of types.ts has a crisp checker', () => {
+  const types = readFileSync(new URL('../../applications/games/types.ts', import.meta.url), 'utf8');
+  const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
+  const keys = new Set(Object.keys(CRISP));
+  assert.deepEqual([...declared].filter(key => !keys.has(key)), []);
+  assert.deepEqual([...keys].filter(key => !declared.has(key)), []);
+});
+
+test('crisp checkers decide the exact predicates; a whole tick in natural language needs no judge', async () => {
+  assert.equal(CRISP["a name: a letter followed by letters, digits, '_' or '-'"]('x y'), false);
+  assert.equal(CRISP['a positive safe integer'](0), false);
+  assert.equal(CRISP['a non-negative safe integer'](1.5), false);
+  assert.equal(CRISP['0 or 1'](2), false);
+  assert.equal(CRISP['1 or 2'](2), true);
+  const { report, model } = await play({ kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, defaultSettings);
+  assert.equal(report.ok, true, report.problem);
+  assert.deepEqual(model.judged, [], 'every refined slot of the tick has a crisp checker');
+});
+
+test('a quantity of zero is sent back with the refinement error and repaired, without the judge', async () => {
+  const bad = { kind: 'buy', seller: 'bob', good: 'apple', quantity: 0 };
+  const model = repairing({ choose: actor => actor === 'alice' ? bad : { kind: 'pass' } }, `return ${JSON.stringify(TRADES.alice)};`);
+  const { report, traces } = await playWith(model, { kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, crispSettings);
+  assert.equal(report.ok, true, report.problem);
+  assert.equal(balance(report.state, 'alice').goods.apple, 2);
+  assert.equal(model.feedback.length, 1);
+  assert.match(model.feedback[0], /a positive safe integer/);
+  assert.deepEqual(model.judged, []);
+  assert.ok(checks(traces).some(event => event.outcome === 'fail' && event.source === 'crisp'));
+});
+
+test('a settlement whose entries are not the traded outcomes is repaired in the stage, before the commit sees it', async () => {
+  const model = repairing({ corrupt: 'entries' }, SCRIPTS.settle);
+  const { report, traces } = await playWith(model, { kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, defaultSettings);
+  assert.equal(report.ok, true, report.problem);
+  assert.equal(balance(report.state, 'bob').cash, 6);
+  assert.match(model.feedback[0], /goods from seller to buyer and then the money from buyer to seller/);
+  assert.equal(model.seen.filter(stage => stage === 'settle').length, 1, 'one settle call: the commit never had to ask again');
+  assert.ok(checks(traces).every(event => event.source === 'crisp' || event.source === 'cache'));
+});
+
+test('settings that name shadow for a part with one implementation are refused before any stage runs', async () => {
+  const model = gameModel();
+  withJudge(model.driver);
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
+  await assert.rejects(runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS) }, { ...defaultSettings, narrate: 'shadow' })),
+    error => error.code === 'refinement-unsatisfied' && /remember and narrate are each nl or crisp/.test(error.message));
+  assert.deepEqual(model.seen, []);
 });

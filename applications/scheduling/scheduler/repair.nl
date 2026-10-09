@@ -6,7 +6,7 @@ args:
   domains: Domain[]
   order: string[]
   slot: number
-returns: Placement[]
+returns: CheckedPlacements
 ---
 placements is a schedule that the verifier rejected, and violations says what it broke (each violation names a task and
 the move that would fix it). Return a schedule with exactly one placement per task, in the order of `order`. Do the

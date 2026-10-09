@@ -6,6 +6,8 @@ import { TypeEnv } from '../../dist/native/types.js';
 import { buildPending } from '../../dist/native/values.js';
 import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.js';
 import YAML from 'yaml';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** A TypeScript module item (callable-folder `.ts` file). */
 export function ts(name, text, children = {}, types = {}) {
@@ -62,4 +64,31 @@ export function scriptedModel(respond) {
     return { text: 'done' };
   };
   return { driver, openings };
+}
+
+/**
+ * The crisp refinement checkers of a built application: the table its `refinements.ts` exports. The application's compiled
+ * `.nl` modules register it themselves, so a runtime needs no `crisp` option; tests read it to check the table itself.
+ */
+export async function appCrisp(app) {
+  const dist = fileURLToPath(new URL('../../../applications/dist', import.meta.url));
+  return (await import(pathToFileURL(join(dist, app, 'refinements.js')).href)).refinements;
+}
+/**
+ * Gives a driver a scoring pass for the refinement judge: `truth(value, predicate)` says whether the value satisfies the
+ * predicate (default: yes). The values it was asked about are returned, as `[value, predicate]` pairs.
+ */
+export function withJudge(driver, truth = () => true) {
+  const judged = [];
+  driver.decide = async request => {
+    // A scripted model scores only the judge's true/false; any other readout falls back to an ordinary call.
+    if (request.options.length !== 2 || request.options[0] !== 'true' || request.options[1] !== 'false') throw new Error('decision-unsupported: the scripted model scores only true and false');
+    const prompt = String(request.messages.at(-1).content);
+    const value = /<<<value\n([^]*?)\nvalue>>>/.exec(prompt)?.[1] ?? '';
+    const predicate = /Property: the value is (.*)\n/.exec(prompt)?.[1] ?? '';
+    judged.push([value, predicate]);
+    const p = truth(value, predicate) ? 0.97 : 0.04;
+    return { log_probs: [Math.log(p), Math.log(1 - p)] };
+  };
+  return judged;
 }

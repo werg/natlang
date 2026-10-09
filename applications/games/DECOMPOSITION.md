@@ -140,34 +140,42 @@ spelled as numbered steps over named data, and exact arithmetic is done in eval.
 
 ## Refinements
 
-Constraints that should become refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). They are not
-written in the code, which carries them as doc comments and crisp checks; each is listed with its slot.
+Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md) on the slots a model writes. Decisions: (a) adopted
+with a crisp checker in `refinements.ts` (no model call), (b) a natural-language judge (proposed only: a model-facing change is measured live first), (c) left to the
+commit check, which already enforces it exactly, (d) not adopted: the value alone does not show the property.
+The state a host builds (`Merchant`, `Totals`, `EconomyState`, `CombatState`, `NpcActor`) keeps plain types: its
+invariants are established by the creators and preserved by the commits, and crisp code builds it from arithmetic.
 
-| Slot | Proposed type |
-|---|---|
-| `Merchant.id`, `Fighter.id`, `NpcActor.id`, `Submission.actor`, `TradeIntent.seller`, `TradeIntent.good`, `CombatPlan.target`, `NpcPlan.item`, `NpcPlan.target` | `Is<string, "a name: a letter followed by letters, digits, '_' or '-'">` |
-| `Merchant.cash`, `Merchant.goods[*]`, `Merchant.offers[*]`, `Entry.amount` bound, `TradeOutcome.total` | `Is<number, "a non-negative safe integer">` |
-| `TradeIntent.quantity` when kind is buy, `Entry.amount` | `Is<number, "a positive safe integer">` |
-| `EconomyState.merchants` | `Is<Merchant[], "at least two merchants with distinct ids">` |
-| `EconomyState.initial` | `Is<Totals, "the sum of the merchants' cash and goods at the start">` |
-| `Settlement` | `Is<Settlement, "entries are the traded outcomes' goods-then-cash pairs in order">` |
-| `EconomyEffects.order` | `Is<string[], "the submitters sorted by SHA-256 of seed:tick:actor">` |
-| `Settlement` (as the commit's argument) | `Is<Settlement, "conserves each good and the money, and no balance goes below zero">` |
-| `TradeOutcome` with status traded | `Is<TradeOutcome, "total equals quantity times the seller's offered price">` |
-| `Fighter.x` | `Is<number, "an integer from 0 to the arena's width minus 1">` |
-| `Fighter.hp` | `Is<number, "an integer from 0 to the fighter's starting health">` |
-| `Fighter.cooldown` | `Is<number, "0 or 1">` |
-| `CombatState.fighters` | `Is<Fighter[], "at least two fighters with distinct ids">` |
-| `CombatPlan.target` when action is attack | `Is<string, "the id of a living fighter other than the actor">` |
-| `Hit.amount` | `Is<number, "2, or 1 when the target guarded">` |
-| `CombatResolution` | `Is<CombatResolution, "each fighter moved at most one cell; health fell by exactly the damage taken; each eligible attacker landed exactly one hit">` |
-| `NpcPlan.item` when action is give | `Is<string, "an item the NPC holds at least one of">` |
-| `NpcPlan.detail` when action is promise | `Is<string, "a concrete, non-empty commitment">` |
-| `Note.about` | `Is<string[], "ids of entries in the NPC's memory">` |
-| `Commitment.evidence_id` | `Is<string, "the id of the event that prompted the promise">` |
-| `NpcEffects.event_id` | `Is<string, "the id the state would assign next, not yet applied">` |
-| `NpcPlan.say` | `Is<string, "a reply in the NPC's voice that claims no knowledge outside its memory">` |
-| `Settings` entries | `Is<Engine, "an implementation that exists for the part">` |
+| Slot | Proposed type | Decision |
+|---|---|---|
+| `TradeIntent.seller`, `.good`, `CombatPlan.target`, `NpcPlan.item`, `.target` (ids a model names) | `Is<string, "a name: a letter followed by letters, digits, '_' or '-'">` (`Name`) | (a) The ids of state slots are checked by the creators. |
+| `TradeOutcome.total` (a model-written amount) | `Is<number, "a non-negative safe integer">` (`Count`) | (a) `Merchant.cash`, `.goods[*]`, `.offers[*]`: the creators check them and the commit keeps them, so they stay plain. |
+| `TradeIntent.quantity`, `TradeOutcome.quantity` (`Entry.amount` is covered by the `Settlement` predicate) | `Is<number, "a positive safe integer">` (`Quantity`) | (a) Moves a zero or fractional quantity back to `choose`/`quote`. |
+| `EconomyState.merchants` | `Is<Merchant[], "at least two merchants with distinct ids">` | (c) `createEconomy`. |
+| `EconomyState.initial` | `Is<Totals, "the sum of the merchants' cash and goods at the start">` | (d) The starting merchants are not in the value; the commit compares with `initial`. |
+| `Settlement` | `Is<Settlement, "entries that are, for each traded outcome in order, the goods from seller to buyer and then the money from buyer to seller, and no others">` | (a) Both outcomes and entries are in the value. The commit still checks it; the refinement moves the error into the `settle` stage, where the model repairs it without a second round. |
+| `EconomyEffects.order` | `Is<string[], "the submitters sorted by SHA-256 of seed:tick:actor">` | (d) Seed and tick are not in the value; `order` is crisp and the commit compares. |
+| `Settlement` (as the commit's argument) | `Is<Settlement, "conserves each good and the money, and no balance goes below zero">` | (c) Needs the balances; the commit. |
+| `TradeOutcome` with status traded | `Is<TradeOutcome, "total equals quantity times the seller's offered price">` | (d) The price is in the seller's offers, not in the outcome; the commit. |
+| `Fighter.x` | `Is<number, "an integer from 0 to the arena's width minus 1">` | (a) Weakened to `Count`; the width is not in the fighter, so the upper bound stays with the commit ("inside the arena"). |
+| `Fighter.hp` | `Is<number, "an integer from 0 to the fighter's starting health">` | (a) Weakened to `Count`; the starting health is not in the fighter; the commit checks the damage. |
+| `Fighter.cooldown` | `Is<number, "0 or 1">` | (a) |
+| `CombatState.fighters` | `Is<Fighter[], "at least two fighters with distinct ids">` | (c) `createArena`. |
+| `CombatPlan.target` when action is attack | `Is<string, "the id of a living fighter other than the actor">` | (d) Needs the arena; `validate` and the commit. The id shape is (a) above. |
+| `Hit.amount` | `Is<number, "2, or 1 when the target guarded">` | (a) Weakened to "1 or 2"; whether the target guarded is in the submissions, and the commit checks it. |
+| `CombatResolution` | `Is<CombatResolution, "each fighter moved at most one cell; ...">` | (c) Needs the state before the round; the commit. |
+| `NpcPlan.item` when action is give | `Is<string, "an item the NPC holds at least one of">` | (d) Needs the inventory; `validate` and the commit. |
+| `NpcPlan.detail` when action is promise | `Is<string, "a concrete, non-empty commitment">` | (b) Proposed, awaiting live evaluation (not wired): `Is<string, "a concrete commitment that names what the NPC will do, stated in one sentence">`, judged once per promise, with a crisp check of the blank case. |
+| `Note.about` | `Is<string[], "ids of entries in the NPC's memory">` | (a) The id shape (`event-N` or `event-N.note-K`); membership in the memory stays with the commit. |
+| `Commitment.evidence_id` | `Is<string, "the id of the event that prompted the promise">` | (a) The event-id shape; that it is this event is the commit's. |
+| `NpcEffects.event_id` | `Is<string, "the id the state would assign next, not yet applied">` | (a) The event-id shape; the next and not-yet-applied checks need the state and stay in the commit. |
+| `NpcPlan.say` | `Is<string, "a reply in the NPC's voice that claims no knowledge outside its memory">` | (d) The memory is not in the value, so the judge could not tell. |
+| `Settings` entries | `Is<Engine, "an implementation that exists for the part">` | (a) On the record: `remember` and `narrate` have no shadow mode, and a settings value that says so is refused before any stage runs. |
+
+Counts: (a) 12, (b) 1, (c) 4, (d) 6.
+
+No instruction sentence was changed: instructions that restate a type (`choose`'s "positive whole number", `respond`'s
+"concrete, checkable") stay until the live comparison of guard against type (plans/REFINEMENT_TYPES.md section 5).
 
 ## Limitations met while porting
 
@@ -177,7 +185,13 @@ written in the code, which carries them as doc comments and crisp checks; each i
 - **Names that collide with function properties** (`apply`) are rejected in callable folders; the ledger uses `post`.
 - **A helper two items need** (`economy/ledger.ts`) is both a child of `economy` (so `economy` sees it as a callable)
   and reached by `settle/policy` through `uses`. It cannot be hidden from the economy's eval scope.
-- **No refinement types yet**, so all constraints in "Refinements" are doc comments plus the commit checks.
+- **A `types.ts` with `Is<...>` must `import type { Is } from '@natlang/node'`.** The `.d.nl.ts` declarations import `Is`
+  from there, and without the import the two brands are different types (`Property '[natlangRefinement]' is missing`).
+- **Crisp code that builds a refined value needs a cast.** `defaultSettings` and the arena's fighters are built with
+  `as Settings` / `as Fighter[]` after the creators have validated them; the rest of the crisp code (ledger, commits,
+  references) only reads refined values or builds plain state.
+- **Embedders load the crisp checkers themselves.** `natlang run` loads `refinements.ts`; a host that calls `playTurn`
+  inside its own runtime passes `refinements: { crisp }` (the test loads it with `appCrisp('games')`).
 - **Shadow comparison** of the two implementations of a pluggable part is `pluggable(..., 'shadow')` from
   `@natlang/node`: set `validate`, `settle` or `resolve` to `'shadow'` and each call runs both, serves the
   natural-language result and records a `pluggable_shadow` event with `agree`. `remember` and `narrate` have no

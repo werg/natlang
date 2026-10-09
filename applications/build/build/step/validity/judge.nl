@@ -3,7 +3,7 @@ description: Build invalidation, cache validity (natural-language implementation
 args:
   task: Task
   evidence: Evidence
-returns: Validity
+returns: CheckedValidity
 ---
 Decide whether task can be settled from its recorded run instead of running again. evidence holds what the workspace
 sees now (fingerprint, inputs, outputs, each file's sha256, null when the file is missing) and what it recorded

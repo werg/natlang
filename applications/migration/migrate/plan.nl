@@ -3,7 +3,7 @@ description: Migration planning. From the classified sites, decide which to edit
 args:
   intent: Intent
   classified: Classified[]
-returns: Plan
+returns: CheckedPlan
 ---
 Plan the migration of intent over classified (each a site with its usage). Compute the lists exactly in eval, then
 write the risks.

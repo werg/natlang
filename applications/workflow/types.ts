@@ -88,3 +88,17 @@ export type Facts = {
   /** What the customer can expect next. */
   next: string,
 };
+
+// ---------------------------------------------------------------- refined results
+// What a stage returns carries the property its value shows by itself. The ledger keeps everything that needs the order:
+// the transition table, the kind of message against the phase, the effects that stand. Crisp code keeps the plain types.
+// Each predicate has a crisp checker in refinements.ts.
+
+/** A decision whose wait, when it names one, is a positive whole number of milliseconds. */
+export type CheckedDecision = Is<Decision, "a decision whose waitMs, when given, is a positive whole number of milliseconds">;
+
+/** The undos in order: the refund comes before the release, and each is listed once. */
+export type CheckedCompensation = Is<Compensation, "steps that list refund before release, each at most once, with a reason for each">;
+
+/** A message with a subject that fits a line and a body. */
+export type CheckedOutgoing = Is<Outgoing, "a message whose subject is one line of at most 60 characters without a trailing period, and whose body is not empty">;

@@ -7,7 +7,10 @@ import { createNatlangRuntime } from '../dist/index.js';
 import { RepositoryMigration, migrate } from '../../applications/dist/migration/index.js';
 import flow from '../../applications/dist/migration/migrate.nl.js';
 const settledCrisp = flow.settledCrisp;
-import { scriptedModel } from './support/natlang.mjs';
+import { readFileSync } from 'node:fs';
+import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+
+const CRISP = await appCrisp('migration');
 
 const source = {
   'lib.mjs': 'export function sum(a, b) { return a + b; }\n',
@@ -124,7 +127,7 @@ try {
   summarize: `return { summary: report.status + ': ' + report.changed.length + ' files changed', next: state.findings.map(f => f.evidence.slice(0, 40)) };`,
 };
 
-async function run({ overrides = {}, policy, attempts = 3, files = Object.keys(source), contents = source, seeds = [] } = {}) {
+async function run({ overrides = {}, policy, attempts = 3, files = Object.keys(source), contents = source, seeds = [], repair } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-repo-'));
   for (const [name, text] of Object.entries(contents)) await writeFile(join(root, name), text);
   const repository = new RepositoryMigration(root, { files, checks: CHECKS, policy });
@@ -137,9 +140,22 @@ async function run({ overrides = {}, policy, attempts = 3, files = Object.keys(s
     const script = overrides[stage] ?? DEFAULTS[stage];
     return typeof script === 'function' ? script(opening) : script;
   });
-  const runtime = createNatlangRuntime({ model: model.driver });
+  // `repair` is the code that answers a refinement rejection of the stage; the feedback it was sent is kept.
+  const feedback = [], base = model.driver;
+  const driver = Object.assign(async request => {
+    const last = request.messages.at(-1);
+    if (repair && last.role === 'tool' && /refinement-unsatisfied/.test(String(last.content))) {
+      feedback.push(String(last.content));
+      return { calls: [['eval', { code: typeof repair === 'function' ? repair(String(last.content)) : repair }]] };
+    }
+    return base(request);
+  }, {});
+  const judged = withJudge(driver);
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: driver, calls: false, trace: trace => traces.push(trace) });
   const result = await migrate(runtime, repository, 'Rename sum to add while preserving the calculation', { attempts, seeds, checks: ['scenario'] });
-  return { result, root, repository, seen, openings };
+  const checks = traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
+  return { result, root, repository, seen, openings, feedback, judged, checks };
 }
 const finish = ({ root }) => rm(root, { recursive: true, force: true });
 
@@ -284,4 +300,81 @@ test('long checks stream output and retain a bounded diagnostic tail', async () 
     assert.equal(checked.checks[0].truncated, true);
     assert.equal(checked.checks[0].output.length, 4000);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------- refinements
+
+test('every predicate of types.ts has a crisp checker', () => {
+  const types = readFileSync(new URL('../../applications/migration/types.ts', import.meta.url), 'utf8');
+  const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
+  assert.deepEqual([...declared].filter(key => !(key in CRISP)), []);
+  assert.deepEqual(Object.keys(CRISP).filter(key => !declared.has(key)), []);
+});
+
+test('the crisp checkers decide patches, intents, sites, usages, plans, findings, verdicts and budgets', () => {
+  const check = (needle, value) => CRISP[Object.keys(CRISP).find(key => key.includes(needle))](value);
+  assert.equal(check('patches that each', [{ path: 'a', old: 'x', new: 'y' }]), true);
+  assert.equal(check('patches that each', [{ path: 'a', old: 'x', new: 'x' }]), false, 'a patch that changes nothing');
+  assert.equal(check('patches that each', [{ path: 'a', old: '', new: 'y' }]), false, 'empty old text matches everywhere');
+  assert.equal(check('an intent whose', { queries: ['sum', 'sum'] }), false);
+  assert.equal(check('an intent whose', { queries: ['sum', ''] }), false);
+  assert.equal(check('a site whose', { from: 3, to: 2, hits: 1 }), false);
+  assert.equal(check('a site whose', { from: 0, to: 2, hits: 1 }), false);
+  assert.equal(check('a site whose', { from: 2, to: 2, hits: 1 }), true);
+  assert.equal(check('a usage whose', { pattern: 'call', action: 'edit', reason: 'x' }), true);
+  assert.equal(check('a usage whose', { pattern: 'invocation', action: 'edit', reason: 'x' }), false);
+  assert.equal(check('a plan whose', { edits: ['s1', 's1'], leave: [], risks: [] }), false);
+  assert.equal(check('a plan whose', { edits: ['s1'], leave: [{ site: 's1', reason: 'r' }], risks: [] }), false);
+  assert.equal(check('a plan whose', { edits: ['s1'], leave: [{ site: 's2', reason: '' }], risks: [] }), false);
+  assert.equal(check('a plan whose', { edits: ['s1'], leave: [{ site: 's2', reason: 'r' }], risks: [] }), true);
+  assert.equal(check('a finding whose', { kind: 'environment', repairable: true }), false);
+  assert.equal(check('a finding whose', { kind: 'missed-site', repairable: true }), true);
+  assert.equal(check('a finding whose', { kind: 'flaky', repairable: false }), false);
+  assert.equal(check('a verdict whose', { exact: false, problem: '' }), false);
+  assert.equal(check('a verdict whose', { exact: true, problem: 'x' }), false);
+  assert.equal(check('a verdict whose', { exact: true, problem: '' }), true);
+  assert.equal(check('a state whose', { remaining: -1 }), false);
+  assert.equal(check('a state whose', { remaining: 2 }), true);
+});
+
+test('a whole migration is checked by crisp checkers and never reaches the judge', async () => {
+  const r = await run();
+  try {
+    assert.equal(r.result.report.status, 'reviewable');
+    assert.ok(r.checks.length >= 10, 'every stage result was checked');
+    assert.ok(r.checks.every(check => check.source === 'crisp' && check.outcome === 'pass'));
+    assert.deepEqual(r.judged, []);
+  } finally { await finish(r); }
+});
+
+test('a patch that changes nothing is sent back to the patch stage and repaired, without the judge', async () => {
+  const noop = `return [{ path: classified.site.path, old: 'sum', new: 'sum' }];`;
+  const r = await run({ overrides: { patch: noop }, repair: DEFAULTS.patch });
+  try {
+    assert.equal(r.result.report.status, 'reviewable');
+    assert.equal(r.feedback.length, 3, 'one rejection per site');
+    assert.match(r.feedback[0], /new text that differs from the old/);
+    assert.deepEqual(r.judged, []);
+  } finally { await finish(r); }
+});
+
+test('a finding that is marked repairable against its kind is repaired by the triage stage', async () => {
+  const wrong = `return [{ check: 'scenario', kind: 'environment', path: '', line: 0, evidence: 'node is not installed', repairable: true }];`;
+  const fixed = `return [{ check: 'scenario', kind: 'environment', path: '', line: 0, evidence: 'node is not installed', repairable: false }];`;
+  const r = await run({ overrides: { patch: `return [];`, triage: wrong }, repair: fixed, attempts: 5, contents: pending });
+  try {
+    assert.equal(r.result.rounds, 1, 'the corrected finding ends the loop');
+    assert.equal(r.result.findings[0].repairable, false);
+    assert.match(r.feedback[0], /repairable exactly when the kind is missed-site, wrong-edit or test-expectation/);
+  } finally { await finish(r); }
+});
+
+test('an exactness verdict that says not exact without a problem is sent back with the fix', async () => {
+  const vague = `return { exact: false, problem: '' };`;
+  const r = await run({ overrides: { exactjudge: vague }, policy: { exact: 'natural-language' }, repair: DEFAULTS.exactjudge });
+  try {
+    assert.equal(r.result.report.status, 'reviewable');
+    assert.match(r.feedback[0], /problem is empty when exact is true and is a sentence when exact is false/);
+    assert.ok(r.checks.some(check => check.outcome === 'fail' && check.source === 'crisp'));
+  } finally { await finish(r); }
 });

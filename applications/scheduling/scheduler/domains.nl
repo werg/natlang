@@ -3,7 +3,7 @@ description: Work out where each task of the day can go, once fixed commitments,
 args:
   view: DayView
   hard: Hard
-returns: Domain[]
+returns: CheckedDomains
 ---
 Compute the places each task can go. Minutes are counted from view.origin. Do the arithmetic in eval with plain numbers.
 

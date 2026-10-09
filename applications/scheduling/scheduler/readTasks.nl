@@ -3,7 +3,7 @@ description: Read the new tasks a scheduling request introduces.
 args:
   request: string
   view: DayView
-returns: TaskReading
+returns: CheckedTaskReading
 ---
 Read request, the user's words about their day, and list the tasks it introduces that view.tasks does not already hold.
 

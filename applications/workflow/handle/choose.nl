@@ -4,7 +4,7 @@ args:
   snapshot: Snapshot
   limits: Limits
   problem?: string
-returns: Decision
+returns: CheckedDecision
 ---
 Choose the next action for the order in snapshot.state, given snapshot.event, with the stages in your folder. limits are
 the policy's numbers. problem, when given, says why an earlier choice was refused: choose differently.

@@ -5,7 +5,7 @@ args:
   classified: Classified
   revision: string
   problem?: string
-returns: Patch[]
+returns: CheckedPatches
 ---
 Write the patches for classified.site at revision. problem, when given, says why an earlier answer was rejected.
 Compute in eval; take every old snippet from the site's text by slicing, as it is stored.

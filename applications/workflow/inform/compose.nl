@@ -4,7 +4,7 @@ args:
   kind: MessageKind
   told: Facts
   problem?: string
-returns: Outgoing
+returns: CheckedOutgoing
 ---
 Write the message for the customer from told. kind is the message's kind and goes into the result.
 1. subject: one line of at most 60 characters, without a trailing period, naming the order (told.order) and what

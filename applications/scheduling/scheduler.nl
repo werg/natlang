@@ -4,7 +4,7 @@ args:
   request: string
   view: DayView
   settings: Settings
-returns: Proposal
+returns: CheckedProposal
 ---
 Plan the day in view for request, with the stages in your folder; calendar checks what they produce. view is the day
 at one revision and all times are minutes after view.origin. settings.candidates is how many complete schedules to

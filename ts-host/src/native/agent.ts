@@ -967,7 +967,7 @@ export class NativeToolAgent {
     let overflowRetries = 0;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
-    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0;
+    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -1114,11 +1114,16 @@ export class NativeToolAgent {
         // call with nothing staged, the reply's text is the result.
         if (!response.truncated) session.acceptTextResult(response.text ?? '');
         const missing = this.missing(session);
+        // A reply without a tool call that leaves a refinement-rejected result unrepaired is a failed repair too: without
+        // this count a model that only says "done" is nudged for ever (a scripted or stuck model never runs out of turns).
+        if (!response.truncated && missing && lastRefinementFailure && this.options.refinement &&
+            ++refinementRepairs > this.options.refinement.checker.repairBudget(this.options.maxFailureRepairs)) return lastRefinementFailure;
         if (!response.truncated && !missing && this.options.refinement) {
           const failures = await this.refinementGate(session);
           if (failures) {
             // The staged result does not satisfy its refinement: unstage it and tell the model, within the repair budget.
             session.lam.return = MISSING;
+            lastRefinementFailure = `${failures[0]!.code}: ${failures[0]!.message}`;
             if (++refinementRepairs > this.options.refinement.checker.repairBudget(this.options.maxFailureRepairs))
               return `${failures[0]!.code}: ${failures[0]!.message}`;
             messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
@@ -1260,9 +1265,9 @@ export class NativeToolAgent {
       // A refinement rejected a proposed result: from the gate above, or from an eval that returned or finished one.
       const refinedResult = results.find(result => result.codes?.some(code => code === 'refinement-unsatisfied' || code === 'refinement-undecided'));
       if (refinementFailures || refinedResult) {
-        if (++refinementRepairs > this.options.refinement!.checker.repairBudget(repairLimit))
-          return refinementFailures ? `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}` :
-            /refinement-(?:unsatisfied|undecided): [^\n]*/.exec(refinedResult!.text)?.[0] ?? 'refinement-unsatisfied: the result does not satisfy its refined type';
+        lastRefinementFailure = refinementFailures ? `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}` :
+          /refinement-(?:unsatisfied|undecided): [^\n]*/.exec(refinedResult!.text)?.[0] ?? 'refinement-unsatisfied: the result does not satisfy its refined type';
+        if (++refinementRepairs > this.options.refinement!.checker.repairBudget(repairLimit)) return lastRefinementFailure;
         continue;
       }
       if (session.failureSerial > previousFailureSerial) {

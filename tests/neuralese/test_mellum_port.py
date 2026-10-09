@@ -287,3 +287,29 @@ def test_unbound_dense_experts_give_the_same_output_and_gradients_as_per_expert_
         DenseExperts.unbound = unbound
     for q, g in zip(latents, fast):
         assert torch.allclose(q.grad, g, atol=1e-5)
+
+
+def test_exported_conversion_loads_as_deployed_ternary_and_matches_the_qat_model(tmp_path):
+    from natlang_neuralese.maple.model import TernaryExperts
+    from natlang_neuralese.maple.qat_convert import install_full_latent_qat
+    from natlang_neuralese.maple.qat_export import export
+
+    source = tmp_path / "src"
+    source.mkdir()
+    tiny_mellum(source)
+    model = load_maple(source, device="cpu", dtype=torch.float32, ternary_attention=False)
+    latents = install_full_latent_qat(model)
+    torch.manual_seed(1)
+    with torch.no_grad():  # a trained conversion: codes differ from the original's
+        for _, q in latents:
+            q.add_(0.02 * torch.randn_like(q))
+    torch.save({"step": 7, "latents": {n: q.detach().clone() for n, q in latents}}, tmp_path / "checkpoint.pt")
+    provenance = export(source, tmp_path / "checkpoint.pt", tmp_path / "out")
+    assert provenance["replaced_tensors"] == LAYERS * (4 + 3 * EXPERTS) and provenance["step"] == 7
+    exported = load_maple(tmp_path / "out", device="cpu", dtype=torch.float32)
+    assert isinstance(exported.model.layers[0].mlp.experts, TernaryExperts)  # deployed form by default
+    ids = torch.randint(0, 128, (1, 24))
+    with torch.no_grad():
+        expected = model.eval()(ids).logits  # QUANT_MIX 1: the conversion's deployed forward
+        actual = exported(ids).logits
+    assert torch.allclose(actual, expected, atol=1e-4), float((actual - expected).abs().max())
