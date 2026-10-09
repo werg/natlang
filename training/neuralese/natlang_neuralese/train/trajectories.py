@@ -731,6 +731,8 @@ def main(argv=None):
     parser.add_argument('--token-cache-mib', type=int, default=0,
                         help='bounded CPU token-ID cache for this fixed tokenizer; 0 disables it')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
+    from .optim_restore import add_optimizer_restore_arguments
+    add_optimizer_restore_arguments(parser)
     parser.add_argument('--checkpoint-every', type=int, default=25)
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     from .sketch_defaults import apply_sketch_defaults
@@ -824,7 +826,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -1437,13 +1439,16 @@ def main(argv=None):
     # causal feedback is already exact; learn payload/stop without corrupting it.
     if args.read_adapter:
         heads.add_read_adapter()
-    head_params = [p for name, p in heads.named_parameters()
+    head_named = [(f'heads.{name}', p) for name, p in heads.named_parameters()
                    if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
+    head_params = [p for _, p in head_named]
     if args.train_control_rows:
         head_params += [backbone.control_rows]
+        head_named += [('backbone.control_rows', backbone.control_rows)]
         if not getattr(backbone, 'tied', True):
             head_params += [backbone.control_head_rows]
+            head_named += [('backbone.control_head_rows', backbone.control_head_rows)]
     for p in head_params:
         p.requires_grad_(True)
     latent_lrs = {}
@@ -1459,6 +1464,11 @@ def main(argv=None):
                                      lora_lr=backbone_lr, heads_lr=args.heads_lr,
                                      embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
                                      lora_names=lora_names, latent_lrs=latent_lrs)
+    from .optim_restore import optimizer_param_names, restore_optimizer_state, declared_added_names, record_restore_report
+    optimizer_named = {**{f'soft.{name}': value for name, value in params.items()},
+                       **({f'backbone.{name}': value for name, value in zip(lora_names, lora)} if lora_names is not None
+                          else {f'lora_{i}': value for i, value in enumerate(lora)}),
+                       **dict(head_named)}
     if resumed is not None:
         if set(params) != set(resumed['params']):
             raise ValueError('recurrence soft-parameter names changed')
@@ -1477,11 +1487,16 @@ def main(argv=None):
         missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
         if unexpected or any(not k.startswith('read_adapter.') for k in missing):
             raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
-        try:
-            optimizer.load_state_dict(resumed['optimizer'])
-        except ValueError as error:
-            # The trainable set grew (members' private parts joined): the optimizer starts fresh.
-            print(json.dumps({'event': 'optimizer_state_fresh', 'reason': str(error)[:200]}), flush=True)
+        # Named restore (optim_restore): unchanged groups load exactly as before; a changed trainable set is refused
+        # unless declared. A read adapter declared with --curriculum-change read_adapter counts as added; further
+        # additions are declared with --optimizer-added PREFIX; --optimizer-state fresh is the explicit reset
+        # (continuations only, so a resume never silently re-resets).
+        declared_prefixes = list(args.optimizer_added) + (['heads.read_adapter.'] if 'read_adapter' in args.curriculum_change else [])
+        restore_report = restore_optimizer_state(
+            optimizer, resumed['optimizer'], optimizer_named, declared_added_names(optimizer_named, declared_prefixes),
+            saved_names=resumed.get('optimizer_param_names'),
+            fresh=args.optimizer_state == 'fresh' and new_continuation)
+        record_restore_report(restore_report, out, source=args.continue_from or 'resume')
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
         from .trajectory_state import initialize_content_residual
@@ -1851,6 +1866,7 @@ def main(argv=None):
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
+            'optimizer_param_names': optimizer_param_names(optimizer, optimizer_named),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
             **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,

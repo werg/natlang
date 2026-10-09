@@ -9,7 +9,8 @@ import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
-import { requestLimit } from './chat-completion.js';
+import { schedulerForSettings, type Scheduler } from './scheduler.js';
+import { planServerSlots, type SlotPlan } from './server-slots.js';
 import type { DecisionRequest, DecisionScores, ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
@@ -26,7 +27,11 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
   /** The model's context window as its server reports it (undefined when it does not say). */
   contextWindow(): Promise<number | undefined>;
-  status(): ManagedModelStatus; close(): Promise<void> };
+  status(): ManagedModelStatus; close(): Promise<void>;
+  /** The session's model scheduler (undefined for Pi provider backends): queue, batch records and occupancy. */
+  scheduler: Scheduler | undefined;
+  /** The slot sizing of a managed local server once it has started (null otherwise). */
+  slotPlan(): SlotPlan | null };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
 
@@ -42,6 +47,13 @@ export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process
   return { executable: found, available: Boolean(found && modelAvailable && template),
     command: environment.NATLANG_LLAMA_SERVER ?? 'llama-server', runtime,
     model: DEFAULT_LOCAL_MODEL.id, modelPath, template, downloadable: Boolean(DEFAULT_LOCAL_MODEL.downloadUrl) };
+}
+
+/** The slot count a managed local server would start with, and why (`natlang doctor`). */
+export function localSlotPlan(local: ModelProfile['local'], environment: NodeJS.ProcessEnv = process.env,
+  modelPath: string | null = localModelPrerequisites(environment).modelPath): SlotPlan {
+  const modelBytes = modelPath && existsSync(modelPath) ? statSync(modelPath).size : DEFAULT_LOCAL_MODEL.bytes;
+  return planServerSlots({ local, modelBytes, defaultContextTokens: DEFAULT_LOCAL_MODEL.contextTokens, environment });
 }
 
 async function fileHash(path: string): Promise<string> {
@@ -140,9 +152,12 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
   let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '', closed = false;
   let prerequisites = localModelPrerequisites(environment);
-  // One limit over every request of the session; a server found unable to score is not asked again.
-  const limit = choice.kind !== 'pi-provider' && choice.concurrency ? requestLimit(choice.concurrency) : undefined;
-  const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn(limit ? { ...options, concurrency: limit } : options);
+  // One scheduler over every request of the session; a server found unable to score is not asked again. A managed
+  // server's concurrency is its slot count unless configured, and is set once the server has started.
+  const scheduler = choice.kind === 'pi-provider' ? undefined : schedulerForSettings(choice);
+  let plan: SlotPlan | null = null;
+  const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
+    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint });
   let unscored: string | null = null;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
@@ -165,12 +180,15 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       if (closed) throw new Error('model session is closed');
       const port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;
-      const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel',
-        String(localSettings?.parallel ?? 1),
-        '-c', String(localSettings?.contextTokens ?? DEFAULT_LOCAL_MODEL.contextTokens), '-ngl',
+      // `-c` is shared among the slots, so it is the per-slot context times the slot count.
+      plan = localSlotPlan(localSettings, environment, modelPath);
+      if (scheduler && choice.kind === 'managed-local' && choice.batching?.maxConcurrent === undefined && choice.concurrency === undefined)
+        scheduler.setMaxConcurrent(plan.slots);
+      const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', String(plan.slots),
+        '-c', String(plan.totalContext), '-ngl',
         String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
         '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
-      error.write(`natlang: starting managed model ${basename(modelPath)}\n`);
+      error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });
       child.once('error', failure => { recentError = `${recentError}\n${failure.message}`.slice(-16000); });
@@ -180,7 +198,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
           throw new Error(`managed model server exited during startup\n${recentError.trim()}`);
         try { const response = await fetch(endpoint + '/health'); if (response.ok) {
           local = { endpoint, model: environment.NATLANG_MODEL ?? choice.model,
-            headers: choice.headers, request: choice.kind === 'managed-local' ? choice.request : undefined }; return local;
+            // Prefix caching: a slot keeps the previous prompt's KV, so calls that share a prefix skip its prefill.
+            headers: choice.headers, request: choice.kind === 'managed-local' ? { cache_prompt: true, ...choice.request } : undefined }; return local;
         } } catch { /* server is still loading */ }
         await new Promise(resolveWait => setTimeout(resolveWait, 250));
       }
@@ -221,8 +240,11 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
+    scheduler,
+    slotPlan() { return plan; },
     async close() {
       closed = true;
+      scheduler?.close();
       if (pi) await pi.then(backend => backend.close(), () => undefined);
       process.removeListener('SIGINT', terminate); process.removeListener('SIGTERM', terminate);
       process.removeListener('exit', onExit);

@@ -3243,3 +3243,41 @@ are in `runs/ling-grouped-duplicate-audit-20261009-v1/`; receipt SHA-256 is
 ## 2026-10-09 — Attribute preference negatives to the erroneous decision
 
 Root inspected the three held source-derived eligibility pairs. Each recorded sampled target is appropriate eval/nl delegation of the supplied eligibility criterion; the observed host value is wrong because its child answer is wrong. Do not label valid parent delegation code as the incorrect response or prefer a static direct answer solely from a downstream false value. Preserve the original three held pairs, descend to the actual erroneous provider response, and bind its exact prompt/source/schema before considering preference admission. Root receipt: `runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/counterfactual-eligibility-repairs-v2/root-delegation-attribution-hold-v1.json`. No data admission or source/oracle mutation.
+
+## 2026-10-09 — Repair source predicates before assigning model negatives
+
+V29 FLD-510 required a verified alert but only stated that water crossed the
+threshold. Its RRD-B record required an approved schedule but only stated a
+schedule match. Captured model decisions identified those missing predicates.
+Hold both original attempts and preference negatives; preserve the old artifacts.
+Successor source adds the exact missing facts in model-visible evidence. Three
+additional eligibility/ranking counterfactuals retain their original train groups.
+All five sources carry zero new-world credit and no training admission.
+
+Root-reviewed source SHA `7f8de3cc4621354a1acf88d5137c41d408b19a1a139f351b625ef64f052c6077`;
+fresh isolated shared-runtime manifest SHA
+`a5e9ca62cf527f2e6608fe30d0356320c34e248181053a2fde448c5e5f163b53`;
+scripted replay passes five cases/58 decisions without provider calls. Generation
+launch uses five Luna slots at medium effort and the reviewed plan SHA
+`57a3de0513db6ea7e00cf4743248c9e043002591f6b9951bd745ce753e456586`.
+Artifacts: `runs/luna-v29-source-repairs-and-counterfactuals-20261009-v1/`.
+The prior ARC case ended at the collection request budget with partial evidence,
+not an established semantic negative. The admitted union audit found neither
+missing predicate in an admitted positive; active training input stays unchanged.
+
+## 2026-10-09 — Shared implementation must include recipe contracts
+
+Sharing Git alone did not prevent Pop restarting superseded sketch training.
+Related experiments use the common mapped-input then AR consumer-fixup path;
+canonical declarations and both machine notes must accompany objective changes.
+Named optimizer restoration is shared by text and trajectory trainers. Both
+recipe handlers now expose its explicit restore/addition controls (`7477c08c`),
+with 44 focused CPU tests passing. No silent fallback to fresh moments is allowed.
+Outer-loop and schedule consolidation remains DGX-owned architecture C1–C3.
+
+AR training masks gold targets after the first differing decision, but held
+full-span metrics include the later tail. Pop and DGX agreed to add shared
+valid-prefix metrics and coverage. Qualification changes require a separate
+decision covering minimum coverage and matched sequential crisp/channel rollout
+parity; a short correct prefix alone does not qualify anything. Active frozen
+jobs retain their exact implementation until a deliberate checkpoint handoff.

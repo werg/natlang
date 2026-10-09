@@ -15,6 +15,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 from .execution import causal_gold_prefix_mask, full_depth_projected_feedback_step, prefill_write_context
 from .output_embedding_projection import sha
+from .optim_restore import optimizer_param_names
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
@@ -257,7 +258,7 @@ def restore_training_rng_state(state, device):
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
 # Activation checkpointing trades memory for recomputation with identical math, so it is operational too.
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device',
-                                      'checkpoint_layers','cuda_reserved_cap_gb'})
+                                      'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added'})
 
 
 def same_resume_identity(previous, current):
@@ -925,6 +926,7 @@ def main(argv=None):
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
     p.add_argument('--backbone-training',choices=['auto','full','adapters','qat'],default='auto');p.add_argument('--rank',type=int,default=16)
+    from .optim_restore import add_optimizer_restore_arguments;add_optimizer_restore_arguments(p)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
     p.add_argument('--sketch-weight',type=float,default=1.);p.add_argument('--text-weight',type=float,default=.25)
@@ -1330,15 +1332,18 @@ def main(argv=None):
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
             heads.load_state_dict(restored['heads'])
-            try:
-                optimizer.load_state_dict(restored['optimizer'])
-                if continuation:
-                    print(json.dumps({'event':'optimizer_state_restored',
-                                      'source_step':continuation['step'],
-                                      'parameter_groups':len(optimizer.param_groups)}),flush=True)
-            except ValueError as error:
-                # The trainable set grew (members' private parts joined): the optimizer starts fresh.
-                print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
+            from .optim_restore import (restore_optimizer_state,declared_added_names,
+                                        record_restore_report)
+            # Named restore: unchanged groups load exactly as before; a grown/shrunk/rerouted trainable set is
+            # refused unless declared (--optimizer-added PREFIX) or the reset is explicit (--optimizer-state fresh).
+            restore_report=restore_optimizer_state(optimizer,restored['optimizer'],dict(named),
+                declared_added_names(named,a.optimizer_added),
+                saved_names=restored.get('optimizer_param_names'),fresh=a.optimizer_state=='fresh' and not resumed)
+            record_restore_report(restore_report,a.out,source=a.continue_from or 'resume')
+            if continuation:
+                print(json.dumps({'event':'optimizer_state_restored',
+                                  'source_step':continuation['step'],
+                                  'parameter_groups':len(optimizer.param_groups)}),flush=True)
         step=restored['step'];updates=display_update_flags(restored['updates'])
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1644,7 +1649,7 @@ def main(argv=None):
                      and available is not None and available >= int(estimate*1.25))
         state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
           'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
-          'optimizer':optimizer.state_dict(),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
+          'optimizer':optimizer.state_dict(),'optimizer_param_names':optimizer_param_names(optimizer,dict(named)),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),

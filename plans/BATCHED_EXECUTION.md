@@ -105,9 +105,111 @@ specialization reports include it.
 1. `model/scheduler.ts` with the capability declaration, routed through all backends (with B3 in the architecture
    plan), plus mock tests.
 2. `scoreMany` and the prefix+continuations scoring endpoint in the neuralese server and the llama.cpp fork, with
-   fallbacks.
+   fallbacks. The TypeScript half is done (below); the server half is pending.
 3. Server slot sizing in `local-server.ts` and `doctor`.
 4. Prompt layout audit and fixture test, with prefix caching on.
 5. Trace fields and the `natlang traces` occupancy view.
 6. The `natlang check` loop diagnostic.
 7. Gates 2–3 on DGX through the ledger, in a window that does not starve training.
+
+## 6. Implementation status (TypeScript host)
+
+Done: steps 1, 3, 4, 5, 6 and the TypeScript half of step 2. Tests: `test/scheduler.test.mjs`,
+`test/prompt-layout.test.mjs`, `test/sequential-loops.test.mjs`.
+
+**Scheduler (`model/scheduler.ts`).**
+- `createScheduler({ mode, maxConcurrent, coalesceMs, priority, adjacency })`. Capabilities are
+  `{ batching: { mode, maxConcurrent } }`.
+- The call identity is `ModelTurnRequest.invocation_id`, which `chatCompletionModelTurn` hands to the transport as a
+  third argument (`ChatRequestMeta`; plain transports ignore it). The scheduler counts requests per invocation: a
+  second request of an invocation (or a malformed-call retry) is a running-call turn. No change to `native/runtime.ts`
+  or `runtime/hooks.ts` was needed.
+- Priority only reorders requests that are queued together: a slot that frees is refilled at once from the queue, so
+  a running call's next turn that is not yet submitted does not hold a slot back for itself.
+- Defaults deviate from 3.1: the coalescing window is 0 (next timer tick) for server-continuous and serial
+  backends, 2 ms for explicit-batch ones. A continuous server batches by itself, so the window would only add
+  latency. Release is immediate when a slot frees.
+- Adjacency prefers the earliest-seen prompt prefix within a priority class; it can delay a late prefix while an
+  earlier one keeps arriving. There is no aging yet.
+- `requestLimit` is unchanged and still what a bare numeric `concurrency` gives. A scheduler with `priority: false`,
+  `adjacency: false`, `coalesceMs: 0` admits like it (test). `openAICompatibleModelTurn({ concurrency })` accepts a
+  number, a `RequestLimit` or a `Scheduler`; the managed session now always builds a scheduler, so its calls carry
+  batch records. `model/config.ts` gains `batching` and `local.memoryBudgetMiB/kvBytesPerToken`.
+
+**Scoring (`model/scoring.ts`, `native/decision.ts`).**
+- `DecisionScorer.scoreMany?(items, signal)` returns one settled result per item; `scoreMany(scorer, items)` in
+  `native/decision.ts` falls back to concurrent single scoring through the scheduler.
+- `coalescingScorer` wraps the scorer of `openAICompatibleModelTurn`, so decision readouts that arrive in the same
+  tick (from `Promise.all`, list refinements, classification loops) are scored by one `scoreMany`. `native/agent.ts`
+  is unchanged for this.
+- **Explicit-batch contract** (optional, capability-gated: `batching.mode: 'explicit-batch'` and
+  `batching.scoreEndpoint`, `true` meaning `{endpoint}/v1/natlang/score`):
+
+      POST /v1/natlang/score
+      { "model": "...", "items": [ { "messages": [...], "continuations": ["\"a\"", "\"b\""], "adapters": [...]? } ] }
+      200 { "results": [ { "log_probs": [..K numbers..], "tokens": [..K ints..]? } | { "error": "..." } ] }
+
+  `continuations[k]` is option k as the closed final assistant message after `messages`. The server prefills each
+  distinct `messages` prefix once and scores the continuations from its cache. `log_probs` and `tokens` have the
+  meaning of `DecisionScores` (over the tokens where the options differ, end of message included), so results must
+  agree with the one-request-per-option path within tolerance (gate 3). One request occupies one scheduler slot.
+  404, 405 and 501 mean "no such endpoint": the client falls back to concurrent scoring and does not ask again. An
+  item that fails returns `{ "error" }` and fails alone. For the Neuralese server the same shape belongs at
+  `/v1/neuralese/decide_many` (with block uploads handled as `decide` does); not implemented.
+
+**Server slots (`model/server-slots.ts`, `local-server.ts`).** `slots = clamp(floor((budget - modelBytes) /
+(contextTokens * kvBytesPerToken)), 1, 8)`, default KV budget = min(half of available memory, 4 GiB), shown by `natlang doctor` and the server start line (an explicit `local.memoryBudgetMiB`, which covers weights and KV, is not capped),
+`kvBytesPerToken` 64 KiB by default; `local.parallel` wins. `-c` is the per-slot context times the slots. Requests to
+the managed server carry `cache_prompt: true`. `natlang doctor` reports `serverSlots`, `slotPlan` and `batching`.
+Note the default `--parallel` changes from 1 to the memory-sized value; on DGX set `local.memoryBudgetMiB` from the
+ledger grant (the 64 KiB per token figure is a guess to be measured for the student model).
+
+**Prompt layout (step 4).** Today's order is system, instructions with the signature and types (user message), the
+pre-filled scope eval (callable declarations, host services, then the arguments, then captured variables), then the
+folder listing for directory reducers, then the transcript. This matches 3.4 except that for directory reducers the
+folder listing is a separate tool turn after the arguments, so the argument values precede the listing, and that
+captured variables and the call's own earlier variables come after the arguments (all variable, so harmless for
+prefix reuse). Reordering the listing before the arguments needs a prompt change and a live measurement; it was not
+done. The fixture test checks the order and that two calls of one function share system, user and scope-eval
+messages and differ first at the arguments.
+
+**Observability (step 5).** `ModelTurn.scheduling` carries `batch_id`, `batch_size`, `in_flight`, `queue_wait_ms`,
+`priority`; the `model_request` end event records them as `batch_id`, `batch_size`, `in_flight`, `queue_wait_ms`,
+`schedule_priority`. Coalesced decision readouts record `batch_id`/`batch_size` on their `decision_readout` event. `natlang traces occupancy` summarises them per call and
+in total. Prefix tokens reused are already in the turn stats (`cachedTokens`) but not in the event.
+
+**Loop diagnostic (step 6).** `compiler/sequential-loops.ts`, called from `compiler/project.ts`. The diagnostic code
+is `nl-sequential-loop` (severity warning). `natlang check` now prints warnings when the check passes.
+
+## 7. Pending integration
+
+- `compiler/inline.ts`: add `'nl-sequential-loop'` to the `NatlangDiagnostic['code']` union. Until then
+  `sequential-loops.ts` casts the code. Detecting calls of inline `nl` functions bound to a local `const f = nl...` and
+  using the type checker (rather than the `.nl` import and `nl` tag syntax) belongs in `compiler/eval-check.ts` or
+  `inline.ts`.
+- `native/runtime.ts` / `runtime/hooks.ts`: pass `turn` and the function name in the model request, so the scheduler
+  can group by function instead of by system-message hash, and (decision-readout batch records are done).
+- `improvement/services.ts`, `applications/pi/*`: construct their model drivers with the session's scheduler (they
+  currently build their own `requestLimit`/drivers if they set `concurrency`).
+- `skills/natlang-authoring/references/language.md`: one line telling authors that `Promise.all(items.map(f))`
+  batches and a `for…of` that awaits does not.
+- llama.cpp fork and `serve/grad.py`: the scoring endpoint above; `--kv-unified` where supported.
+
+## 8. Gates 2 and 3 on DGX (through the ledger)
+
+Gate 2 (triage throughput), baseline then scheduled. `tickets-1000.json` is a JSON array of 1,000 ticket strings:
+
+    NATLANG_PROFILE=bench-p1 natlang run examples/triage -- tickets-1000.json
+    NATLANG_PROFILE=bench-sized natlang run examples/triage -- tickets-1000.json
+    natlang traces occupancy --limit 1200
+
+with profiles in `~/.config/natlang/config.json`:
+
+    "bench-p1":    { "local": { "parallel": 1 }, "batching": { "maxConcurrent": 1, "priority": false } }
+    "bench-sized": { "local": { "memoryBudgetMiB": <ledger grant> } }
+
+Time each run (`/usr/bin/time -v`); p50/p95 call latency are the `wall_ms` of `natlang traces list --definition classify
+--json`; occupancy is the output of `natlang traces occupancy`. Gate 3 needs the server endpoint (pending) and compares
+`batching: { mode: 'explicit-batch', scoreEndpoint: true }` with the same profile without `scoreEndpoint`, over
+1,000 `readout: decision` classifications issued with `Promise.all`; compare the `decision_readout` events'
+`log_probs` (events: `natlang traces show CALL --events`).

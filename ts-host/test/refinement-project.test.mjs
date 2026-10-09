@@ -37,6 +37,7 @@ export async function run(complaint: string): Promise<string> {
 ` });
   const result = buildProject({ project: root, runtimeModule: RUNTIME });
   assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
+  assert.deepEqual(result.refinedSlots, [{ source: 'src/reply.nl', function: 'reply', slot: 'return', predicate: 'a reply that is polite' }]);
   const declaration = readFileSync(join(root, 'src/reply.d.nl.ts'), 'utf8');
   assert.match(declaration, /import type \{ NatlangFunction, Folder as FolderStore, FolderHandle, Is \}/);
   assert.match(declaration, /NatlangFunction<\[complaint: string\], Is<string, "a reply that is polite">>/);
@@ -60,4 +61,21 @@ test('natlang.json carries refinements settings, validated where the runtime is 
   assert.throws(() => parseRefinementSettings({ threshold: 3 }), /threshold/);
   assert.throws(() => parseRefinementSettings({ colour: 1 }), /unknown refinements field/);
   assert.throws(() => parsePackageManifest({ ...base, refinements: [] }), /refinements must be an object/);
+});
+
+test('refine<Is<T, P>>(value) and assume<R>(value) are lowered to the predicate form', () => {
+  const root = project({ ...FILES, 'src/app.ts': `import { refine, assume } from '@natlang/node';
+import type { Is } from '@natlang/node';
+type Polite = Is<string, "a reply that is polite">;
+export async function run(text: string): Promise<string> {
+  const checked: Polite = await refine<Polite>(text);
+  const taken = assume<Is<Is<string, "short">, "lowercase">>(text);
+  return checked + taken;
+}
+` });
+  const result = buildProject({ project: root, runtimeModule: RUNTIME });
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
+  const emitted = readFileSync(join(root, 'dist/app.js'), 'utf8');
+  assert.match(emitted, /refine\(text, "a reply that is polite"\)/);
+  assert.match(emitted, /assume\(text, "short; and lowercase"\)/);
 });

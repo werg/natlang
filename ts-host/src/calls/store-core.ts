@@ -99,7 +99,11 @@ CREATE TABLE IF NOT EXISTS spend (id INTEGER PRIMARY KEY AUTOINCREMENT, definiti
   tokens INTEGER NOT NULL, wall_ms INTEGER NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS spend_definition ON spend(definition_key);
 CREATE TABLE IF NOT EXISTS iteration_statistics (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS refinement_verdicts (key TEXT PRIMARY KEY, probability REAL NOT NULL, judge TEXT NOT NULL, created_at TEXT NOT NULL);
 `;
+
+/** The call store's `VerdictCache` (native/refinement.ts), with a count and a clear for tools. */
+export type RefinementVerdictStore = import('../native/refinement.js').VerdictCache & { count(): number; clear(): void };
 
 const now = () => new Date().toISOString();
 const refHashes = (ref: ValueRef | null | undefined): string[] => ref?.complete ? [ref.hash] : [];
@@ -614,6 +618,24 @@ export class CallStore {
     };
   }
   private statistics?: IterationStatisticsStore;
+
+  /**
+   * Refinement verdicts (`Is<T, P>`, native/refinement.ts) kept with the machine's records: P(true) by content key
+   * (value hash, normalized predicate, judge id), so a value is not judged twice in any process. The table is created on
+   * open like every other, so existing stores gain it without a version bump.
+   */
+  refinementVerdicts(): RefinementVerdictStore {
+    return this.verdicts ??= {
+      get: key => { const row = this.db.prepare('SELECT probability, judge FROM refinement_verdicts WHERE key = ?').get(key) as
+        { probability: number; judge: string } | undefined; return row ? { probability: row.probability, judge: row.judge } : undefined; },
+      set: (key, verdict) => { this.db.prepare(`INSERT INTO refinement_verdicts (key, probability, judge, created_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET probability = excluded.probability, judge = excluded.judge, created_at = excluded.created_at`)
+        .run(key, verdict.probability, verdict.judge, now()); },
+      count: () => (this.db.prepare('SELECT COUNT(*) AS n FROM refinement_verdicts').get() as { n: number }).n,
+      clear: () => { this.db.prepare('DELETE FROM refinement_verdicts').run(); },
+    };
+  }
+  private verdicts?: RefinementVerdictStore;
 
   /** Bytes of the database and blobs (for `natlang traces status`). */
   diskBytes(): number {

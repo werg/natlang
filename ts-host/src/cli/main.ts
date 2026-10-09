@@ -8,10 +8,11 @@ import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
+import { loadProgramRefinements } from './program-refinements.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
-  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
+  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
   type ModelSelectionOverrides, type ResolvedModelChoice } from '../model/index.js';
 import type { AuthPrompt } from '@earendil-works/pi-ai';
@@ -116,6 +117,7 @@ once per matching file and prints path<TAB>result. --filter prints matching inpu
   natlang traces hot [--program DIR] [--by calls|tokens|wall_ms]
   natlang traces list [--definition NAME] [--executor agent|crisp|crisp-agent] [--outcome X] [--since ISO] [--all]
   natlang traces show CALL [--events] [--json]
+  natlang traces occupancy [--definition NAME] [--limit N]   Batch occupancy: requests in flight, batch size, queue wait.
   natlang traces export [--definition NAME] [--limit N]    One JSON record per line, values inlined.
   natlang traces pin|unpin CALL              Keep a call when the store evicts.
   natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.
@@ -331,6 +333,7 @@ function commandAvailable(command: string): boolean {
 async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise<{ report: Record<string, unknown>; okay: boolean }> {
   const selected = modelSelection(parsed), choice = selected.choice;
   const local = choice.kind === 'managed-local' ? localModelPrerequisites() : null;
+  const slotPlan = choice.kind === 'managed-local' ? localSlotPlan(choice.local, process.env, local?.modelPath ?? null) : null;
   let piReady = false;
   if (choice.kind === 'pi-provider') {
     let session: ReturnType<typeof createResolvedModelSession> | undefined;
@@ -350,7 +353,13 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
     modelPath: local?.modelPath ?? null, modelServer: local?.executable ?? null,
     modelDownloadAvailable: local?.downloadable ?? null,
     apiKey: choice.kind === 'external' ? Boolean(process.env[choice.apiKeyEnv]) : null,
-    providerAuthConfigured: choice.kind === 'pi-provider' ? piReady : null } };
+    providerAuthConfigured: choice.kind === 'pi-provider' ? piReady : null,
+    // Batched execution (plans/BATCHED_EXECUTION.md): the slots a managed server starts with and the scheduler's limits.
+    serverSlots: slotPlan?.slots ?? null, kvBudgetMiB: slotPlan?.budgetBytes == null ? null : Math.round(slotPlan.budgetBytes / 2 ** 20),
+    kvBudgetSource: slotPlan?.budgetSource ?? null, slotPlan: slotPlan ?? null,
+    batching: choice.kind === 'pi-provider' ? null : { mode: choice.batching?.mode ?? 'server-continuous',
+      maxConcurrent: choice.batching?.maxConcurrent ?? choice.concurrency ?? slotPlan?.slots ?? null,
+      coalesceMs: choice.batching?.coalesceMs ?? null, scoreEndpoint: choice.batching?.scoreEndpoint ?? null } } };
 }
 
 function applicationSpecifier(store: NatlangPackageStore, query: string, requestedTarget?: string): string {
@@ -435,8 +444,11 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const program = inventory.manifest.adaptation!;
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
+  // Crisp checkers of refined predicates: the program's own refinements module, if it has one.
+  const crisp = await loadProgramRefinements(compiled, spec.installed ? join(stateDirectory, 'build') : join(spec.root, '.natlang', 'build'));
+  const refinements = crisp || manifest.refinements ? { ...manifest.refinements, ...(crisp ? { crisp } : {}) } : undefined;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
-    programRoot: spec.root, ...manifest });
+    programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
@@ -727,8 +739,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const result = buildProject({ project: words[0] ?? '.', emit: command === 'build', outDir: option(parsed, '--out'),
       runtimeTypes: { specifiers: RUNTIME_MODULE.specifiers, types: RUNTIME_MODULE.types },
       ...(target ? { target: target as 'node' | 'browser' } : {}) });
-    if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest }, true);
-    else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` :
+    if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest,
+      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}) }, true);
+    else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` +
+      (result.refinedSlots?.length ? `\nrefined slots (checked at run time):\n${result.refinedSlots.map(slot =>
+        `  ${slot.function} ${slot.slot}: ${JSON.stringify(slot.predicate)}`).join('\n')}` : '') +
+      (result.diagnostics.length ? `\n${formatDiagnostics(result.diagnostics)}` : '') :
       formatDiagnostics(result.diagnostics), false);
     return result.ok ? 0 : 1;
   }

@@ -881,7 +881,8 @@ export class NativeToolAgent {
     const chosen = probabilities.indexOf(Math.max(...probabilities));
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
       log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
-      duration_ms: Math.round(performance.now() - started) });
+      duration_ms: Math.round(performance.now() - started),
+      ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
     lam.return = values[chosen] as Value;
     lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probabilities[index]])) });
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';
@@ -920,6 +921,13 @@ export class NativeToolAgent {
         ...(session.lam.projectTransaction ? [{ role: 'assistant', content: '', ...thought(FOLDER_THOUGHT), tool_calls: [{ id: 'scope_1', type: 'function',
           function: { name: 'list_files', arguments: '{}' } }] },
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
+    };
+    const refinement = this.options.refinement;
+    if (refinement) session.refinementCheck = async (value, type, path) => {
+      const failures = await refinement.checker.checkValue(value, type, session.env,
+        { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
+          signal: session.runtime.signal, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
+      return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
     const decided = await this.decisionReadout(session, messages);
@@ -1065,7 +1073,10 @@ export class NativeToolAgent {
       overflowRetries = 0;
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
-        prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+        prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
+        ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
+          in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
+          schedule_priority: response.scheduling.priority } : {}) });
       const turnNode = this.modelTurnNode(session, messages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
@@ -1236,9 +1247,12 @@ export class NativeToolAgent {
       }
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;
-      if (refinementFailures) {
+      // A refinement rejected a proposed result: from the gate above, or from an eval that returned or finished one.
+      const refinedResult = results.find(result => result.codes?.some(code => code === 'refinement-unsatisfied' || code === 'refinement-undecided'));
+      if (refinementFailures || refinedResult) {
         if (++refinementRepairs > this.options.refinement!.checker.repairBudget(repairLimit))
-          return `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}`;
+          return refinementFailures ? `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}` :
+            /refinement-(?:unsatisfied|undecided): [^\n]*/.exec(refinedResult!.text)?.[0] ?? 'refinement-unsatisfied: the result does not satisfy its refined type';
         continue;
       }
       if (session.failureSerial > previousFailureSerial) {

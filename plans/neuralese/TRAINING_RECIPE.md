@@ -30,11 +30,18 @@ isolated tree and pin source, compiler and compiled-output hashes, rather than
 trusting the checkout's existing `dist`. Matched autoregressive diagnostics use
 the shared projected-history evaluator and exact hashed window selections.
 
+Shared named optimizer restoration landed in `train/optim_restore.py`
+(`e8c7523c`). Both text and trajectory trainers use it: matching parameter slots
+retain moments and step counts; only explicitly declared added parameters start
+fresh. An incompatible unnamed historical layout is refused rather than silently
+reset. An unchanged historical layout still restores positionally. An explicit
+fresh optimizer is a declared continuation decision, never an automatic fallback.
+Active frozen runs retain their recorded implementation and restore evidence.
+
 This consolidation is still incomplete: text and trajectory objective/schedule
-deduplication is owned by the DGX agent; optimizer handoffs must preserve matching
-parameter moments rather than silently resetting every group. The C++ raw-token
-read port also remains unqualified. These are shared work items, not separate
-experimental policies or completed claims.
+and outer-loop deduplication is owned by the DGX agent (architecture items C1–C3).
+The C++ raw-token read port also remains unqualified. These are shared work items,
+not separate experimental policies or completed claims.
 
 ## Active text foundation: mapped drift, then autoregressive feedback (2026-10-09 correction)
 
@@ -72,6 +79,19 @@ reports retained-prefix coverage, full-span alignment gates and AR diagnostics
 separately. A short supervised prefix does not qualify the full channel; held
 metrics continue to score the complete span. It does not issue a
 runtime or recurrence certificate.
+
+The October 9 owner decision in `DECISIONS.md` changes the next self-feedback
+qualification contract: compare ordinary token inputs and projected payloads on
+the same generated history (distribution KL and argmax agreement), then compare
+plain-model scoring of projected and crisp generated continuations. Gold-tail
+metrics and context-valid prefix coverage remain diagnostics. Earlier strict
+gate failures remain unchanged, and active frozen jobs keep their pinned gate.
+Pop owns this shared evaluator. Initial proposed thresholds, declared before its
+first matched measurements, are minimum agreement 0.99, maximum
+KL(plain || projected) 0.02 nats/token, and maximum own-output plain-model CE gap
+0.05 nats/token, each per stratum. These are a proposal for review, not an
+existing channel or runtime certificate. A checked declaration and exact-weight
+evaluation must land before this contract can qualify a new handoff.
 
 The canonical `raw-recurrence-v1` recipe places `autoregressive_text_fixup`
 after the mapped text warm-up. The runner binds its `checkpoint.pt` and

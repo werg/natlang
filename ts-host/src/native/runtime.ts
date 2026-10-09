@@ -10,7 +10,7 @@ import { arrayToStringNeuralese, concatNeuralese, invokeWithReceiver, joinNeural
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
-import { TypeEnv, formatType, parseType, type Type } from './types.js';
+import { TypeEnv, containsRefinement, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
@@ -980,6 +980,11 @@ export class TranscriptView {
 
 export class NativeSession {
   completed = false;
+  /**
+   * Judges the refined slots (`Is<T, P>`) of a value before the session accepts it as the result or as a local. Set by
+   * the agent loop (native/agent.ts); a failure is `{ code, message }` and is reported to the model like a type error.
+   */
+  refinementCheck?: (value: Value, type: Type, path: string) => Promise<{ code: string; message: string } | undefined>;
   actions = 0;
   toolCalls = 0;
   readonly surfaceName = 'scope-eval-v2';
@@ -1787,6 +1792,10 @@ export class NativeSession {
     const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
       !Object.hasOwn(captureCells, 'decide');
     if (decideBinding) opaqueNames.push('decide');
+    // refine(value, predicate) / assume(value, predicate): the refinement helpers (Is<T, P>), unless the name is taken.
+    const refinementBinding = (name: string) => !taken(name) && !declaredHere(name) && !callableNames.includes(name) &&
+      !serviceNames.includes(name) && !Object.hasOwn(captureCells, name);
+    const refineBinding = refinementBinding('refine'), assumeBinding = refinementBinding('assume');
     // transcript: this call's earlier tool calls and their outputs, read-only, unless the name is taken (an input, a
     // local, a function of the call's folder, a service or a capture: theirs wins, as for read_code and decide).
     const transcriptBinding = !taken('transcript') && !callableNames.includes('transcript') && !serviceNames.includes('transcript') &&
@@ -1884,6 +1893,17 @@ export class NativeSession {
         const frame = currentFrame() ?? this.runtime.frame!;
         return import('../runtime/runtime.js').then(module => module.decideInFrame(frame, fn, args));
       },
+      refine: (value: unknown, predicate: string) => {
+        const frame = currentFrame() ?? this.runtime.frame!;
+        return import('../runtime/surface.js').then(module => runInFrame(frame, () => module.refine(value, predicate)));
+      },
+      assume: (value: unknown, predicate: string) => {
+        const text = typeof predicate === 'string' ? predicate.replace(/\s+/g, ' ').trim() : '';
+        if (!text) throw new Error('refinement-predicate-invalid: assume(value, predicate) takes a nonempty string predicate, for example "one line of at most 60 characters".');
+        const shown = oneLine(value as Value, undefined, this.runtime.displayLiveId);
+        this.runtime.trace.emit('refinement_assumed', { call_id: this.runtime.currentCallId ?? null, predicate: text, value: shown.slice(0, 400) });
+        return value;
+      },
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
       bindLocal: (name: string, get: () => unknown, set?: (value: unknown) => void) => {
         this.activeScopeLocals?.set(name, [get, set]);
@@ -1919,6 +1939,8 @@ export class NativeSession {
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
       ...(readCodeBinding ? ['const read_code = (input: string | { name: string }) => __live.readCode(input);'] : []),
+      ...(refineBinding ? ['const refine = (value: any, predicate: string) => __live.refine(value, predicate);'] : []),
+      ...(assumeBinding ? ['const assume = (value: any, predicate: string) => __live.assume(value, predicate);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
@@ -1998,6 +2020,18 @@ export class NativeSession {
         notResult = `\nThis is not a valid ${formatType(this.lam.type.returns)}, so it is not the result: ` +
           error.message;
       }
+      // A proposed result (or a staged local) with a refined type must satisfy its predicate before it is kept.
+      let refinementFailure: { code: string; message: string } | undefined;
+      if (this.refinementCheck) {
+        if (functionResult !== undefined && this.lam.type.kind === 'lambda') {
+          refinementFailure = await this.refinementCheck(functionResult, this.lam.type.returns, 'return');
+          if (refinementFailure) { functionResult = undefined; notResult = `\nThis is not the result: ${refinementFailure.code}: ${refinementFailure.message}`; }
+        }
+        for (const [name, type, value] of staged) {
+          const failure = containsRefinement(type, this.env) ? await this.refinementCheck(value, type, name) : undefined;
+          if (failure) throw new Reject([{ path: `let/${name}`, code: failure.code, expected: failure.message }]);
+        }
+      }
       const captureWrites: [string, unknown][] = [];
       for (const [name, value] of Object.entries(output.captures ?? {})) {
         const cell = captureCells[name];
@@ -2072,6 +2106,9 @@ export class NativeSession {
         }
         if (staged === undefined) return { kind: 'rejected', text: `${logStatus}${rendered}${storedStatus}\nreturn_result: this is not a valid ` +
           `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
+        const unrefined = this.refinementCheck ? await this.refinementCheck(staged, this.lam.type.returns, 'return') : undefined;
+        if (unrefined) return { kind: 'rejected', text: `${logStatus}${rendered}${storedStatus}\nreturn_result: this is not the result: ` +
+          `${unrefined.code}: ${unrefined.message}`, codes: [unrefined.code] };
         this.lam.return = staged;
         this.failureDebug = undefined;
         if (complete) {
@@ -2096,14 +2133,14 @@ export class NativeSession {
           const finishHint = notResult
             ? "\nCorrect this eval's value to match the declared result type; a previously staged value cannot finish this action."
             : '\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.';
-          return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:['missing-fresh-result']};
+          return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:[refinementFailure?.code ?? 'missing-fresh-result']};
         }
         // Finish with the staged value as checked above (computed values keep their extra fields), not a re-check.
         const done=this.scopeTool('return_result',{status:'success'});
         return {...done,text:logStatus+rendered+storedStatus+unsetStatus+'\n'+done.text};
       }
       return { kind: 'ok', text: logStatus + rendered + storedStatus + unsetStatus + status, value: (output.result ?? null) as Value,
-        ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
+        ...(refinementFailure ? { codes: [refinementFailure.code] } : compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
       // A failed eval (an error, a rejected value, its timeout) stops the natural-language calls it started.
       evalStop?.abort(new Error('the eval that started this call failed'));

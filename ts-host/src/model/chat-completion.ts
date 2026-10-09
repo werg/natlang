@@ -9,11 +9,24 @@ import type { DecisionScorer, ModelTurn, ModelTurnRequest } from '../contracts.j
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
-export type ChatTransport = (body: Json, signal?: AbortSignal) => Promise<AsyncIterable<Json> | Json>;
+export type ChatTransport = (body: Json, signal?: AbortSignal, meta?: ChatRequestMeta) => Promise<AsyncIterable<Json> | Json>;
+/**
+ * What a scheduling transport (model/scheduler.ts) may know about a request without reading its body: the call it
+ * belongs to, and a hook for what the scheduler decided. Never sent to the model. A plain transport ignores it.
+ */
+export type ChatRequestMeta = { invocation_id?: string; /** Re-sends of one turn count up from 0. */ retry?: number;
+  /** Turn number within the invocation, when the caller knows it (the scheduler counts requests otherwise). */ turn?: number;
+  /** Requests with the same group are sent next to each other (default: the request's system message). */ group?: string;
+  onScheduled?: (info: ScheduledInfo) => void };
+/** A scheduler's record of one request (see `ScheduleInfo` in scheduler.ts). */
+export type ScheduledInfo = { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number;
+  priority: 'running' | 'new' };
 
 export type ChatExchange = { request: ModelTurnRequest; wireRequest: Json; wireResponse: Json };
 export type ChatTurnStats = { durationMs: number; promptTokens: number | null; completionTokens: number | null;
-  cachedTokens: number | null; retries: number };
+  cachedTokens: number | null; retries: number; scheduling?: TurnScheduling };
+/** How the scheduler handled a turn's requests: the last request's batch, queue wait summed over retries. */
+export type TurnScheduling = { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number; priority: 'running' | 'new' };
 export type ChatCompletionOptions = {
   /** Extra request fields (sampling settings, template arguments). */
   request?: Json;
@@ -146,10 +159,12 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const started = Date.now();
     const counts = () => ({ ...(hasCompletion ? { completion_tokens: completionTokens } : {}),
       ...(hasPrompt ? { prompt_tokens: promptTokens } : {}) });
+    let scheduling: TurnScheduling | undefined;
     const finish = (turn: ModelTurn): ModelTurn => {
       options.onTurn?.({ durationMs: Date.now() - started, promptTokens: hasPrompt ? promptTokens : null,
-        completionTokens: hasCompletion ? completionTokens : null, cachedTokens: hasCached ? cachedTokens : null, retries });
-      return turn;
+        completionTokens: hasCompletion ? completionTokens : null, cachedTokens: hasCached ? cachedTokens : null, retries,
+        ...(scheduling ? { scheduling } : {}) });
+      return scheduling ? { ...turn, scheduling } : turn;
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');
@@ -175,7 +190,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         wireRequest.max_tokens = typeof configuredMax === 'number' ?
           Math.min(configuredMax, request.max_tokens) : request.max_tokens;
       await options.onRequestStart?.(request, retries);
-      const reply = await transport(wireRequest, signal);
+      const reply = await transport(wireRequest, signal, { ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
+        retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; } });
       const body = isStream(reply) ? await assembleChatCompletion(reply) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
       const choice = (body.choices as Json[] | undefined)?.[0];
@@ -250,10 +266,10 @@ export function requestLimit(size: number): RequestLimit {
   } };
 }
 export function limitedTransport(transport: ChatTransport, limit: RequestLimit): ChatTransport {
-  return async (body, signal) => {
+  return async (body, signal, meta) => {
     const release = await limit.acquire(signal);
     let result: AsyncIterable<Json> | Json;
-    try { result = await transport(body, signal); } catch (error) { release(); throw error; }
+    try { result = await transport(body, signal, meta); } catch (error) { release(); throw error; }
     if (!isStream(result)) { release(); return result; }
     const stream = result;
     return (async function* () { try { yield* stream; } finally { release(); } })();

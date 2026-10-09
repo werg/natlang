@@ -7,6 +7,8 @@
  * - Ordinary project files are type-checked, `nl` expressions are planned against the checker, and the
  *   emitted JavaScript calls the runtime through `__natlang`.
  */
+import { checkSequentialNlLoops } from './sequential-loops.js';
+import { refinedSlotsOf, type RefinedSlot } from './refined-slots.js';
 import ts from 'typescript';
 import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
@@ -111,7 +113,9 @@ export type DefinitionManifest = { version: typeof NATLANG_COMPILE_VERSION;
 export type BuildResult = { ok: boolean; diagnostics: NatlangDiagnostic[]; outputs: Record<string, string>;
   declarations: Record<string, string>; manifest: DefinitionManifest; outDir: string;
   /** Rewrites applied per emitted file (empty until a rule is enabled). */
-  rewrites?: Record<string, RewriteRecord[]> };
+  rewrites?: Record<string, RewriteRecord[]>;
+  /** Every `Is<T, "predicate">` slot of the named and inline functions and the predicate the runtime will check there. */
+  refinedSlots?: RefinedSlot[] };
 
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', '.git', '.natlang']);
 
@@ -384,6 +388,7 @@ export function compileProject(options: BuildOptions): BuildResult {
   }
   const sources = rootNames.map(path => program.getSourceFile(path)).filter((file): file is ts.SourceFile => !!file);
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
+  for (const file of sources) diagnostics.push(...checkSequentialNlLoops(file, source => rel(source.fileName)));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
   const readouts = new Map<ts.SourceFile, import('./neuralese.js').NeuraleseReadout[]>();
@@ -441,6 +446,19 @@ export function compileProject(options: BuildOptions): BuildResult {
     sites: [], adaptation: describeProgram(programId, optimizationSources, optimizationComponents, options.guidance, options.importedGuidancePrograms,
       options.services ? { declarations: Object.fromEntries(Object.entries(options.services.declarations).map(([name, text]) =>
         [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)])), scopes: options.services.scopes } : undefined) };
+  const refinedSlots: RefinedSlot[] = [];
+  const collectSlots = (level: Record<string, ItemRecord>) => {
+    for (const item of Object.values(level)) {
+      if (item.kind === 'natlang') refinedSlots.push(...refinedSlotsOf(item.source, item.name, item.args, item.returns, item.types));
+      collectSlots(item.codebase);
+    }
+  };
+  for (const record of namedRecords.values()) { collectSlots({ [record.name]: record }); }
+  for (const records of contextRecords.values()) collectSlots(records);
+  for (const plan of [...plans.values()].flat()) {
+    refinedSlots.push(...refinedSlotsOf(plan.sourceSpan.file, plan.definitionId, Object.fromEntries(plan.parameters.map(parameter => [parameter.name, parameter.type.text])),
+      plan.returns.text, {}));
+  }
   const ok = !diagnostics.some(item => item.severity === 'error');
   const outputs: Record<string, string> = {};
   const rewrites: Record<string, RewriteRecord[]> = {};
@@ -533,7 +551,8 @@ export function compileProject(options: BuildOptions): BuildResult {
     if (options.write !== false) fs.write?.(join(outDir, 'natlang-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
   diagnostics.sort((a, b) => a.file.localeCompare(b.file) || a.start - b.start);
-  return { ok: !diagnostics.some(item => item.severity === 'error'), diagnostics, outputs, declarations, manifest, outDir, rewrites };
+  return { ok: !diagnostics.some(item => item.severity === 'error'), diagnostics, outputs, declarations, manifest, outDir, rewrites,
+    ...(refinedSlots.length ? { refinedSlots } : {}) };
 }
 
 function walkNz(fs: ProjectFiles, root: string): string[] {
