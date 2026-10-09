@@ -83,6 +83,8 @@ export async function appCrisp(app) {
 export function withJudge(driver, truth = () => true) {
   const judged = [];
   driver.decide = async request => {
+    // A scripted model scores only the judge's true/false; any other readout falls back to an ordinary call.
+    if (request.options.length !== 2 || request.options[0] !== 'true' || request.options[1] !== 'false') throw new Error('decision-unsupported: the scripted model scores only true and false');
     const prompt = String(request.messages.at(-1).content);
     const value = /<<<value\n([^]*?)\nvalue>>>/.exec(prompt)?.[1] ?? '';
     const predicate = /Property: the value is (.*)\n/.exec(prompt)?.[1] ?? '';

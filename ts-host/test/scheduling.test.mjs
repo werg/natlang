@@ -183,7 +183,7 @@ test('the scheduler reads the request, builds candidates, ranks them by the wish
 
 test('the request adds a task, a hard limit and a commitment, which the verifier enforces', async () => {
   const workspace = new ScheduleWorkspace(day);
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const first = await plan(workspace, 'Add a workout, review not before 11', { run: run(runtime) });
   assert.equal(first.status, 'committed', first.detail);
   assert.equal(first.plan.length, 3);
@@ -198,7 +198,7 @@ test('the request adds a task, a hard limit and a commitment, which the verifier
 });
 
 test('the natural-language enumeration is selected by a setting and gives the same plan as the exact one', async () => {
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const exact = await plan(new ScheduleWorkspace(day), 'Draft early', { run: run(runtime), enumeration: 'crisp' });
   const model = plannerModel();
   const natural = await plan(new ScheduleWorkspace(day), 'Draft early',
@@ -224,7 +224,7 @@ test('a near-miss from natural-language construction is repaired, and the verifi
 
 test('unclear requests return questions, impossible ones are diagnosed, and nothing is committed', async () => {
   const workspace = new ScheduleWorkspace(day);
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const unclear = await plan(workspace, 'Fit in something', { run: run(runtime) });
   assert.equal(unclear.status, 'unclear');
   assert.match(unclear.detail, /How long/);
