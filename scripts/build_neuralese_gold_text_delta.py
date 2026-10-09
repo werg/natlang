@@ -218,6 +218,8 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
         source_ref = record.get("source_ref") or {}
         receipts = source_ref.get("provider_expanded_read_contexts") or []
         metadata = []
+        record_bindings = []
+        context_omissions = []
         for receipt in receipts:
             if receipt.get("origin") not in {"same-run-producer", "configured-function-definition"}: continue
             block, write = receipt.get("block") or {}, receipt.get("producer_write") or {}
@@ -309,8 +311,27 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                         "writer_target_selected": False, "learner_representation": "runtime-definition-context-only",
                         "learned_vectors": False, "qualification_certificate": False,
                         "training_admission": False}
-                bindings.append({"record_id": record.get("id"), **item})
+                record_bindings.append({"record_id": record.get("id"), **item})
                 metadata.append(item)
+                continue
+            if (receipt.get("writer_target_selected") is False
+                    and receipt.get("writer_witness") is None
+                    and block.get("type") == "Neuralese<string>"):
+                # Keep the authenticated native action available to native
+                # review, but quarantine its text row because the reader edge
+                # cannot be grounded to a validated producer witness. This is
+                # a row-scoped omission; it must not abort unrelated records.
+                context_omissions.append({
+                    "reason": "missing_authenticated_writer_witness",
+                    "block_id": block_id,
+                    "body_sha256": body_hash,
+                    "invocation_id": required["invocation_id"],
+                    "source_row_sha256": required["source_row_sha256"],
+                    "trace_sha256": receipt.get("trace_sha256"),
+                    "transport_provenance_sha256": required["transport_provenance_sha256"],
+                    "source_request_sha256": required["source_request_sha256"],
+                    "source_response_sha256": required["source_response_sha256"],
+                })
                 continue
             if (receipt.get("writer_target_selected") is not False
                     or not isinstance(receipt.get("writer_witness"), dict)
@@ -345,12 +366,19 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                 "learned_vectors": False, "qualification_certificate": False, "training_admission": False,
             }
             metadata.append(item)
-            bindings.append({"record_id": record.get("id"), **item,
-                             "provider_body_sha256": body_hash,
-                             "provider_source_writer_call_id": write.get("call_id"),
-                             "provider_source_writer_class": receipt.get("writer_source_class")})
+            record_bindings.append({"record_id": record.get("id"), **item,
+                                    "provider_body_sha256": body_hash,
+                                    "provider_source_writer_call_id": write.get("call_id"),
+                                    "provider_source_writer_class": receipt.get("writer_source_class")})
+        if context_omissions:
+            record["_text_context_omissions"] = context_omissions
+            bindings.append({"record_id": record.get("id"),
+                             "status": "omitted_unbound_provider_context",
+                             "omissions": context_omissions})
+        else:
+            bindings.extend(record_bindings)
         existing = ((record.get("neuralese_conversion") or {}).get("external_context_inputs") or [])
-        if metadata:
+        if metadata and not context_omissions:
             record["neuralese_conversion"] = {**(record.get("neuralese_conversion") or {}),
                 "external_context_inputs": [*existing, *metadata]}
     return bindings
@@ -813,7 +841,8 @@ def main():
     # only to the real, previously derived base packet.
     for anchor in anchors:
         rendered, helper_receipt, omissions, provenance = gold_text_rows(
-            [*delta_records, anchor], pieces, tokenizer=tokenizer,
+            [*(r for r in delta_records if not r.get("_text_context_omissions")), anchor],
+            pieces, tokenizer=tokenizer,
             require_independent_splits=False)
         qualification = anchor_qualification(anchor, rendered, omissions, helper_receipt)
         anchor_attempts.append({"id": anchor.get("id"),
@@ -828,6 +857,10 @@ def main():
 
     additions, coverage = [], []
     delta_omissions = selected_delta_omissions(omissions, delta_ids)
+    for original in delta_records:
+        for item in original.get("_text_context_omissions", []):
+            delta_omissions.append({"id": original["id"], **item,
+                                    "source_record_sha256": original["_source_record_sha256"]})
     omission_by_id = {r["id"]: r for r in delta_omissions}
     # Rows are already de-duplicated by the shared gold-text helper.
     for row in rendered:
@@ -856,7 +889,10 @@ def main():
             continue  # the temporary held-test anchor is not part of this delta
         original = next(r for r in delta_records if r["id"] == rid)
         coverage.append({"record_id": rid, "source_ids": original.get("source_ids", []),
-                         "status": "omitted_by_shared_text_renderer", "reason": omission,
+                         "status": ("omitted_unbound_provider_context"
+                                    if omission.get("reason") == "missing_authenticated_writer_witness"
+                                    else "omitted_by_shared_text_renderer"),
+                         "reason": omission,
                          "source_record_sha256": original["_source_record_sha256"]})
         covered.add(rid)
     if covered != delta_ids:
