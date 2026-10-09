@@ -164,7 +164,7 @@ class Store:
                 baseline = max(baseline, message['received_at'])
         archive = self.root / 'archive'
         archive.mkdir(exist_ok=True)
-        legacy.rename(archive / f'legacy-inbox-{now():%Y%m%d}.md')
+        legacy.rename(archive / f'legacy-inbox-{stamp()}.md')   # never overwrite an earlier archive
         for retired in ('seen.json', 'inbox.lock'):
             (self.root / retired).unlink(missing_ok=True)
         self.save_cursor(f'{self.machine}-agent', {'since': baseline, 'read': []})
