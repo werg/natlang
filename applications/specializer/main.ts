@@ -44,9 +44,19 @@ export function targets(store: CallStore, options: Options, self: string | null)
 }
 
 /** The runtime the reducer runs in: the launcher's model, with the store as the `traces` service. */
+/** One reducer call's budget: a function whose evidence cannot be settled in this much work is declined for now. */
+const REDUCER_LIMITS = { maxActions: 250, timeoutMs: 90 * 60_000 };
+
+/** Whether a reducer call stopped on its budget (actions, episodes or time), not on a failure around it. */
+function exhausted(error: unknown): boolean {
+  const outcome = (error as { outcome?: string } | null)?.outcome;
+  const message = error instanceof Error ? error.message : String(error);
+  return outcome === 'budget' || /budget exhausted|timed out/.test(message) && !/ECONN|fetch failed|model request/.test(message);
+}
+
 function reducerRuntime(context: TargetContext, store: CallStore): NatlangRuntime {
   return createNatlangRuntime({ model: context.model, executorIdentity: context.executorIdentity, programRoot: context.package?.root,
-    services: { traces: tracesService(store) }, serviceDeclarations: { traces: TRACES_DECLARATIONS } });
+    services: { traces: tracesService(store) }, serviceDeclarations: { traces: TRACES_DECLARATIONS }, limits: REDUCER_LIMITS });
 }
 
 /** Specialize one definition revision: at most `rounds` rounds of write, verify, report. */
@@ -67,7 +77,16 @@ export async function specializeOne(context: TargetContext, store: CallStore, ke
     const files: Record<string, string> = Object.fromEntries(Object.entries(evidence).map(([path, body]) => [`evidence/${path}`, String(body)]));
     if (text) files['cases.ts'] = text;
     const workspace = Folder.fromFiles(files);
-    const result = await reducerRuntime(context, store).run(() => workspace.root().apply(specialize, name)) as SpecializeResult;
+    let result: SpecializeResult;
+    try { result = await reducerRuntime(context, store).run(() => workspace.root().apply(specialize, name)) as SpecializeResult; }
+    catch (error) {
+      // A reducer that runs out of its budget leaves the function to the agent; it is looked at again when its call
+      // volume doubles or its revision changes, not on every pass. Other failures (the model unreachable) are retried.
+      if (!exhausted(error)) throw error;
+      const why = `round ${round}: the reducer did not finish: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`;
+      if (!options.dryRun) store.decline({ definitionKey: key, definitionId: subject.definition.id, reason: 'budget', why, calls: subject.examples.length });
+      return `${name}: declined (budget: ${why})`;
+    }
     if (result.kind === 'declined') {
       if (!options.dryRun) store.decline({ definitionKey: key, definitionId: subject.definition.id, reason: result.reason, why: result.why, calls: subject.examples.length });
       return `${name}: declined (${result.reason}: ${result.why})`;

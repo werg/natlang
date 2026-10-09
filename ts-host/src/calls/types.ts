@@ -105,5 +105,5 @@ export type CompilationRow = { id: string; definition_key: string; definition_id
   interface_hash: string; program_root: string | null; folder_hash: string; parent_id: string | null; created_at: string;
   status: 'current' | 'superseded' | 'disabled'; files: Record<string, string> };
 
-export type DeclineReason = 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it';
+export type DeclineReason = 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it' | 'budget';
 export type DeclineRow = { definition_key: string; definition_id: string; reason: DeclineReason; why: string; calls_at_decline: number; created_at: string };
