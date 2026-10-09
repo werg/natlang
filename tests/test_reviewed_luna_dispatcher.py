@@ -350,6 +350,53 @@ def test_graceful_stop_signals_active_supervisor_once_and_holds_claim(reviewed_p
     assert any(row.get('event') == 'abandoned' and row.get('index') == 0 for row in events)
 
 
+def test_drain_marker_preserves_active_runner_and_leaves_later_cases_unclaimed(reviewed_plan, monkeypatch):
+    _mock_controls(monkeypatch)
+    plan_path, plan_sha, campaign_root, plan = reviewed_plan
+    plan['slots'] = 1
+    plan['cases'] = plan['cases'][:2]
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    plan_sha = dispatcher.digest(plan_path)
+    made = []
+
+    class FakeRunner:
+        def __init__(self, command, **kwargs):
+            self.queue, self.entry, self.journal = _entry_for_queue(command)
+            self.pid = 82818
+            self.polls = 0
+            made.append(self)
+        def poll(self):
+            self.polls += 1
+            if self.polls == 1:
+                Path(self.queue).parents[3].joinpath('drain.requested').touch()
+                return None
+            with Path(self.journal).open('a') as stream:
+                stream.write(json.dumps({'event': 'finish', 'key': self.entry['key'], 'status': 'complete',
+                                         'exit_code': 0, 'output_accounting': {'complete': True}}) + '\n')
+            return 0
+        def terminate(self):
+            raise AssertionError('drain must not terminate an active runner')
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(dispatcher.subprocess, 'Popen', FakeRunner)
+    assert dispatcher.run_dispatcher(plan_path, plan_sha) == 0
+    assert len(made) == 1 and made[0].polls >= 2
+    launch = json.loads((campaign_root / 'dispatch/launch.json').read_text())
+    assert launch['status'] == 'drained'
+    assert launch['pending_indices'] == [1]
+    events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
+    assert [row['index'] for row in events if row.get('event') == 'claim'] == [0]
+    assert any(row.get('event') == 'campaign_draining' and row.get('active_indices') == [0]
+               for row in events)
+    assert any(row.get('event') == 'campaign_drained' and row.get('pending_indices') == [1]
+               for row in events)
+    _, identity = dispatcher.validate_plan(plan_path, plan_sha)
+    identity['identity_sha256'] = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    dispatcher._verify_ledger_events(events, identity)
+
+
 def test_spawned_runner_is_owned_before_runner_started_ledger_write(reviewed_plan, monkeypatch):
     _mock_controls(monkeypatch)
     plan_path, plan_sha, campaign_root, plan = reviewed_plan

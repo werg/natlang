@@ -299,7 +299,8 @@ def _verify_ledger_events(events, identity):
             if (type(row.get('free_mib')) is not int or type(row.get('min_free_mib')) is not int
                     or row['free_mib'] < 0 or row['min_free_mib'] < 0):
                 raise ValueError('Invalid storage pause/resume event')
-        elif event not in {'campaign_stopped', 'campaign_finished', 'dispatcher_error'}:
+        elif event not in {'campaign_stopped', 'campaign_finished', 'campaign_draining',
+                           'campaign_drained', 'dispatcher_error'}:
             raise ValueError(f'Unknown claim ledger event type: {event!r}')
     open_slots = set()
     for claim_id, claim in claims.items():
@@ -433,6 +434,16 @@ def _set_launch_status(path, identity, status, **extra):
     record['status'] = status
     record.update(extra)
     atomic_json(path, record)
+
+
+def _drain_marker(identity):
+    """Marker that stops future claims while allowing active runners to finish.
+
+    Create ``<campaign_root>/drain.requested`` to drain a live dispatcher.
+    Draining records unclaimed indices and does not signal active runners.
+    Remove the marker before an explicit resume of that campaign.
+    """
+    return Path(identity['campaign_root']) / 'drain.requested'
 
 
 def _claim_queue(plan, identity, slot, case):
@@ -581,6 +592,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
         all_children = list(active.values())
         termination_sent = set()
         storage_paused = False
+        draining = False
 
         def terminate_once(process):
             pid = process.pid
@@ -590,11 +602,23 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
 
         try:
             while next_case < len(cases) or active:
+                if not draining and _drain_marker(identity).exists():
+                    draining = True
+                    pending_indices = [case['index'] for case in cases[next_case:]]
+                    _append_event(ledger, {'event': 'campaign_draining',
+                                           'identity_sha256': identity['identity_sha256'],
+                                           'requested_at': _now(),
+                                           'pending_indices': pending_indices,
+                                           'active_indices': [claim['index'] for _, claim in active.values()],
+                                           'disposition': 'stop new claims; allow active runners to finish'})
+                    _set_launch_status(launch_record, identity, 'draining',
+                                       drain_marker=str(_drain_marker(identity)),
+                                       pending_indices=pending_indices)
                 if _stop_requested:
                     for process, claim in active.values():
                         terminate_once(process)
                 for slot in range(1, identity['slots'] + 1):
-                    if _stop_requested or next_case >= len(cases):
+                    if _stop_requested or draining or next_case >= len(cases):
                         break
                     if slot in active:
                         continue
@@ -669,6 +693,20 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                         continue
                 for slot in finished_slots:
                     del active[slot]
+                if draining and not active and next_case < len(cases):
+                    pending_indices = [case['index'] for case in cases[next_case:]]
+                    _append_event(ledger, {'event': 'campaign_drained',
+                                           'identity_sha256': identity['identity_sha256'],
+                                           'drained_at': _now(),
+                                           'pending_indices': pending_indices,
+                                           'disposition': 'active runners finished; unclaimed cases preserved'})
+                    atomic_json(launch_record, {'status': 'drained', 'identity': identity,
+                                                'drained_at': _now(),
+                                                'drain_marker': str(_drain_marker(identity)),
+                                                'pending_indices': pending_indices,
+                                                'ledger': str(ledger)})
+                    _authority_update(identity)
+                    return 0
                 if active:
                     time.sleep(1)
                 elif next_case < len(cases) and not _stop_requested:
