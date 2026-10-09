@@ -131,3 +131,7 @@ export function assume(value: unknown, predicate?: string): unknown {
     value: shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown, value_sha256: hexDigest(shown) });
   return value;
 }
+
+/** Host and application helper: one entry point over a crisp and a natural-language implementation (see ./pluggable.ts). */
+export { pluggable } from "./pluggable.js";
+export type { PluggableMode, PluggableImplementations, PluggableOptions } from "./pluggable.js";

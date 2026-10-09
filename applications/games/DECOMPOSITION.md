@@ -178,6 +178,7 @@ written in the code, which carries them as doc comments and crisp checks; each i
 - **A helper two items need** (`economy/ledger.ts`) is both a child of `economy` (so `economy` sees it as a callable)
   and reached by `settle/policy` through `uses`. It cannot be hidden from the economy's eval scope.
 - **No refinement types yet**, so all constraints in "Refinements" are doc comments plus the commit checks.
-- **No shadow comparison** (NL against crisp on the same input, disagreements recorded) between the two
-  implementations of a pluggable part; plans/REFINEMENT_TYPES.md describes it for refinements and it would apply
-  here. The tests compare them on fixed scenarios.
+- **Shadow comparison** of the two implementations of a pluggable part is `pluggable(..., 'shadow')` from
+  `@natlang/node`: set `validate`, `settle` or `resolve` to `'shadow'` and each call runs both, serves the
+  natural-language result and records a `pluggable_shadow` event with `agree`. `remember` and `narrate` have no
+  comparable crisp result (the crisp side is a degraded form), so they stay two-valued.

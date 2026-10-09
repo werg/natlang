@@ -1,5 +1,5 @@
 /** Which implementation runs a pluggable part: its natural-language function, or its crisp reference. */
-export type Engine = 'nl' | 'crisp';
+export type Engine = 'nl' | 'crisp' | 'shadow';
 
 /**
  * Which implementation each pluggable part uses. The parts that run for every actor of every turn have two

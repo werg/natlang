@@ -234,6 +234,20 @@ test('the crisp implementations settle the same tick the same way, whatever orde
   assert.match(crispRun.narration, /alice bought 2 apple from bob for 6\./);
 });
 
+test('shadow mode runs both implementations of a pluggable part, serves the natural-language one and records agreement', async () => {
+  const traces = [];
+  const model = gameModel();
+  const runtime = createNatlangRuntime({ model: model.driver, trace: trace => traces.push(trace) });
+  const shadow = { validate: 'shadow', settle: 'shadow', resolve: 'shadow', remember: 'nl', narrate: 'nl' };
+  const report = await runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, shadow));
+  assert.equal(report.ok, true, report.problem);
+  assert.equal(balance(report.state, 'alice').goods.apple, 2);
+  const shadows = traces.flatMap(trace => trace.events).filter(event => event.kind === 'pluggable_shadow');
+  assert.deepEqual(new Set(shadows.map(event => event.name)), new Set(['economy.validate', 'economy.settle']));
+  assert.ok(shadows.length >= 4, 'one validation per merchant and one settlement');
+  assert.ok(shadows.every(event => event.served === 'nl' && event.agree === true), JSON.stringify(shadows));
+});
+
 test('a contested good goes to the merchant the seed puts first, and the loser is rejected with a reason', async () => {
   const state = createEconomy([...MERCHANTS.slice(0, 2), { id: 'dan', cash: 10, goods: { apple: 0 }, offers: {} }, MERCHANTS[2]], { seed: 5 });
   const choose = actor => actor === 'alice' || actor === 'dan' ? { kind: 'buy', seller: 'bob', good: 'apple', quantity: 2 } : { kind: 'pass' };
