@@ -74,27 +74,27 @@ The executors are small models, so each function spells its algorithm as numbere
 ## Refinement candidates
 
 Constraints now written as instructions or checked by hand that should become types
-(`Is<T, "...">`, `Untrusted<T>`; plans/REFINEMENT_TYPES.md). Not used in code yet.
+(`Is<T, "...">`, `Untrusted<T>`; plans/REFINEMENT_TYPES.md). Status: `adopted` rows are in code; `open` rows are not yet. `WikiUpdate.text` is `Untrusted<string>` in `types.ts`; `prepare` marks each update's text `wiki update <id>`.
 
-| Slot | Proposed type |
-|---|---|
-| `WikiUpdate.text` and any text read from a page or an update, shown to the model | `Untrusted<string>` |
-| `Change.intent` | `Is<string, "one sentence saying what the block should say or do after the update">` |
-| `Change.adds`, `Change.removes` | `Is<string[], "short phrases, each a statement the text has that the other lacks">` |
-| `Change.text` | `Is<string, "the update's text, copied exactly">` |
-| `PlanStep.update_ids` | `Is<string[], "IDs of changes to this block, each ID in exactly one step">` |
-| `Merged.text` (prose) | `Is<string, "carries every add of the given changes and keeps every sentence none of them touched">` |
-| `Merged.text` (cell) | `Is<string, "a complete function body that returns a value of the cell's return type on every path">` |
-| `Merged` when `clear` is false | `Is<string, "equal to the block's base text">` |
-| `BlockOutcome.accounted` | `Is<string[], "every update ID of the block once, sorted">` |
-| `MergeDraft.blocks` | `Is<WikiBlock[], "the base blocks' IDs in the base order">` |
-| `Conflict.alternatives` | `Is<string[], "the text of every update in the conflict, in update ID order">` |
-| `Section.id` | `Is<string, "the lower-case slug of the title, with -2, -3 for repeats">` |
-| `LinkStatus.resolves_to` | `Is<string \| null, "an existing section ID or block ID, null unless status is ok or renamed">` |
-| `WikiUpdate` from `maintain` (repairs) | `Is<WikiUpdate, "changes only link targets">` |
-| `CellRequest.input` for `origin: "auto"` | `Is<string, "taken from a recorded request">` |
-| `CellPlan.batches` | `Is<CellRun[][], "no run reads the result of a run in the same or a later batch">` |
-| `Dependency.cells` | `Is<string[], "IDs of cell blocks of this page">` |
+| Slot | Proposed type | Status |
+|---|---|---|
+| `WikiUpdate.text` and any text read from a page or an update, shown to the model | `Untrusted<string>` | adopted |
+| `Change.intent` | `Is<string, "one sentence saying what the block should say or do after the update">` | open |
+| `Change.adds`, `Change.removes` | `Is<string[], "short phrases, each a statement the text has that the other lacks">` | open |
+| `Change.text` | `Is<string, "the update's text, copied exactly">` | open |
+| `PlanStep.update_ids` | `Is<string[], "IDs of changes to this block, each ID in exactly one step">` | open |
+| `Merged.text` (prose) | `Is<string, "carries every add of the given changes and keeps every sentence none of them touched">` | open |
+| `Merged.text` (cell) | `Is<string, "a complete function body that returns a value of the cell's return type on every path">` | open |
+| `Merged` when `clear` is false | `Is<string, "equal to the block's base text">` | open |
+| `BlockOutcome.accounted` | `Is<string[], "every update ID of the block once, sorted">` | open |
+| `MergeDraft.blocks` | `Is<WikiBlock[], "the base blocks' IDs in the base order">` | open |
+| `Conflict.alternatives` | `Is<string[], "the text of every update in the conflict, in update ID order">` | open |
+| `Section.id` | `Is<string, "the lower-case slug of the title, with -2, -3 for repeats">` | open |
+| `LinkStatus.resolves_to` | `Is<string \| null, "an existing section ID or block ID, null unless status is ok or renamed">` | open |
+| `WikiUpdate` from `maintain` (repairs) | `Is<WikiUpdate, "changes only link targets">` | open |
+| `CellRequest.input` for `origin: "auto"` | `Is<string, "taken from a recorded request">` | open |
+| `CellPlan.batches` | `Is<CellRun[][], "no run reads the result of a run in the same or a later batch">` | open |
+| `Dependency.cells` | `Is<string[], "IDs of cell blocks of this page">` | open |
 
 Prompt guards removed from the old `reconcile.nl`: "return runnable source only if the combined meaning is clear;
 otherwise keep the old source and record a conflict" is now the `clear` flag of `Merged` (refinement above), and

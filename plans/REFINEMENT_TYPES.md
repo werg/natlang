@@ -250,3 +250,10 @@ Done after the first push:
 
 Remaining: the browser call-store worker protocol does not carry verdicts; verdict-table eviction (rows are tiny and keyed
 by content, so none yet).
+
+Done, `Untrusted<T>` (step 5): the `untrusted` type kind (`native/types.ts`; parse, format, fit), provenance registry and data-block
+renderer (`native/untrusted.ts`, used by `renderValue`), entry through `refinements.services`, typed arguments and captures,
+and `untrusted(value, source)`; the compile error `untrusted-instruction` (`compiler/inline.ts`) for `${}` in an inline `nl`
+template, including text built from an untrusted expression (`.nl` bodies splice nothing); the TypeScript brand in
+`intrinsics.ts`/`surface.ts` and the import in generated `.d.nl.ts`. Adopted in `applications/logs` and `applications/wiki`.
+Not done: eval-time one-shot ``nl(`${x}`)`` is not checked; derived strings lose their label at run time.

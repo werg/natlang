@@ -87,8 +87,10 @@ function logModel(overrides = {}) {
     const stage = /inside this call: (\w+)\(/.exec(text)?.[1];
     seen.push(stage);
     let winner;
-    if (stage === 'judge') winner = /message: "[^"]*(?:test|probe ok)[^"]*"/.test(text) ? 'ignore' : /message: "[^"]*(?:failed|timed out)[^"]*"/.test(text) ? 'watch' : 'ignore';
-    else if (stage === 'kin') winner = /service: "(\w+)"/.exec(text)?.[1] && text.includes('services: ["' + /service: "(\w+)"/.exec(text)[1] + '"') ? 'same' : 'different';
+    // A message is Untrusted<string>: the model reads it as a fenced data block (the messages are JSON here, so a newline is a backslash and n).
+    const messageWith =words => new RegExp('message: (?:\\\\n)?`{3,}untrusted data from [^\\\\]*\\\\n[^\\\\]*(?:' + words + ')');
+    if (stage === 'judge') winner = messageWith('test|probe ok').test(text) ? 'ignore' : messageWith('failed|timed out').test(text) ? 'watch' : 'ignore';
+    else if (stage === 'kin') winner =/service: "(\w+)"/.exec(text)?.[1] && text.includes('services: ["' + /service: "(\w+)"/.exec(text)[1] + '"') ? 'same' : 'different';
     else winner = 'high';
     return { log_probs: options.map(option => Math.log(option === JSON.stringify(winner) ? 0.9 : 0.1 / (options.length - 1))) };
   };

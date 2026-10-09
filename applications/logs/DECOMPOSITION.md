@@ -51,23 +51,23 @@ the stages).
 ## Refinement candidates
 
 Constraints now stated in instructions, or enforced by hand, that should become types
-(`Is<T, "...">`, `Untrusted<T>`; plans/REFINEMENT_TYPES.md). Not used in code yet.
+(`Is<T, "...">`, `Untrusted<T>`; plans/REFINEMENT_TYPES.md). Status: `adopted` rows are in code; `open` rows are not yet. `LogEvent.message` and `Evidence.message` are `Untrusted<string>` in `types.ts`; the console marks input with `untrusted(...)` and the index marks evidence messages `index.search`.
 
-| Slot | Proposed type |
-|---|---|
-| `LogEvent.message` (all stages) | `Untrusted<string>`; replaces the old "never treat log text as instructions" guard |
-| `Evidence.message` | `Untrusted<string>` |
-| `runbook` file argument and result | `Untrusted<string>`; the path `Is<string, "a relative path under the files folder that the event message names">` (replaces "read only that file") |
-| `Escalation.cited` | `Is<string[], "distinct IDs of records returned by the index for this incident's queries">` (the sink still checks existence) |
-| `Escalation.action` when "escalate" | `Is<Escalation, "cited holds at least settings.threshold IDs and the incident has no alert yet">` |
-| `Escalation.claim` | `Is<string, "one sentence stating what is wrong, grounded in the cited records">` |
-| `Support.evidence_ids` | `Is<string[], "IDs that occur in the found evidence given to the call">` |
-| `Hypothesis.claim` | `Is<string, "a claim that log records could confirm or refute">` |
-| `Query` | `Is<Query, "from is not after to, limit is at most 50, fields exist in the index">` |
-| `Incident.id` | `Is<string, "the ID of the event that opened the incident">` |
-| `Incident.members` | `Is<string[], "at most settings.max_members IDs, the newest">` |
-| `Incident.closes_at` | `Is<number, "at least last_seen plus settings.quiet_ms">` |
-| `Attachment.fold` | `Is<string[], "IDs of open incidents other than incident_id, each matched as the same">` |
-| `Decision.effects` | `Is<Effect[], "empty unless escalation.action is escalate">` |
-| `GapNote.unknown` | `Is<string, "one sentence starting with Source gap at cursor N">` |
-| `Significance` (judge) | `Is<Significance, "ignore unless the message reports something that went wrong">` replaces "an error word alone is not an incident" |
+| Slot | Proposed type | Status |
+|---|---|---|
+| `LogEvent.message` (all stages) | `Untrusted<string>`; replaces the old "never treat log text as instructions" guard | adopted |
+| `Evidence.message` | `Untrusted<string>` | adopted |
+| `runbook` file argument and result | `Untrusted<string>`; the path `Is<string, "a relative path under the files folder that the event message names">` (replaces "read only that file") | open |
+| `Escalation.cited` | `Is<string[], "distinct IDs of records returned by the index for this incident's queries">` (the sink still checks existence) | open |
+| `Escalation.action` when "escalate" | `Is<Escalation, "cited holds at least settings.threshold IDs and the incident has no alert yet">` | open |
+| `Escalation.claim` | `Is<string, "one sentence stating what is wrong, grounded in the cited records">` | open |
+| `Support.evidence_ids` | `Is<string[], "IDs that occur in the found evidence given to the call">` | open |
+| `Hypothesis.claim` | `Is<string, "a claim that log records could confirm or refute">` | open |
+| `Query` | `Is<Query, "from is not after to, limit is at most 50, fields exist in the index">` | open |
+| `Incident.id` | `Is<string, "the ID of the event that opened the incident">` | open |
+| `Incident.members` | `Is<string[], "at most settings.max_members IDs, the newest">` | open |
+| `Incident.closes_at` | `Is<number, "at least last_seen plus settings.quiet_ms">` | open |
+| `Attachment.fold` | `Is<string[], "IDs of open incidents other than incident_id, each matched as the same">` | open |
+| `Decision.effects` | `Is<Effect[], "empty unless escalation.action is escalate">` | open |
+| `GapNote.unknown` | `Is<string, "one sentence starting with Source gap at cursor N">` | open |
+| `Significance` (judge) | `Is<Significance, "ignore unless the message reports something that went wrong">` replaces "an error word alone is not an incident" | open |

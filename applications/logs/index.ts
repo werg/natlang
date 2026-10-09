@@ -4,7 +4,7 @@
  * pure bounded `commit` of a decision into the incident state, and `step`, which folds one event:
  * snapshot, decide (model calls), carry out the effects as data, commit.
  */
-import type { FolderHandle } from '@natlang/node';
+import { untrusted, type FolderHandle } from '@natlang/node';
 import investigate from './investigate.nl';
 import type { Alert, ClosedIncident, Decision, Effect, Evidence, Incident, IncidentState, LogEvent, LogSettings, Observation,
   SearchQuery, SearchResult } from './types.js';
@@ -19,7 +19,7 @@ export const emptyIncidentState = (): IncidentState =>
 
 /** What the model learns of the index service. */
 export const indexDeclaration = `/** Search the exact log index. Every field given must match; contains is a case-insensitive substring of the message; from and to are inclusive event times. total counts all matches, evidence holds the first limit by event time. */
-export function search(query: { service?: string, code?: string, level?: string, contains?: string, from: number, to: number, limit: number }): Promise<{ total: number, evidence: { id: string, service: string, code: string, occurred_at: number, level: string, message: string }[] }>;`;
+export function search(query: { service?: string, code?: string, level?: string, contains?: string, from: number, to: number, limit: number }): Promise<{ total: number, evidence: { id: string, service: string, code: string, occurred_at: number, level: string, message: Untrusted<string> }[] }>;`;
 
 /** The exact index of log lines: event time and arrival time kept apart, ingest by unique ID, windowed search. */
 export class LogIndex {
@@ -59,7 +59,7 @@ export class LogIndex {
       row.occurred_at >= query.from && row.occurred_at <= query.to)
       .sort((a, b) => a.occurred_at - b.occurred_at || a.id.localeCompare(b.id));
     const evidence: Evidence[] = matches.slice(0, Math.max(0, query.limit)).map(row =>
-      ({ id: row.id, service: row.service, code: row.code, occurred_at: row.occurred_at, level: row.level, message: row.message }));
+      ({ id: row.id, service: row.service, code: row.code, occurred_at: row.occurred_at, level: row.level, message: untrusted(row.message, 'index.search') }));
     if (record) this.events.push({ operation: 'logs.query', query, ids: evidence.map(row => row.id) });
     return { total: matches.length, evidence };
   }
