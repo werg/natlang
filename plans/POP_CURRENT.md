@@ -1,6 +1,6 @@
 # Pop current work
 
-Last reviewed: 2026-10-09 11:06 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Last reviewed: 2026-10-09 11:56 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 
 ## Ownership and coordination
 
@@ -17,9 +17,9 @@ Recipe: [luna-foundation-text-4880-continuation-from-repair-best-20261009-v1.jso
 Output: `/srv/storage/natlang-artifacts/neuralese-foundation-text-4880-continuation-20261009-v1/direct-stage-run/foundation_text_continuation`.
 
 - Full-state continuation from repair best1280: model, distinct full/sketch projections, Muon/AdamW optimizer, schedule and RNG restored. It uses all 4880 admitted target-bound text documents, not the old 87-document repair subset. Absolute step cap4096; no automatic qualification from completing steps.
-- Latest observed evaluation/current checkpoint1792; best receipt1664. Inspect `best-checkpoint.json`, not training log progress, to choose saved weights. GPU approximately100%,4939MiB of8188MiB.
-- Eval1792 full/shallow raw-embedding relativeMSE .1262/.5858; repeated-pass excessCE .820/1.251. Alignment gate **false**. Both projections train against raw next-token embeddings; backbone adaptation is active; three sequence passes use shifted projected outputs.
-- Full-depth projected autoregression matched crisp on one256-token control at1664 but diverged at index3 at1792; crisp remained exact. The narrow success is unstable. Sketch autoregression remains poor. Do not treat this as qualification or move to recurrence merely because text warm-up reached its cap.
+- Latest observed evaluation/current/best checkpoint2560. GPU approximately100%,4943MiB of8188MiB. Inspect saved checkpoint receipts before selecting weights.
+- Held full/shallow raw-embedding relativeMSE .1210/.5396; long-tail repeated-pass excessCE .618/.964 and agreement .870/.810. Alignment gate **false**; improving held metrics do not yet qualify recurrence.
+- One256-token full-depth projected autoregressive control is exact at2560, but earlier saved checkpoints alternated between exact and divergence at index3. This is a fixed control, not randomized window selection. Sketch autoregression remains poor. New shared diagnostics fingerprint control windows and distinguish preceding feedback from current emitted payload; the active frozen runtime predates those additions.
 - Next: monitor held metrics and storage; diagnose exact-best foundation functionality if improvement stalls. Qualify runtime transport/gradient replay separately against the actual selected weights before recurrence.
 
 ### Shutdown and storage
@@ -36,14 +36,14 @@ Available space approximately root14GiB / external5.7GiB, including a1.436GB che
 
 Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
-- All five queue runners and provider activity confirmed. Three Bridge/River/Emergency train sources explicitly use bound v6 criterion/evidence skills; two original Archive/Wetland train controls.
-- Exact source/skill proofSHA `5939dc1fabc50187a85577e3f8ee8aa6e548d2dc44ac8ba4a90e2fff1b75e25b`; planSHA `aaf075d1cd9039fb23b8873f2aa419c6576a9e1db352ef83913722821bcccdb6`.
-- Active plan's statement that root code is unchanged is corrected separately in `campaign-live-v1/source-provenance-correction-v1.json`: diagnostic prompt code changed; facts/oracles/groups/splits did not. This tests combined skill and explicit-use treatment, not skill-only causal effect. Controls have pinned original oracle references; their fresh generic fake fixture was incompatible with a Neuralese marker and did not pass runtime replay.
+- Three five-case waves have completed; latest wave3 reseeds all five source-bound train cases passed their runtime outcomes. Results remain held pending per-action review; accepted case output is not training admission.
+- Latest wave3 plan: `extension-wave-v1/dispatch-wave3-reseed-v1/dispatch-plan-v1.json`, SHA49e99f4b1b35e68561e9c4e6a38620662ac23500ff485829f8f92a44abc370ff. It pins exact overlay source4bc9…, current runtime7532… and aggregate proofbcd7… separately from original source visibility proof5939…. Future plans should name the aggregate as their primary source proof.
+- Next five tasks come from V26 editing, archive, grant and records train sources. Its previous apparent “generation” was static reference proof, not model trajectories. Current-runtime preflight exposed a fixture matching filenames inside carried historical text instead of the current FileHandle preamble. Selector-only fixture correction passes16/16; runtime access boundaries, gold and source splits are unchanged. Preserve old failures and bind fresh exact proof before launching.
 - Review every observed action and skill disclosure before admission. No global v6 activation, new-world credit or blanket task-level admission.
 
 ### Step5 Preview Free
 
-`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Existing modern adapters are preparing native/text/recurrence candidates; root replay/adoption required before publication. Keep Step5 on a fresh distinct train source after exact-source launch checks. No paid fallback or text-distillation flag.
+`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Final token-suffix audit and explicit composition/publication remain pending; no recurrence or hidden-state admission. Step5 is actively generating the distinct Microgrid source under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
 
 ### Failure repairs and skills
 
