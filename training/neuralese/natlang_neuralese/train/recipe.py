@@ -26,7 +26,8 @@ HANDLERS = {
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','qat_latent_lr',
-                          'member_weight','member_tokens','member_eval_windows'},'result':'heads.pt'},
+                          'member_weight','member_tokens','member_eval_windows',
+                          'optimizer_state','optimizer_added'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -43,7 +44,8 @@ HANDLERS = {
                                                'projection_anchor_weight', 'projection_anchor_backbone_scale',
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib',
                                                'qat_latent_lr', 'member_weight', 'member_tokens', 'member_eval',
-                                               'member_mask_system', 'member_full_weight'},
+                                               'member_mask_system', 'member_full_weight',
+                                               'optimizer_state', 'optimizer_added'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
@@ -62,6 +64,20 @@ HANDLERS = {
 DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
 
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
+
+
+def validate_stage_parameters(kind, parameters):
+    """Validate parameter shapes whose CLI actions are not scalar values."""
+    if kind not in ('core_text_warmup', 'raw_recurrence_training'):
+        return
+    if ('optimizer_state' in parameters and
+            parameters['optimizer_state'] not in ('restore', 'fresh')):
+        raise ValueError('optimizer_state must be restore or fresh')
+    if 'optimizer_added' in parameters:
+        prefixes = parameters['optimizer_added']
+        if not isinstance(prefixes, list) or any(
+                not isinstance(prefix, str) or not prefix for prefix in prefixes):
+            raise ValueError('optimizer_added must be a list of nonempty parameter-name prefixes')
 
 
 def validate_input_bindings(recipe):
@@ -207,6 +223,7 @@ def load_recipe(path):
         parameters = stage.get('parameters')
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
+        validate_stage_parameters(kind, parameters)
         if 'text_data' in parameters and 'text_data' in stage.get('inputs', {}):
             raise ValueError('text_data must be declared either as a named stage input or a legacy parameter')
         if kind == 'core_text_warmup':
@@ -300,6 +317,7 @@ def validate_direct_stage_recipe(recipe):
     parameters = recipe.get('parameters')
     if not isinstance(parameters, dict) or not set(parameters) <= handler['parameters']:
         raise ValueError('direct stage contains unsupported handler parameters')
+    validate_stage_parameters(stage['kind'], parameters)
     runtime = recipe.get('runtime')
     if (not isinstance(runtime, dict) or not re.fullmatch(r'sha256:[0-9a-f]{64}', runtime.get('image', '')) or
             not isinstance(runtime.get('package_code'), dict) or not runtime['package_code']):
@@ -425,6 +443,12 @@ def stage_parameter_args(parameters):
     """Serialize a validated stage's typed options into CLI arguments."""
     command = []
     for key, value in parameters.items():
+        if key == 'optimizer_added':
+            if not isinstance(value, list) or any(not isinstance(prefix, str) or not prefix for prefix in value):
+                raise ValueError('optimizer_added must be a list of nonempty parameter-name prefixes')
+            for prefix in value:
+                command += ['--optimizer-added', prefix]
+            continue
         if isinstance(value, bool):
             command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
         else:

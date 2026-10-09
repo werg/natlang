@@ -77,6 +77,81 @@ def test_ar_feedback_fixup_is_a_declared_map_continuation_mode(tmp_path):
     assert stage_parameter_args({'ar_feedback_fixup':True})==['--ar-feedback-fixup']
 
 
+def test_text_warmup_recipe_propagates_explicit_named_optimizer_restore_controls(tmp_path):
+    from argparse import ArgumentParser
+    from natlang_neuralese.train.optim_restore import add_optimizer_restore_arguments
+    from natlang_neuralese.train.recipe import HANDLERS
+
+    parser = ArgumentParser()
+    add_optimizer_restore_arguments(parser)
+    defaults = parser.parse_args([])
+    assert defaults.optimizer_state == 'restore'
+    assert defaults.optimizer_added == []
+
+    recipe = declared()
+    recipe['stages'].extend([
+        {'id': 'mapped_warmup', 'kind': 'core_text_warmup',
+         'requires': ['runtime_qualification'], 'parameters': {'steps': 128}},
+        {'id': 'mapped_ar_fixup', 'kind': 'core_text_warmup',
+         'requires': ['mapped_warmup'], 'parameters': {
+             'ar_feedback_fixup': True,
+             'optimizer_state': 'restore',
+             'optimizer_added': ['heads.new_projection.', 'backbone.new_adapter.'],
+         }},
+    ])
+    path = tmp_path / 'mapped-ar.json'
+    path.write_text(json.dumps(recipe))
+    loaded = load_recipe(path)
+    parameters = loaded['stages'][-1]['parameters']
+    assert {'optimizer_state', 'optimizer_added'} <= HANDLERS['core_text_warmup']['parameters']
+    assert stage_parameter_args(parameters) == [
+        '--ar-feedback-fixup', '--optimizer-state', 'restore',
+        '--optimizer-added', 'heads.new_projection.',
+        '--optimizer-added', 'backbone.new_adapter.',
+    ]
+
+    parameters['optimizer_state'] = 'fresh'
+    assert stage_parameter_args(parameters)[1:3] == ['--optimizer-state', 'fresh']
+
+
+@pytest.mark.parametrize('parameters', [
+    {'optimizer_state': 'silent'},
+    {'optimizer_added': 'heads.new.'},
+    {'optimizer_added': ['heads.valid.', 7]},
+])
+def test_text_warmup_recipe_rejects_malformed_optimizer_restore_controls(tmp_path, parameters):
+    recipe = declared()
+    recipe['stages'].append({
+        'id': 'mapped_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification'], 'parameters': parameters,
+    })
+    path = tmp_path / 'invalid-mapped.json'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='optimizer_'):
+        load_recipe(path)
+
+
+def test_raw_recurrence_recipe_propagates_named_optimizer_restore_controls(tmp_path):
+    from natlang_neuralese.train.recipe import HANDLERS
+
+    recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
+    stage = next(stage for stage in recipe['stages'] if stage['kind'] == 'raw_recurrence_training')
+    stage['parameters']['optimizer_state'] = 'restore'
+    stage['parameters']['optimizer_added'] = ['heads.read_adapter.', 'backbone.control_rows']
+    path = tmp_path / 'recurrence-optimizer-controls.json'
+    path.write_text(json.dumps(recipe))
+
+    loaded = load_recipe(path)
+    assert {'optimizer_state', 'optimizer_added'} <= HANDLERS['raw_recurrence_training']['parameters']
+    parameters = next(stage['parameters'] for stage in loaded['stages']
+                      if stage['kind'] == 'raw_recurrence_training')
+    assert stage_parameter_args({key: parameters[key] for key in ('optimizer_state', 'optimizer_added')}) == [
+        '--optimizer-state', 'restore',
+        '--optimizer-added', 'heads.read_adapter.',
+        '--optimizer-added', 'backbone.control_rows',
+    ]
+
+
 def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
     recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
     by_id={stage['id']:stage for stage in recipe['stages']}
@@ -444,7 +519,8 @@ def test_shared_text_recipe_uses_one_mapped_graph_and_inherits_common_parameters
     assert core['sketch_lr']>core['lr']
     assert 'neuralese_input' not in core and 'rollout_passes' not in core
     assert by_id['core_text_warmup']['parameters']=={'steps':4096}
-    assert by_id['autoregressive_text_fixup']['parameters']=={'steps':1024,'ar_feedback_fixup':True}
+    assert by_id['autoregressive_text_fixup']['parameters']=={
+        'steps':1024,'ar_feedback_fixup':True,'tokens':16384,'target_tokens':256}
 
 
 def test_active_core_text_recipe_has_no_objective_choice_or_sketch_rollout(tmp_path):
