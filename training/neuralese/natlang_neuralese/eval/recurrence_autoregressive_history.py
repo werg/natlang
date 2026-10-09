@@ -273,9 +273,10 @@ def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recip
         role_codes = role_codes_by_row.get(item['row_id'])
         if not isinstance(role_codes, list) or len(role_codes) != len(ids):
             raise ValueError(f'{window_id}: assistant-role labels are missing or misaligned')
-        allowed_roles = ({ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
-                         if cell[0] == 'prose' else {ROLE_CODES.index('assistant_reply')})
-        if any(code not in allowed_roles for code in role_codes[start:end]):
+        allowed_role_names = {'assistant_reasoning', 'assistant_reply'} if cell[0] == 'prose' else {'assistant_reply'}
+        target_role = item.get('target_role')
+        if (target_role not in allowed_role_names or
+                any(code != ROLE_CODES.index(target_role) for code in role_codes[start:end])):
             raise ValueError(f'{window_id}: target span is outside its declared assistant role class')
         evidence = item.get('class_evidence')
         allowed_boundaries = {
@@ -314,7 +315,8 @@ def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recip
             'stratum': {'kind': cell[0], 'target_tokens': cell[1]},
             'row_id': item['row_id'], 'document_sha256': document_sha,
             'source_groups': groups, 'prefix_start': prefix_start, 'target_start': start,
-            'target_end': end, 'prefix_token_ids': prefix_ids, 'target_token_ids': target_ids,
+            'target_end': end, 'target_role': target_role,
+            'prefix_token_ids': prefix_ids, 'target_token_ids': target_ids,
             'prefix_token_ids_sha256': token_ids_sha256(prefix_ids),
             'target_token_ids_sha256': token_ids_sha256(target_ids),
         })
@@ -413,6 +415,7 @@ def main(argv=None):
         output_rows.append({
             'window_id': window['window_id'], 'context_id': window['context_id'],
             'stratum': window['stratum'],
+            'target_role': window['target_role'],
             'row_id': window['row_id'], 'document_sha256': window['document_sha256'],
             'source_groups': window['source_groups'], 'split': 'test',
             'prefix_token_count': int(prefix.shape[1]), 'target_token_count': int(span.shape[1]),

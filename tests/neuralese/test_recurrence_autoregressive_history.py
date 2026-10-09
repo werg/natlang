@@ -45,6 +45,7 @@ def _selection(row):
         'windows': [{
             'window_id': 'window-1', 'context_id': 'context-1',
             'stratum': {'kind': 'prose', 'target_tokens': 2},
+            'target_role': 'assistant_reply',
             'row_id': row['id'], 'split': 'test',
             'document_sha256': hashlib.sha256(row['text'].encode()).hexdigest(),
             'source_groups': row['source_groups'],
