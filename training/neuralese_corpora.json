@@ -13792,6 +13792,20 @@
         "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
       ],
       "notes": "Root composition adoption runs/opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-native-text-composition-adoption-v1.json SHA-256 9e85bdee9137fafae5de3c2d49cf0c1f6a307d33edb394fd377b530d4650268c approves exactly seven native + seven ordinary-text additions, all train, zero recurrence. The base prefix is 5467 native / 4699 text / 4961 recurrence; this delta gives virtual 5474/4706/4961, and with the separately adopted River-derived one-row delta the prospective union is 5475/4707/4961. Source/action decisions are the four ABD-1A ordinary actions and three independently selected case-01 actions; all exact row IDs, source/context/trace, native admission overlay, text derivations, tokenizer fingerprints and root adoption/review receipts are included. Provider route is official OpenCode Zen Step 5 Preview Free, main/small alias equal, low; physical/upstream and title calls are unknown. Simple-four capture provenance includes a stop-time snapshot because earlier CLI capture references were mutable/reused; it is not retroactively attributed to the original attempt. Case-01 includes original attempt and separate post-stop snapshot. No new-world credit, whole trajectories, recurrence, model/runtime/learned-writer qualification, automatic training selection or active input change."
+    },
+
+    {
+      "id": "neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v18-v19-selected17-full-recurrence-static-qualification-20261009-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "static-exact-weight-foundation-and-runtime-qualification-evidence-plus-authenticated-context-audit-only;not-training-data;live-recurrence-outcome-excluded",
+      "derived_from": [
+        "v18-v19-full-selected17-native-text-5467-4699-r4961-20261009-v1"
+      ],
+      "notes": "Frozen v3 recipe/runtime, fresh token-identity rerun, exact-input reused v1 embedding/raw/adapted runtime gate reports and referenced artifacts, warmup report/heads, source context crosswalk, and root assembly receipts. Live recurrence log/checkpoints/terminal results are excluded; no new training admission or recurrence performance claim."
     }
   ],
   "coverage_backlog": [
