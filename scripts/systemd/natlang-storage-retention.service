@@ -8,6 +8,7 @@ Type=oneshot
 # ~/.config/natlang/storage-approved.txt) stays manual until the owner enables it here.
 ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/storage_report.py
 Nice=19
-IOSchedulingClass=idle
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 CPUQuota=50%
 MemoryMax=3G
