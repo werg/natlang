@@ -8,6 +8,7 @@ snapshot; exact existing documents are accounted for without rewriting the base.
 """
 from __future__ import annotations
 import argparse
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -91,6 +92,48 @@ def provider_context_occurrences(value, block_id):
         return count
     if isinstance(value, list): return sum(provider_context_occurrences(child, block_id) for child in value)
     return 0
+
+def extract_combinator_definition(source_text: str, name: str) -> tuple[str, str]:
+    """Read exact type/text literals from a frozen COMBINATORS property."""
+    match = re.search(rf"(?ms)^\s*{re.escape(name)}\s*:\s*\{{(?P<body>[^}}]*)\}}", source_text)
+    if match is None:
+        raise ValueError(f"frozen COMBINATORS.{name} definition was not found")
+    values = {}
+    for field in ("type", "text"):
+        literal = re.search(rf"\b{field}\s*:\s*(?P<literal>'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\")\s*(?:[,}}]|$)",
+                            match.group("body"))
+        if literal is None:
+            raise ValueError(f"frozen COMBINATORS.{name}.{field} is not a string literal")
+        try:
+            value = ast.literal_eval(literal.group("literal"))
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError(f"frozen COMBINATORS.{name}.{field} is not a supported quoted string") from exc
+        if not isinstance(value, str):
+            raise ValueError(f"frozen COMBINATORS.{name}.{field} is not a string")
+        values[field] = value
+    return values["type"], values["text"]
+
+def validate_configured_read_context(receipt: dict, definition_type: str, definition_text: str) -> None:
+    """Require a provider-expanded function body to equal the pinned runtime source."""
+    block = receipt.get("block") or {}
+    readout = receipt.get("readout") or {}
+    definition = receipt.get("definition") or {}
+    block_id, revision = block.get("id"), definition.get("revision")
+    body = block.get("body")
+    if (not isinstance(block_id, str) or not block_id.startswith("nz1_")
+            or not isinstance(revision, str) or not block_id[4:].startswith(revision)
+            or definition.get("id") != "nz-fn:" + block_id
+            or block.get("type") != f"Neuralese<{definition_type}>"
+            or not isinstance(body, str) or body != definition_text
+            or sha(body.encode("utf-8")) != block.get("body_sha256")
+            or readout.get("schema") != "natlang.text-template-readout/1"
+            or readout.get("call") != "return_result" or readout.get("value") != "decode"
+            or readout.get("value_type") != "string"
+            or readout.get("read_body_id") != block_id
+            or readout.get("read_source_sha256") != sha(definition_text.encode("utf-8"))
+            or any(readout.get(flag) is not False for flag in
+                   ("learned_vectors", "qualification_certificate", "training_admission"))):
+        raise ValueError("configured read definition differs from its exact frozen-runtime source")
 
 def bind_exact_provider_contexts(records, source_approval, repo_root):
     """Project authenticated provider reads into the renderer as context only.
@@ -176,17 +219,11 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                 definition = receipt.get("definition") or {}
                 readout = receipt.get("readout") or {}
                 expected_definition = "nz-fn:" + str(block_id)
-                source_text = combinator_path.read_text() if combinator_path else ""
-                read_source = re.search(r"(?ms)\bread\s*:\s*\{(?P<definition>[^}]+)\}", source_text)
-                if (runtime_manifest is None or not combinator_hash
-                        or definition.get("id") != expected_definition
-                        or not isinstance(definition.get("revision"), str)
-                        or readout.get("read_body_id") != block_id
-                        or readout.get("read_source_sha256") != body_hash
-                        or any(readout.get(flag) is not False for flag in
-                               ("learned_vectors", "qualification_certificate", "training_admission"))
-                        or read_source is None or body not in read_source.group("definition")):
+                if runtime_manifest is None or not combinator_hash or definition.get("id") != expected_definition:
                     raise ValueError(f"{record.get('id')}: configured read definition lacks an exact frozen-runtime binding")
+                runtime_type, runtime_text = extract_combinator_definition(
+                    combinator_path.read_text(), "read")
+                validate_configured_read_context(receipt, runtime_type, runtime_text)
                 if (read.get("kind") != "block_read" or read.get("call_id") != required["invocation_id"]
                         or read.get("block") != block_id or turn.get("kind") != "model_turn"
                         or turn.get("call_id") != required["invocation_id"]
@@ -221,6 +258,7 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                 continue
             if (receipt.get("writer_target_selected") is not False
                     or not isinstance(receipt.get("writer_witness"), dict)
+                    or block.get("type") != "Neuralese<string>"
                     or (receipt.get("additional_read_turn_pairs") is not None
                         and not isinstance(receipt.get("additional_read_turn_pairs"), list))):
                 raise ValueError(f"{record.get('id')}: malformed same-run provider context receipt {block_id}")
