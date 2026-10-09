@@ -71,3 +71,36 @@ only for the latest resumable slot of a run that may continue.
   timer after reviewing the first pass.
 - Owner approval of PRUNE-ASK items: add paths (one per line) to `~/.config/natlang/storage-approved.txt`; the next
   `--apply` deletes them if they are still PRUNE-ASK.
+
+## 6. First measurement and pass (2026-10-10 00:30)
+
+Disks: NVMe `/` 916 GB (90% used, archiver running); `/mnt/external` 3.6 TB (83%, 644 GB free).
+
+Scanned roots `runs/` (181 GB real files; 685 entries are symlinks into the HDD from the 10-02 relocation),
+`~/data` (187 GB) and the archive (54 GB so far). By category:
+
+| Root | Largest categories (GB) |
+|---|---|
+| `runs/` | registered corpora 120.3, checkpoints 26.7, teacher dumps 18.2, weights snapshots 11.1, exports 3.7 |
+| `~/data` | checkpoints 90.9 (Mellum conversion slot 43.6), registered corpora 38.2, data-other 31.6 (BIRD SQLite), exports 10.9, unregistered corpora 10.1 |
+| `archive/` | teacher dumps 22.8, checkpoints 13.6, registered corpora 7.5, weights snapshots 7.1 |
+
+Tiers (files ≥ 1 GiB): KEEP 91 files / 208 GB, ACTIVE 20 / 54 GB, PRUNE-ASK 16 / 43 GB, PRUNE-AUTO 0. Runs keep one
+rolling `checkpoint.pt` (+ `best-checkpoint.pt`), not step series, so there are no intermediate checkpoints to
+prune; the first `--apply` deleted nothing (docker: image prune 0 B, build cache 67 B).
+
+Awaiting owner approval (PRUNE-ASK, top items):
+
+| GB | Path |
+|---|---|
+| 7.6 ×3 | `archive/data/neuralese-converted/v13-2026100{4,5,5}-v{5,6,7}/teacher.neuralese.jsonl` (superseded by registered v8) |
+| 2.8, 2.4, 1.6, 1.6, 1.3 | `~/data/maple-slices/*.gguf` (slice/export checks) |
+| 1.6 | `runs/maple-nested-20261005/exec-n2b/24x64-q.gguf` |
+| 1.3 | `runs/maple-foundation-20261005/c12-v1-stopped/embedding_distillation/checkpoint.pt` |
+| 25.4 | docker image `80394cb1e815` (pre-py-spy natlang-neuralese base) still referenced by exited experiment containers (maple recurrence, probes); removing those containers frees it. Never the teacher container. |
+| 9.0 | unused docker volumes (content not inspected) |
+
+Biggest structural consumers are KEEP by rule: registered corpora (~166 GB across roots) and the running Mellum
+conversion. The levers are therefore (1) checkpoint cadence and end-of-run handling (§2), (2) compact ternary
+milestones (§3), (3) owner approval of superseded corpus versions and exports, and (4) the full HDD report
+(`~/.local/state/natlang/storage/report-latest.md`, weekly) for the rest of `/mnt/external`.
