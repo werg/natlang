@@ -130,6 +130,77 @@ def test_named_input_binding_relocation_keeps_expected_content_identity(tmp_path
         resolve_stage_inputs(recipe, stage, {}, {'other.input': str(relocated)})
 
 
+def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train import recipe as runner
+    from natlang_neuralese.train.output_embedding_projection import sha
+
+    records = tmp_path / 'records.jsonl'
+    pieces = tmp_path / 'pieces.jsonl'
+    text = tmp_path / 'text.jsonl'
+    heads = tmp_path / 'heads.pt'
+    checkpoint = tmp_path / 'checkpoint.pt'
+    for path, data in ((records, b'{}\n'), (pieces, b'{}\n'), (text, b'{}\n'),
+                       (heads, b'heads'), (checkpoint, b'checkpoint')):
+        path.write_bytes(data)
+    package = Path(runner.__file__).parents[1]
+    code = {str(path.relative_to(package)): sha(path) for path in sorted(package.rglob('*.py'))}
+    output = tmp_path / 'run'
+    metadata = tmp_path / 'launch-intent.json'
+    recipe = {
+        'schema': runner.DIRECT_STAGE_SCHEMA,
+        'id': 'fixture-direct-warmup',
+        'execution': 'direct_shared_stage',
+        'stage': {'id': 'warmup', 'kind': 'core_text_warmup'},
+        'runtime': {'image': 'sha256:' + 'a' * 64, 'package_code': code},
+        'inputs': {role: {'path': str(path), 'sha256': sha(path)} for role, path in
+                   (('records', records), ('pieces', pieces), ('text_data', text),
+                    ('heads', heads), ('student_checkpoint', checkpoint))},
+        'lineage': {'scope': 'test only'},
+        'parameters': {'steps': 4, 'neuralese_input': 'sketch', 'rollout_passes': 0},
+        'outputs': {'directory': str(output)},
+    }
+    recipe_path = tmp_path / 'recipe.json'
+    recipe_path.write_text(json.dumps(recipe))
+    loaded = load_recipe(recipe_path)
+    assert loaded['schema'] == runner.DIRECT_STAGE_SCHEMA
+
+    def fake_run(command, env, check):
+        del env, check
+        stage_out = Path(command[command.index('--out') + 1])
+        (stage_out / 'report.json').write_text(json.dumps({'qualified': True}))
+        (stage_out / 'heads.pt').write_bytes(b'head artifact')
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', fake_run)
+    assert runner.run_declared_direct_stage(loaded, recipe_path, output, metadata, 'cpu') == 0
+    plan = json.loads((output / 'direct-stage-plan.json').read_text())
+    result = json.loads((output / 'direct-stage-result.json').read_text())
+    assert plan['inputs']['student_checkpoint']['sha256'] == sha(checkpoint)
+    assert '--student-checkpoint' in plan['child_argv']
+    assert result['completed'] and result['qualified']
+    assert metadata.is_file()
+
+
+def test_direct_stage_rejects_unregistered_parameters_and_unpinned_roles(tmp_path):
+    from natlang_neuralese.train.recipe import validate_direct_stage_recipe, DIRECT_STAGE_SCHEMA
+    recipe = {
+        'schema': DIRECT_STAGE_SCHEMA, 'id': 'fixture', 'execution': 'direct_shared_stage',
+        'stage': {'id': 'warmup', 'kind': 'core_text_warmup'},
+        'runtime': {'image': 'sha256:' + 'a' * 64, 'package_code': {'module.py': 'b' * 64}},
+        'inputs': {'records': {'path': 'r', 'sha256': 'c' * 64},
+                   'pieces': {'path': 'p', 'sha256': 'd' * 64}},
+        'lineage': {'scope': 'test'}, 'parameters': {'shell_command': 'unsafe'},
+        'outputs': {'directory': '/tmp/out'},
+    }
+    with pytest.raises(ValueError, match='unsupported handler parameters'):
+        validate_direct_stage_recipe(recipe)
+    recipe['parameters'] = {}
+    recipe['inputs']['unregistered'] = {'path': 'x', 'sha256': 'e' * 64}
+    with pytest.raises(ValueError, match='input roles'):
+        validate_direct_stage_recipe(recipe)
+
+
 def test_recipe_runner_routes_each_stage_its_declared_input_files(tmp_path, monkeypatch):
     from natlang_neuralese.train import recipe as recipe_runner
     from natlang_neuralese.train.output_embedding_projection import sha

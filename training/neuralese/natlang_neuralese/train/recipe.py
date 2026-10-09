@@ -5,6 +5,7 @@ handler and declare its dependencies in a JSON recipe. No shell command strings.
 An unsuccessful stage cannot advance its dependents or issue a certificate.
 """
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -22,7 +23,7 @@ HANDLERS = {
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','cutoff','group_size',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
-                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
+                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
                           'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
@@ -55,6 +56,7 @@ HANDLERS = {
                                                     'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
                                                     'argmax_weight', 'continue_from', 'stop_on_gate'}, 'result': 'best-checkpoint.pt'},
 }
+DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
 
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
 
@@ -144,6 +146,9 @@ def stage_input_args(resolved, kind):
 
 def load_recipe(path):
     recipe = json.loads(Path(path).read_text())
+    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
+        validate_direct_stage_recipe(recipe)
+        return recipe
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
     declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
@@ -213,6 +218,59 @@ def load_recipe(path):
     return recipe
 
 
+def validate_direct_stage_recipe(recipe):
+    """Validate a single shared handler stage with exact external lineage pins.
+
+    This path is for a narrowly scoped repair that reuses previously qualified
+    weights and therefore must not rerun unrelated foundation stages. It uses
+    the same handler registry, input-role contracts, and typed parameter CLI as
+    a full recipe.
+    """
+    if recipe.get('execution') != 'direct_shared_stage' or not isinstance(recipe.get('id'), str):
+        raise ValueError('direct stage must declare its execution mode and recipe id')
+    stage = recipe.get('stage')
+    if not isinstance(stage, dict) or set(stage) != {'id', 'kind'}:
+        raise ValueError('direct stage needs exactly an id and registered handler kind')
+    if not re.fullmatch(r'[a-z][a-z0-9_-]*', stage['id']) or stage['kind'] not in HANDLERS:
+        raise ValueError('invalid direct stage identity or handler')
+    handler = HANDLERS[stage['kind']]
+    inputs = recipe.get('inputs')
+    if not isinstance(inputs, dict):
+        raise ValueError('direct stage requires pinned input bindings')
+    roles = set(inputs)
+    if not handler['required_inputs'] <= roles or not roles <= handler['required_inputs'] | handler['optional_inputs']:
+        raise ValueError('direct stage input roles do not satisfy the shared handler contract')
+    for role, binding in inputs.items():
+        if (not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or
+                not isinstance(binding['path'], str) or not binding['path'] or
+                not isinstance(binding['sha256'], str) or
+                not re.fullmatch(r'[0-9a-f]{64}', binding['sha256'])):
+            raise ValueError('invalid direct stage input binding: ' + role)
+    parameters = recipe.get('parameters')
+    if not isinstance(parameters, dict) or not set(parameters) <= handler['parameters']:
+        raise ValueError('direct stage contains unsupported handler parameters')
+    runtime = recipe.get('runtime')
+    if (not isinstance(runtime, dict) or not re.fullmatch(r'sha256:[0-9a-f]{64}', runtime.get('image', '')) or
+            not isinstance(runtime.get('package_code'), dict) or not runtime['package_code']):
+        raise ValueError('direct stage requires a pinned image and shared package code inventory')
+    lineage = recipe.get('lineage')
+    if not isinstance(lineage, dict) or not lineage.get('scope'):
+        raise ValueError('direct stage requires an explicit lineage scope')
+    evidence = lineage.get('evidence', [])
+    if not isinstance(evidence, list):
+        raise ValueError('direct-stage lineage evidence must be a list')
+    for item in evidence:
+        if (not isinstance(item, dict) or set(item) != {'role', 'path', 'sha256'} or
+                not isinstance(item['role'], str) or not item['role'] or
+                not isinstance(item['path'], str) or not item['path'] or
+                not isinstance(item['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256'])):
+            raise ValueError('invalid direct-stage lineage evidence binding')
+    outputs = recipe.get('outputs')
+    if not isinstance(outputs, dict) or not isinstance(outputs.get('directory'), str):
+        raise ValueError('direct stage requires a declared output directory')
+    return recipe
+
+
 def require_gate(report, kind):
     if kind == 'token_identity':
         if report.get('token_aligned_reference_passed') is not True:
@@ -256,6 +314,107 @@ def stage_parameter_args(parameters):
     return command
 
 
+def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, device):
+    """Freeze, bind, and run one explicitly declared shared stage.
+
+    Direct stages are only appropriate when lineage evidence already qualifies
+    their prerequisites and rerunning those independent stages would change the
+    experiment. The declaration still uses the shared handler registry and
+    records exact input/code/runtime pins before the child starts.
+    """
+    validate_direct_stage_recipe(recipe)
+    output = Path(output).resolve()
+    declared_output = Path(recipe['outputs']['directory']).resolve()
+    if output != declared_output:
+        raise ValueError('direct-stage output differs from its declaration')
+    if output.exists():
+        raise ValueError('fresh direct-stage output directory required')
+    metadata_path = Path(launch_metadata).resolve()
+    if metadata_path.exists() or output == metadata_path or output in metadata_path.parents:
+        raise ValueError('direct-stage launch metadata must be a fresh external path')
+
+    inputs = {}
+    for role, binding in recipe['inputs'].items():
+        path = Path(binding['path']).resolve()
+        if sha(path) != binding['sha256']:
+            raise ValueError('direct-stage input hash mismatch: ' + role)
+        inputs[role] = {'path': str(path), 'sha256': binding['sha256']}
+    lineage_evidence = []
+    for item in recipe['lineage'].get('evidence', []):
+        path = Path(item['path']).resolve()
+        if sha(path) != item['sha256']:
+            raise ValueError('direct-stage lineage evidence hash mismatch: ' + item['role'])
+        lineage_evidence.append({'role': item['role'], 'path': str(path), 'sha256': item['sha256']})
+
+    package = Path(__file__).parents[1]
+    actual_code = {str(path.relative_to(package)): sha(path)
+                   for path in sorted(package.rglob('*.py'))}
+    if actual_code != recipe['runtime']['package_code']:
+        raise ValueError('direct-stage shared package differs from its frozen code inventory')
+
+    output.mkdir(parents=True)
+    frozen = output / 'runtime' / 'natlang_neuralese'
+    shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    frozen_code = {str(path.relative_to(frozen)): sha(path)
+                   for path in sorted(frozen.rglob('*.py'))}
+    if frozen_code != actual_code:
+        raise ValueError('direct-stage runtime snapshot differs from reviewed package bytes')
+    stage = recipe['stage']
+    stage_output = output / stage['id']
+    stage_output.mkdir()
+    handler = HANDLERS[stage['kind']]
+    if 'heads' not in inputs:
+        raise ValueError('direct stage requires an exact heads input')
+    command = [sys.executable, '-m', handler['module'], '--heads', inputs['heads']['path']]
+    command += stage_input_args(inputs, stage['kind'])
+    command += ['--out', str(stage_output), '--device', device]
+    parameters = dict(recipe['parameters'])
+    if 'text_data' in inputs:
+        parameters.pop('text_data', None)
+    command += stage_parameter_args(parameters)
+    plan = {'schema': 'natlang.neuralese-direct-stage-plan/1', 'recipe_id': recipe['id'],
+            'recipe_path': str(Path(recipe_path).resolve()), 'recipe_sha256': sha(recipe_path),
+            'stage': stage, 'inputs': inputs, 'device': device,
+            'runtime_image': recipe['runtime']['image'], 'frozen_code': frozen_code,
+            'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
+            'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence}
+    write_json(output / 'direct-stage-plan.json', plan)
+    write_json(metadata_path, {'schema': 'natlang.neuralese-direct-stage-launch-intent/1',
+                               'recipe_id': recipe['id'], 'recipe_sha256': plan['recipe_sha256'],
+                               'plan_path': str(output / 'direct-stage-plan.json'),
+                               'plan_sha256': sha(output / 'direct-stage-plan.json'),
+                               'output_path': str(output), 'device': device,
+                               'input_sha256': {role: value['sha256'] for role, value in inputs.items()},
+                               'lineage_evidence_sha256': {item['role']: item['sha256'] for item in lineage_evidence},
+                               'runtime_image': recipe['runtime']['image'],
+                               'frozen_code_count': len(frozen_code),
+                               'frozen_code_manifest_sha256': hashlib.sha256(
+                                   json.dumps(frozen_code, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+                               'child_argv': command})
+    environment = dict(os.environ)
+    environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+    print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
+    result = subprocess.run(command, env=environment, check=False)
+    stage_report = stage_output / 'report.json'
+    report = json.loads(stage_report.read_text()) if stage_report.is_file() else None
+    qualified = False
+    if result.returncode == 0 and report is not None:
+        try:
+            require_gate(report, stage['kind'])
+            qualified = True
+        except ValueError:
+            qualified = False
+    outputs = {str(path.relative_to(output)): {'bytes': path.stat().st_size, 'sha256': sha(path)}
+               for path in sorted(stage_output.rglob('*')) if path.is_file()}
+    write_json(output / 'direct-stage-result.json',
+               {'schema': 'natlang.neuralese-direct-stage-result/1', 'recipe_id': recipe['id'],
+                'stage_id': stage['id'], 'process_exit_code': result.returncode,
+                'completed': result.returncode == 0, 'qualified': qualified,
+                'gate_scope': recipe['lineage'].get('qualification_scope'),
+                'report': report, 'outputs': outputs})
+    return result.returncode
+
+
 def require_foundation(certificate, *, heads, checkpoint):
     """Downstream API: validate exact handoff, not an unrelated passed report.
 
@@ -285,7 +444,8 @@ def require_foundation(certificate, *, heads, checkpoint):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', type=Path, required=True)
-    parser.add_argument('--heads', type=Path, required=True)
+    parser.add_argument('--heads', type=Path,
+                        help='required by multi-stage recipes; direct stages pin heads in their input manifest')
     parser.add_argument('--records', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
     parser.add_argument('--pieces', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
     parser.add_argument('--text-data', type=Path, help='legacy shared fallback for text warm-up stages')
@@ -299,6 +459,17 @@ def main(argv=None):
     parser.add_argument('--inspect', action='store_true')
     args = parser.parse_args(argv)
     recipe = load_recipe(args.recipe)
+    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
+        if args.inspect:
+            print(json.dumps(recipe, indent=2))
+            return 0
+        if args.input_binding or args.records or args.pieces or args.text_data or args.until or args.heads:
+            parser.error('direct-stage recipes use only their pinned inputs and declared output')
+        if args.launch_metadata is None:
+            parser.error('direct-stage execution requires --launch-metadata')
+        return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device)
+    if args.heads is None:
+        parser.error('multi-stage training recipes require --heads')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
         parser.error('unknown stopping stage')
     if args.inspect:
