@@ -11,6 +11,8 @@ export function view(state: IncidentState): TerminalView {
     blocks: [
       { kind: 'status', text: `Status: ${state.status}`, tone:
         state.status === 'alerted' ? 'bad' : state.status === 'delivery-unknown' || state.status === 'gap' ? 'warn' : 'muted' },
+      ...(state.incidents.length ? [{ kind: 'table' as const, columns: ['Incident', 'Events', 'Severity', 'Summary'],
+        rows: state.incidents.slice(-10).map(row => [row.id, String(row.count), row.severity || '-', row.summary || '(investigating)']) }] : []),
       ...(state.observed === 0 ? [{ kind: 'text' as const, tone: 'muted' as const, text:
         'Ready for logs. Use /demo for an immediate incident walkthrough, /load FILE for JSONL, paste a JSON event, or type a plain informational record.' }] : []),
       ...(state.alerts.length ? [{ kind: 'table' as const, columns: ['Status', 'Incident', 'Detail'],
@@ -29,7 +31,7 @@ export async function main(context: TargetContext): Promise<number> {
   const loop: EventLoop<IncidentState, TerminalView, Event> = new EventLoop({
     initialState: checkpoint.state, initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
     reduce: (state, event) => step(logs, state, event, files()), view,
-    step: fn => context.runtime.run(fn), onCommit: commit => store.commit(commit, loop.seenEventIds) });
+    step: fn => context.runtime.run(fn, logs.runOptions()), onCommit: commit => store.commit(commit, loop.seenEventIds) });
   let nextCursor = checkpoint.state.cursor + 1;
   const event = (value: string, id: string): Event => {
     if (value.startsWith('{')) {
