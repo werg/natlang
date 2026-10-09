@@ -124,7 +124,7 @@ export function toolsService(runtime: Runtime, context: Context, agent: Agent, c
       if (result) {
         try { result = copyJson(result as never, { omitUndefinedProperties: true }) as unknown as ToolExecutionResult; }
         catch (thrown) {
-          phase.failed = `the tool ${name} returned a result that cannot be stored`;
+          phase.failed = `the tool ${name} returned a result that cannot be stored: ${thrown instanceof Error ? thrown.message : String(thrown)}`;
           throw new Error(`The tool ${name} returned a result that cannot be stored (${thrown instanceof Error ? thrown.message : String(thrown)}). ` +
             'Do not work around it, rerun the tool, or build a result yourself: end this call with return_result status ' +
             '"failed" and this reason. The harness faults the tool task.');

@@ -22,7 +22,7 @@ import { plain } from './durable.ts';
 function storable(message: AssistantMessage, phase: { failed?: string }): AssistantMessage {
   try { return copyJson(message, { omitUndefinedProperties: true }) as unknown as AssistantMessage; }
   catch (error) {
-    phase.failed = `the provider returned a message that cannot be stored`;
+    phase.failed = `the provider returned a message that cannot be stored: ${error instanceof Error ? error.message : String(error)}`;
     throw new Error(`The provider returned a message that cannot be stored (${error instanceof Error ? error.message : String(error)}), ` +
       'so this request failed. Do not work around it, retry it, or build a message yourself: end this call with ' +
       'return_result status "failed" and this reason. The harness faults the generation.');

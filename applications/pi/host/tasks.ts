@@ -96,6 +96,8 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
       phaseState.failed = undefined;
       const summary = await host.natlang.run(() => entry(attempt === 1 ? facts : { ...facts, previousAttempt }), { services, serviceDeclarations, signal: runtime.signal,
         name: `${task.kind}#${task.id}:${phase}` });
+      // An executor that returned normally after a final failure still faults the task (the catch below).
+      if (phaseState.failed !== undefined) throw new Error(phaseState.failed);
       // An entry must commit the task's next state. One that says it did, while the state is unchanged, failed.
       if (stateKey(await runtime.getTask(task.id, context)) === before)
         throw new Error(`the ${phase} phase returned "${String(summary ?? '').slice(0, 200)}" without committing the task's next state`);
@@ -105,11 +107,12 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
       if (runtime.signal.aborted) throw error;
       const message = error instanceof Error ? error.message : String(error);
       host.onPhase?.({ kind: task.kind, taskId: task.id, phase, mode, attempt, error: message });
+      // A failure the services declared final (an unstorable provider message or tool result) faults the task as pi's
+      // throw does, whatever the phase committed before it: a rerun or a next phase would only repeat the phase's
+      // effects (hooks, owned tasks) or settle the task some other way.
+      if (phaseState.failed !== undefined) throw new Error(`${task.kind} ${phase}: ${phaseState.failed}`);
       // A phase that committed its next state before failing made progress; the step rules judge it.
       if (stateKey(await runtime.getTask(task.id, context)) !== before) return;
-      // A failure the services declared final (an unstorable provider message) faults the task as pi's throw does: a
-      // rerun would repeat the phase's effects (hooks, owned tasks) for the same outcome.
-      if (phaseState.failed !== undefined) throw new Error(`${task.kind} ${phase}: ${phaseState.failed}`);
       if (attempt >= attempts) throw new Error(`${task.kind} ${phase}: the executor failed: ${message}`);
       previousAttempt = message.slice(0, 2000);
     }
