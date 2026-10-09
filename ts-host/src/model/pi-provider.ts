@@ -356,8 +356,8 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const raw_calls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
         arguments: JSON.stringify(call.arguments) } }));
       // Delta events describe the streamed path; the completed AssistantMessage is authoritative
-      // for what the collector saved. Keep payload-free measurements of both so revised argument
-      // deltas are not mistaken for an equally large final tool call.
+      // for what the collector saved. Keep byte counts, hashes and bounded private previews for
+      // both so revised argument deltas are not mistaken for an equally large final tool call.
       const piStreamObservation = {
         version: 'pi-stream-final-comparison/1',
         streamed_delta_events: counts.deltaEvents,
@@ -374,12 +374,13 @@ export function createPiModelBackend(provider: string, modelId: string, environm
           arguments_sha256: sha256Text(call.function.arguments),
           arguments_preview: boundedUtf8Preview(call.function.arguments) })),
         tool_delta_repetition: {
-          fingerprint: 'sha256 of exact delta string; no delta contents retained',
+          fingerprint: 'sha256 of exact delta string; frequency alone does not establish repetitive generated content because short/common tokens repeat naturally',
           unique_fingerprint_limit: MAX_TRACKED_DELTA_FINGERPRINTS,
           tracked_unique_fingerprints: deltaFingerprints.size,
           untracked_delta_events_after_limit: untrackedDeltaEvents,
           repeated_events_within_tracked_fingerprints: [...deltaFingerprints.values()]
             .reduce((sum, item) => sum + Math.max(0, item.occurrences - 1), 0),
+          interpretation_limit: 'Repeated hashes summarize exact event strings; common short chunks can recur in ordinary output. Inspect the bounded stream prefix/tail and adjacent-repeat run before interpreting them.',
           adjacent_duplicate_events: adjacentDuplicateDeltaEvents,
           longest_adjacent_repeat_run: longestRepeatRun,
           top_repeated_fingerprints: [...deltaFingerprints.entries()]
