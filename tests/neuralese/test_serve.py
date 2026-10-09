@@ -210,12 +210,12 @@ def test_http_endpoints_and_interleaved_requests(engine):
         text = "Refunds are allowed within 30 days."
         encoded = call("POST", "/v1/neuralese/encode", {"text": text, "type": "Neuralese<string>"})
         assert encoded["length"] == len(engine.tokenizer(text, add_special_tokens=False)["input_ids"])
-        written = call("POST", "/v1/neuralese/write", {"messages": [{"role": "user", "content": "Digest: " + text}],
-                                                       "prefix": "const digest: Neuralese<Digest> = "})
+        written = call("POST", "/v1/neuralese/write", {"messages": [{"role": "user", "content": "Summary: " + text}],
+                                                       "prefix": "const summary: Neuralese<string> = "})
         assert 0 <= written["length"] <= engine.max_block and written["id"].startswith("nz1_")
         # A length hint writes exactly that many vectors without stop decisions; block-wise with passes >= length is
         # the same block as position by position, and one pass still gives a block of that length.
-        site = {"messages": [{"role": "user", "content": "Digest: " + text}], "prefix": "Note: "}
+        site = {"messages": [{"role": "user", "content": "Summary: " + text}], "prefix": "Note: "}
         rough = call("POST", "/v1/neuralese/write", {**site, "length": 3, "passes": 1})
         hinted = call("POST", "/v1/neuralese/write", {**site, "length": 3})
         blockwise = call("POST", "/v1/neuralese/write", {**site, "length": 3, "passes": 3})
@@ -226,12 +226,21 @@ def test_http_endpoints_and_interleaved_requests(engine):
         assert blockwise["id"] == hinted["id"] or blockwise["producer"]["passes"] >= 2
         exact = (engine.lookup(hinted["id"]).payload.float() - engine.lookup(blockwise["id"]).payload.float()).abs().max()
         assert float(exact) < 1e-4, float(exact)
-        # Digest: one write when the value fits the window, chunk digests combined by a final write when it does not.
-        site = {"name": "state", "type": "unknown", "value": " ".join(f"item{i}" for i in range(40)), "instructions": "Decide."}
-        whole = call("POST", "/v1/neuralese/digest", site)
+        # View: one template write when the value fits the window, part views combined by a final write when it does
+        # not; faithful without instructions, written for a purpose with them.
+        site = {"value": " ".join(f"item{i}" for i in range(40)), "instructions": "Decide."}
+        whole = call("POST", "/v1/neuralese/view", site)
         assert whole["parts"] == 1 and whole["window"] > 1000
-        chunked = call("POST", "/v1/neuralese/digest", {**site, "window": 16})
+        chunked = call("POST", "/v1/neuralese/view", {**site, "window": 16})
         assert chunked["parts"] > 1 and chunked["id"].startswith("nz1_")
+        faithful = call("POST", "/v1/neuralese/view", {"value": site["value"]})
+        assert faithful["parts"] == 1 and faithful["id"].startswith("nz1_")
+        # The view write is the template write of view's body: the same block as a template-readout chat request at
+        # view's site.
+        from natlang_neuralese.view import INSTRUCTIONS, TEMPLATE, TOOLS, view_site
+        templated = call("POST", "/v1/chat/completions", {"messages": view_site(INSTRUCTIONS, site["value"], "Decide."),
+            "tools": TOOLS, "max_tokens": engine.max_block + 64, "neuralese_template": TEMPLATE})
+        assert templated["neuralese"]["blocks"][0]["id"] == whole["id"]
         # Template readout: the reply is the return_result call, its value a written block (the call parses back with
         # the block as the value) or decoded after the forced opening of the call.
         opening = [{"role": "user", "content": "Combine the two notes."}]

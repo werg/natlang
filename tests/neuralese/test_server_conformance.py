@@ -10,7 +10,8 @@ visible. Each check sends one request to both servers and compares what a client
 - a prompt that reads an uploaded block: the greedy continuation;
 - a decision readout (`/v1/neuralese/decide`): per-option log-probabilities and token counts;
 - text encoding (`/v1/neuralese/encode`, with and without a context), a write at a write site (`/write`) and the
-  digest operator's plan (`/digest`: the fixture's single site, and a value chunked at a small window);
+  Neuralese instance of the builtin `view` (`/view`: the fixture's single site, faithful and instructed, and a value
+  chunked at a small window);
 - weight adapters: an `xs` adapter exported as a GGUF LoRA (export/adapters.py) and loaded into the fork gives the
   reference's decision log-probabilities and greedy reply;
 - capabilities the fork does not serve (gradient sessions, text embedding, adapters it has no LoRA for or decoded
@@ -383,15 +384,19 @@ def test_write_at_a_write_site_agrees(servers):
     _block_agrees(servers, _both(servers, "/v1/neuralese/write", "POST", body))
 
 
-def test_digest_plans_agree(servers):
-    """The fixture's write site (one write), and a long value at a small window (part writes and a combine write)."""
+def test_view_plans_agree(servers):
+    """The fixture's write site (one template write), faithful (no instructions), and a long value at a small window
+    (part writes and a combine write)."""
     from pathlib import Path
 
-    fixture = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "digest-site.json").read_text())
-    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/digest", "POST", fixture["site"]))
+    fixture = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "view-site.json").read_text())
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", fixture["site"]))
+    assert ref["parts"] == fork["parts"] == 1
+    faithful = {"value": fixture["site"]["value"]}
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", faithful))
     assert ref["parts"] == fork["parts"] == 1
     long = {**fixture["site"], "value": json.dumps({f"line{i}": f"fee {i} paid" for i in range(12)}), "window": 16}
-    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/digest", "POST", long), atol=3 * ATOL_PAYLOAD)
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", long), atol=3 * ATOL_PAYLOAD)
     assert ref["parts"] == fork["parts"] > 1 and ref["window"] == fork["window"] == 16
 
 

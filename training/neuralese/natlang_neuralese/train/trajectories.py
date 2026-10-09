@@ -8,11 +8,11 @@ its tokens) with the soft parameters as gradient leaves, optionally with a LoRA 
 parameters are saved as a bank of the current runtime's pieces (`system-prompts.nz`) and as all soft parameters by
 name (`soft-params.pt`).
 
-Written values (`--handover written`, `--digest written`): handover notes, child calls' results and listing digests are written by the
+Written values (`--handover written`, `--view written`): handover notes, child calls' results and listing views are written by the
 model through the port's differentiable write procedure (S3 `unroll_write`), afresh at every step, and enter their
 readers as gradient leaves. The readers' losses therefore train the writer: the payload carries gradients into the
-content projection, the sketch recurrence, the LoRA and every soft parameter of the write site (the digest
-instructions, the producing record's prompts), so a note or digest learns to hold what its readers need. A note is
+content projection, the sketch recurrence, the LoRA and every soft parameter of the write site (view's body, the
+producing record's prompts), so a note or view learns to hold what its readers need. A note is
 written from its producing record (the record whose target is the `compact_history` call), soft-rendered, at the note
 argument (the reply forced to the model's own rendering of `compact_history(note='`, chat.call_reply, then the
 write: the same cut the server's template readout makes). A child call's result (converter: child results) is
@@ -21,16 +21,19 @@ caller's eval output shows it: the recurrence of calling a function, retrieving 
 caller's trajectory, trained across the run's chunks (the child's record and every caller record that reads it) in
 one graph. Writes nest: a producer's own context reads the values it was given written afresh too, to
 `--write-depth` levels (a caller reads a child's result whose child read a grandchild's); deeper ones are crisp. A
-digest by the digest operator's plan
-(digest.py), chunked when the value exceeds `--digest-window` tokens, every chunk write and the combining write
+view part (a listing value, or a tool output in harness-bench records) is the Neuralese instance of the builtin
+`view(value, instructions)`: written at view's template write site by its plan (view.py: view's body as the system
+text, the reply forced to `return_result(status="success", value="` and the write, as the servers' `/v1/neuralese/view`
+does), chunked when the value exceeds `--view-window` tokens, every chunk write and the combining write
 differentiable. With `--tokens-per-vector R` a write is sized from the crisp text it stands for (the note's text, the
-listing preview a digest replaces): ceil(tokens / R) vectors, no stop decision, and the stop head is trained on that
+listing preview a view replaces): ceil(tokens / R) vectors, no stop decision, and the stop head is trained on that
 boundary (`--stop-weight`). This is the simple training regime; sizes are never required at inference, where the stop
 head decides unless a caller passes a length hint. Otherwise stop decisions are sampled and trained by a policy gradient with reward −(reader loss + λ·length)
 against a running baseline (`--stop-pg λ`); without it they are detached and the length is the stop head's choice. With the crisp modes, notes are rendered as the crisp note and
-digests as the listing's preview. A digest part may carry its own `instructions` (what it is written for, for example an
-agent's intent at the tool call whose output it digests) and `note` (how the reader gets the whole value); otherwise the
-receiving call's instructions and the variable note apply. Records that read written values add a self-distillation term (weight `--distill`)
+views as the listing's preview. A view part may carry its own `instructions` (what it is written for, for example an
+agent's intent at the tool call whose output it views) and `note` (how the reader gets the whole value); otherwise the
+view is written for the receiving call (view.listing_instructions) and the variable note applies. Records converted
+before the rename carry `digest` parts, which are rejected with the conversion to run. Records that read written values add a self-distillation term (weight `--distill`)
 from the same model given the crisp note and preview.
 
 Evaluation on held-out records (split `test`): mean target cross-entropy with the system prompt as crisp text, with the
@@ -64,7 +67,7 @@ import torch
 
 from .memory import cuda_allocated_bytes
 
-from ..digest import PREFIX as DIGEST_PREFIX, digest_note, write_digest
+from ..view import TOOLS as VIEW_TOOLS, listing_instructions, reject_digest_part, reply_prefix, view_note, write_view
 
 INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
 
@@ -77,12 +80,12 @@ def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str,
 
 
 def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[str, str] | None = None,
-           digests: dict[str, str] | None = None,
+           views: dict[str, str] | None = None,
            neuralese_bodies: dict[str, str] | None = None) -> list[dict]:
     """Converted messages → engine messages: `soft` parts via `soft_part(name)`; handover reads and writes as the
     written block where `blocks` has one (name → block ID), else as the crisp note; parts merged into text where no
     block remains."""
-    blocks, digests, neuralese_bodies = blocks or {}, digests or {}, neuralese_bodies or {}
+    blocks, views, neuralese_bodies = blocks or {}, views or {}, neuralese_bodies or {}
     out = []
     for message in messages:
         message = dict(message)
@@ -92,13 +95,15 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             for part in content:
                 if part["type"] == "soft":
                     parts.append(soft_part(part["name"]))
-                elif part["type"] == "digest":
-                    # Written digests (decision 43) show as the runtime lists them; otherwise the crisp cut-off preview.
-                    if part["name"] in digests:
-                        parts.append({"type": "neuralese", "id": digests[part["name"]]})
-                        parts.append({"type": "text", "text": part.get("note") or digest_note(part["holder"])})
+                elif part["type"] == "view":
+                    # Written views show as the runtime lists them; otherwise the crisp cut-off preview.
+                    if part["name"] in views:
+                        parts.append({"type": "neuralese", "id": views[part["name"]]})
+                        parts.append({"type": "text", "text": part.get("note") or view_note(part["holder"])})
                     else:
                         parts.append({"type": "text", "text": part["preview"]})
+                elif part["type"] == "digest":
+                    reject_digest_part(part)
                 elif part["type"] == "read":
                     name = part["name"]
                     parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else
@@ -680,14 +685,14 @@ def main(argv=None):
     parser.add_argument("--write-depth", type=int, default=2,
                         help="levels of written values inside written values' producers (1: producers read crisp text)")
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
-    parser.add_argument("--digest", choices=["preview", "written"], default="preview",
-                        help="digest sites: the crisp preview, or a digest the model writes at the operator's write site")
-    parser.add_argument("--digest-window", type=int, default=4096,
-                        help="value tokens per digest write site in training (longer values are digested in chunks)")
+    parser.add_argument("--view", choices=["preview", "written"], default="preview",
+                        help="view parts: the crisp preview, or the view the model writes at view's template write site")
+    parser.add_argument("--view-window", type=int, default=4096,
+                        help="value tokens per view write site in training (longer values are viewed in chunks)")
     parser.add_argument("--stop-pg", type=float, default=0.0,
                         help="train the stop head on written values by policy gradient with this length cost per vector (0: off)")
     parser.add_argument("--tokens-per-vector", type=float, default=0.0,
-                        help="size each written value from the crisp text it stands for (the note's text, the digest's listing "
+                        help="size each written value from the crisp text it stands for (the note's text, the view's listing "
                              "preview): ceil(tokens / this) vectors, the stop head trained on that boundary (0: the stop head decides)")
     parser.add_argument("--sketch-gradient", choices=["unroll", "one_step", "local_stage"], default="unroll")
     parser.add_argument("--local-stage-batch-size", type=int, default=1, help="isolated sketch stages per tensor batch;1 is sequential reference; explicit memory/performance control")
@@ -695,7 +700,7 @@ def main(argv=None):
     parser.add_argument("--sketch-target-weight", type=float, default=0.)
     parser.add_argument("--train-control-rows", action=argparse.BooleanOptionalAction, help="train/save/restore LM control rows for close-token stopping")
     parser.add_argument("--stop-weight", type=float, default=1.0, help="weight of the stop-boundary loss on source-sized writes")
-    parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or digests are written")
+    parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or views are written")
     parser.add_argument("--detach-write-context", action="store_true",
                         help="no gradient into the write sites' context (saves memory; soft prompts there then do not learn from writing)")
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
@@ -789,8 +794,8 @@ def main(argv=None):
         raise ValueError('projection anchor backbone scale must be finite and between zero and one')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
         raise ValueError('invalid graph memory budget')
-    if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written'):
-        raise ValueError('staging currently requires deterministic handoffs and preview digests')
+    if args.backward_policy != 'joint' and (args.stop_pg or args.view == 'written'):
+        raise ValueError('staging currently requires deterministic handoffs and preview views')
     if args.device.startswith('cuda'):
         free, total = torch.cuda.mem_get_info()
         args.memory_gb = args.memory_gb or float(os.environ.get('NATLANG_CUDA_MEMORY_GB') or free / 2**30 * .9)
@@ -887,6 +892,13 @@ def main(argv=None):
             piece_kinds[piece["name"]] = piece.get("kind")
     with open(args.records) as stream:
         source_records = [json.loads(line) for line in stream]
+    # Records converted before the view rename are refused before any model work, naming their conversion.
+    for record in source_records:
+        for message in record.get("messages") or []:
+            for part in message.get("content") if isinstance(message.get("content"), list) else []:
+                reject_digest_part(part)
+    if "prompt:digest" in texts:
+        reject_digest_part({"type": "digest"})
     records, context_review = authenticated_recurrence_context_view(source_records, texts)
     context_review_path = out / "recurrence-context-review.json"
     context_review_path.write_text(json.dumps(context_review, ensure_ascii=False, indent=2) + "\n")
@@ -1234,29 +1246,35 @@ def main(argv=None):
                 memo.write(job['name'], depth, lambda node=node: node)
         return {name: memo.values[(name, depth)] for name in chosen}
 
-    def digest_payload(record, part, leaves):
-        """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
-        crisp = crisp_messages(record["messages"], texts, handover_notes(record))
-        opening = next((m["content"] for m in crisp if m["role"] == "user" and isinstance(m["content"], str)), "")
-        found = INSTRUCTIONS.search(opening)
-        system = [{"type": "neuralese", "id": leaf_ids["prompt:digest"]}]
+    view_prefix = []
+
+    def view_payload(record, part, leaves):
+        """The view of a value by its plan (view.py) at view's template write site, every write differentiable."""
+        if not view_prefix:
+            view_prefix.append(reply_prefix(
+                lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g)))
+        system = [{"type": "neuralese", "id": leaf_ids["prompt:view"]}]
         written = {}
 
         def site_write(messages):
-            payload = write(messages, None, DIGEST_PREFIX, {**leaves, **written}, source=part.get("preview"))
+            payload = write(messages, VIEW_TOOLS, view_prefix[0], {**leaves, **written}, source=part.get("preview"))
             block = placeholder(f"{part['name']}#{len(written)}")
             written[block] = payload
             return block
 
-        # A digest part may carry the instructions it is written for (an agent's intent at the tool call whose output
-        # it digests, HARNESS_BENCH.md); otherwise they are the receiving call's instructions in the opening.
-        instructions = part.get("instructions") or (found.group(1) if found else "")
-        block, _ = write_digest(site_write, system, part["holder"], part["value_type"], part["source"],
-                                instructions, engine.tokenizer, args.digest_window)
+        # A view part may carry the instructions it is written for (an agent's intent at the tool call whose output
+        # it views, HARNESS_BENCH.md); otherwise it is written for the receiving call, as the runtime's listing does.
+        instructions = part.get("instructions")
+        if not instructions:
+            crisp = crisp_messages(record["messages"], texts, handover_notes(record))
+            opening = next((m["content"] for m in crisp if m["role"] == "user" and isinstance(m["content"], str)), "")
+            found = INSTRUCTIONS.search(opening)
+            instructions = listing_instructions(part["holder"], part["value_type"], found.group(1) if found else "")
+        block, _ = write_view(site_write, system, part["source"], instructions, engine.tokenizer, args.view_window)
         return written[block]
 
     def written_values(record, leaves, depth=0, visiting=(), memo=None, reader_only=False):
-        """Blocks written for this record this step: handoffs it reads or shows (notes, child results), digests in its
+        """Blocks written for this record this step: handoffs it reads or shows (notes, child results), views in its
         listing. Inside a producer (depth > 0) its own target's value is not one of them. Returns (name → placeholder
         ID, placeholder ID → payload)."""
         names, payloads = {}, {}
@@ -1278,12 +1296,13 @@ def main(argv=None):
             for name in chosen:
                 names[name] = placeholder(name)
                 payloads[names[name]] = frontier[name] if frontier is not None else note_payload(name, leaves, depth + 1, visiting, memo)
-        if args.digest == "written":
+        if args.view == "written":
             for message in record["messages"]:
                 for part in message.get("content") if isinstance(message.get("content"), list) else []:
-                    if part["type"] == "digest":
+                    reject_digest_part(part)
+                    if part["type"] == "view":
                         names[part["name"]] = placeholder(part["name"])
-                        payloads[names[part["name"]]] = digest_payload(record, part, leaves)
+                        payloads[names[part["name"]]] = view_payload(record, part, leaves)
         return names, payloads
 
     def soft_messages(record, names):
@@ -1337,8 +1356,8 @@ def main(argv=None):
     # Soft parameters for the names the selected records use (a corpus has thousands of instructions texts).
     used_names = {part["name"] for record in train + held + paired_held + paired_train + list(producers.values()) for message in record["messages"]
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
-    if args.digest == "written":
-        used_names.add("prompt:digest")
+    if args.view == "written":
+        used_names.add("prompt:view")
     from .trajectory_state import soft_initialization, resumed_initial_rows, iteration_rng_state, restore_iteration_rng
     warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size, profile=heads.profile) if args.soft_init and resumed is None else {}
     saved_rows = resumed_initial_rows(resumed, used_names, backbone.config.hidden_size)
@@ -1441,7 +1460,7 @@ def main(argv=None):
         heads.add_read_adapter()
     head_named = [(f'heads.{name}', p) for name, p in heads.named_parameters()
                    if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
-                           (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
+                           (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.view == "written") else []
     head_params = [p for _, p in head_named]
     if args.train_control_rows:
         head_params += [backbone.control_rows]
@@ -1591,7 +1610,7 @@ def main(argv=None):
             crisp = crisp_messages(record["messages"], texts, handover_notes(record))
             target = render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record))[0]
             return session._term({"kind": "crossEntropy", "messages": crisp, "tools": record.get("tools"), "target": target}, leaves)
-        # Notes and digests are written afresh by the current writer; their payloads are leaves of this loss.
+        # Notes and views are written afresh by the current writer; their payloads are leaves of this loss.
         stop_terms.clear()
         boundary_terms.clear()
         names, payloads = written_values(record, leaves)
@@ -1625,7 +1644,7 @@ def main(argv=None):
             boundary_terms.clear()
         if stop_terms:
             # Stop policy (phase E's objective on real readers): reward = -(reader loss + λ·length), against a running
-            # baseline; the stop head learns how long a note or digest must be for what its readers need.
+            # baseline; the stop head learns how long a note or view must be for what its readers need.
             reward = -(float(loss.detach()) + args.stop_pg * sum(n for _, n in stop_terms))
             advantage = reward - (baseline["value"] if baseline["value"] is not None else reward)
             baseline["value"] = reward if baseline["value"] is None else 0.9 * baseline["value"] + 0.1 * reward
@@ -1724,7 +1743,7 @@ def main(argv=None):
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
     if resumed is None and family and args.member_eval:
         report["family-init"] = evaluate_members(backbone, member_eval_windows())
-    if resumed is None and (args.handover == "written" or args.digest == "written"):
+    if resumed is None and (args.handover == "written" or args.view == "written"):
         report["written-init"] = evaluate_written("written-init", leaves, paired_held, held_probe_accounting)
         report["written-init-train"] = evaluate_written("written-init-train", leaves, paired_train, train_probe_accounting)
     if resumed is not None and resumed.get('probe_selection_sha256') != probe_selection_hash:
@@ -1733,7 +1752,7 @@ def main(argv=None):
         baseline_eval = {'completed_updates': resumed['step'], 'event': 'probe_scope_baseline',
                          'selection_sha256': probe_selection_hash,
                          'soft': evaluate('resume-scope-soft', leaves)}
-        if args.handover == 'written' or args.digest == 'written':
+        if args.handover == 'written' or args.view == 'written':
             baseline_eval['written'] = evaluate_written('resume-scope-written', leaves, paired_held, held_probe_accounting)
         report['resume_scope_baseline'] = baseline_eval
         report['historical_initial_scope'] = 'Earlier initial reports retain their original selection scope.'
@@ -2153,7 +2172,7 @@ def main(argv=None):
                         evaluation['family'] = evaluate_members(backbone, member_eval_windows())
                     if args.crisp_weight:
                         evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
-                    if args.handover == 'written' or args.digest == 'written':
+                    if args.handover == 'written' or args.view == 'written':
                         evaluation['written'] = evaluate_written('periodic-written', leaves, paired_held, held_probe_accounting)
                 with (out / 'eval.jsonl').open('a') as evaluation_log:
                     evaluation_log.write(json.dumps(evaluation) + '\n')
@@ -2182,7 +2201,7 @@ def main(argv=None):
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if family and args.member_eval:
         report["family-trained"] = evaluate_members(backbone, member_eval_windows())
-    if args.handover == "written" or args.digest == "written":
+    if args.handover == "written" or args.view == "written":
         report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
         report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
     if lengths:

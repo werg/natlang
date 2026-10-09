@@ -32,13 +32,26 @@ def test_written_notes_are_block_parts_in_reads_and_inside_the_quoted_argument()
     assert arguments == {"note": [{"type": "neuralese", "id": block, "value_type": "string"}]}
 
 
-def test_digest_sites_render_as_their_preview_until_the_operator_writes_them():
+def test_view_parts_render_as_their_preview_until_view_writes_them():
     messages = [{"role": "tool", "tool_call_id": "scope_0", "content": [
         {"type": "text", "text": "state: unknown = "},
-        {"type": "digest", "name": "digest:abc", "source": "{\"a\": 1}", "preview": "{ a: 1, <<cut off: 2 of 3 fields not shown>> }"},
+        {"type": "view", "name": "view:abc", "holder": "state", "source": "{\"a\": 1}", "preview": "{ a: 1, <<cut off: 2 of 3 fields not shown>> }"},
         {"type": "text", "text": "\nDeclared state for the rest of this call."}]}]
     out = render(messages, lambda name: None, {})
     assert out[0]["content"].startswith("state: unknown = { a: 1, <<cut off")
+    block = "nz1_" + "d" * 52
+    written = render(messages, lambda name: None, {}, views={"view:abc": block})
+    assert {"type": "neuralese", "id": block} in written[0]["content"]
+    assert {"type": "text", "text": "  // view of the value; state holds all of it"} in written[0]["content"]
+
+
+def test_digest_parts_from_before_the_rename_are_refused_with_their_conversion():
+    import pytest
+
+    messages = [{"role": "tool", "tool_call_id": "scope_0", "content": [
+        {"type": "digest", "name": "digest:abc", "holder": "state", "source": "{}", "preview": "{}"}]}]
+    with pytest.raises(ValueError, match="digest_to_view.py"):
+        render(messages, lambda name: None, {})
 
 
 def test_structured_child_returns_keep_their_type_in_crisp_replay():

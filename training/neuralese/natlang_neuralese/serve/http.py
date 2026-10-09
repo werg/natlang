@@ -21,7 +21,7 @@
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type"?, "context"?}` → block metadata. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
-| `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
+| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`view.py`): `{"value", "instructions"?, "system"?, "window"?}` → the view block's metadata, `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is viewed in chunks) and `window`. Every write is the template write of view's body (the reply forced to `return_result`, its value written). Without `instructions` the view is faithful. `system` is view's body, as text or parts (its soft form). |
 
 Owners (serve/store.py `TensorStore`): a client names itself (a session or runtime ID) in the `x-natlang-owner`
 header. That owner holds every block it uploads and every block ID the server names to it in a response, and its pins
@@ -77,8 +77,8 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
 CAPABILITIES = sorted([
     "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
-    "decide", "digest", "embed", "encode", "grad", "grad.order2", "guidance.check", "optim", "parts.value-type",
-    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "write"])
+    "decide", "embed", "encode", "grad", "grad.order2", "guidance.check", "optim", "parts.value-type",
+    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
 
 
 def unavailable_code(capability: str) -> str:
@@ -253,24 +253,24 @@ def make_handler(engine: Engine):
                     if not blocks:
                         return self._error(500, "neuralese-write", "the write produced no block")
                     return self._json(201, blocks[0])
-                if self.path == "/v1/neuralese/digest":
-                    from ..digest import INSTRUCTIONS, PREFIX, window_of, write_digest
+                if self.path == "/v1/neuralese/view":
+                    from ..view import INSTRUCTIONS, TEMPLATE, TOOLS, window_of, write_view
 
                     body = self._object()
 
                     def write(messages):
-                        request = GenerationRequest(messages=messages, max_tokens=engine.max_block + 32,
-                                                    forced=[PREFIX, {"neuralese": "write"}])
+                        # The template write of view's body: the reply forced to return_result, its value written.
+                        request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
+                                                    max_tokens=engine.max_block + 64)
                         blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
                         if not blocks:
-                            raise RequestError("neuralese-digest", "a digest write produced no block")
+                            raise RequestError("neuralese-view", "a view write produced no block")
                         return blocks[0]["id"]
 
-                    instructions = body.get("instructions") or ""
+                    instructions = body.get("instructions") or None
                     window = window_of(engine, instructions, body.get("window"))
-                    block, parts = write_digest(write, body.get("system") or INSTRUCTIONS, body.get("name") or "value",
-                                                body.get("type") or "unknown", body.get("value") or "", instructions,
-                                                engine.tokenizer, window)
+                    block, parts = write_view(write, body.get("system") or INSTRUCTIONS, body.get("value") or "",
+                                              instructions, engine.tokenizer, window)
                     return self._json(201, {**engine.lookup(block).meta(), "parts": parts, "window": window})
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide

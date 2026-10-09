@@ -9,13 +9,15 @@ renderer, and recurrence/trajectory training directly. One record per supervised
   and tool calls, and tool results;
 - target: the assistant turn itself; tools: the harness's tool schemas.
 
-A tool result longer than `digest_chars` is a **digest part** (DECISIONS 43): `source` is the full output, `preview`
-is the output as the teacher saw it (cut at `preview_chars`, the companion's crisp head-and-tail shape beyond), and the
-digest is conditioned on the call's intent: the reasoning and text of the assistant turn that made the call, and the
-call (`instructions`). `note` says how the agent gets the whole output (`recall`). Text renderings show the preview,
-so the text warm-up trains on the teacher's own view; recurrence training writes the digest through the port, and the
-reader's loss plus self-distillation from the preview (`--distill`) train the writer to keep what the following
-actions need.
+A tool result longer than `view_chars` is a **view part** (DECISIONS.md 2026-10-09, one summarizer family): `source`
+is the full output, `preview` is the output as the teacher saw it (cut at `preview_chars`, the companion's crisp
+head-and-tail shape beyond), and the view is the builtin `view(source, instructions)` with the call's intent as its
+instructions: the reasoning and text of the assistant turn that made the call, and the call (`instructions`). `note`
+says how the agent gets the whole output (`recall`). Text renderings show the preview, so the text warm-up trains on
+the teacher's own view; recurrence training writes the view through the port at view's template write site
+(view.py), and the reader's loss plus self-distillation from the preview (`--distill`) train the writer to keep what
+the following actions need. Records before natlang.harness-bench-conversion/2 named these parts `digest`; the trainer
+rejects them and scripts/neuralese_data/digest_to_view.py converts them.
 
 Splits are by repository (no repository in both); source groups are the repository and the task instance.
 Admission is recorded per record by explicit criteria (`admission`); the builder never approves on its own.
@@ -29,12 +31,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ..common.hashing import sha256_hex
-from ..digest import INSTRUCTIONS as DIGEST_INSTRUCTIONS
+from ..view import INSTRUCTIONS as VIEW_INSTRUCTIONS
 from .openhands import DIALECT, Normalized, normalize, rows
 
 VERSION = 'natlang.teacher_training_turn.native/1'
 BUILDER = 'natlang.harness_bench.records/1'
-DIGEST_CHARS = 2000
+VIEW_CHARS = 2000
 PREVIEW_CHARS = 40_000
 SHAPE_HEAD, SHAPE_TAIL = 2500, 2000
 
@@ -44,7 +46,7 @@ def text_digest(text: str) -> str:
 
 
 def recall_note(call_id: str) -> str:
-    return f'  // digest of the output; recall("{call_id}") returns all of it'
+    return f'  // view of the output; recall("{call_id}") returns all of it'
 
 
 def companion_shape(text: str, call_id: str) -> str:
@@ -65,7 +67,7 @@ def _arguments_text(arguments: Any) -> str:
 
 def intent(assistant: dict[str, Any], call: dict[str, Any]) -> str:
     """What the agent wanted from a tool call, as it was known when the call was made: the turn's reasoning and text,
-    then the call. The digest of the call's output is conditioned on this, never on later turns."""
+    then the call. The view of the call's output is written for this, never for later turns."""
     reasoning = '\n'.join(part.get('thinking', '') for part in assistant['content'] if part['type'] == 'thinking').strip()
     text = '\n'.join(part.get('text', '') for part in assistant['content'] if part['type'] == 'text').strip()
     lines = ['The agent made this tool call and reads its output next:', f'{call["name"]} {_arguments_text(call["arguments"])}']
@@ -74,12 +76,12 @@ def intent(assistant: dict[str, Any], call: dict[str, Any]) -> str:
     return '\n'.join(lines)
 
 
-def native_messages(transcript: Normalized, system_piece: str, digest_chars: int, preview_chars: int) -> tuple[list[dict], list[int], int]:
-    """The transcript as native messages; also the index of every assistant message and the number of digest parts."""
+def native_messages(transcript: Normalized, system_piece: str, view_chars: int, preview_chars: int) -> tuple[list[dict], list[int], int]:
+    """The transcript as native messages; also the index of every assistant message and the number of view parts."""
     out: list[dict] = [{'role': 'system', 'content': [{'type': 'soft', 'name': system_piece}]}]
     assistants: list[int] = []
     calls: dict[str, tuple[dict, dict]] = {}
-    digests = 0
+    views = 0
     for message in transcript.messages:
         role = message['role']
         if role == 'user':
@@ -104,22 +106,22 @@ def native_messages(transcript: Normalized, system_piece: str, digest_chars: int
         elif role == 'toolResult':
             text = ''.join(part.get('text', '') for part in message['content'] if part.get('type') == 'text')
             call_id = message['toolCallId']
-            if len(text) > digest_chars and call_id in calls:
+            if len(text) > view_chars and call_id in calls:
                 assistant, call = calls[call_id]
                 preview = text if len(text) <= preview_chars else companion_shape(text, call_id)
-                content: Any = [{'type': 'digest', 'name': f'digest:{text_digest(text)[:12]}', 'holder': f'recall("{call_id}")',
+                content: Any = [{'type': 'view', 'name': f'view:{text_digest(text)[:12]}', 'holder': f'recall("{call_id}")',
                                  'value_type': 'string', 'source': text, 'preview': preview,
                                  'instructions': intent(assistant, call), 'note': recall_note(call_id)}]
-                digests += 1
+                views += 1
             else:
                 content = text
             out.append({'role': 'tool', 'tool_call_id': call_id, 'content': content})
-    return out, assistants, digests
+    return out, assistants, views
 
 
 def choose_targets(messages: list[dict], assistants: list[int], targets: str, per_trajectory: int, rng: random.Random) -> list[int]:
     """Which assistant turns become records. `all`: every turn (whole-trajectory supervision). `sample`: up to
-    `per_trajectory`, first the turns that read a digested output, then others at random, in trajectory order."""
+    `per_trajectory`, first the turns that read a viewed output, then others at random, in trajectory order."""
     if targets == 'all':
         return assistants
     readers = [index for index in assistants
@@ -158,10 +160,10 @@ def replayed(line: dict[str, Any]) -> tuple[Normalized, dict[str, Any] | None]:
 
 
 def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, tools: list[dict], corpus: str, test_percent: int,
-          digest_chars: int, preview_chars: int, targets: str, per_trajectory: int, seed: int,
+          view_chars: int, preview_chars: int, targets: str, per_trajectory: int, seed: int,
           transcript: Normalized | None = None, replay: dict[str, Any] | None = None, row_sha: str | None = None) -> Iterable[dict]:
     transcript = transcript or normalize(row, 'pi')
-    messages, assistants, digests = native_messages(transcript, system_piece, digest_chars, preview_chars)
+    messages, assistants, views = native_messages(transcript, system_piece, view_chars, preview_chars)
     rng = random.Random(f'{seed}:{transcript.id}')
     split = split_of(transcript.repo, test_percent)
     admitted = admission(transcript, replay)
@@ -175,7 +177,7 @@ def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, to
                            'source_row_sha256': row_sha, 'message_index': index},
             'provenance': {'builder': BUILDER, 'corpus': corpus, 'dialect': DIALECT, 'mapping': 'pi', 'harness': 'pi',
                            'surface_sha256': surface_sha, 'teacher': 'Qwen3-Coder-480B-A35B-Instruct (OpenHands 0.54)',
-                           'digest_chars': digest_chars, 'preview_chars': preview_chars,
+                           'view_chars': view_chars, 'preview_chars': preview_chars,
                            'observations': 'pi-replayed' if replay else 'teacher-recorded',
                            **({'replay': replay} if replay else {})},
             'task': {'kind': 'agent_trajectory', 'instance_id': transcript.instance_id, 'repo': transcript.repo,
@@ -183,11 +185,11 @@ def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, to
             'family': 'harness_bench', 'task_family': 'swe', 'task_kind': 'agent_trajectory', 'task_modality': 'code',
             'license': 'CC-BY-4.0', 'split': split, 'source_groups': groups, 'source_ids': [transcript.id],
             'outcome': {'resolved': transcript.resolved}, 'training_admission': admitted,
-            'neuralese_conversion': {'version': 'natlang.harness-bench-conversion/1',
-                                     'sites': {'digest': {'converted': sum(1 for m in prefix if m['role'] == 'tool' and isinstance(m['content'], list))},
+            'neuralese_conversion': {'version': 'natlang.harness-bench-conversion/2',
+                                     'sites': {'view': {'converted': sum(1 for m in prefix if m['role'] == 'tool' and isinstance(m['content'], list))},
                                                'prompt': {'converted': 1}}},
             'messages': prefix, 'target': messages[index], 'tools': tools,
-            'digests_in_trajectory': digests,
+            'views_in_trajectory': views,
         }
 
 
@@ -203,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--offset', type=int, default=0)
     parser.add_argument('--targets', choices=['all', 'sample'], default='sample')
     parser.add_argument('--per-trajectory', type=int, default=8)
-    parser.add_argument('--digest-chars', type=int, default=DIGEST_CHARS)
+    parser.add_argument('--view-chars', type=int, default=VIEW_CHARS)
     parser.add_argument('--preview-chars', type=int, default=PREVIEW_CHARS)
     parser.add_argument('--test-percent', type=int, default=5)
     parser.add_argument('--seed', type=int, default=0)
@@ -216,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     summary = {'builder': BUILDER, 'corpus': args.corpus, 'surface_sha256': surface_sha, 'trajectories': 0, 'records': 0,
-               'by_split': {'train': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'digest_parts': 0}
+               'by_split': {'train': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'view_parts': 0}
     def sources() -> Iterable[dict[str, Any]]:
         if args.replayed:
             with open(args.replayed) as lines:
@@ -238,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
             summary['trajectories'] += 1
             for record in build(item['row'], transcript=item['transcript'], replay=item['replay'], row_sha=item['row_sha'],
                                 system_piece=system_piece, surface_sha=surface_sha, tools=tools, corpus=args.corpus,
-                                test_percent=args.test_percent, digest_chars=args.digest_chars,
+                                test_percent=args.test_percent, view_chars=args.view_chars,
                                 preview_chars=args.preview_chars, targets=args.targets,
                                 per_trajectory=args.per_trajectory, seed=args.seed):
                 handle.write(json.dumps(record, ensure_ascii=False) + '\n')
@@ -248,9 +250,9 @@ def main(argv: list[str] | None = None) -> int:
                     summary['admitted'] += 1
                 for reason in record['training_admission'].get('held', []):
                     summary['held'][reason] = summary['held'].get(reason, 0) + 1
-                summary['digest_parts'] += record['neuralese_conversion']['sites']['digest']['converted']
+                summary['view_parts'] += record['neuralese_conversion']['sites']['view']['converted']
     pieces = [{'name': system_piece, 'kind': 'system-prompt', 'text': surface['system']},
-              {'name': 'prompt:digest', 'kind': 'system-prompt', 'text': DIGEST_INSTRUCTIONS}]
+              {'name': 'prompt:view', 'kind': 'system-prompt', 'text': VIEW_INSTRUCTIONS}]
     (out / 'pieces.jsonl').write_text(''.join(json.dumps(piece, ensure_ascii=False) + '\n' for piece in pieces))
     (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary))

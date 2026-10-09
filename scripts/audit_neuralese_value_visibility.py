@@ -50,7 +50,10 @@ def visible_segments(row, pieces):
             for j, part in enumerate(content):
                 if part['type'] == 'text': yield f'message:{i}:part:{j}', 'text', part['text']
                 elif part['type'] == 'soft': yield f'message:{i}:part:{j}', 'soft-source', pieces[part['name']]
-                elif part['type'] == 'digest': yield f'message:{i}:part:{j}', 'digest-preview', part['preview']
+                elif part['type'] == 'view': yield f'message:{i}:part:{j}', 'view-preview', part['preview']
+                elif part['type'] == 'digest':
+                    raise ValueError("a 'digest' part predates the view rename; convert the records with "
+                                     "scripts/neuralese_data/digest_to_view.py first")
         for j, call in enumerate(m.get('tool_calls', [])):
             value = call['function']['arguments']
             if isinstance(value, str): value = json.loads(value)
