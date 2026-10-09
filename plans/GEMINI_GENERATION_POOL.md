@@ -26,7 +26,10 @@ python3 scripts/run_gemini_decision_pool.py \
 ```
 
 All Google pool owners on this machine/project must use that same state file.
-It is locked for the lifetime of the process; a second owner refuses to start.
+It is locked for the lifetime of the process; a second owner refuses to start
+unless `--wait-for-owner` explicitly queues it behind the current owner. The
+queued source reads the persisted quota state only after acquiring ownership.
+Freeze the source, inventory and both adapter files before queuing.
 Reserve groups used by older standalone workers with `--exclude-model MODEL`.
 The exclusion applies to all aliases in the group. Coordinate cross-machine
 ownership rather than starting competing project pools on both machines.
@@ -70,3 +73,14 @@ credit. Do not claim that inventory size means all models produced answers.
 
 Sources: [Google rate limits](https://ai.google.dev/gemini-api/docs/rate-limits),
 [Google pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+Standalone HTTP label queues pause after an HTTP429 exhausts bounded retries,
+leaving later source cases pending. Use provider RetryInfo to distinguish a
+minute cooldown from a daily cap; do not automatically relaunch before it.
+A retryable transport error can be requeued with its earlier attempt preserved.
+Semantic-invalid labels remain errors rather than automatic relabel targets.
+
+The additional verified RoboticsER2 group is included in the next frozen pool;
+its standalone worker has now closed on a daily quota. The next queued source
+contains1024 additional inherited train cases and all10 verified model IDs
+across9 conservative quota groups. Both prior Lite workers are closed.

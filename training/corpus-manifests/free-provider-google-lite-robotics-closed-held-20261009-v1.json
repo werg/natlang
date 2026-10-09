@@ -1,0 +1,178 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-lite-robotics-closed-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "availability-review-v1/google-free-model-availability-v1.json",
+      "bytes": 8470,
+      "sha256": "dcd6d1c3b5b7927cbe17752288595db8d8e4a542e40bc7ba28af2e29752952e0"
+    },
+    {
+      "path": "google-live-model-catalog-v2.json",
+      "bytes": 24314,
+      "sha256": "7d655f4897d3e162df06806fdb0fb7faa900ede7077a338c223da31a1ac9d4ee"
+    },
+    {
+      "path": "provider-gemini-2.5-pro-short-availability-v1/labels.jsonl",
+      "bytes": 820,
+      "sha256": "b398912320e922da51fd789f37295040a3eb8218b2c33c10888652e8fd8c0e1e",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-2.5-pro-short-availability-v1/labels.jsonl.manifest.json",
+      "bytes": 827,
+      "sha256": "cc5a7128f2ce2450450e22b791ae9b81d04acf6db9a6a0894d7c53df1c68dc50"
+    },
+    {
+      "path": "provider-gemini-robotics-er-2-preview-short-availability-v1/labels.jsonl",
+      "bytes": 1087,
+      "sha256": "4ccc0565115196c8c2e752d14b93c42ce4ecbe63c98bd9c8f5be2329670632ea",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-robotics-er-2-preview-short-availability-v1/labels.jsonl.manifest.json",
+      "bytes": 855,
+      "sha256": "d48207c2c1f5f12c4372a0ce852b97a1ed74439a86e9ae56f61b03b0bfc246e9"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/labels.jsonl",
+      "bytes": 153235,
+      "sha256": "a45b2474e1e769c3159a37e539946a26c8c66c6defcb9fd46457d608089f1690",
+      "lines": 128
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 785,
+      "sha256": "8da8b7038a8fb664c6227b52d420f0a014663467a9bcf1bf030c50bd42552403"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1055,
+      "sha256": "19dedb1f5887aba5ae0e14d7cb017f7704097b5f457d7978e78c9f295867a43a"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/worker.log",
+      "bytes": 6028,
+      "sha256": "7dbd136d43ec4c617620ec1b5c6d966395f5a2a1a2e225bccb8c833282c2664d"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25171,
+      "sha256": "f92188933dc6beaea661ce403a211e29c53f9fb8d413492f45a8a424a620028e"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/labels.jsonl",
+      "bytes": 9382,
+      "sha256": "abf867c97c332e85d78684ce652cecf200a2459190690907af6a676e470ca775",
+      "lines": 8
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 859,
+      "sha256": "a957a0fa6760878de7058116c51081ab3ab82622301144420dcd6fbbc54b8ae5"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1214,
+      "sha256": "0add60bbb2efb8a026bbd1f393f2d1de0c19393f8b6707811286e872b9ffc95d"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/owner-pause-receipt-v1.json",
+      "bytes": 341,
+      "sha256": "1edb258eb46e221f18c80da50e0eb2ebde11dad01acbeeb2f8af1a8de64b1ad8"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v1/worker.log",
+      "bytes": 351,
+      "sha256": "61172debd7a4debd6f55f2ad2e4003b60955ac84d3bb7768995721c301f12e2b"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/cases.jsonl",
+      "bytes": 66291,
+      "sha256": "4883b2a986c2ea4542b91b24bcab012145d362d0cfe403ef2caee6297269b9fd",
+      "lines": 120
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/labels.jsonl",
+      "bytes": 9744,
+      "sha256": "e6a4718022fc8b8dbd2d4be065497945b3984caea937062e80bb9141963cfc60",
+      "lines": 9
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/labels.jsonl.manifest.json",
+      "bytes": 859,
+      "sha256": "3a7839146b4a21b0f9692ffb955ae16c702ad794c50e19e3cda413fd3f4577fc"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1438,
+      "sha256": "fb547dbda5bd34c04a378378def4f6aa617716be084f315da0abb28e32532ba9"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v2/worker.log",
+      "bytes": 676,
+      "sha256": "06f22f83f9e1832ee10dcb2a45a436bd3bc6887d6121c9fa069a5c9a15fc8a3a"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/cases.jsonl",
+      "bytes": 63057,
+      "sha256": "f6b47f0b85b78354a5b752bd223e0d754cf7dafd56d15db5d4e982b48feebf4d",
+      "lines": 114
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/labels.jsonl",
+      "bytes": 9932,
+      "sha256": "c01caf6f2b885af864c6f60519aefae81b170c857f995219d04f0ae5cdb7f5d9",
+      "lines": 8
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/labels.jsonl.manifest.json",
+      "bytes": 860,
+      "sha256": "8eb20de3d48bfbc8f76ef39123832ec7577339154b498716bcb48b715068b2cf"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/launch-receipt-v1.json",
+      "bytes": 1618,
+      "sha256": "1bc7839a92c3640398c4514a00a7f9bfd638274f3815544b8c28226a1a90f942"
+    },
+    {
+      "path": "provider-google-robotics-er2-mixed-decisions-v3/worker.log",
+      "bytes": 633,
+      "sha256": "a4343ab7698ef3dc72e690a5f3944783e5794f522e6f42f47296ea34cfb750cf"
+    },
+    {
+      "path": "quality-review-v7/gemini-3.1-flash-lite-mixed128-scorer-output.json",
+      "bytes": 3829,
+      "sha256": "f3ce472e7c92b081f9e9cf342774a4ffae6b509536382143baa89d7fd52842d1"
+    },
+    {
+      "path": "quality-review-v7/provider-mixed-followup-quality-review-v7.json",
+      "bytes": 97638,
+      "sha256": "1e89095f3990cf931d31cb16b2b3cdb37d9c8985a7db610347b192b71a2ff688"
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/cases.jsonl",
+      "bytes": 70600,
+      "sha256": "84bae10bb04f573e5b9e37c56cb7039d8fe545d6381fa816065089279f10b78a",
+      "lines": 128
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/source-manifest.json",
+      "bytes": 1050,
+      "sha256": "8a461e15c97506c50e22268592ac997e2541d92c85c80d43136ccfe466ac325d"
+    }
+  ],
+  "bytes": 614763
+}

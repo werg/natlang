@@ -18506,7 +18506,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261009-1000"
       },
-      "notes": "Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical)."
+      "notes": "Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical)."
     },
     {
       "id": "luna-v30-source-repairs-counterfactuals-generation-only-20261009-v1",
@@ -20344,6 +20344,56 @@
       ],
       "license": "internal",
       "notes": "natlang.replay-record/1 (a78372fc): 216 records (144 train from 24 cases, 72 held from 12 cases), 0 failures; programs read(v), read(map(v,f)), read(split(zip(a,b))[i]), laws combineIdentity and splitZip, collected on the reference server with LFM2.5-350M + runs/neuralese-s3-pilot-20261005-v4 heads and the text-init standard library in the same directory. Blocks are only meaningful for that backbone and those heads."
+    },
+    {
+      "id": "free-provider-google-lite-robotics-closed-held-20261009-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "availability-review-v1/google-free-model-availability-v1.json",
+        "google-live-model-catalog-v2.json",
+        "provider-gemini-2.5-pro-short-availability-v1/labels.jsonl",
+        "provider-gemini-2.5-pro-short-availability-v1/labels.jsonl.manifest.json",
+        "provider-gemini-robotics-er-2-preview-short-availability-v1/labels.jsonl",
+        "provider-gemini-robotics-er-2-preview-short-availability-v1/labels.jsonl.manifest.json",
+        "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/labels.jsonl",
+        "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/labels.jsonl.manifest.json",
+        "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/launch-receipt-v1.json",
+        "provider-google-gemini-3.1-flash-lite-mixed-decisions-v1/worker.log",
+        "provider-google-robotics-er2-mixed-decisions-v1/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-robotics-er2-mixed-decisions-v1/labels.jsonl",
+        "provider-google-robotics-er2-mixed-decisions-v1/labels.jsonl.manifest.json",
+        "provider-google-robotics-er2-mixed-decisions-v1/launch-receipt-v1.json",
+        "provider-google-robotics-er2-mixed-decisions-v1/owner-pause-receipt-v1.json",
+        "provider-google-robotics-er2-mixed-decisions-v1/worker.log",
+        "provider-google-robotics-er2-mixed-decisions-v2/cases.jsonl",
+        "provider-google-robotics-er2-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-robotics-er2-mixed-decisions-v2/labels.jsonl",
+        "provider-google-robotics-er2-mixed-decisions-v2/labels.jsonl.manifest.json",
+        "provider-google-robotics-er2-mixed-decisions-v2/launch-receipt-v1.json",
+        "provider-google-robotics-er2-mixed-decisions-v2/worker.log",
+        "provider-google-robotics-er2-mixed-decisions-v3/cases.jsonl",
+        "provider-google-robotics-er2-mixed-decisions-v3/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-robotics-er2-mixed-decisions-v3/labels.jsonl",
+        "provider-google-robotics-er2-mixed-decisions-v3/labels.jsonl.manifest.json",
+        "provider-google-robotics-er2-mixed-decisions-v3/launch-receipt-v1.json",
+        "provider-google-robotics-er2-mixed-decisions-v3/worker.log",
+        "quality-review-v7/gemini-3.1-flash-lite-mixed128-scorer-output.json",
+        "quality-review-v7/provider-mixed-followup-quality-review-v7.json",
+        "throughput-mixed-decisions-source-v1/cases.jsonl",
+        "throughput-mixed-decisions-source-v1/source-manifest.json"
+      ],
+      "split": null,
+      "source_class": "typed-decision-labels-and-provider-quota-diagnostics",
+      "admission": "held-pending-source-quality-and-current-IR-conversion",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-lite-and-new-free-screens-held-20261009-v1"
+      ],
+      "license": "Inherited exact original decision train roles/groups/licenses; see pinned source manifests",
+      "independent_new_worlds": 0,
+      "notes": "3.1Lite128 typed-valid, existinggraderquality .86953/allgates .765625. Robotics25rawrows22uniqueIDs18unique typed-valid; dedup hash selection in V7, all attempts retained. DailyRetryInfo6645s, no evidence reset elapsed. Availability2.5Pro404 vsRobotics200; catalog does not imply availability. Active pools excluded; all held/no automatic corpus admission."
     }
   ],
   "coverage_backlog": [
