@@ -753,6 +753,7 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
   return async request => {
     const maxTokens = request.max_tokens === null ? planLimit : Math.min(planLimit, request.max_tokens);
     let plan = '', planningCompletionTokens = 0;
+    let authenticPlanCall: Record<string, unknown> | undefined;
     let retryMessages: unknown[] = [...request.messages, { role: 'user', content: EXECUTION_PLAN_PROMPT }];
     for (let attempt = 0; attempt < attempts; attempt++) {
       let planned: ModelTurn;
@@ -772,7 +773,22 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
       planningCompletionTokens += planned.completion_tokens ?? maxTokens;
       const calls = planned.calls ?? [], value = calls.length === 1 && calls[0]![0] === 'execution_plan' ?
         calls[0]![1].plan : undefined;
-      if (typeof value === 'string' && value.trim()) { plan = value.trim(); break; }
+      if (typeof value === 'string' && value.trim()) {
+        plan = value.trim();
+        const plannedRaw = Array.isArray(planned.raw_calls) && planned.raw_calls.length === 1 ?
+          planned.raw_calls[0] as Record<string, unknown> : undefined;
+        const plannedRawFunction = plannedRaw?.function as Record<string, unknown> | undefined;
+        if (calls.length === 1 && calls[0]![0] === 'execution_plan' && plannedRaw && plannedRawFunction &&
+            plannedRawFunction.name === 'execution_plan' && typeof plannedRawFunction.arguments === 'string') {
+          try {
+            const rawArgs = JSON.parse(plannedRawFunction.arguments) as Record<string, unknown>;
+            if (typeof rawArgs.plan === 'string' && rawArgs.plan.trim() === plan &&
+                typeof plannedRaw.id === 'string' && plannedRaw.id)
+              authenticPlanCall = structuredClone(plannedRaw);
+          } catch { /* malformed raw provenance is not forwarded as an authentic provider call */ }
+        }
+        break;
+      }
       retryMessages = [...retryMessages,
         { role: 'assistant', content: planned.text ?? '' },
         { role: 'user', content: 'The plan was not recorded. Call execution_plan exactly once with a nonempty plan.' }];
@@ -783,12 +799,13 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
       return { ...action, execution_plan: null, reasoning: undefined,
         completion_tokens: planningCompletionTokens + (action.completion_tokens ?? 0) };
     }
-    const planCall = { id: 'execution_plan_0', type: 'function',
+    const planCall = authenticPlanCall ?? { id: 'execution_plan_0', type: 'function',
       function: { name: 'execution_plan', arguments: JSON.stringify({ plan }) } };
+    const planCallId = typeof planCall.id === 'string' ? planCall.id : 'execution_plan_0';
     const actionLimit = request.max_tokens === null ? null : Math.max(1, request.max_tokens - planningCompletionTokens);
     const action = await send({ ...request, max_tokens: actionLimit, messages: [...request.messages,
-      { role: 'assistant', content: '', tool_calls: [planCall] },
-      { role: 'tool', tool_call_id: planCall.id, content: 'Plan recorded. Now take the planned next step.' }] });
+      { role: 'assistant', content: '', ...(authenticPlanCall ? {} : { natlang_host_generated: true }), tool_calls: [planCall] },
+      { role: 'tool', tool_call_id: planCallId, content: 'Plan recorded. Now take the planned next step.' }] });
     // The plan deliberately replaces provider reasoning: it is the reproducible thinking signal retained in IR and
     // threaded through later action history. Keep the action response otherwise intact for execution and accounting.
     return { ...action, execution_plan: plan, reasoning: plan,

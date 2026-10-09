@@ -177,13 +177,30 @@ export function piModels(environment: NodeJS.ProcessEnv = process.env, scopedEnv
 function piContext(request: ModelTurnRequest, model: { api: string; provider: string; id: string }): Context {
   const messages: Message[] = [];
   const names = new Map<string, string>();
+  const hostGeneratedCalls = new Set<string>();
+  const googleHistory = model.api === 'google-generative-ai' || model.api === 'google-vertex';
   for (const raw of request.messages as Record<string, unknown>[]) {
     const role = raw.role, content = String(raw.content ?? '');
     const timestamp = Date.now();
     if (role === 'system') messages.push({ role, content, timestamp });
     else if (role === 'user') messages.push({ role, content, timestamp });
     else if (role === 'assistant') {
-      const calls = (raw.tool_calls ?? []) as Array<{ id: string; function: { name: string; arguments: string } }>;
+      const calls = (raw.tool_calls ?? []) as Array<{ id: string; function: { name: string; arguments: string };
+        thought_signature?: string }>;
+      const hostGenerated = googleHistory && raw.natlang_host_generated === true;
+      if (hostGenerated) {
+        const notes: string[] = [];
+        if (content) notes.push(content);
+        const reasoning = raw.reasoning_content ?? raw.reasoning;
+        if (typeof reasoning === 'string' && reasoning) notes.push(reasoning);
+        for (const call of calls) {
+          names.set(call.id, call.function.name);
+          hostGeneratedCalls.add(call.id);
+          notes.push(`Host-provided operation ${call.function.name} arguments: ${call.function.arguments || '{}'}`);
+        }
+        if (notes.length) messages.push({ role: 'user', content: notes.join('\n'), timestamp });
+        continue;
+      }
       const blocks: AssistantMessage['content'] = [];
       const reasoning = raw.reasoning_content ?? raw.reasoning;
       if (typeof reasoning === 'string' && reasoning) blocks.push({ type: 'thinking', thinking: reasoning });
@@ -191,13 +208,19 @@ function piContext(request: ModelTurnRequest, model: { api: string; provider: st
       for (const call of calls) {
         names.set(call.id, call.function.name);
         blocks.push({ type: 'toolCall', id: call.id, name: call.function.name,
-          arguments: JSON.parse(call.function.arguments || '{}') as Record<string, never> });
+          arguments: JSON.parse(call.function.arguments || '{}') as Record<string, never>,
+          ...(typeof call.thought_signature === 'string' ? { thoughtSignature: call.thought_signature } : {}) });
       }
       messages.push({ role, content: blocks, api: model.api as AssistantMessage['api'], provider: model.provider,
         model: model.id, usage: emptyUsage, stopReason: calls.length ? 'toolUse' : 'stop', timestamp });
-    } else if (role === 'tool') messages.push({ role: 'toolResult', toolCallId: String(raw.tool_call_id),
-      toolName: names.get(String(raw.tool_call_id)) ?? 'unknown', content: [{ type: 'text', text: content }],
-      isError: false, timestamp });
+    } else if (role === 'tool') {
+      const callId = String(raw.tool_call_id);
+      const toolName = names.get(callId) ?? 'unknown';
+      if (googleHistory && hostGeneratedCalls.has(callId))
+        messages.push({ role: 'user', content: `Host-provided result for ${toolName}: ${content}`, timestamp });
+      else messages.push({ role: 'toolResult', toolCallId: callId,
+        toolName, content: [{ type: 'text', text: content }], isError: false, timestamp });
+    }
   }
   const tools: Tool[] = modelTools(request.tools).map(tool => ({ name: tool.function.name,
     description: String(tool.function.description ?? ''), parameters: tool.function.parameters as Tool['parameters'] }));
@@ -354,7 +377,8 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const reasoning = reply.content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n');
       const replyDiagnostic = piReplyDiagnostic(reply, text, reasoning, calls);
       const raw_calls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
-        arguments: JSON.stringify(call.arguments) } }));
+        arguments: JSON.stringify(call.arguments) },
+      ...(typeof call.thoughtSignature === 'string' ? { thought_signature: call.thoughtSignature } : {}) }));
       // Delta events describe the streamed path; the completed AssistantMessage is authoritative
       // for what the collector saved. Keep byte counts, hashes and bounded private previews for
       // both so revised argument deltas are not mistaken for an equally large final tool call.

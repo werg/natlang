@@ -141,6 +141,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const tools = modelTools(request.tools);
     for (const tool of tools) tool.function.name = forward[tool.function.name] ?? tool.function.name;
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
+    // This marker is internal provenance used by adapters that need to render host-supplied context differently.
+    // It is never part of the chat-completions wire schema.
+    for (const message of messages) delete message.natlang_host_generated;
     // Modern vLLM reads `reasoning`; older compatible servers use `reasoning_content`.
     // Carry both exact aliases so interleaved history is retained by either parser.
     for (const message of messages) {
