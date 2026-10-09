@@ -8,6 +8,7 @@ import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
+import { loadProgramRefinements } from './program-refinements.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
@@ -443,8 +444,11 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const program = inventory.manifest.adaptation!;
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
+  // Crisp checkers of refined predicates: the program's own refinements module, if it has one.
+  const crisp = await loadProgramRefinements(compiled, spec.installed ? join(stateDirectory, 'build') : join(spec.root, '.natlang', 'build'));
+  const refinements = crisp || manifest.refinements ? { ...manifest.refinements, ...(crisp ? { crisp } : {}) } : undefined;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
-    programRoot: spec.root, ...manifest });
+    programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
