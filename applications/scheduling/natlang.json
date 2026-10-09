@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/scheduling",
+  "version": "0.2.0",
+  "description": "Revisioned local scheduling in natural language: a planner that reads a request, extracts constraints, builds and repairs candidate schedules, ranks them by the user's wishes and explains its choice, over an exact verifier and a conditional commit.",
+  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "workspace.ts", "calendar.ts", "services.d.ts", "types.ts", "scheduler.nl", "scheduler", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
