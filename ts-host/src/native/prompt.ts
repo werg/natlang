@@ -72,7 +72,6 @@ For subfolders, use a reducer: await Promise.all((await folder.folders('teams/*'
 Each child sees only its selected root. A small file's contents appear in the child's opening; otherwise the child must read or search before answering.
 For a large file, pass its handle to the child and let it search/read relevant portions. Keep the child's instructions short rather than interpolating the entire file into them.
 For a table joined to message files, parse the original table in code and join by the identifier. Keep each judgment paired with that identifier; use the original amounts rather than retyping a second amount table.
-To change a file, write each complete replacement once; a failed action stops the rest of its batch, so read its error before acting again. Read a large argument through its compact summary first and open only the part a decision needs.
 `;
 }
 
