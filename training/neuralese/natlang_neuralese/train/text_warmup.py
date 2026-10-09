@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
+import argparse, atexit, hashlib, json, math, os, random, time, traceback
 from collections import Counter
 from array import array
 from collections.abc import Sequence
@@ -22,6 +22,8 @@ from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
 from .foundation_schedule import ProjectionFirstSchedule
+from .loop import (Cadence, StopSignal, TrainingLoop, capture_training_rng_state,
+                   commit_optimizer_step, restore_training_rng_state)
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
                             TEXT_WARMUP_FFN_CHUNKS,
@@ -38,12 +40,6 @@ from .text_supervision import (ROLE_CODES, TEXT_POSITION_WEIGHT_POLICY,
 
 def relative_mse(predicted, target):
     return relative_mse_positions(predicted,target).mean()
-
-
-def capture_training_rng_state(device):
-    """Capture every RNG stream used by a text warm-up update attempt."""
-    return {'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
-            'cuda_rng':torch.cuda.get_rng_state_all() if str(device).startswith('cuda') else []}
 
 
 TEXT_WARMUP_MEMORY_KIND='text-warmup-complete-update-v1'
@@ -293,14 +289,6 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
                 slots=1 if is_muon else 2
                 lazy_state_bytes += slots*param.numel()*max(4,param.element_size())
     return int(grad_bytes+lazy_state_bytes)
-
-
-def restore_training_rng_state(state, device):
-    """Restore the RNG boundary saved in a full-state warm-up checkpoint."""
-    random.setstate(state['python_rng'])
-    torch.set_rng_state(state['torch_rng'])
-    if str(device).startswith('cuda'):
-        torch.cuda.set_rng_state_all(state['cuda_rng'])
 
 
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
@@ -1024,8 +1012,7 @@ def load_initial(heads, checkpoint, device, cutoff):
 def main(argv=None):
     # Installed before any loading: a container's PID 1 ignores signals without a handler, so a stop requested
     # while the model loads would otherwise be dropped. The training loop checks the flag before each update.
-    stop=[False]
-    for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
+    stop=StopSignal().install()
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('heads','records','out'):p.add_argument('--'+name,type=Path,required=True)
     for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
@@ -1864,11 +1851,12 @@ def main(argv=None):
         serving_heads_step=step
         return True
 
-    last_save=[time.monotonic()]
+    checkpoint_cadence=Cadence(a.checkpoint_every,a.checkpoint_minutes)
+    eval_cadence=Cadence(a.eval_every)
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
              retain_best=False, wait=False):
         checkpoint_writer.drain()
-        last_save[0]=time.monotonic()
+        checkpoint_cadence.mark()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
@@ -2262,7 +2250,7 @@ def main(argv=None):
         if memory_record is not None:m['memory']=memory_record
         log('train.jsonl',m)
         report=None
-        if step%a.eval_every==0:
+        if eval_cadence.due(step):
             report=evaluate()
             qualification_depth=_alignment_qualification_pass_depth(
                 schedule=schedule)
@@ -2280,7 +2268,7 @@ def main(argv=None):
             except Exception as error:
                 recover_postcommit_persistence_failure(error)
                 return
-        elif step%a.checkpoint_every==0 or time.monotonic()-last_save[0]>=60*a.checkpoint_minutes:
+        elif checkpoint_cadence.due(step):
             try:
                 save(write_export=False)
             except Exception as error:
@@ -2298,8 +2286,8 @@ def main(argv=None):
     # Restored tensors now live on the device: drop the read checkpoints' page cache (GB10 unified memory).
     for path in (state_path,a.continue_from,a.heads,a.student_checkpoint):
         if path and Path(path).is_file():drop_file_cache(path)
-    for _ in range(step,a.steps):
-        if stop[0]:break
+    loop=TrainingLoop(step,a.steps,stop)
+    for _ in loop:
         try:
             checkpoint_writer.check()
         except Exception as error:
@@ -2327,7 +2315,7 @@ def main(argv=None):
                     memory_passes=passes+int(a.ar_feedback_fixup)
                     memory_plan=prepare_update_memory(batch,memory_passes,bootstrap);break
                 except RuntimeError as error:
-                    if 'preflight refused' not in str(error) or wait==10 or stop[0]:raise
+                    if 'preflight refused' not in str(error) or wait==10 or stop.requested:raise
                     if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)
                     time.sleep(30)
             backbone.ffn_chunk_tokens=int(memory_plan['ffn_chunk_tokens'])
@@ -2379,9 +2367,7 @@ def main(argv=None):
         # Do not place optimizer.step inside the emergency-save handler: an
         # exception here can follow partial parameter or moment mutation, so
         # the only safe resume point is the last already-written checkpoint.
-        try:
-            optimizer.step()
-        except Exception:
+        def discard_partial_optimizer_step():
             # Gradients are not checkpointed. Clear them without writing any
             # state because parameters or optimizer moments may have mutated.
             optimizer.zero_grad(set_to_none=True)
@@ -2392,14 +2378,15 @@ def main(argv=None):
             # that catch the optimizer exception without exiting the process.
             try:checkpoint_writer.drain()
             except Exception:traceback.print_exc()
-            raise
+        commit_optimizer_step(optimizer,on_failure=discard_partial_optimizer_step)
         try:
             completion=finish_committed_update(prepared,memory_plan,passes,controls)
         except Exception as error:
             recover_postcommit_persistence_failure(error)
             return
-        if completion=='qualified':break
-    if stop[0]:
+        if completion=='qualified':
+            loop.finish('qualified');break
+    if stop.requested:
         # Interruptible: on a signal, persist the full resumable state at once. The held evaluation is not needed
         # to resume and would delay the stop past the container's kill timeout.
         try:
@@ -2415,7 +2402,7 @@ def main(argv=None):
     try:
         report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
         report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-          updates=display_update_flags(updates),status='checkpointed_on_signal' if stop[0] else 'complete',
+          updates=display_update_flags(updates),status='checkpointed_on_signal' if stop.requested else 'complete',
           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
         score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         improved=best is None or score<best['score']

@@ -56,7 +56,6 @@ import json
 import math
 import random
 import re
-import signal
 import os
 import gc
 import time
@@ -1781,9 +1780,10 @@ def main(argv=None):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
     graph_routes = dict(resumed.get('graph_routes', {})) if resumed and memory_estimator.joint_routes_compatible else {}
     trainables = list(params.values()) + lora + head_params
-    stop_requested = [False]
-    previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))
-                         for sig in (signal.SIGTERM, signal.SIGINT)}
+    from .loop import (Cadence, StopSignal, TrainingLoop, accumulate_gradients,
+                       commit_optimizer_step)
+    stop = StopSignal().install()
+    eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every)
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
                            'content_transport': heads.content.transport, 'sketch_gradient': args.sketch_gradient,
@@ -1923,7 +1923,9 @@ def main(argv=None):
                       'previous_frozen_objects': frozen_before, 'frozen_objects': gc.get_freeze_count(),
                       'scope': 'process-lifetime setup only; future graph collection unchanged'}), flush=True)
     with torch.enable_grad():
-        for step in range(start_step, args.steps):
+        # A stop is observed after a step has run and been checkpointed, never before the first one.
+        loop = TrainingLoop(start_step, args.steps, stop, stop_before_step=False)
+        for step in loop:
             anchor_now[0] = scheduled_anchor(step)
             step_started = time.perf_counter()
             phase_wall_seconds = {}
@@ -2021,12 +2023,7 @@ def main(argv=None):
                             print(json.dumps({'status': 'stage_for_budget', 'record_id': record['id'],
                                               'joint_failure': failure, 'graph_budget_gib': graph_budget / 2**30}), flush=True)
                         else:
-                            for param, gradient in zip(trainables, gradients):
-                                if gradient is not None:
-                                    if param.grad is None:
-                                        param.grad = gradient
-                                    else:
-                                        param.grad.add_(gradient)
+                            accumulate_gradients(trainables, gradients)
                             del gradients
                             losses.append(value * args.batch)
                     if mode == 'staged' or args.backward_policy == 'joint':
@@ -2060,12 +2057,7 @@ def main(argv=None):
                     if args.crisp_weight:
                         objective = args.crisp_weight * loss_of(record, {}, soft=False) / args.batch
                         gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
-                        for param, gradient in zip(trainables, gradients):
-                            if gradient is not None:
-                                if param.grad is None:
-                                    param.grad = gradient
-                                else:
-                                    param.grad.add_(gradient)
+                        accumulate_gradients(trainables, gradients)
                         crisp_losses.append(float(objective.detach()) * args.batch)
                         del objective, gradients
                     collect_graph_cycles()
@@ -2124,7 +2116,7 @@ def main(argv=None):
             optimizer_phase = start_phase('gradient_clip_and_optimizer', step)
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
-            optimizer.step()
+            commit_optimizer_step(optimizer)
             stop_phase(optimizer_phase)
             entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
@@ -2162,7 +2154,7 @@ def main(argv=None):
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:
                 print(json.dumps(entry), flush=True)
-            if args.eval_every and (step + 1) % args.eval_every == 0 and not stop_requested[0]:
+            if eval_cadence.due(step + 1) and not stop.requested:
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
@@ -2188,14 +2180,11 @@ def main(argv=None):
                                        'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
                     save_training_state(step + 1, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
-            if (step + 1) % args.checkpoint_every == 0 or stop_requested[0] or step + 1 == args.steps:
+            if checkpoint_cadence.due(step + 1, force=stop.requested or step + 1 == args.steps):
                 save_training_state(step + 1)
-            if stop_requested[0]:
-                break
-    for sig, handler in previous_handlers.items():
-        signal.signal(sig, handler)
+    stop.restore()
     log.close()
-    if stop_requested[0]:
+    if stop.requested:
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
