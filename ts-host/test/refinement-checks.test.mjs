@@ -248,3 +248,14 @@ test('the judge scores true against false and renders the value as data', async 
   const checker = new RefinementChecker({ judge });
   assert.deepEqual(await checker.check([{ path: 'p', predicate: 'a record', value: { a: 1 } }], { phase: 'refine' }), []);
 });
+
+test('a model that answers a refinement rejection with plain text, never a tool call, ends in refinement-unsatisfied within the repair budget', async () => {
+  let turns = 0;
+  const driver = Object.assign(async () => {
+    if (++turns > 40) throw new Error('runaway: the rejected call kept asking for turns');
+    return turns === 1 ? { calls: [['eval', { code: 'return "your fault";' }]] } : { text: 'done' };
+  }, { decide: async () => ({ log_probs: [Math.log(0.02), Math.log(0.98)] }) });
+  const t = run({ driver }, { 'reply.nl': REPLY }, { repairs: 2 }, fn => fn('late parcel'));
+  await assert.rejects(t.result(), error => error instanceof RefinementCallError && error.code === 'refinement-unsatisfied');
+  assert.ok(turns <= 6, `the call took ${turns} turns`);
+});
