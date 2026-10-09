@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
 import time
 from pathlib import Path
 
@@ -242,6 +243,10 @@ def run_train(a):
         if step % 10 == 0 or "held_ce" in row:
             print(json.dumps(row), flush=True)
         if step % a.checkpoint_every == 0 or step == a.steps:
+            # A checkpoint is ~47 GB (latents + Lion momentum): when the disk cannot hold two, the previous one goes
+            # first (a write interrupted then costs the resume point, not a full disk).
+            if state_path.exists() and shutil.disk_usage(out).free < 1.2 * state_path.stat().st_size:
+                state_path.unlink()
             # GPU tensors: torch.save copies one storage at a time to host; ``.cpu()`` first would hold a second
             # copy of all latents in (unified) memory at once (guard stop at the v2 trial's first checkpoint).
             torch.save({"step": step, "latents": {n: q.detach() for n, q in latents},
