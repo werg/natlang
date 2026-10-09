@@ -1,0 +1,280 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-iterate-six-successes-22-native-19-text-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/campaign-v1/held-review-view-v2/action-inventory-v1.jsonl",
+      "bytes": 142308,
+      "sha256": "5ad06ffa35709a25c1dbfc8c5ced6fa7e2cb15aad2cb639f2f2dfef92cc5a762",
+      "lines": 143
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/campaign-v1/held-review-view-v2/case-00-held-native-actions.jsonl",
+      "bytes": 4251380,
+      "sha256": "4994adbcff6f835180e9cbbf88ec550332b980abda9026b6aa571d5a1a5eee9e",
+      "lines": 31
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/campaign-v1/held-review-view-v2/case-01-held-native-actions.jsonl",
+      "bytes": 5350675,
+      "sha256": "dd90f8711c2f956166c1a0a04665692868b68fa1ecd785a55eeb06ff14dd3ff5",
+      "lines": 39
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/campaign-v1/held-review-view-v2/case-02-held-native-actions.jsonl",
+      "bytes": 4855231,
+      "sha256": "14634458d37aab9d8bb4ad9d60812a8bc0ac0a488bbd5f0531a3453a12b27451",
+      "lines": 34
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/campaign-v1/held-review-view-v2/case-03-held-native-actions.jsonl",
+      "bytes": 5679551,
+      "sha256": "3f2959935d2723dc16a472bffeee310c50829d953cb825937fb52d3ed7065dc5",
+      "lines": 39
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/dispatch-plan-root-approved-v1.json",
+      "bytes": 10987,
+      "sha256": "0b9a90ef525f1cc30158d42526b449a5e354964171819fed257b368482c3adbb"
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/reference-proof-v1/runtime-reference-proof.json",
+      "bytes": 109163,
+      "sha256": "daa8a3686842cecbd913fd2278feaad44634a19be18b9cb40cc7016187fca8fb"
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/source-inventory-v1.json",
+      "bytes": 3222,
+      "sha256": "a26604500a846079b7c05d9caa893d4c2a3939c02f00d809ac6209def21c2ebd"
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/source-subset-manifest.json",
+      "bytes": 3702,
+      "sha256": "069943223ef7e915aa6919f5e4c5e3847d612ecb96e19e2edf95ac8b2433e478"
+    },
+    {
+      "path": "luna-purposeful-repair-fourcase-current-runtime-20261009-v1/source.cases.jsonl",
+      "bytes": 186006,
+      "sha256": "da8413e73f8b50205a3a07aaf8c2e8b03ad6a19824856ebdb92e9f9628a5d440",
+      "lines": 4
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/candidate-visible-evidence-review-v1.json",
+      "bytes": 34985,
+      "sha256": "56ce65690cfc43db5c4a8515e3f819e946e20cbdbf288def23cff2d621c95014"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/per-action-review-v2.jsonl",
+      "bytes": 282270,
+      "sha256": "edc7a312de62e02af35473b2b90ebd7a8632bf2a6de63be318b8fc1d7b809503",
+      "lines": 199
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/review-packet-v4.json",
+      "bytes": 8435,
+      "sha256": "a062d035185307dc5cc409fe6fbf6f095af04b460ea341d75406a5060d3302f7"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/current-union-collision-audit-v1/audit_current_union.py",
+      "bytes": 12025,
+      "sha256": "ee6bee4cdc143cada170dd8dc012634fe088dceb833a52eeee7e5d7558401c16"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/current-union-collision-audit-v1/collision-receipt-v2.json",
+      "bytes": 37565,
+      "sha256": "59fd7b502d4b4254bb5cd52888a4a100b5c0b8b5119637db0cd2553a6d4d7eee"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/independent-proposal-verification-v1/receipt.json",
+      "bytes": 65878,
+      "sha256": "7e2799ab2319777a38ca53047fb1828075d40205cbf3b29e30b0cadd9cc1dd24"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/independent-proposal-verification-v1/stdout.json",
+      "bytes": 426,
+      "sha256": "f24155e50649199e20dad57997eedb1309d77e272d558d0d9ffa8dfb21262c44"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/independent-proposal-verification-v1/verify.py",
+      "bytes": 25817,
+      "sha256": "97bd6783b5411615be8688b501ee65eeac700c26a950430ef62b8375b4277d6b"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/native-approved-overlay-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/native-approved-overlay-v1/delta-native-records.jsonl",
+      "bytes": 3342784,
+      "sha256": "db75232a793b91f579b4cfac17c487367a7e52cd6f6bd4c0d1fb0f54937c2fb6",
+      "lines": 22
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/native-approved-overlay-v1/proposal-manifest.json",
+      "bytes": 11587,
+      "sha256": "0754fc92374ec6c6b2d2f33125a9c3488cc46d8d7fb13bd320d6fe14c60dd6fe"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/native-approved-overlay-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/proposal-verification-v1.json",
+      "bytes": 5854,
+      "sha256": "34e929b67c7412030ddbb8e7d7217beb2e94e44bee67d859ef3e14974c9ceb5c"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/root-22-native-19-text-composition-adoption-v1.json",
+      "bytes": 13613,
+      "sha256": "4838739e175ea8b53461600face60a142cbaef3e1f6c5efa457bf35a0298dd17"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/root-selected-action-admission-v1.json",
+      "bytes": 28754,
+      "sha256": "950801b12a6c65f41870023cb90cf7980270583b4e74f59cfa6f48c5199f414a"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/root-selected-action-text-conversion-v1.json",
+      "bytes": 28979,
+      "sha256": "9d18d49653283dde81d2344c17fea7fa7fc736f2c7c07959242b728d3c25d0bd"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/selected-22-held-native-actions.jsonl",
+      "bytes": 3337508,
+      "sha256": "2a8567c9bdafde4fe3e07dfa3969f3c48fc24b0b30664157c6bafaf36d446d66",
+      "lines": 22
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-convertible-21-inputs.jsonl",
+      "bytes": 3127695,
+      "sha256": "650345dcd6336d70a151c8aad7929a9eaa3731ecd4ea168773d33f266c235b3b",
+      "lines": 21
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/README.md",
+      "bytes": 1441,
+      "sha256": "ec04e4ec74a322fa8f85bcca840e5cf0376255bea8ae71fd0755c8726eb19cee"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/delta-omissions.jsonl",
+      "bytes": 518,
+      "sha256": "c777389beef51932d35c41c1afa479f8e78937c13865575142579f7795973d5f",
+      "lines": 2
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/delta-provenance.jsonl",
+      "bytes": 57965,
+      "sha256": "7262d0e86013d0e6b7ae3a951e9046aa1f5525f55ebdb0315d9bc36dd9939d5b",
+      "lines": 19
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/delta-text.jsonl",
+      "bytes": 1532721,
+      "sha256": "d2d561d8fc57960a9c8913334f2ce360704d21c7a56abc02b2ea2c294e0ea373",
+      "lines": 19
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/output-manifest.json",
+      "bytes": 1440,
+      "sha256": "830c8d7e1f980786d1518bb89646ea0566c889493704e2efd76852d7a2383e7d"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/packet-manifest.json",
+      "bytes": 2022,
+      "sha256": "efafe5a36a39a6bbdf184887a0438b6eff178468c4bc6132babfba58093b71f1"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/provider-context-bindings.jsonl",
+      "bytes": 57304,
+      "sha256": "5d7644a713a0f394cb9d4b7dea152c5270025f2d19f7a62e27d440baa77d8140",
+      "lines": 22
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/receipt.json",
+      "bytes": 6056,
+      "sha256": "aebdd9667dd647375aaace3a69e0e08369195e6b1197165b0b3bfc11e62fd35c"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/text-targetbound-v3/source-coverage.jsonl",
+      "bytes": 8727,
+      "sha256": "d679ea699d623da18971477e8ae081aaa272d3ee0cdd0066decd91ea9d3b887e",
+      "lines": 21
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/visibility-selection-v5.json",
+      "bytes": 91583,
+      "sha256": "0fdf0976edb7633045e4440a1fe9897e2d4709cb91a70ce6bffae5d5d63d6f76"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/visibility-supplement-v5.json",
+      "bytes": 74977,
+      "sha256": "5bb0e13e76c7dd1e085568856f7cafe5a5983fa3198ea6c0fadf7dcfc32301d6"
+    },
+    {
+      "path": "luna-v22-row12-corrected-current-runtime-20261009-v1/campaign-v1/held-review-view-v1/action-inventory-v1.jsonl",
+      "bytes": 15287,
+      "sha256": "cf88e44a556f0336763d04bd4069c4b8bf9ef78005435785234a66aaf4912425",
+      "lines": 26
+    },
+    {
+      "path": "luna-v22-row12-corrected-current-runtime-20261009-v1/campaign-v1/held-review-view-v1/case-12-held-native-actions.jsonl",
+      "bytes": 3688003,
+      "sha256": "b6d3c831a457504c6e32d70f0961ee73d03e5b191dc4e9a1ab08c1c35b8f1dd8",
+      "lines": 26
+    },
+    {
+      "path": "luna-v22-row12-corrected-current-runtime-20261009-v1/launch-plan-root-authorized-v1.json",
+      "bytes": 6256,
+      "sha256": "dab21173ce3d6a4b58d342bd1134031c65290d924c84ef0a042665b4b5b8584b"
+    },
+    {
+      "path": "luna-v22-row12-corrected-current-runtime-20261009-v1/source-inventory-v1.json",
+      "bytes": 1085,
+      "sha256": "bf3586c5dc2b32f0aec580e63854eef138c9812ac4f53c596d1b67af8ab5f462"
+    },
+    {
+      "path": "luna-v22-row13-corrected-current-runtime-20261009-v1/campaign-v2/held-review-view-v1/action-inventory-v1.jsonl",
+      "bytes": 17342,
+      "sha256": "d6129a70d347f81cc8a1749b9e6f74a03a1cda235e1a69cf0a66fd8577d749e6",
+      "lines": 30
+    },
+    {
+      "path": "luna-v22-row13-corrected-current-runtime-20261009-v1/campaign-v2/held-review-view-v1/case-13-held-native-actions.jsonl",
+      "bytes": 4247134,
+      "sha256": "d41cd5e77aa4d9893ae47ff3c69afaf8dc3cd17259ae532073b805f7f363ee29",
+      "lines": 30
+    },
+    {
+      "path": "luna-v22-row13-corrected-current-runtime-20261009-v1/launch-plan-root-authorized-v2.json",
+      "bytes": 6661,
+      "sha256": "e08d82549252ba25a59e01f68d0ef9586e076d06e1df9983cc5a3b8f2409b560"
+    },
+    {
+      "path": "luna-v22-row13-corrected-current-runtime-20261009-v1/source-inventory-v1.json",
+      "bytes": 1085,
+      "sha256": "e7e234ee8deec735139abca76e008f9efff55fdefa06232aa72b080f0a12ac35"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v22-source-v5-20261009-v5/runtime-reference-proof-frozen-reference-driver-v3/runtime-reference-proof.json",
+      "bytes": 414997,
+      "sha256": "2717fe6760554ca358672627445fa583cf73b9ed735d5f9ad1a15997f212dfc1"
+    },
+    {
+      "path": "neuralese-semantic-iterate-reducers-v22-source-v5-20261009-v5/source.cases.jsonl",
+      "bytes": 719546,
+      "sha256": "b72635f5974743f08892c13903dd23fad9496b4118dd2b0e7257e648fa9c857b",
+      "lines": 16
+    }
+  ],
+  "bytes": 41913512
+}
