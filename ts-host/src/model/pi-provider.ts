@@ -20,6 +20,27 @@ function sha256Text(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+/** Keep only a bounded UTF-8 prefix and suffix for private trajectory diagnostics. */
+function boundedUtf8Preview(value: string, limit = 1024): Record<string, unknown> {
+  let prefix = '', prefixBytes = 0;
+  for (const character of value) {
+    const size = Buffer.byteLength(character, 'utf8');
+    if (prefixBytes + size > limit) break;
+    prefix += character; prefixBytes += size;
+  }
+  const tail: { character: string; bytes: number }[] = [];
+  let tailBytes = 0;
+  for (const character of value) {
+    const bytes = Buffer.byteLength(character, 'utf8');
+    tail.push({ character, bytes }); tailBytes += bytes;
+    while (tailBytes > limit) tailBytes -= tail.shift()!.bytes;
+  }
+  return { encoding: 'final parsed tool arguments JSON string', preview_limit_utf8_bytes: limit,
+    prefix_utf8: prefix, prefix_bytes: prefixBytes,
+    tail_utf8: tail.map(item => item.character).join(''), tail_bytes: tailBytes,
+    truncated: Buffer.byteLength(value, 'utf8') > limit };
+}
+
 function containsControlCharacter(value: unknown): boolean {
   if (typeof value === 'string') return CONTROL_CHARACTERS.test(value);
   if (Array.isArray(value)) return value.some(containsControlCharacter);
@@ -251,6 +272,10 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const started = Date.now(), startedAt = new Date(started).toISOString();
       const counts = { deltaEvents: 0, deltaBytes: 0, textDeltaEvents: 0, textDeltaBytes: 0,
         thinkingDeltaEvents: 0, thinkingDeltaBytes: 0, toolCallDeltaEvents: 0, toolCallDeltaBytes: 0 };
+      const deltaFingerprints = new Map<string, { occurrences: number; utf8Bytes: number }>();
+      const MAX_TRACKED_DELTA_FINGERPRINTS = 4096;
+      let untrackedDeltaEvents = 0, adjacentDuplicateDeltaEvents = 0;
+      let previousDeltaFingerprint = '', currentRepeatRun = 0, longestRepeatRun = 0;
       const emit = (status: ModelStreamProgress['status']) => {
         if (!onProgress) return;
         const progress: ModelStreamProgress = { status, ...counts, startedAt,
@@ -274,7 +299,18 @@ export function createPiModelBackend(provider: string, modelId: string, environm
           counts.deltaEvents++; counts.deltaBytes += bytes;
           if (kind === 'text') { counts.textDeltaEvents++; counts.textDeltaBytes += bytes; }
           else if (kind === 'thinking') { counts.thinkingDeltaEvents++; counts.thinkingDeltaBytes += bytes; }
-          else { counts.toolCallDeltaEvents++; counts.toolCallDeltaBytes += bytes; }
+          else {
+            counts.toolCallDeltaEvents++; counts.toolCallDeltaBytes += bytes;
+            const fingerprint = sha256Text(delta), prior = deltaFingerprints.get(fingerprint);
+            if (prior) { prior.occurrences++; }
+            else if (deltaFingerprints.size < MAX_TRACKED_DELTA_FINGERPRINTS)
+              deltaFingerprints.set(fingerprint, { occurrences: 1, utf8Bytes: bytes });
+            else untrackedDeltaEvents++;
+            if (fingerprint === previousDeltaFingerprint) {
+              adjacentDuplicateDeltaEvents++; currentRepeatRun++;
+            } else { previousDeltaFingerprint = fingerprint; currentRepeatRun = 1; }
+            longestRepeatRun = Math.max(longestRepeatRun, currentRepeatRun);
+          }
           const now = Date.now();
           if (lastEmitted === 0 || now - lastEmitted >= 15_000) { emit('progress'); lastEmitted = now; }
         }
@@ -307,7 +343,23 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         final_raw_calls_json_utf8_bytes: Buffer.byteLength(JSON.stringify(raw_calls), 'utf8'),
         final_calls: raw_calls.map((call, index) => ({ index, name: call.function.name,
           arguments_utf8_bytes: Buffer.byteLength(call.function.arguments, 'utf8'),
-          arguments_sha256: sha256Text(call.function.arguments) })),
+          arguments_sha256: sha256Text(call.function.arguments),
+          arguments_preview: boundedUtf8Preview(call.function.arguments) })),
+        tool_delta_repetition: {
+          fingerprint: 'sha256 of exact delta string; no delta contents retained',
+          unique_fingerprint_limit: MAX_TRACKED_DELTA_FINGERPRINTS,
+          tracked_unique_fingerprints: deltaFingerprints.size,
+          untracked_delta_events_after_limit: untrackedDeltaEvents,
+          repeated_events_within_tracked_fingerprints: [...deltaFingerprints.values()]
+            .reduce((sum, item) => sum + Math.max(0, item.occurrences - 1), 0),
+          adjacent_duplicate_events: adjacentDuplicateDeltaEvents,
+          longest_adjacent_repeat_run: longestRepeatRun,
+          top_repeated_fingerprints: [...deltaFingerprints.entries()]
+            .filter(([, item]) => item.occurrences > 1)
+            .sort((a, b) => b[1].occurrences - a[1].occurrences || a[0].localeCompare(b[0]))
+            .slice(0, 8).map(([sha256, item]) => ({ sha256, occurrences: item.occurrences,
+              delta_utf8_bytes: item.utf8Bytes }))
+        },
         comparison_scope: 'stream delta byte totals vs final parsed sdk call arguments; no delta-to-call identity asserted'
       };
       return { calls: calls.map(call => [call.name, call.arguments as Record<string, unknown>]), raw_calls, text,

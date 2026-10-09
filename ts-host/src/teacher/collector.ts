@@ -196,7 +196,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
-      stream_observation: { version: 'pi-stream-observation/2', detail: 'request-bound-delta-counts-and-final-call-comparison', watchdog_refresh: false },
+      stream_observation: { version: 'pi-stream-observation/3', detail: 'request-bound-delta-counts; private-bounded-final-call-previews; delta-repetition-summary', watchdog_refresh: false },
       ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
         version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
         retry: 'no-case-retry' } }),
@@ -218,7 +218,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
         pi_options: options.judgeModel.piOptions ?? {},
-        stream_observation: { version: 'pi-stream-observation/2', detail: 'request-bound-delta-counts-and-final-call-comparison', watchdog_refresh: false },
+        stream_observation: { version: 'pi-stream-observation/3', detail: 'request-bound-delta-counts; private-bounded-final-call-previews; delta-repetition-summary', watchdog_refresh: false },
         ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
           version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
           retry: 'no-case-retry' } }),
