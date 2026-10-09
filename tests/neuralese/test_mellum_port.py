@@ -353,3 +353,34 @@ def test_mellum_n0_ordering_keeps_the_full_model_and_lxe_members_run(tmp_path, f
         member = model(ids).logits
         model.set_member(None)
     assert torch.isfinite(member).all() and not torch.allclose(member, before)
+
+
+def test_export_in_n0_order_equals_ordering_after_load(tmp_path):
+    from natlang_neuralese.maple.qat_convert import install_full_latent_qat
+    from natlang_neuralese.maple.qat_export import export
+
+    source = tmp_path / "src"
+    source.mkdir()
+    tiny_mellum(source)
+    qat = load_maple(source, device="cpu", dtype=torch.float32, ternary_attention=False)
+    latents = install_full_latent_qat(qat)
+    torch.save({"step": 1, "latents": {n: q.detach().clone() for n, q in latents}}, tmp_path / "c.pt")
+    generator = torch.Generator().manual_seed(3)
+    orders = [torch.randperm(EXPERTS, generator=generator) for _ in range(LAYERS)]
+    torch.save({"orders": orders}, tmp_path / "order.pt")
+    export(source, tmp_path / "c.pt", tmp_path / "plain")
+    provenance = export(source, tmp_path / "c.pt", tmp_path / "ordered", order=tmp_path / "order.pt")
+    assert provenance["expert_order_sha256"]
+    reference = load_maple(tmp_path / "plain", device="cpu", dtype=torch.float32)
+    reference.order_experts(orders)
+    ordered = load_maple(tmp_path / "ordered", device="cpu", dtype=torch.float32)
+    ids = torch.randint(0, 128, (1, 16))
+    with torch.no_grad():
+        assert torch.allclose(ordered(ids).logits, reference(ids).logits, atol=1e-5)
+        for member in (EXPERTS // 2,):  # prefixes of the exported order are the members (>= top-k)
+            for model in (ordered, reference):
+                model.set_active_experts(member)
+            assert torch.allclose(ordered(ids).logits, reference(ids).logits, atol=1e-5)
+    for name, value in ordered.state_dict().items():
+        if ".experts." in name or ".mlp.gate." in name:
+            assert torch.equal(value, reference.state_dict()[name]), name
