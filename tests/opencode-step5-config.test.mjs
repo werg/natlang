@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { buildFreeModelConfig, buildToolSurfaceReceipt } from '../scripts/opencode-cli-loopback-bootstrap.mjs';
+import { buildFreeModelConfig, buildToolSurfaceReceipt, effectiveBuildAgentSurface } from '../scripts/opencode-cli-loopback-bootstrap.mjs';
 
 test('effective Step 5 config pins both main and title work to the explicit free model', () => {
   const actual = buildFreeModelConfig('/test/action-server.mjs', '/test/action-calls.jsonl', '/test/mcp-handshake.jsonl');
@@ -33,4 +33,25 @@ test('bootstrap receipt distinguishes visible but permission-gated tools from th
     },
     permission_policy: 'official wildcard ask keeps native schemas visible but gated; adapter rejects every native tool permission; exact Natlang action MCP tool allowed; session history is not an execution barrier'
   });
+});
+
+test('Natlang-only build agent hides native tools and leaves exactly the action MCP enabled', () => {
+  const config = buildFreeModelConfig('/test/action-server.mjs', '/test/action-calls.jsonl',
+    '/test/mcp-handshake.jsonl', 'step-5-preview-free', 'natlang-only');
+  assert.deepEqual(config.agent.build.tools, { '*': false, natlang_action_bridge_submit_action: true });
+  assert.deepEqual(config.permission, { '*': 'ask', natlang_action_bridge_submit_action: 'allow' });
+  const effective = effectiveBuildAgentSurface(config, 'natlang-only');
+  assert.deepEqual(effective, { agent: 'build', tools: config.agent.build.tools });
+  const receipt = buildToolSurfaceReceipt(['bash', 'read'], 'natlang-only', effective);
+  assert.equal(receipt.tool_surface_mode, 'natlang-only');
+  assert.deepEqual(receipt.effective_agent_tool_surface, effective);
+  assert.match(receipt.model_tool_surface.native_tools, /disabled/);
+  assert.match(receipt.permission_policy, /auto-rejected/);
+});
+
+test('Natlang-only surface rejects missing or accidentally enabled native tools', () => {
+  assert.throws(() => effectiveBuildAgentSurface({ agent: { build: { tools: { '*': false } } } }, 'natlang-only'), /does not match/);
+  assert.throws(() => effectiveBuildAgentSurface({ agent: { build: { tools: {
+    '*': false, natlang_action_bridge_submit_action: true, bash: true
+  } } } }, 'natlang-only'), /does not match/);
 });

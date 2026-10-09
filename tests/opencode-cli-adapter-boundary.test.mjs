@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { abortOpenCodeSession, createOpenCodeCliChatAdapter } from '../scripts/opencode-cli-chat-adapter.mjs';
 
-async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], permissionEvent, exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant } = {}) {
+async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], permissionEvent, exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant, agentName } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-opencode-boundary-'));
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
@@ -73,7 +73,7 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
   const adapter = await createOpenCodeCliChatAdapter({ cliPath, client,
     baseUrl: `http://127.0.0.1:${eventAddress.port}`, directory: root, outputDirectory,
     modelAlias: 'fixture/free', modelID: 'free', actionLogPath, timeoutMs, maxRequestMs: timeoutMs,
-    modelVariant,
+    modelVariant, agentName,
     env: { PATH: process.env.PATH, HOME: root, NATLANG_OPENCODE_ACTION_LOG: actionLogPath,
       FAKE_ABORT_MARKER: markerPath, FAKE_ARGV: argvPath, FAKE_TOOL_ACTIONS: JSON.stringify(actions),
       FAKE_EXTRA_EVENTS: JSON.stringify(extraEvents), FAKE_EXIT_CODE: String(exitCode) } });
@@ -104,6 +104,15 @@ test('completed audited action stops only its session after the tool-calls step'
     assert.equal(diagnostic.terminal_action_boundary.status, 'aborted');
     assert.equal(diagnostic.final_text_status, 'invalid_json_final_text_ignored');
     assert.equal(diagnostic.provider_step_telemetry.started, 1);
+  } finally { await f.close(); }
+});
+
+test('dedicated configured agent is selected explicitly by the CLI invocation', async () => {
+  const f = await fixture({ agentName: 'build' });
+  try {
+    const response = await invoke(f.adapter); assert.equal(response.status, 200);
+    const argv = JSON.parse(await readFile(f.argvPath, 'utf8'));
+    assert.equal(argv[argv.indexOf('--agent') + 1], 'build');
   } finally { await f.close(); }
 });
 

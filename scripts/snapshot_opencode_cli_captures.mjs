@@ -6,11 +6,11 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REQUIRED = [
-  'cli-stdout.raw', 'cli-invocations.jsonl', 'action-mcp-calls.jsonl',
+  'cli-invocations.jsonl', 'action-mcp-calls.jsonl',
   'bootstrap-config.json', 'bootstrap-events.jsonl', 'mcp-handshake.jsonl',
   'lifecycle.json', 'opencode-home/data/opencode/log/opencode.log',
 ];
-const OPTIONAL = ['cli-stderr.raw'];
+const OPTIONAL = ['cli-stdout.raw', 'cli-stderr.raw'];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export async function snapshotOpenCodeCliCaptures({ sourceDirectory, outputDirectory, scope }) {
