@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 import torch
@@ -147,8 +148,10 @@ def _verify_source_recipe(recipe, recipe_path):
         if not actual.is_file() or sha(actual) != expected:
             raise ValueError(f'evaluator code snapshot pin mismatch: {relative}')
         code_paths[relative] = actual.resolve()
-    import inspect
-    active_files = (Path(__file__).resolve(), Path(inspect.getsourcefile(autoregressive_history_metrics)).resolve())
+    active_metric_module = sys.modules.get(autoregressive_history_metrics.__module__)
+    if active_metric_module is None or not isinstance(getattr(active_metric_module, '__file__', None), str):
+        raise ValueError('shared AR metrics module has no verifiable source file')
+    active_files = (Path(__file__).resolve(), Path(active_metric_module.__file__).resolve())
     for active in active_files:
         try:
             relative = active.relative_to(code_root).as_posix()
