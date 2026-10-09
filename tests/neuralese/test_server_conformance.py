@@ -239,8 +239,8 @@ def test_batched_decision_scoring_agrees_and_fails_per_item(servers):
 def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/grad", "POST", {"terms": []})
     assert status == 501 and body["error"]["code"] == "neuralese-grad-unavailable"
-    status, _ = _request(servers["fork"] + "/v1/neuralese/embed", "POST", {"text": "x"})
-    assert status == 404
+    status, body = _json(servers["fork"] + "/v1/neuralese/embed", "POST", {"text": "x"})
+    assert status == 501 and body["error"]["code"] == "neuralese-embed-unavailable"
     status, adapter = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
     assert status == 201
     # An adapter the fork has no LoRA for, and one decoded through a projection, fail; never the base model.
@@ -251,7 +251,75 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/decide", "POST",
                          {"messages": [{"role": "user", "content": "hi"}], "options": ["a", "b"],
                           "adapters": [{"code": adapter["id"], "projection": "p", "scale": 1.0}]})
-    assert status == 501 and body["error"]["code"] == "neuralese-adapters-unavailable"
+    assert status == 501 and body["error"]["code"] == "neuralese-adapters-projection-unavailable"
+
+
+REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat.stream",
+                  "embed", "grad", "grad.order2", "optim", "parts.value-type", "template.argument-path",
+                  "template.value-type"}
+
+
+def _error_code(response):
+    status, payload = response
+    try:
+        return status, json.loads(payload)["error"]["code"]
+    except (ValueError, KeyError, TypeError):
+        return status, f"<not the error envelope: {payload[:80]!r}>"
+
+
+def test_one_capability_model_on_every_runtime(servers):
+    """spec/NEURALESE_PORT.md "Capabilities": each runtime lists what it serves; what it lacks answers 501
+    `neuralese-<capability>-unavailable` (never 404, never silently ignored); errors share one envelope."""
+    ref = _json(servers["reference"] + "/v1/neuralese/info")[1]
+    fork = _json(servers["fork"] + "/v1/neuralese/info")[1]
+    assert ref["server"] == "reference" and fork["server"] == "llama.cpp"
+    assert ref["capabilities"] == sorted(ref["capabilities"]) and fork["capabilities"] == sorted(fork["capabilities"])
+    assert set(ref["capabilities"]) - set(fork["capabilities"]) == REFERENCE_ONLY
+    # store.owners: the fork has owner-scoped holds; the reference lists it once its store implements them.
+    assert set(fork["capabilities"]) - set(ref["capabilities"]) - {"store.owners"} == {"adapters.lora-load"}
+    hi = [{"role": "user", "content": "hi"}]
+    lacking = {  # capability -> a request needing it
+        "grad": ("POST", "/v1/neuralese/grad", {"terms": []}),
+        "optim": ("POST", "/v1/neuralese/optim", {"optimizer": "sgd", "params": [], "grads": []}),
+        "embed": ("POST", "/v1/neuralese/embed", {"text": "x"}),
+        "adapters.create": ("POST", "/v1/neuralese/adapters", {"kind": "xs", "rank": 2}),
+        "adapters.lora-export": ("GET", "/v1/neuralese/adapters/nz1_aaaa/lora", None),
+        "chat.stream": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 2, "stream": True}),
+        "template.value-type": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 4, "neuralese_template":
+                                {"call": "f", "value": "write", "value_type": "unknown"}}),
+        "template.argument-path": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 4, "neuralese_template":
+                                   {"call": "f", "value": "write", "argument_path": ["a"]}}),
+        "parts.value-type": ("POST", "/v1/neuralese/render", {"messages": [{"role": "user", "content": [
+            {"type": "text", "text": "x"}, {"type": "neuralese", "id": "nz1_aaaa", "value_type": "unknown"}]}]}),
+    }
+    for capability, (method, path, body) in lacking.items():
+        assert capability not in fork["capabilities"]
+        got = _error_code(_request(servers["fork"] + path, method, body))
+        assert got == (501, "neuralese-" + capability.replace(".", "-") + "-unavailable"), (capability, got)
+    got = _error_code(_request(servers["reference"] + "/v1/neuralese/adapters/nz1_aaaa/lora", "PUT", raw=b"x"))
+    assert got == (501, "neuralese-adapters-lora-load-unavailable"), got
+    for name in ("reference", "fork"):
+        base = servers[name]
+        assert _error_code(_request(base + "/v1/neuralese/decide", "DELETE")) == (405, "method-not-allowed"), name
+        assert _error_code(_request(base + "/v1/no-such-path", "POST", {})) == (404, "not-found"), name
+        assert _error_code(_request(base + "/v1/neuralese/decide", "POST", [1, 2])) == (400, "bad-json"), name
+        # A malformed collect is refused, not read as "nothing referenced" (which would drop unpinned blocks).
+        assert _error_code(_request(base + "/v1/neuralese/collect", "POST", raw=b"{not json")) == (400, "bad-json"), name
+
+
+def test_batched_scoring_shares_a_prefill_across_non_adjacent_items_in_request_order(servers):
+    france = [{"role": "user", "content": "Is Paris the capital of France? Reply with a JSON value."}]
+    water = [{"role": "user", "content": "Is water wet? Reply with a JSON value."}]
+    items = [{"messages": france, "continuations": ["true", "false"]},
+             {"messages": water, "continuations": ["true", "false"]},
+             {"messages": france, "continuations": ["false", "true"]}]
+    got = _both(servers, "/v1/natlang/score", "POST", {"items": items})
+    for name in ("reference", "fork"):
+        status, body = got[name]
+        assert status == 200, (name, body)
+        first, _, last = body["results"]
+        assert first["tokens"] == last["tokens"][::-1], (name, body)
+        assert all(abs(a - b) <= 1e-3 for a, b in zip(first["log_probs"], last["log_probs"][::-1])), (name, body)
 
 
 def test_a_weight_adapter_served_as_a_lora_agrees(servers):

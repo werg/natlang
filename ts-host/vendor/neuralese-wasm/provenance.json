@@ -1,25 +1,28 @@
 {
-  "schema": "natlang.neuralese-wasm/1",
-  "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "24af2b603",
-  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, built on DGX 2026-10-09 (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
-  "sha256": {
-    "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
-    "neuralese-wasm-gpu.wasm": "ca52cfca24f1d390000fd97cfb53ef30457182c9bbd4811ce6f575a092e1d7a6",
-    "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
-    "neuralese-wasm-mt.wasm": "9c6dc712b17460dadaf581b4f11b55374baefb9f84d098f4f3e5032deee63847",
-    "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-    "neuralese-wasm.wasm": "0d15124f28ffc208330ebb6063938fef068d03f1e1d84dc6e887a52b6cb59ae2"
-  },
-  "serves": "the fork commit's neuralese-service.cpp: batched decision scoring (/v1/natlang/score, /v1/neuralese/decide_many), full-residual-v1 reader adapter in nz_read",
-  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 14 passed against the reference server (2026-10-09, DGX, CPU), incl. batched decision scoring",
-  "measured_on_5d999c0c5": {
-    "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
-    "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
-    "node_bench": "733-token prompt + 16 tokens: 22.1 s one thread, 3.1 s eight threads",
-    "browser_q8_0": "model Q8_0 (379 MB, llama-quantize) + heads Q8_0 matrices (150 MB, export_heads_gguf matrix_type='q8_0'), 8 threads: load 3.3 s, plain turn 0.5 s, template call 18.3 s, browser memory peak 1.1 GB",
-    "browser_webgpu": "Chromium 145 headed (Xvfb) on the DGX GB10 with --enable-dawn-features=vulkan_enable_f16_on_nvidia (Dawn hides shader-f16 on NVIDIA's Vulkan driver by default; headless Chromium offers only SwiftShader): WebGPU device registered, every layer and the heads on the GPU. f32: load 6.3 s, plain turn 1.1 s, 615-token prefill 0.84 s, 32 tokens decoded 2.0 s, template call 5.8 s. Q8_0: load 4.3 s, prefill 0.97 s, decode 1.4 s, template call 6.5 s. Against 8 CPU threads (prefill 2.2 s, decode 1.1 s, template 10.6 s): prefill-bound calls 2x faster, token-by-token decoding slower (per-token GPU synchronisation through JSPI).",
-    "browser_profile_mt": "8 threads, f32: 615-token prefill 2.2 s, 32 decoded tokens 1.1 s, template call 10.6 s",
-    "browser_opfs_cache": "cachedModelFile: Q8_0 model + heads (529 MB) written to OPFS in 2.6 s from a local server, reopened in 5 ms; the worker mounts the disk-backed Files (WORKERFS)."
-  }
+ "schema": "natlang.neuralese-wasm/1",
+ "fork": "https://github.com/werg/llama.cpp-neuralese",
+ "fork_commit": "62639bf33",
+ "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, built on DGX 2026-10-10 (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
+ "sha256": {
+  "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
+  "neuralese-wasm-gpu.wasm": "56747a6fd4fb633c5f1a81f324382d23a3f003843ecec3b19b5a2f9ed81aba10",
+  "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
+  "neuralese-wasm-mt.wasm": "00b653ec6325def03c29b29bedf78c613eb9982b8b9afd4247e7fddfd7ecab6a",
+  "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
+  "neuralese-wasm.wasm": "a5660baa4cd0bc1bc6a9878468504840d06b7ce01133e4241319ee0a40881abb"
+ },
+ "serves": "the fork commit's neuralese-service.cpp: the capability model shared with the reference server (info.capabilities, 501 neuralese-<capability>-unavailable), batched decision scoring grouped across the request, owner-scoped store, full-residual-v1 reader adapter in nz_read",
+ "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 16 passed against the reference server (incl. the capability model and request-order batched grouping), fork 62639bf33, 2026-10-10",
+ "measured_on_5d999c0c5": {
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
+  "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
+  "node_bench": "733-token prompt + 16 tokens: 22.1 s one thread, 3.1 s eight threads",
+  "browser_q8_0": "model Q8_0 (379 MB, llama-quantize) + heads Q8_0 matrices (150 MB, export_heads_gguf matrix_type='q8_0'), 8 threads: load 3.3 s, plain turn 0.5 s, template call 18.3 s, browser memory peak 1.1 GB",
+  "browser_webgpu": "Chromium 145 headed (Xvfb) on the DGX GB10 with --enable-dawn-features=vulkan_enable_f16_on_nvidia (Dawn hides shader-f16 on NVIDIA's Vulkan driver by default; headless Chromium offers only SwiftShader): WebGPU device registered, every layer and the heads on the GPU. f32: load 6.3 s, plain turn 1.1 s, 615-token prefill 0.84 s, 32 tokens decoded 2.0 s, template call 5.8 s. Q8_0: load 4.3 s, prefill 0.97 s, decode 1.4 s, template call 6.5 s. Against 8 CPU threads (prefill 2.2 s, decode 1.1 s, template 10.6 s): prefill-bound calls 2x faster, token-by-token decoding slower (per-token GPU synchronisation through JSPI).",
+  "browser_profile_mt": "8 threads, f32: 615-token prefill 2.2 s, 32 decoded tokens 1.1 s, template call 10.6 s",
+  "browser_opfs_cache": "cachedModelFile: Q8_0 model + heads (529 MB) written to OPFS in 2.6 s from a local server, reopened in 5 ms; the worker mounts the disk-backed Files (WORKERFS)."
+ },
+ "measured_on_24af2b603": {
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 14 passed against the reference server (2026-10-09, DGX, CPU), incl. batched decision scoring"
+ }
 }
