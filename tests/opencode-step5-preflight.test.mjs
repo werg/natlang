@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { verifyStep5ModelPair, verifyStep5SourceBinding } from '../scripts/opencode-step5-preflight.mjs';
+import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding } from '../scripts/opencode-step5-preflight.mjs';
 
 const alias = 'opencode/step-5-preview-free';
 const bootstrapConfig = { model_alias: alias, main_model: alias, small_model: alias };
@@ -178,4 +181,92 @@ test('authored-root preflight rejects source-byte, group, split and target-code 
     assert.throws(() => verifyStep5SourceBinding({ ...fixture, plan }),
       field === 'authored_target_code_sha256' ? /controller code does not match/ : /ID\/group\/split/);
   }
+});
+
+async function artifactClosureFixture() {
+  const root = await mkdtemp(join(tmpdir(), 'step5-artifact-closure-'));
+  const names = ['adapter', 'bootstrap', 'collector_runner', 'invalid_tool_classifier',
+    'launcher', 'mcp_server', 'preflight', 'structured_turn'];
+  const closure = {}, files = {};
+  for (const [index, name] of names.entries()) {
+    const execution_path = `scripts/${name}.mjs`;
+    const snapshot_path = `snapshot/scripts/${name}.mjs`;
+    const bytes = Buffer.from(`immutable ${name} ${index}`);
+    await mkdir(join(root, 'scripts'), { recursive: true });
+    await mkdir(join(root, 'snapshot/scripts'), { recursive: true });
+    await writeFile(join(root, execution_path), bytes);
+    await writeFile(join(root, snapshot_path), bytes);
+    files[name] = { execution_path, snapshot_path, bytes: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex') };
+    closure[name] = { path: execution_path, immutable_snapshot_path: snapshot_path,
+      bytes: bytes.length, sha256: files[name].sha256 };
+  }
+  const snapshot = { schema: 'natlang.step5_bridge_code_snapshot/1', source_git_head: 'fixture', files };
+  const snapshotBytes = Buffer.from(`${JSON.stringify(snapshot)}\n`);
+  await writeFile(join(root, 'snapshot/manifest.json'), snapshotBytes);
+  const entryPath = 'frozen/dist/teacher/cli.js';
+  const entryBytes = Buffer.from('frozen collector entry');
+  await mkdir(join(root, 'frozen/dist/teacher'), { recursive: true });
+  await writeFile(join(root, entryPath), entryBytes);
+  const runtimeManifest = { files: { 'dist/teacher/cli.js': createHash('sha256').update(entryBytes).digest('hex') } };
+  const runtimeManifestBytes = Buffer.from(`${JSON.stringify(runtimeManifest)}\n`);
+  await writeFile(join(root, 'frozen/frozen-runtime.json'), runtimeManifestBytes);
+  const proofBytes = Buffer.from(JSON.stringify({ schema: 'fixture.fake-proof/1' }));
+  await writeFile(join(root, 'proof.json'), proofBytes);
+  const runtimeManifestSha = createHash('sha256').update(runtimeManifestBytes).digest('hex');
+  const plan = {
+    schema: 'natlang.step5_authored_root_source_case_launch_plan/1',
+    bridge_code_import_closure: closure,
+    bridge_code_import_closure_snapshot: { path: 'snapshot/manifest.json', bytes: snapshotBytes.length,
+      sha256: createHash('sha256').update(snapshotBytes).digest('hex') },
+    command_templates: { collector: `${entryPath} cases jobs results` },
+    collector: { entry: entryPath,
+      entry_sha256: runtimeManifest.files['dist/teacher/cli.js'], runtime_manifest_sha256: runtimeManifestSha },
+    runtime: { path: 'frozen', manifest: { path: 'frozen/frozen-runtime.json', sha256: runtimeManifestSha,
+      bytes: runtimeManifestBytes.length }, source_specific_proof: { path: 'proof.json',
+      sha256: createHash('sha256').update(proofBytes).digest('hex'), runtime_manifest_sha256: runtimeManifestSha } },
+    reference_protocol: { exact_source_fake_proof: { path: 'proof.json',
+      sha256: createHash('sha256').update(proofBytes).digest('hex'), runtime_manifest_sha256: runtimeManifestSha } },
+  };
+  return { root, plan, runtimeManifestSha, names };
+}
+
+test('Step 5 artifact preflight verifies all imported files against immutable closure and runtime', async t => {
+  const fixture = await artifactClosureFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const result = await verifyStep5ArtifactClosure({ plan: fixture.plan, repoRoot: fixture.root });
+  assert.equal(result.ok, true);
+  assert.equal(result.closure_files_verified, 8);
+  assert.equal(result.runtime_manifest_sha256, fixture.runtimeManifestSha);
+  assert.equal(result.exact_source_fake_proof_runtime_sha256, fixture.runtimeManifestSha);
+});
+
+test('Step 5 artifact preflight rejects live bridge source drift from its pinned snapshot', async t => {
+  const fixture = await artifactClosureFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  await writeFile(join(fixture.root, fixture.plan.bridge_code_import_closure.preflight.path), 'changed source');
+  await assert.rejects(verifyStep5ArtifactClosure({ plan: fixture.plan, repoRoot: fixture.root }),
+    /current bridge execution file preflight differs/);
+});
+
+test('Step 5 artifact preflight rejects stale closure metadata and collector entry drift', async t => {
+  const fixture = await artifactClosureFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const stale = structuredClone(fixture.plan);
+  stale.bridge_code_import_closure.preflight.sha256 = 'stale';
+  await assert.rejects(verifyStep5ArtifactClosure({ plan: stale, repoRoot: fixture.root }),
+    /closure entry preflight differs/);
+  const wrongEntry = structuredClone(fixture.plan);
+  wrongEntry.collector.entry = 'frozen/other.js';
+  await assert.rejects(verifyStep5ArtifactClosure({ plan: wrongEntry, repoRoot: fixture.root }),
+    /collector entry\/runtime manifest do not match/);
+});
+
+test('Step 5 artifact preflight rejects a proof pinned to a different runtime', async t => {
+  const fixture = await artifactClosureFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const wrongProof = structuredClone(fixture.plan);
+  wrongProof.reference_protocol.exact_source_fake_proof.runtime_manifest_sha256 = 'other-runtime';
+  await assert.rejects(verifyStep5ArtifactClosure({ plan: wrongProof, repoRoot: fixture.root }),
+    /exact-source fake proof runtime differs/);
 });

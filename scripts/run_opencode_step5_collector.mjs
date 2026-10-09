@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { verifyStep5ModelPair } from './opencode-step5-preflight.mjs';
+import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding } from './opencode-step5-preflight.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 async function main(argv) {
@@ -24,6 +24,18 @@ async function main(argv) {
     readFile(options.get('--collector-argv-json'), 'utf8')
   ]);
   const plan = JSON.parse(planText), bootstrapConfig = JSON.parse(bridgeText), collectorArgv = JSON.parse(argvText);
+  const artifactClosure = await verifyStep5ArtifactClosure({ plan, repoRoot: process.cwd() });
+  let sourceBinding = null;
+  if (plan?.schema === 'natlang.step5_authored_root_source_case_launch_plan/1') {
+    const sourcePath = plan.source?.path;
+    const proofPath = plan.reference_protocol?.exact_source_fake_proof?.path;
+    if (typeof sourcePath !== 'string' || typeof proofPath !== 'string')
+      throw new Error('authored-root launch plan lacks exact source/proof paths');
+    const [sourceCasesText, sourceProofText] = await Promise.all([
+      readFile(sourcePath, 'utf8'), readFile(proofPath, 'utf8')
+    ]);
+    sourceBinding = verifyStep5SourceBinding({ plan, sourceCasesText, sourceProofText });
+  }
   const pairing = verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv,
     bootstrapConfigText: bridgeText, bootstrapConfigPath: options.get('--bootstrap-config') });
   const timeoutMs = Number(plan.bounds?.outer_wall_clock_seconds) * 1000;
@@ -31,6 +43,7 @@ async function main(argv) {
   const receiptPath = options.get('--receipt');
   const receipt = { schema: 'natlang.opencode_step5_collector_launch/1', plan_sha256: hash(planText),
     bridge_config_sha256: hash(bridgeText), collector_argv_sha256: hash(argvText), ...pairing,
+    artifact_closure: artifactClosure, ...(sourceBinding ? { source_binding: sourceBinding } : {}),
     collector_argv: collectorArgv, parent_pid: process.pid, started_at: new Date().toISOString(), status: 'starting' };
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
   let receiptWrite = Promise.resolve();
