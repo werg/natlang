@@ -1674,6 +1674,8 @@ def main(argv=None):
                           'selection_signature': selection_signature}), flush=True)
     host_gc_seconds = 0.0
     host_gc_calls = 0
+    host_gc_generation_stats = {0: {'calls': 0, 'seconds': 0.0, 'unreachable': 0},
+                                2: {'calls': 0, 'seconds': 0.0, 'unreachable': 0}}
     phase_wall_seconds = {}
     pending_cuda_phase_events = []
 
@@ -1711,15 +1713,27 @@ def main(argv=None):
                 }) + '\n')
         pending_cuda_phase_events.clear()
 
-    def collect_graph_cycles():
-        # Host wall time only: do not synchronize CUDA or change collection cadence.
+    def collect_graph_cycles(generation=2):
+        # Host wall time only: do not synchronize CUDA. Generation 0 is for
+        # short-lived per-writer graphs; generation 2 remains at phase edges.
         nonlocal host_gc_seconds, host_gc_calls
         started_gc = time.perf_counter()
+        collected = 0
         try:
-            return gc.collect()
+            collected = gc.collect(generation)
+            return collected
         finally:
-            host_gc_seconds += time.perf_counter() - started_gc
+            elapsed = time.perf_counter() - started_gc
+            host_gc_seconds += elapsed
             host_gc_calls += 1
+            stats = host_gc_generation_stats.setdefault(
+                generation, {'calls': 0, 'seconds': 0.0, 'unreachable': 0})
+            stats['calls'] += 1
+            stats['seconds'] += elapsed
+            stats['unreachable'] += collected
+
+    def collect_local_graph_cycles():
+        return collect_graph_cycles(0)
 
     def save_training_state(step, destination=None):
         started_save = time.perf_counter()
@@ -1783,6 +1797,7 @@ def main(argv=None):
             step_started = time.perf_counter()
             phase_wall_seconds = {}
             step_gc_seconds, step_gc_calls = host_gc_seconds, host_gc_calls
+            step_gc_generation_stats = {g: dict(v) for g, v in host_gc_generation_stats.items()}
             step_lengths_start = len(lengths)
             step_batches_start = len(writer_batches)
             step_contexts_start = len(write_context_lengths)
@@ -1881,7 +1896,11 @@ def main(argv=None):
                             del gradients
                             losses.append(value * args.batch)
                     if mode == 'staged' or args.backward_policy == 'joint':
-                        active_staging[0] = StagedWrites(observe=observe_writer, measure=retained_tape_bytes if args.device.startswith('cuda') else None, collect=collect_graph_cycles) if mode == 'staged' else None
+                        active_staging[0] = StagedWrites(
+                            observe=observe_writer,
+                            measure=retained_tape_bytes if args.device.startswith('cuda') else None,
+                            collect=collect_graph_cycles,
+                            collect_local=collect_local_graph_cycles) if mode == 'staged' else None
                         from .memory import offload_attention_tensors
                         persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
                         with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
@@ -1976,6 +1995,13 @@ def main(argv=None):
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
                      "host_gc_seconds": round(host_gc_seconds - step_gc_seconds, 6),
                      "host_gc_calls": host_gc_calls - step_gc_calls,
+                     "host_gc_by_generation": {
+                         str(g): {
+                             'calls': host_gc_generation_stats[g]['calls'] - step_gc_generation_stats.get(g, {}).get('calls', 0),
+                             'seconds': round(host_gc_generation_stats[g]['seconds'] - step_gc_generation_stats.get(g, {}).get('seconds', 0.0), 6),
+                             'unreachable': host_gc_generation_stats[g]['unreachable'] - step_gc_generation_stats.get(g, {}).get('unreachable', 0),
+                         } for g in sorted(host_gc_generation_stats)
+                     },
                      "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.perf_counter() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                      **({"write_lengths": lengths[step_lengths_start:][-8:]} if len(lengths) > step_lengths_start else {}),
                      "writes_this_update": len(lengths) - step_lengths_start,

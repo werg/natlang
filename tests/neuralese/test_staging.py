@@ -41,6 +41,24 @@ def test_budget_retains_joint_graph_below_limit_and_stops_above():
             x.square()
 
 
+def test_local_staging_collector_runs_per_node_and_full_collector_runs_on_clear():
+    events = []
+    source = torch.tensor(1., requires_grad=True)
+    weight = torch.tensor(2., requires_grad=True)
+    staged = StagedWrites(
+        collect=lambda: events.append('full'),
+        collect_local=lambda: events.append('local'))
+    first = staged.add(lambda: (source * weight, []))
+    second = staged.add(lambda: (first.value * weight, []))
+    second.value.sum().backward()
+    staged.backward()
+    torch.testing.assert_close(source.grad, torch.tensor(4.))
+    torch.testing.assert_close(weight.grad, torch.tensor(4.))
+    assert events == ['local', 'local', 'local', 'local']
+    staged.clear()
+    assert events == ['local', 'local', 'local', 'local', 'full']
+
+
 @pytest.mark.parametrize('scale', [1., .25])
 @pytest.mark.parametrize('core_penalties', [False, True])
 def test_separate_auxiliary_graph_matches_joint_branching_gradients(scale, core_penalties):
