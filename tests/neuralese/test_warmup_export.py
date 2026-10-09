@@ -101,3 +101,13 @@ def test_the_status_record_is_written_atomically(tmp_path):
     assert json.loads((tmp_path / 'heads-export-status.json').read_text()) == status
     assert not (tmp_path / 'heads-export-status.json.pending').exists()
     assert warmup_export.write_heads_export_status(tmp_path / 'missing', status) is False
+
+
+def test_a_new_warmup_checkpoint_binds_its_inputs_by_role(tmp_path, monkeypatch):
+    from natlang_neuralese.common.artifact_paths import ArtifactResolver
+    run, _ = run_tiny(tmp_path, monkeypatch, steps=1)
+    state = torch.load(run / 'checkpoint.pt', weights_only=False)
+    assert set(state['artifact_refs']) == {'heads', 'records', 'text_data'}
+    assert state['artifact_refs']['text_data']['resolved'] == str((tmp_path / 'text.jsonl').resolve())
+    resolver = ArtifactResolver.from_state(state)
+    assert resolver.path('text_data') == str((tmp_path / 'text.jsonl').resolve())

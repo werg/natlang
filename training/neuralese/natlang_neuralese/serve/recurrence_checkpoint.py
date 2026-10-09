@@ -5,15 +5,23 @@ import torch
 
 from . import load_engine
 from ..model.capacity import set_write_capacity
+from ..common.artifact_paths import ArtifactResolver
 from ..train.adapters import inject_lora
 
 
-def load_recurrence_checkpoint(path, *, device='cpu', dtype=None):
+def load_recurrence_checkpoint(path, *, device='cpu', dtype=None, artifact_overrides=None):
+    """Restore a recurrence checkpoint's serving weights.
+
+    Its input files are bound by role through the checkpoint's own pins (common/artifact_paths.py), never by the
+    working directory. ``artifact_overrides`` ({role: path}) replaces a role whose recorded file moved.
+    """
     state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('requires complete recurrence checkpoint')
     options = state['identity']['options']
-    engine = load_engine(options.get('base'), heads_checkpoint=options.get('heads'), device=device, dtype=dtype)
+    artifacts = ArtifactResolver.from_state(state, overrides=artifact_overrides)
+    engine = load_engine(artifacts.path('base'), heads_checkpoint=artifacts.path('heads'), device=device, dtype=dtype,
+                         artifacts=artifacts)
     engine.heads.set_content_transport(state.get('port_config', {}).get('content_transport', 'learned-residual'))
     engine.heads.load_state_dict(state['heads'])
     capacity = state.get('port_config', {}).get('max_length', engine.heads.max_length)

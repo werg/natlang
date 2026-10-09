@@ -837,6 +837,9 @@ def main(argv=None):
         identity['continuation'] = {'checkpoint_sha256': digest_file(args.continue_from),
                                     'path': str(Path(args.continue_from).resolve()),
                                     'curriculum_changes': args.curriculum_change}
+    from ..common.artifact_paths import artifact_refs
+    # Each input bound to its role once, at launch, for every loader of the checkpoints written below.
+    input_roles = artifact_refs(vars(args), identity['files'], ('base', 'heads', 'records', 'pieces', 'bank', 'soft_init'))
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     new_continuation = resumed is None and bool(args.continue_from)
     if resumed is not None:
@@ -1879,6 +1882,7 @@ def main(argv=None):
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,
                                  'geometry_version': geometry_version},
+            'artifact_refs': input_roles,
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
             'control_rows': backbone.control_rows.detach().cpu(),

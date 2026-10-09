@@ -1120,6 +1120,9 @@ def main(argv=None):
     identity['supervision_policy'].update(context_weight=a.context_weight,feedback_weight=a.feedback_weight,
                                          sampler='cohort-then-document-then-window/1',
                                          cohort_weights=a.cohort_weights)
+    from ..common.artifact_paths import artifact_refs
+    input_roles=artifact_refs(options,identity['inputs'],
+        ('heads','records','pieces','text_data','student_checkpoint','continue_from'))
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     was_resumed=resumed is not None
@@ -1834,7 +1837,7 @@ def main(argv=None):
         available=available_system_memory_bytes()
         async_write=(not wait and emergency_recovery is None and estimate is not None
                      and available is not None and available >= int(estimate*1.25))
-        state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
+        state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'artifact_refs':input_roles,'step':step,
           'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
           'optimizer':optimizer.state_dict(),'optimizer_param_names':optimizer_param_names(optimizer,dict(named)),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],

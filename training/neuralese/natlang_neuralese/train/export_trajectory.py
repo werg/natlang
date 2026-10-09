@@ -4,28 +4,27 @@ The original optimizer/RNG checkpoint remains the authoritative resumable state.
 Legacy recurrence checkpoints inherit frozen control rows and backbone metadata
 from their pinned parent heads; this provenance is validated rather than guessed.
 """
-import argparse, hashlib, json, re
+import argparse, json, re
 from pathlib import Path
 import torch
+from ..common.artifact_paths import ArtifactResolver
+from ..common.hashing import sha256_file_hex as digest
 from .trajectory_state import atomic_checkpoint
 
-def digest(path):
-    h=hashlib.sha256()
-    with Path(path).open('rb') as f:
-        for b in iter(lambda:f.read(1<<20),b''):h.update(b)
-    return h.hexdigest()
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--checkpoint',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
+    p.add_argument('--artifact',action='append',default=[],metavar='ROLE=PATH',
+                   help='bind a recorded input (heads, pieces) to this file when the checkpoint cannot find it; its bytes must still match the pin')
     a=p.parse_args();state=torch.load(a.checkpoint,map_location='cpu',weights_only=False,mmap=True)
     if state.get('schema')!='natlang.neuralese_recurrence_checkpoint/1':raise ValueError('unsupported checkpoint')
-    identity=state['identity'];options=identity['options'];parent_path=options.get('heads');parent={}
+    identity=state['identity'];options=identity['options']
+    artifacts=ArtifactResolver.from_state(state,overrides=dict(item.split('=',1) for item in a.artifact))
+    parent_path=artifacts.path('heads');parent={}
     if parent_path:
-        if digest(parent_path)!=identity['files'][str(Path(parent_path).resolve())]:raise ValueError('parent heads changed')
         parent=torch.load(parent_path,map_location='cpu',weights_only=False,mmap=True)
     control=state.get('control_rows',parent.get('control_rows'));config=state.get('port_config',parent.get('port_config'))
     if control is None or not config:raise ValueError('missing deployment metadata; refuse reconstruction')
-    pieces=Path(options['pieces'])
-    if digest(pieces)!=identity['files'][str(pieces.resolve())]:raise ValueError('piece initialization changed')
+    pieces=Path(artifacts.path('pieces',required=True))
     texts=state.get('texts') or {r['name']:r['text'] for r in map(json.loads,pieces.open())}
     if a.out.exists():raise ValueError('fresh immutable export required')
     a.out.mkdir(parents=True)
