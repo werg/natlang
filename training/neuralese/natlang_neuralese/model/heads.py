@@ -92,8 +92,11 @@ class LatentSketchProjection(nn.Module):
     """Small vocabulary-free shallow feedback, learned through consumers.
 
     A normalized state is a scale-safe starting latent, not a token prediction.
-    The zero correction preserves that initializer; all weights can learn from
-    consumer loss. No next-token readout or independent fidelity gate exists.
+    The zero correction preserves that initializer. Foundation warm-up trains
+    this map against detached raw next-token embeddings, alongside the distinct
+    full-depth content projection. Recurrence retains that anchor and consumer
+    supervision. Qualification checks the resulting feedback history; there is
+    no separate vocabulary readout in this shallow map.
     """
 
     def __init__(self, embedding: torch.Tensor, eps: float = 1e-5):
