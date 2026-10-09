@@ -173,7 +173,13 @@ stream of events):
   function returning `boolean`. It is checked on the initial state and after
   every step.
 - `withMeasure(state => n)` supplies a non-negative integer that must decrease at
-  every step; `withLimit({ maxSteps })` a hard step bound. A deadline alone is
+  every step that continues the loop. The step after which `until` is true ends
+  the loop and need not lower it, so a measure that counts the work still to do
+  needs no padding (`2*remaining + running`). A measure at 0 while `until` is
+  still false ends the loop with `IterationLimitError` coded
+  `iteration-measure-exhausted`, since a further step could not lower it; a
+  continuing step that does not lower it is `IterationDivergedError`, whose
+  trajectory ends at the last state that did. `withLimit({ maxSteps })` a hard step bound. A deadline alone is
   not a bound.
 - With a TypeScript predicate, a measure or a step limit is required
   (`iteration-unbounded`). With a natural-language predicate none is required:

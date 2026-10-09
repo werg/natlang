@@ -98,3 +98,5 @@ To run the same stages from a checked host driver and from a natural-language dr
 ## Extension decisions
 
 Before adding a runtime feature, try what exists: typed values, named functions, ordinary control flow, services, and `iterateOn`. Search, SQL, processes, binary assets, and stronger-model calls are services or callable-folder helpers. When a general capability is missing, implement it in the shared runtime for Node and browser alike rather than as an application-local workaround.
+
+**Iteration measures.** `iterateOn(step, initial).withMeasure(state => n)` gives the loop a bound that holds without a step limit: `n` is a nonnegative integer counting the work still to do, and every step that continues the loop must lower it. The step that makes `until` true may leave it unchanged, so write the plain count (`items.length - done`), not a padded one. If the measure reaches 0 while `until` is false, the loop stops with `iteration-measure-exhausted`: let `until` be true where the measure is 0, or count one more unit for the work that remains.
