@@ -13,8 +13,12 @@ Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navi
 
 Current state: corrected continuation `luna-ar-feedback-prefix-4962-best23936-v1`
 was gracefully paused at serialized step24704 for two serial GPU own-history
-diagnostics. All optimizer/schedule state is retained. Resume uses the exact
-frozen child argv and existing stage checkpoint, not a fresh outer recipe.
+diagnostics, then resumed (first observed update24705). All optimizer/schedule
+state is retained. Resume uses the exact frozen child argv and existing stage
+checkpoint, not a fresh outer recipe. The first resume attempt failed before
+training because its `/tmp` working directory could not resolve inherited
+checkpoint-relative artifacts; corrected launch uses `/home/werg/natlang`.
+Receipts/logs: `runs/luna-self-feedback-best23936-20261009-v1/`.
 It continues from immutable mapped best23936, not regressed final24960. Declared
 recipe `luna-ar-feedback-prefix-4962-best23936-20261009-v1.json` has SHA
 `70e416d7558727d0eced37cd465827184da5cc64198bd5c26ec25ffc0317a99c`;
@@ -66,7 +70,9 @@ the ordinary model on their respective histories. Its proposed per-stratum gates
 (.99 argmax agreement, .02 KL nats/token, .05 own-output CE gap) were declared
 before measurements. Code and146 tests are landed. The best23936 GPU diagnostic completed: short
 spans pass the proposed gate, medium/long and first/last strata fail. A matched
-immutable intermediate24448 comparison is running. Reports live beneath
+immutable intermediate24448 comparison also completed: short passes, other
+strata fail; first/medium strata worsen versus23936, later quality improves
+slightly. No uniform channel qualification. Reports live beneath
 `/srv/storage/natlang-artifacts/luna-self-feedback-best23936-20261009-v1/result-parent-v3/`;
 launch declaration v4 retains that v3 output parent. These are diagnostics, not
 certificates; canonical qualification integration remains open.
