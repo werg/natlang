@@ -87,6 +87,28 @@ class Server:
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             return json.loads(response.read())
 
+    def get_bytes(self, path: str) -> bytes:
+        with urllib.request.urlopen(self.base + path, timeout=self.timeout) as response:
+            return response.read()
+
+    def put_bytes(self, path: str, data: bytes) -> dict:
+        request = urllib.request.Request(self.base + path, data=data, method="PUT",
+                                         headers={"content-type": "application/octet-stream"})
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return json.loads(response.read())
+
+    def save_block(self, block_id: str, path: Path) -> None:
+        """The block's bytes as the server encodes them (content-addressed: re-uploading gives the same id)."""
+        path.write_bytes(self.get_bytes(f"/v1/neuralese/blocks/{block_id}"))
+
+    def restore_block(self, path: Path) -> str:
+        """Upload saved block bytes (a server restart loses its in-memory store); returns the block id."""
+        from ..serve.store import decode_block
+
+        block = decode_block(path.read_bytes())
+        self.put_bytes(f"/v1/neuralese/blocks/{block.id}", path.read_bytes())
+        return block.id
+
     def sequence_logps(self, rollouts: list[dict], adapters: list | None, chunk: int = 8) -> list[float]:
         """Σ over each rollout's turns of log π(turn) under `adapters` (None: the base model)."""
         out = []
@@ -175,6 +197,7 @@ def main(argv=None):
     r.add_argument("--round", type=int, default=None)
     r.add_argument("--adapter", required=True, help="adapter block the rollouts were sampled with")
     r.add_argument("--state", default=None, help="optimiser state JSON from the previous round")
+    r.add_argument("--restore", default=None, help="adapter.nzb of --adapter, uploaded first (after a server restart)")
     r.add_argument("--out", required=True)
     r.add_argument("--lr", type=float, default=1e-3)
     r.add_argument("--beta", type=float, default=0.02)
@@ -187,12 +210,18 @@ def main(argv=None):
     if a.command == "init":
         block = server.post("/v1/neuralese/adapters", {"kind": a.kind, "rank": a.rank})
         (out / "adapter.json").write_text(json.dumps({"adapter": block["id"], "state": {}, "init": block}, indent=1) + "\n")
+        server.save_block(block["id"], out / "adapter.nzb")
         print(json.dumps({"adapter": block["id"]}))
         return
+    if a.restore:
+        restored = server.restore_block(Path(a.restore))
+        if restored != a.adapter:
+            raise SystemExit(f"{a.restore} holds {restored}, not --adapter {a.adapter}")
     state = json.loads(Path(a.state).read_text())["state"] if a.state else {}
     result = run_round(server, load_rollouts(a.rollouts, a.round), a.adapter, state, lr=a.lr, beta=a.beta, clip=a.clip,
                        steps=a.steps)
     (out / "adapter.json").write_text(json.dumps({"adapter": result["adapter"], "state": result["state"]}, indent=1) + "\n")
+    server.save_block(result["adapter"], out / "adapter.nzb")
     with (out / "rounds.jsonl").open("a") as log:
         log.write(json.dumps({**result["report"], "round": a.round}) + "\n")
     print(json.dumps(result["report"]))
