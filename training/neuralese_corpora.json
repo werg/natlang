@@ -19859,6 +19859,25 @@
       "license": "Inherited source licenses and source groups in exact cases.jsonl; generated teacher annotations",
       "independent_new_worlds": 0,
       "notes": "Closed Groq20B/GoogleGemma4/OpenRouterLing/Lightning small screens, including all failed v1 envelopes and corrected v2. Error is answer.error, never infer success from row count or process exit. Wire controls/manifests preserved. These are typed probability labels, not full trajectories; current Natlang IR conversion and quality/source admission remain explicit pending work."
+    },
+    {
+      "id": "free-provider-typed-quality-review-held-20261009-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v2",
+      "include": [
+        "provider-short-decisions-quality-v2.json"
+      ],
+      "split": null,
+      "source_class": "provider-quality-review",
+      "admission": "held-diagnostic-only-not-training-examples",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-typed-screens-held-20261009-v1"
+      ],
+      "license": "Generated audit metadata with inherited source identities",
+      "independent_new_worlds": 0,
+      "notes": "Four selected cases, post-hoc human-label comparisons and observed usage/elapsed times. Keeps provider controls and exact file hashes. Not representative rankings or admission."
     }
   ],
   "coverage_backlog": [

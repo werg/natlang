@@ -1,3 +1,9 @@
+## Broader provider diagnostics — 2026-10-09 21:25 UTC
+
+- Luna helper v2 quality receipt SHAe5e18a960ea1f3c2658821da91990185cbd6d46fe90d6bc41371cdbc14bbf071 independently verified4/4,2/4,4/4,4/4 valid counts for Gemma26/Gemma31/Ling/Lightning. Gemma31 failuresHTTP500. Post-hoc labels/usage are review evidence only; no admission or representative ranking. Receipt registered separately and immutable; original screen manifest untouched.
+- Mixed cohorts are exposing genuine invalid-typed-response200 envelopes on choice/ordinal distributions (Gemma and Groq), even when output budget is not exhausted. Original adapter retained only whole-response hashes, so exact failed formatting/normalization cannot be inferred. A fresh Gemma26 call on one previously failed AGNews input returned an exact valid distribution; this does not repair or explain the historical failure.
+- Shared label adapter now retains bounded actual teacher response content with full content SHA/truncation marker, finish reason and specific validation exception for subsequent jobs. Strict schema/probability validation unchanged. Running batches keep their already-loaded adapter and recorded SHA; no hotpatch or invented recovery. Rerun only selected errors with fresh outputs/identity once batches close, and diagnose from saved content rather than weakening the checker blindly.
+
 ## Free screens publication and live throughput expansion — 2026-10-09 21:22 UTC
 
 - Fixed capability reruns v2 completed: Gemma4-26B4/4valid in16s, Ling3.1Flash4/4in17s, Nemotron3.5Lightning4/4in48s; Gemma4-31B2/4valid,2errors,in84s. These tiny screens include five-second pacing and cannot establish representative model quality or large-prompt throughput. No provider-gold leakage. Original failing formats preserved.

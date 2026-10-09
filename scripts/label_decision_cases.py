@@ -177,25 +177,34 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         history_entry['sleep_seconds'] = delay
         time.sleep(delay)
 
-    answer, error = None, None
+    answer, error, validation_detail = None, None, None
+    response_content, finish_reason = None, None
     if response_status != 200:
         error = f'http_{response_status}' if response_status else 'network_error'
     else:
         try:
-            content = response_body['choices'][0]['message']['content']
-            parsed = json.loads(content)
+            choice = response_body['choices'][0]
+            finish_reason = choice.get('finish_reason')
+            response_content = choice['message']['content']
+            parsed = json.loads(response_content)
             answer = _validate_http_answer(case, parsed)
-        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             error = 'invalid_typed_response'
+            validation_detail = {'type': type(exc).__name__, 'message': str(exc)[:300]}
     if error:
         answer = {'error': error}
     provenance = {
         'backend': 'openai-compatible', 'model': model, 'endpoint': endpoint,
         'request_sha256': request_hash, 'response_sha256': response_hash,
         'http_status': response_status, 'attempts': len(history), 'retry_history': history,
+        'finish_reason': finish_reason, 'validation_error': validation_detail,
         'usage': {k: v for k, v in (response_body.get('usage', {}) if isinstance(response_body, dict) else {}).items()
                   if k in {'prompt_tokens', 'completion_tokens', 'total_tokens'} and isinstance(v, int) and not isinstance(v, bool)},
     }
+    if isinstance(response_content, str):
+        provenance['response_content'] = response_content[:65536]
+        provenance['response_content_truncated'] = len(response_content) > 65536
+        provenance['response_content_sha256'] = hashlib.sha256(response_content.encode('utf-8')).hexdigest()
     return answer, provenance
 
 
