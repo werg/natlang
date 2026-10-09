@@ -33,11 +33,15 @@ Lion momentum 23 GB), every ~15 min at one per 100 updates.
 - **Cadence by wall clock**, not steps: one rolling resumable slot every 45 min (configurable) and whenever the
   process is asked to stop (SIGTERM/SIGINT/SIGUSR1 → checkpoint at the next step boundary, then exit). A run loses
   at most 45 min of work; the disk sees ~3x fewer 47 GB writes.
-- **One rolling slot**, written atomically (pending → rename) and disk-aware (the previous slot goes first when the
-  disk cannot hold both).
+- **One rolling slot**, written atomically and durably (pending → fsync → rename → directory fsync).
+  If the disk cannot hold the replacement beside the previous slot, report insufficient space and preserve the
+  previous checkpoint. Failed partial writes are removed; pruning is separate from checkpoint writing.
 - **Best = weights only** (no optimizer state), on eval improvement.
-- **End of run: drop the optimizer state.** The final file holds weights only; a continuation starts from weights
-  with its own optimizer (the shared `optim_restore` path declares new slots).
+- **End of run: preserve full resumability by default.** Export final weights alongside the full optimizer,
+  schedule and RNG checkpoint. Call `finalize(weights, resumable_state=latest_full_state)` to preserve the exact
+  final step, or save the final full state before exporting. Explicit `drop_resumable=True` is available only for
+  an owner-authorized weights-only milestone after a successful final export; it is not a space-pressure fallback.
+  Pop requires optimizer continuation. DGX-specific disposal decisions must be explicit in its owned wiring.
 - Implementation: `train/checkpoint_policy.py` (`CheckpointPolicy`). Wired into `maple/qat_convert.py` on branch
   `storage/qat-convert-checkpoint-policy` (d74a821e), to merge after the running conversion v2 ends. Wiring into
   `text_warmup.py` / `trajectories.py` is proposed to their owners (Pop: C1 checkpoint/export seam; architecture

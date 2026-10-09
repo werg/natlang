@@ -105,7 +105,7 @@
     "on_sigterm": true,
     "rolling_slots": 1,
     "best_weights_only": true,
-    "drop_optimizer_at_end": true,
+    "drop_optimizer_at_end": false,
     "disk_aware": true
   }
 }
