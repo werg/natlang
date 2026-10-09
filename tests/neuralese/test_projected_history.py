@@ -4,7 +4,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from natlang_neuralese.eval.projected_history import _gold_reference_survival, projected_history_metrics
+from natlang_neuralese.eval.projected_history import (
+    _first_divergence_details, _gold_reference_survival, projected_history_metrics,
+)
 
 
 class CausalCycle(torch.nn.Module):
@@ -132,3 +134,30 @@ def test_greedy_gold_reference_reports_full_survival_without_zero_case_ambiguity
     assert metrics['exact_prefix_survival_tokens']==2
     assert metrics['exact_prefix_survival_ce']==pytest.approx(.25)
     assert metrics['exact_prefix_survival_accuracy']==1
+
+
+def test_first_divergence_details_bind_tokens_logits_and_payload_without_extra_forward():
+    class EmbeddingBackbone:
+        def embed(self, ids):
+            return torch.nn.functional.one_hot(ids, num_classes=4).float()
+
+    span=torch.tensor([[1,2,3]])
+    generated={'ar_projection':torch.tensor([[1,0,3]]),'ar_greedy':torch.tensor([[1,2,3]])}
+    losses=torch.tensor([[.1,.8,.9]])
+    survival=_gold_reference_survival(generated['ar_projection'],losses,span)
+    assert survival['first_divergence_index_by_window']==[1]
+    details=_first_divergence_details(
+        EmbeddingBackbone(),'ar_projection',survival,generated,
+        torch.tensor([[1,0,3]]),
+        {'ar_projection':(torch.tensor([[0.,2.,0.]]),torch.tensor([[3.,4.,2.]]),torch.tensor([[1.,1.5,1.]]))},
+        {'ar_projection':torch.tensor([[[0.,1.,0.,0.],[0.,0.,0.,2.],[0.,0.,1.,0.]]])},span)
+    row=details[0]
+    assert row['target_index']==1
+    assert (row['gold_token_id'],row['generated_token_id'],row['rescored_token_id'])==(2,0,0)
+    assert row['ar_greedy_control_token_id']==2
+    assert row['generated_logit_minus_gold_logit']==pytest.approx(2)
+    assert row['top1_logit_margin']==pytest.approx(1.5)
+    assert row['payload_l2_norm']==pytest.approx(2)
+    assert row['gold_embedding_l2_norm']==pytest.approx(1)
+    assert row['payload_minus_gold_embedding_l2_norm']==pytest.approx(5**.5)
+    assert row['payload_gold_embedding_cosine']==pytest.approx(0)

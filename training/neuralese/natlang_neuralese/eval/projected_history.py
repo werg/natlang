@@ -215,9 +215,42 @@ def _gold_reference_survival(prediction, losses, span):
     }
 
 
+def _first_divergence_details(backbone, name, survival, generated_tokens, predictions,
+                             token_diagnostics, payloads, span):
+    """Compact evidence at the first bad emitted token, without another model pass."""
+    rows = []
+    for row_index, divergence in enumerate(survival['first_divergence_index_by_window']):
+        if divergence is None:
+            rows.append(None)
+            continue
+        gold_embedding = backbone.embed(span[row_index:row_index+1, divergence]).float().reshape(-1)
+        payload = payloads[name][row_index:row_index+1, divergence].float().reshape(-1)
+        gold_score, top_score, top_margin = (value[row_index, divergence] for value in token_diagnostics[name])
+        greedy_token = (generated_tokens['ar_greedy'][row_index, divergence]
+                        if 'ar_greedy' in generated_tokens else span.new_tensor(-1))
+        values = torch.stack((
+            span[row_index, divergence].float(), generated_tokens[name][row_index, divergence].float(),
+            predictions[row_index, divergence].float(), greedy_token.float(),
+            (top_score-gold_score).float(), top_margin.float(), payload.norm(), gold_embedding.norm(),
+            (payload-gold_embedding).norm(),
+            torch.nn.functional.cosine_similarity(payload[None, :], gold_embedding[None, :]).reshape(()),
+        )).detach().cpu().tolist()
+        rows.append({
+            'target_index': divergence,
+            'gold_token_id': int(values[0]), 'generated_token_id': int(values[1]),
+            'rescored_token_id': int(values[2]),
+            'ar_greedy_control_token_id': int(values[3]) if values[3] >= 0 else None,
+            'generated_logit_minus_gold_logit': values[4], 'top1_logit_margin': values[5],
+            'payload_l2_norm': values[6], 'gold_embedding_l2_norm': values[7],
+            'payload_minus_gold_embedding_l2_norm': values[8], 'payload_gold_embedding_cosine': values[9],
+        })
+    return rows
+
+
 @torch.no_grad()
 def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE_KINDS, *,
-                            return_generated_tokens=False):
+                            return_generated_tokens=False, return_token_diagnostics=False,
+                            gold_tokens=None):
     """Self-fed rollouts from one prefix, one position at a time.
 
     ar_greedy feeds back the crisp greedy token; ar_projection the full-depth projection of the top state (the
@@ -229,13 +262,16 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
     if heads.read_markers:
         raise ValueError('autoregressive history controls require the raw read profile')
     prefix_embeddings = backbone.embed(prefix)
-    payloads = {};generated_tokens={}
+    if return_token_diagnostics and (not return_generated_tokens or gold_tokens is None or
+            gold_tokens.ndim != 2 or gold_tokens.shape[0] != prefix.shape[0] or gold_tokens.shape[1] < steps):
+        raise ValueError('token diagnostics require generated tokens and aligned gold targets')
+    payloads = {};generated_tokens={};token_diagnostics={}
     for kind in kinds:
         if kind not in AUTOREGRESSIVE_KINDS:
             raise ValueError(f'unknown autoregressive control {kind}')
         # A separate prefill per rollout: no-grad caches grow in place.
         context = prefill_write_context(backbone, heads, prefix_embeddings)
-        cache, values = context.cache, [];tokens=[]
+        cache, values = context.cache, [];tokens=[];diagnostics=[]
         state, top = context.state[:, None], context.top[:, None]
         for position in range(steps):
             # The decoded token of each rollout: the sketch head's own argmax (its straight-through choice), the
@@ -243,15 +279,23 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
             if kind == 'ar_sketch':
                 value = heads.feedback(state)
                 decoded = getattr(heads.feedback, 'logits', None)  # latent sketches have no token choice
-                token = decoded(state).argmax(-1) if return_generated_tokens and decoded else None
+                scores = decoded(state) if return_generated_tokens and decoded else None
+                token = scores.argmax(-1) if scores is not None else None
             elif kind == 'ar_greedy':
-                token = backbone.logits(top).argmax(-1)
+                scores = backbone.logits(top)
+                token = scores.argmax(-1)
                 value = backbone.embed(token)
             else:
                 value = heads.content(torch.zeros_like(top), top)
-                token = backbone.logits(top).argmax(-1) if return_generated_tokens else None
+                scores = backbone.logits(top) if return_generated_tokens else None
+                token = scores.argmax(-1) if scores is not None else None
             if token is not None:
                 tokens.append(token)
+                if return_token_diagnostics:
+                    top_values = scores.topk(min(2, scores.shape[-1]), dim=-1).values
+                    gold_score = scores.gather(-1, gold_tokens[:, position:position+1])
+                    diagnostics.append((gold_score, top_values[..., :1],
+                                        top_values[..., :1] - top_values[..., -1:]))
             values.append(value)
             if position == steps - 1:
                 break
@@ -263,7 +307,11 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
         payloads[kind] = torch.cat(values, 1)
         if tokens:
             generated_tokens[kind] = torch.cat(tokens, 1)
+        if diagnostics:
+            token_diagnostics[kind] = tuple(torch.cat([item[i] for item in diagnostics], 1) for i in range(3))
         del cache
+    if return_token_diagnostics:
+        return payloads, generated_tokens, token_diagnostics
     return (payloads,generated_tokens) if return_generated_tokens else payloads
 
 
@@ -280,8 +328,9 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
     if steps < 2:
         raise ValueError('autoregressive controls need at least two target positions')
     span = span[:, :steps]
-    payloads,generated_tokens = autoregressive_payloads(
-        backbone, heads, prefix, steps, kinds, return_generated_tokens=True)
+    payloads,generated_tokens,token_diagnostics = autoregressive_payloads(
+        backbone, heads, prefix, steps, kinds, return_generated_tokens=True,
+        return_token_diagnostics=True, gold_tokens=span)
     payloads = {'gold': backbone.embed(span), **payloads}
     prefix_embeddings = backbone.embed(prefix)
     scores = {}
@@ -308,6 +357,8 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
             actual_tokens = generated_tokens[name]
             survival=_gold_reference_survival(actual_tokens, losses, span)
             survival['generated_vs_rescored_prediction_agreement']=float((actual_tokens==prediction).float().mean())
+            survival['first_divergence_details_by_window'] = _first_divergence_details(
+                backbone, name, survival, generated_tokens, prediction, token_diagnostics, payloads, span)
             row['gold_reference_after_divergence'] = survival
         rows[name] = row
     return {'schema': 'natlang.autoregressive-history-controls/2', 'steps': steps, 'windows': span.shape[0],
