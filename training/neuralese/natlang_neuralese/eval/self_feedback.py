@@ -36,27 +36,10 @@ def _consumer_states(backbone, heads, prefix, history):
 @torch.no_grad()
 def _distribution_comparison(backbone, plain_states, projected_states, *, logit_chunk_tokens):
     """Compare normalized distributions in bounded time-by-vocabulary blocks."""
-    if plain_states.shape != projected_states.shape or plain_states.ndim != 3:
-        raise ValueError('plain and projected states must have identical [batch,time,width] shapes')
-    if logit_chunk_tokens < 1:
-        raise ValueError('logit_chunk_tokens must be positive')
-    agreements = []
-    divergences = []
-    for start in range(0, plain_states.shape[1], logit_chunk_tokens):
-        stop = min(start + logit_chunk_tokens, plain_states.shape[1])
-        # Restrict the live vocabulary activation to a few positions. One full
-        # vocabulary vector is necessary for exact normalization; no T x V
-        # logits are retained across chunks.
-        plain_logits = backbone.logits(plain_states[:, start:stop]).float()
-        projected_logits = backbone.logits(projected_states[:, start:stop]).float()
-        plain_logp = torch.log_softmax(plain_logits, dim=-1)
-        projected_logp = torch.log_softmax(projected_logits, dim=-1)
-        kl = (plain_logp.exp() * (plain_logp - projected_logp)).sum(dim=-1)
-        agreement = plain_logits.argmax(dim=-1).eq(projected_logits.argmax(dim=-1))
-        divergences.append(kl)
-        agreements.append(agreement)
-        del plain_logits, projected_logits, plain_logp, projected_logp
-    return torch.cat(divergences, dim=1), torch.cat(agreements, dim=1)
+    from ..train.channel_objective import chunked_distribution_comparison
+    return chunked_distribution_comparison(
+        backbone, plain_states, projected_states, chunk_size=logit_chunk_tokens, gradients=False)
+
 
 
 def _mean_and_count(values):
