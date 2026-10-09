@@ -136,6 +136,68 @@ def validate_configured_read_context(receipt: dict, definition_type: str, defini
                    ("learned_vectors", "qualification_certificate", "training_admission"))):
         raise ValueError("configured read definition differs from its exact frozen-runtime source")
 
+def pinned_runtime_manifest(source_approval: dict, repo_root: Path) -> Path | None:
+    """Resolve one exact runtime manifest through hash-pinned approval inputs.
+
+    A root review may pin the runtime directly, or pin a materialization receipt
+    whose converter provenance binds the runtime path and bytes. Only those
+    hash-verified input documents are followed; the selected runtime manifest
+    itself must also match its declared digest.
+    """
+    root = repo_root.resolve()
+    candidates: dict[Path, str] = {}
+
+    def add_runtime(raw_path, expected_sha, *, source_label):
+        if not isinstance(raw_path, str) or not isinstance(expected_sha, str):
+            raise ValueError(f"malformed runtime-manifest provenance in {source_label}")
+        path = Path(raw_path)
+        if path.is_absolute():
+            raise ValueError(f"runtime-manifest path must be repository-relative in {source_label}")
+        resolved = (root / path).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError(f"pinned runtime manifest is missing or outside repository in {source_label}")
+        actual_sha = sha_file(resolved)
+        if actual_sha != expected_sha:
+            raise ValueError(f"pinned runtime manifest hash mismatch in {source_label}")
+        candidates[resolved] = actual_sha
+
+    def visit(value, source_label):
+        if isinstance(value, dict):
+            # A digest without a path is not a binding. Plans commonly record
+            # runtime_manifest_sha256 while the path is held in a separate
+            # field (or the runtime is pinned through a replay receipt).
+            if "runtime_manifest_path" in value:
+                add_runtime(value.get("runtime_manifest_path"), value.get("runtime_manifest_sha256"),
+                            source_label=source_label)
+            for child in value.values():
+                visit(child, source_label)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, source_label)
+
+    for raw_path, pin in (source_approval.get("input_pins") or {}).items():
+        if not isinstance(pin, dict) or not isinstance(raw_path, str):
+            continue
+        path = Path(raw_path)
+        if path.is_absolute():
+            raise ValueError("root per-action input paths must be repository-relative")
+        resolved = (root / path).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            continue  # the root admission validator reports missing or mismatched pins first
+        if sha_file(resolved) != pin.get("sha256"):
+            raise ValueError(f"root per-action input pin changed while resolving runtime provenance: {raw_path}")
+        if resolved.name == "frozen-runtime.json":
+            add_runtime(raw_path, pin.get("sha256"), source_label=raw_path)
+        elif resolved.suffix == ".json":
+            try:
+                visit(json.loads(resolved.read_text(encoding="utf-8")), raw_path)
+            except json.JSONDecodeError:
+                continue
+
+    if len(candidates) > 1:
+        raise ValueError("root per-action inputs bind more than one runtime manifest")
+    return next(iter(candidates), None)
+
 def bind_exact_provider_contexts(records, source_approval, repo_root):
     """Project authenticated provider reads into the renderer as context only.
 
@@ -144,14 +206,7 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
     and are never represented as a writer event or recurrence edge.
     """
     bindings = []
-    runtime_candidates = []
-    for raw_path, entry in (source_approval.get("input_pins") or {}).items():
-        if not isinstance(entry, dict) or not raw_path.endswith("/frozen-runtime.json"):
-            continue
-        path = (repo_root / raw_path).resolve()
-        if path.is_file() and sha_file(path) == entry.get("sha256"):
-            runtime_candidates.append(path)
-    runtime_manifest = runtime_candidates[0] if len(runtime_candidates) == 1 else None
+    runtime_manifest = pinned_runtime_manifest(source_approval, repo_root)
     runtime_root = runtime_manifest.parent if runtime_manifest else None
     runtime_data = json.loads(runtime_manifest.read_text()) if runtime_manifest else {}
     combinator_rel = "src/neuralese/combinators.ts"
