@@ -71,6 +71,11 @@ def test_held_text_preview_accepts_single_split_without_weakening_production_ren
     assert receipt["review_only"] is True
     assert receipt["sft_eligible"] is False
     assert receipt["test_documents"] == 0
+    boundary = rows[0]["supervised_suffix_start"]
+    decoded_prefix = "".join(chr(token) for token in rows[0]["token_ids"][:boundary])
+    decoded_target = "".join(chr(token) for token in rows[0]["token_ids"][boundary:])
+    assert decoded_prefix.endswith("<|assistant|>")
+    assert decoded_target == "Answer<|end|>"
 
     # The production gold packet still requires an independent held split.
     approved = {**row, "training_admission": {"approved": True}}
