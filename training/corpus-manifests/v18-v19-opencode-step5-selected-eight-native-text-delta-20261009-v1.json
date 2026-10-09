@@ -1,0 +1,1503 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-opencode-step5-selected-eight-native-text-delta-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/compact-eight-review-packet-v8.json",
+      "bytes": 38278,
+      "sha256": "e371cf9d900ad92d8476eb53af06e278c91b7a738cf12aa3d5494b711cee8ccb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/native-compact-proposal-v2/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/native-compact-proposal-v2/delta-native-records.jsonl",
+      "bytes": 787048,
+      "sha256": "85c441f66d130591705a94e9fde8dd11a07ce429af096c413f22daeec2b80c5e",
+      "lines": 8
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/native-compact-proposal-v2/proposal-manifest.json",
+      "bytes": 13111,
+      "sha256": "310f8d042bb12928c8093ea8b46a29ecce37e0eb144a747cfa419ae1ece0cb7c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/native-compact-proposal-v2/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 60698,
+      "sha256": "52024806b1a61ed2f6fa5e767025ec11c408ef691c8cceafaea0fbf4a2f88285"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/snapshot-manifest.json",
+      "bytes": 24692,
+      "sha256": "80b8de7454128834f7d4fea1d3d711451337d2a5d7ef833c26bdca80d68fe76a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 396,
+      "sha256": "fa138db4bfd2c665a1fd7c78bc5031d589657607d3ac50e8002e15ae43bbbecf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/__pycache__/digest.cpython-310.pyc",
+      "bytes": 5715,
+      "sha256": "e4d7ff33532062df55576299a0ed15e34c003befe54b73ac5ac4af089a702d5c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 630,
+      "sha256": "90763d578edb7e70260c0390500d634d5a359df89325b7e106feee038d41a611"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/__pycache__/records.cpython-310.pyc",
+      "bytes": 6191,
+      "sha256": "54a1625b0f4d71339ec7ba54d50abaee5430f67d1f4206198c597623deb64de2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/__pycache__/render.cpython-310.pyc",
+      "bytes": 8635,
+      "sha256": "0be3c952c36f62ad269f23252ffca602f8fb7f094464070aea80b0daf36b9ea8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/__pycache__/text_corpus.cpython-310.pyc",
+      "bytes": 53257,
+      "sha256": "4d9ecc38d90fc3ed2dd8b535caaac9dea25896bde14135f155158b017d8e9e43"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/data/text_corpus.py",
+      "bytes": 80305,
+      "sha256": "37b655c00ee09f0bb2ed6c520d4a2e52e6ad074bead009d5c9aebedd94effda8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 4801,
+      "sha256": "e6aa3823160feb4baf5d015f4a0671852722ae86f2477be812d69a4e6ef2c09c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/__pycache__/chat.cpython-310.pyc",
+      "bytes": 20537,
+      "sha256": "8bb2ff1b380b069e58eeb58853b279e19399db7f7f4b6ea184114156eaa65005"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/grad.py",
+      "bytes": 53910,
+      "sha256": "d60da9f6c257caec0515c08030f1728a2349a97da83714bec292cadef405fd4f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/__pycache__/__init__.cpython-310.pyc",
+      "bytes": 551,
+      "sha256": "4ddb32ad6f16f7136815a78b1878e916ea5b51812a7eaaec30fa97dd6f39e589"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/__pycache__/memory.cpython-310.pyc",
+      "bytes": 3200,
+      "sha256": "6a64aae12e0ea6212236c60225f72d20600e6fe89a2a44421e2b70bb73ee53b9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/__pycache__/trajectories.cpython-310.pyc",
+      "bytes": 99452,
+      "sha256": "0bec9bb4736a8e2a0a12959ca2a1055b4aaea8b02289e4f970fc34cfdd90e8b4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/recipe.py",
+      "bytes": 28069,
+      "sha256": "82dbacb3bffa0d9cfb41503a193c3a1f95cb3b167a2cfe7ccefc68ea2c88ee8d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/staging.py",
+      "bytes": 8533,
+      "sha256": "3b214918589207065175868d13d0eeed437d57a7651c2b9d220bddb96331287e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/trajectories.py",
+      "bytes": 138656,
+      "sha256": "644a746d7aa21ea8a2a3e1645bcde74986e9a2857e90b2e5a7d1d70f207a63a1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/renderer-snapshot-v2/training/neuralese/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/root-native-text-composition-adoption-v1.json",
+      "bytes": 15958,
+      "sha256": "574f6e7c0125edaad4b052a8e071f31b2faccd8f16b7654f658a02bd1082f7b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/root-native-text-composition-review-v1.json",
+      "bytes": 2631,
+      "sha256": "7900d6b6ffb3fb70926f86afbbc824c2bbfc24930f732dd781b151ecd611afc5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/root-selected-native-content-review-v1.json",
+      "bytes": 461,
+      "sha256": "7c7660c5f2b7f64b896ed04a0ab95c71f0f82c08300bc9ab268ba2652ec5ab95"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-inputs-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-inputs-v1/delta-native-records.jsonl",
+      "bytes": 99432,
+      "sha256": "58ed06419b55455082e54c963d7c1a878f6d111d59fd660cfb6039d1ee3b84d2",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/README.md",
+      "bytes": 1438,
+      "sha256": "8722d2631727ec179d00116c2c3c09e48e71b35fc8a7f601993ae85cbdb6adc0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/delta-provenance.jsonl",
+      "bytes": 907,
+      "sha256": "3679503f61089bb4314a1d2e2183c644f6ef9f0fe3e5a0d6db37a377ce424997",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/delta-text.jsonl",
+      "bytes": 85853,
+      "sha256": "7c4ffe615411a7be901fa2a1583ffa24db65bad01034333ad695eabef821d3fd",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/output-manifest.json",
+      "bytes": 1429,
+      "sha256": "f09dd26302679b86904674a820ef15058087454bd4c9101d963c11af0211a0fa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/packet-manifest.json",
+      "bytes": 1967,
+      "sha256": "a11b539a60b60ee3530780a05dce27f2999b933a685d895c2b6dacff44b3ada4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/receipt.json",
+      "bytes": 5447,
+      "sha256": "fd1b517b98f8cc39fb9b56396d165477cb05010b018439d3504d9c90bbfff3a8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-03-proposal-v4/source-coverage.jsonl",
+      "bytes": 419,
+      "sha256": "536ffe239cd1f803ec7011326a95ff8dea9dbd027b683813260a3520ff983109",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-inputs-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-inputs-v1/delta-native-records.jsonl",
+      "bytes": 296519,
+      "sha256": "b7dafc4f3687a7033f651a34780983fc22094404711c5a92d3e681dd2a1cd2f1",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/README.md",
+      "bytes": 1438,
+      "sha256": "0cfd814e6d3e3dbe455ca50243567eb2e50276aa50a8e8117acd3b2c726e3f8b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/delta-provenance.jsonl",
+      "bytes": 2709,
+      "sha256": "d2310b4e05730b820c23bbb07886a85273195284bdc810a29f20f90bbb4f0466",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/delta-text.jsonl",
+      "bytes": 252998,
+      "sha256": "82e9d0a688ac89a5fddbcee5411f36b3ac520260cd5032c41d5989a79b5e69bb",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/output-manifest.json",
+      "bytes": 1432,
+      "sha256": "406998019393389fb803ccb6e1a544198dd0181a3a3e0fb0000764f9d63b9404"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/packet-manifest.json",
+      "bytes": 1970,
+      "sha256": "91665d446f23c8000d8f8063034d9820a35f45bda0ce5fdf9f9185fa89ba52aa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/receipt.json",
+      "bytes": 5447,
+      "sha256": "e13001afa8d36c6fb2bcadd7ffc5aec0f680fa518dc57a0badb0e5c93ec6b996"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-04-proposal-v4/source-coverage.jsonl",
+      "bytes": 1251,
+      "sha256": "d9f8c8a2b3ff01dc27c6eaf1a507621e09582d0bdadc96d232a1dab1caf958c7",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-inputs-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-inputs-v1/delta-native-records.jsonl",
+      "bytes": 196262,
+      "sha256": "b905959d21a588925b53429bfac1c919e3abf4cbcf1e623ad0bf0f5be834b341",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/README.md",
+      "bytes": 1438,
+      "sha256": "b6ac832bb6a5209332bcdec332d701c2289b07b9047bf38b61923cee2dd155bc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/delta-provenance.jsonl",
+      "bytes": 1798,
+      "sha256": "cafdbb9f8662467fb6186e6c8daeb20fe262874be43017caa3e7f61137720c65",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/delta-text.jsonl",
+      "bytes": 165476,
+      "sha256": "f1620398d3e8482efaf44716ff3eeddc2f272d5bf5d9ba088a65a6d5d46e566b",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/output-manifest.json",
+      "bytes": 1431,
+      "sha256": "e3f2de1f7cf9b58ea4a8f98ffdb7abe7725b0e830690ca2912e9a4b9b2f9ddca"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/packet-manifest.json",
+      "bytes": 1969,
+      "sha256": "a5c045262e66c8e8ccde6b145d1118bd866ada00ccfa8ac4896fc9bc0917e7c8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/receipt.json",
+      "bytes": 5447,
+      "sha256": "1260808f44abae50f53c8d2e63dc4bb5cbc3fc52b89da4b81a5cdc1b2c18b698"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-05-proposal-v4/source-coverage.jsonl",
+      "bytes": 830,
+      "sha256": "3064475e4b49155840f27e4f900937080fc507bac47afb0af3472969845c14cf",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-inputs-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-inputs-v1/delta-native-records.jsonl",
+      "bytes": 194835,
+      "sha256": "b544d4465296a66d7a4947e8bcae12f6c53f148cf16b7edd43bd6b75495847ca",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/README.md",
+      "bytes": 1438,
+      "sha256": "b6ac832bb6a5209332bcdec332d701c2289b07b9047bf38b61923cee2dd155bc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/delta-provenance.jsonl",
+      "bytes": 1830,
+      "sha256": "70b76838811a4bd344a8eae5cc4032bf7874612da71b0a2f48310f57e12032c9",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/delta-text.jsonl",
+      "bytes": 164180,
+      "sha256": "9cbd8237a699d7c3c180ec9acb8b0f9c892d2f5ef136b791aaaaa1c67cf0a4cc",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/output-manifest.json",
+      "bytes": 1431,
+      "sha256": "e4190f390653b1dee77ac5308d0adfef0d60cebecfcd65c44f10d5f7e9f13f09"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/packet-manifest.json",
+      "bytes": 1969,
+      "sha256": "1a8b6b8dbdf64ec353a027bba6581dbb1a7c5c95fb88269b6906caf0c1446fe6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/receipt.json",
+      "bytes": 5447,
+      "sha256": "66abaa94d9d5169c4b2a7e69b4d7a7c4d19e4ef48f88944f04b064c735019a9b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/text-case-06-proposal-v4/source-coverage.jsonl",
+      "bytes": 846,
+      "sha256": "072f4f0f6b61434bfe863ea64a5855105caeae1d96a37fd6c333ffb4ad684356",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/compact-eight-action-delta-v1/union-and-tokenizer-audit-v1/audit.json",
+      "bytes": 7990,
+      "sha256": "e7ad49dfa266861f440d6fa962d8cc22e17a6cc987b196fbb0318c2adbb5176c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/campaigns/case-03-standard-v1/jobs/000003-62869de027109979.result.json",
+      "bytes": 241158,
+      "sha256": "09ba3911d2dd0fb05bd3e85c9fa10f1ebcd26b2fcfcaa6b76759d54832a2167d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/campaigns/case-03-standard-v1/jobs/000003-62869de027109979.trace.jsonl",
+      "bytes": 37877,
+      "sha256": "41fd95f079382933facf31392a4feacb7fcae4531e4312d8b130188c3ba5f602",
+      "lines": 51
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/campaigns/case-03-standard-v1/results.jsonl",
+      "bytes": 241158,
+      "sha256": "09ba3911d2dd0fb05bd3e85c9fa10f1ebcd26b2fcfcaa6b76759d54832a2167d",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/campaigns/case-03-standard-v1/results.jsonl.manifest.json",
+      "bytes": 1725,
+      "sha256": "54602f4073a49c161208cff0d5dc79c0f73f6f8228cea8c48b7360557182c92a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/action-mcp-calls.jsonl",
+      "bytes": 1974,
+      "sha256": "dd868a71efe710c84174a68f8cf478a2557db5cb886981bce2f9246569344a3b",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/bootstrap-config.json",
+      "bytes": 3025,
+      "sha256": "ad4078dc0588026ad27f0e66031a098101128086020f1c77e79cdd60d2251603"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "74e1d63fb0f342e4c66a37a29f8dfa437540f2d1635b4ed018d23fec2fd18afb",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/cli-invocations.jsonl",
+      "bytes": 13786,
+      "sha256": "6490c4fc707e671a48620e604cbb20ed1c7a5fd5dc200385d04082e3027d98bd",
+      "lines": 7
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/cli-stdout.raw",
+      "bytes": 5233,
+      "sha256": "5b1df6fad42aed776f8fa96abef46ef19f7a586eb8d3765c10efdc1a17dbb9e0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "c6f85d96c13076d2117b1f0c12164f723213b24fdbf3bb11f34888b62fe780c1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 22225,
+      "sha256": "f914988be64e92cc7286d7c30ed0a187a105a9c5b463840782c1d8d808a89345"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/capture-snapshots/case-03-standard-v1/snapshot-manifest.json",
+      "bytes": 5168,
+      "sha256": "0cb349742b62bf7a1341bf7fda9cb5c754e4ef4d746af196adaafa2717011f3e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/collector-argv-v1.json",
+      "bytes": 1108,
+      "sha256": "8ccf0b21245747375369e9b93b057245537aa28450bc1de264498bbc7e54c219"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/collector-launch-receipt-v2.json",
+      "bytes": 1851,
+      "sha256": "0c0c9386bac78156229268c8b822373d55069b352aaf4424f66dc5bf5887c79c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/launch-plan-v1.json",
+      "bytes": 11109,
+      "sha256": "e3d78d5a814e76d26d97a0024c0c8528157b9e500a77299fb1dc22f95ccdc1d9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/launch-plan-v2.json",
+      "bytes": 11072,
+      "sha256": "0f347fda2ab0de0e9859bcec4e7268dc1615f9ddac8c6fd73b200a78e594df0a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/root-action-review-v1.json",
+      "bytes": 9128,
+      "sha256": "c36cc6c446287093c44e36fe49fad8817cfdc3c57dde6785859da8b3978e067d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/case-03-standard/root-action-review-v2.json",
+      "bytes": 16328,
+      "sha256": "b17230f7fce5bc5737bf085b6a358bc4031051683697797f65fc475046e30f56"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/compact-materialized-review-v1/case-03-native-raw-v1.jsonl",
+      "bytes": 295092,
+      "sha256": "0a25b77412218aae55239b7a08a3f46bdff1a8cf15acfe787178f590a182a46e",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/compact-materialized-review-v1/case-03-packet-v1.json",
+      "bytes": 4662,
+      "sha256": "27b0b8118fe1a7a79ed5f6c5bab543fe8ef508cd792452dc6b24734add7902d9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/compact-materialized-review-v1/root-selected-action-admission-v1.json",
+      "bytes": 6548,
+      "sha256": "11ef6756d34305e432a8f24323c77b1fb7908525ca34b79454bc3755de2cac72"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v6/compact-materialized-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 8801,
+      "sha256": "f82cc9656409654b1d5ae75a8e612fd4a25f881b05cd7e19d1d825f094c1407f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/campaigns/case-04-standard-v1/jobs/000004-9edc5fc8cb544236.result.json",
+      "bytes": 383258,
+      "sha256": "fa45d6bb308ff0cf924edbf16d5b1166affbad5d2e6c0433dfa40faa08cf05ac"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/campaigns/case-04-standard-v1/jobs/000004-9edc5fc8cb544236.trace.jsonl",
+      "bytes": 38045,
+      "sha256": "66aaac9ad2619e03bb7f684b9a7309f909d3e5dd44010c7867ccaf9cfcfe9c99",
+      "lines": 57
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/campaigns/case-04-standard-v1/results.jsonl",
+      "bytes": 383258,
+      "sha256": "fa45d6bb308ff0cf924edbf16d5b1166affbad5d2e6c0433dfa40faa08cf05ac",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/campaigns/case-04-standard-v1/results.jsonl.manifest.json",
+      "bytes": 1725,
+      "sha256": "df9072eab088f0aaea3152a945785651483a2de50dc2cd62dff44a920efd6d70"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/action-mcp-calls.jsonl",
+      "bytes": 2441,
+      "sha256": "157c27a783caf84bf8aafad39b9904ad647957df7b58155caa347850e392cd1c",
+      "lines": 5
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/bootstrap-config.json",
+      "bytes": 3025,
+      "sha256": "35f535caed37bcc36a0b6a2848edceef41374046eae44131b95dbda8bbb55983"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "3dd1341a17df192a5c169609f66e060fa114a4f34bdcc1306942785a3fead405",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/cli-invocations.jsonl",
+      "bytes": 11530,
+      "sha256": "5a0f2019657e9062e0f42c4cb1d01d20c403d42b82bdd9d8ab70c1a7b24cd18c",
+      "lines": 5
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/cli-stdout.raw",
+      "bytes": 8025,
+      "sha256": "5485894c7eea1f08110a6857c3bf69f77e77027cbc5d0f5a3cfffade9a4e9f38"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "d3f3660e3a56d06c261a889f1a5ec1e31e67329839dc8f6b8976bcef78cc8f2d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 18797,
+      "sha256": "ca0e1d774fe6f5c9c65443445ade7c5f1308e3a73673fc5b8afd3398bf2c6ba5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/capture-snapshots/case-04-standard-v1/snapshot-manifest.json",
+      "bytes": 5158,
+      "sha256": "b7052d2c19182296002e52df5a975e5eeed1139493cb4151e6778a41fe749863"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/case-04-standard/actual-case-review-v1.json",
+      "bytes": 10863,
+      "sha256": "e315ef052430e01bc4e117d352a454c9f1b090272cfa41e2a0131c25835cedbd"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/case-04-standard/actual-case-review-v2.json",
+      "bytes": 12047,
+      "sha256": "383a4bc60821673a0f99f73ec7e996065ff77937296aafdd023d6eaa42a4667b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/case-04-standard/collector-argv-v1.json",
+      "bytes": 1108,
+      "sha256": "0f69081efeda11604d0a0ef124974f8aba96888740d053c4d859cb1d13d97555"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/case-04-standard/collector-launch-receipt-v1.json",
+      "bytes": 1851,
+      "sha256": "cc00b0d9a587abfef8b4935c39b01fda2290341eda1aef6ffae1388ab4d218d5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/case-04-standard/launch-plan-v1.json",
+      "bytes": 11131,
+      "sha256": "61121220849cf31326c7253760e15c50ac7d5d89dacca881c00b15e2da54bbf1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/compact-materialized-review-v1/case-04-native-raw-v1.jsonl",
+      "bytes": 490159,
+      "sha256": "4efe7c8a65d86764ef940a7024e11684d3038c810f88092adad0cd47b885f2d9",
+      "lines": 5
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/compact-materialized-review-v1/case-04-packet-v1.json",
+      "bytes": 5883,
+      "sha256": "da676e765905111cf63d89412076c559403ade12027a6934587b3520333b1bea"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/compact-materialized-review-v1/root-selected-action-admission-v1.json",
+      "bytes": 8479,
+      "sha256": "c072133928ba16b8df871562856c4447b0338161329783814f9a7a021b116b3f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v7/compact-materialized-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 10885,
+      "sha256": "bbd1c89b221090b67bbf00053be21047e8da671de619976ead26c6c82289301a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/campaigns/case-05-standard-v3/jobs/000005-03bba95093e843e2.result.json",
+      "bytes": 159455,
+      "sha256": "6a026797329feecb4bd0e40c9e7c487d6b9666d3a6125126815cac8e0bbfe7f2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/campaigns/case-05-standard-v3/jobs/000005-03bba95093e843e2.trace.jsonl",
+      "bytes": 25845,
+      "sha256": "0cd16c44f77526d1714adc1ddc1732357c06ae9c996275f59a69607f7f7c0c9f",
+      "lines": 34
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/campaigns/case-05-standard-v3/results.jsonl",
+      "bytes": 159455,
+      "sha256": "6a026797329feecb4bd0e40c9e7c487d6b9666d3a6125126815cac8e0bbfe7f2",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/campaigns/case-05-standard-v3/results.jsonl.manifest.json",
+      "bytes": 1725,
+      "sha256": "eed5b54cd1fb2011c55449d72fdbe05b64529d5133ff5bd8f9dcf53204d06667"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/action-mcp-calls.jsonl",
+      "bytes": 705,
+      "sha256": "db0090686cfd9862b2713a066e23a077773e91ee765ce6632af90e006313f297",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/bootstrap-config.json",
+      "bytes": 3025,
+      "sha256": "b04f3831cb45ffee2b7ea9799fb452dfc0685aae4c96df392deb859f51f93306"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "84fbecf9256311f26c7dad8ff26358480dbbd4323586e973c8b40c7ab429e934",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/cli-invocations.jsonl",
+      "bytes": 4015,
+      "sha256": "a69243e22799f7702151bb3a22fb7dc4c6350d65915086ebc3e5d6e746aebcd5",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/cli-stdout.raw",
+      "bytes": 2041,
+      "sha256": "62011aaa41bc88ac75c0789908e7f48d2522ec914cb227700c209018811d36d4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "9893e15a350be450f3e71de5ba67028d9f6209b38479c492ad29b62ba38ed42a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 9350,
+      "sha256": "a6ba5e7b3edc8c54a663161aca0431563e1f776be00b52934c5bf4489abd83a1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/capture-snapshots/case-05-standard-v1/snapshot-manifest.json",
+      "bytes": 5099,
+      "sha256": "b5e505cb0aef96aeb29712528e807161ee5e1f949339c850f76b20e090d223cb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/actual-case-review-v1.json",
+      "bytes": 8518,
+      "sha256": "269fa086f2399b3809c0b79e7313d72c651fdf55c01eda0e11b060acc4ebac40"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/actual-case-review-v2.json",
+      "bytes": 8648,
+      "sha256": "33b9c95c51cbe3d5f4f97c65b8b31bfaa9571608e46d5a8222203a82328f1ad9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/actual-case-review-v3.json",
+      "bytes": 8992,
+      "sha256": "571358d9c9e5a5c524fa540b4fe823cbedc633deaded4ccc79c10e9e31b1239d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/collector-argv-v1.json",
+      "bytes": 1127,
+      "sha256": "6038ad33ddf742ce6b8d422d65640c4704f4c3d629c6d1e71e73261a418cc578"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/collector-argv-v2.json",
+      "bytes": 1127,
+      "sha256": "4e4d88b58beca945bdef35288986ce04efde8337074468f4b95923350406a438"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/collector-argv-v3.json",
+      "bytes": 1127,
+      "sha256": "5dcd5b9e0b4892cb37f4f97456381a3bb4e341e169120678cebbc83c3299efb0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/collector-launch-receipt-v3.json",
+      "bytes": 1870,
+      "sha256": "5176f5ba5a4961c02b3c0cf77b39fe90ea182eb1713f54711f5b44030835da40"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/launch-plan-v1.json",
+      "bytes": 11157,
+      "sha256": "0986e3d1d9aef2d91e5e3292861435a49aed6b3b27c3ecc39650d7e45161ce9f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/launch-plan-v2.json",
+      "bytes": 11142,
+      "sha256": "c98a0b8eed96f3295fb581168aa91e5fbb76e814633bf617c9ce3cd97bb33111"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/case-05-standard/launch-plan-v3.json",
+      "bytes": 11105,
+      "sha256": "147458fa7b38f6dfdb20d95d71eca19e052603c8e5d1ceb2c413d59bd10f62b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/compact-materialized-review-v1/case-05-native-raw-v1.jsonl",
+      "bytes": 195668,
+      "sha256": "6f75086b772ddfb94143eabd216f5edb9e72e84e6d9e563b374f7e9d927b3e93",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/compact-materialized-review-v1/case-05-packet-v1.json",
+      "bytes": 4222,
+      "sha256": "bc464e63061254ba91a1b869daeaaea4c966beb62b9888614123d1a24fc1424e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/compact-materialized-review-v1/root-selected-action-admission-v1.json",
+      "bytes": 7817,
+      "sha256": "cd39e4486c249537ac8c5a9de3d3e58e9672b14a7829d085ea511e613dba91f4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v8/compact-materialized-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 8784,
+      "sha256": "7da3a50e71ae33a82f67aeb2a663f427b3c95ee4fc9e3ee6073509981ce5f073"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/campaigns/case-06-standard-v1/jobs/000006-aa714ac54f9d20fe.result.json",
+      "bytes": 157312,
+      "sha256": "99c4607d4b7e2d94e351a64d359a4da72428d1b95a063eeede5f521031c008d5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/campaigns/case-06-standard-v1/jobs/000006-aa714ac54f9d20fe.trace.jsonl",
+      "bytes": 23873,
+      "sha256": "b802ea50694db281aa0c50eb7603630c19260c241ee8b8980262680fa399740f",
+      "lines": 34
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/campaigns/case-06-standard-v1/results.jsonl",
+      "bytes": 157312,
+      "sha256": "99c4607d4b7e2d94e351a64d359a4da72428d1b95a063eeede5f521031c008d5",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/campaigns/case-06-standard-v1/results.jsonl.manifest.json",
+      "bytes": 1725,
+      "sha256": "5e6bf626d5c61feaafc59417fb6370f0fbf8e9e9578db79fa47f39f54c0a9f89"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/action-mcp-calls.jsonl",
+      "bytes": 684,
+      "sha256": "b5280f2c28ad6c7fa0a04234c565a08d7b0655b85f9c2e51ee7186fb0c318df0",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/bootstrap-config.json",
+      "bytes": 3025,
+      "sha256": "39f360411ae7214548a3af7f1483025d30ef58c1125bf205e3f4fe8f32318185"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "79d1117f22f235597d5e4cd888f113b3c90bc7b9d886ee21524e6cf56e0f4bd2",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/cli-invocations.jsonl",
+      "bytes": 4567,
+      "sha256": "214c9c5f81bbac1934893dd826cbfa27544d0556ed560b1e060af41d0b0d9f2e",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/cli-stdout.raw",
+      "bytes": 2854,
+      "sha256": "f17dc9dffadd03b64fdebe6efdb4b3cd5e1368945041c1e2f296d4037f6a0768"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "7d59c3f96c11bf6a3f8197eacf7f7ea993ad8085bda6ab071cab255dcba51115"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 10277,
+      "sha256": "b5219c6b55171e7864d885d4947dbf72ea6b22d9fb0720a56c73a4ef36112ac9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/capture-snapshots/case-06-standard-v1/snapshot-manifest.json",
+      "bytes": 5100,
+      "sha256": "59e86fee9b06bf2269b6d77933e229e0fcb1369be40c270fc693ac0cd232db35"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/case-06-standard/actual-case-review-v1.json",
+      "bytes": 8332,
+      "sha256": "8f0251f699f7781b7e770bea0ac0f62884ebe412be6cb7e32db85d2678a56c22"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/case-06-standard/actual-case-review-v2.json",
+      "bytes": 9026,
+      "sha256": "c9b40d5844159ca12b3165ab07724d0da6a7c36a5fbbe1b45018a90a026c88c7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/case-06-standard/collector-argv-v1.json",
+      "bytes": 1127,
+      "sha256": "ef9069b7e13af0d2b9a3c24427e444565d0bc53762802cd4dcdb70c5f0588612"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/case-06-standard/collector-launch-receipt-v1.json",
+      "bytes": 1870,
+      "sha256": "adbd179e37743d7766410cf16542f98c8ab40af3f069a3c106100266eea04a39"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/case-06-standard/launch-plan-v1.json",
+      "bytes": 11069,
+      "sha256": "928718980b4fdceba71c2bbc4dea7e8b11f30de9485a9ee73264272b4cad1a60"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/compact-materialized-review-v1/case-06-native-raw-v1.jsonl",
+      "bytes": 194241,
+      "sha256": "f2b1a6d61af19752856a4c17c9846983b90f4edf0d57282ff1bf146a515093c7",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/compact-materialized-review-v1/case-06-packet-v1.json",
+      "bytes": 4347,
+      "sha256": "45fb87139264981f259deec4586f9c48a73a25511241263560c87b0b97134364"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/compact-materialized-review-v1/root-selected-action-admission-v1.json",
+      "bytes": 7876,
+      "sha256": "9c49418b196a542106b9f546ff41134d13173afd2739820b5c55423cf5c2ac2c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v9/compact-materialized-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 8843,
+      "sha256": "c1d6aa0018b59c8de153e0ed1d16bd6e7d0bbb5dd01ab3610f279296b30c4309"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/root-source-launch-approval-v1.json",
+      "bytes": 1491,
+      "sha256": "ba8d1cd2e9e75153888a4d9ccdbe3b0f6b2a3342cee973268d2e2cf30dde9541"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-compiler-preflight-v1.json",
+      "bytes": 13726,
+      "sha256": "f9637d081a6fdb7743afb7f6a548ad707ac92121dbe60f352f704061bb6b6bf5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-manifest-v1.json",
+      "bytes": 9161,
+      "sha256": "b9cae936bfbb280cd6679b671f5cb03204b534ac635738f32d16303050bcc91b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-v3.cases.jsonl",
+      "bytes": 50606,
+      "sha256": "64dad0c8678a792abd7a19380dce20421f3fa21f6506985398d34bb38ba0f03c",
+      "lines": 8
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/frozen-runtime/frozen-runtime.json",
+      "bytes": 122624,
+      "sha256": "4a0af9b19f9255f0e95a314f0b931d6ecac692e923ef43f9fe5fb2a870a76ed5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/qualification-v1.json",
+      "bytes": 3059,
+      "sha256": "8caf74bf816dd18e59a8cfe3939974587b44bddf8bed0396a6a594725bde3764"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v2.json",
+      "bytes": 4839,
+      "sha256": "a321614bd15e58e5750d1dd1cdeed666c1bbe7d255e4ac8c795d7d1b430d1e82"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+      "bytes": 1941,
+      "sha256": "76ad042a1fb45c9b3a002a469be6c160645543a35750a426541cc012d0e3c136"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json",
+      "bytes": 6284,
+      "sha256": "db43586b406e5d4d6535e4e11bdd46a53120d1695eb7c4988e3d24b6993c8ee8"
+    }
+  ],
+  "bytes": 7909079
+}
