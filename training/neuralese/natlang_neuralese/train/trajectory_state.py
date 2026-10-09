@@ -103,6 +103,12 @@ def atomic_checkpoint(path, state):
             # clean cache would otherwise sit in MemFree until something reclaims it.
             drop_file_cache(stream.fileno())
         pending.replace(path)
+        # Make the rename itself durable: a power loss must leave the old or the new file, never neither.
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     except BaseException:
         # A failed write (often ENOSPC) leaves an incomplete owned temp file.
         # Remove it so a post-commit recovery save can use the reserved space.
