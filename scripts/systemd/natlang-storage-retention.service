@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly storage report and retention dry run (plans/STORAGE_POLICY.md)
+
+[Service]
+Type=oneshot
+# Dry run: classifies every file into KEEP / ACTIVE / PRUNE-AUTO / PRUNE-ASK and writes
+# ~/.local/state/natlang/storage/report-*.md. Deletion (--apply, PRUNE-AUTO + owner-approved paths in
+# ~/.config/natlang/storage-approved.txt) stays manual until the owner enables it here.
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/storage_report.py
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+MemoryMax=3G
