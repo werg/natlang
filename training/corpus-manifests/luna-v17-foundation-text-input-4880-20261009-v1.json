@@ -1,0 +1,51 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-foundation-text-input-4880-20261009-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-text-input-4880-20261009-v1",
+  "files": [
+    {
+      "path": "loader-package-manifest-v1.json",
+      "bytes": 31823,
+      "sha256": "0eec8bb94b096bebecbcdca1f8315324080761540a86968776d9e4096a32d3b2"
+    },
+    {
+      "path": "loader-validation-receipt-v1.json",
+      "bytes": 5408,
+      "sha256": "d0f80a44e09484cbeac31ce7e526dbbe12cd6f6aff8b4ee36fbb1ea5eaca3a29"
+    },
+    {
+      "path": "loader-validation-stdout-v4.jsonl",
+      "bytes": 2738,
+      "sha256": "39e3f4edb29c1e76d389eb8a181f926ac08fcb18ffc2dbbf694d89625bc99c93",
+      "lines": 38
+    },
+    {
+      "path": "preparation-receipt-v1.json",
+      "bytes": 4079,
+      "sha256": "bb18a2b4df149251b0610412fde80091090c3d6cd72121eb0323e78953dae398"
+    },
+    {
+      "path": "published-dependency-reuse-map-v1.json",
+      "bytes": 54592,
+      "sha256": "709a19fb54d92db190e8ac8c5a699e3f6d48d1005f9a48a39c6998051a67f33c"
+    },
+    {
+      "path": "root-concatenation-verification-v1.json",
+      "bytes": 1103,
+      "sha256": "f1fc73aaa469f7b7dac06210549ffab0a234c79e5f1cb983443193a64dc774e3"
+    },
+    {
+      "path": "text-data.jsonl",
+      "bytes": 246229667,
+      "sha256": "b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572",
+      "lines": 4880
+    },
+    {
+      "path": "validate_text_rows_cpu.py",
+      "bytes": 2627,
+      "sha256": "420dee1dcf7cc7930f4024dfe7bcf60d6bcc7a42679cc7891119fffb6a7a74dc"
+    }
+  ],
+  "bytes": 246332037
+}

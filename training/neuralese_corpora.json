@@ -16486,6 +16486,27 @@
         "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v3"
       ],
       "notes": "Replacement view for the earlier 4,793-row text refresh; do not add counts. Root adoption v2 and noncyclic locator map v3 are included. The immutable candidate core is byte-identical to the previously reviewed 157-file allowlist; two files add the adoption-v2 receipt and its artifact locator map. No active training input change."
+    },
+    {
+      "id": "luna-v17-foundation-text-input-4880-20261009-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-foundation-text-input-4880-20261009-v1",
+      "include": [
+        "text-data.jsonl",
+        "preparation-receipt-v1.json",
+        "root-concatenation-verification-v1.json",
+        "loader-validation-receipt-v1.json",
+        "loader-validation-stdout-v4.jsonl",
+        "loader-package-manifest-v1.json",
+        "validate_text_rows_cpu.py",
+        "published-dependency-reuse-map-v1.json"
+      ],
+      "admission": "Convenience byte-composition of four existing root-adopted ordinary-text streams only. No new action or document admission and no change to native, recurrence, source-world, or active-training counts.",
+      "derived_from": [
+        "luna-v17-text-serving-boundary-refresh-20261009-v2",
+        "luna-v17-step5-selected112-native-87-targetbound-text-20261009-v3"
+      ],
+      "notes": "Ready ordinary-text foundation input: 4,880 byte-preserved documents (3,176 train / 1,704 test) validated through the shared frozen load_text_rows loader. The input file is a canonical run-path symlink to its immutable data on /srv/storage. Root composition and loader receipts are included; the renderer package and tokenizer are pinned by reuse map to exact bytes in the already-registered parent snapshot rather than duplicated."
     }
   ],
   "coverage_backlog": [
