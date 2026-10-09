@@ -123,7 +123,16 @@ async function rollout({ episode, row, task }, sample) {
   const evaluator = new SourceEvaluator(contract, cases, executor, gateway, { executorId, signal: controller.signal,
     executeCase: executions.executeCase, scoring, excludeModelWaitFromTimeout: true, maxCasesPerRequest: 1,
     timeoutMs: task.budget.timeout_ms });
-  const report = await evaluator.evaluate(Folder.fromFiles(skillEpisodeFiles(episode)).snapshot(), { split: 'train' });
+  let report;
+  try { report = await evaluator.evaluate(Folder.fromFiles(skillEpisodeFiles(episode)).snapshot(), { split: 'train' }); }
+  catch (error) {
+    // Running out of the task's model-call budget is the policy's failure (it did not return in time): reward 0,
+    // with the turns it took. Other errors are the driver's and stay unscored.
+    if (!/budget exhausted/i.test(String(error?.message ?? error))) throw error;
+    return { schema: 'natlang.rollout/1', round, task_id: task.id, family: task.family, group: task.id, sample, seed, policy,
+      turns, reward: { quality: 0, passed: 0, gates: { within_budget: false } }, unscored: null,
+      model_calls: turns.length, wall_ms: Date.now() - started, pins };
+  }
   const outcomes = evaluator.page(report.evidence, 0, 10);
   const unscored = hasUnscoredEvaluationFailure({ outcomes });
   const outcome = outcomes[0] ?? {};

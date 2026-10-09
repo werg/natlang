@@ -21,7 +21,8 @@ def test_examples_are_in_place_soft_gold_deltas(tmp_path, monkeypatch):
          "before": [{"kind": "soft-skill", "id": "b0"}], "after": [{"kind": "soft-skill", "id": "b2"}]},  # shape change
     ]
     (tmp_path / "improvement-steps.jsonl").write_text("".join(json.dumps(s) + "\n" for s in steps))
-    (tmp_path / "artifacts.nz").write_bytes(b"")
+    (tmp_path / "artifacts").mkdir()
+    (tmp_path / "artifacts" / "decision_x.nz").write_bytes(b"")
     dialect, examples = learned_updater.load_examples(tmp_path)
     assert dialect == "nd:natlang@1" and [e["step"] for e in examples] == ["s1"]
     assert torch.equal(examples[0]["delta"], after - base) and examples[0]["family"] == "decision:x"
