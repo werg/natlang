@@ -330,7 +330,7 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
     original_options = dict((state.get('identity', {}).get('options') or {}))
     old = _with_defaults(state.get('identity', {}), {k: v for k, v in (defaults or {}).items() if k in keys})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale', 'projection_anchor_decay_steps', 'read_adapter'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     # Checkpoints predating the shared gold-projection anchor trained no such term.
