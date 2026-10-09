@@ -464,6 +464,15 @@ def main():
             done.add(case['id'])
             print(json.dumps({'labelled': count, 'errors': errors,
                               'seconds': round(time.time() - started)}), flush=True)
+            if provider is not None and provider.get('http_status') == 429:
+                # Once bounded retries are exhausted, a standalone worker has
+                # no alternate quota group. Do not burn the rest of the queue
+                # recording the same exhausted model as a new case failure.
+                delays = [h.get('retry_after_seconds', 0) for h in provider['retry_history']]
+                print(json.dumps({'event': 'rate_limit_paused', 'model': args.model,
+                                  'retry_not_before': time.time() + max(delays, default=args.initial_backoff),
+                                  'unfinished_source': args.cases}), flush=True)
+                break
             if args.limit and count >= args.limit:
                 break
     print(json.dumps({'labelled': count, 'errors': errors,
