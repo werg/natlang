@@ -6,6 +6,5 @@
 import { registerMusique } from './musique/index.js';
 import { registerTatqa } from './tatqa/index.js';
 
-export const BUILTIN_BENCHMARKS = ['tatqa', 'musique'] as const;
 registerTatqa();
 registerMusique();
