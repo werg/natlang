@@ -50,7 +50,10 @@ async function interpreter(): Promise<any> {
     const node = typeof process !== 'undefined' && Boolean(process.versions?.node);
     const localAssets = node ? new URL('../../vendor/pyodide/', import.meta.url).href :
       new URL('../pyodide/', import.meta.url).href;
-    const py = await loadPyodide(node ? { packageBaseUrl: localAssets } :
+    // Pyodide caches packages under packageCacheDir, which defaults to packageBaseUrl; a file: URL there is
+    // path-joined literally and creates a `file:/...` directory under the working directory.
+    const py = await loadPyodide(node ? { packageBaseUrl: localAssets,
+      packageCacheDir: decodeURIComponent(new URL(localAssets).pathname) } :
       { indexURL: localAssets, packageBaseUrl: localAssets });
     py.FS.mkdir('/calls');
     py.FS.writeFile('/lib/python3.14/site-packages/natlang_policy.py', PYTHON_POLICY);
