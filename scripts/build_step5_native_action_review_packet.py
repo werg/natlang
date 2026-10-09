@@ -2,8 +2,11 @@
 """Build a trace-bound per-action review packet for materialized Step 5 rows.
 
 This derives byte pins, canonical JSON target/context digests, and exact action
-event joins. Human semantic dispositions are read from a separate annotation
-file and are never inferred from collector success or materializer status.
+event joins. Semantic dispositions are never inferred from collector success or
+materializer status. They are read from the receipts of the natlang row reviewer
+(`--row-reviews`: source_review.py receipts whose explicit decision is hold or
+clear; the recommendation is advice, the decision is the disposition) or, for
+older packets, from a separate annotation file (`--annotations`).
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "scripts"))
 from assemble_admitted_neuralese_cohort import target_digest
+from source_review import annotations_from_row_receipts
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
@@ -47,11 +51,30 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def review_pin(path: Path) -> Any:
+    """Byte pin of a review input: one file, or every receipt file of a folder."""
+    if path.is_dir():
+        return {"files": [file_pin(file) for file in sorted(path.glob("*.json"))]}
+    return file_pin(path)
+
+
+def load_annotations(annotations: Path | None, row_reviews: Path | None) -> tuple[dict[str, Any], str, Any]:
+    """The review assessments per native row id, the pin key to record, and the pin; exactly one source is given."""
+    if (annotations is None) == (row_reviews is None):
+        raise ValueError("give exactly one of --row-reviews (source_review.py row receipts) or --annotations")
+    if row_reviews is not None:
+        return annotations_from_row_receipts(row_reviews), "row_reviews", review_pin(row_reviews)
+    return load_json(annotations), "annotations", file_pin(annotations)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     for name in ("result", "trace", "native-rows", "materialization-manifest", "capture-snapshot",
-                 "annotations", "source-cases", "launch-plan", "runtime-manifest", "output"):
+                 "source-cases", "launch-plan", "runtime-manifest", "output"):
         parser.add_argument(f"--{name}", required=True, type=Path)
+    parser.add_argument("--annotations", type=Path, default=None, help="legacy outside annotation file")
+    parser.add_argument("--row-reviews", type=Path, default=None,
+                        help="row receipts (a JSONL, a receipt file or a folder) written by source_review.py")
     parser.add_argument("--source-row-index", required=True, type=int)
     parser.add_argument("--controller-provenance", required=True,
                          help="Explicitly identify whether the controller/root was authored or sampled")
@@ -59,7 +82,7 @@ def main() -> None:
     result = load_json(args.result)
     native_rows = read_jsonl(args.native_rows)
     trace_rows = read_jsonl(args.trace)
-    annotations = load_json(args.annotations)
+    annotations, annotations_pin_key, annotations_pin = load_annotations(args.annotations, args.row_reviews)
     launch_plan = load_json(args.launch_plan)
 
     ledger = result.get("outcome", {}).get("action_ledger", [])
@@ -163,7 +186,7 @@ def main() -> None:
             "native_rows": file_pin(args.native_rows),
             "materialization_manifest": file_pin(args.materialization_manifest),
             "capture_snapshot_manifest": file_pin(args.capture_snapshot),
-            "annotations": file_pin(args.annotations),
+            annotations_pin_key: annotations_pin,
             "source_cases": file_pin(args.source_cases),
             "launch_plan": file_pin(args.launch_plan),
             "runtime_manifest": file_pin(args.runtime_manifest),
