@@ -15,7 +15,11 @@ it arrives; user input streams too (edit deltas while typing), so the harness ca
    build gets it through the rebuild, and its in-process endpoint streams responses. A conformance case: a streamed
    reply, assembled, equals the non-streamed one, on both servers.
 4. **pi.** The natlang provider maps deltas to pi-ai's events, so pi-durable streams into `pi.live` and the user sees
-   output as with any provider. Only the final message is stored.
+   output as with any provider. Only the final message is stored. A Neuralese part streams as the provider's
+   `neuralese` event (pi-ai has no part type for it). The final turn decides the message: streamed parts it extends
+   are finished, others are replaced. A `reset` replaces the abandoned attempt's parts in the partial (they end as
+   they stood; the re-sent request's parts start again at index 0) within the same pi-durable attempt: a new attempt
+   is the generation's retry, which would store the abandoned partial as an aborted entry.
 5. **Blocks shown to people.** A block streams as one unit when complete and shows as a block reference. Its content is
    shown by forcing its stored call at `string` (DECISIONS 2026-10-09) only when the user asks.
 6. **Natlang programs.** The runtime passes a function's model deltas into its live events, so a host can show a natlang

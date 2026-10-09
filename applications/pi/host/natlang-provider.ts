@@ -17,11 +17,16 @@ import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, Prov
   StreamOptions, TranscriptContext, ToolCall } from '@earendil-works/pi-ai';
 import { transformMessages } from '@earendil-works/pi-ai/api/transform-messages';
 import { checkNeuraleseReader, NeuraleseUnsupportedError, supportsNeuralese, textToParts, hasNeuraleseSentinel,
-  type ModelContentPart, type ModelTurn, type ModelTurnRequest } from '@natlang/node';
+  type ModelContentPart, type ModelTurn, type ModelTurnDelta, type ModelTurnOptions, type ModelTurnRequest } from '@natlang/node';
+import { parseStreamingJson } from '@earendil-works/pi-ai/utils/json-parse';
 import type { NeuraleseContent } from '../types.ts';
 
-/** A natlang model-turn driver; one that carries content parts sets `neuralese: true` (ts-host contracts.ts). */
-export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>) & { neuralese?: boolean };
+/**
+ * A natlang model-turn driver; one that carries content parts sets `neuralese: true` (ts-host contracts.ts). Its
+ * `onDelta` option streams the turn's deltas.
+ */
+export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) &
+  { neuralese?: boolean };
 
 /** What the agent model reads: text, or the blocks of one Neuralese dialect (at most `maxBlockLength` positions each). */
 export type AgentReader = { kind: 'text' } | { kind: 'neuralese'; dialect: string; maxBlockLength?: number };
@@ -131,13 +136,176 @@ function replyContent(text: string): (AssistantMessage['content'][number] | Neur
       part.type === 'neuralese' ? { type: 'neuralese', id: part.id } : { type: 'text', text: part.text });
 }
 
+type Content = AssistantMessage['content'][number] | NeuraleseContent;
+
 /**
- * One model turn as pi-ai's event stream. natlang's drivers return the whole turn, so its parts are emitted in order
- * once it arrives: each text and thinking part as start, one delta, end; each call as start, its arguments as one
- * delta, end. A Neuralese part has no pi-ai event; it is in the partial and final message at its position.
+ * The event a Neuralese part streams as: pi-ai's event union has no part type for it, so the transport adds one. The
+ * block arrives whole, once the server has written it, and shows as a block reference (plans/STREAMING.md §1.5); a
+ * consumer that does not know the event still finds the part in `partial` at `contentIndex`.
+ */
+export type NeuraleseEvent = { type: 'neuralese'; contentIndex: number; content: NeuraleseContent; partial: AssistantMessage };
+/** What the natlang transport streams: pi-ai's events and the Neuralese part event. */
+export type NatlangEvent = AssistantMessageEvent | NeuraleseEvent;
+
+/** A turn's content as pi parts, in the order the final message holds them: thinking, the reply, the calls. */
+function turnContent(turn: ModelTurn, streamedIds: (string | undefined)[]): Content[] {
+  const content: Content[] = turn.reasoning ? [{ type: 'thinking', thinking: turn.reasoning }] : [];
+  content.push(...replyContent(turn.text ?? ''));
+  const raw = (turn.raw_calls ?? []) as { id?: unknown }[];
+  for (const [i, [name, args]] of (turn.calls ?? []).entries()) {
+    const id = typeof raw[i]?.id === 'string' && raw[i]!.id ? raw[i]!.id as string : streamedIds[i] || `call_${uuidv7()}`;
+    content.push({ type: 'toolCall', id, name, arguments: args as ToolCall['arguments'] });
+  }
+  return content;
+}
+
+/**
+ * The parts of one streamed turn in the partial message `output`, and the pi-ai events that build them.
+ *
+ * Deltas (ts-host contracts.ts `ModelTurnDelta`) map as they arrive: text to a text part and reasoning to a thinking
+ * part (start, then a delta per piece; a part of another kind ends it), a tool-call fragment to the call of its index
+ * (start at its first fragment, its argument text as deltas, the partial's arguments parsed as far as they go), a
+ * Neuralese block to a `NeuraleseEvent`. Calls stay open until the turn ends.
+ *
+ * `reset` (the driver sends the request again: a malformed-call retry, or blocks restored on the server) replaces the
+ * abandoned attempt within the same live attempt: its open parts end as they stand, the partial is emptied, and the
+ * re-sent request's parts start again at content index 0. pi-ai's events cannot be retracted, and the abandoned
+ * attempt is not a pi-durable attempt: that is the generation's retry (it counts against the retry policy, and
+ * `convertPartial` would store the abandoned partial as an aborted assistant entry the model then reads). So pi.live
+ * shows the re-sent request's output in place of the abandoned one at its next partial, and nothing of the abandoned
+ * attempt is stored.
+ *
+ * `finish` takes the driver's final turn, which is authoritative: where the streamed parts are the start of its parts
+ * (same kinds in order, an ended part equal, an open text or thinking part a prefix, a call of the same name), they
+ * are completed and ended, and the rest follow whole; otherwise the streamed parts are replaced as on `reset`, and the
+ * turn's parts follow whole. Either way the message `done` carries is exactly the final turn's.
+ */
+function streamedTurn(output: AssistantMessage) {
+  const content = output.content as Content[];
+  let current: number | undefined;
+  /** Tool-call delta index -> content index, and each open call's argument text. */
+  const calls = new Map<number, number>();
+  const argumentText = new Map<number, string>();
+  const ended = (index: number): NatlangEvent => {
+    const part = content[index]!;
+    if (part.type === 'text') return { type: 'text_end', contentIndex: index, content: part.text, partial: output };
+    if (part.type === 'thinking') return { type: 'thinking_end', contentIndex: index, content: part.thinking, partial: output };
+    argumentText.delete(index);
+    return { type: 'toolcall_end', contentIndex: index, toolCall: part as ToolCall, partial: output };
+  };
+  /** End the open text or thinking part. */
+  const endCurrent = (): NatlangEvent[] => {
+    if (current === undefined) return [];
+    const index = current;
+    current = undefined;
+    return [ended(index)];
+  };
+  /** End every open part, in content order. */
+  const endAll = (): NatlangEvent[] => {
+    const open = [...new Set([...(current === undefined ? [] : [current]), ...argumentText.keys()])].sort((a, b) => a - b);
+    current = undefined;
+    return open.map(ended);
+  };
+  const clear = (): NatlangEvent[] => {
+    const events = endAll();
+    content.length = 0;
+    calls.clear();
+    return events;
+  };
+  /** A part sent whole: its start, its content as one delta, its end. */
+  const whole = (part: Content): NatlangEvent[] => {
+    const index = content.push(part) - 1;
+    if (part.type === 'text') return [{ type: 'text_start', contentIndex: index, partial: output },
+      { type: 'text_delta', contentIndex: index, delta: part.text, partial: output }, ended(index)];
+    if (part.type === 'thinking') return [{ type: 'thinking_start', contentIndex: index, partial: output },
+      { type: 'thinking_delta', contentIndex: index, delta: part.thinking, partial: output }, ended(index)];
+    if (part.type === 'toolCall') return [{ type: 'toolcall_start', contentIndex: index, partial: output },
+      { type: 'toolcall_delta', contentIndex: index, delta: JSON.stringify(part.arguments), partial: output }, ended(index)];
+    return [{ type: 'neuralese', contentIndex: index, content: part as NeuraleseContent, partial: output }];
+  };
+  /** The next piece of a text or thinking part. */
+  const piece = (kind: 'text' | 'thinking', text: string): NatlangEvent[] => {
+    const events: NatlangEvent[] = [];
+    if (current === undefined || content[current]!.type !== kind) {
+      events.push(...endCurrent());
+      current = content.push(kind === 'text' ? { type: 'text', text: '' } : { type: 'thinking', thinking: '' }) - 1;
+      events.push({ type: kind === 'text' ? 'text_start' : 'thinking_start', contentIndex: current, partial: output });
+    }
+    const part = content[current]!;
+    if (part.type === 'text') part.text += text; else if (part.type === 'thinking') part.thinking += text;
+    events.push({ type: kind === 'text' ? 'text_delta' : 'thinking_delta', contentIndex: current, delta: text, partial: output });
+    return events;
+  };
+  /** Whether a streamed part is the start of the final part at its position. */
+  const agrees = (index: number, part: Content, final: Content | undefined): boolean => {
+    if (final?.type !== part.type) return false;
+    const open = index === current || argumentText.has(index);
+    if (part.type === 'text' || part.type === 'thinking') {
+      const [streamed, wanted] = part.type === 'text' ? [part.text, (final as { text: string }).text] :
+        [part.thinking, (final as { thinking: string }).thinking];
+      return open ? wanted.startsWith(streamed) : wanted === streamed;
+    }
+    if (part.type === 'toolCall') return part.name === (final as ToolCall).name;
+    return (part as NeuraleseContent).id === (final as NeuraleseContent).id;
+  };
+  return {
+    delta(delta: ModelTurnDelta): NatlangEvent[] {
+      if (delta.type === 'text') return piece('text', delta.text);
+      if (delta.type === 'reasoning') return piece('thinking', delta.text);
+      if (delta.type === 'reset') return clear();
+      if (delta.type === 'neuralese') return [...endCurrent(), ...whole({ ...delta.part })];
+      const events = endCurrent();
+      let index = calls.get(delta.index);
+      if (index === undefined) {
+        index = content.push({ type: 'toolCall', id: '', name: '', arguments: {} }) - 1;
+        calls.set(delta.index, index);
+        argumentText.set(index, '');
+        events.push({ type: 'toolcall_start', contentIndex: index, partial: output });
+      }
+      const call = content[index] as ToolCall;
+      if (delta.id) call.id = delta.id;
+      if (delta.name) call.name += delta.name;
+      if (delta.arguments && argumentText.has(index)) {
+        const text = argumentText.get(index)! + delta.arguments;
+        argumentText.set(index, text);
+        call.arguments = parseStreamingJson<ToolCall['arguments']>(text);
+        events.push({ type: 'toolcall_delta', contentIndex: index, delta: delta.arguments, partial: output });
+      }
+      return events;
+    },
+    finish(turn: ModelTurn): NatlangEvent[] {
+      const streamedIds = content.filter((part): part is ToolCall => part.type === 'toolCall').map(call => call.id);
+      const final = turnContent(turn, streamedIds);
+      if (!content.every((part, index) => agrees(index, part, final[index]))) return [...clear(), ...final.flatMap(whole)];
+      const events: NatlangEvent[] = [];
+      for (const [index, part] of content.entries()) {
+        const wanted = final[index]!;
+        if (index === current && (part.type === 'text' || part.type === 'thinking')) {
+          const [streamed, text] = part.type === 'text' ? [part.text, (wanted as { text: string }).text] :
+            [part.thinking, (wanted as { thinking: string }).thinking];
+          if (text.length > streamed.length) events.push(...piece(part.type, text.slice(streamed.length)));
+        }
+        // The final part replaces the streamed one's fields: a call's id and decoded arguments, a block's metadata.
+        if (part.type === 'toolCall' || part.type === 'neuralese') {
+          for (const key of Object.keys(part)) delete (part as Record<string, unknown>)[key];
+          Object.assign(part, wanted);
+        }
+      }
+      events.push(...endAll());
+      for (const part of final.slice(content.length)) events.push(...whole(part));
+      return events;
+    },
+  };
+}
+
+/**
+ * One model turn as pi-ai's event stream, built from the driver's deltas as they arrive (`streamedTurn`) and closed
+ * from the final turn, which the `done` message equals. A driver that returns the whole turn sends no deltas: its parts
+ * are then emitted in order once it arrives, each text and thinking part as start, one delta, end, each call as start,
+ * its arguments as one delta, end, and each Neuralese part as its `NeuraleseEvent`.
  */
 async function* turnEvents(model: Model<Api>, driver: ModelDriver, context: TranscriptContext,
-    options: SimpleStreamOptions): AsyncGenerator<AssistantMessageEvent> {
+    options: SimpleStreamOptions): AsyncGenerator<NatlangEvent> {
   const output: AssistantMessage = { role: 'assistant', content: [], api: model.api, provider: model.provider, model: model.id,
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
@@ -148,33 +316,22 @@ async function* turnEvents(model: Model<Api>, driver: ModelDriver, context: Tran
     if (carriesBlocks && !supportsNeuralese(driver))
       throw new NeuraleseUnsupportedError(`the conversation holds Neuralese blocks, but the transport of ` +
         `${model.provider}/${model.id} does not carry content parts (its reader is ${modelReader(model).kind})`);
-    const turn = await driver(request, options.signal);
-    const content = output.content as (AssistantMessage['content'][number] | NeuraleseContent)[];
-    if (turn.reasoning) {
-      const index = content.push({ type: 'thinking', thinking: '' }) - 1;
-      yield { type: 'thinking_start', contentIndex: index, partial: output };
-      (content[index] as { thinking: string }).thinking = turn.reasoning;
-      yield { type: 'thinking_delta', contentIndex: index, delta: turn.reasoning, partial: output };
-      yield { type: 'thinking_end', contentIndex: index, content: turn.reasoning, partial: output };
+    const parts = streamedTurn(output);
+    // Deltas arrive while the driver runs; its events queue until the consumer takes them.
+    const queue: NatlangEvent[] = [];
+    let wake: (() => void) | undefined;
+    let outcome = undefined as { turn: ModelTurn } | { error: unknown } | undefined;
+    const notify = () => { wake?.(); wake = undefined; };
+    driver(request, options.signal, { onDelta: delta => { queue.push(...parts.delta(delta)); notify(); } })
+      .then(turn => { outcome = { turn }; }, error => { outcome = { error }; }).finally(notify);
+    while (true) {
+      while (queue.length) yield queue.shift()!;
+      if (outcome) break;
+      await new Promise<void>(resolve => { wake = resolve; });
     }
-    for (const part of replyContent(turn.text ?? '')) {
-      if (part.type !== 'text') { content.push(part); continue; }
-      const index = content.push({ type: 'text', text: '' }) - 1;
-      yield { type: 'text_start', contentIndex: index, partial: output };
-      (content[index] as { text: string }).text = part.text;
-      yield { type: 'text_delta', contentIndex: index, delta: part.text, partial: output };
-      yield { type: 'text_end', contentIndex: index, content: part.text, partial: output };
-    }
-    const raw = (turn.raw_calls ?? []) as { id?: unknown }[];
-    for (const [i, [name, args]] of (turn.calls ?? []).entries()) {
-      const id = typeof raw[i]?.id === 'string' && raw[i]!.id ? raw[i]!.id as string : `call_${uuidv7()}`;
-      const call: ToolCall = { type: 'toolCall', id, name, arguments: {} };
-      const index = content.push(call) - 1;
-      yield { type: 'toolcall_start', contentIndex: index, partial: output };
-      call.arguments = args as ToolCall['arguments'];
-      yield { type: 'toolcall_delta', contentIndex: index, delta: JSON.stringify(args), partial: output };
-      yield { type: 'toolcall_end', contentIndex: index, toolCall: call, partial: output };
-    }
+    if ('error' in outcome) throw outcome.error;
+    const { turn } = outcome;
+    yield* parts.finish(turn);
     output.usage.input = turn.prompt_tokens ?? 0;
     output.usage.output = turn.completion_tokens ?? 0;
     output.usage.totalTokens = output.usage.input + output.usage.output;
@@ -194,6 +351,7 @@ async function* turnEvents(model: Model<Api>, driver: ModelDriver, context: Tran
 /** The natlang transport as pi-ai's chat API: `drivers` gives each model's driver. */
 export function natlangApi(drivers: NatlangDrivers): ProviderStreams {
   const stream = (model: Model<Api>, context: TranscriptContext, options: SimpleStreamOptions = {}): AssistantMessageEventStream =>
-    lazyStream(model, async () => turnEvents(model, drivers(model, { reasoning: Boolean(options.reasoning) }), context, options));
+    lazyStream(model, async () => turnEvents(model, drivers(model, { reasoning: Boolean(options.reasoning) }), context, options) as
+      AsyncIterable<AssistantMessageEvent>);
   return { stream: (model, context, options?: StreamOptions) => stream(model, context, options), streamSimple: stream };
 }

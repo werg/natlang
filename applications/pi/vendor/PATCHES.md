@@ -49,3 +49,7 @@ Changes, each kept minimal:
 3. Test support only: `test/chat-support.ts` `waitFor` reads its default timeout from `PI_WAIT_MS` (default 5000 as
    before). The conformance config (applications/pi/test/conformance) raises it, since the port's phases are model
    calls rather than microtasks.
+
+4. `src/harness/events.ts` `messageChanges`: a content block that is neither text, thinking nor a tool call (pi's
+   Neuralese block reference, streamed by the natlang provider) is reported as `{ type: "block" }` instead of being
+   labelled `toolcall_start`.
