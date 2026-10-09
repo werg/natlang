@@ -127,7 +127,7 @@ test('status-only success requires a same-invocation linked staged typed result 
   const stagedText = 'Staged { answer: "ready" } as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
   const stageCall = { id: stageCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"draft"}' } };
   const make = ({ withStage = true, linked = true, stageInvocation = 'same-invocation', returnType = '{ answer: string }',
-    resultArgs = { status: 'success' }, stageOutput = stagedText, ledgerToolCallId = true } = {}) => {
+    resultArgs = { status: 'success' }, stageOutput = stagedText, ledgerToolCallId = true, sampledToolCallId = stageCallId } = {}) => {
     const row = nativeRow(`status-only-${withStage}-${linked}-${returnType}`);
     const user = { role: 'user', content: `You are inside this call: root(): ${returnType}\n\nInstructions:\nReturn the staged value.` };
     const context = [system, user];
@@ -141,7 +141,9 @@ test('status-only success requires a same-invocation linked staged typed result 
     row.trajectory = [
       ...(withStage ? [{ phase: 'action', invocation_id: 'same-invocation', context: [system, user], tools_offered: schema,
         assistant: { content: '', reasoning: 'Evaluate the result.', calls: [{ tool: 'eval', source_tool: 'eval',
-          arguments: { code: 'draft' }, call_id: stageCallId }] }, raw_response_sha256: 'status-only-stage-raw' }] : []),
+          arguments: { code: 'draft' }, call_id: stageCallId }] },
+        model_response: { raw_calls: [{ id: sampledToolCallId, function: { name: 'eval', arguments: JSON.stringify({ code: 'draft' }) } }] },
+        raw_response_sha256: 'status-only-stage-raw' }] : []),
       { phase: 'action', invocation_id: 'same-invocation', context, tools_offered: schema,
         assistant: { content: '', reasoning: 'Finish with the staged result.', calls: [{ tool: 'return_result', source_tool: 'return_result',
           arguments: resultArgs, call_id: null }] }, raw_response_sha256: 'status-only-raw' },
@@ -212,6 +214,86 @@ test('status-only success requires a same-invocation linked staged typed result 
   const consoleImitation = make({ stageOutput: imitated });
   const fake = materializeNativeRows([consoleImitation]).turns.at(-1);
   assert.equal(fake.training_admission.approved, false);
+});
+
+test('status-only success accepts only the exact runtime rewrite of a staged inline Neuralese result', () => {
+  const invocationId = 'status-only-rewritten-stage';
+  const callId = 'rewritten-stage-eval';
+  const blockId = `nz1_${'f'.repeat(32)}`;
+  const body = 'Review ESR-202; deadline 2 September 2028.';
+  const bodySha = createHash('sha256').update(body).digest('hex');
+  const sentinel = `${blockId}`;
+  const rawArgs = { code: `const note: Neuralese<string> = <|neuralese|>${body}<|/neuralese|>; return note;` };
+  const runtimeArgs = { code: `const note: Neuralese<string> = ${sentinel}; return note;` };
+  const stagedNotice = `Staged ${sentinel} as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.`;
+  const user = { role: 'user', content: 'You are inside this call: root(): Neuralese<string>\n\nReturn the staged note.' };
+  const evalCall = { id: callId, type: 'function', function: { name: 'eval', arguments: JSON.stringify(rawArgs) } };
+  const finishArgs = { status: 'success' };
+  const make = ({ changedRuntimeArgs, changedBodySha, changedBlockId, changedCallId, changedSampledCallId,
+    extraWrite = false } = {}) => {
+    const row = nativeRow('status-only-rewritten-stage');
+    const actionArgs = changedRuntimeArgs ?? runtimeArgs;
+    const graphBlock = changedBlockId ?? blockId;
+    row.outcome.action_ledger = [
+      { seq: 3, call_id: invocationId, tool_call_id: changedCallId ?? callId, name: 'eval', arguments: actionArgs,
+        outcome: 'ok', result_text: stagedNotice },
+      { seq: 4, call_id: invocationId, name: 'return_result', arguments: finishArgs,
+        outcome: 'completed', result_text: `Returned ${sentinel}.` },
+    ];
+    const turn = { version: 'reduction-trace/1', seq: 1, kind: 'model_turn', call_id: invocationId,
+      node: `${invocationId}#turn1`, calls: ['eval'], inputs: [{ node: `call:${invocationId}`, port: 'invocation' }] };
+    const write = { version: 'reduction-trace/1', seq: 2, kind: 'block_write', call_id: invocationId,
+      turn: turn.node, block: graphBlock, node: `${invocationId}#write1`, truncated: false,
+      marker_context: 'eval-code', result_type: 'Neuralese<string>', text_body_sha256: changedBodySha ?? bodySha,
+      inputs: [{ node: turn.node, port: 'turn' }] };
+    row.outcome.execution_graph = [turn, write, ...(extraWrite ? [{ ...write, node: `${invocationId}#write2` }] : [])];
+    const terminalContext = [system, user,
+      { role: 'assistant', content: '', tool_calls: [evalCall] },
+      { role: 'tool', tool_call_id: callId, content: stagedNotice }];
+    row.outcome.invocation_ledger = [{ invocation_id: invocationId,
+      inline_instruction_site: { returns: { natlang: 'Neuralese<string>' } },
+      host_result: { kind: 'host_capture', capture_kind: 'invocation_output', call_id: invocationId,
+        complete: true, result_type: 'Neuralese<string>', value: { $neuralese: { id: blockId, type: 'Neuralese<string>' } },
+        terminal_action_seq: 4 } }];
+    row.trajectory = [
+      { phase: 'action', invocation_id: invocationId, context: [system, user], tools_offered: schema,
+        assistant: { content: '', reasoning: 'Stage a typed note.', calls: [{ tool: 'eval', source_tool: 'eval',
+          arguments: rawArgs, call_id: callId }] },
+        model_response: { raw_calls: [{ id: changedSampledCallId ?? callId,
+          function: { name: 'eval', arguments: JSON.stringify(rawArgs) } }] },
+        raw_response_sha256: 'status-only-rewrite-stage-raw' },
+      { phase: 'action', invocation_id: invocationId, context: terminalContext, tools_offered: schema,
+        assistant: { content: '', reasoning: 'Finish with the staged value.', calls: [{ tool: 'return_result',
+          source_tool: 'return_result', arguments: finishArgs, call_id: null }] },
+        model_response: { raw_calls: [{ function: { name: 'return_result', arguments: JSON.stringify(finishArgs) } }] },
+        raw_response_sha256: 'status-only-rewrite-finish-raw' },
+    ];
+    return row;
+  };
+
+  const accepted = materializeNativeRows([make()]).turns.at(-1);
+  assert.equal(accepted.training_admission.approved, true);
+  assert.equal(accepted.decision.status_only_success_validation[0].proof.staged_call_id, callId);
+  assert.equal(accepted.decision.status_only_success_validation[0].proof.staged_action_seq, 3);
+
+  const mismatches = [
+    make({ changedRuntimeArgs: { code: `${runtimeArgs.code} ` } }),
+    make({ changedCallId: 'different-eval-call' }),
+    make({ changedSampledCallId: 'different-raw-eval-call' }),
+    make({ changedBodySha: createHash('sha256').update('other body').digest('hex') }),
+    make({ changedBlockId: `nz1_${'a'.repeat(32)}` }),
+    make({ extraWrite: true }),
+  ];
+  for (const row of mismatches) {
+    const converted = materializeNativeRows([row]);
+    const rejected = converted.turns.at(-1);
+    if (rejected) {
+      assert.equal(rejected.training_admission.approved, false);
+      assert.equal(rejected.decision.status_only_success_validation[0].valid, false);
+    } else {
+      assert.ok(converted.rejectedRows > 0, 'a malformed stage link must not become a training row');
+    }
+  }
 });
 
 test('eval-return typed writer is attached to its source action only when later status-only success commits the same latest block', () => {

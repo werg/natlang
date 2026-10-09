@@ -253,11 +253,73 @@ function exactTranscriptText(value: unknown): string | undefined {
   return parts.join('');
 }
 
+function exactSampledEvalStageCall(row: NativeRow, invocationId: string, toolCallId: string,
+  modelArguments: unknown): boolean {
+  const matches: Dict[] = [];
+  for (const stepValue of row.trajectory) {
+    const step = stepValue as Dict;
+    if (step.phase !== 'action' || step.invocation_id !== invocationId) continue;
+    const calls = Array.isArray((step.assistant as Dict | undefined)?.calls) ?
+      (step.assistant as Dict).calls as Dict[] : [];
+    const rawCalls = Array.isArray((step.model_response as Dict | undefined)?.raw_calls) ?
+      (step.model_response as Dict).raw_calls as Dict[] : [];
+    for (const call of calls) {
+      if (call.source_tool !== 'eval' || canonical(call.arguments) !== canonical(modelArguments) ||
+          !hasExactRawModelCall(step, call)) continue;
+      const idMatches = rawCalls.filter(raw => {
+        const fn = raw && typeof raw.function === 'object' ? raw.function as Dict : undefined;
+        if (raw?.id !== toolCallId || fn?.name !== 'eval' || typeof fn.arguments !== 'string') return false;
+        try { return canonical(JSON.parse(fn.arguments)) === canonical(modelArguments); }
+        catch { return false; }
+      });
+      if (idMatches.length === 1) matches.push(step);
+    }
+  }
+  return matches.length === 1;
+}
+
 /** A status-only success can finish a non-void call only when the same call has just staged a
  * runtime-accepted typed result. The runtime's own linked eval output is the receipt: arbitrary
  * host captures, parent outcomes, prior tool outputs, and unlinked prose cannot stand in for it. */
+function transformedSoftEvalStageProof(modelArguments: unknown, actionArguments: unknown, row: NativeRow,
+  invocationId: string, toolCallId: string, stagedValue: string, actionEvent: Dict): boolean {
+  if (softBodyActionMatch(modelArguments, actionArguments) !== 'complete' ||
+      !softBodyActionMatches(modelArguments, actionArguments, row, invocationId) ||
+      !exactSampledEvalStageCall(row, invocationId, toolCallId, modelArguments)) return false;
+  const model = modelArguments as Dict;
+  const rawCode = model.code as string, runtimeCode = (actionArguments as Dict).code as string;
+  const open = '<|neuralese|>', close = '<|/neuralese|>';
+  const start = rawCode.indexOf(open), bodyStart = start + open.length;
+  const closeAt = rawCode.indexOf(close, bodyStart);
+  if (start < 0 || closeAt < bodyStart || rawCode.indexOf(open, start + open.length) >= 0 ||
+      rawCode.indexOf(close, closeAt + close.length) >= 0) return false;
+  const body = rawCode.slice(bodyStart, closeAt);
+  const sentinel = /(nz1_[a-z2-7]{20,})/.exec(runtimeCode);
+  if (!sentinel || stagedValue !== sentinel[0] ||
+      [...runtimeCode.matchAll(/(nz1_[a-z2-7]{20,})/g)].length !== 1) return false;
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === invocationId &&
+    event.block === sentinel[1] && event.result_type === 'Neuralese<string>' &&
+    event.marker_context === 'eval-code' && event.truncated === false &&
+    event.text_body_sha256 === hexDigest(body) && Number.isSafeInteger(event.seq) &&
+    Number(event.seq) < Number(actionEvent.seq));
+  if (writes.length !== 1) return false;
+  const write = writes[0]!;
+  const inputs = Array.isArray(write.inputs) ? write.inputs as Dict[] : [];
+  const turnNodes = inputs.filter(input => input.port === 'turn' && typeof input.node === 'string')
+    .map(input => input.node as string);
+  if (turnNodes.length !== 1) return false;
+  const turns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+    event.node === turnNodes[0] && Array.isArray(event.calls) && (event.calls as unknown[]).includes('eval') &&
+    Number.isSafeInteger(event.seq) && Number(event.seq) < Number(write.seq));
+  if (turns.length !== 1 || write.turn !== turns[0]!.node) return false;
+  const turnInputs = Array.isArray(turns[0]!.inputs) ? turns[0]!.inputs as Dict[] : [];
+  return turnInputs.some(input => input.node === `call:${invocationId}` && input.port === 'invocation');
+}
+
 function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocationId: string | undefined,
-  declaredReturnType: unknown, actionLedger: readonly Dict[], terminalSeq: unknown): StatusOnlySuccessProof | undefined {
+  declaredReturnType: unknown, actionLedger: readonly Dict[], terminalSeq: unknown,
+  row: NativeRow): StatusOnlySuccessProof | undefined {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return;
   const result = args as Dict;
   if ((result.status ?? 'success') !== 'success' || Object.hasOwn(result, 'value')) return;
@@ -267,6 +329,7 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
   if (returnType.trim() === 'void') return { schema: 'natlang.status-only-success-proof/1',
     basis: 'declared-void-return', ...(invocationId ? { invocation_id: invocationId } : {}), declared_return_type: returnType };
   if (!returnType.trim() || !invocationId || context.length < 2) return;
+  const exactInvocationId = invocationId;
   // The complete runtime notice is the final line of a staged result. Requiring that suffix rejects
   // eval console output that merely imitates the notice. Earlier staged values remain in the
   // invocation across ordinary reads and unsuccessful evals, so inspect the whole current context
@@ -276,23 +339,34 @@ function statusOnlySuccessProof(args: unknown, context: readonly Dict[], invocat
   for (let outputIndex = 0; outputIndex < context.length; outputIndex++) {
     const message = context[outputIndex]!;
     if (message.role !== 'tool' || typeof message.tool_call_id !== 'string') continue;
+    const stagedToolCallId = message.tool_call_id as string;
     const output = exactTranscriptText(message.content);
     if (output === undefined) continue;
     const stage = stagePattern.exec(output);
     if (!stage || stage[1]!.includes('<<cut off')) continue;
     const producer = context.slice(0, outputIndex).reverse().find(candidate => candidate.role === 'assistant' &&
-      Array.isArray(candidate.tool_calls) && (candidate.tool_calls as Dict[]).some(call => call.id === message.tool_call_id));
-    const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === message.tool_call_id);
+      Array.isArray(candidate.tool_calls) && (candidate.tool_calls as Dict[]).some(call => call.id === stagedToolCallId));
+    const call = (producer?.tool_calls as Dict[] | undefined)?.find(item => item.id === stagedToolCallId);
     const fn = call?.function && typeof call.function === 'object' ? call.function as Dict : undefined;
     if (fn?.name !== 'eval') continue;
     const stagedArgs = parseArguments(fn.arguments);
-    const stagedEvents = actionLedger.filter(event => event.call_id === invocationId && event.name === 'eval' &&
-      (event.tool_call_id === message.tool_call_id || event.tool_call_id === undefined) && ['ok', 'completed'].includes(String(event.outcome)) &&
-      canonical(event.arguments) === canonical(stagedArgs) && event.result_text === output &&
-      !(event.arguments && typeof event.arguments === 'object' && (event.arguments as Dict).finish === true) &&
-      Number.isSafeInteger(event.seq) && Number.isSafeInteger(terminalSeq) && Number(event.seq) < Number(terminalSeq));
-    if (stagedEvents.length === 1) stagedCandidates.push({ callId: message.tool_call_id, output,
-      event: stagedEvents[0]!, linkage: stagedEvents[0]!.tool_call_id === message.tool_call_id ?
+    const stagedEvents = actionLedger.filter(event => {
+      if (event.call_id !== exactInvocationId || event.name !== 'eval' ||
+          !(event.tool_call_id === stagedToolCallId || event.tool_call_id === undefined) ||
+          !['ok', 'completed'].includes(String(event.outcome)) || event.result_text !== output ||
+          (event.arguments && typeof event.arguments === 'object' && (event.arguments as Dict).finish === true) ||
+          !Number.isSafeInteger(event.seq) || !Number.isSafeInteger(terminalSeq) || Number(event.seq) >= Number(terminalSeq))
+        return false;
+      if (canonical(event.arguments) === canonical(stagedArgs)) return true;
+      // The runtime rewrites a single complete inline Neuralese literal to a block sentinel before eval.
+      // Accept that one transformation only when the action call ID, staged notice, and execution graph
+      // all identify the same exact typed block/body and producing eval turn.
+      return event.tool_call_id === stagedToolCallId && stage[1] !== undefined &&
+        transformedSoftEvalStageProof(stagedArgs, event.arguments, row, exactInvocationId, stagedToolCallId,
+          stage[1], event);
+    });
+    if (stagedEvents.length === 1) stagedCandidates.push({ callId: stagedToolCallId, output,
+      event: stagedEvents[0]!, linkage: stagedEvents[0]!.tool_call_id === stagedToolCallId ?
         'tool-call-id' : 'unique-invocation-arguments-output' });
   }
   const staged = stagedCandidates.at(-1);
@@ -729,7 +803,7 @@ function stagedEvalReturnCompletionProof(row: NativeRow, invocationId: string, a
   const context = Array.isArray(terminalSteps[0]!.context) ? terminalSteps[0]!.context as Dict[] : [];
   const returnType = contextDeclaredReturnType(context);
   if (typeof expectedResultType !== 'string' || returnType !== expectedResultType) return;
-  const proof = statusOnlySuccessProof(args, context, invocationId, returnType, ledger, terminalSeq);
+  const proof = statusOnlySuccessProof(args, context, invocationId, returnType, ledger, terminalSeq, row);
   if (!proof || proof.basis !== 'same-invocation-staged-result' || proof.staged_action_seq !== actionEvent.seq ||
       (typeof actionEvent.tool_call_id === 'string' && proof.staged_call_id !== actionEvent.tool_call_id)) return;
   return proof;
@@ -1312,7 +1386,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const args = call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? call.arguments as Dict : {};
         if (args.status !== 'success' || Object.hasOwn(args, 'value')) return [];
         const proof = statusOnlySuccessProof(args, contextSource, invocation, invocationReturnType, ledger,
-          (call.outcome as Dict | undefined)?.trace_seq);
+          (call.outcome as Dict | undefined)?.trace_seq, row);
         return [{ valid: proof !== undefined, ...(proof ? { proof } : {}),
           ...(proof ? {} : { reason: 'success without value has no same-invocation staged typed result or declared void return' }) }];
       });
