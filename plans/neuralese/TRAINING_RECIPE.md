@@ -72,6 +72,23 @@ its pinned content identity. Existing recipes without stage `inputs` retain the
 shared `--records`/`--pieces` fallback; the resolved stage roles and hashes are
 recorded in the recipe plan.
 
+For same-architecture continuation from a trained map or sketch, declare a
+`verified_heads_handoff` stage after raw runtime qualification. Bind its full
+warm-up checkpoint, best-checkpoint manifest, matching serving-head export and
+trained-channel runtime report by hash. It checks the held text thresholds and
+the 128/512 runtime and gradient evidence, and records raw reference evidence
+separately. A dependent `core_text_warmup` uses the same named checkpoint as
+`continue_from`; the loader restores the exact model, heads, optimizer, schedule
+and RNG state. Select the matching `warmup_heads` binding as that stage's
+`heads` input as well: the raw-port output exists for the separate reference
+gate and must not seed the learned map/sketch continuation. `steps` is the
+absolute final step, so a continuation from step `s` with `n` additional updates
+sets `steps` to `s+n`. A changed corpus remeasures its held baseline and must
+earn its own consecutive gates. The raw-port checkpoint does not replace the
+trained map/sketch state, and its foundation certificate is never inherited by
+that learned channel. Fresh lineages without `continue_from` still start from
+their declared raw handoff.
+
 The result is `foundation-certificate.json`, which binds the exact frozen backbone
 heads and feedback checkpoint hashes, recipe and passed stage reports. Downstream
 code uses `require_foundation` to check that handoff. Changes to input weights or
@@ -103,7 +120,8 @@ not apply the token-to-Neuralese map when serving.
 
 A sketch-to-map checkpoint handoff preserves all model/head weights and RNG.
 Its changed trainable parameter groups start a declared fresh optimizer and
-projection plateau. Subsequent map resumes restore the complete optimizer state.
+projection plateau. Same-mode map or sketch continuation restores the full
+optimizer and schedule. Subsequent resumes restore the complete optimizer state.
 The training-only map is omitted from serving heads and retained in resumable
 state. Existing frozen sketch runs and diagnostic operators remain identifiable;
 new map runs use this declaration and fresh held qualification evidence.
@@ -242,9 +260,17 @@ handoffs remain mandatory. These defaults are not a consumer quality certificate
 `one_step` remains an explicit research alternative: it cuts recursive feedback
 rollout gradients but retains causal attention/convolution gradients through
 recomputed sketch inputs. `unroll` is full recurrent BPTT; selecting it also
-requires `--sketch-target-weight 0` and is not the v2 consumer policy. The declared
-raw foundation recurrence warm-up pins its separate `unroll`/no-sketch-target
-policy explicitly, rather than inheriting consumer defaults.
+requires `--sketch-target-weight 0` and is not the v2 consumer policy. The
+current declared `raw-recurrence-v1` uses the shared consumer defaults:
+`local_stage`, same-slot sketch target0.1, source-state auxiliary gradient0.05,
+and control-row training. Older runs that explicitly used `unroll` remain tied
+to their own recorded recipe and are not the current shared default.
+
+The shared raw recurrence recipe leaves CUDA envelope and graph budget unset so
+the trainer can size them from the owner ledger or available device memory.
+Historical machine-specific `memory_gb` and `graph_memory_gb` values belong in
+individual run receipts when an owner chooses them; they are not shared recipe
+defaults.
 
 Stage replay grouping is a resource choice: batch1 is the reference default;
 Pop uses qualified group16. Adaptive graph staging and checkpointing are enabled,
