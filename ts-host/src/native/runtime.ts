@@ -30,6 +30,7 @@ import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from 
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
+import { callTypes, guardFields, guardedService, serviceResultTypes, serviceTypes } from './field-guard.js';
 import { undeclaredServiceType } from './introspection.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
@@ -46,6 +47,8 @@ export type NativeRuntimeHooks = {
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
     neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[] };
+  /** Reads of fields a value's declared type does not have, checked in every eval. */
+  checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -95,7 +98,7 @@ function diagnosticArgument(value: unknown, holder: string, liveIdentity?: (valu
 }
 
 const DIAGNOSTIC_HINTS: Record<string, string> = {
-  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
+  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields. With `nl.with<T>`, T is the child result type; use `nl.with<CaptureRecord, Result>` only when you want to type both the captures and result. The child input is passed separately.',
   'unknown-field': 'Use one of the fields listed as expected.',
   'no-such-path': 'Use a variable or field that exists in the scope.',
   'capture-conflict': 'Another caller changed that captured variable; run the eval again with its current value.',
@@ -125,8 +128,8 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
-  read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. The value must be a genuine Neuralese reference; use FileHandle.readText() or FileHandle.readJson() for files.',
-  'neuralese.read': 'Compatibility access through the configured neuralese service. Prefer the shared eval builtin `await read(value)` for Neuralese<T>; it returns Promise<T> and records the ordinary typed readout in the execution graph. `neuralese.bodies.read` is only the configured reader body ID.',
+  read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. Already-crisp strings pass through unchanged; other non-reference values are rejected. Use FileHandle.readText() or FileHandle.readJson() for files.',
+  'neuralese.read': 'Compatibility access through the configured neuralese service. Prefer the shared eval builtin `await read(value)` for Neuralese<T>; it returns Promise<T> and records the ordinary typed readout in the execution graph. Already-crisp strings pass through unchanged; other non-reference values are rejected. `neuralese.bodies.read` is only the configured reader body ID.',
   'neuralese.textReadSource': `neuralese.textReadSource is read-only standard-library metadata, not a callable API or a value to invoke.
   read_code("neuralese") shows the available host service declaration; read_code("Neuralese") shows the opaque compile-time type.
 The descriptor identifies the configured read instruction body (export: "read") and its provenance. Do not call
@@ -134,6 +137,7 @@ neuralese.textReadSource.read or inspect/copy its fields to read a value. Use th
 read(value), or a supported JavaScript text-conversion context such as String(value) for
 Neuralese<string>. The runtime performs the configured typed readout; the descriptor itself does not perform it.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
+  const verdict: Neuralese<(statement: string) => Promise<"allow" | "deny">> = nl\`Choose allow or deny for the statement.\`;
   const decision = await decide(verdict, statement);
   decision.value                    the function's answer
   decision.probabilities            { value, probability }[] for its finite result choices
@@ -386,6 +390,8 @@ function containsLive(value: unknown): boolean {
   }
   return false;
 }
+/** Declared service result types by declaration text. */
+const serviceResultTypeCache = new Map<string, ReturnType<typeof serviceResultTypes>>();
 /** Split scope values into portable snapshot data and live references. */
 function splitScope(values: Record<string, Value>): { portable: Record<string, unknown>; live: Record<string, unknown> } {
   const portable: Record<string, unknown> = {}, live: Record<string, unknown> = {};
@@ -1492,6 +1498,28 @@ export class NativeSession {
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
+  /**
+   * Call inputs of a declared record or list type, behind field guards (field-guard.ts): eval code that reads a field
+   * the type does not declare and the value does not have gets an error naming the type's fields, not `undefined`.
+   */
+  private guardedInputs(values: Record<string, unknown>): Record<string, unknown> {
+    if (this.lam.type.kind !== 'lambda') return values;
+    const types = new Map(this.lam.type.params.fields.map(field => [field.name, field.type]));
+    return Object.fromEntries(Object.entries(values).map(([name, value]) =>
+      [name, types.has(name) ? guardFields(value, types.get(name)!, callTypes(this.env), name) : value]));
+  }
+
+  /** Services whose declarations type their results return those results behind field guards. */
+  private guardedServices(services: Record<string, object>): Record<string, object> {
+    return Object.fromEntries(Object.entries(services).map(([name, service]) => {
+      const declaration = this.runtime.declarations[name];
+      if (declaration === undefined || name === 'neuralese') return [name, service];
+      let declared = serviceResultTypeCache.get(declaration);
+      if (!declared) serviceResultTypeCache.set(declaration, declared = serviceResultTypes(name, declaration));
+      return [name, guardedService(service, name, declared.results, serviceTypes(name, declared.own, this.env))];
+    }));
+  }
+
   availableServices(): Record<string, object> {
     const chain = currentFrame()?.chain ?? [];
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
@@ -1807,6 +1835,7 @@ export class NativeSession {
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
+      ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source) } : {}),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
     // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
     if (compiled.ok) {
@@ -1845,7 +1874,7 @@ export class NativeSession {
       })() } : undefined;
     this.activeScopeLocals = new Map();
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
-      services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
+      services: this.guardedServices(this.availableServices()), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
       readNeuraleseIfReference,
       readCode: (input: unknown) => {
@@ -1877,7 +1906,8 @@ export class NativeSession {
       invokeWithReceiver,
       rebindInline: (value: unknown, captures: Record<string, unknown>, sources: Record<string, 'input' | 'local' | 'block' | 'handle'>) =>
         rebindInlineCallable(value, captures, origin, sources),
-      callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
+      callInputs: inputsBinding || inputsObject ? Object.freeze(this.guardedInputs(frozenCopy(this.lam.args) as Record<string, unknown>)) : undefined,
+      guardInputs: (values: Record<string, unknown>) => this.guardedInputs(values),
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       decide: (fn: (...args: unknown[]) => Promise<unknown>, args: unknown[]) => {
         const frame = currentFrame() ?? this.runtime.frame!;

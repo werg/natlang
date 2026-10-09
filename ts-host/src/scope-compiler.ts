@@ -58,6 +58,8 @@ export type ScopeCompileOptions = {
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
   analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[];
     readouts?: NeuraleseReadout[]; rebinds?: InlineRebindSite[] };
+  /** Reads of fields a value's declared type does not have (snippet-relative spans), checked in every snippet. */
+  checkFields?: (source: string) => NatlangDiagnostic[];
   /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
   neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
@@ -751,6 +753,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     rebinds = analysis.rebinds ?? [];
     for (const item of analysis.diagnostics) diagnostics.push(toRaw(item));
   }
+  if (options.checkFields) for (const item of options.checkFields(analysisSource)) diagnostics.push(toRaw(item));
 
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
   type Edit = { start: number; end: number; text: string; composed?: boolean };
@@ -1130,7 +1133,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [
-    inputNames.length ? `const { ${inputNames.join(', ')} } = __natlang_frozen(__natlang_copy(__inputs));` : '',
+    // The inputs as eval code reads them: values of a declared record type behind field guards, when the host has them.
+    inputNames.length ? `const { ${inputNames.join(', ')} } = (__live.guardInputs ?? ((inputs: any) => inputs))(__natlang_frozen(__natlang_copy(__inputs)));` : '',
     // Your own locals come back as mutable copies (only parameters are frozen); the eval commits them when it succeeds.
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name});`),
