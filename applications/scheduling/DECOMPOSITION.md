@@ -29,8 +29,8 @@ The executors are small models, so instructions spell algorithms out as numbered
 - **Derived values form a DAG** (one run of `scheduler.nl`):
 
   ```
-  request, view ─▶ read-tasks ─▶ read-limits ─┐
-                                  read-preferences ┤  (the last two run together)
+  request, view ─▶ readTasks ─▶ readLimits ─┐
+                                  readPreferences ┤  (the last two run together)
                                                   ▼
                        view + hard ─▶ domains ─▶ order ─▶ enumerate (pluggable) ─▶ offers
                                                                   offers ─▶ check ─▶ valid / violations
@@ -53,9 +53,9 @@ The executors are small models, so instructions spell algorithms out as numbered
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| New tasks named in the request (id, minutes, earliest, latest, dependencies) | fn | `scheduler/read-tasks` | Its own data (`TaskView`). Defaults (the day's extent) are spelled. |
-| Hard limits on tasks ("review not before 11:00", "after the call") and commitments ("I'm out 11:00-11:30") | fn | `scheduler/read-limits` | Hard and soft are different contracts: a limit is checked exactly, a preference is judged. |
-| Soft preferences ("draft early", "keep the afternoon free"), each with the tasks it concerns and a weight 1 to 3 | fn | `scheduler/read-preferences` | Judged later by `assess`. Independent of `read-limits`, so they run together. |
+| New tasks named in the request (id, minutes, earliest, latest, dependencies) | fn | `scheduler/readTasks` | Its own data (`TaskView`). Defaults (the day's extent) are spelled. |
+| Hard limits on tasks ("review not before 11:00", "after the call") and commitments ("I'm out 11:00-11:30") | fn | `scheduler/readLimits` | Hard and soft are different contracts: a limit is checked exactly, a preference is judged. |
+| Soft preferences ("draft early", "keep the afternoon free"), each with the tasks it concerns and a weight 1 to 3 | fn | `scheduler/readPreferences` | Judged later by `assess`. Independent of `readLimits`, so they run together. |
 | Ambiguities that need the user (an unknown task, two readings of a time) | inline | each reader | Each reader returns `questions`. The driver asks back instead of guessing. |
 | Merging the readings into `Requirements` | inline | `scheduler` | Concatenation. Spelled in the driver. |
 
@@ -115,7 +115,7 @@ doc comment, enforced by `calendar.check` or by a reader's instructions.
 | `Span`, `Placement`, `Block` | `Is<Span, "start is a whole number of minutes before end">` |
 | `Placement.start` | `Is<number, "a multiple of the slot length after the origin">` |
 | `TaskView.after` | `Is<string[], "ids of other tasks, forming no cycle">` |
-| `TaskReading.tasks` (output of `read-tasks`) | `Is<TaskView[], "tasks the request introduces, none of them already in the day">` |
+| `TaskReading.tasks` (output of `readTasks`) | `Is<TaskView[], "tasks the request introduces, none of them already in the day">` |
 | `LimitReading.limits` | `Is<Limit[], "each limit narrows one task and restates a requirement of the request">` |
 | `Preference.text` | `Is<string, "the user's wish, restated without times the request does not state">` |
 | `Preference.weight` | `Is<number, "1, 2 or 3: 3 for a wish stated as important">` |
