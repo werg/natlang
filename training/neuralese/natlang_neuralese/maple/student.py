@@ -14,9 +14,10 @@ import torch
 from .model import load_maple
 from .nested_train import Member, setup
 from ..common.hashing import sha256_file_hex as _sha256
+from ..common.paths import resolve_str
 
-DEFAULT_MODEL = "/home/werg/data/models/maple-preview-bf16"
-DEFAULT_CACHE = "/home/werg/data/models/maple-preview-converted"
+DEFAULT_MODEL = resolve_str("models", "maple-preview-bf16")
+DEFAULT_CACHE = resolve_str("models", "maple-preview-converted")
 
 
 def student_identity(model: str, state: str | None) -> dict:

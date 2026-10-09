@@ -25,9 +25,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from ..common.paths import resolve
 from .ternary import ternary_codes
 
-GGUF_PY = Path("/home/werg/llama.cpp-neuralese/gguf-py")
+GGUF_PY = resolve("llama_cpp", "gguf-py")
 ATTENTION = {"attn_q": "q_proj", "attn_k": "k_proj", "attn_v": "v_proj", "attn_output": "o_proj"}
 NORMS = {"attn_norm": "input_layernorm", "ffn_norm": "post_attention_layernorm"}
 

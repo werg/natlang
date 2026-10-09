@@ -28,6 +28,7 @@ from pathlib import Path
 import torch
 
 from ..train.joint import load_rows, shifted
+from ..common.paths import resolve_str
 from ..train.joint_kd import IGNORE, chunked_ce_kl
 from .model import load_maple
 from .ternary import adapters_disabled, add_qat_lora, flip_fraction
@@ -147,7 +148,7 @@ def member_step(model, members, x, y, *, phase, normaliser, ce_member, kl_weight
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted")
+    ap.add_argument("--cache", default=resolve_str("models", "maple-preview-converted"))
     ap.add_argument("--order", help="expert-order.pt from natlang_neuralese.maple.routing (N0)")
     ap.add_argument("--members", default="24x32,24x64,8x16")
     ap.add_argument("--phase", choices=["bootstrap", "joint", "eval"], default="bootstrap",
