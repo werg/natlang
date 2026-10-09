@@ -20525,6 +20525,46 @@
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
       "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds."
+    },
+    {
+      "id": "free-provider-zai45-first3-native-and-partial-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/collector.log",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.result.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/results.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-001/results.jsonl.manifest.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/collector.log",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.result.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.trace.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/results.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-002/results.jsonl.manifest.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/collector.log",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.partial.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.partial.json.evidence-263c3df4-a1da-43d1-aac5-2c5a3a1946aa.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/results.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/case-003/results.jsonl.manifest.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/launch-receipt-v1.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/model-choice-review-pause-v1.json",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/queue.jsonl",
+        "free-provider-generation-20261009-v1/provider-zai45-flash-source-indices-1-4-v1/throughput-policy-resume-v1.json",
+        "free-provider-generation-20261009-v1/zai45-flash-v22-first3-journal-prefix-v1.jsonl",
+        "free-provider-generation-20261009-v1/zai45-flash-v22-first3-quality-review-v1.json",
+        "free-provider-generation-20261009-v1/zai45-flash-v22-first3-quality-review-v1.md"
+      ],
+      "split": "inherited-train",
+      "source_class": "actual-provider-native-results-and-scoped-file-partial-evidence",
+      "admission": "held-pending-V22-source-quality-and-native-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-v22-followups-and-kilo-held-20261009-v1"
+      ],
+      "independent_new_worlds": 0,
+      "license": "Inherited authored V22 same-world counterfactual source provenance",
+      "notes": "Closed ZAI4.5Flash cases1-3 only; case4live excluded. Two exact runtime accepted final decisions, third1800.7s resource-budget incomplete/61savedreplies48kcompletiontokens, not semanticnegative. Twenty-four repeatedempty authoritysearches occur in correctlyscoped pass3conditions child; authorityfactintentionallylaterpass4. Root shared prompt fixes pendingfactreturn boundary, no widenedscope/sourcefactmutation. Provider transport causes/physicalrequesttotals unknown. Frozenruntime/source receipts preserved throughparent/sourcehash. No admission/newworldcredit."
     }
   ],
   "coverage_backlog": [
@@ -20550,6 +20590,7 @@
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
-    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed."
+    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
+    "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission."
   ]
 }
