@@ -134,15 +134,20 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_backoff,
-                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema'):
+                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema',
+                  openrouter_free_only=False):
     payload = _http_payload(case, model, reasoning_effort, max_output_tokens, response_format)
+    if openrouter_free_only:
+        payload['provider'] = {'sort': 'throughput', 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     request_hash = hashlib.sha256(body).hexdigest()
-    request = urllib.request.Request(endpoint, data=body, method='POST', headers={
-        'Authorization': f'Bearer {api_key}',
+    headers = {
         'Content-Type': 'application/json', 'Accept': 'application/json',
         'User-Agent': 'natlang-decision-labeler/1',
-    })
+    }
+    if api_key is not None:
+        headers['Authorization'] = f'Bearer {api_key}'
+    request = urllib.request.Request(endpoint, data=body, method='POST', headers=headers)
     opener = urllib.request.build_opener(_NoRedirect())
     history = []
     response_body = None
@@ -277,18 +282,25 @@ def main():
     parser.add_argument('--max-output-tokens', type=int, default=256)
     parser.add_argument('--request-interval-seconds', type=float, default=0,
                         help='minimum interval between case request starts; HTTP backend only')
+    parser.add_argument('--anonymous', action='store_true', help='explicitly use an HTTP endpoint without credentials')
+    parser.add_argument('--openrouter-free-only', action='store_true',
+                        help='OpenRouter only: enforce zero token/request price and sort providers by throughput')
     args = parser.parse_args()
 
     if args.backend == 'openai-compatible':
         if args.checkpoint:
             parser.error('--checkpoint is not used by openai-compatible backend')
-        if not args.endpoint or not args.model or not args.api_key_env:
-            parser.error('openai-compatible requires --endpoint, --model and --api-key-env')
+        if not args.endpoint or not args.model or (not args.api_key_env and not args.anonymous):
+            parser.error('openai-compatible requires --endpoint, --model and either --api-key-env or --anonymous')
+        if args.anonymous and args.api_key_env:
+            parser.error('--anonymous cannot be combined with --api-key-env')
         parts = urlsplit(args.endpoint)
         if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.query or parts.fragment:
             parser.error('--endpoint must be an HTTPS URL without userinfo, query or fragment')
-        api_key = os.environ.get(args.api_key_env)
-        if not api_key:
+        if args.openrouter_free_only and parts.hostname != 'openrouter.ai':
+            parser.error('--openrouter-free-only requires an openrouter.ai endpoint')
+        api_key = None if args.anonymous else os.environ.get(args.api_key_env)
+        if not args.anonymous and not api_key:
             parser.error(f'API key environment variable {args.api_key_env!r} is unset or empty')
         teacher = args.teacher or f'{args.backend}/{args.model}'
         identity = {
@@ -298,6 +310,8 @@ def main():
             'selection': {'families': sorted(set(args.family)), 'limit': args.limit},
             'adapter_sha256': hashlib.sha256(open(__file__, 'rb').read()).hexdigest(),
             'request_settings': {'reasoning_effort': args.reasoning_effort,
+                                 'anonymous': args.anonymous,
+                                 'openrouter_free_only': args.openrouter_free_only,
                                  'response_format': args.response_format,
                                  'max_output_tokens': args.max_output_tokens,
                                  'request_interval_seconds': args.request_interval_seconds},
@@ -310,8 +324,8 @@ def main():
             parser.error('--checkpoint is required for decider and clef')
         if not args.teacher:
             parser.error('--teacher is required for decider and clef')
-        if args.endpoint or args.model or args.api_key_env:
-            parser.error('--endpoint, --model and --api-key-env are only for openai-compatible')
+        if args.endpoint or args.model or args.api_key_env or args.anonymous or args.openrouter_free_only:
+            parser.error('HTTP endpoint/auth/routing options are only for openai-compatible')
         teacher = args.teacher
         checkpoint_files = sorted(os.path.join(root, f) for root, _, files in os.walk(args.checkpoint) for f in files
                                   if f.endswith(('.safetensors', '.json')))
@@ -377,7 +391,8 @@ def main():
                                  initial_backoff=args.initial_backoff, max_backoff=args.max_backoff,
                                  reasoning_effort=args.reasoning_effort,
                                  max_output_tokens=args.max_output_tokens,
-                                 response_format=args.response_format)
+                                 response_format=args.response_format,
+                                 openrouter_free_only=args.openrouter_free_only)
 
     started, count, errors = time.time(), 0, 0
     last_request_start = None

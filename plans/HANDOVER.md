@@ -1,3 +1,9 @@
+## Further current free endpoints — 2026-10-09 21:52 UTC
+
+- Live Kilo public catalog now includes Step5Preview, Ling3.1Flash, Laguna2.1XS/S, InklingSmall, NorthMiniCode and Nemotron3.5Lightning; do not assume the earlier12model catalog stays current. Anonymous four-row shared labeler screens started for PoolsideLagunaXS2.1, InklingSmall, NorthMiniCode; receipt PIDs/argv authoritative. Four per model,10s pacing,1retry, explicit free slugs; no credential reuse across providers. Original Kilo first full-case122calls remain recorded, respect200/hour/IP if throttled.
+- Shared label adapter now supports declared --anonymous endpoints (no Authorization header) and --openrouter-free-only (zero prompt/completion/request price ceiling, throughput provider sorting). Generic authenticated backends remain unchanged. Future OpenRouter zero-priced unsuffixed slugs must use the explicit zero ceiling; public catalog discovery alone does not authorize paid route fallback. No text distillation flag.
+- OpenCode Zen models endpoint probe returned403/1010 with existing key; no live catalog proof established and no credential printed. Continue through its supported official-client integration rather than claim absence or availability from that failure.
+
 ## Free pool throughput/quality evidence and Gemini daily cooldowns — 2026-10-09 21:45 UTC
 
 - Completed broader selected128-case/19-family screens: GroqOSS20B120typed-valid/8errors in893s; Gemma26B98/30in919s. Ling16casefollowup11/5in427s. Corrected review-v5v2 SHA0d8c55a9b342ad2d213e6dc2444148c833440011c4f8ed23765c13d8520f1de9 uses pinned existing scorer outputs: quality/all-gates over nonerrors Groq.7972/.6417, Gemma.8084/.6939, Ling.9225/.8182 (Ling only16selectedcases; no ranking inference). Type-valid throughput8.063/6.398/1.546perminute; these are not admitted-training throughput.
