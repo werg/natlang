@@ -250,3 +250,47 @@ def resolve(identity: str, file: str | None = None, repo: Path | None = None, *,
     if actual != rows[file]["sha256"]:
         raise ArtifactError(f"artifact {identity}/{file} content hash mismatch")
     return path, actual
+
+
+def find_by_sha(sha256: str, repo: Path | None = None) -> tuple[str, str] | None:
+    """The registered (artifact id, file) whose manifest pins these bytes, if any."""
+    repo = repo or REPO
+    for item in load_registry(repo)["artifacts"]:
+        path = manifest_path(repo, item["id"])
+        if path.exists():
+            for row in json.loads(path.read_text())["files"]:
+                if row["sha256"] == sha256:
+                    return item["id"], row["path"]
+    return None
+
+
+def backbone_identity(model: str, revision: str | None = None) -> dict:
+    """{"model", "revision"} of a backbone: an explicit revision, a hub snapshot directory's revision, or the revision a
+    local weights directory recorded when its files were verified (weights-verified.json). Refuses to guess."""
+    if revision:
+        return {"model": model, "revision": revision}
+    parts = Path(model).parts
+    if "snapshots" in parts and parts.index("snapshots") + 1 < len(parts):
+        return {"model": model, "revision": parts[parts.index("snapshots") + 1]}
+    verified = Path(model) / "weights-verified.json"
+    if verified.exists():
+        recorded = json.loads(verified.read_text()).get("revision")
+        if recorded:
+            return {"model": model, "revision": recorded}
+    raise ArtifactError(f"cannot pin the revision of backbone {model}; pass it explicitly")
+
+
+def register_output(path: Path, *, identity: str, kind: str, dialect: str, backbone: dict, trainer: str, commit: str,
+                    corpora: list[str] | None = None, parent: str | None = None, run: str | None = None,
+                    notes: str | None = None, repo: Path | None = None) -> dict:
+    """Register a file a trainer produced (init method "trained"), unqualified until a gate says otherwise."""
+    import datetime
+
+    repo = repo or REPO
+    item = {"id": identity, "kind": kind, "owner": "dgx", "dialect": dialect, "backbone": backbone,
+            "init": {"method": "trained", **({"parent": parent} if parent else {"source": run or str(path)})},
+            "training": {"corpora": corpora or [], "trainer": trainer, "commit": commit, **({"run": run} if run else {})},
+            "qualification": {"status": "unqualified", "evidence": []}, "origin": {Path(path).name: str(path)},
+            "registered": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            **({"notes": notes} if notes else {})}
+    return register(repo, item, {Path(path).name: Path(path)})

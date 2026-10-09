@@ -84,3 +84,21 @@ def test_bundles_declare_adapter_dialects(tmp_path):
     assert manifest["extra_dialects"] == ["adapter/1;base=x;kind=xs"]
     with pytest.raises(artifacts.ArtifactError, match="adapter dialects"):
         artifacts.register(repo, item("bundle-test-v3", kind="bundle", extra_dialects=["nd:other@1"]), {"a.nz": path})
+
+
+def test_trainer_outputs_register_with_their_parent_found_by_content(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    source = nz(tmp_path / "src.nz")
+    artifacts.register(repo, item(), {"bank.nz": source})
+    assert artifacts.find_by_sha(artifacts.digest(source), repo) == ("bank-test-v1", "bank.nz")
+    trained = nz(tmp_path / "system-prompts.nz", width=6)
+    manifest = artifacts.register_output(trained, identity="bank-test-trained-v1", kind="prompt-bank",
+                                         dialect="nd:test@1", backbone={"model": "test/model", "revision": "abc"},
+                                         trainer="natlang_neuralese.train.decision", commit="c0ffee",
+                                         corpora=["corpus-a"], parent="bank-test-v1", repo=repo)
+    entry = artifacts.entry(artifacts.load_registry(repo), "bank-test-trained-v1")
+    assert entry["init"] == {"method": "trained", "parent": "bank-test-v1"} and manifest["files"][0]["nz"]["widths"] == [6]
+    snapshot = tmp_path / "hub/models--x/snapshots/0123abcd"
+    assert artifacts.backbone_identity(str(snapshot)) == {"model": str(snapshot), "revision": "0123abcd"}
+    with pytest.raises(artifacts.ArtifactError, match="cannot pin"):
+        artifacts.backbone_identity(str(tmp_path / "unpinned-model"))
