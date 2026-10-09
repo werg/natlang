@@ -54,8 +54,10 @@ admits the call's arguments serves it, with the function's own context items and
   agent, whose opening then says what the case already did (service calls, files, finished calls). `Deopt` before any
   effect simply lets the agent run.
 - New cases start in shadow: the agent serves, and the call is replayed against the case offline. A case is promoted
-  after `promotionComparisons` comparisons with at most `acceptanceBound` of them worse; an active case is demoted when
-  audits or hand-offs exceed that bound. `auditRate` of crisp-served calls are re-run through the agent offline.
+  after `promotionComparisons` (10) comparisons with at most `acceptanceBound` of them worse, of which at least
+  `promotionLiveComparisons` (3) are on calls made after the compilation; an active case is demoted when audits or
+  hand-offs exceed that bound. `auditRate` of crisp-served calls are re-run through the agent offline.
+- A case that uses a service the calling task does not provide is not considered for that call.
 - Settings: `natlang traces config specialization=off|shadow|on auditRate=0.05 ...`, `NATLANG_SPECIALIZATION`, a
   program's `"specialization"` in `natlang.json`, and `createNatlangRuntime({ specialization })`; the lowest wins.
 
@@ -66,7 +68,15 @@ natlang compilations show support         # cases, tiers, numbers, cases.ts, the
 natlang compilations why CALL             # which case served a call, or why none did
 natlang compilations export support DIR   # the compilation and its evidence as files
 natlang compilations disable CASE
+natlang compilations savings              # tokens and time saved by serving, against what specializing spent
+natlang compilations findings             # what compiling found about programs and their executor; acknowledge ID
+natlang compilations export-corpus --out DIR   # cases with their evidence, declines and findings as JSONL
 ```
+
+Findings are worth reading as an author: identical inputs that led to different service calls, a service argument
+passed as a number in some calls and a string in others, groups of calls whose results disagree, and calls where a
+compiled case did better than the agent. Each points at instructions that leave a decision open, or at an executor
+that needs clearer instructions.
 
 Effects of a crisp case are as real as the agent's: design services so the same operation is safe either way, and
 use `ONCE_EFFECTS` for effects that must not repeat.

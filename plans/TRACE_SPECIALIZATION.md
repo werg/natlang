@@ -9,8 +9,29 @@ Status: implemented 2026-10-08 (design revised three times that day with the own
 
 Where the implementation differs from the text below:
 
-- The reducer's folder holds the evidence beside `cases.ts` (`evidence/...`), so the model reads it with ordinary file
-  tools; only `cases.ts` is kept. The program is read through `evidence/function.md` and the function's context.
+- One writer per group, not one reducer per function (2026-10-09, after one function's reducer ran 1–7 hours and
+  compacted its history repeatedly). The host splits a function's calls by what they did (calls/groups.ts:
+  behavior labels, at least 3 training calls, at most 8 groups) and gives each group to `writeCase.nl`, a directory
+  reducer over a small folder: `function.md`, `group.md` (the group's normalized code, results, and candidate
+  conditions measured on all groups), examples, `others.md` (the most similar calls of other groups) and `report.md`.
+  The writer checks a condition with the exact `group.measure(condition)` service, asks `semanticCheck`, and writes
+  `case.ts` (`export const when`, `export const run`, helpers) or skips with a reason. `assembleCases` joins the parts
+  into one cases file (imports merged, each part's statements private to its array element); all parts are verified
+  together each round, and a rejected case goes back to its group with its own report. A writer call has 150 actions
+  and two hours.
+- Promotion (§6.2) also needs `promotionLiveComparisons` (3) comparisons on live calls (shadow, audit) within the bound:
+  replays of the recorded calls share the context the case was written from (the pi `oracle` case passed 496 replays
+  and failed every live call).
+- Findings (§5.3): the store's `findings` table holds what compiling learned about a program or its executor
+  (identical inputs that led to different service calls, service arguments whose type varies, writer skips marked
+  unstable, cases judged better than the executor). `natlang compilations findings|acknowledge`.
+- Spend and savings: the specializer meters its model tokens per function (`spend` table: writing, verifying, shadow,
+  audit). `natlang compilations savings` sets them against what serving saved. Targets are ordered by tokens, and
+  before each step the specializer waits (up to `--idle-wait`, 1800 s) until the executor has at most `--max-busy` (2)
+  requests, so it does not compete with the programs it serves.
+- `natlang compilations export-corpus` writes cases (with the calls each was checked on and the verdicts), declines and
+  findings as a corpus; the first held snapshot is `natlang-specialization-cases-declines-20261009-v1`.
+- A case is admitted only where the calling task provides every `natlang:services` import it uses.
 - §4: `iterateOn` site statistics moved into the store. Standalone native runs (`NodeNativeRuntime`, the teacher
   collector's roots) are now recorded like kernel calls, under their run ID and the driver's model, so a collection's
   whole call tree is in the store. Exact host capture is a filter over it: `hostCaptures(store, callId, spec)`
@@ -37,7 +58,9 @@ Live validation (2026-10-08, Qwen3.6-35B pi-executor): `examples/specialization`
 comparisons (0 worse) and then served `refund 777` in 29 ms (agent: ~7 s). Other requests went to the agent. nldb
 `translate` was declined as unstable (identical inputs, three different schemas). The DGX runs the loop as the ledger
 unit `natlang-specializer` (`scripts/specializer-loop.sh --profile pi-executor`, log
-`~/.local/state/natlang/specializer.log`). A reducer pass takes 20–100 minutes on this executor.
+`~/.local/state/natlang/specializer.log`). On 2026-10-09 the second `support` revision got three cases from the
+single reducer; two were promoted on live shadow comparisons and serve in 24–32 ms (agent: 8–49 s), and the third
+("thanks!") stays in shadow because the judge found its two-sentence reply worse than "answer in one short sentence".
 
 ## 1. Idea
 
