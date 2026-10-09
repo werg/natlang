@@ -4,11 +4,12 @@
   DGX. The Pop agent owns execution/resource management on Pop; the DGX agent
   owns execution/resource management on DGX. Do not launch new jobs from retired
   `natlang-remote` snapshots or manage the other machine's jobs without a request.
-- At session start, before changing shared resources, and at each monitoring
-  cycle, run `python3 scripts/coordination_inbox.py check --ack`. The gitignored
-  `.coordination/inbox.md` contains incoming machine-specific notes. Read them,
-  append responses to the sender's inbox, and preserve history. While monitoring
-  long jobs, check at least once per 50-minute work/sleep cycle.
+- Agents talk through `scripts/coord.py` (see "Messages" in
+  `plans/MACHINE_COORDINATION.md`). At session start, before changing shared
+  resources, and at each monitoring cycle (at least every 50 minutes), run
+  `python3 scripts/coord.py inbox --ack`. Answer requests with `coord.py reply`
+  or `close`; send with `coord.py send --to pop|dgx|all --subject ...`. Keep
+  your machine's state in `coord.py status --set`, not in a stream of notes.
 - Synchronize code through small commits and frequent fetch/merge/push to
   `origin/main`; preserve the other agent's uncommitted work. Do not copy source
   trees between machines. See `plans/MACHINE_COORDINATION.md`.
