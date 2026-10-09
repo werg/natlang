@@ -17,6 +17,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.data.context_refs import context_ref_count
 from root_derived_writer_admission import admitted_root_derived_writer_rows
 sys.path.insert(0, str(ROOT / "scripts"))
 from root_integration_adoption import root_integration_adoption_bindings
@@ -82,17 +84,8 @@ def read_records(path):
     return out
 
 def provider_context_occurrences(value, block_id):
-    """Count explicit typed Neuralese message objects without expanding/freehanding content."""
-    if isinstance(value, dict):
-        count = int(value.get("type") == "neuralese" and value.get("id") == block_id)
-        for key, child in value.items():
-            if key == "arguments" and isinstance(child, str):
-                try: count += provider_context_occurrences(json.loads(child), block_id)
-                except json.JSONDecodeError: pass
-            else: count += provider_context_occurrences(child, block_id)
-        return count
-    if isinstance(value, list): return sum(provider_context_occurrences(child, block_id) for child in value)
-    return 0
+    """Compatibility name for the shared typed-marker-only count."""
+    return context_ref_count(value, block_id)
 
 def extract_combinator_definition(source_text: str, name: str) -> tuple[str, str]:
     """Read exact type/text literals from a frozen COMBINATORS property."""
@@ -225,7 +218,14 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
             block, write = receipt.get("block") or {}, receipt.get("producer_write") or {}
             read, turn = receipt.get("block_read") or {}, receipt.get("model_turn") or {}
             block_id, body, body_hash = block.get("id"), block.get("body"), block.get("body_sha256")
-            occurrences = provider_context_occurrences(record.get("messages") or [], block_id)
+            expected_read_name = None
+            for existing in ((record.get("neuralese_conversion") or {}).get("external_context_inputs") or []):
+                if isinstance(existing, dict) and existing.get("block_id") == block_id:
+                    expected_read_name = existing.get("target_write_name")
+                    if not isinstance(expected_read_name, str):
+                        expected_read_name = "soft-state:" + block_id
+                    break
+            occurrences = context_ref_count(record.get("messages") or [], block_id, expected_read_name)
             if occurrences == 0: continue
             # A root-admitted derived target has a separate ID/target. Provider
             # reads still bind to the original sampled assistant action that

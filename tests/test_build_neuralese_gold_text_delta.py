@@ -222,7 +222,7 @@ def test_top_level_provider_read_accepts_only_matching_complete_root_capture():
         "transport_provenance_sha256": "f" * 64, "raw_request_sha256": "1" * 64,
         "rendered_request_sha256": "2" * 64, "source_request_sha256": "3" * 64,
         "source_response_sha256": response_hash, "source_action_target_sha256": target_hash,
-        "source_trajectory_index": 4, "context_occurrences": 1,
+        "source_trajectory_index": 4, "context_occurrences": 2,
         "learned_vectors": False, "qualification_certificate": False, "training_admission": False,
         "writer_target_selected": False, "writer_witness": {"schema": "test-witness"},
         "block": {"id": block_id, "type": "Neuralese<string>", "body": body,
@@ -234,8 +234,11 @@ def test_top_level_provider_read_accepts_only_matching_complete_root_capture():
         "producer_write": {"call_id": "producer-call/2", "node": "write-node"},
     }
     record = {
-        "id": "root-read", "target": target, "messages": [{"type": "neuralese", "id": block_id}],
+        "id": "root-read", "target": target, "messages": [
+            {"type": "neuralese", "id": block_id}, {"type": "read", "name": "soft-state:" + block_id}],
         "decision": {"source_raw_response_sha256": response_hash},
+        "neuralese_conversion": {"external_context_inputs": [{
+            "block_id": block_id, "target_write_name": "soft-state:" + block_id}]},
         "source_ref": {
             "invocation_id": invocation, "source_row_sha256": "a" * 64,
             "provider_expanded_read_contexts": [receipt],
@@ -246,7 +249,9 @@ def test_top_level_provider_read_accepts_only_matching_complete_root_capture():
     }
     bindings = MODULE.bind_exact_provider_contexts([record], {}, Path.cwd())
     assert bindings[0]["record_id"] == "root-read"
-    assert record["neuralese_conversion"]["external_context_inputs"][0]["parent_invocation_id"] is None
+    bound = record["neuralese_conversion"]["external_context_inputs"][-1]
+    assert bound["parent_invocation_id"] is None
+    assert bound["context_occurrences"] == 2
 
     forged = json.loads(json.dumps(record))
     forged["source_ref"]["host_result_capture"]["capture"]["parent_call_id"] = "unbound-child"

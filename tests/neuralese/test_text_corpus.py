@@ -2,6 +2,17 @@ import hashlib
 import json
 
 from natlang_neuralese.data.text_corpus import gold_text_preview_rows, gold_text_rows
+from natlang_neuralese.data.context_refs import context_ref_count, typed_neuralese_ref_count
+
+
+def test_shared_context_occurrence_counter_matches_typed_marker_and_read_contract():
+    block_id = "nz1_" + "a" * 52
+    value = [{"type": "neuralese", "id": block_id},
+             {"type": "read", "name": "soft-state:" + block_id},
+             {"type": "read", "name": "soft-state:other"}]
+    assert typed_neuralese_ref_count(value, block_id) == 1
+    assert context_ref_count(value, block_id, "soft-state:" + block_id) == 2
+    assert context_ref_count(value, block_id, "soft-state:wrong") == 1
 
 
 class _Backend:

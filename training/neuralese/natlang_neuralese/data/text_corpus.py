@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from .context_refs import context_ref_count, typed_neuralese_ref_count
+
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -631,40 +633,6 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     if not metadata:
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
-    def context_ref_count(value, block_id):
-        expected_name = item.get("target_write_name") or "soft-state:" + block_id
-        if isinstance(value, dict):
-            own = ((value.get("type") == "neuralese" and value.get("id") == block_id) or
-                   (value.get("type") == "read" and value.get("name") == expected_name))
-            count = int(own)
-            for key, child in value.items():
-                if key == "arguments" and isinstance(child, str):
-                    try:
-                        count += context_ref_count(json.loads(child), block_id)
-                    except json.JSONDecodeError:
-                        pass
-                else:
-                    count += context_ref_count(child, block_id)
-            return count
-        if isinstance(value, list):
-            return sum(context_ref_count(child, block_id) for child in value)
-        return 0
-    def typed_neuralese_ref_count(value, block_id):
-        if isinstance(value, dict):
-            own = value.get("type") == "neuralese" and value.get("id") == block_id
-            count = int(own)
-            for key, child in value.items():
-                if key == "arguments" and isinstance(child, str):
-                    try:
-                        count += typed_neuralese_ref_count(json.loads(child), block_id)
-                    except json.JSONDecodeError:
-                        pass
-                else:
-                    count += typed_neuralese_ref_count(child, block_id)
-            return count
-        if isinstance(value, list):
-            return sum(typed_neuralese_ref_count(child, block_id) for child in value)
-        return 0
     attestations = []
     reader_source_row = ((record.get("source_ref") or {}).get("source_row_sha256"))
     reader_invocation = ((record.get("source_ref") or {}).get("invocation_id"))
@@ -998,7 +966,9 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                     or item.get("source_request_sha256") != receipt.get("source_request_sha256")
                     or item.get("source_response_sha256") != receipt.get("source_response_sha256")):
                 raise ValueError("provider-expanded context selected-action binding mismatch")
-        actual_context_occurrences = (context_ref_count(record.get("messages") or [], block_id)
+        expected_read_name = item.get("target_write_name") or "soft-state:" + block_id
+        actual_context_occurrences = (context_ref_count(record.get("messages") or [], block_id,
+                                                        expected_read_name)
                                       if matches else
                                       typed_neuralese_ref_count(record.get("messages") or [], block_id))
         receipt_context_occurrences = receipt.get("context_occurrences")
