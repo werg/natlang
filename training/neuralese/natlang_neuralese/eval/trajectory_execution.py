@@ -16,12 +16,8 @@ from ..serve.chat import call_reply
 from ..train.trajectory_probe import select_held, select_paired_held, source_groups
 from ..train.trajectories import (crisp_messages, render, reads, target_write, handover_notes,
                                   write_site, write_value_type, write_value_path, write_site_arguments)
+from ..common.hashing import sha256_file_hex as sha
 
-def sha(path):
-    h=hashlib.sha256()
-    with Path(path).open('rb') as f:
-        for chunk in iter(lambda:f.read(1<<20),b''):h.update(chunk)
-    return h.hexdigest()
 def returned(row):
     def contains_write(value):
         if isinstance(value,dict):

@@ -14,6 +14,7 @@ from torch.nn import functional as F
 from ..serve import load_engine
 from .trajectories import target_write, handover_notes
 from .trajectory_state import atomic_checkpoint
+from ..common.hashing import sha256_file_hex as sha
 
 
 class OutputEmbeddingProjection(nn.Module):
@@ -25,13 +26,6 @@ class OutputEmbeddingProjection(nn.Module):
         nn.init.zeros_(self.residual.weight); nn.init.zeros_(self.residual.bias)
     def forward(self, states):
         return self.linear(states.float()) + self.residual(F.gelu(self.hidden(states.float())))
-
-
-def sha(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as f:
-        for b in iter(lambda:f.read(1<<20),b''): h.update(b)
-    return h.hexdigest()
 
 
 def source_texts(records):

@@ -15,18 +15,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from ..common.hashing import sha256_file_hex as _sha256_file
 
 
 _HASH_CHUNK_BYTES = 1024 * 1024
-
-
-def _sha256_file(path: Path) -> str:
-    """Hash a file with bounded memory; callers only pass regular files."""
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(_HASH_CHUNK_BYTES), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _stat_identity(path: Path):

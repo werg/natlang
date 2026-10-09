@@ -9,10 +9,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .context_refs import context_ref_count, typed_neuralese_ref_count
-
-
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+from ..common.hashing import sha256_hex as _sha
+from ..common.jsonio import canonical_json_str as _canonical
 
 
 def _sha256_hex(value: Any) -> bool:
@@ -331,10 +329,6 @@ def _authenticated_root_derived_text_writer(record, derived):
         return None
     return {"body": body, "body_sha256": admission["exact_body_sha256"],
             "source": "root-admitted-derived-text-writer-body", "native_runtime_write": False}
-
-
-def _canonical(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def tokenizer_fingerprint(tokenizer) -> str:

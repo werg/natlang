@@ -13,17 +13,10 @@ import torch
 
 from .model import load_maple
 from .nested_train import Member, setup
+from ..common.hashing import sha256_file_hex as _sha256
 
 DEFAULT_MODEL = "/home/werg/data/models/maple-preview-bf16"
 DEFAULT_CACHE = "/home/werg/data/models/maple-preview-converted"
-
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
 
 
 def student_identity(model: str, state: str | None) -> dict:
