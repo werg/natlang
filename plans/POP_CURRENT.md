@@ -18,7 +18,10 @@ recipe `luna-ar-feedback-prefix-4962-best23936-20261009-v1.json` has SHA
 its frozen122-file common package is from `9a16218c`. Startup confirms all four
 optimizer groups and31 schedule observations restored. Cap is4096 additional
 updates (absolute28032), with128-update evaluation/checkpoint cadence. The
-shared causal-prefix supervision and checkpoint tests pass79 focused CPU tests.
+shared causal-prefix supervision and checkpoint tests passed79 focused CPU tests
+at launch. Current main passes146 focused tests covering prefix metrics, shared
+window preparation, self-feedback evaluation, optimizer restoration and recipes;
+these later changes are not hot-patched into the frozen run.
 Input is the complete4962-row root-adopted text union (3258train/1704test), SHA
 `30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576`,
 verified on both machines. It adds82 train documents to the previous4880 input;
@@ -51,6 +54,33 @@ Pop, and removes silent fresh-state fallback from both text and trajectory
 trainers. The active frozen run already restored its unchanged four groups; do
 not patch its implementation in place. DGX owns the remaining objective/schedule
 and outer-loop consolidation (architecture C1–C3).
+
+The owner-approved direction for the next qualification evaluates the channel
+on its own generated history, not the unrelated gold tail after divergence.
+Shared `eval/self_feedback.py` compares ordinary embeddings and actual projected
+payloads on the same continuation, and scores projected/crisp continuations with
+the ordinary model on their respective histories. Its proposed per-stratum gates
+(.99 argmax agreement, .02 KL nats/token, .05 own-output CE gap) were declared
+before measurements. Code and146 tests are landed; GPU exercise and canonical
+qualification integration remain open. No new certificate has been issued.
+Do not duplicate this evaluator for another backbone. Coordinate integration
+with the DGX-owned C1–C3 work through request
+`2026-10-09T19:31:19.113313Z-pop-85c7`.
+
+Pop has about16GB physical RAM. During the active trainer, approximately4.3GB
+was available and2.6GB GPU memory free at the October9 check. Prepare an exact
+checkpoint/restart plan before scheduling a second model evaluator; free GPU
+memory alone does not establish sufficient host memory.
+
+V30 finished4 exact task successes and1 oracle mismatch (RRD-B omitted A).
+The source-repaired FLD/RRD variants and three factual counterfactuals are held
+observations, not automatically admitted training data. V30 closeout v2 pins
+313 logical turns,631 sender starts,5 observed retries and71,483 completion tokens.
+The next five V22 counterfactuals preserve four inherited train groups and claim
+no independent-world credit. Root reviewed their explicit facts and targets and
+authorized generation-only dispatch; inspect its launch receipt for actual
+worker activity. Source SHA is
+`2de1a4a78b22d5136551bc72b03924e494c4d9f845b644c66bbc379667fabc35`.
 
 The V29 FLD/RRD rejections exposed missing source predicates (verified alert /
 approved schedule), not established model mistakes. Hold those attempts and any
