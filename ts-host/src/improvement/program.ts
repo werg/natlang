@@ -24,6 +24,21 @@ export type ImproveProgramOptions = { folder: Folder; contract: ProgramContract;
   improver: ModelDriver; executor: ModelDriver; executorId: string; executorTimeoutMs?:number; excludeModelWaitFromTimeout?:boolean; metadataOnlySkillFiles?:string[]; budget: BudgetLimits; signal?: AbortSignal; trace?: (trace: InvocationTrace) => void; seed?: number; directory?: string; improverSource?: FolderSnapshot; gateway?:UsageGateway; evaluationLevel?:1|2; executeCase?: import('./host.js').SourceCaseExecution; singleStep?:boolean; scoring?:import('./host.js').SourceResultScoring; transformation?:TransformationSpec;
   captureExactRewriteIO?: boolean };
 class InvalidImprovementState extends Error {}
+/**
+ * Exact capture of the arguments and result of every natural-language stage of the authored improver (the editors, the
+ * diagnose and hypothesize stages, the search policies): each `.nl` in a folder of the program. The training exporters
+ * replay these invocations, and a bounded state summary cannot be replayed.
+ */
+function exactStageCapture(authored: Readonly<Record<string, string>>) {
+  const sources = Object.keys(authored).filter(path => path.endsWith('.nl') && path.includes('/'));
+  const names = new Set<string>();
+  for (const path of sources) {
+    const header = /^---\n([\s\S]*?)\n---/.exec(authored[path]!)?.[1] ?? '';
+    const args = /^args:\n((?:[ ]{2}.*\n?)*)/m.exec(header)?.[1] ?? '';
+    for (const match of args.matchAll(/^ {2}([A-Za-z_$][\w$]*)\??:/gm)) names.add(match[1]!);
+  }
+  return { definitionSources: sources, inputArguments: [...names], captureOutput: true, maxBytes: 8_000_000 };
+}
 /** The SDK entry runs an authored reducer; native services supply only source and evidence authority. */
 export async function improveProgram(options: ImproveProgramOptions) {
   if (!Number.isSafeInteger(options.policy.maxExperiments) || options.policy.maxExperiments < 1 || !Number.isSafeInteger(options.policy.maxPopulation) || options.policy.maxPopulation < 2) throw new RangeError('finite experiment and population limits are required');
@@ -62,8 +77,7 @@ export async function improveProgram(options: ImproveProgramOptions) {
     return evaluator.evaluate(folder,{...request,seed});
   };
   const task = createNatlangRuntime({ model: { driver: (request,signal) => gateway.request(options.improver,request,signal??options.signal,'reflection'), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
-    exactHostTraceCapture: options.captureExactRewriteIO ? { definitionSources: ['improveStep/editSource.nl','improveStep/editSourceStructural.nl'],
-      inputArguments: ['request'], captureOutput: true, maxBytes: 8_000_000 } : undefined,
+    exactHostTraceCapture: options.captureExactRewriteIO ? exactStageCapture(authored) : undefined,
     trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
   const stepEvaluator = { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) };
   const plans = planService(journal);

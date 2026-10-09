@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reserveExportDirectory, finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, parentSelectionProof, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
+import { reserveExportDirectory, finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, parentSelectionProof, stateHistorySelectionProof, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
+import { stageFields, stageOf } from '../scripts/self-improvement/improver-stages.mjs';
 
 test('paired quality is a gate only; failures and regressions cannot export SFT', () => {
   const artifact = { disposition: 'evaluated', positive: true,
@@ -67,7 +68,8 @@ test('training task copies only support cases and groups', () => {
     cases: [{ id: 's1', group: 'support-a', split: 'train', expected: 1 },
       { id: 's2', group: 'support-b', split: 'validation', expected: 2 }],
     query: { expected: 'must never copy' }, transfer: { expected: 'must never copy' }, executorExchanges: ['must never copy'] };
-  const task = supportTaskDefinition(def, { 'target.nl': 'selected' });
+  const task = supportTaskDefinition(def, { 'target.nl': 'selected' }, 'improveStep/rewriteProgram.nl');
+  assert.equal(task.semantics.root, 'improveStep/rewriteProgram.nl');
   assert.deepEqual(task.source_groups, ['support-a', 'support-b']);
   assert.deepEqual(task.source_ids, ['s1', 's2']);
   assert.deepEqual(task.semantics.expected_files, { 'target.nl': 'selected' });
@@ -76,13 +78,31 @@ test('training task copies only support cases and groups', () => {
   assert.equal(JSON.stringify(task).includes('transfer'), false);
 });
 
+test('the task names the editor that was recorded, for both generations, and refuses any other definition', () => {
+  const def = { version: 'natlang.improvement-case/1', id: 'episode-1', seed: 0, files: { 'target.nl': 'baseline' }, authoredFiles: {},
+    authoredDigest: 'pinned', sourceGroups: ['a', 'b'], cases: [{ id: 'a1', group: 'a', split: 'train' }, { id: 'b1', group: 'b', split: 'validation' }] };
+  for (const root of ['improveStep/rewriteProgram.nl', 'improveStep/editSource.nl', 'improveStep/editSourceStructural.nl'])
+    assert.equal(supportTaskDefinition(def, { 'target.nl': 'selected' }, root).semantics.root, root);
+  assert.throws(() => supportTaskDefinition(def, {}, 'improveStep/diagnose.nl'), /unexpected editor definition.*improveStep\/editSource\.nl/);
+  assert.throws(() => supportTaskDefinition(def, {}, undefined), /unexpected editor definition/);
+});
+
+test('with no step invocation the run state vouches for the selected edit', () => {
+  const state = { incumbent: 'sel', history: [{ source: 'sel', accepted: true, selected: true }, { source: 'x', accepted: false, selected: false }] };
+  assert.equal(stateHistorySelectionProof(state, 'sel', 'sel'), true);
+  assert.equal(stateHistorySelectionProof(state, 'sel', 'other'), false, 'the edit must produce the selected source');
+  assert.equal(stateHistorySelectionProof({ ...state, incumbent: 'x' }, 'sel', 'sel'), false);
+  assert.equal(stateHistorySelectionProof({ ...state, history: [{ source: 'sel', accepted: true, selected: false }] }, 'sel', 'sel'), false);
+  assert.equal(stateHistorySelectionProof(undefined, 'sel', 'sel'), false);
+});
+
 test('test split cases and mismatched group declarations are rejected', () => {
   const base = { version: 'natlang.improvement-case/1', id: 'episode-1', seed: 0,
     files: {}, authoredFiles: { 'rewrite.nl': 'source' }, authoredDigest: 'pin',
     sourceGroups: ['a', 'b'], cases: [{ id: 'a1', group: 'a', split: 'train' }, { id: 'b1', group: 'b', split: 'validation' }] };
-  assert.throws(() => supportTaskDefinition({ ...base, cases: [...base.cases, { id: 'q', group: 'q', split: 'test' }], sourceGroups: ['a', 'b', 'q'] }, {}), /non-support/);
-  assert.throws(() => supportTaskDefinition({ ...base, sourceGroups: ['a', 'wrong'] }, {}), /do not match/);
-  assert.throws(() => supportTaskDefinition({ ...base, seed: 1 }, {}), /seed/);
+  assert.throws(() => supportTaskDefinition({ ...base, cases: [...base.cases, { id: 'q', group: 'q', split: 'test' }], sourceGroups: ['a', 'b', 'q'] }, {}, 'improveStep/editSource.nl'), /non-support/);
+  assert.throws(() => supportTaskDefinition({ ...base, sourceGroups: ['a', 'wrong'] }, {}, 'improveStep/editSource.nl'), /do not match/);
+  assert.throws(() => supportTaskDefinition({ ...base, seed: 1 }, {}, 'improveStep/editSource.nl'), /seed/);
 });
 
 test('recorded author exchange keeps the exact prompt, tools and raw call target', () => {
@@ -116,25 +136,35 @@ test('effective turn replay preserves normalized tool choice, truncation, and us
   assert.throws(() => recordedRequestTurn({ ...exchange, wireExchanges: undefined }), /malformed effective/);
 });
 
-test('general native materializer dry run admits support-only turns and excludes sealed fixtures', () => {
-  const definition = { version: 'natlang.improvement-case/1', id: 'episode-materializer', seed: 0,
-    files: { 'target.nl': 'baseline' }, authoredFiles: { 'improveStep/rewriteProgram.nl': '---\nkind: directory-reducer\n---\ninstructions' },
-    authoredDigest: 'pinned', sourceGroups: ['support-a', 'support-b'],
-    cases: [{ id: 'support-1', group: 'support-a', split: 'train' }, { id: 'support-2', group: 'support-b', split: 'validation' }] };
-  const task = supportTaskDefinition(definition, { 'target.nl': 'selected support procedure' });
-  const row = { version: 'natlang.teacher_trajectory.native/1', id: 'trajectory-1', task: { kind: 'whole_program', program_ir: {
-      ...task, semantics: { ...task.semantics, inputs: { request: { sourceFiles: [{ path: 'target.nl', text: 'baseline' }] } }, expected: { summary: 'support procedure' } } } },
-    provenance: { collection_role: 'teacher', support_only: true, parent_candidate_verified: true },
-    outcome: { accepted: true, status: 'completed', oracle: 'exact' }, outcome_actions: [],
-    trajectory: [{ invocation_id: 'call-1', context: [{ role: 'system', content: 'system' }, { role: 'user', content: 'Use support evidence only.' }],
-      tools_offered: [], assistant: { content: 'The reusable procedure is ready.', reasoning: 'Summarize the support evidence.', calls: [], raw_calls: [] }, model_response: { raw_calls: [] } }] };
-  const turns = materializeVerifiedTrajectory(row, { materializeNativeRows });
-  assert.equal(turns.length, 1);
-  assert.equal(turns[0].training_admission.approved, true);
-  assert.deepEqual(turns[0].source_groups.filter(group => group.startsWith('support-')).sort(), ['support-a', 'support-b']);
-  const exported = JSON.stringify(turns);
-  for (const withheld of ['sealed query answer', 'sealed transfer answer', 'evaluation_ticket', 'executorExchanges'])
-    assert.equal(exported.includes(withheld), false);
+test('general native materializer dry run admits support-only turns and excludes sealed fixtures, for both editor generations', () => {
+  for (const root of ['improveStep/rewriteProgram.nl', 'improveStep/editSource.nl', 'improveStep/editSourceStructural.nl']) {
+    const definition = { version: 'natlang.improvement-case/1', id: 'episode-materializer', seed: 0,
+      files: { 'target.nl': 'baseline' }, authoredFiles: { [root]: '---\nkind: directory-reducer\n---\ninstructions' },
+      authoredDigest: 'pinned', sourceGroups: ['support-a', 'support-b'],
+      cases: [{ id: 'support-1', group: 'support-a', split: 'train' }, { id: 'support-2', group: 'support-b', split: 'validation' }] };
+    const task = supportTaskDefinition(definition, { 'target.nl': 'selected support procedure' }, root);
+    const row = { version: 'natlang.teacher_trajectory.native/1', id: 'trajectory-1', task: { kind: 'whole_program', program_ir: {
+        ...task, semantics: { ...task.semantics, inputs: { request: { sourceFiles: [{ path: 'target.nl', text: 'baseline' }] } }, expected: { summary: 'support procedure' } } } },
+      provenance: { collection_role: 'teacher', support_only: true, parent_candidate_verified: true, ...stageFields(stageOf(root)) },
+      outcome: { accepted: true, status: 'completed', oracle: 'exact' }, outcome_actions: [],
+      trajectory: [{ invocation_id: 'call-1', context: [{ role: 'system', content: 'system' }, { role: 'user', content: 'Use support evidence only.' }],
+        tools_offered: [], assistant: { content: 'The reusable procedure is ready.', reasoning: 'Summarize the support evidence.', calls: [], raw_calls: [] }, model_response: { raw_calls: [] } }] };
+    const turns = materializeVerifiedTrajectory(row, { materializeNativeRows });
+    assert.equal(turns.length, 1);
+    assert.equal(turns[0].training_admission.approved, true);
+    assert.deepEqual(turns[0].source_groups.filter(group => group.startsWith('support-')).sort(), ['support-a', 'support-b']);
+    // The row names its stage and generation, and declares whole-trajectory supervision.
+    assert.equal(turns[0].improver_stage.definition_source, root);
+    assert.equal(turns[0].improver_stage.generation, root === 'improveStep/rewriteProgram.nl' ? 'rewriteProgram/1' : 'stages/1');
+    assert.equal(turns[0].supervision.scope, 'whole-trajectory');
+    assert.deepEqual(turns[0].supervision.masked, []);
+    assert.equal(turns[0].supervision.classes.length, turns[0].messages.length);
+    assert.equal(turns[0].supervision.classes[0], 'instructions-inputs');
+    const exported = JSON.stringify(turns);
+    for (const withheld of ['sealed query answer', 'sealed transfer answer', 'evaluation_ticket', 'executorExchanges'])
+      assert.equal(exported.includes(withheld), false);
+    assert.throws(() => materializeVerifiedTrajectory({ ...row, provenance: { ...row.provenance, improver_stage: undefined } }, { materializeNativeRows }), /does not name its improver stage/);
+  }
 });
 
 
