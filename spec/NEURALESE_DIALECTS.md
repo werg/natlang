@@ -24,7 +24,14 @@ space, the version is bumped.
   input and output maps between its hidden width and the dialect's space. No other
   model needs adapters.
 - **Default.** `DefaultDialect` is bound by program configuration
-  (`NeuraleseConfig` in [neuralese.d.ts](neuralese.d.ts)).
+  (`NeuraleseConfig` in [neuralese.d.ts](neuralese.d.ts)). In the TypeScript
+  host it is the runtime's reader dialect: `neuralese.dialect` in the runtime
+  options, else the write port's dialect (the two must agree), exposed as
+  `NatlangRuntime.readerDialect()` (null for a text-only runtime). Hosts check it
+  at startup against what their consumers read (a server's
+  `/v1/neuralese/info`), not by a failing request. Arguments, results, `let`
+  variables and `read` check the dialect each block was stored with
+  (`ts-host/src/native/values.ts`).
 - **Measurements.** Measurements tied to a model, such as the comparisons that
   enable law-based rewrites ([NEURALESE_REWRITES.md](NEURALESE_REWRITES.md)), are
   keyed by model and dialect version and re-run when either changes.

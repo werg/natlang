@@ -12,7 +12,8 @@
  * agent's text handling (cut-offs, compaction, transcript) needs no special case for it; transports turn sentinels into
  * parts, and eval compilation turns them into `__neuralese("id")`, which the checker types from context.
  */
-import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from './neuralese-store.js';
+import { constantBlock, type NeuraleseBlockMeta, type NeuralesePort, type NeuraleseStore } from './neuralese-store.js';
+import type { DialectBinding } from './types.js';
 
 export const NEURALESE_OPEN = '<|neuralese|>';
 export const NEURALESE_CLOSE = '<|/neuralese|>';
@@ -124,11 +125,23 @@ export class NeuraleseUnsupportedError extends Error {
   constructor(detail: string) { super(`neuralese-unsupported-backend: ${detail}`); this.name = 'NeuraleseUnsupportedError'; }
 }
 
+/** A soft value met a reader or slot of another dialect. Values are never reused across dialects (NEURALESE_DIALECTS.md). */
+export class NeuraleseDialectError extends Error {
+  readonly code = 'neuralese-dialect-mismatch';
+  constructor(detail: string) { super(`neuralese-dialect-mismatch: ${detail}`); this.name = 'NeuraleseDialectError'; }
+}
+
 /** Runtime configuration for soft values. */
 export type NeuraleseRuntimeOptions = {
   store: NeuraleseStore;
   /** Writes blocks for literals a model returns as marker text (the stand-in port, or a writer in-process). */
   port?: NeuralesePort;
+  /**
+   * The dialect the runtime's model reads and writes, which `DefaultDialect` stands for. Defaults to the port's; set it
+   * when a server writes the blocks (no port in-process). Hosts check it at startup against the server's
+   * `/v1/neuralese/info` (`NatlangRuntime.readerDialect()`). It must equal the port's dialect when both are set.
+   */
+  dialect?: string;
   /**
    * Soft forms of the runtime's prompt pieces (system-prompts.ts), used in place of their text under a Neuralese
    * driver. Their blocks must be in `store` or on the server.
@@ -140,6 +153,25 @@ export type NeuraleseRuntimeOptions = {
    */
   digest?: (site: { name: string; type: string; value: string; instructions: string }) => Promise<NeuraleseRef | undefined>;
 };
+
+/**
+ * The dialect a runtime with these options reads (DECISIONS.md 2026-10-09: dialects are static facts): the declared
+ * dialect, else the port's; null for a text-only runtime.
+ */
+export function readerDialect(options: NeuraleseRuntimeOptions | undefined): string | null {
+  const declared = options?.dialect, port = options?.port?.dialect;
+  if (declared !== undefined && port !== undefined && declared !== port)
+    throw new NeuraleseDialectError(`the runtime declares dialect ${JSON.stringify(declared)}, but its write port writes ` +
+      `${JSON.stringify(port)}; configure a port of the declared dialect, or declare ${JSON.stringify(port)}`);
+  return declared ?? port ?? null;
+}
+
+/** The dialect binding of type checks under these options (TypeEnv.dialects); undefined without Neuralese. */
+export function dialectBinding(options: NeuraleseRuntimeOptions | undefined): DialectBinding | undefined {
+  if (!options) return undefined;
+  const dialect = readerDialect(options), store = options.store;
+  return { dialect, blockDialect: id => store.peek?.(id)?.dialect ?? constantBlock(id)?.meta.dialect };
+}
 
 /** A model driver that carries content parts. Transports mark themselves by setting `neuralese: true`. */
 export const supportsNeuralese = (driver: unknown): boolean =>

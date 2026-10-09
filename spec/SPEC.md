@@ -458,8 +458,9 @@ needs an owner decision. Found while splitting the specification (2026-10-09).
    contents) but the skill states it as a requirement.
 2. **Reserved child names.** The list above names `constructor`, `in` and `with`; the skill's list omits them.
 3. **`neuralese-dialect-mismatch`.** The Neuralese extension says values of different dialects do not unify, with
-   this code. The only place that raises the code is the `.nz` file loader (`native/nz-file.ts`, when a file entry's
-   dialect differs from its declared type). The compiler has no check of that name.
+   this code. The runtime raises it at `.nz` loading and wherever a value is coerced to a `Neuralese` type (the
+   block's stored dialect against the type's, `DefaultDialect` bound to the runtime's reader dialect). The compiler
+   has no check of that name.
 4. **`readout: decision` arity.** The text says a finite result type; the loader (`runtime/loader.ts`) also
    requires at least two values, so a single-literal or `null`-only return is rejected.
 5. **`iteration-unbounded` and `iteration-measure-exhausted`.** Both are carried by `IterationLimitError` (the text

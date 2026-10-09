@@ -12,6 +12,7 @@ import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
 import { decisionScorer } from '../native/decision.js';
+import { readerDialect } from '../native/neuralese.js';
 import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
 
 /** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
@@ -372,7 +373,15 @@ export class NatlangRuntime {
         capture.definitionSources.some(source => typeof source !== 'string' || !source.endsWith('.nl')) ||
         !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
       throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
+    readerDialect(options.neuralese);
   }
+
+  /**
+   * The dialect this runtime's model reads and writes, which `Neuralese<T>` (`DefaultDialect`) names: the configured
+   * `neuralese.dialect`, else the write port's; null for a text-only runtime. A host checks it at startup against what
+   * its consumers read (a Neuralese server's `/v1/neuralese/info` dialects), so a mismatch is found before a request.
+   */
+  readerDialect(): string | null { return readerDialect(this.options.neuralese); }
 
   /** Run `fn` as a natlang task. Natlang functions called anywhere inside it use this runtime. */
   async run<T>(fn: () => T | Promise<T>, options: TaskOptions = {}): Promise<T> {

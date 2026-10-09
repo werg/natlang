@@ -8,7 +8,8 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { TypeEnv, containsRefinement, parseType, type Type } from '../native/types.js';
+import { TypeEnv, containsRefinement, parseType, type DialectBinding, type Type } from '../native/types.js';
+import { dialectBinding, readerDialect } from '../native/neuralese.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
@@ -62,6 +63,8 @@ export type InvokeOptions = {
   folder?: { transaction: FolderTransaction; mode: 'apply' | 'direct' };
   /** Constructors for class-typed parameters and returns. */
   classes?: ReadonlyMap<string, Function>;
+  /** The runtime's dialect binding for checking arguments and results (the kernel sets it from its Neuralese options). */
+  dialects?: DialectBinding;
   manifest?: Record<string, unknown>;
   /** Files of the context's `skills/` data entries, by path (`skills/<name>/SKILL.md`, ...): the call's bound skills. */
   skillFiles?: Readonly<Record<string, string | Uint8Array>>;
@@ -245,6 +248,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   if (definition.readout) node.readout = definition.readout;
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
+  env.dialects = options.dialects;
   if (node.type.kind === 'lambda') node.type.params.fields.forEach((field, index) => {
     if (inputs[index] !== undefined) node.args[field.name] = coerce(inputs[index], field.type, env,
       `${definition.name}/${field.name}`, { preserveRecordExtras: true });
@@ -567,7 +571,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       context_id: definition.contextId ?? FILE_CONTEXT,
       graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),
-        revision: model.revision ?? null } : undefined, dialect: task.runtime.options.neuralese?.port?.dialect ?? null,
+        revision: model.revision ?? null } : undefined, dialect: readerDialect(task.runtime.options.neuralese),
         rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
         seeds: { policy: task.runtime.options.seed ?? null } }),
       ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}),
@@ -580,7 +584,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
-    const node = await prepareDefinitionNode(definition, normalizedInputs, options);
+    const node = await prepareDefinitionNode(definition, normalizedInputs,
+      { ...options, dialects: dialectBinding(task.runtime.options.neuralese) });
     if (handoff) node.handoff = handoff;
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;
@@ -708,10 +713,12 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
   try {
     const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
     await task.drainChildren(callId);
-    const node = definitionNode(definition, inputs, options);
+    const dialects = dialectBinding(task.runtime.options.neuralese);
+    const node = definitionNode(definition, inputs, { ...options, dialects });
     if (node.type.kind !== 'lambda') throw new Error('not a function');
     const env = new TypeEnv(node.types);
     env.classes = options.classes;
+    env.dialects = dialects;
     const structural = coerce(raw as Value, node.type.returns, env, 'return');
     // A compiled case's result must satisfy refinements too; if not, the case fails and the agent takes the call.
     if (containsRefinement(node.type.returns, env)) {

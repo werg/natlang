@@ -16,7 +16,7 @@
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
-import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
+import { isNeuraleseRef, NeuraleseDialectError, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import { emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
@@ -197,6 +197,13 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
   const store = task?.runtime.options.neuralese?.store;
   if (!store || !await store.has(library.bodies.read))
     throw new NeuraleseReadoutCapabilityError(`read body ${library.bodies.read} is unavailable in the task block store`);
+  // The read body reads its library's dialect only. As at coercion (native/values.ts), a block whose dialect the
+  // task's store cannot tell without I/O is not checked here.
+  const written = store.peek?.(value.$neuralese.id)?.dialect;
+  if (library.dialect && written !== undefined && written !== library.dialect)
+    throw new NeuraleseDialectError(`read(value) reads dialect ${JSON.stringify(library.dialect)}, but block ` +
+      `${value.$neuralese.id} was written in ${JSON.stringify(written)}; convert it first with ` +
+      `\`convert(value, ${JSON.stringify(library.dialect)})\`, or read it with a standard library of its dialect`);
   return createNeuraleseLibrary(library).read(value);
 }
 

@@ -1,4 +1,4 @@
-import { checkHost, fitsType, formatType, parseType, TypeEnv } from './types.js';
+import { checkHost, DEFAULT_DIALECT, fitsType, formatType, isAdapterType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
 import { isNeuraleseRef, neuraleseRef, soleSentinel } from './neuralese.js';
@@ -136,6 +136,23 @@ function closestMiss(misses: Reject[], path: string): Diagnostic | undefined {
   return best;
 }
 
+/**
+ * A soft value is readable only in the dialect it was written in, so the dialect its store recorded must be the one
+ * the slot's type names (`DefaultDialect`: the runtime's reader dialect). Not checked: an unbound `DefaultDialect` (a
+ * text-only runtime), and a block whose dialect the store cannot tell without I/O (not held locally); there the
+ * reference's type text is all that is checked.
+ */
+function checkBlockDialect(id: string, wanted: Extract<Type, { kind: 'neuralese' }>, env: TypeEnv, path: string): void {
+  const expected = env.dialect(wanted.dialect);
+  if (expected === DEFAULT_DIALECT) return;
+  const stored = env.dialects?.blockDialect?.(id);
+  if (stored === undefined || stored === expected) return;
+  reject(path, 'neuralese-dialect-mismatch', `${formatType(wanted)} in dialect ${JSON.stringify(expected)}`,
+    `block ${id}, written in dialect ${JSON.stringify(stored)}; a value is read only in the dialect it was written in, so ` +
+    `write it again in ${JSON.stringify(expected)} (\`convert(value, ${JSON.stringify(expected)})\` from natlang:neuralese, or a model of that ` +
+    `dialect), or declare the slot as Neuralese<T, ${JSON.stringify(stored)}>`);
+}
+
 export type CoerceOptions = { /** Keep structurally compatible extra record properties (used for callable inputs only). */
   preserveRecordExtras?: boolean };
 
@@ -153,13 +170,15 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   // argument (return_result's value) arrives as one block marker and takes the slot's type.
   if (wanted.kind === 'neuralese') {
     const sole = typeof raw === 'string' ? soleSentinel(raw) : undefined;
-    if (sole) return neuraleseRef(formatType(wanted), sole) as unknown as Value;
+    if (sole) { checkBlockDialect(sole, wanted, env, path); return neuraleseRef(formatType(wanted), sole) as unknown as Value; }
     if (!isNeuraleseRef(raw)) return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
     let got: Type | undefined;
     try { got = parseType(raw.$neuralese.type); } catch { got = undefined; }
     let fits = false;
     try { fits = !!got && got.kind === 'neuralese' && fitsType(got, wanted, env); } catch { fits = false; }
     if (!fits) return reject(path, 'type-mismatch', formatType(wanted), raw.$neuralese.type);
+    // An adapter block's dialect is its spec (model/tiny_adapters.py), not a dialect a model reads.
+    if (!isAdapterType(got!)) checkBlockDialect(raw.$neuralese.id, wanted, env, path);
     return raw as unknown as Value;
   }
   // A function-typed slot holds a live function (for example a natlang callable), never a pending node.

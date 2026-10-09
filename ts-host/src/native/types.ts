@@ -27,11 +27,18 @@ export type Type =
 /** The dialect a `Neuralese<T>` without a second argument names; a program's configuration binds it. */
 export const DEFAULT_DIALECT = 'DefaultDialect';
 
+/**
+ * How a runtime's type checks see dialects (DECISIONS.md 2026-10-09, "dialects are static facts"). `dialect` is the
+ * runtime's reader dialect, which `DefaultDialect` stands for; null for a text-only runtime, where `DefaultDialect`
+ * stays unbound. `blockDialect` is the dialect a stored block was written in, when the store knows it without I/O.
+ */
+export type DialectBinding = { readonly dialect: string | null; blockDialect?(id: string): string | undefined };
+
 /** `Adapter`: a weight adapter value (a stored coefficient block whose dialect is its spec; model/tiny_adapters.py).
  * It is a soft value of a marker element, so it fits `Adapter` and `Neuralese<unknown>` slots and no other. */
 export const ADAPTER_TYPE: Type = { kind: 'neuralese', dialect: DEFAULT_DIALECT,
   element: { kind: 'record', fields: [{ name: '$adapter', type: { kind: 'lit', value: 'adapter' }, optional: false }] } };
-const isAdapterType = (type: Type) => type.kind === 'neuralese' && type.dialect === DEFAULT_DIALECT &&
+export const isAdapterType = (type: Type) => type.kind === 'neuralese' && type.dialect === DEFAULT_DIALECT &&
   type.element.kind === 'record' && type.element.fields.length === 1 && type.element.fields[0]!.name === '$adapter';
 
 /** Runtime check for a live host value. */
@@ -322,8 +329,11 @@ function children(type: Type): Type[] {
 export class TypeEnv {
   /** Constructors used to check `class` host contracts; inherited by child environments. */
   classes?: ReadonlyMap<string, Function>;
+  /** The runtime's dialect binding; inherited by child environments. Without one, `DefaultDialect` is unbound. */
+  dialects?: DialectBinding;
   constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) {
     this.classes = parent?.classes;
+    this.dialects = parent?.dialects;
     for (const name of Object.keys(names)) this.checkRecursiveFunction(name);
   }
   /**
@@ -350,6 +360,8 @@ export class TypeEnv {
   }
   child(names: Record<string, Type>): TypeEnv { return Object.keys(names).length ? new TypeEnv({ ...names }, this) : this; }
   lookup(name: string): Type | undefined { return this.names[name] ?? this.parent?.lookup(name); }
+  /** The dialect a type's dialect name means here: `DefaultDialect` is the bound reader dialect, when there is one. */
+  dialect(name: string): string { return name === DEFAULT_DIALECT ? this.dialects?.dialect ?? name : name; }
   resolve(type: Type): Type {
     const seen = new Set<string>();
     for (;;) {
@@ -418,7 +430,7 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
     return b.contract.kind === 'any' || JSON.stringify(a.contract) === JSON.stringify(b.contract);
   if (b.kind === 'host' && b.contract.kind === 'any') return true;
   if (a.kind === 'neuralese' && b.kind === 'neuralese')
-    return a.dialect === b.dialect && fitsType(a.element, b.element, env, seen);
+    return env.dialect(a.dialect) === env.dialect(b.dialect) && fitsType(a.element, b.element, env, seen);
   if (a.kind === 'lambda' && b.kind === 'lambda')
     return fitsType(a.returns, b.returns, env, seen) && fitsType(b.params, a.params, env, seen);
   return false;

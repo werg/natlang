@@ -29,7 +29,18 @@ declarations in [neuralese.d.ts](../neuralese.d.ts).
 - A `Neuralese<F>` with a function type `F` is callable with `F`'s parameters
   and result.
 - Values of different dialects do not unify (`neuralese-dialect-mismatch`);
-  `convert` moves between them. `DefaultDialect` is bound by configuration.
+  `convert` moves between them. `DefaultDialect` is bound by configuration: it
+  is the runtime's reader dialect (`neuralese.dialect`, else the write port's;
+  `NatlangRuntime.readerDialect()`), so `Neuralese<T>` and
+  `Neuralese<T, "nd:x@1">` are one type in a runtime that reads `nd:x@1`. A
+  text-only runtime leaves it unbound.
+- A block's stored dialect is checked wherever a value is coerced to a
+  `Neuralese` type (call arguments, results, `let` variables, `read`): a block
+  written in another dialect is rejected with `neuralese-dialect-mismatch`,
+  naming both dialects. A block whose dialect the runtime's store cannot tell
+  without I/O (one it does not hold) is checked by its reference type only.
+  Text at a `Neuralese<string, D>` slot is written only when `D` is the port's
+  dialect.
   Dialects are version tags ([NEURALESE_DIALECTS.md](../NEURALESE_DIALECTS.md)).
 
 **Literal.** At the model-token level a soft value is written
