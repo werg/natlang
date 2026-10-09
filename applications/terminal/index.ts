@@ -2,21 +2,27 @@
  * Semantic terminal: a trusted recipe terminal. Natlang chooses one exact recipe for a request and
  * explains actual completions; `RecipeTerminal` owns the job promises, correlates completion IDs,
  * and rejects forged completions. Recipes run argv without a shell. A request that arrives while a
- * job is active is declined for resubmission, and a cancellation never claims a rollback.
+ * job is active is declined for resubmission, and a completion carries the fact that cancellation was requested
+ * (`cancel_requested`) beside the actual result. The recipe catalog, its limits and the wording of the session's
+ * messages are data files (recipes.json, messages.json).
  */
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import type { FolderHandle } from '@natlang/node';
-import interpret from './interpret.nl';
-import explain from './explain.nl';
-import type { Recipe, TerminalEvent } from './types.js';
+import { untrusted, type FolderHandle } from '@natlang/node';
+import readNote from './interpret/readNote.nl';
+import chooseRecipe from './interpret/chooseRecipe.nl';
+import explain from './explain/explain.nl';
+import { loadMessages, loadRecipeData, renderMessage, type CommandRecipe, type MessageTable, type RecipeData, type RecipeLimits } from './data.js';
+import type { Recipe, ResultStatus, SessionStatus, TerminalEvent } from './types.js';
 
 export type * from './types.js';
-export type RecipeResult = { status: 'ok' | 'failed' | 'unknown', detail: string };
+export { loadMessages, loadRecipeData, parseRecipeData, renderMessage, type CommandRecipe, type MessageTable, type RecipeData, type RecipeLimits } from './data.js';
+export type RecipeResult = { status: ResultStatus, detail: string };
 export type RunnableRecipe = Recipe & { run(context: { signal: AbortSignal, requestId: string, jobId: string }): Promise<RecipeResult> };
-export type Outcome = { request_id: string, job_id: string, status: string, detail: string };
-export type Session = { revision: number, active_request: string, active_job: string, status: string, messages: string[], history: Outcome[] };
+export type Outcome = { request_id: string, job_id: string, status: string, detail: string, cancel_requested?: boolean };
+/** active_job is empty exactly when status is not running or cancel-requested. */
+export type Session = { revision: number, active_request: string, active_job: string, status: SessionStatus, messages: string[], history: Outcome[] };
 type Job = { id: string, requestId: string, recipeId: string, cancelRequested: boolean, result: RecipeResult | null,
   promise: Promise<unknown> | null, controller: AbortController, completion?: TerminalEvent };
 
@@ -37,7 +43,7 @@ export class RecipeTerminal {
 
   catalog(): Recipe[] { return [...this.recipes.values()].map(({ id, description }) => ({ id, description })); }
 
-  start(requestId: string, recipeId: string): { id: string, request_id: string, status: string, detail: string } {
+  start(requestId: string, recipeId: string): { id: string, request_id: string, status: 'running', detail: string } {
     if (!requestId || this.requests.has(requestId)) throw new Error(`duplicate request: ${requestId}`);
     const recipe = this.recipes.get(recipeId);
     if (!recipe) throw new Error(`unknown recipe: ${recipeId}`);
@@ -56,7 +62,7 @@ export class RecipeTerminal {
     return { id, request_id: requestId, status: 'running', detail: '' };
   }
 
-  cancel(jobId: string): { id: string, request_id: string, status: string, detail: string } {
+  cancel(jobId: string): { id: string, request_id: string, status: 'cancel-requested', detail: string } {
     const job = this.jobs.get(jobId);
     if (!job) throw new Error(`unknown job: ${jobId}`);
     job.cancelRequested = true;
@@ -74,11 +80,10 @@ export class RecipeTerminal {
 
   private complete(job: Job): RecipeResult {
     const result = job.result!;
-    const detail = job.cancelRequested ? `Cancellation was requested. Actual result: ${result.detail}` : result.detail;
     this.events.push({ operation: 'terminal.complete', request_id: job.requestId, job_id: job.id, status: result.status,
       cancel_requested: job.cancelRequested });
     job.completion = { kind: 'complete', id: `completion-${job.id}`, request_id: job.requestId, job_id: job.id, text: '',
-      status: result.status, detail };
+      status: result.status, detail: result.detail, cancel_requested: job.cancelRequested };
     for (const listener of this.listeners) {
       try { listener({ ...job.completion }); }
       catch (error) { this.events.push({ operation: 'terminal.listener-failed', job_id: job.id,
@@ -101,47 +106,56 @@ export class RecipeTerminal {
   confirm(event: TerminalEvent): boolean {
     const job = this.jobs.get(event.job_id);
     return !!job?.completion && job.completion.request_id === event.request_id &&
-      job.completion.status === event.status && job.completion.detail === event.detail;
+      job.completion.status === event.status && job.completion.detail === event.detail &&
+      job.completion.cancel_requested === event.cancel_requested;
   }
 
   drainEvents(): Record<string, unknown>[] { return this.events.splice(0); }
 }
 
-/** Reduce one user or job event into the session. */
-export async function step(terminal: RecipeTerminal, session: Session, item: TerminalEvent, files?: FolderHandle): Promise<Session> {
-  const say = (message: string, changes: Partial<Session> = {}): Session => ({ ...session, ...changes, messages: [...session.messages, message] });
+/**
+ * Reduce one user or job event into the session. The wording of the session's own messages comes from `messages`
+ * (messages.json); the explanation of a completion is the only text a model writes for the user.
+ */
+export async function step(terminal: RecipeTerminal, session: Session, item: TerminalEvent, files?: FolderHandle,
+    messages: MessageTable = loadMessages()): Promise<Session> {
+  const say = (name: string, values: Record<string, string | number> = {}, changes: Partial<Session> = {}): Session =>
+    ({ ...session, ...changes, messages: [...session.messages, renderMessage(messages, name, values)] });
   switch (item.kind) {
     case 'request': {
       if (!item.id || item.id === session.active_request || session.history.some(row => row.request_id === item.id))
-        return say('Duplicate or empty request ID.');
+        return say('duplicate-request');
       if (session.status === 'running' || session.status === 'cancel-requested')
-        return say(`Request ${item.id} was not accepted while ${session.active_request} is active; resubmit it after completion.`);
+        return say('request-busy', { request: item.id, active: session.active_request });
       const catalog = terminal.catalog();
-      const recipe = await interpret(item.text, catalog, files);
+      const note = files ? await readNote(item.text, files) : untrusted('', 'workspace file');
+      const recipe = await chooseRecipe(item.text, catalog, note);
       if (!catalog.some(row => row.id === recipe))
-        return say(`No supported recipe for: ${item.text}`, { revision: session.revision + 1, status: 'unsupported' });
+        return say('no-recipe', { text: item.text }, { revision: session.revision + 1, status: 'unsupported' });
       const job = terminal.start(item.id, recipe);
-      return say(`Started ${recipe} for ${item.id}.`, { revision: session.revision + 1, active_request: item.id, active_job: job.id, status: job.status });
+      return say('started', { recipe, request: item.id }, { revision: session.revision + 1, active_request: item.id, active_job: job.id, status: job.status });
     }
     case 'complete': {
-      if (!terminal.confirm(item)) return say(`Unverified completion ignored: ${item.job_id}`);
-      const message = await explain(item);
-      const history = [...session.history, { request_id: item.request_id, job_id: item.job_id, status: item.status, detail: item.detail }];
+      if (!terminal.confirm(item) || item.status === '') return say('unverified-completion', { job: item.job_id });
+      const explanation = await explain({ request_id: item.request_id, job_id: item.job_id, status: item.status,
+        detail: untrusted(item.detail, 'command output'), cancel_requested: item.cancel_requested });
+      const history = [...session.history, { request_id: item.request_id, job_id: item.job_id, status: item.status, detail: item.detail,
+        cancel_requested: item.cancel_requested }];
       if (item.request_id !== session.active_request || item.job_id !== session.active_job)
-        return say(`Stale result ${item.job_id}: ${message}`, { history });
-      return say(message, { history, revision: session.revision + 1, active_request: '', active_job: '', status: item.status });
+        return say('stale-result', { job: item.job_id, explanation }, { history });
+      return { ...session, messages: [...session.messages, explanation], history, revision: session.revision + 1,
+        active_request: '', active_job: '', status: item.status };
     }
     case 'cancel':
-      if (!session.active_job || item.request_id !== session.active_request) return say(`No active job for ${item.request_id}.`);
+      if (!session.active_job || item.request_id !== session.active_request) return say('no-active-job', { request: item.request_id });
       terminal.cancel(session.active_job);
-      return say(`Cancellation requested for ${session.active_job}; awaiting actual outcome.`,
-        { revision: session.revision + 1, status: 'cancel-requested' });
+      return say('cancel-requested', { job: session.active_job }, { revision: session.revision + 1, status: 'cancel-requested' });
     case 'recover':
       if (session.status !== 'running' && session.status !== 'cancel-requested') return session;
-      return say(`The prior host stopped while ${session.active_job} was active. Its outcome is unknown; inspect external effects before retrying.`,
+      return say('recovered', { job: session.active_job },
         { revision: session.revision + 1, active_request: '', active_job: '', status: 'unknown' });
     default:
-      return say(`Ignored unknown event kind: ${(item as TerminalEvent).kind}`);
+      return say('unknown-event', { kind: String((item as TerminalEvent).kind) });
   }
 }
 
@@ -150,19 +164,15 @@ function inside(root: string, path: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
-export type CommandRecipe = { id: string, description: string, argv: string[], cwd?: string, env?: Record<string, string>, timeoutMs?: number };
-
 /** Exact argv recipes for a trusted local workspace. No shell text is evaluated. */
 export class CommandRecipeLibrary {
   private readonly root: string;
-  private readonly outputBytes: number;
-  private readonly timeoutMs: number;
+  private readonly limits: RecipeLimits;
   private readonly definitions: (CommandRecipe & { cwd: string })[];
 
-  constructor(root: string, definitions: CommandRecipe[], { outputBytes = 64 * 1024, timeoutMs = 10 * 60_000 } = {}) {
+  constructor(root: string, definitions: CommandRecipe[], limits: Partial<RecipeLimits> = {}) {
     this.root = realpathSync(root);
-    this.outputBytes = outputBytes;
-    this.timeoutMs = timeoutMs;
+    this.limits = { ...loadRecipeData().limits, ...limits };
     this.definitions = definitions.map(definition => {
       if (!definition.id || !definition.description || !Array.isArray(definition.argv) || !definition.argv.length ||
           definition.argv.some(value => typeof value !== 'string'))
@@ -186,16 +196,16 @@ export class CommandRecipeLibrary {
       let stdout = Buffer.alloc(0), stderr = Buffer.alloc(0), settled = false, timedOut = false, cancelled = false;
       const capture = (field: 'stdout' | 'stderr', chunk: Buffer) => {
         const value = Buffer.concat([field === 'stdout' ? stdout : stderr, chunk]);
-        const bounded = value.subarray(Math.max(0, value.length - this.outputBytes));
+        const bounded = value.subarray(Math.max(0, value.length - this.limits.outputBytes));
         if (field === 'stdout') stdout = bounded; else stderr = bounded;
       };
       child.stdout.on('data', chunk => capture('stdout', chunk));
       child.stderr.on('data', chunk => capture('stderr', chunk));
       const abort = () => {
         cancelled = true; child.kill('SIGTERM');
-        setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 5000).unref();
+        setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, this.limits.killDelayMs).unref();
       };
-      const duration = Math.max(1, Math.min(definition.timeoutMs ?? this.timeoutMs, 24 * 60 * 60_000));
+      const duration = Math.max(1, Math.min(definition.timeoutMs ?? this.limits.timeoutMs, this.limits.maxTimeoutMs));
       const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, duration);
       timer.unref();
       const finish = (status: RecipeResult['status'], detail: string) => {
@@ -217,14 +227,7 @@ export class CommandRecipeLibrary {
   }
 }
 
-export function natlangWorkspaceRecipes(root: string): CommandRecipeLibrary {
-  return new CommandRecipeLibrary(root, [
-    { id: 'repository-status', description: 'inspect concise Git working tree status', argv: ['git', 'status', '--short'] },
-    { id: 'repository-diff', description: 'summarize current uncommitted Git changes', argv: ['git', 'diff', '--stat'] },
-    { id: 'list-files', description: 'list workspace files tracked or visible to ripgrep', argv: ['rg', '--files'] },
-    { id: 'test-typescript-host', description: 'build and test the natlang TypeScript host',
-      argv: ['npm', '--prefix', 'ts-host', 'test'], timeoutMs: 60 * 60_000 },
-    { id: 'build-typescript-host', description: 'build the natlang TypeScript host and browser bundle',
-      argv: ['npm', '--prefix', 'ts-host', 'run', 'build'], timeoutMs: 60 * 60_000 },
-  ]);
+/** The workspace's recipes: the catalog and limits of recipes.json (or the data given). */
+export function natlangWorkspaceRecipes(root: string, data: RecipeData = loadRecipeData()): CommandRecipeLibrary {
+  return new CommandRecipeLibrary(root, data.recipes, data.limits);
 }

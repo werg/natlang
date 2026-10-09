@@ -1,0 +1,12 @@
+{
+  "duplicate-request": "Duplicate or empty request ID.",
+  "request-busy": "Request {request} was not accepted while {active} is active; resubmit it after completion.",
+  "no-recipe": "No supported recipe for: {text}",
+  "started": "Started {recipe} for {request}.",
+  "unverified-completion": "Unverified completion ignored: {job}",
+  "stale-result": "Stale result {job}: {explanation}",
+  "no-active-job": "No active job for {request}.",
+  "cancel-requested": "Cancellation requested for {job}; awaiting actual outcome.",
+  "recovered": "The prior host stopped while {job} was active. Its outcome is unknown; inspect external effects before retrying.",
+  "unknown-event": "Ignored unknown event kind: {kind}"
+}
