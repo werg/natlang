@@ -340,12 +340,13 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
           ...parts.filter(part => part.type !== 'text')] };
       },
     }), hook(GenerationTask, {
-      // The intent of each tool call, while the agent's model reads Neuralese: the view of the call's output is written
-      // for it (host/views.ts viewIntent, the harness bench's records.py intent()).
+      // The intent of each tool call, whatever the agent's model reads: a cheap text document, the instructions of the
+      // view of the call's output (host/views.ts viewIntent, the harness bench's records.py intent()). Recorded for a
+      // text reader too, so a conversation switched to a Neuralese reader can force the views of earlier calls;
+      // forcing itself happens only for a Neuralese reader.
       async afterResponse(message, api, context) {
         const calls = message.content.filter((part): part is ToolCall => part.type === 'toolCall');
-        const model = calls.length ? api.models.getModel(message.provider, message.model) : undefined;
-        if (!model || modelReader(model).kind !== 'neuralese') return;
+        if (!calls.length) return;
         const conversation = await options.harness().conversation(api.conversationId, context);
         await conversation?.commit(async tx => {
           for (const call of calls) await tx.doc(ViewIntents, api.conversationId, call.id, { intent: viewIntent(message as AssistantMessage, call) });

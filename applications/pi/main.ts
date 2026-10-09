@@ -16,6 +16,7 @@
  *                                           /v1/neuralese/info, and Neuralese parts then reach it as blocks
  *   --cwd DIR                               the agent's working directory (default: the workspace)
  *   --session FILE                          the SQLite session (default: a new one under the state directory)
+ *                                           (with a Neuralese reader, its block archive is FILE.blocks/)
  *   Pluggable hot paths, each crisp|nl|shadow (default crisp; nl runs the natural-language functions, shadow runs
  *   both, uses the natural-language result and records whether they agree; natural-language is accepted for nl):
  *   --context MODE                          context building
@@ -44,7 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createModels, createProvider, type AssistantMessage, type Models } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
-import { NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
+import { FileNeuraleseStore, NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
 import { declareReader, natlangApi, type AgentReader, type ModelDriver } from './host/natlang-provider.ts';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
 import type { EntryId } from './vendor/durable/src/types.ts';
@@ -134,15 +135,30 @@ function implementations(args: string[]): Implementations {
 const textOf = (message: AssistantMessage | undefined) =>
   (message?.content ?? []).flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim();
 
-/** The launcher's runtime, with the executor's context budget when --executor-context sets it. */
-function executor(target: TargetContext, args: string[]): NatlangRuntime {
+/**
+ * The launcher's runtime, with the executor's context budget when --executor-context sets it, and `store` as its
+ * Neuralese store when given (its other Neuralese options kept).
+ */
+function executor(target: TargetContext, args: string[], store?: NeuraleseStore): NatlangRuntime {
   const budget = option(args, '--executor-context');
-  if (budget === undefined) return target.runtime;
+  if (budget === undefined && !store) return target.runtime;
+  const options = { ...target.runtime.options,
+    ...(store ? { neuralese: { ...target.runtime.options.neuralese, store } } : {}) };
+  if (budget === undefined) return new NatlangRuntime(options);
   const configured = target.runtime.options.model;
   const base = typeof configured === 'object' && configured ? configured : {};
   const driver = typeof configured === 'function' ? configured : (configured as { driver?: unknown } | undefined)?.driver ?? target.model;
-  return new NatlangRuntime({ ...target.runtime.options,
-    model: { ...base, driver, contextTokens: Number(budget) } as never });
+  return new NatlangRuntime({ ...options, model: { ...base, driver, contextTokens: Number(budget) } as never });
+}
+
+/**
+ * The block archive of a session whose agent reads Neuralese: a content-addressed directory beside the SQLite file
+ * (`SESSION.blocks/`), so the blocks its conversations were sent (stored views, host/views.ts) outlive a harness
+ * restart as the session does, and are restored to a server that lost them. Undefined for a text reader.
+ */
+export async function sessionBlockStore(args: string[], sessionPath: string): Promise<NeuraleseStore | undefined> {
+  const neuralese = option(args, '--agent-transport') === 'natlang' && (option(args, '--agent-reader') ?? 'text') !== 'text';
+  return neuralese ? FileNeuraleseStore.open(`${sessionPath}.blocks`) : undefined;
 }
 
 export type RunResult = { status: string; answer: string; reason?: string; ms: number };
@@ -150,12 +166,12 @@ export type RunResult = { status: string; answer: string; reason?: string; ms: n
 /** Run one task to its answer on a session at `sessionPath`. */
 export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal): Promise<RunResult> {
   const started = Date.now();
+  const natlang = executor(target, args, await sessionBlockStore(args, sessionPath));
   const { models, ref } = await agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint,
-    target.runtime.options.neuralese?.store);
+    natlang.options.neuralese?.store);
   const quiet = args.includes('--quiet');
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);
-  const natlang = executor(target, args);
   mkdirSync(join(sessionPath, '..'), { recursive: true });
   const registry = codingRegistry(natlang, { cwd });
   let opened: Harness | undefined;

@@ -80,7 +80,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
   // One phase state per attempt: a failure the ai service sees ends what durable may still commit.
   const phaseState: PhaseState = {};
   const ai = aiService(runtime, context, task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined,
-    phaseState, host.natlang.options.neuralese?.store, { collect: task.kind === 'pi.generation' });
+    phaseState, host.natlang.options.neuralese?.store, { collect: task.kind === 'pi.generation', agent: agent.model, owner: facts.sessionId });
   // One estimate of a message's tokens for the whole port: pi-durable's crisp estimate goes through the ai service's.
   const services: Record<string, object> = { durable: durableService(runtime, context, host, agent, phaseState, ai.estimateTokens), ai };
   const serviceDeclarations: Record<string, string> = { durable: DURABLE_DECLARATION, ai: AI_DECLARATION };

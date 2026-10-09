@@ -133,14 +133,19 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
 - **Stored calls, forced per reader (built, `host/views.ts`).** A long output is not converted when it arrives, since
   its readers are not known then. It is stored as a call of `view` with two inputs: the whole output (the `recall`
   store, `pi.companion.output`) and the agent's intent when it made the call (`pi.view.intent`, recorded after the
-  response by the `afterResponse` hook while the reader is Neuralese; the same text as the harness bench's
-  `intent()`). The result message keeps the text form plus the reference (`{ type: "text", text, stored: { function:
+  response by the `afterResponse` hook for every reader, a cheap text document, so a conversation switched to a
+  Neuralese reader can force its earlier calls; the same text as the harness bench's `intent()`). The result message keeps the text form plus the reference (`{ type: "text", text, stored: { function:
   "view", call } }`); pi messages stay plain JSON and reader-independent. Each consumer forces the call at its own
   representation:
   - the agent's requests (`ai.turn`, host/ai.ts): a Neuralese reader is sent the block of `view(output, intent)` in its
     dialect, written by its own server (`POST /v1/neuralese/view`), followed by the note `// view of the output;
     recall("ID") returns all of it` (the bench's `recall_note`). A text reader is sent the text form. The block is
     started by the `afterTool` hook as soon as the result exists, and the request joins or finds it;
+  - the token estimate (`ai.estimateTokens`, both the crisp and the natural-language estimate) is per reader: for a
+    Neuralese reader a stored call counts as its block's length plus the recall note. `ai.blockMeta`, the async
+    preparation harness/context.ts and harness/estimate.ts run before estimating, forces each call the reader has not
+    forced yet and fills a synchronous index (call → length per representation) from the durable memo; a call that
+    could not be forced fails the estimate (`neuralese-unknown-view-length`, naming the call), never a guess;
   - compaction, the companion's transcript and `recall` read the text form or the raw output and force nothing.
 
   Forcing is memoized durably per (call, dialect) in the conversation's `pi.view.forced` documents (block ID, length,
@@ -148,7 +153,9 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
   pinned on the server under the conversation's owner (its provider session ID, also sent with each request), and a
   generation's request collects the owner's blocks to the ones it references when the context's head moved (the
   first request, after a compaction or a reset), unpinning views that left the context. A block the server lost is
-  restored from the archive. A view that cannot be written fails the turn, never falling back to text:
+  restored from the archive; on Node, pi's archive for a Neuralese reader is a `FileNeuraleseStore` (ts-host
+  neuralese/node-block-store.ts) beside the session's SQLite file (`SESSION.blocks/`, one verified safetensors file
+  per block), so a harness restart and a server restart together lose nothing. A view that cannot be written fails the turn, never falling back to text:
   `neuralese-view-unavailable` (server unreachable, 429, 5xx) is retried by pi's retry policy,
   `neuralese-view-failed` (no intent recorded, wrong dialect, a 4xx) is not.
 - `recall` returns exact text when the agent asks for it. For a Neuralese reader the block is the default; it never falls back to text when a block cannot be written.

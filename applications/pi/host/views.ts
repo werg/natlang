@@ -43,7 +43,11 @@ export const ToolOutputs = defineDocFamily<{ tool: string; text: string }, { too
   initial: seed => seed,
 });
 
-/** The agent's intent for a tool call, by call ID (records.py `intent()`): view's `instructions` input. */
+/**
+ * The agent's intent for a tool call, by call ID (records.py `intent()`): view's `instructions` input. Recorded after
+ * every response, whatever the agent model reads (a text document, cheap), so a conversation that switches to a
+ * Neuralese reader can force the views of earlier calls.
+ */
 export const ViewIntents = defineDocFamily<{ intent: string }, { intent: string }>({
   kind: 'pi.view.intent', version: 1, scope: 'conversation', history: 'latest', fork: 'current', family: true,
   initial: seed => seed,
@@ -159,8 +163,8 @@ async function writeView(docs: ViewDocs, call: string, dialect: string, reader: 
   if (!output) throw fail(false, 'the conversation has no stored output for the call (pi.companion.output)');
   const intent = await docs.read.snapshot(ViewIntents, docs.conversationId, call, context);
   if (!intent) throw fail(false, 'the conversation recorded no intent for the call (pi.view.intent). The companion records ' +
-    'it after each response while the agent model\'s reader is Neuralese, so the call was made while the model read text. ' +
-    'Continue with a text reader, or start a new conversation with the Neuralese reader.');
+    'it after each response that makes tool calls, so the call was made before the companion recorded intents (or ' +
+    'without the companion). Continue with a text reader, or start a new conversation with the Neuralese reader.');
   const store = reader.store;
   if (!store) throw fail(false, 'the natlang runtime has no Neuralese store to archive the block in (its neuralese.store option)');
   let forced: ForcedView;
@@ -197,17 +201,28 @@ async function writeView(docs: ViewDocs, call: string, dialect: string, reader: 
   return winner;
 }
 
+/** The stored view calls `messages` reference, each once, in order. */
+export function storedCalls(messages: readonly { content?: unknown }[]): string[] {
+  const calls = new Set<string>();
+  for (const message of messages) if (Array.isArray(message.content))
+    for (const part of message.content) { const ref = storedCall(part); if (ref) calls.add(ref.call); }
+  return [...calls];
+}
+
 /**
  * `messages` as `reader` reads them: each text part that is a stored view call becomes the call's block (forced once per
  * call and dialect) followed by the recall note. Messages without such parts are returned unchanged.
  */
 export async function forceStoredViews<M extends { content?: unknown }>(messages: readonly M[], docs: ViewDocs, reader: ViewReader,
     context: Context): Promise<M[]> {
-  const calls = new Set<string>();
-  for (const message of messages) if (Array.isArray(message.content))
-    for (const part of message.content) { const ref = storedCall(part); if (ref) calls.add(ref.call); }
-  if (!calls.size) return [...messages];
-  const forced = new Map(await Promise.all([...calls].map(async call => [call, await forceView(docs, call, reader, context)] as const)));
+  const calls = storedCalls(messages);
+  if (!calls.length) return [...messages];
+  // Every forcing settles before the request fails: the failure reported is the first call's, and none stays in flight
+  // for a retry to join.
+  const settled = await Promise.allSettled(calls.map(call => forceView(docs, call, reader, context)));
+  const failed = settled.find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
+  const forced = new Map(calls.map((call, index) => [call, (settled[index] as PromiseFulfilledResult<ForcedView>).value]));
   return messages.map(message => !Array.isArray(message.content) || !message.content.some(part => storedCall(part)) ? message :
     { ...message, content: (message.content as unknown[]).flatMap(part => {
       const ref = storedCall(part);
