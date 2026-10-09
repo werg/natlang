@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn.utils import parametrize
 
 from .model import DenseExperts, load_maple
-from .ternary import ternarize_ste
+from .ternary import QUANT_MIX, ramped_ternarize_ste, ternarize_ste
 
 ATTENTION = ("q_proj", "k_proj", "v_proj", "o_proj")
 
@@ -33,7 +33,7 @@ class TernarySTE(nn.Module):
     """Parametrization: the latent's ternary codes times its row scale, straight-through to the latent."""
 
     def forward(self, latent: torch.Tensor) -> torch.Tensor:
-        return ternarize_ste(latent)
+        return ramped_ternarize_ste(latent)
 
 
 def install_full_latent_qat(model) -> list[tuple[str, nn.Parameter]]:
@@ -142,8 +142,28 @@ def run_train(a):
         step = state["step"]
     log = (out / "train.jsonl").open("a")
 
+    def schedule(at):
+        """Ternarization mix and BF16-teacher KL weight at update ``at``: the mix ramps to 1 (deployed), the KL to
+        the original phases out (owner: no anchor to the original model beyond the conversion)."""
+        mix = min(1.0, at / a.ramp_steps) if a.ramp_steps else 1.0
+        kl = a.kl_weight * max(0.0, 1.0 - at / a.kl_decay_steps) if a.kl_decay_steps else a.kl_weight
+        return mix, kl
+
     @torch.no_grad()
     def evaluate():
+        """Held CE/KL of the deployed model (mix 1), and of the current mix while ramping."""
+        current = QUANT_MIX["value"]
+        report = {}
+        for tag, mix in (("", 1.0),) + ((("_current_mix", current),) if current < 1.0 else ()):
+            QUANT_MIX["value"] = mix
+            report.update({k + tag: v for k, v in held_scores().items()})
+        QUANT_MIX["value"] = current
+        report["mix"] = current
+        report["teacher_ce"] = sum(held["teacher_ce"]) / len(held["teacher_ce"])
+        return report
+
+    @torch.no_grad()
+    def held_scores():
         model.eval()
         ce, kl = [], []
         for i in range(held["ids"].shape[0]):
@@ -152,9 +172,9 @@ def run_train(a):
             ce.append(float(F.cross_entropy(logits.float(), ids[0, 1:])))
             kl.append(float(topk_kl(logits, held["top_ids"][i].cuda(), held["top_logp"][i].cuda())))
         model.train()
-        return {"held_ce": sum(ce) / len(ce), "held_kl": sum(kl) / len(kl),
-                "teacher_ce": sum(held["teacher_ce"]) / len(held["teacher_ce"])}
+        return {"held_ce": sum(ce) / len(ce), "held_kl": sum(kl) / len(kl)}
 
+    QUANT_MIX["value"] = schedule(step)[0]
     if step == 0:
         report = {"step": 0, **evaluate()}
         print(json.dumps(report), flush=True)
@@ -162,19 +182,20 @@ def run_train(a):
     generator = torch.Generator().manual_seed(a.seed + step)
     while step < a.steps:
         started = time.perf_counter()
+        QUANT_MIX["value"], kl_weight = schedule(step)
         i = int(torch.randint(train["ids"].shape[0], (1,), generator=generator))
         ids = train["ids"][i:i + 1].long().cuda()
         logits = hidden_logits(model, ids)[0, :-1]
         ce = F.cross_entropy(logits.float(), ids[0, 1:])
         kl = topk_kl(logits, train["top_ids"][i].cuda(), train["top_logp"][i].cuda())
-        loss = a.ce_weight * ce + a.kl_weight * kl
+        loss = a.ce_weight * ce + kl_weight * kl
         if not torch.isfinite(loss):
             raise RuntimeError("nonfinite conversion loss")
         loss.backward()
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         step += 1
-        row = {"step": step, "ce": float(ce), "kl": float(kl), "seconds": time.perf_counter() - started,
+        row = {"step": step, "ce": float(ce), "kl": float(kl), "mix": QUANT_MIX["value"], "kl_weight": kl_weight, "seconds": time.perf_counter() - started,
                "peak_gb": torch.cuda.max_memory_allocated() / 2**30}
         if step % a.eval_every == 0 or step == a.steps:
             row.update(evaluate())
@@ -207,6 +228,8 @@ def main(argv=None):
     r.add_argument("--lr", type=float, default=3e-3, help="Lion step in units of each latent's ternary scale")
     r.add_argument("--ce-weight", type=float, default=1.0)
     r.add_argument("--kl-weight", type=float, default=1.0)
+    r.add_argument("--ramp-steps", type=int, default=1000, help="ternarization mix ramps 0 → 1 over these updates")
+    r.add_argument("--kl-decay-steps", type=int, default=0, help="KL to the BF16 original falls to 0 over these updates")
     r.add_argument("--eval-every", type=int, default=100)
     r.add_argument("--checkpoint-every", type=int, default=100)
     r.add_argument("--seed", type=int, default=0)

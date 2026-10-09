@@ -56,6 +56,20 @@ def ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
     return _StraightThrough.apply(weight)
 
 
+# Gradual ternarization (full-latent QAT of a BF16 model): forwards use w + mix·(Q(w) − w), straight-through, with mix
+# ramped 0 → 1 over the conversion (HF 1.58-bit fine-tuning: an abrupt switch loses most of the model). 1 = deployed.
+QUANT_MIX = {"value": 1.0}
+
+
+def ramped_ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
+    mix = QUANT_MIX["value"]
+    if mix >= 1.0:
+        return ternarize_ste(weight)
+    if mix <= 0.0:
+        return weight
+    return weight + mix * (ternarize(weight.detach()) - weight.detach())
+
+
 # Global switches read by every adapter: which nested member is running (its private deltas apply) and whether
 # adapters apply at all (off = the frozen original model, used as the anchor teacher).
 STATE = {"size": None, "enabled": True, "teacher": False}

@@ -345,8 +345,8 @@ class DenseExperts(nn.Module):
     def _value(self, weight, dtype):
         if not self.quantize:
             return weight.to(dtype)
-        from .ternary import ternarize_ste
-        return ternarize_ste(weight).to(dtype)
+        from .ternary import ramped_ternarize_ste
+        return ramped_ternarize_ste(weight).to(dtype)
 
     def weights(self, index, dtype):
         return self._value(self.gate_up[index], dtype), self._value(self.down[index], dtype)

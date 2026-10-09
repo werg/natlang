@@ -166,3 +166,28 @@ def test_full_latent_qat_ternarizes_attention_and_experts_and_trains_latents(tmp
     full = torch.log_softmax(torch.randn(5, 128), -1)
     values, index = full.topk(128, -1)
     assert float(topk_kl(full, index, values)) < 1e-6
+
+
+def test_ternarization_ramp_interpolates_from_bf16_to_deployed(tmp_path):
+    from natlang_neuralese.maple.qat_convert import install_full_latent_qat
+    from natlang_neuralese.maple.ternary import QUANT_MIX
+
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    original = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    install_full_latent_qat(model)
+    ids = torch.randint(0, 128, (1, 12))
+    try:
+        with torch.no_grad():
+            QUANT_MIX["value"] = 0.0
+            assert torch.allclose(model(ids).logits, original(ids).logits, atol=1e-5)
+            QUANT_MIX["value"] = 1.0
+            deployed = model(ids).logits
+            QUANT_MIX["value"] = 0.5
+            half = model(ids).logits
+        assert not torch.allclose(half, deployed, atol=1e-4) and not torch.allclose(half, original(ids).logits, atol=1e-4)
+        QUANT_MIX["value"] = 0.5
+        model(ids).logits.square().mean().backward()
+        assert model.model.layers[0].self_attn.q_proj.parametrizations.weight.original.grad is not None
+    finally:
+        QUANT_MIX["value"] = 1.0
