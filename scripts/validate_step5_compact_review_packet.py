@@ -142,6 +142,26 @@ def verify_compact_packet(packet: dict[str, Any]) -> dict[str, int]:
     native_delta_path = option(native_argv, "--delta-native")
     if native_delta_path not in native_paths:
         raise ValueError("native assembler delta input is not among pinned native inputs")
+    base = packet.get("base_scope", {}).get("physical_root_adopted_base")
+    if not isinstance(base, str):
+        raise ValueError("packet has no physical adopted base path")
+    expected_repo_base = "/repo/" + base
+    for flag, expected in (("--base-text", expected_repo_base + "/text.jsonl"),
+                           ("--base-provenance", expected_repo_base + "/text-provenance.jsonl"),
+                           ("--base-records", expected_repo_base + "/native-records.jsonl")):
+        if option(argv, flag) != expected:
+            raise ValueError(f"text-builder {flag} does not match the physical adopted base")
+    for flag, expected in (("--base-native", base + "/native-records.jsonl"),
+                           ("--base-recurrence", base + "/recurrence-records.jsonl"),
+                           ("--base-native-pieces", base + "/native-pieces.jsonl"),
+                           ("--base-recurrence-pieces", base + "/recurrence-pieces.jsonl")):
+        if option(native_argv, flag) != expected:
+            raise ValueError(f"native assembler {flag} does not match the physical adopted base")
+    base_receipt = option(native_argv, "--base-receipt")
+    if not isinstance(base_receipt, str) or base_receipt.removeprefix("/repo/") != base + "/root-integration-adoption-v2.json":
+        raise ValueError("native assembler base receipt does not match the physical adopted base")
+    if option(argv, "--base-root-receipt") != "/repo/" + base_receipt.removeprefix("/repo/"):
+        raise ValueError("text-builder base receipt differs from the native base receipt")
     native_outputs = packet.get("native_delta", {}).get("outputs", [])
     if not native_outputs or any((ROOT / item["path"]).resolve().parent !=
                                  (ROOT / native_outputs[0]["path"]).resolve().parent
