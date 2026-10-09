@@ -159,3 +159,18 @@ enter the Neuralese stages before either backbone's long runs.
 - Launch sequence once the conversion qualifies: qat_export --order → maple/foundation_heads --model EXPORT
   --cutoff 27 → recipe raw-recurrence-mellum-v1 (or foundation-mellum-v1 first) via natlang_neuralese.train.recipe.
   Not yet done: a GPU smoke of the warm-up path on an export, and the step profile (#46).
+- v2 trial results (held: 32 windows of system-free chat turns + repo code; BF16 teacher CE 1.756). Deployed = all
+  attention and experts ternary (λ=1); current = the ramp's λ:
+
+  | step | λ | deployed CE | current-λ CE | deployed KL to BF16 |
+  |---|---|---|---|---|
+  | 0 | 0.0 | 10.74 | 1.756 | 9.86 |
+  | 300 | 0.3 | 3.45 | 1.426 | — |
+  | 500 | 0.5 | 2.70 | 1.487 | — |
+  | 700 | 0.7 | 1.89 | 1.468 | 1.07 |
+  | 800 | 0.8 | 1.74 | 1.497 | 0.95 |
+  | 900 | 0.9 | 1.64 | 1.546 | 0.88 |
+
+  The fully ternary model beats the BF16 original on this held set from step 800. The KL stays high: it is learning
+  our text, not copying the original. Not yet evidence of general/agentic quality — the harness eval (24-case packet)
+  on the exported λ=1 model decides qualification. Steps 1000–2000 continue at λ=1.
