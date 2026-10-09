@@ -1,0 +1,895 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v22-native-results-and-partials-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/collector-0.log",
+      "bytes": 39344,
+      "sha256": "0c42064a3d378194eb6f2dd7e6c9628cfa642f21dc9570377d29f19271eeeed1"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 1030994,
+      "sha256": "718726835fe3a81fd60c137c2cb983209ccb1ce083e30a91d18ebeeee3b805c8"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 343757,
+      "sha256": "42aa2e4f3275968339d233c35791d70e2a8ea45505679fa3f497d2939656c8ea",
+      "lines": 220
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/journal.jsonl",
+      "bytes": 8250,
+      "sha256": "e716a469dc5a6504ecf7f221d435efc3868213bf87738b6a68cde5cbb0d8ea15",
+      "lines": 10
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 876,
+      "sha256": "24c86db0c72edea622b08c15234d874537ac6e0b6f18675d18ec7e4791c1fb79"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/queue.jsonl",
+      "bytes": 935,
+      "sha256": "44b143b44f7103beb41353f803e3ebfe27ed99243e1bf444969b0ef4556a586f",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/results.jsonl",
+      "bytes": 1030994,
+      "sha256": "718726835fe3a81fd60c137c2cb983209ccb1ce083e30a91d18ebeeee3b805c8",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1697,
+      "sha256": "73b2e3daf7070a5e5b15aa2681a0ec00d15c27657ce1b2651314e57d82c02823"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-preview-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 8250,
+      "sha256": "e716a469dc5a6504ecf7f221d435efc3868213bf87738b6a68cde5cbb0d8ea15"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/collector.log",
+      "bytes": 36281,
+      "sha256": "614e23ea7c5cc9bee50ab5a3c4062aa9b60bcb637fb6782ad5eebb90f5164247"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 1023972,
+      "sha256": "a10bd23374f0b5b8e3f9337401fba618658022c3d4586343921f734276f1c37c"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 343750,
+      "sha256": "aa3d7adbede4dffce5abd8b99770f733a7f7fc2aca767fe5c2ace004f2e4f081",
+      "lines": 220
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/journal.jsonl",
+      "bytes": 4652,
+      "sha256": "b073f2297543bb33f77f0b8eaad44ff80faa011885b8a61247bee8d3e4fd13dd",
+      "lines": 5
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 899,
+      "sha256": "67c928e051c9a7349176e6656f8148eb33baa6f9906e1d654ab23adff79b4bf6"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/queue.jsonl",
+      "bytes": 901,
+      "sha256": "634f5b270654b08785d5a439647ab8da7cd146c9fb5baadde36fabc29c9b412e",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/results.jsonl",
+      "bytes": 1023972,
+      "sha256": "a10bd23374f0b5b8e3f9337401fba618658022c3d4586343921f734276f1c37c",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "3969d8a30ccdd3be428957ddd3e87e30e2ae88ff0c42dc2e1f82bff837d3ac59"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 4652,
+      "sha256": "b073f2297543bb33f77f0b8eaad44ff80faa011885b8a61247bee8d3e4fd13dd"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/collector-1.log",
+      "bytes": 77145,
+      "sha256": "9462627254ad89de063c28f21e1eb406ce647d464c6f64769ee5031ff620bfd6"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/collector-2.log",
+      "bytes": 95331,
+      "sha256": "447629f1e72e140abc14c550f5e35ce8f4d3bfe7c357997a57ff815680bf89bf"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/collector-3.log",
+      "bytes": 47606,
+      "sha256": "92a4eb5ca2b27adb8d66416f619f84e3367343de4097d6e67f2638e5d22707f1"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/collector-4.log",
+      "bytes": 37175,
+      "sha256": "1347818adb1cbfaea894e1f0629858264539517c0914d8304ecdc83493108d5e"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000001-8151446f05f9ecd6.result.json",
+      "bytes": 2230759,
+      "sha256": "5691058673dcbe1c7a98c0fc5952e60fdc3515f8be698c4879650ad879623395"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+      "bytes": 376864,
+      "sha256": "e780df4b4ed3b7798c7b0a0ff203d5ccb4cff4b44a79a817115fbb22f65773da",
+      "lines": 305
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000002-f2726c36961ae380.result.json",
+      "bytes": 2842954,
+      "sha256": "6e8a7e32ce8926460f8e1b887c3e4dbeaa5e61b1e3d289d4845c2663efa4850f"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000002-f2726c36961ae380.trace.jsonl",
+      "bytes": 406430,
+      "sha256": "ef4657cc3a7beeb3532a07c84514204fe94b6dafe6f14b2ef54a0389ab1207ce",
+      "lines": 355
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000003-af5a8095c1e55a57.result.json",
+      "bytes": 1329882,
+      "sha256": "8c1412168af4703800e7104b2eb239305cd675fe601b1d6c5b17d265de5899ca"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000003-af5a8095c1e55a57.trace.jsonl",
+      "bytes": 326742,
+      "sha256": "7c1eb8fa2bf3ee929d104d2737f0940be74e607c80db6c038ebca2045214cbfd",
+      "lines": 233
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000004-4709f15b8532b6a2.result.json",
+      "bytes": 1016603,
+      "sha256": "24b2739748f3a21ba46dddbf245cce3979f169f25e48669f6a0f60201764c362"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+      "bytes": 330971,
+      "sha256": "2131395d420c5685b4950ac6326471d87a57f7ced59b95ca0da216a476cb837d",
+      "lines": 220
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/journal.jsonl",
+      "bytes": 26043,
+      "sha256": "925ded43069380f745a6bedba5cb0c701cc97e74504484bd6d1b2e0f3c27df5b",
+      "lines": 30
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/launch-receipt-v1.json",
+      "bytes": 860,
+      "sha256": "66e9d12eaafb7a32db742d1cfcfc77014e117885d88cba0ec2a9f9db3b91bec3"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/queue.jsonl",
+      "bytes": 3660,
+      "sha256": "e176a0fcf75d09723c0174e1b4f20ec62d0f123b83a583fe7c61c56be28c7f78",
+      "lines": 4
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/results.jsonl",
+      "bytes": 1016603,
+      "sha256": "24b2739748f3a21ba46dddbf245cce3979f169f25e48669f6a0f60201764c362",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "a5cbee09bccfa51b0b6bb8bde059d336fcca025b47eb3fbd733f1c069651d8d4"
+    },
+    {
+      "path": "provider-gemini-3.1-flash-lite-source-indices-1-4-v1/supervisor-stdout-v1.log",
+      "bytes": 26043,
+      "sha256": "925ded43069380f745a6bedba5cb0c701cc97e74504484bd6d1b2e0f3c27df5b"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/collector.log",
+      "bytes": 45673,
+      "sha256": "e3b09d42605ad324e600ae9d8cc451ab9c385b7a574271407b384001f0e5d562"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 471423,
+      "sha256": "b04f805f5ab86ab6d4452caebc6e4905dff341e86bd51d2aa40e8f6e86a9f924"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-4d5c99bc-a0c5-4235-937a-36bbde02708f.jsonl",
+      "bytes": 3757467,
+      "sha256": "472014f27b5add9683bae2a686a62ae40ef74456ee611bdc8323fcfee48e19ea",
+      "lines": 242
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 2105,
+      "sha256": "ba11bde38117bb8fff4b085f4223fc32ed7a6899a615a29e91dff527154a34a2"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/journal.jsonl",
+      "bytes": 28993,
+      "sha256": "b4db8645904f428525bc418d1284879314de3463abac289f49c41384b6c7cdf3",
+      "lines": 38
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 884,
+      "sha256": "dc0c483d7822207346a8b6e00ff2359192429762aefa801d819e9aef4ef994db"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/queue.jsonl",
+      "bytes": 881,
+      "sha256": "012eda851a9b557cef0c45df60c9924ada347a4d8ef4e2267398c90f298bab61",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1676,
+      "sha256": "b4d55a1125ef1ef34a3205e5e0403090a5c741d6243b5710d0b2a763adefae53"
+    },
+    {
+      "path": "provider-gemini-3.5-flash-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 28993,
+      "sha256": "b4db8645904f428525bc418d1284879314de3463abac289f49c41384b6c7cdf3"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/collector.log",
+      "bytes": 36808,
+      "sha256": "d04ad34405414af9616cdeabaf27a1564a3e2cc549c1911bedab9184af696214"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 329345,
+      "sha256": "bcf2f821997e0b9595a31ed1c679cd6721706fa8f8b6a1e4409ba9ec2ebc0513"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-c902b634-6688-4d69-85ad-f34286407738.jsonl",
+      "bytes": 2652195,
+      "sha256": "5b08a5757058e622c5e1d17eb9774905709342d28a37dd3afb75e97fded50bca",
+      "lines": 236
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 2106,
+      "sha256": "272fc0544484a38eef423d4bf1a9afcc6ddcbf569447b72ce046c29479732d94"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/journal.jsonl",
+      "bytes": 15262,
+      "sha256": "651ec08d8327b614c521c3d6e45548ea52e8019b5284860a472ffce1bf5d4bb2",
+      "lines": 20
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 884,
+      "sha256": "cebaeb32463a639d011473102cf039fde48129aff07e16b38ad15ce4287ecc4f"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/queue.jsonl",
+      "bytes": 881,
+      "sha256": "b3aee551de0f678d65056453847cd3a52c090e620f9856fb718c0592ed344578",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1676,
+      "sha256": "1bad9e8a04133d5f5e8e81ecb8942c7d149ee8d3f768125eb07d365c00ed1a01"
+    },
+    {
+      "path": "provider-gemini-3.6-flash-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 15262,
+      "sha256": "651ec08d8327b614c521c3d6e45548ea52e8019b5284860a472ffce1bf5d4bb2"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/collector.log",
+      "bytes": 34943,
+      "sha256": "b43c1829cc5f026f68c20da8ed6f5bf5402f32acc1a520a34d5784351167f6ee"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 327717,
+      "sha256": "302ac010c72df6f0524afa73ba0b19522b81d626dd4a8efff07b2809f04b70ab"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json.evidence-bf637e57-ab3e-4fee-80ab-57b8c6087adc.jsonl",
+      "bytes": 2605496,
+      "sha256": "99c5dc0ba990771840416234af4bf40bbe3bc2ec30c0f5c98c448db707df8c8f",
+      "lines": 222
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/jobs/000000.error.json",
+      "bytes": 2103,
+      "sha256": "bda0b00a9ac2db1cbefd047b600cdb5cb39c5ed26e29e0451d0d678fb617eb6e"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/journal.jsonl",
+      "bytes": 20131,
+      "sha256": "cab350b5d130fa71c5808447695cf0737998ad80a01249e7ab5d83eb7a9b7270",
+      "lines": 25
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/launch-receipt-v1.json",
+      "bytes": 1165,
+      "sha256": "67902647db46b19fcbcc7d4971ec5823ac33015f96981fdd7fbec448f1d93a24"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/queue.jsonl",
+      "bytes": 819,
+      "sha256": "a19d2041916f3a619ba1a71d7d972be08d3842ed7c10f5a9083ea1adc740caa8",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/quota-pause-v1.json",
+      "bytes": 237,
+      "sha256": "310b59746e2c0afd43e95f38570af785db85e92867c56d9132aaba822cdfef2c"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/results.jsonl.manifest.json",
+      "bytes": 1676,
+      "sha256": "4437d637003773134f8b7194e561c334da54c53497fe4a12857efce5facd8300"
+    },
+    {
+      "path": "provider-gemini-source-index-0-v2/supervisor-stdout-v1.log",
+      "bytes": 20131,
+      "sha256": "cab350b5d130fa71c5808447695cf0737998ad80a01249e7ab5d83eb7a9b7270"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/collector.log",
+      "bytes": 3190,
+      "sha256": "eae12159ef69db23e6321acc0f27b312cd517b64fc7138127a55d37cebeae0b9"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 2892,
+      "sha256": "a5b7ca2f0c8c65f52aa6763194d0930bc87aebb8ab5eb53a2ddafff2a615c333"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-abb01baf-b9a0-4fa5-a2b5-f2c9833145ce.jsonl",
+      "bytes": 95461,
+      "sha256": "b0a01bce4a3a4d6d3540c9f072599146a80ae42bd9119e3dde6adc12eae0abd6",
+      "lines": 15
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 727,
+      "sha256": "3ed790da5dbc163f628bbccdbc07cb5099b226f1100ae3d96ea03d9e8570ee20"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/journal.jsonl",
+      "bytes": 1909,
+      "sha256": "fd3852ded8755a943f601eb8a9dcafd5bad859136e32ee2303bd49b13ab6e72e",
+      "lines": 2
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 1220,
+      "sha256": "713b84463382e00447b83cf78f3ae2f30deca5b0285d163a2c4fd0dfb8a177ce"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/queue.jsonl",
+      "bytes": 767,
+      "sha256": "d67443a9d3adcd9e8c0b5467ee2d95a59aefde49a37572f9cec0e2765ccb52fb",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1681,
+      "sha256": "2623877e50299a0775eae6dddabaf0426cf9a7cf86393c1dfbf8cca25075bc2f"
+    },
+    {
+      "path": "provider-gemini25-flash-lite-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 1909,
+      "sha256": "fd3852ded8755a943f601eb8a9dcafd5bad859136e32ee2303bd49b13ab6e72e"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/collector.log",
+      "bytes": 46704,
+      "sha256": "11f0f40c7df78dd63be11415b1bc02b99cdefdd136ddbfab38a4dc99cd2f6b16"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 1328727,
+      "sha256": "b6d71131cf4139e591603849a46f831e3699457c921b5977e1bfe3d93537776c"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 445081,
+      "sha256": "5bb1cde14ff5e23ff78c91fe3e6446f798a726cba2251ed6eab418fdc37bed4b",
+      "lines": 261
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/journal.jsonl",
+      "bytes": 4417,
+      "sha256": "57e6109931a8345ad62373c41d8915a6ec8c021c2af3cf1b7ee1c286f79033f5",
+      "lines": 5
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 969,
+      "sha256": "3bc7f97cad047d0207a790cb754468632c717e65de9108c13124dd258e3b3eed"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/queue.jsonl",
+      "bytes": 767,
+      "sha256": "a8dd34e957629792b6d59173f4bdb2a4610767e8975b418be249282ecafe0bbf",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/results.jsonl",
+      "bytes": 1328727,
+      "sha256": "b6d71131cf4139e591603849a46f831e3699457c921b5977e1bfe3d93537776c",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "354b140145acd0c99fb6b50b4cdf50a48f6288eaaa6b7def498d5a45daa774f4"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 4417,
+      "sha256": "57e6109931a8345ad62373c41d8915a6ec8c021c2af3cf1b7ee1c286f79033f5"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/collector.log",
+      "bytes": 213,
+      "sha256": "5d546699bfc54ebcf22d023715320b22b55539f2efc5f18471eb00cc48e6bc62"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 2587,
+      "sha256": "79988ecb0622bcd77776dbf8cfabc3c1cc8e44f75f74761416ef3d8736e57076"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-692fa2aa-9945-4140-a602-2dc31bb8614b.jsonl",
+      "bytes": 93742,
+      "sha256": "2f36af14cac1db454adfd5a3ffef29339821896badc37890cfa5c828661cc36f",
+      "lines": 15
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 438,
+      "sha256": "460fdce9a976aabc26673786b9ed0a6dac3cad322851411077e0f51624510cdf"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/journal.jsonl",
+      "bytes": 1859,
+      "sha256": "4299ba5b713ab5a0c4c57075cb833a137f7474eb762656879f0995c5d2363170",
+      "lines": 2
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 1134,
+      "sha256": "96e660313949f7d4393007defd43a2f1f1515ef391a59dcfd8cb63b31c1f84a3"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/queue.jsonl",
+      "bytes": 759,
+      "sha256": "4781d907599c41b4a4f481ad4f58116312e2cb1b2871fb8169f2c02da1f76a74",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1690,
+      "sha256": "9843205013d315e44878dcdd394e3fca1722b0e60b23159aa8b78cbdbfef5cbf"
+    },
+    {
+      "path": "provider-nvidia-nano3-http-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 1859,
+      "sha256": "4299ba5b713ab5a0c4c57075cb833a137f7474eb762656879f0995c5d2363170"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/collector.log",
+      "bytes": 1397,
+      "sha256": "b96dcd428cae3b4fe5635b8b71d54895e23db8037654f0103859c56eb9282777"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 2901,
+      "sha256": "2582439cb418017093a7c4065a604437cb00000b1e5539cba053800a3d006fc8"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-40db7095-828a-4fcd-8627-4aee5bbd31b7.jsonl",
+      "bytes": 92404,
+      "sha256": "d74662189420a56d28408688f0e202567eb439da17300fbd999a222345425472",
+      "lines": 13
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 368,
+      "sha256": "d086fbd36309d1f2c9f91ee3a70f8f46e2949f89e49b514e16e6af66e11ef0c2"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/journal.jsonl",
+      "bytes": 1895,
+      "sha256": "23fefee71b2c272e7eaa8d051d6ba74d3186b1ba5ce5249ddde4b47d24677d56",
+      "lines": 2
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 1215,
+      "sha256": "6d7b4b63994afc9b41acfb5e24623499a1a4b63c0dab3e884afec29e69b90d31"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/queue.jsonl",
+      "bytes": 739,
+      "sha256": "41674a2c241e767b6db36e448fad00da47486447f6a61c7a2fe73506303d2ea1",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1690,
+      "sha256": "9843205013d315e44878dcdd394e3fca1722b0e60b23159aa8b78cbdbfef5cbf"
+    },
+    {
+      "path": "provider-nvidia-nano3-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 1895,
+      "sha256": "23fefee71b2c272e7eaa8d051d6ba74d3186b1ba5ce5249ddde4b47d24677d56"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/chat-request-config.json",
+      "bytes": 27,
+      "sha256": "94a5a344ca7e21c54de98681834875e536c698b99ba2e7527489f122a436d072"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/collector.log",
+      "bytes": 344,
+      "sha256": "9607aa5b6ae5d26801c3a5ad9874613f47c4505a40b76752cde6826869b13906"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/journal.jsonl",
+      "bytes": 1855,
+      "sha256": "7bd51a4e5fa69a4fb3512e88458d2287a4297d8ab867d0ab9748ae150482d83b",
+      "lines": 2
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 1542,
+      "sha256": "a72a6f4121905180e294aa378494a19d8442725bbcba9d4bfe34e2e72d26e850"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/queue.jsonl",
+      "bytes": 743,
+      "sha256": "445e995b6c15c014680692efcddd69ecd24fada0afa2cf240595182497558001",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 1855,
+      "sha256": "7bd51a4e5fa69a4fb3512e88458d2287a4297d8ab867d0ab9748ae150482d83b"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/chat-request-config.json",
+      "bytes": 27,
+      "sha256": "94a5a344ca7e21c54de98681834875e536c698b99ba2e7527489f122a436d072"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/collector.log",
+      "bytes": 209,
+      "sha256": "4eb9e4f81970cb94a97357966f34c629c1c410432dc4e09bfa11d19e7c2fda0b"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 492215,
+      "sha256": "d8c48b41d737fb3bfdf09cb0cdfab2ed87198d87dc383e91ab3fd5ff9ff4c700"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json.evidence-c3a5afaf-1411-4d1a-bfac-36ab2d6bd965.jsonl",
+      "bytes": 4244583,
+      "sha256": "ec9042702e3846e8aa2c8b5b847211c37a1e80dd197fcf5a518789e48fcafe13",
+      "lines": 220
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/jobs/000000.error.json",
+      "bytes": 372,
+      "sha256": "855332f10f16a5147051bc5cff6c5f46254b134d857c494862b7a72185d7bbde"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/journal.jsonl",
+      "bytes": 3913,
+      "sha256": "2e1af64af3ffbb42579a6ffe5590370d64bca6251b092a969154b6d81f4e36c0",
+      "lines": 5
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/launch-receipt-v1.json",
+      "bytes": 1620,
+      "sha256": "44c5fdee4aab9399dfe74e35bbc99356b297b7d8dedc14245189cf22bcde249c"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/queue.jsonl",
+      "bytes": 746,
+      "sha256": "8c877ad79929e7d33c58d3ab5fa0d77ba632bc4e075c008352aba8c3b7b48629",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/results.jsonl.manifest.json",
+      "bytes": 1678,
+      "sha256": "84c8958ced32b4944fef2bf7ccca0c3bce28f89628c3987f4277ae149422deef"
+    },
+    {
+      "path": "provider-nvidia-oss20b-source-index-0-v2/supervisor-stdout-v1.log",
+      "bytes": 3913,
+      "sha256": "2e1af64af3ffbb42579a6ffe5590370d64bca6251b092a969154b6d81f4e36c0"
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/collector.log",
+      "bytes": 165475,
+      "sha256": "32dd7b9cb3a3097bc38a9625af98338c925e1f9ce0e14649d5432312795b85d8"
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 4053373,
+      "sha256": "94ca8df17aa0dbfd2a1afe039bf42d1657f76fbebda226c112b47cae18801dc7"
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 919670,
+      "sha256": "a50723f206d009d772d6ff1c5e6f3a7f646d0528dd50b2fc4ab2cca703180d0d",
+      "lines": 559
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/journal.jsonl",
+      "bytes": 16464,
+      "sha256": "1fe9768c260187a7972d0304d72d87b2153f6df1c45218e59b12569ca2a1dcee",
+      "lines": 19
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/launch-receipt-v1.json",
+      "bytes": 791,
+      "sha256": "c18e4cc6f233caad32f9bf715a0e779b68df2b3fc382bfff963944c0a925e498"
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/queue.jsonl",
+      "bytes": 819,
+      "sha256": "cdf58c0815161d18b43c752426840bf534a9d260c90de1f849f60f8c55d339b4",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/results.jsonl",
+      "bytes": 4053373,
+      "sha256": "94ca8df17aa0dbfd2a1afe039bf42d1657f76fbebda226c112b47cae18801dc7",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/results.jsonl.manifest.json",
+      "bytes": 1707,
+      "sha256": "a067f94444a025a7587ad28cad6d94b45293fd247972669a87a342db11e0cc4e"
+    },
+    {
+      "path": "provider-nvidia-source-index-0-v2/supervisor-stdout-v1.log",
+      "bytes": 16464,
+      "sha256": "1fe9768c260187a7972d0304d72d87b2153f6df1c45218e59b12569ca2a1dcee"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/collector.log",
+      "bytes": 211,
+      "sha256": "448d37c88e81a112d4e1055ab348894f857638328d6c197b697c34de67d938a6"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 41457,
+      "sha256": "bfc62fac3598c1a01210cea30d5a42d1cb8ceb51bf0a450e4da6990658084c63"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/jobs/000000-0902f25e0b417661.partial.json.evidence-a8444c08-b5f6-4bb6-8ca0-bfb51acde14f.jsonl",
+      "bytes": 389065,
+      "sha256": "6ccd1fa5f73868de5a85b7f0b75c90bb4fc61dc15342538b99a03a7eec40e2eb",
+      "lines": 35
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/jobs/000000.error.json",
+      "bytes": 518,
+      "sha256": "d4dac50aa907de3a1226d94bc5a680f950ee959ddb3abe4e4a17b64617cb85f8"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/journal.jsonl",
+      "bytes": 4565,
+      "sha256": "bec406a90381279df8d66cb48a50d44a079ddd0bedd8718979030da2b3d5eb8e",
+      "lines": 6
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/launch-receipt-v1.json",
+      "bytes": 1109,
+      "sha256": "512dd23ad6b66e1b409d67be117e098b093be432e13a8b4ee7e18776914c418c"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/queue.jsonl",
+      "bytes": 864,
+      "sha256": "db02f8c7595f2498672c4b7d88630a671d1fbabbfbd3efaf863a6ff1770c547a",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/results.jsonl.manifest.json",
+      "bytes": 1673,
+      "sha256": "4c71588dcdb69ca18baa119ce506b377eb2db33c5f841a7c37ca0c5e78234ecb"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v2/supervisor-stdout-v1.log",
+      "bytes": 4565,
+      "sha256": "bec406a90381279df8d66cb48a50d44a079ddd0bedd8718979030da2b3d5eb8e"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/collector.log",
+      "bytes": 211,
+      "sha256": "4c1d54d246f6861a42907a9c57bf7bfa82d2fdf61bd211c95a583a5a15793e43"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 264163,
+      "sha256": "2a8d0010d3eccd2554483dab5b33b85997d8adf03cc2099112808b71862e468a"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/jobs/000000-0902f25e0b417661.partial.json.evidence-e2758111-7a58-44a5-afec-73dc4c13cef3.jsonl",
+      "bytes": 2194222,
+      "sha256": "d013ab440eab0742adb684704cd11282bd441a468ca3ccc5170e71623badeb0e",
+      "lines": 175
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/journal.jsonl",
+      "bytes": 42590,
+      "sha256": "5872fe9c0db73f4a6b3ee70b79670011c3fb59d3302fb00fb09060a288888637",
+      "lines": 62
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/launch-receipt-v1.json",
+      "bytes": 1181,
+      "sha256": "b2f5d70b3d7b9b79cfa4087bff8e3224235c6d2586a6a3ff22eb659fd862532d"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/queue.jsonl",
+      "bytes": 886,
+      "sha256": "01fb72c3e8bfe7148224bb1e6e16cbd40de2a00e76e9ddf36a1501b7f88b6d3f",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/results.jsonl.manifest.json",
+      "bytes": 1673,
+      "sha256": "4c71588dcdb69ca18baa119ce506b377eb2db33c5f841a7c37ca0c5e78234ecb"
+    },
+    {
+      "path": "provider-zai-glm47-flash-source-index-0-v3/supervisor-stdout-v1.log",
+      "bytes": 42590,
+      "sha256": "5872fe9c0db73f4a6b3ee70b79670011c3fb59d3302fb00fb09060a288888637"
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/collector.log",
+      "bytes": 419,
+      "sha256": "b4d41b0aae99d67673e74fb5049bdf13993a63969dc4238604f0cec45bf3a5c6"
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 1986470,
+      "sha256": "ba840bae688043c5fc681f44d78d7649a9a8cd9c0f780cda17dc27a76d5c16a4"
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 424000,
+      "sha256": "898b08394c493672b6e78a3c395994456fbc4a05fafa9cddf63d96810dd7140b",
+      "lines": 241
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/journal.jsonl",
+      "bytes": 10809,
+      "sha256": "d4aa6b62b728397596778693ec0b277583409f1e5c6b700db99685f1499c2be2",
+      "lines": 15
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 1339,
+      "sha256": "afa392e73bb5de2cf336af097db08fbd65da193cdbb17db1e0c39f441754c5b1"
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/queue.jsonl",
+      "bytes": 735,
+      "sha256": "af9466982ed174869e54f4ecf3c49040de421d650b8f06a3c720e740984496cf",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/results.jsonl",
+      "bytes": 1986470,
+      "sha256": "ba840bae688043c5fc681f44d78d7649a9a8cd9c0f780cda17dc27a76d5c16a4",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1682,
+      "sha256": "c7577d3b5b0a9bc51b628ecbd782e2fafa09d4e418971a97c8a424d8945e5be9"
+    },
+    {
+      "path": "provider-zai45-flash-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 10809,
+      "sha256": "d4aa6b62b728397596778693ec0b277583409f1e5c6b700db99685f1499c2be2"
+    },
+    {
+      "path": "runtime/frozen-runtime.json",
+      "bytes": 172151,
+      "sha256": "1c44660ed8142f596e3a0566af28336ca57b97700369e84ee6b07309d5f4f085"
+    },
+    {
+      "path": "runtime-gemini-signature-v4/frozen-runtime.json",
+      "bytes": 172373,
+      "sha256": "b9648e9352a66e346cf700a57e347398a947ab6eabd91de8c40445cf9677ecd7"
+    },
+    {
+      "path": "runtime-small-teachers-v5/frozen-runtime.json",
+      "bytes": 176513,
+      "sha256": "64125271f4791e1c6ac8ebc725a7042eba837ef3ee81c664059669bb00c98ae1"
+    },
+    {
+      "path": "source-v22-v1/source.cases.jsonl",
+      "bytes": 230270,
+      "sha256": "2de1a4a78b22d5136551bc72b03924e494c4d9f845b644c66bbc379667fabc35",
+      "lines": 5
+    }
+  ],
+  "bytes": 51135557
+}
