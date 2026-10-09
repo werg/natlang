@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-foundation-text-4880-sketch-run-held-artifacts-20261009-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-text-4880-continuation-20261009-v1/held-artifact-only-publication-proposal-v1",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 150373,
+      "sha256": "cd3336924ddb333f3d3f6a16490b29d208f261e752cb0e89167eb92e2bde78c2"
+    },
+    {
+      "path": "best-checkpoint.json",
+      "bytes": 157937,
+      "sha256": "e257e6ce076863c412706cce6210665c9495e7fd6a5752f3eed5845c0d6ef81f"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1223935496,
+      "sha256": "1c134d95729a5c68ccabe4a162ac4376fee23484cb3ca8325e2db73883073c91"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628875285,
+      "sha256": "7e998635b46b2d2744d0cd8c320aa1239ba84e218136c3a663b8f75ea4c4592b"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232313730,
+      "sha256": "32e77b2b3a579ef7ca0e918a4ab06af724537b01b1bc3aa663bdd74d556d2a9f"
+    },
+    {
+      "path": "direct-stage-plan.json",
+      "bytes": 20564,
+      "sha256": "d4dbba951dfc8c2511e45056a4c58ffd6684e72e3a2621eba2b7d8373dff60a7"
+    },
+    {
+      "path": "direct-stage-result.json",
+      "bytes": 159832,
+      "sha256": "a2b73ba01285f745f346b56ea0e5a82c18a1035e2de202834242e6ba958849f0"
+    },
+    {
+      "path": "disposition.json",
+      "bytes": 939,
+      "sha256": "e128951b982f55528376dd645e8fab175a9456289f1b87ff54593601072a4ee1"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 1868068,
+      "sha256": "54fcb5f3ba4d8c20e58fb3acb1f7991e5dbde10e01eed441c19e70ab54e02865",
+      "lines": 17
+    },
+    {
+      "path": "heads-export-status.json",
+      "bytes": 252,
+      "sha256": "1125e1264327f261d6577b2211bc9db757f31c8d504ef8293c7ee796035fce69"
+    },
+    {
+      "path": "launch-intent.json",
+      "bytes": 3919,
+      "sha256": "0e8160aea56437c24118da7cc5515731f6ceb4328203a900794507e4e8636131"
+    },
+    {
+      "path": "mount-preflight-receipt-v2.json",
+      "bytes": 3032,
+      "sha256": "8fc87510c3ea21a2cd00a2f8fce4d5244568ae9dfe361fbe161edf89c1b527a9"
+    },
+    {
+      "path": "parent-final-checkpoint-inspection.json",
+      "bytes": 4253,
+      "sha256": "67f9dbb5642a50864f68caac03c4a034ccc0b01ab8bbe41559628167b46f286a"
+    },
+    {
+      "path": "plan.json",
+      "bytes": 116920,
+      "sha256": "95124118432ed615f3d3bb31bea3c3d9138829dc29ab71655bb0d33d408c3dfe"
+    },
+    {
+      "path": "preflight-root-review-v1.json",
+      "bytes": 3846,
+      "sha256": "43fe4aa47c64fd324f151fc3d3ee4212d083fa0ce61a872fd8842e9583cc822a"
+    },
+    {
+      "path": "report.json",
+      "bytes": 150359,
+      "sha256": "1b8f3275a8d5b2b76d7006feb694ce3abf883488783b3baec1adbc91f0c65ec2"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 18731948,
+      "sha256": "c202c42d2eede69aae1d8d6bc44885c397acc675d99779f8df1982834bb02e19",
+      "lines": 2111
+    }
+  ],
+  "bytes": 3106496753
+}
