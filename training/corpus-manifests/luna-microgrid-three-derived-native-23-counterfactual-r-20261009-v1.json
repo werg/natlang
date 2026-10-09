@@ -1,0 +1,311 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-microgrid-three-derived-native-23-counterfactual-r-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/campaign-v1/slot-01/jobs/000001-fda483ef4d168313.result.json",
+      "bytes": 3535043,
+      "sha256": "a9eab1e9f25bf811b834c2c94189c2408d1ab965d88312d87990baba888370de"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/campaign-v1/slot-01/jobs/000001-fda483ef4d168313.trace.jsonl",
+      "bytes": 785628,
+      "sha256": "f6239691c982a4d68c8cefad110b74835b916d829848cbce53625e66ccf9ec27",
+      "lines": 762
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/derived-native-v2/delta-derived-native-records-v2.jsonl",
+      "bytes": 424590,
+      "sha256": "31958af4b259518bd5e797a9ec042c9f1c8e1fceb51a81315ecac68dc4396971",
+      "lines": 3
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/code-snapshot/build_neuralese_counterfactual_reader_proposal.py",
+      "bytes": 41027,
+      "sha256": "d21e310df739d01cf00aab733117ca2112168b59cee0f77c397a2bb966c70623"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/counterfactual-r-pieces-v2.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/counterfactual-r-v2.jsonl",
+      "bytes": 3191101,
+      "sha256": "b854298f444dfebe241c209a0f87e4eaa9814bf2856f0b80f66d0d736b5a81fb",
+      "lines": 23
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/edge-candidates-v2.jsonl",
+      "bytes": 139809,
+      "sha256": "9f82f43639e14ad64e529e64c7012563285f3f4c22eba3d2d15f0bfbbebec295",
+      "lines": 26
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/proposal-manifest-v2.json",
+      "bytes": 8333,
+      "sha256": "7151e53ccc9f48ea7ad737dca951c3e2e6dd008a77ef2288cc2c4834a037d79b"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/actual-argv.json",
+      "bytes": 2184,
+      "sha256": "42cff41f768e49e20d277ec49c3591eaa6b8532e19c8f2ff6d8d4d892e0b22bb"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/counterfactual-r-pieces-v2.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/counterfactual-r-v2.jsonl",
+      "bytes": 3191101,
+      "sha256": "b854298f444dfebe241c209a0f87e4eaa9814bf2856f0b80f66d0d736b5a81fb",
+      "lines": 23
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/edge-candidates-v2.jsonl",
+      "bytes": 139809,
+      "sha256": "9f82f43639e14ad64e529e64c7012563285f3f4c22eba3d2d15f0bfbbebec295",
+      "lines": 26
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-replay-v2/stdout.txt",
+      "bytes": 138,
+      "sha256": "b1e2fe8dfd4159f7e6c5b8ed97d52df6cf4ca64d11f2645f40ea63846c9c495c"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-review-v1/proof-v1.json",
+      "bytes": 7640,
+      "sha256": "7483a75eacc4ef6e44fc815da5a14a50c5b0a69a8789aaa0b488d159e59ccebe"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-review-v1/root-recurrence-facet-admission-v2.json",
+      "bytes": 31853,
+      "sha256": "eca314778f2497f6739f6d52ba3e1b7b76672e571b66f16934ded042805768de"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v5/r-candidate-v2/root-independent-review-v1/root-semantic-review-v1.json",
+      "bytes": 8024,
+      "sha256": "fde832404ce41a8d57f38665e18ce25993cccfd3725c56a0368031e4b14ed5bc"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/audit-current-microgrid-composition.py",
+      "bytes": 6407,
+      "sha256": "16515f8412a87847ccd3f7801732c50417c03cdf2609ec863f3f38eb925d9031"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/code-snapshot/code-manifest.json",
+      "bytes": 1774,
+      "sha256": "b83c9d4ce76dbe758227606285964ea9f7862bd656ff463f5039c512cc2c2b82"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/composition-proposal-v3.json",
+      "bytes": 9131,
+      "sha256": "2abc98b501ca02910ccb766f2c0bd28c43780f4fd49df8d2f667a309a75c4140"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/current-union-audit-v1.json",
+      "bytes": 16950,
+      "sha256": "47440ed7af5a30abb9820d56c2323626aac86655eeb04147d6634fc3af0180ad"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/native-proposal-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/native-proposal-v1/delta-native-records.jsonl",
+      "bytes": 425670,
+      "sha256": "e365720e61375e54faf61c5a036084c993bb69b13a11b425d1979cede27a7eb2",
+      "lines": 3
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/native-proposal-v1/proposal-manifest.json",
+      "bytes": 10803,
+      "sha256": "4856781b05b0fac963cc7535b8a80d8d92e4b18454a636d2ea98705d713c092c"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/native-proposal-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/recurrence-proposal-v1/delta-recurrence-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/recurrence-proposal-v1/delta-recurrence-records.jsonl",
+      "bytes": 3206534,
+      "sha256": "6e9c3ac764ae5e5a67ed05be25a210534d6190bb0c1d2d926ade7e2218360d23",
+      "lines": 23
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/recurrence-proposal-v1/proposal-manifest.json",
+      "bytes": 15471,
+      "sha256": "ba143b734522db7dd38f60b6776b852ae9533a36f8d8d9254ba597e07265789e"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/recurrence-proposal-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "d45ec93d4b3c7bc92aa9a4d646540460020eaa99a5e626d1c616f413ad946c69"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/audit-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/audit-stdout.txt",
+      "bytes": 843,
+      "sha256": "0a77de4832042cd0b51db4c3ff21027afafb421257de107a37acd5aa8adbe24f"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-actual-argv.json",
+      "bytes": 2110,
+      "sha256": "6e63db704efbdf6267c96e27ac20a073a59f9e4f2f60e1b21c1ac8ec3190c9d4"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-replay/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-replay/delta-native-records.jsonl",
+      "bytes": 425670,
+      "sha256": "e365720e61375e54faf61c5a036084c993bb69b13a11b425d1979cede27a7eb2",
+      "lines": 3
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-replay/proposal-manifest.json",
+      "bytes": 10803,
+      "sha256": "4856781b05b0fac963cc7535b8a80d8d92e4b18454a636d2ea98705d713c092c"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-replay/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/native-stdout.txt",
+      "bytes": 4880,
+      "sha256": "2305f37afc3e4ad8ea8bfa1e462f4eb013e6db63bc10eeeab6df2da5ba302980"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-actual-argv.json",
+      "bytes": 2428,
+      "sha256": "c833558350ec9939071c8376d69f953d5d194560f636eb6209a5f6c881fb17bd"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-replay/delta-recurrence-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-replay/delta-recurrence-records.jsonl",
+      "bytes": 3206534,
+      "sha256": "6e9c3ac764ae5e5a67ed05be25a210534d6190bb0c1d2d926ade7e2218360d23",
+      "lines": 23
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-replay/proposal-manifest.json",
+      "bytes": 15501,
+      "sha256": "1e8e15c6b0b52d12d14274c06c9158c01b1069fa019a070904bbc7fbf7fa729b"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-replay/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "d45ec93d4b3c7bc92aa9a4d646540460020eaa99a5e626d1c616f413ad946c69"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/recurrence-stdout.txt",
+      "bytes": 4950,
+      "sha256": "9dfbf22b6b63c561d90fc6e0eedfc56c086289c82aa0edbbce7ea663896138be"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/root-audit-current-union-v1.py",
+      "bytes": 6447,
+      "sha256": "cdc766c4d6213a4b4248d8c80a5458a3b69b2fe7a67463e1f2fe11cab4b41cc8"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/root-current-union-audit-v1.json",
+      "bytes": 16950,
+      "sha256": "47440ed7af5a30abb9820d56c2323626aac86655eeb04147d6634fc3af0180ad"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/counterfactual-proposal-v6/compact-compose-v1/root-independent-closure-review-v1/root-three-native-23-recurrence-composition-adoption-v1.json",
+      "bytes": 19726,
+      "sha256": "eb566fa698028f344bd98c632a474ee29a0a5ff02106525ba6bd3af91ebc627b"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/root-body-review-v2/root-derived-body-admission-index-v2.json",
+      "bytes": 1236,
+      "sha256": "e1eaa1eec967a482d84d6fd52c5f3cb72735bc4d2252d6296c91e10a45c48689"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/root-body-review-v2/root-writer-0004-body-admission-v2.json",
+      "bytes": 5460,
+      "sha256": "80f7209044349e685caf2d9b93c582abd5852d701349fd9872726c39430800a9"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/root-body-review-v2/root-writer-0011-body-admission-v2.json",
+      "bytes": 5535,
+      "sha256": "96044a56f53c5b4ffa60d3c7ec6305ebd43019b062504048a6f30aa9a907dbad"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/root-body-review-v2/root-writer-0040-body-admission-v2.json",
+      "bytes": 5591,
+      "sha256": "77e10a77ef7a1285123dab41a1bcad0e41968f93263af552337651e23057bce7"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/writer-0004.json",
+      "bytes": 126889,
+      "sha256": "84c6a05b2cf090d6f61a2d0fd8872c907d255aa4aef207cfac2f5f0fb7ac63e8"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/writer-0011.json",
+      "bytes": 107240,
+      "sha256": "ef4510cf0ad03ab15a2651d436af89bf408593de13639b27ded996ce47f9fe88"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/derived-body-candidates-v2/writer-0040.json",
+      "bytes": 119474,
+      "sha256": "fde64c69acaea006ee089b7f25afdd1d1d270380380d70c06cb390b469646a4a"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/native-materialization-v1/root-31-ordinary-action-admission-v2.json",
+      "bytes": 43343,
+      "sha256": "fc8b67a006702d9a9d49e5d1f22d3e566cb079e9228816274745f5f590331586"
+    },
+    {
+      "path": "luna-authored-root-microgrid-multilambda-20261009-v1/evidence/native-materialization-v1/root-native-replay-v1.jsonl",
+      "bytes": 5983079,
+      "sha256": "602dadddf9a8dc2ea309c8e005cca0661c70a34ea493129a68f53f8dcb82dcc2",
+      "lines": 47
+    }
+  ],
+  "bytes": 25331749
+}
