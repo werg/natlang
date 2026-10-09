@@ -5,28 +5,25 @@ New neuralese training lineages start with the declared recipe at
 must not bypass its foundation gates. Code moves through `origin/main`; data and
 checkpoints move through the corpus registry and immutable manifests.
 
-## Active text foundation and depth curriculum (2026-10-09)
+## Active text foundation: mapped drift, then autoregressive feedback (2026-10-09 correction)
 
-The current foundation uses the shared projection-first sequence schedule in
-`train.text_warmup`: both distinct projections receive raw next-token embedding
-supervision from the first update; after their held plateau the transformer
-adapts gently. Gold-seeded passes reuse the same shallow layers and projection,
-shifted into the next input position, with one-stage consumer credit. Saved step
-counts and a narrow autoregressive control do not grant channel qualification.
+The shared owner decision from 2026-10-08 replaces repeated sketch passes in
+text warm-up with `gold-text-input-map-v1`. A causal token-to-neuralese map fits
+stop-gradient full-depth projected outputs at matching positions. The full
+model consumes detached mapped previous-token embeddings, while its output
+projection retains the raw gold next-token embedding anchor. Each update uses
+a gold-history pass and a mapped-history consumer pass.
 
-Declared `max_sequence_passes` defaults to3. An explicit4/5-pass continuation
-uses this same schedule and full-state handoff. Its saved depth-ramp cursor
-preserves optimizer, adaptation phase and backbone trainability, then adds a
-pass after each fresh `pass_ramp_evals` interval. Extending an already capped
-4-pass schedule to5 likewise waits a fresh interval; it cannot jump depths
-because earlier evaluation counters are large. A depth change remeasures held
-alignment baseline and qualification streak. Every evaluated target depth must
-pass its gates; runtime/gradient replay still needs its separate qualification.
+After mapped-input adaptation, train and qualify genuinely self-generated
+full-depth autoregressive feedback. A mapped-history alignment gate or an AR
+evaluation alone does not perform that fixup. Runtime transport, stopping and
+function recurrence remain separately qualified against exact weights.
 
-Shared commits96a17e66, d60f0180 and a31f5838 fix deeper-depth qualification and
-recipe declaration/resume handling. Pop's currently running immutable4880-text
-continuation predates them and remains at three passes. Review its final held
-metrics before declaring the next depth curriculum and exact checkpoint pins.
+Pop mistakenly reactivated sketch warm-up on October 9 despite the previously
+acknowledged map decision. That run was interrupted for checkpoint preservation;
+its failed sketch gates remain evidence, not grounds for a deeper sketch
+curriculum. Sketch diagnostics and inference initialization experiments do not
+replace the active map training path.
 
 ## Required order
 
@@ -120,7 +117,7 @@ resuming under changed inputs. The raw-port handoff consumes this API and create
 The runtime report qualifies fixed-length transport/replay only; autonomous stop
 selection and semantic compression require subsequent training and evaluation.
 
-## Historical mapped text warm-up policy (2026-10-08)
+## Mapped text warm-up policy (2026-10-08; current)
 
 Maple and LFM share `recipes/gold-text-input-map-v1.json` and the same
 `train.text_warmup` implementation. Launch with `--neuralese-input map
@@ -134,9 +131,8 @@ qualify autonomous neuralese rollout or function recurrence.
 The shared `raw-recurrence-v1` recipe declares this map mode explicitly in its
 `core_text_warmup` stage. The recipe runner requires every declared core text
 warm-up to choose `neuralese_input` as `map` or `sketch`; mapped warm-up also
-requires `rollout_passes: 0`. The direct `text_warmup` CLI keeps its historical
-sketch default for reproducing explicit sketch diagnostics, but new shared
-lineages use the declared recipe so the mode cannot be omitted silently. The
+requires `rollout_passes: 0`. The direct `text_warmup` CLI defaults to map. Explicit sketch diagnostics
+remain distinguishable; new shared lineages use the declared map recipe. The
 input map is training-only: export keeps it beside the serving heads, and the
 recurrence runtime starts from the map-tuned backbone and serving heads. It does
 not apply the token-to-Neuralese map when serving.

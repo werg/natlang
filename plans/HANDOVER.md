@@ -1,3 +1,17 @@
+## Pop course correction: restore mapped-input training — 2026-10-09
+
+The user caught a genuine regression: Pop resumed sketch warm-up although the
+October 8 inbox memo513f4953 and shared DECISIONS already replaced it with a
+causal token-to-neuralese input map. Pop had acknowledged and successfully run
+that approach (20992 text qualification plus separate runtime probe). This was
+not a missing memo. The October 9 active sketch/depth summary and "historical"
+map label are superseded. The trainer was signalled directly inside its container
+to save and stop; verify the complete checkpoint before choosing a continuation.
+Preserve the full-projection raw embedding anchor repair and failed gate evidence.
+Use mapped drift adaptation, then genuine autoregressive feedback training/fixup;
+AR evaluation alone is not that training stage. Radial/sketch extension WIP is
+paused and preserved separately, not part of the active training path.
+
 > Start with [Pop current work](POP_CURRENT.md) for active Pop jobs, next actions and admission status. The detailed chronological evidence follows below. DGX state remains owned by its agent.
 
 

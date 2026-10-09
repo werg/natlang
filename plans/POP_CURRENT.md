@@ -8,19 +8,20 @@ Last reviewed: 2026-10-09 11:56 UTC. This page is a navigation aid; inspect live
 - Run `python3 scripts/coordination_inbox.py check --ack` at session start, before resource changes and each monitoring cycle. Use Git for code and the corpus registry/manifests plus `sync_training_corpora.py` for selected data artifacts.
 - The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
 
-## GPU: active foundation continuation
+## GPU: correcting the foundation training path
 
-Container: `neuralese-foundation-text-4880-continuation-20261009-v1`.
+The sketch run `neuralese-foundation-text-4880-continuation-20261009-v1`
+was signalled to checkpoint and stop on 2026-10-09 after the user caught a
+regression to the superseded approach. Best saved step3328 remains unqualified;
+matching best checkpoint SHA `1c134d95729a5c68ccabe4a162ac4376fee23484cb3ca8325e2db73883073c91`.
+This run's raw gold-embedding anchor repair is useful work, but its repeated
+sketch consumer objective is not the agreed training path.
 
-Recipe: [luna-foundation-text-4880-continuation-from-repair-best-20261009-v1.json](../training/neuralese/recipes/luna-foundation-text-4880-continuation-from-repair-best-20261009-v1.json).
-
-Output: `/srv/storage/natlang-artifacts/neuralese-foundation-text-4880-continuation-20261009-v1/direct-stage-run/foundation_text_continuation`.
-
-- Full-state continuation from repair best1280: model, distinct full/sketch projections, Muon/AdamW optimizer, schedule and RNG restored. It uses all 4880 admitted target-bound text documents, not the old 87-document repair subset. Absolute step cap4096; no automatic qualification from completing steps.
-- Latest observed evaluation/current/best checkpoint2560. GPU approximately100%,4943MiB of8188MiB. Inspect saved checkpoint receipts before selecting weights.
-- Held full/shallow raw-embedding relativeMSE .1210/.5396; long-tail repeated-pass excessCE .618/.964 and agreement .870/.810. Alignment gate **false**; improving held metrics do not yet qualify recurrence.
-- One256-token full-depth projected autoregressive control is exact at2560, but earlier saved checkpoints alternated between exact and divergence at index3. This is a fixed control, not randomized window selection. Sketch autoregression remains poor. New shared diagnostics fingerprint control windows and distinguish preceding feedback from current emitted payload; the active frozen runtime predates those additions.
-- Next: monitor held metrics and storage; diagnose exact-best foundation functionality if improvement stalls. Qualify runtime transport/gradient replay separately against the actual selected weights before recurrence.
+Next: restore the shared `gold-text-input-map-v1` mapped-input path with an
+explicit checkpoint/objective handoff on admitted target-bound text, then train
+against actual full-depth autoregressive feedback. Verify the saved shutdown
+checkpoint before selecting a source. Neither mapped alignment nor AR controls
+alone qualify autonomous feedback, runtime transport, stopping or recurrence.
 
 ### Shutdown and storage
 

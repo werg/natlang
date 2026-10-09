@@ -891,7 +891,7 @@ def main(argv=None):
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
                    help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
                         'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
-    p.add_argument('--neuralese-input',choices=('sketch','map'),default='sketch',
+    p.add_argument('--neuralese-input',choices=('sketch','map'),default='map',
                    help='how Neuralese positions are filled in training: sketch = repeated shallow sketch passes; '
                         'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
                         'self-consistent with the model\'s own projection)')
