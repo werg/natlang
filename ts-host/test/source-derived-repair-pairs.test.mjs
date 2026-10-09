@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { loadSourceDerivedRepairCandidates, sourceDerivedRepairReviewPair,
   validateSourceDerivedRepairItem } from '../scripts/source-derived-repair-pairs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const proposalPath = path.join(root, 'runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/counterfactual-eligibility-repairs-v2/proposal.json');
+const causalProposalPath = path.join(root, 'runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/leaf-eligibility-repair-audit-v1/causal-boundary-repairs-v5.json');
 
 test('renders the three pinned source-derived repairs as held native preference reviews', async () => {
   const loaded = await loadSourceDerivedRepairCandidates(proposalPath);
@@ -90,6 +91,91 @@ test('resolves artifact paths from repo markers at varied depth and accepts a on
     tampered.items[0].original_provider_decision.request_sha256 = '0'.repeat(64);
     await writeFile(nested, JSON.stringify(tampered));
     await assert.rejects(loadSourceDerivedRepairCandidates(nested), /proposal request\/action\/context differs/);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('loads reviewed causal-action v5 joins and keeps every candidate held', async () => {
+  const loaded = await loadSourceDerivedRepairCandidates(causalProposalPath);
+  assert.equal(loaded.items.length, 3);
+  const reviews = loaded.items.map(sourceDerivedRepairReviewPair);
+  assert.deepEqual(reviews.map(row => row.status), ['held', 'held', 'held']);
+  assert.ok(reviews.every(row => row.training_admission === false &&
+    row.disposition === 'root_per_item_preference_admission_pending'));
+  assert.deepEqual(reviews.map(row => row.pair.evidence.terminal_tool_call_id),
+    loaded.items.map(row => row.provider_request.terminal_tool_call_id));
+  assert.ok(reviews.every(row => row.pair.evidence.synthetic_target === true &&
+    row.pair.evidence.observed_rejected_target === true && row.pair.messages.length > 0));
+  const repeated = loaded.items[0];
+  const raw = JSON.parse(await readFile(path.join(root, repeated.raw_result.path), 'utf8'));
+  const sameInvocation = raw.trajectory.filter(event => event.invocation_id === repeated.provider_request.invocation_id);
+  const exactRequest = sameInvocation.filter(event => event.request_sha256 === repeated.provider_request.request_sha256 &&
+    event.raw_response_sha256 === repeated.provider_request.raw_response_sha256);
+  assert.ok(sameInvocation.length > 1, 'fixture exercises repeated invocation IDs');
+  assert.equal(exactRequest.length, 1, 'request and response hashes select one exact provider turn');
+  assert.equal(exactRequest[0].model_response.raw_calls[0].id, repeated.provider_request.terminal_tool_call_id);
+});
+
+test('causal-action v5 rejects request/response and repeated-invocation tool-call mismatches', async () => {
+  const proposal = JSON.parse(await readFile(causalProposalPath, 'utf8'));
+  const temporaryRoot = await mkdtemp(path.join(root, '.causal-action-repair-'));
+  const nested = path.join(temporaryRoot, 'deep', 'proposal.json');
+  try {
+    await mkdir(path.dirname(nested), { recursive: true });
+    const write = async changed => writeFile(nested, JSON.stringify(changed));
+    const requestMismatch = structuredClone(proposal);
+    requestMismatch.items[0].provider_request.request_sha256 = '0'.repeat(64);
+    await write(requestMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /raw result\/request\/response pins mismatch/);
+
+    const responseMismatch = structuredClone(proposal);
+    responseMismatch.items[0].provider_request.raw_response_sha256 = '0'.repeat(64);
+    await write(responseMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /raw result\/request\/response pins mismatch/);
+
+    // The same invocation can occur more than once. The join must still identify the terminal call by its ID.
+    const toolCallMismatch = structuredClone(proposal);
+    toolCallMismatch.items[0].provider_request.terminal_tool_call_id = 'different-terminal-call';
+    await write(toolCallMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /terminal provider tool-call ID/);
+
+    const contextMismatch = structuredClone(proposal);
+    contextMismatch.items[0].preference_pair_candidate.messages[0].content += ' altered';
+    await write(contextMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /candidate pair target\/context/);
+
+    const terminalArgumentsMismatch = structuredClone(proposal);
+    terminalArgumentsMismatch.items[0].preference_pair_candidate.rejected.target.tool_calls[0].function.arguments =
+      JSON.stringify({ code: 'return false;', finish: true, extra: true });
+    await write(terminalArgumentsMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /rejected target does not exactly preserve/);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('causal-action v5 checks chosen eval syntax and names against the captured scope', async () => {
+  const proposal = JSON.parse(await readFile(causalProposalPath, 'utf8'));
+  const temporaryRoot = await mkdtemp(path.join(root, '.causal-action-scope-'));
+  const nested = path.join(temporaryRoot, 'proposal.json');
+  try {
+    const write = async changed => writeFile(nested, JSON.stringify(changed));
+    const syntaxMismatch = structuredClone(proposal);
+    const syntaxItem = syntaxMismatch.items[0];
+    syntaxItem.causal_repair.synthetic_chosen_tool.arguments.code = 'return (;';
+    syntaxItem.preference_pair_candidate.chosen.target.tool_calls[0].function.arguments =
+      JSON.stringify(syntaxItem.causal_repair.synthetic_chosen_tool.arguments);
+    await write(syntaxMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /typescript_syntax_error/);
+
+    const scopeMismatch = structuredClone(proposal);
+    const scopeItem = scopeMismatch.items[0];
+    scopeItem.causal_repair.synthetic_chosen_tool.arguments.code = 'return missingEligibilityFact;';
+    scopeItem.preference_pair_candidate.chosen.target.tool_calls[0].function.arguments =
+      JSON.stringify(scopeItem.causal_repair.synthetic_chosen_tool.arguments);
+    await write(scopeMismatch);
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /unavailable_or_conflicting_scope/);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

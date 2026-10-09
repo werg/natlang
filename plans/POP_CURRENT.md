@@ -47,9 +47,9 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
 ### Failure repairs and skills
 
-- Exact-context source audit confirms three genuine positive-eligibility false judgments (BIR-2C, RWA-1C, ESR-2A), with evidence visible and faithful host capture. These are not converter/read/transport failures.
-- Shared `build-preference-pairs.mjs --source-derived-repairs PROPOSAL.json` now preserves three checked counterfactual repairs in a held sidecar. Ordinary preference output is empty. Synthetic chosen targets are explicit; no task/hidden-state equivalence or DPO admission. Root review found all three negative targets are appropriate delegation code whose children returned incorrect values. Keep held; locate the actual wrong leaf response and exact context before DPO promotion, to avoid teaching against delegation. See `root-delegation-attribution-hold-v1.json` beside the proposal.
-- V6 `judge-against-criteria` adds a generic positive conjunction example; other six v5 skills unchanged. Tracked diagnostic authorization scopes its current use. Evaluate results and discovery before broader activation/SFT.
+- Exact-context source audit confirms three genuine positive-eligibility false judgments (BIR-2C, RWA-1C, ESR-2A), with the relevant facts visible and faithful host captures. The failure boundaries were respectively a false leaf answer, an added identity/proof requirement in the delegated criterion, and a stale “eligibility unknown” premise passed to a child. The original three repair rows remain held.
+- The shared `build-preference-pairs.mjs --source-derived-repairs PROPOSAL.json` adapter now accepts the exact-context v5 causal-boundary proposal. It joins source row, request hash, raw response hash, terminal tool-call ID, trace action and offered schema; it checks chosen eval syntax and names against the captured scope. All three candidate pairs stay in the held sidecar pending per-item root preference admission; ordinary preference output remains empty. The chosen side preserves the eligibility delegation, and carries no task-success, runtime-equivalence or hidden-state claim.
+- The audit's generic skill recommendations are to evaluate each stated conjunction against supplied facts, use later source-bound evidence instead of retaining a superseded unknown premise, and avoid adding identity/proof conditions absent from the task contract. These remain review recommendations; no skill-wide activation or new DPO/SFT admission follows from them.
 
 ## Corpus inventory
 

@@ -62,29 +62,35 @@ let sourceRepairInput = null;
 if (values['source-derived-repairs']) {
   sourceRepairInput = await loadSourceDerivedRepairCandidates(values['source-derived-repairs']);
   for (const item of sourceRepairInput.items) {
+    const sourceRepairId = item.candidate_id ?? item.id;
+    const sourceRepairSource = item.source.source_id;
+    const sourceRepairInvocation = item.provider_request?.invocation_id ?? item.original_provider_decision?.invocation_id ?? null;
     const candidate = sourceDerivedRepairReviewPair(item);
     if (candidate.status !== 'held' || candidate.training_admission !== false || !candidate.pair) {
       const reason = candidate.reason ?? 'source_derived_candidate_not_held';
       skip(`source_repair:${reason}`);
-      audit.push({ id: item.id, source_id: item.source.source_id, decision_index: item.original_provider_decision.invocation_id,
+      audit.push({ id: sourceRepairId, source_id: sourceRepairSource, decision_index: sourceRepairInvocation,
         result: 'held_source_repair_validation_failed', reasons: [reason] });
       continue;
     }
-    heldRepairPairs.push({ version: 'natlang.source_derived_repair_review/1', id: item.id,
-      status: 'held', training_admission: false, required_root_preference_admission_receipt: true,
-      root_preference_admission_receipt: null,
-      provenance: { proposal_path: values['source-derived-repairs'], proposal_sha256: sourceRepairInput.proposal_sha256,
+    const repairProvenance = candidate.provenance
+      ? { proposal_path: values['source-derived-repairs'], ...candidate.provenance }
+      : { proposal_path: values['source-derived-repairs'], proposal_sha256: sourceRepairInput.proposal_sha256,
         audit_receipt: sourceRepairInput.proposal.audit_receipt, source_inventory: sourceRepairInput.proposal.source_inventory,
         source_id: item.source.source_id, source_row_sha256_including_lf: item.source.source_row_sha256_including_lf,
         request_sha256: item.original_provider_decision.request_sha256,
         raw_result_sha256: item.original_provider_decision.raw_result_sha256,
-        raw_response_sha256: item.original_provider_decision.raw_response_sha256 },
+        raw_response_sha256: item.original_provider_decision.raw_response_sha256 };
+    heldRepairPairs.push({ version: 'natlang.source_derived_repair_review/1', id: sourceRepairId,
+      status: 'held', training_admission: false, required_root_preference_admission_receipt: true,
+      root_preference_admission_receipt: null,
+      provenance: repairProvenance,
       disposition: candidate.disposition, synthetic_target: candidate.synthetic_target,
       observed_rejected_target: candidate.observed_rejected_target,
       runtime_or_hidden_state_equivalence: false, successful_task_completion_claimed: false,
       pair: candidate.pair });
-    audit.push({ id: item.id, source_id: item.source.source_id,
-      decision_index: item.original_provider_decision.invocation_id, result: 'held_source_derived_repair_review',
+    audit.push({ id: sourceRepairId, source_id: sourceRepairSource,
+      decision_index: sourceRepairInvocation, result: 'held_source_derived_repair_review',
       reasons: ['root_preference_pair_admission_pending'] });
   }
 }
