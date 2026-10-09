@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, browserTest as test } from './support/natlang.mjs';
 
 async function api() {
   const process = globalThis.process;

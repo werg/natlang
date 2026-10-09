@@ -73,6 +73,17 @@ def block_ids(value) -> set[str]:
     return set()
 _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 
+# What this server serves (spec/NEURALESE_PORT.md "Capabilities"): every runtime reports its list in
+# /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
+CAPABILITIES = sorted([
+    "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
+    "decide", "digest", "embed", "encode", "grad", "grad.order2", "guidance.check", "optim", "parts.value-type",
+    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "write"])
+
+
+def unavailable_code(capability: str) -> str:
+    return "neuralese-" + capability.replace(".", "-") + "-unavailable"
+
 
 def adapter_lora(engine: Engine, block_id: str) -> bytes:
     """A stored adapter as a GGUF LoRA (export/adapters.py), for servers that apply adapters as LoRAs (the fork)."""
@@ -146,7 +157,11 @@ def make_handler(engine: Engine):
                                         "max_block_length": engine.max_block, "grad": True, "grad_order": 2, "stream": True,
                                         "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
-                                                        for name, p in engine.projections.items()}})
+                                                        for name, p in engine.projections.items()},
+                                        "server": "reference",
+                                        # Owner-scoped holds only once the store implements them.
+                                        "capabilities": [c for c in CAPABILITIES
+                                                         if c != "store.owners" or hasattr(engine.store, "hold")]})
             lora = _LORA.match(self.path)
             if lora:
                 try:
@@ -164,7 +179,26 @@ def make_handler(engine: Engine):
                 return self._send(200, encode_block(block), "application/octet-stream")
             self._error(404, "not-found", self.path)
 
+        def _unavailable(self, capability: str):
+            self._error(501, unavailable_code(capability),
+                        f"{capability} is not served by this server (see capabilities in /v1/neuralese/info)")
+
+        def _method_not_allowed(self):
+            self._error(405, "method-not-allowed", self.command)
+
+        do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _method_not_allowed
+
+        def _object(self) -> dict:
+            """The JSON object body; anything else is 400 `bad-json`, as the fork answers."""
+            body = json.loads(self._body() or b"{}")
+            if not isinstance(body, dict):
+                raise json.JSONDecodeError("request body is not a JSON object", "", 0)
+            return body
+
         def do_PUT(self):
+            if _LORA.match(self.path):
+                # Adapters apply directly here; loading a LoRA is the fork's way of applying them.
+                return self._unavailable("adapters.lora-load")
             match = _BLOCK.match(self.path)
             if not match or match.group(2):
                 return self._error(404, "not-found", self.path)
@@ -180,35 +214,35 @@ def make_handler(engine: Engine):
         def do_POST(self):
             try:
                 if self.path == "/v1/chat/completions":
-                    return self._chat(json.loads(self._body() or b"{}"))
+                    return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
-                    referenced = set(json.loads(self._body() or b"{}").get("referenced") or [])
+                    referenced = set(self._object().get("referenced") or [])
                     return self._send(200, json.dumps({"removed": engine.store.collect(referenced, self._owner)}).encode())
                 if self.path == "/v1/neuralese/grad":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         return self._json(200, GradSession(engine).run(body))
                 if self.path == "/v1/neuralese/decide":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         return self._json(200, decide(engine, body))
                 if self.path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         return self._json(200, decide_many(engine, body))
                 if self.path == "/v1/neuralese/optim":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         return self._json(200, optim_step(engine, body))
                 if self.path == "/v1/neuralese/adapters":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         return self._json(201, new_adapter(engine, body).meta())
                 if self.path == "/v1/neuralese/embed":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
                 if self.path == "/v1/neuralese/write":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     prefix = body.get("prefix") or ""
                     request = GenerationRequest(messages=body.get("messages") or [], tools=body.get("tools"),
                                                 max_tokens=engine.max_block + len(engine._tokens(prefix)) + 8,
@@ -222,7 +256,7 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/digest":
                     from ..digest import INSTRUCTIONS, PREFIX, window_of, write_digest
 
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
 
                     def write(messages):
                         request = GenerationRequest(messages=messages, max_tokens=engine.max_block + 32,
@@ -241,7 +275,7 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide
 
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     g = body.get("guidance") or {}
                     guide = Guide(Settings(tools=g.get("tools") or None, repeat=int(g.get("repeat", 3)),
                                            syntax=bool(g.get("syntax", True)), run=int(g.get("run", 4))))
@@ -254,14 +288,14 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/render":
                     from .chat import render_messages, split_escaped
 
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     rendered = render_messages(body.get("messages") or [], body.get("tools"), engine._template, engine.specials)
                     prompt = "".join("<block>" if isinstance(segment, int) else
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)
                     return self._json(201, {"prompt": prompt})
                 if self.path == "/v1/neuralese/encode":
-                    body = json.loads(self._body() or b"{}")
+                    body = self._object()
                     with grad_lock:
                         block = encode_text(engine, body.get("text") or "", body.get("type"), body.get("context"))
                     return self._json(201, block.meta())
@@ -279,6 +313,8 @@ def make_handler(engine: Engine):
                 self._error(400, error.code, str(error))
             except json.JSONDecodeError as error:
                 self._error(400, "bad-json", str(error))
+            except Exception as error:  # noqa: BLE001 - every failure answers the error envelope, as the fork's
+                self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def _chat(self, body: dict):
             request = GenerationRequest(

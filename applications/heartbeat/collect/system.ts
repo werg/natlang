@@ -1,18 +1,10 @@
 // Sources "gpu", "teacher", "git" and "disk": the machine's resources.
+import { vllmLoad } from '@natlang/node';
 import type { Host } from '../host.js';
 import { failure, makeReading, type Reading } from './reading.js';
 
-/** Requests the vLLM server runs or queues, summed from its Prometheus text; null when the text has no such metric. */
-export function vllmLoad(metrics: string): { running: number, waiting: number } | null {
-  let running = 0, waiting = 0, found = false;
-  for (const line of metrics.split('\n')) {
-    const match = /^vllm:num_requests_(running|waiting)(?:\{[^}]*\})? ([\d.]+)$/.exec(line);
-    if (!match) continue;
-    found = true;
-    if (match[1] === 'running') running += Number(match[2]); else waiting += Number(match[2]);
-  }
-  return found ? { running, waiting } : null;
-}
+/** Shared with the other programs that wait for an idle executor (`@natlang/node`). */
+export { vllmLoad };
 
 export async function collectGpu(host: Host): Promise<{ reading: Reading, utilization: number | null }> {
   const result = await host.exec(['nvidia-smi', '--query-gpu=utilization.gpu,memory.used', '--format=csv,noheader,nounits'], { timeoutMs: 20_000 });

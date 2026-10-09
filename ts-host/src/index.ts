@@ -1,6 +1,8 @@
 /** @natlang/node: natural-language functions in TypeScript applications on Node. */
 export * from './runtime/node.js';
 export { builtin } from './runtime/builtin.js';
+export { vllmLoad, waitForExecutorIdle } from './runtime/executor-load.js';
+export type { ExecutorIdleWait } from './runtime/executor-load.js';
 export { compileProject, formatDiagnostics, natlangDeclaration } from './compiler/project.js';
 export { buildProject, checkProject, nodeProjectFiles } from './compiler/node-project.js';
 export type { BuildOptions, BuildResult, DefinitionManifest, ProjectFiles } from './compiler/project.js';
@@ -75,3 +77,4 @@ export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js
 export { registerBuiltinModule } from './runtime/modules.js';
 export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';
 export type { ReplayRecordSink, ReplaySession } from './neuralese/replay-records.js';
+export * as gepa from './gepa/index.js';

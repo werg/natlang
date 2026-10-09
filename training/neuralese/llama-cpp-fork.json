@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "24af2b603",
+  "working_commit": "62639bf33",
   "working_status": "Batched decision readout (/v1/natlang/score, /v1/neuralese/decide_many) on top of the full-residual-v1 reader adapter in nz_read; the browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Legacy-rms-v1 GGUF projector supports optional full-residual-v1 reader adapter in nz_read; CPU parity verified with a nonzero adapter. Raw-token and latent-sketch projectors remain unsupported, and this does not qualify the new foundation C++ runtime.",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2",
-  "commit": "24af2b603",
+  "commit": "62639bf33",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -45,15 +45,14 @@
       "lengths_and_truncation": "equal to the reference"
     },
     "server_conformance": {
-      "date": "2026-10-09",
-      "fork_commit": "24af2b603",
+      "date": "2026-10-10",
+      "fork_commit": "62639bf33",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
         "forced write: length, truncation, payload, stop logits",
         "read of an uploaded block: greedy continuation",
         "decision readout log-probabilities",
-        "grad and embed refused",
         "text encoding (with and without a context)",
         "write at a write site",
         "digest plan: single site and chunked at window 16",
@@ -62,13 +61,16 @@
         "rendered prompts (plain, tools, tool calls with results, a reply returning a written value as a block)",
         "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry",
         "weight adapters: an xs adapter (adapter/2) exported as a GGUF LoRA gives the reference's decision log-probabilities and greedy reply; unloaded adapters fail 409, projection-decoded ones 501",
-        "batched decision scoring (/v1/natlang/score, /v1/neuralese/decide_many): each item equals decide alone, a bad item fails alone"
+        "batched decision scoring (/v1/natlang/score, /v1/neuralese/decide_many): each item equals decide alone, a bad item fails alone",
+        "one capability model: info.server and sorted info.capabilities on both; every capability the fork lacks answers 501 neuralese-<capability>-unavailable (grad, optim, embed, adapters.create, adapters.lora-export, chat.stream, template.value-type, template.argument-path, parts.value-type); the reference answers PUT \u2026/lora 501",
+        "shared error behaviour: 405 method-not-allowed, 404 not-found, 400 bad-json for a non-object body and for a malformed collect",
+        "batched scoring groups same-prompt items across the request and answers in request order"
       ],
       "stop_sources": [
         "shallow",
         "final"
       ],
-      "result": "42 passed on DGX CPU: 14 shallow, 14 final (native build-cpu), 14 final-wasm (vendored wasm built from the same commit)",
+      "result": "48 passed on DGX CPU: 16 shallow, 16 final (native build-cpu), 16 final-wasm (vendored wasm built from the same commit); test_runtime_versions passes",
       "decide_max_logprob_diff": 0.0041
     }
   },

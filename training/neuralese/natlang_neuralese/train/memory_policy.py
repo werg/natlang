@@ -109,7 +109,8 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
                                       sequence_passes: int, batch_size: int,
                                       full_layout: dict, shallow_layout: dict,
                                       *, cutoff: int, vocab_size: int,
-                                      readout_chunk_tokens: int = 128):
+                                      readout_chunk_tokens: int = 128,
+                                      channel_consistency: bool = False):
     """Estimate the peak retained geometry of one text-warmup update.
 
     Map adaptation may run a gold-history pass and mapped-history consumer at the
@@ -157,6 +158,12 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
         iterative_overlap = (producer_prefix + producer_shallow + consumer_prefix +
                             consumer_history + consumer_branch)
         peak_per_row = max(pass_zero, iterative_overlap)
+    if channel_consistency:
+        # geometry_bytes already budgets four vocabulary arrays. Same-history
+        # KL additionally holds the detached target distribution and live
+        # projected log probabilities in a checkpointed chunk, not T x vocab.
+        peak_per_row += readout_tokens * vocab_size * 16
+        peak_per_row += target_tokens * full_layout['width'] * full_layout['dtype_bytes']
     return int(peak_per_row * batch_size)
 
 

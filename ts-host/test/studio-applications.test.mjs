@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, browserTest as test } from './support/natlang.mjs';
 import { modelTurnsSoFar } from '../dist/native/agent.js';
-import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { simulateInventory } from '../studio/apps/worlds.mjs';
 import { apps, appById } from '../studio/apps/index.mjs';

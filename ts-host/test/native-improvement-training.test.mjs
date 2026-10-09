@@ -132,8 +132,8 @@ test('file reducer diagnostics expose actual training effects without opening va
  assert.deepEqual(evidence.expectedFiles,expected);
  const runtime=await import('../dist/runtime/node.js');
  const {compileVirtualProject}=await import('../dist/runtime/virtual-project.js');
- const compiled=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},runtime,{constrained:true,target:'node'});
- assert.equal(compiled.ok,true);
+ const compiled=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts'],'transformations.ts':AUTHORED_IMPROVER['improveStep/transformations.ts']}},runtime,{constrained:true,target:'node'});
+ assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
  const brief=compiled.require('main.ts').brief({goal:'Write report.json.',mode:'structural',objective:'quality',allowedFiles:['solve.nl']},[evidence],[]);
  assert.match(brief,/File effects:.*report.json.*<missing>/);
  const validation=await evaluator.evaluate(source,{split:'validation'});

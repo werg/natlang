@@ -3,11 +3,13 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { SOURCE_REVIEW_OPTIONS, configureSourceReview, writeIntakeReviews } from './source-review-intake.mjs';
 import { loadWorkflowSources } from './workflow-sources.mjs';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { expectedSourcePageCount } from './source-read-validation.mjs';
 
-const { values } = parseArgs({ options: { out: { type: 'string' }, cache: { type: 'string' }, prior: { type: 'string' } } });
+const { values } = parseArgs({ options: { out: { type: 'string' }, cache: { type: 'string' }, prior: { type: 'string' }, ...SOURCE_REVIEW_OPTIONS } });
+configureSourceReview(values);
 if (!values.out || !values.cache || !values.prior) throw new Error('usage: node build-workflowevals-folder-iterate-v1.mjs --out FRESH_DIR --cache CACHE --prior BUNDLE_JSONL');
 const REVISION = 'workflowevals-folder-iterate/2-paginated-exact-evidence-ledger';
 const canonical = value => JSON.stringify(value);
@@ -191,4 +193,5 @@ await writeFile(resolve(out,'source-manifest.json'),JSON.stringify({schema:'natl
 await writeFile(resolve(out,'review-facts.json'),JSON.stringify(rows.map(row=>({id:row.id,source_groups:row.source_groups,
   source_ids:row.source_ids,split:row.split,expected:row.semantics.expected,
   field_types:row.generation.output_field_types,source_question_instance_ids:row.generation.question_instance_ids})),null,2)+'\n');
-console.log(JSON.stringify({source_sha256:sourceSha,proof,output:out},null,2));
+const reviewed = await writeIntakeReviews(resolve(out,'source-review.jsonl'));
+console.log(JSON.stringify({...(reviewed ? {source_review:reviewed} : {}),source_sha256:sourceSha,proof,output:out},null,2));

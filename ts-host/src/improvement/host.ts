@@ -83,7 +83,7 @@ export class SourceEvaluator implements ProgramEvaluator {
       const file = ts.createSourceFile(path, source, ts.ScriptTarget.ES2022, true);
       for (const node of file.statements) if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
         const name = node.moduleSpecifier.text;
-        if (!name.startsWith('./') && !name.startsWith('../') && !['@natlang/node','@natlang/browser'].includes(name)) diagnostics.push('target import is outside the declared checked core: ' + name);
+        if (!name.startsWith('./') && !name.startsWith('../') && !['@natlang/node','@natlang/browser','natlang:gepa'].includes(name)) diagnostics.push('target import is outside the declared checked core: ' + name);
         if (['@natlang/node','@natlang/browser'].includes(name) && ts.isImportDeclaration(node) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
           const forbidden = node.importClause.namedBindings.elements.filter(item => ['createNatlangRuntime','SourceEvaluator','improveProgram','suiteExecution','FrozenImprover','OperationJournal','AssignmentBudget'].includes(item.propertyName?.text ?? item.name.text));
           if (forbidden.length) diagnostics.push('target cannot import program-evaluation authority');

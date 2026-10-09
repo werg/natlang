@@ -448,3 +448,21 @@ test('agent actions are derived from ledger events, commits, coordination messag
   assert.deepEqual(found.map(item => [item.source, item.action, item.target]), [['ledger', 'relaunch-run', 'natlang-v20-train.service'], ['status', 'set-status-page', 'dgx'], ['explicit', 'release-cache', 'dgx'],
     ['git', 'edit-code', 'abcdef012345'], ['coord', 'reply-note', 'm1'], ['coord', 'send-note', 'dgx']]);
 });
+
+test('the shared executor wait polls until the load falls, goes ahead after the limit, and never waits without metrics', async () => {
+  const { waitForExecutorIdle } = await import('../dist/index.js');
+  const lines = [], text = running => `vllm:num_requests_running{model_name="m"} ${running}\nvllm:num_requests_waiting{model_name="m"} 1\n`;
+  let clock = 0, polls = 0;
+  const base = { maxBusy: 2, idleWaitSeconds: 100, log: line => lines.push(line), now: () => clock, sleep: async ms => { clock += ms; } };
+  await waitForExecutorIdle({ ...base, readMetrics: async () => text(++polls < 3 ? 5 : 0) });
+  assert.equal(polls, 3);
+  assert.deepEqual(lines, ['waiting for the executor to be idle (6 requests, at most 2)']);
+  lines.length = 0; clock = 0;
+  await waitForExecutorIdle({ ...base, idleWaitSeconds: 60, readMetrics: async () => text(9) });
+  assert.match(lines.at(-1), /still busy \(10 requests\); going ahead/);
+  lines.length = 0;
+  for (const readMetrics of [async () => null, async () => 'nothing here', async () => { throw new Error('down'); }]) await waitForExecutorIdle({ ...base, readMetrics });
+  assert.deepEqual(lines, []);
+  await waitForExecutorIdle({ ...base, readMetrics: async () => text(9), stopping: () => true });
+  assert.deepEqual(lines, [], 'a stop ends the wait before it starts');
+});

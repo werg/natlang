@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { MemoryResearchAdapter } from '../studio/shared/research-workspace.mjs';
 import { ResearchRuntime } from '../studio/shared/research-runtime.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, browserTest as test } from './support/natlang.mjs';
 
 const root = new URL('../studio/research/programs/', import.meta.url);
 const paths = ['types.ts', 'reduce.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];

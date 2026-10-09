@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { loadSourceDerivedRepairCandidates, sourceDerivedRepairReviewPair,
@@ -9,8 +10,9 @@ import { loadSourceDerivedRepairCandidates, sourceDerivedRepairReviewPair,
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const proposalPath = path.join(root, 'runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/counterfactual-eligibility-repairs-v2/proposal.json');
 const causalProposalPath = path.join(root, 'runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/leaf-eligibility-repair-audit-v1/causal-boundary-repairs-v5.json');
+const skipUnless = file => existsSync(file) ? false : `requires the gitignored run artifact ${path.relative(root, file)} (not present in a clean checkout)`;
 
-test('renders the three pinned source-derived repairs as held native preference reviews', async () => {
+test('renders the three pinned source-derived repairs as held native preference reviews', { skip: skipUnless(proposalPath) }, async () => {
   const loaded = await loadSourceDerivedRepairCandidates(proposalPath);
   assert.equal(loaded.items.length, 3);
   const reviews = loaded.items.map(sourceDerivedRepairReviewPair);
@@ -37,7 +39,7 @@ test('renders the three pinned source-derived repairs as held native preference 
   ]);
 });
 
-test('holds target, prompt, evidence, and source-group tampering', async () => {
+test('holds target, prompt, evidence, and source-group tampering', { skip: skipUnless(proposalPath) }, async () => {
   const { items } = await loadSourceDerivedRepairCandidates(proposalPath);
   const item = structuredClone(items[0]);
   item.counterfactual_repair.target_arguments.value = false;
@@ -61,7 +63,7 @@ test('holds target, prompt, evidence, and source-group tampering', async () => {
   assert.equal(validateSourceDerivedRepairItem(wrongGroupContract).reason, 'counterfactual_scope_flags_invalid');
 });
 
-test('rejects malformed source-derived typed fact shape', async () => {
+test('rejects malformed source-derived typed fact shape', { skip: skipUnless(proposalPath) }, async () => {
   const { items } = await loadSourceDerivedRepairCandidates(proposalPath);
   const river = structuredClone(items[1]);
   river.counterfactual_repair.target_value.rationale = 'extra field';
@@ -76,7 +78,7 @@ test('rejects malformed source-derived typed fact shape', async () => {
   assert.equal(validateSourceDerivedRepairItem(alteredTargetPin).reason, 'counterfactual_target_hash_mismatch');
 });
 
-test('resolves artifact paths from repo markers at varied depth and accepts a one-item review fixture', async () => {
+test('resolves artifact paths from repo markers at varied depth and accepts a one-item review fixture', { skip: skipUnless(proposalPath) }, async () => {
   const loaded = await loadSourceDerivedRepairCandidates(proposalPath);
   const temporaryRoot = await mkdtemp(path.join(root, '.source-derived-repair-depth-'));
   const nested = path.join(temporaryRoot, 'a', 'b', 'c', 'proposal.json');
@@ -96,7 +98,7 @@ test('resolves artifact paths from repo markers at varied depth and accepts a on
   }
 });
 
-test('loads reviewed causal-action v5 joins and keeps every candidate held', async () => {
+test('loads reviewed causal-action v5 joins and keeps every candidate held', { skip: skipUnless(causalProposalPath) }, async () => {
   const loaded = await loadSourceDerivedRepairCandidates(causalProposalPath);
   assert.equal(loaded.items.length, 3);
   const reviews = loaded.items.map(sourceDerivedRepairReviewPair);
@@ -119,7 +121,7 @@ test('loads reviewed causal-action v5 joins and keeps every candidate held', asy
   assert.equal(exactRequest[0].model_response.raw_calls[0].id, repeated.provider_request.terminal_tool_call_id);
 });
 
-test('causal-action v5 rejects request/response and repeated-invocation tool-call mismatches', async () => {
+test('causal-action v5 rejects request/response and repeated-invocation tool-call mismatches', { skip: skipUnless(causalProposalPath) }, async () => {
   const proposal = JSON.parse(await readFile(causalProposalPath, 'utf8'));
   const temporaryRoot = await mkdtemp(path.join(root, '.causal-action-repair-'));
   const nested = path.join(temporaryRoot, 'deep', 'proposal.json');
@@ -157,7 +159,7 @@ test('causal-action v5 rejects request/response and repeated-invocation tool-cal
   }
 });
 
-test('causal-action v5 checks chosen eval syntax and names against the captured scope', async () => {
+test('causal-action v5 checks chosen eval syntax and names against the captured scope', { skip: skipUnless(causalProposalPath) }, async () => {
   const proposal = JSON.parse(await readFile(causalProposalPath, 'utf8'));
   const temporaryRoot = await mkdtemp(path.join(root, '.causal-action-scope-'));
   const nested = path.join(temporaryRoot, 'proposal.json');

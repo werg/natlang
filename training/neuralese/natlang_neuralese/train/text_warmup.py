@@ -55,6 +55,7 @@ _OBJECTIVE_METRIC_SCALARS = (
     'gold_accuracy', 'close_targets', 'close_probability', 'close_top1',
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
     'context_valid_gold_tokens', 'context_valid_gold_fraction',
+    'channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens',
 )
 
 _EVALUATION_CONTEXT_METRICS = (
@@ -170,9 +171,13 @@ def _normalize_context_valid_strata(strata):
     for row in strata.values():
         non_metrics={'tokens','context_valid_gold_tokens','context_valid_gold_fraction',
                      'context_valid_last256_target_tokens','context_valid_last256_gold_tokens',
-                     'context_valid_windows'}
+                     'context_valid_windows', 'channel_consistency_tokens'}
         non_metrics.update(n for n in row if n.endswith('_weighted_sum'))
         for n in row.keys()-non_metrics:row[n]/=row['tokens']
+        channel_count=row.get('channel_consistency_tokens',0)
+        for name in ('channel_consistency_kl','channel_consistency_agreement'):
+            total=row.pop(name+'_weighted_sum',0.)
+            row[name]=total/channel_count if channel_count else None
         row['context_valid_gold_fraction']=row['context_valid_gold_tokens']/row['tokens']
         row['context_valid_last256_gold_fraction']=(
             row['context_valid_last256_gold_tokens']/row['context_valid_last256_target_tokens']
@@ -224,7 +229,7 @@ def _warmup_memory_layout(backbone, heads, *, checkpointed):
 def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
                                   full_layout, shallow_layout, cutoff,
                                   vocab_size, batch_size, named, optimizer,
-                                  default_ffn_chunk_tokens=1024):
+                                  default_ffn_chunk_tokens=1024, channel_consistency=False):
     """Bootstrap calibration only from previously successful update records."""
     path=Path(train_log)
     if not path.is_file():return 0
@@ -243,6 +248,7 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
             positions=int(row.get('positions',0));passes=int(row.get('schedule',{}).get('sequence_passes',0))
             count=int(row.get('batch',batch_size))
             preflight=memory.get('preflight',{})
+            if bool(preflight.get('channel_consistency',False)) != channel_consistency:continue
             context=int(preflight.get('context_tokens',prefix_tokens+positions-1))
             target=int(preflight.get('target_tokens',positions))
             actual_prefix=context-target+1
@@ -252,7 +258,7 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
             ffn_chunk=int(preflight.get('ffn_chunk_tokens',default_ffn_chunk_tokens))
             raw=text_warmup_update_geometry_bytes(actual_prefix,target,passes,count,
                 full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size,
-                readout_chunk_tokens=readout_chunk)
+                readout_chunk_tokens=readout_chunk,channel_consistency=channel_consistency)
             raw += text_warmup_ffn_workspace_delta_bytes(actual_prefix,target,count,
                 full_layout['intermediate'],base_chunk_tokens=default_ffn_chunk_tokens,
                 candidate_chunk_tokens=ffn_chunk)
@@ -522,6 +528,14 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
             payloads.append(payload)
         producer_payloads = torch.stack(payloads, dim=1).detach()
         producer_predictions = torch.stack(predictions, dim=1)
+        del producer, cache, top, payloads, predictions
+        # Same decisions, ordinary input coordinates. This target is recomputed
+        # from the live model; gold span IDs are not fed into this history.
+        ordinary_input = torch.cat((backbone.embed(prefix_ids),
+                                    backbone.embed(producer_predictions[:, :-1])), dim=1)
+        ordinary = backbone.forward_embeds(ordinary_input, cutoff=heads.cutoff, logits=False)
+        ordinary_top = ordinary['h_final'][:, prefix_ids.shape[1] - 1:].detach().clone()
+        del ordinary, ordinary_input
 
     # The final payload predicts the final target (including a real close
     # marker, where present) but is not consumed: no post-target state exists.
@@ -536,6 +550,7 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
             'secondary_target': secondary_target,
             'producer_payloads': producer_payloads,
             'producer_predictions': producer_predictions,
+            'ordinary_generated_top': ordinary_top,
             'gold_prefix_mask': causal_gold_prefix_mask(producer_predictions, span_ids),
             'pass_index': 1}
 
@@ -1029,6 +1044,8 @@ def main(argv=None):
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
     p.add_argument('--sketch-weight',type=float,default=1.);p.add_argument('--text-weight',type=float,default=.25)
+    p.add_argument('--channel-consistency-weight',type=float,default=1.,
+                   help='effective update weight of same-generated-history ordinary-to-projected KL in the AR fixup')
     p.add_argument('--projection-patience',type=int,default=3)
     p.add_argument('--projection-min-evals',type=int,default=2)
     p.add_argument('--projection-min-improvement',type=float,default=.01)
@@ -1077,6 +1094,8 @@ def main(argv=None):
         p.error('positive bounds and at least three tokens required')
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
+    if not math.isfinite(a.channel_consistency_weight) or a.channel_consistency_weight <= 0:
+        p.error('channel consistency weight must be finite and positive')
     if a.target_tokens is None and a.prefix_tokens>=a.tokens-1:p.error('prefix must leave at least two target tokens')
     if a.target_tokens is not None and (a.target_tokens<1 or a.target_tokens>=a.tokens):
         p.error('--target-tokens must be positive and smaller than --tokens')
@@ -1090,8 +1109,13 @@ def main(argv=None):
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':('gold-context control then detached sequential full-depth projected-payload history; '
                               'consumer gold supervision ends after its first differing decision; '
+                              'live ordinary-distribution KL supervises the same generated history through close; '
                               'full-span held metrics remain diagnostic' if a.ar_feedback_fixup else
                               'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'),
+              'channel_consistency':{'target':'live stop-gradient ordinary conditional distribution on the same generated history',
+                                     'mask':'through first generated close, inclusive',
+                                     'effective_update_weight':a.channel_consistency_weight}
+                  if a.ar_feedback_fixup else None,
               'ar_feedback_handoff_optimizer':'restore when parameter groups match; otherwise record a fresh optimizer with its reason'
                   if a.ar_feedback_fixup else None,
               'sketch_gradient':'detached_consumer',
@@ -1189,7 +1213,7 @@ def main(argv=None):
         f'i{full_memory_layout["intermediate"]}:kv{full_memory_layout["kv_width"]}:'
         f'skv{shallow_memory_layout["kv_width"]}:'
         f'd{backbone.embedding_weight.element_size()}:v{backbone.embedding_weight.shape[0]}:'
-        f'prefix{a.prefix_tokens}:ckpt{int(a.checkpoint_layers)}')
+        f'prefix{a.prefix_tokens}:ckpt{int(a.checkpoint_layers)}:channelkl{int(a.ar_feedback_fixup)}')
     restored_memory=resumed or continuation or {}
     memory_estimator=AdaptiveGraphMemory(_warmup_readout_calibration_state(
         restored_memory.get('memory_estimator'),
@@ -1295,7 +1319,7 @@ def main(argv=None):
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None):
+    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None,objective_passes=1):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
         weights=consumer_position_weights(weights,out.get('gold_prefix_mask'))
@@ -1324,6 +1348,18 @@ def main(argv=None):
         loss=a.embedding_weight*supervised_embedding+a.sketch_weight*supervised_secondary
         if not bootstrap:
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
+        channel_metrics = {name: top.new_zeros((), dtype=torch.float32) for name in
+                           ('channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens')}
+        if 'ordinary_generated_top' in out:
+            from .channel_objective import generated_history_channel_loss
+            channel_loss, channel_metrics = generated_history_channel_loss(
+                backbone, out['ordinary_generated_top'], top, out['producer_predictions'],
+                backbone.controls.close_id, chunk_size=readout_chunk_tokens,
+                gradients=not bootstrap)
+            if not bootstrap:
+                # Updates average their objective passes. Compensate here so the
+                # declared weight is the coefficient in the complete update.
+                loss = loss + objective_passes * a.channel_consistency_weight * channel_loss
         with torch.no_grad():
             ending=span==backbone.controls.close_id
             # The same detached reductions serve training and evaluation. Only
@@ -1359,6 +1395,7 @@ def main(argv=None):
           'supervised_'+secondary_name+'_mse':supervised_secondary.detach(),
           'context_valid_gold_tokens':prefix_stats['context_valid_tokens'],
           'context_valid_gold_fraction':prefix_stats['context_valid_fraction']}
+        metrics.update(channel_metrics)
         if evaluation:
             metrics.update({
               'context_valid_gold_ce':prefix_stats['context_valid_ce'],
@@ -1406,7 +1443,7 @@ def main(argv=None):
         completions=text_history_completions(backbone,heads,prefix,span,passes=passes,
             ar_feedback_fixup=a.ar_feedback_fixup)
         for out in completions:
-            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
+            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles,objective_passes=passes)
 
     step=0;streak=0;best=None;updates={'backbone':False,'input_map':False,'full_projection':False}
     initial_text_ce={}
@@ -1513,7 +1550,8 @@ def main(argv=None):
             shallow_layout=shallow_memory_layout,cutoff=heads.cutoff,
             vocab_size=backbone.embedding_weight.shape[0],batch_size=a.batch,
             named=named,optimizer=optimizer,
-            default_ffn_chunk_tokens=default_ffn_chunk_tokens)
+            default_ffn_chunk_tokens=default_ffn_chunk_tokens,
+            channel_consistency=a.ar_feedback_fixup)
         plan_path=a.out/'plan.json'
         if plan_path.is_file():
             plan_doc=json.loads(plan_path.read_text())
@@ -1575,6 +1613,11 @@ def main(argv=None):
                     for n in ('ce','text_ce','ce_delta','relative_mse',secondary_metric_name+'_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                         row[n]=row.get(n,0.)+m[n]*m['tokens']
                     row['tokens']+=m['tokens']
+                    channel_count=int(m['channel_consistency_tokens'])
+                    row['channel_consistency_tokens']=row.get('channel_consistency_tokens',0)+channel_count
+                    for name in ('channel_consistency_kl','channel_consistency_agreement'):
+                        key_sum=name+'_weighted_sum'
+                        row[key_sum]=row.get(key_sum,0.)+m[name]*channel_count
                     valid_count=int(m['context_valid_gold_tokens'])
                     row['context_valid_gold_tokens']=row.get('context_valid_gold_tokens',0)+valid_count
                     row['context_valid_gold_fraction']=row.get('context_valid_gold_fraction',0)+valid_count
@@ -1995,7 +2038,7 @@ def main(argv=None):
                 candidate_geometry=text_warmup_update_geometry_bytes(
                     prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
                     cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
-                    readout_chunk_tokens=chunk)
+                    readout_chunk_tokens=chunk,channel_consistency=a.ar_feedback_fixup)
                 candidate_raw=candidate_geometry+update_floor
                 candidate_kind=_warmup_memory_kind(len(batch),passes,chunk,
                                                    default_ffn_chunk_tokens)
@@ -2057,7 +2100,7 @@ def main(argv=None):
             raw_geometry=text_warmup_update_geometry_bytes(
                 prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
                 cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
-                readout_chunk_tokens=readout_chunk_tokens)
+                readout_chunk_tokens=readout_chunk_tokens,channel_consistency=a.ar_feedback_fixup)
             update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
             predictor_raw=raw_geometry+update_floor
             saved_activation_geometry=raw_geometry
@@ -2079,6 +2122,7 @@ def main(argv=None):
                 'saved_activation_geometry_upper_bound_bytes':saved_activation_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,
                 'readout_chunk_tokens':readout_chunk_tokens,
+                'channel_consistency':a.ar_feedback_fixup,
                 'ffn_chunk_tokens':ffn_chunk_tokens,
                 'chunk_policy':'largest FFN tile, then largest readout tile whose independently forecast update fits reusable memory after reserve; 128/1024 fallback then existing offload/refusal',
                 'chunk_candidates':candidate_forecasts,
@@ -2108,6 +2152,7 @@ def main(argv=None):
                 'saved_activation_geometry_upper_bound_bytes':saved_activation_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,'device':'non-cuda',
                 'readout_chunk_tokens':readout_chunk_tokens,
+                'channel_consistency':a.ar_feedback_fixup,
                 'ffn_chunk_tokens':ffn_chunk_tokens,
                 'chunk_policy':'conservative 128 readout / 1024 FFN on non-CUDA device',
                 'offload_budget_bytes':0,'predicted_fit':True,
@@ -2116,6 +2161,7 @@ def main(argv=None):
         return {'plan':details,'raw_geometry_bytes':saved_activation_geometry,
                 'predictor_raw_bytes':predictor_raw,
                 'readout_chunk_tokens':readout_chunk_tokens,
+                'channel_consistency':a.ar_feedback_fixup,
                 'ffn_chunk_tokens':ffn_chunk_tokens,
                 'context_tokens':context,'target_tokens':target,
                 'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
@@ -2238,9 +2284,9 @@ def main(argv=None):
             # before refusing, which would cost a full reload.
             for wait in range(11):
                 try:
-                    # The no-grad sequential producer adds a live full-depth KV
-                    # cache alongside the two objective passes; reserve one extra
-                    # pass worth of geometry rather than underestimating it.
+                    # Reserve an extra pass for the sequential producer and detached
+                    # ordinary target. Producer KV is released before the target
+                    # and consumer forwards; this is a conservative peak reserve.
                     memory_passes=passes+int(a.ar_feedback_fixup)
                     memory_plan=prepare_update_memory(batch,memory_passes,bootstrap);break
                 except RuntimeError as error:

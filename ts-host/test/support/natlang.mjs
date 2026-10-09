@@ -7,6 +7,8 @@ import { buildPending } from '../../dist/native/values.js';
 import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.js';
 import YAML from 'yaml';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { test as nodeTest } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** A TypeScript module item (callable-folder `.ts` file). */
@@ -91,4 +93,16 @@ export function withJudge(driver, truth = () => true) {
     return { log_probs: [Math.log(p), Math.log(1 - p)] };
   };
   return judged;
+}
+
+/**
+ * Tests that run the browser bundle (dist/browser/natlang.js) skip with a reason when it has not been built, as the suite does for
+ * other missing artifacts. `npm test` and `npm run build` build it; a checkout built with `build:node` alone does not.
+ */
+export const browserBundleSkip = existsSync(new URL('../../dist/browser/natlang.js', import.meta.url)) ? false :
+  'dist/browser/natlang.js is missing; run `npm run build:browser` (in ts-host) to build the browser bundle';
+export function browserTest(name, ...rest) {
+  const fn = rest.pop(), options = { ...(rest[0] ?? {}) };
+  if (browserBundleSkip && options.skip === undefined) options.skip = browserBundleSkip;
+  return nodeTest(name, options, fn);
 }

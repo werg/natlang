@@ -26,6 +26,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeAdapters, activeRecorder } from '../neuralese/recording.js';
+import { serves } from './neuralese-info.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
 import { constantBlock, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
@@ -170,7 +171,7 @@ export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<Chat
   request?: Json;
   /**
    * Weight adapters as GGUF LoRAs, for servers that apply adapters as LoRAs (the llama.cpp fork, native or in the
-   * browser: `info.adapters === 'lora'`): the driver uploads each bound adapter's LoRA once
+   * browser: capability `adapters.lora-load` in `/v1/neuralese/info`): the driver uploads each bound adapter's LoRA once
    * (`PUT /v1/neuralese/adapters/{id}/lora`). `referenceAdapterLoras` exports them from a reference server; a browser
    * runtime passes the files its model manifest ships. Without a LoRA the fork refuses the request (409).
    */
@@ -241,7 +242,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // A server that applies adapters as LoRAs (the fork) gets each adapter's LoRA once, from `adapterLoras`.
   const loras = new Set<string>();
   const uploadLoras = async (ids: readonly string[]) => {
-    if (!adapterLoras || (await serverInfo())?.adapters !== 'lora') return;
+    if (!adapterLoras || !serves((await serverInfo()) ?? {}, 'adapters.lora-load')) return;
     for (const id of ids) {
       if (loras.has(id)) continue;
       const bytes = await adapterLoras(id);
@@ -305,7 +306,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
         headers: { 'content-type': 'application/json', ...http.headers },
         body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}) }) });
-      if (response.status === 404) throw new Error('decision-unsupported: the server has no /v1/neuralese/decide');
+      if (response.status === 404 || response.status === 501) throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
       if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
       return await response.json() as DecisionScores;
     }, uploaded);

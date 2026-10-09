@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-static-decision-inline-lambdas-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v5",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 544111,
+      "sha256": "97af192d4ecc1ef3b1751d0e2d1d80fbf06ae6515ea8ec42b89e4e4b2a6392dd",
+      "lines": 23
+    },
+    {
+      "path": "frozen-adapter-v1/TEACHER_DECISION_LABELS.md",
+      "bytes": 4189,
+      "sha256": "e2005089dd0dfe8aee00fbd700bb7f8138644e0daca38d65da98283732d39232"
+    },
+    {
+      "path": "frozen-adapter-v1/teacher-decision-labels.mjs",
+      "bytes": 33697,
+      "sha256": "92939561323f34babf4a7c8052894b8838f63e120a0dabaaa3898e46e65870fb"
+    },
+    {
+      "path": "label-manifest.json",
+      "bytes": 257040,
+      "sha256": "194c61e958408a2961428e5e3a68764b47cf1c5e37f24ee77c95f85f9dad8ab9"
+    },
+    {
+      "path": "native.held.jsonl",
+      "bytes": 25763939,
+      "sha256": "41eb401340051a86a269dd659386cfbd0f263c6b51d66133481699d593af00cc",
+      "lines": 308
+    },
+    {
+      "path": "rejections.jsonl",
+      "bytes": 58394,
+      "sha256": "63828290d38764f2ec86de566f35bdc7dab1556982a0138a8f7f71e51fe880b8",
+      "lines": 125
+    },
+    {
+      "path": "replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 8881197,
+      "sha256": "6c7c90fbdbb1a804606921b37f0a09f56169d26d89bd405f42df061b88ed5bca",
+      "lines": 23
+    },
+    {
+      "path": "scorer-manifest.json",
+      "bytes": 34057,
+      "sha256": "dcd01dc15f921c0fd8c45033366a423bb6278d58a2864de9d6cf3ce0d563c381"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 6202,
+      "sha256": "ca7ff7596622d672e198c7b8618ed5e9a8d5601ce1dffe17a865de4b737bf1d6"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1198,
+      "sha256": "1b4f0e34558ca34fbd4ca8373c69d5f8b6629cca67d337ef9e20ea1a2223b761"
+    }
+  ],
+  "bytes": 35584024
+}

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { curriculumCase, returnCall } from './lib.mjs';
 import { digest, safePath } from './directory-sources.mjs';
+import { noteSourceItem } from './source-review-intake.mjs';
 import { pendingSourceReview } from '../../dist/teacher/source-review.js';
 import { retiredWorkflowEvaluationReleased } from '../../dist/teacher/source-conversion.js';
 
@@ -111,6 +112,8 @@ export async function loadWorkflowSources(cache, limit=Number.MAX_SAFE_INTEGER) 
     }
     for (const item of unique.values()) if(item.conflicted) { for(const id of item.aliases) { rejected.push({source,id,reason:'duplicate_target_conflict'}); const audit=audits.find(x=>x.source===source && id.endsWith(':'+x.id)); if(audit){audit.status='held';audit.reason='duplicate_target_conflict';} } }
     const selected=[...unique.values()].filter(item=>!item.conflicted).sort((a,b)=>a.row.question_instance_id.localeCompare(b.row.question_instance_id)).slice(0,limit);
+    for(const item of selected) for(const alias of item.aliases) noteSourceItem({dataset:`workflowevals:${source}`,id:alias,
+      visible:JSON.stringify({question:item.question,state:item.state}),annotated_label:String(item.answer),contract:item.question.instructions,answer_format:item.returns});
     for(const item of selected) {
       const record=curriculumCase({family:`workflow_${source}`,shape:item.row.question_instance_id,variant:'question-v1',splitGroup:item.groups[0],
         slice:'inline_placement',domain:'other',mode:'single_call',root:{name:'judge',args:{state:'unknown'},returns:item.returns,instructions:instructions(item.question)},

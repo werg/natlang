@@ -702,18 +702,30 @@ position bands and metrics through the first generated close (stopping itself
 remains separately qualified). This isolates channel drift from post-close
 continuation. Add these to the shared evaluator, never a backbone-specific path.
 
-Objective proposal for owner review, not implemented: preserve gold control and
-context-valid gold-prefix semantic supervision, but investigate a separate
-channel-consistency objective on the actual generated history through its close.
-Compare ordinary token-embedding and projected consumers on the same generated
-tokens; stop-gradient the ordinary conditional-distribution target, and optimize
-projected-consumer agreement over positions beyond gold divergence too. This
-would address a supervision gap: current gold losses must mask the unrelated
-gold tail, leaving most of a divergent rollout without channel-alignment
-supervision. Measure whether this improves consistency without harming ordinary
-text quality; do not silently restore invalid gold-tail targets, relax gates, or
-qualify a checkpoint from its completed step count. Distinguish this proposal
-from training the sketch or adding a frozen teacher model.
+Shared objective implemented for the next controlled handoff (DGX owner agreed
+2026-10-09): retain gold control and context-valid gold-prefix supervision, and
+add channel consistency on the actual generated history through its first close
+(inclusive). `train/channel_objective.py` supplies the exact chunked
+KL(ordinary || projected) used by both training and self-feedback evaluation.
+The ordinary consumer uses embeddings of the same preceding generated tokens,
+is a live stop-gradient target, and needs no frozen teacher. The projected
+consumer receives the gradients, including past divergence from gold; unrelated
+gold-tail targets stay masked.
+
+`channel_consistency_weight` defaults to 1.0 and is declared in the shared AR
+recipe. It is the effective coefficient in the complete update, compensated
+for the existing average over the gold control and self-fed consumer passes.
+The objective is always present in AR fixup after projection bootstrap;
+bootstrap still trains the projections against their existing embedding targets.
+Metrics report channel KL, argmax agreement, and the actual number of positions
+through close, using their own denominator. Producer KV is freed before the
+ordinary target/consumer forwards; vocabulary work is checkpointed in bounded
+chunks. Memory forecasts have a distinct geometry identity and do not reuse
+old no-KL peak observations.
+
+Measure consistency together with ordinary text quality and stopping against
+the exact new weights. This objective does not relax qualification gates or
+qualify a checkpoint by its completed step count. It does not train the sketch.
 
 The frozen Pop run resumed from complete24704 optimizer/schedule/RNG state
 (first update24705). No objective or schedule was hot-patched. A change requires

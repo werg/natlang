@@ -66,6 +66,7 @@
       "parameters": {
         "steps": 1024,
         "ar_feedback_fixup": true,
+        "channel_consistency_weight": 1.0,
         "tokens": 16384,
         "target_tokens": 256
       }

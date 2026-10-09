@@ -10,7 +10,7 @@
 import { resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
 import { CallStore, Folder, pluggableMode, untrusted, TRACES_DECLARATIONS, reviewPromotions, assembleCases, createNatlangRuntime, crispDecline, groupsOf, machineStoreRoot, measure,
-  betterFinding, detectFindings, renderFunction, renderGroup, renderReport, runJob, saveAccepted, study, tracesService, verifyCases, type CaseCheck, type DeclineReason,
+  betterFinding, detectFindings, waitForExecutorIdle, renderFunction, renderGroup, renderReport, runJob, saveAccepted, study, tracesService, verifyCases, type CaseCheck, type DeclineReason,
   type Group, type HotDefinition, type NatlangRuntime, type Study } from '@natlang/node';
 import chooseCondition from './chooseCondition.nl';
 import writeBody from './writeBody.nl';
@@ -117,24 +117,8 @@ async function waitForIdle(context: TargetContext, options: Options, log: (line:
   const endpoint = (context.executorIdentity?.configuration as { endpoint?: unknown } | undefined)?.endpoint;
   if (typeof endpoint !== 'string' || options.idleWait <= 0) return;
   const url = new URL('/metrics', endpoint).href;
-  const busy = async (): Promise<number | undefined> => {
-    try {
-      const text = await (await fetch(url, { signal: AbortSignal.timeout(5000) })).text();
-      let total = 0, found = false;
-      for (const line of text.split('\n')) {
-        const match = /^vllm:num_requests_(running|waiting)\{[^}]*\} ([\d.]+)$/.exec(line);
-        if (match) { total += Number(match[2]); found = true; }
-      }
-      return found ? total : undefined;
-    } catch { return undefined; }
-  };
-  const started = Date.now();
-  let said = false;
-  for (let load = await busy(); load !== undefined && load > options.maxBusy && !stopping(); load = await busy()) {
-    if (Date.now() - started > options.idleWait * 1000) { log(`the executor is still busy (${load} requests); going ahead`); return; }
-    if (!said) { log(`waiting for the executor to be idle (${load} requests, at most ${options.maxBusy})`); said = true; }
-    await new Promise(done => setTimeout(done, 30_000));
-  }
+  await waitForExecutorIdle({ readMetrics: async () => (await fetch(url, { signal: AbortSignal.timeout(5000) })).text(),
+    maxBusy: options.maxBusy, idleWaitSeconds: options.idleWait, log, stopping });
 }
 
 /** The runtime one group's writer runs in: the launcher's model, the store as `traces`, the group's exact `measure`. */

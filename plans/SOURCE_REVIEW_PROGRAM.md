@@ -393,3 +393,7 @@ Decisions on the open questions of section 9:
    are the same.
 5. **Second reviewer.** `ReviewOptions.second` takes any executor identity and call function; which model it is remains
    a deployment choice.
+
+### Intake wiring (2026-10-10)
+
+The intake readers `folder-data.mjs`, `workflow-sources.mjs` and `sources-ai2.mjs` note each kept item through `ts-host/scripts/inline-curriculum/source-review-intake.mjs`. The build scripts `build.mjs`, `build-source-backed.mjs --workflow-cache` and `build-workflowevals-folder-iterate-v1.mjs` take `--source-review-mode crisp|nl|shadow` (or `NATLANG_SOURCE_REVIEW_MODE`), `--source-review-server`, `--source-review-model` and `--source-review-limit`, and write review-output lines beside their output (`<out>.source-review.jsonl`, or `source-review.jsonl` in an output folder). `python3 scripts/source_review.py receipt` turns them into receipts. The default `crisp` notes nothing, calls no model and writes no file; no reader consults a recommendation, so admission never changes.

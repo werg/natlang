@@ -9,18 +9,18 @@ import {fingerprint} from '../dist/adaptation/identity.js';
 import {AUTHORED_IMPROVER} from '../dist/improvement/authored-source.js';
 import {compileVirtualProject} from '../dist/runtime/virtual-project.js';
 import * as runtime from '../dist/runtime/node.js';
+import {gepaModule} from '../dist/gepa/index.js';
 
 test('native bookkeeping treats correct multi-request executions as efficiency opportunities',()=>{
- const files={'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
- const build=compileVirtualProject({files},runtime,{constrained:true,target:"node"});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
+ const files={'main.ts':AUTHORED_IMPROVER['improveStep/crisp.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
+ const build=compileVirtualProject({files},runtime,{constrained:true,target:"node",modules:{'natlang:gepa':gepaModule}});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
  const helper=build.require('main.ts'),policy={objective:'model-calls',goal:'Reduce requests while preserving judgment.',mode:'instruction',allowedFiles:['solve.nl']};
  const evidence=[{passed:true,modelCalls:3,modelTrace:[{calls:[{name:'return_result'}],observation:'typed answer staged'}]}];
- assert.equal(helper.opportunity(policy,evidence).kind,'efficiency');
- assert.equal(helper.opportunity({...policy,objective:'quality'},evidence).kind,'none');
- assert.equal(helper.opportunity(policy,[{passed:true}]).kind,'none');
- assert.equal(helper.opportunity(policy,[{passed:false,failureKind:'fixture',modelCalls:0}]).kind,'fixture');
- assert.equal(helper.opportunity(policy,[{passed:false,failureKind:'timeout',modelCalls:3}]).kind,'quality');
- assert.equal(helper.request(policy,'Combine computation and completion.',evidence,[]).evidence,evidence);
+ assert.equal(helper.crispOpportunity(helper.opportunityFacts(policy,evidence)).kind,'efficiency');
+ assert.equal(helper.crispOpportunity(helper.opportunityFacts({...policy,objective:'quality'},evidence)).kind,'none');
+ assert.equal(helper.crispOpportunity(helper.opportunityFacts(policy,[{passed:true}])).kind,'none');
+ assert.equal(helper.crispOpportunity(helper.opportunityFacts(policy,[{passed:false,failureKind:'fixture',modelCalls:0}])).kind,'fixture');
+ assert.equal(helper.crispOpportunity(helper.opportunityFacts(policy,[{passed:false,failureKind:'timeout',modelCalls:3}])).kind,'quality');
 });
 
 test('current-student selection uses measured train failures/costs and excludes fixture and held-out failures',()=>{
@@ -67,21 +67,25 @@ test('decision curriculum uses actual correct training costs rather than validat
 });
 
 test('authored experiment helper measures edits and never installs a rejected candidate',async()=>{
- const files={'main.ts':AUTHORED_IMPROVER['improveStep/experiment.ts'].replace("'../types'","'./types'").replace("'./feedback'","'./feedback'"),'capabilities.ts':AUTHORED_IMPROVER['improveStep/capabilities.ts'].replace("'../types'","'./types'"),'feedback.ts':AUTHORED_IMPROVER['improveStep/feedback.ts'].replace("'../types'","'./types'").replace("'../capabilities'","'./capabilities'"),'context.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
- const build=compileVirtualProject({files},runtime,{constrained:true,target:"node"});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
- const helper=build.require('main.ts');
+ const relative=name=>AUTHORED_IMPROVER['improveStep/'+name+'.ts'].replace("'../types'","'./types'");
+ const files={'main.ts':relative('experiment'),'capabilities.ts':relative('capabilities'),'feedback.ts':relative('feedback'),'context.ts':relative('context'),'crisp.ts':relative('crisp'),'transformations.ts':relative('transformations'),'types.ts':AUTHORED_IMPROVER['types.ts']};
+ const build=compileVirtualProject({files},runtime,{constrained:true,target:"node",modules:{'natlang:gepa':gepaModule}});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
+ const helper=build.require('main.ts'),crisp=build.require('crisp.ts');
+ let hypothesis={kind:'efficiency',statement:'Batch judgments.',files:['solve.nl'],predictedChange:'fewer requests'};
+ const decide={findOpportunity:async(policy,facts)=>crisp.crispOpportunity(facts),diagnose:async()=>({observations:[],pattern:'p'}),hypothesize:async()=>hypothesis,editor:()=>({})};
+ const state={iteration:0,done:false,incumbent:'parent',quality:1,population:[],history:[],stopReason:''};
  const task=runtime.createNatlangRuntime();
- const execute=(...args)=>task.run(()=>helper.test(...args));
+ const execute=(folder,evaluator,id,editor,policy,note)=>{hypothesis={...hypothesis,statement:note};return task.run(()=>helper.test(folder,evaluator,id,policy,state,decide));};
  const policy={objective:'model-calls',goal:'Batch judgments.',mode:'structural',allowedFiles:['solve.nl'],maxExperiments:3,maxPopulation:3,strategy:'adaptive'};
  let accepts=0,proposals=0,changed=true,valid=true,calls=4,fixture=false;
  const candidate={digest:'candidate',filePaths:()=>['solve.nl'],readText:async()=> 'edited candidate source'},parent={digest:'parent',branch:()=>({filePaths:()=>["solve.nl"],readText:async()=>"judge then count",propose:async()=>{proposals++;return {value:{summary:"Batch judgments."},folder:candidate,diff:{changes:changed?[{path:'solve.nl'}]:[]}};},accept:async()=>{accepts++;return candidate;}})};
  const folder={at:()=>parent};
  const evaluator={evaluate:async(source,request)=>({source:source.digest,quality:1,sourceBytes:100,modelCalls:source===candidate?calls:4,gatesPassed:true,evidence:'train',scores:request.split==='validation'?[{caseId:'v',quality:1}]:undefined}),page:()=>[{passed:!fixture,modelCalls:4,...(fixture?{failureKind:'fixture',error:'broken fixture'}:{})}],check:async()=>({valid,diagnostics:['bad contract']})};
- let result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,false);assert.match(result.reason,/calls 4 vs 4/);assert.equal(accepts,0);assert.equal(result.feedback.sourceFiles[0].text,"edited candidate source");assert.equal(result.feedback.training[0].modelCalls,4);assert.deepEqual(result.feedback.validation,{quality:1,modelCalls:4});
- calls=2;result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,true);assert.equal(result.source,'candidate');assert.equal(result.modelCalls,2);assert.equal(accepts,1);
- changed=false;result=await execute(folder,evaluator,'parent',{},policy,'No-op.');assert.match(result.reason,/No supported hypothesis/);assert.equal(accepts,1);
- changed=true;valid=false;result=await execute(folder,evaluator,'parent',{},policy,'Invalid edit.');assert.match(result.reason,/Compilation rejected/);assert.equal(accepts,1);
- fixture=true;const before=proposals;result=await execute(folder,evaluator,'parent',{},policy,'Invent repair.');assert.match(result.reason,/^fixture-error: broken fixture/);assert.equal(proposals,before);
+ let result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,false);assert.equal(result.disposition,'rejected');assert.match(result.reason,/calls 4 vs 4/);assert.equal(accepts,0);assert.equal(result.feedback.sourceFiles[0].text,"edited candidate source");assert.equal(result.feedback.training[0].modelCalls,4);assert.deepEqual(result.feedback.validation,{quality:1,modelCalls:4});
+ calls=2;result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,true);assert.equal(result.disposition,'accepted');assert.equal(result.source,'candidate');assert.equal(result.modelCalls,2);assert.equal(accepts,1);
+ changed=false;result=await execute(folder,evaluator,'parent',{},policy,'No-op.');assert.equal(result.disposition,'no-hypothesis');assert.equal(accepts,1);
+ changed=true;valid=false;result=await execute(folder,evaluator,'parent',{},policy,'Invalid edit.');assert.match(result.reason,/Compilation rejected/);assert.equal(result.disposition,'invalid-candidate');assert.equal(accepts,1);
+ fixture=true;const before=proposals;result=await execute(folder,evaluator,'parent',{},policy,'Invent repair.');assert.equal(result.disposition,'fixture-error');assert.match(result.reason,/^broken fixture/);assert.equal(proposals,before);
 });
 
 test('retired optimizer templates migrate to the exact lifecycle and lose stale admission',async()=>{

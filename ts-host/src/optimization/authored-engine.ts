@@ -12,12 +12,14 @@ import { BudgetExhausted, type UsageGateway } from '../evaluation/usage.js';
 import { EvaluationFeedbackError } from '../evaluation/feedback.js';
 import type { Candidate, ComponentDescriptor } from '../adaptation/types.js';
 import type { EvaluationBatch, PreparedSuite } from '../evaluation/types.js';
-import { frontierParents, meanBetter, mergeCandidates } from './strategies/gepa.js';
+import { frontierParents, memberOf, meanBetter, mergeCandidates } from './strategies/gepa.js';
+import { draw, pick, prune } from '../gepa/index.js';
+import { checkPolicySettings, closeUnderDependencies, componentFactsOf, crispMove, decide, moveFacts, parentChoices, policyFunction, verifyComponents, verifyMove, verifyParent, type ComponentPolicySettings } from './policies.js';
 import { ComponentSelector } from './vendor/ax-gepa/gepaSelection.js';
 import { getUpdateGroup } from './vendor/ax-gepa/gepaDependencies.js';
 import type { OptimizationOptions, OptimizationTarget, SearchCandidate, SearchState } from './types.js';
 
-type Settings = {maxPopulation:number;maxRepairs:number;minibatchSize:number;dependencies:Readonly<Record<string,readonly string[]>>};
+type Settings = {maxPopulation:number;maxRepairs:number;minibatchSize:number;dependencies:Readonly<Record<string,readonly string[]>>;policies?:ComponentPolicySettings};
 type LoopState = {iteration:number;incumbent:string;done:boolean;stopReason:string};
 export async function runAuthoredSearch(context: {prepared:PreparedSuite;options:OptimizationOptions;settings:Settings;state:SearchState;
   target:OptimizationTarget;descriptors:readonly ComponentDescriptor[];train:string[];validation:string[];gateway:UsageGateway;
@@ -28,8 +30,11 @@ export async function runAuthoredSearch(context: {prepared:PreparedSuite;options
   const evidence=new Map<string,{batch:EvaluationBatch;id:string;split:string}>();
   const merged=new Set<string>();
   let plan: {iteration:number;parent:SearchCandidate;selected:{key:string};keys:string[];mini:string[];partner:SearchCandidate}|undefined;
+  let composing=false;
+  let chose:NonNullable<SearchState['plan']>['chose']={chooseParent:'crisp',chooseComponents:'crisp',chooseMove:'crisp'};
   let selector=new ComponentSelector(targets,state.selector);
-  const random=()=>{let x=state.rng;x^=x<<13;x^=x>>>17;x^=x<<5;state.rng=x>>>0;return state.rng/4294967296;};
+  const policies=checkPolicySettings(settings.policies);
+  const random=()=>{const step=draw(state.rng);state.rng=step.next;return step.value;};
   const member=()=>state.population.find(item=>item.id===state.incumbent)!;
   const register=(value:Candidate)=>{const id=fingerprint(value);values.set(id,value);return id;};
   let committed=structuredClone(state);
@@ -42,20 +47,44 @@ export async function runAuthoredSearch(context: {prepared:PreparedSuite;options
       const covered=new Set(state.population.flatMap(candidate=>candidate.train.results.flatMap(result=>[...result.coverage])));
       const eligible=targets.filter(item=>covered.has(item.key));
       if(!eligible.length)return {stopReason:'coverage-gap',incumbent:member().value};
-      const winners=state.strategy==='gepa'?frontierParents(state.population):[state.incumbent];
-      const parent=state.population.find(item=>item.id===(winners[Math.floor(random()*winners.length)]??state.incumbent))!;
-      let selected=selector.pick(iteration,random);
-      if(!eligible.some(item=>item.key===selected.key))selected=eligible[Math.floor(random()*eligible.length)]!;
-      const keys=getUpdateGroup(selected,targets).map(item=>item.key);
-      gateway.reserve('proposals',1,options.signal);selector.recordProposal(selected.key);
-      const shuffled=[...train];for(let index=shuffled.length-1;index>0;index--){const chosen=Math.floor(random()*(index+1));[shuffled[index],shuffled[chosen]]=[shuffled[chosen]!,shuffled[index]!];}
-      // The merge draw is made only on a scheduled composition experiment.
-      const compose=state.strategy==='gepa'&&iteration%4===3&&state.population.length>1;
-      const partner=compose?state.population[Math.floor(random()*state.population.length)]!:parent;
-      plan={iteration,parent,selected,keys,mini:shuffled.slice(0,settings.minibatchSize).sort(),partner};
-      const feedback=await target.feedback(parent.train,keys);
-      return {stopReason:'',parent:parent.value,parentId:parent.id,keys,components:descriptors.filter(item=>keys.includes(item.key)),
-        feedback:new EvidenceView(feedback),compose,duplicateIds:state.population.map(item=>item.id)};
+      const find=(id:string)=>state.population.find(item=>item.id===id);
+      if(plan?.iteration!==iteration){
+        const journaled=state.plan?.iteration===iteration?state.plan:undefined;
+        const parent0=journaled&&find(journaled.parent),partner0=journaled&&find(journaled.partner);
+        if(journaled&&parent0&&partner0){
+          // A resumed run reuses the plan it recorded before the edit; nothing is drawn or charged again.
+          selector.recordProposal(journaled.selected);
+          plan={iteration,parent:parent0,selected:{key:journaled.selected},keys:journaled.keys,mini:journaled.mini,partner:partner0};
+          composing=journaled.compose;chose=journaled.chose;
+        } else {
+          const parentId=await decide('chooseParent',policies.chooseParent,
+            async()=>{const winners=state.strategy==='gepa'?frontierParents(state.population):[state.incumbent];return pick(winners.length?winners:[state.incumbent],random());},
+            async()=>verifyParent(await policyFunction('chooseParent')(parentChoices(state.population)),state.population))();
+          const parent=find(parentId)??find(state.incumbent)!;
+          const chosen=await decide('chooseComponents',policies.chooseComponents,
+            async()=>{let selected=selector.pick(iteration,random);if(!eligible.some(item=>item.key===selected.key))selected=eligible[Math.floor(random()*eligible.length)]!;return [selected.key];},
+            async()=>verifyComponents(await policyFunction('chooseComponents')(componentFactsOf(eligible.map(item=>item.key),parent,selector.snapshot())),eligible.map(item=>item.key)))();
+          const selected={key:chosen[0]!};
+          const keys=closeUnderDependencies(chosen,targets);
+          gateway.reserve('proposals',1,options.signal);selector.recordProposal(selected.key);
+          const shuffled=[...train];for(let index=shuffled.length-1;index>0;index--){const picked=Math.floor(random()*(index+1));[shuffled[index],shuffled[picked]]=[shuffled[picked]!,shuffled[index]!];}
+          // The merge draw is made only on a composition experiment.
+          const move=state.strategy==='gepa'?await decide('chooseMove',policies.chooseMove,
+            async()=>crispMove(state.strategy,iteration,state.population.length),
+            async()=>verifyMove(await policyFunction('chooseMove')(moveFacts(iteration,state.population,state.baseline.value)),state.population.length))():'edit';
+          composing=move==='compose';
+          const partner=composing?state.population[Math.floor(random()*state.population.length)]!:parent;
+          plan={iteration,parent,selected,keys,mini:shuffled.slice(0,settings.minibatchSize).sort(),partner};
+          chose={chooseParent:policies.chooseParent??'crisp',chooseComponents:policies.chooseComponents??'crisp',chooseMove:policies.chooseMove??'crisp'};
+          // The plan is journaled before the edit: the checkpoint holds the drawn state, the charge and the plan.
+          state.plan={iteration,parent:parent.id,partner:partner.id,selected:selected.key,keys,mini:plan.mini,compose:composing,chose};
+          checkpoint();committed=structuredClone(state);
+        }
+      }
+      const open=plan!;
+      const feedback=await target.feedback(open.parent.train,open.keys);
+      return {stopReason:'',parent:open.parent.value,parentId:open.parent.id,keys:open.keys,components:descriptors.filter(item=>open.keys.includes(item.key)),
+        feedback:new EvidenceView(feedback),compose:composing,duplicateIds:state.population.map(item=>item.id)};
     },
     merge:()=>{if(!plan)throw Error('experiment not opened');const value=mergeCandidates(state.baseline.value,plan.parent.value,plan.partner.value);if(value)merged.add(fingerprint(value));return value;},
     check:async(value:Candidate)=>{if(!plan)throw Error('experiment not opened');
@@ -84,14 +113,13 @@ export async function runAuthoredSearch(context: {prepared:PreparedSuite;options
         const missing=guidanceChanged?prepared.program.components.filter(component=>component.kind==='lambda.instructions'&&!validated.batch.results.some(result=>result.coverage.includes(component.key))).map(item=>item.key):[];
         if(missing.length)event({iteration,type:'insufficient-guidance-coverage',components:missing});
         else if(meanBetter(candidate,member(),prepared.suite.selection))state.incumbent=candidate.id;
-        if(state.population.length>settings.maxPopulation){const frontier=new Set(frontierParents(state.population));
-          const remove=state.population.filter(item=>item.id!==state.incumbent&&item.id!==state.baseline.id).sort((a,b)=>Number(frontier.has(a.id))-Number(frontier.has(b.id))||(a.validation.quality??0)-(b.validation.quality??0)||a.id.localeCompare(b.id))[0];
-          if(remove)state.population=state.population.filter(item=>item.id!==remove.id);}
+        if(state.population.length>settings.maxPopulation){const kept=new Set(prune(state.population.map(memberOf),[state.incumbent,state.baseline.id],settings.maxPopulation).map(item=>item.id));
+          state.population=state.population.filter(item=>kept.has(item.id));}
       }
-      selector.recordResult(plan.selected.key,input.accepted,iteration);state.selector=selector.snapshot();state.iteration++;
+      selector.recordResult(plan.selected.key,input.accepted,iteration);state.selector=selector.snapshot();state.iteration++;delete state.plan;
       const done=gateway.ledger.proposals>=gateway.limits.maxProposals;
       const type=input.error?'invalid-proposal':input.candidate?(input.accepted?'accepted':'rejected'):'duplicate-proposal';
-      event({iteration,type,candidate:input.candidate??null,parent:plan.parent.id,keys:plan.keys,...(input.error?{error:input.error}:{})});
+      event({iteration,type,candidate:input.candidate??null,parent:plan.parent.id,keys:plan.keys,chose,...(input.error?{error:input.error}:{})});
       plan=undefined;
       return {state:{iteration:state.iteration,incumbent:state.incumbent,done,stopReason:done?'completed':''},candidate:member().value};
     }

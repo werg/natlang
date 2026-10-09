@@ -6,8 +6,22 @@
 import { fetchModel, openAIEndpointRoot } from './chat-completion.js';
 
 /** A server's `/v1/neuralese/info`: the dialects it speaks, and the fields hosts read. Other fields are kept as sent. */
-export type NeuraleseServerInfo = { dialects: string[]; width?: number; dtype?: string; max_block_length?: number } &
-  Record<string, unknown>;
+export type NeuraleseServerInfo = { dialects: string[]; width?: number; dtype?: string; max_block_length?: number;
+  capabilities?: string[] } & Record<string, unknown>;
+
+/**
+ * Whether a server serves `capability` (spec/NEURALESE_PORT.md "Capabilities"), from its `capabilities` list. A server
+ * from before the list is judged by its older fields: `adapters: "lora"` (the fork) loads LoRAs and serves no grad,
+ * embed, optim, adapter creation or streaming; otherwise (the reference) everything but LoRA loading.
+ */
+export function serves(info: Record<string, unknown>, capability: string): boolean {
+  if (Array.isArray(info.capabilities)) return info.capabilities.includes(capability);
+  const lora = info.adapters === 'lora';
+  if (capability === 'adapters.lora-load') return lora;
+  const referenceOnly = ['grad', 'grad.order2', 'embed', 'optim', 'adapters.create', 'adapters.direct', 'adapters.lora-export',
+    'adapters.projection', 'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
+  return !(lora && referenceOnly.includes(capability));
+}
 
 /**
  * The server's `/v1/neuralese/info`. A server without the endpoint is no Neuralese server: that fails with
