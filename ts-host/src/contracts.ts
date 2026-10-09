@@ -43,6 +43,30 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   /** How the model scheduler batched this turn's request (batch id and size, requests in flight, queue wait). */
   scheduling?: { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number; priority: 'running' | 'new' } };
 
+/**
+ * A piece of a model turn while it streams (plans/STREAMING.md §1.1), in the order the model produced it:
+ * - `text`, `reasoning`: the next characters of the reply or of the reasoning before it;
+ * - `tool_call`: a fragment of call `index` — its `id` and `name` when they arrive (names already as the runtime
+ *   knows them, tool aliases undone), and the next `arguments` text (JSON text, possibly with Neuralese parts);
+ * - `neuralese`: a block the server wrote into the reply, once complete (`block`: its metadata, when sent);
+ * - `reset`: the turn's request is sent again (a malformed-call retry, or a retry after restoring blocks); deltas so
+ *   far belong to an abandoned attempt.
+ * Deltas are hints for showing and preparing: the turn the driver returns stays authoritative (on a Neuralese server,
+ * the final message it sends). A driver emits deltas only for replies it receives as a stream; a whole reply emits
+ * none. They come from the one place streamed chunks are assembled (`assembleChatCompletion`), so the deltas of a
+ * turn concatenate to the content of the turn assembled from them.
+ */
+export type ModelTurnDelta = { type: 'text'; text: string } | { type: 'reasoning'; text: string } |
+  { type: 'tool_call'; index: number; id?: string; name?: string; arguments?: string } |
+  { type: 'neuralese'; part: Extract<ModelContentPart, { type: 'neuralese' }>; block?: Record<string, unknown> } |
+  { type: 'reset' };
+/**
+ * Per-call options of a model-turn driver, its optional third argument: `(request, signal?, options?)`. They are not
+ * part of `ModelTurnRequest`, which is data (recorded, cloned, sent to workers). `onDelta` receives the turn's
+ * deltas as they arrive; it must not throw (an observer never affects the turn) and is not awaited.
+ */
+export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void };
+
 
 /**
  * Decision readout (single pass over the prompt): score a finite set of assistant replies after `messages`. A

@@ -5,7 +5,7 @@
  * aliases, assembling streamed deltas into one response, decoding tool calls, truncation, the malformed-call retry,
  * and token accounting.
  */
-import type { DecisionScorer, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -17,7 +17,13 @@ export type ChatTransport = (body: Json, signal?: AbortSignal, meta?: ChatReques
 export type ChatRequestMeta = { invocation_id?: string; /** Re-sends of one turn count up from 0. */ retry?: number;
   /** Turn number within the invocation, when the caller knows it (the scheduler counts requests otherwise). */ turn?: number;
   /** Requests with the same group are sent next to each other (default: the request's system message). */ group?: string;
-  onScheduled?: (info: ScheduledInfo) => void };
+  onScheduled?: (info: ScheduledInfo) => void;
+  /**
+   * The turn's delta observer (`ModelTurnOptions.onDelta`, tool aliases already undone). A transport that returns a
+   * stream leaves it alone (the adapter assembles the stream and emits); a transport that assembles a stream itself, to
+   * post-process the body, passes it to `assembleChatCompletion`.
+   */
+  onDelta?: (delta: ModelTurnDelta) => void };
 /** A scheduler's record of one request (see `ScheduleInfo` in scheduler.ts). */
 export type ScheduledInfo = { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number;
   priority: 'running' | 'new' };
@@ -68,28 +74,64 @@ export function callWrittenAsText(text: string, tools: Array<{ function: { name:
 const MALFORMED_RETRY = 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. ' +
   'Do not change the task or invent a new tool.';
 
-function isStream(value: AsyncIterable<Json> | Json): value is AsyncIterable<Json> {
+/** Whether a transport answered with streamed chunks rather than one whole body. */
+export function isStream(value: AsyncIterable<Json> | Json): value is AsyncIterable<Json> {
   return typeof (value as AsyncIterable<Json>)[Symbol.asyncIterator] === 'function';
 }
 
 /**
  * Fold streamed chunks into the `chat.completion` body a non-streaming request would have returned: content,
  * reasoning, and tool calls are concatenated per index; usage and timings come from the chunk that carries them.
+ * Content deltas may be arrays of parts (a Neuralese server's `[{"type": "neuralese", "id"}]` per written block); then
+ * the content is the parts in order, adjacent text merged. A chunk with `x_natlang_message` (natlang's servers: the
+ * complete parsed message) is final and authoritative: the body's message is that message, and its other top-level
+ * fields (`neuralese`, `x_natlang_…`) are the body's.
+ *
+ * This is the one place streamed replies are assembled, so it is also where a turn's deltas come from: `onDelta`
+ * receives each piece as it is folded in (`ModelTurnDelta`, contracts.ts). A throwing observer is ignored.
  */
-export async function assembleChatCompletion(chunks: AsyncIterable<Json>): Promise<Json> {
-  let head: Json = {}, finish: unknown = null, content = '', reasoning = '', sawContent = false, sawReasoning = false;
+export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelta?: (delta: ModelTurnDelta) => void): Promise<Json> {
+  let head: Json = {}, finish: unknown = null, reasoning = '', sawContent = false, sawReasoning = false;
+  let final: Json | undefined;
+  const parts: ModelContentPart[] = [];
+  let partsOnly = true;
   const calls: Array<{ id?: string; type: string; function: { name: string; arguments: string } }> = [];
   const extra: Json = {};
+  const emit = (delta: ModelTurnDelta) => { try { onDelta?.(delta); } catch { /* observers never affect the turn */ } };
+  const addText = (text: string) => {
+    const last = parts[parts.length - 1];
+    if (last?.type === 'text') last.text += text; else parts.push({ type: 'text', text });
+    if (text) emit({ type: 'text', text });
+  };
   for await (const chunk of chunks) {
     if (!Object.keys(head).length) head = { id: chunk.id, model: chunk.model, created: chunk.created };
     for (const key of ['usage', 'timings', 'system_fingerprint'] as const) if (chunk[key] != null) extra[key] = chunk[key];
+    if (chunk.x_natlang_message && typeof chunk.x_natlang_message === 'object') {
+      final = chunk.x_natlang_message as Json;
+      for (const [key, value] of Object.entries(chunk))
+        if (!['id', 'object', 'created', 'model', 'choices', 'x_natlang_message'].includes(key)) extra[key] = value;
+    }
     const choice = (chunk.choices as Json[] | undefined)?.[0];
     if (!choice) continue;
     if (choice.finish_reason != null) finish = choice.finish_reason;
     const delta = (choice.delta ?? {}) as Json;
-    if (typeof delta.content === 'string') { content += delta.content; sawContent = true; }
+    if (typeof delta.content === 'string') { addText(delta.content); sawContent = true; }
+    else if (Array.isArray(delta.content)) {
+      sawContent = true; partsOnly = false;
+      const block = (chunk.neuralese as Json | undefined)?.block as Json | undefined;
+      for (const part of delta.content as ModelContentPart[]) {
+        if (part?.type === 'text') addText(part.text);
+        else if (part?.type === 'neuralese') {
+          parts.push({ ...part });
+          emit({ type: 'neuralese', part: { ...part }, ...(block && block.id === part.id ? { block } : {}) });
+        }
+      }
+    }
     const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
-    if (typeof reasoningDelta === 'string') { reasoning += reasoningDelta; sawReasoning = true; }
+    if (typeof reasoningDelta === 'string') {
+      reasoning += reasoningDelta; sawReasoning = true;
+      if (reasoningDelta) emit({ type: 'reasoning', text: reasoningDelta });
+    }
     for (const part of (delta.tool_calls ?? []) as Json[]) {
       const index = typeof part.index === 'number' ? part.index : calls.length;
       const call = calls[index] ??= { type: 'function', function: { name: '', arguments: '' } };
@@ -98,9 +140,14 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>): Promi
       const fn = (part.function ?? {}) as Json;
       if (typeof fn.name === 'string') call.function.name += fn.name;
       if (typeof fn.arguments === 'string') call.function.arguments += fn.arguments;
+      const fragment = { ...(typeof part.id === 'string' ? { id: part.id } : {}),
+        ...(typeof fn.name === 'string' && fn.name ? { name: fn.name } : {}),
+        ...(typeof fn.arguments === 'string' && fn.arguments ? { arguments: fn.arguments } : {}) };
+      if (Object.keys(fragment).length) emit({ type: 'tool_call', index, ...fragment });
     }
   }
-  const message: Json = { role: 'assistant', content: sawContent ? content : null,
+  const content = !sawContent ? null : partsOnly ? parts.map(part => (part as { text: string }).text).join('') : parts;
+  const message: Json = final ? structuredClone(final) : { role: 'assistant', content,
     ...(sawReasoning ? { reasoning_content: reasoning } : {}),
     ...(calls.length ? { tool_calls: calls.filter(Boolean) } : {}) };
   return { ...head, object: 'chat.completion', choices: [{ index: 0, message, finish_reason: finish }], ...extra };
@@ -136,7 +183,15 @@ function decodeArguments(value: unknown): Json {
 export function chatCompletionModelTurn(transport: ChatTransport, options: ChatCompletionOptions = {}) {
   const forward = options.toolAliases ?? {};
   const reverse = Object.fromEntries(Object.entries(forward).map(([source, target]) => [target, source]));
-  return async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
+  return async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions: ModelTurnOptions = {}): Promise<ModelTurn> => {
+    // Deltas carry the runtime's tool names; a re-sent request first voids the deltas of the attempt before it.
+    const observer = turnOptions.onDelta;
+    let emitted = false;
+    const onDelta = observer && ((delta: ModelTurnDelta) => {
+      emitted = true;
+      try { observer(delta.type === 'tool_call' && delta.name ? { ...delta, name: reverse[delta.name] ?? delta.name } : delta); }
+      catch { /* observers never affect the turn */ }
+    });
     const recordedRequest = options.onExchange ? structuredClone(request) : undefined;
     const tools = modelTools(request.tools);
     for (const tool of tools) tool.function.name = forward[tool.function.name] ?? tool.function.name;
@@ -193,9 +248,11 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         wireRequest.max_tokens = typeof configuredMax === 'number' ?
           Math.min(configuredMax, request.max_tokens) : request.max_tokens;
       await options.onRequestStart?.(request, retries);
+      if (onDelta && emitted) { onDelta({ type: 'reset' }); emitted = false; }
       const reply = await transport(wireRequest, signal, { ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
-        retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; } });
-      const body = isStream(reply) ? await assembleChatCompletion(reply) : reply;
+        retry: retries, onScheduled: info => { scheduling = { ...info, queue_wait_ms: (scheduling?.queue_wait_ms ?? 0) + info.queue_wait_ms }; },
+        ...(onDelta ? { onDelta } : {}) });
+      const body = isStream(reply) ? await assembleChatCompletion(reply, onDelta) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
       const choice = (body.choices as Json[] | undefined)?.[0];
       const message = choice?.message as Json | undefined;
