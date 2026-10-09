@@ -523,8 +523,10 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         onViolation: value => { violation ??= value; diagnostics.violation = value; void stopChild(); } });
       const args = ['run', '--format', 'json', '--model', modelName, '--title', 'Natlang teacher turn', '--dir', directory,
         '--pure', '--attach', baseUrl, userText];
+      if (options.agentName) args.splice(args.indexOf('--title'), 0, '--agent', options.agentName);
       if (modelVariant) args.splice(args.indexOf('--title'), 0, '--variant', modelVariant);
       diagnostics.cli_model_variant = modelVariant ?? 'catalog_default';
+      diagnostics.cli_agent = options.agentName ?? 'default';
       diagnostics.stdout_path = 'cli-stdout.raw'; diagnostics.stderr_path = 'cli-stderr.raw';
       diagnostics.stdout_start_bytes = fileSize(`${outputDirectory}/cli-stdout.raw`);
       diagnostics.stderr_start_bytes = fileSize(`${outputDirectory}/cli-stderr.raw`);

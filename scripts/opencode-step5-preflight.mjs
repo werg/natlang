@@ -36,7 +36,26 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }) {
   if ((plannedVariant === 'catalog_default' && variantFlag) ||
       (plannedVariant !== 'catalog_default' && variantFlag?.[1] !== plannedVariant))
     throw new Error('bridge command template variant does not match pinned model variant');
-  return { ok: true, model_alias: bridgeAlias, collector_model_id: actualArgvAlias };
+  const expectedToolSurface = plan?.provider?.tool_surface_mode;
+  if (expectedToolSurface !== undefined) {
+    if (!['standard', 'natlang-only'].includes(expectedToolSurface) ||
+        bootstrapConfig.tool_surface_mode !== expectedToolSurface)
+      throw new Error('bootstrap tool surface does not match pinned plan');
+    if (expectedToolSurface === 'natlang-only') {
+      const surface = bootstrapConfig.effective_agent_tool_surface;
+      if (bootstrapConfig.cli_agent !== 'build' || bootstrapConfig.mcp_status !== 'connected' ||
+          surface?.agent !== 'build' || surface?.tools?.['*'] !== false ||
+          surface?.tools?.natlang_action_bridge_submit_action !== true ||
+          Object.entries(surface?.tools ?? {}).some(([name, enabled]) =>
+            name !== '*' && name !== 'natlang_action_bridge_submit_action' && enabled === true))
+        throw new Error('effective OpenCode build-agent tools do not match the Natlang-only surface');
+      const bridgeTemplate = plan.command_templates?.bridge;
+      if (typeof bridgeTemplate !== 'string' || !/(?:^|\s)--tool-surface\s+natlang-only(?:\s|$)/.test(bridgeTemplate))
+        throw new Error('bridge command template does not pin Natlang-only tool surface');
+    }
+  }
+  return { ok: true, model_alias: bridgeAlias, collector_model_id: actualArgvAlias,
+    ...(expectedToolSurface === undefined ? {} : { tool_surface_mode: expectedToolSurface }) };
 }
 
 async function main(argv) {

@@ -18,6 +18,9 @@ function parseArgs(argv) {
   }
   for (const key of ['--sdk-module', '--client-bin', '--out']) if (!out[key]) throw new Error(`${key} is required`);
   out['--model'] ??= 'ling-3.1-flash-free';
+  out['--tool-surface'] ??= 'standard';
+  if (!['standard', 'natlang-only'].includes(out['--tool-surface']))
+    throw new Error('--tool-surface must be standard or natlang-only');
   if (out['--variant'] !== undefined && (out['--model'] !== 'step-5-preview-free' ||
       !['low', 'medium', 'high'].includes(out['--variant'])))
     throw new Error('--variant is supported only for step-5-preview-free with low, medium, or high');
@@ -35,7 +38,7 @@ const writeJson = (path, value, flag = 'w') => writeFile(path, JSON.stringify(va
 // primary and title work. Free-tier validation depends on the native provider
 // request shape and its normal tool schemas, so do not re-register Zen as a
 // custom OpenAI-compatible provider or remove native tools from the request.
-export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, modelID = 'step-5-preview-free') {
+export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, modelID = 'step-5-preview-free', toolSurface = 'standard') {
   const providerID = 'opencode';
   const modelAlias = `${providerID}/${modelID}`;
   const config = {
@@ -49,16 +52,44 @@ export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, mode
       environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog, NATLANG_OPENCODE_MCP_HANDSHAKE_LOG: handshakeLog } } },
     share: 'disabled', autoupdate: false
   };
+  if (toolSurface === 'natlang-only')
+    config.agent = { build: { tools: { '*': false, natlang_action_bridge_submit_action: true } } };
+  else if (toolSurface !== 'standard') throw new Error('unsupported OpenCode tool surface');
   return config;
 }
 
-export function buildToolSurfaceReceipt(installedToolIDs) {
-  return {
+export function effectiveBuildAgentSurface(config, toolSurface) {
+  const tools = config?.agent?.build?.tools;
+  if (!tools || typeof tools !== 'object')
+    throw new Error('official OpenCode build-agent tool configuration is unavailable');
+  if (toolSurface === 'standard') return { agent: 'build', tools };
+  if (toolSurface !== 'natlang-only' || tools['*'] !== false ||
+      tools.natlang_action_bridge_submit_action !== true ||
+      Object.entries(tools).some(([name, enabled]) => name !== '*' && name !== 'natlang_action_bridge_submit_action' && enabled === true))
+    throw new Error('official OpenCode build-agent tool surface does not match Natlang-only configuration');
+  return { agent: 'build', tools };
+}
+
+export function buildToolSurfaceReceipt(installedToolIDs, toolSurface = 'standard', effectiveAgentSurface = null) {
+  if (toolSurface === 'natlang-only' && !effectiveAgentSurface)
+    throw new Error('Natlang-only tool surface receipt requires the effective build-agent configuration');
+  if (!['standard', 'natlang-only'].includes(toolSurface)) throw new Error('unsupported OpenCode tool surface');
+  const receipt = {
     installed_tool_ids: [...installedToolIDs],
-    model_tool_surface: { native_tools: 'official schemas remain model-visible; all require permission and are auto-rejected by the adapter',
-      natlang_action_bridge_submit_action: 'allowed; the only enabled action tool' },
-    permission_policy: 'official wildcard ask keeps native schemas visible but gated; adapter rejects every native tool permission; exact Natlang action MCP tool allowed; session history is not an execution barrier'
+    model_tool_surface: toolSurface === 'natlang-only'
+      ? { native_tools: 'disabled for the explicitly selected build agent through documented OpenCode agent.tools configuration',
+        natlang_action_bridge_submit_action: 'enabled; the only enabled action tool' }
+      : { native_tools: 'official schemas remain model-visible; all require permission and are auto-rejected by the adapter',
+        natlang_action_bridge_submit_action: 'allowed; the only enabled action tool' },
+    permission_policy: toolSurface === 'natlang-only'
+      ? 'global wildcard ask remains configured; native permission requests are still auto-rejected by the adapter; exact Natlang action MCP tool allowed'
+      : 'official wildcard ask keeps native schemas visible but gated; adapter rejects every native tool permission; exact Natlang action MCP tool allowed; session history is not an execution barrier'
   };
+  if (toolSurface === 'natlang-only') {
+    receipt.tool_surface_mode = toolSurface;
+    receipt.effective_agent_tool_surface = effectiveAgentSurface;
+  }
+  return receipt;
 }
 
 async function reservePort() {
@@ -117,7 +148,8 @@ async function main() {
   await writeFile(actionLog, '', { flag: 'wx', mode: 0o600 });
   await writeFile(handshakeLog, '', { flag: 'wx', mode: 0o600 });
   const actionServer = resolve(dirname(fileURLToPath(import.meta.url)), 'opencode-natlang-action-mcp-server.mjs');
-  const config = buildFreeModelConfig(actionServer, actionLog, handshakeLog, args['--model']);
+  const toolSurface = args['--tool-surface'];
+  const config = buildFreeModelConfig(actionServer, actionLog, handshakeLog, args['--model'], toolSurface);
   const configPath = resolve(isolatedConfig, 'opencode', 'opencode.json');
   await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
   await writeJson(configPath, config, 'wx');
@@ -200,10 +232,19 @@ async function main() {
     if (defaultTools?.error || !Array.isArray(defaultTools?.data) || !defaultTools.data.length)
       throw new Error('official default tool inventory is missing');
     await stage('default-tool-inventory-checked', { count: defaultTools.data.length });
+    let effectiveAgentSurface = null;
+    if (toolSurface === 'natlang-only') {
+      const loadedConfig = await sdkClient.config.get({ directory: scratch });
+      if (loadedConfig?.error || !loadedConfig?.data) throw new Error('official effective configuration is unavailable');
+      effectiveAgentSurface = effectiveBuildAgentSurface(loadedConfig.data, toolSurface);
+      await stage('natlang-only-agent-surface-verified', { agent: effectiveAgentSurface.agent,
+        tool_names: Object.keys(effectiveAgentSurface.tools) });
+    }
     const providerID = 'opencode';
     adapter = await createOpenCodeCliChatAdapter({ cliPath, client: sdkClient, baseUrl: serverUrl,
       directory: scratch, outputDirectory: output, actionLogPath: actionLog, providerID,
       modelAlias: `${providerID}/${args['--model']}`, modelID: args['--model'], maxCliTurns: 384, contextTokens: 32768,
+      agentName: toolSurface === 'natlang-only' ? 'build' : undefined,
       modelVariant: args['--variant'], maxRequestMs: args['--max-request-ms'], timeoutMs: args['--max-request-ms'], env: cliEnvironment });
     const receipt = { schema: 'natlang.opencode_cli_loopback_bootstrap/1', bootstrap_id: bootstrapId,
       official_cli: cliPath, official_cli_sha256: await shaFile(cliPath), official_cli_version: cliVersion,
@@ -213,9 +254,10 @@ async function main() {
       model_config_source: args['--model'] === 'step-5-preview-free' ? 'official OpenCode Zen catalog provider/model alias; OPENCODE_API_KEY environment; no custom provider override' : 'OpenCode built-in provider catalog',
       main_model: `${providerID}/${args['--model']}`, small_model: `${providerID}/${args['--model']}`,
       model_variant: args['--variant'] ?? 'catalog_default',
+      cli_agent: toolSurface === 'natlang-only' ? 'build' : null,
       credential_source: 'OPENCODE_API_KEY environment; value excluded', server_url: serverUrl,
       server_pid: serverChild.pid, adapter_url: adapter.url, scratch_directory: scratch, isolated_home: isolatedHome,
-      ...buildToolSurfaceReceipt(defaultTools.data), mcp_status: statuses.natlang_action_bridge.status,
+      ...buildToolSurfaceReceipt(defaultTools.data, toolSurface, effectiveAgentSurface), mcp_status: statuses.natlang_action_bridge.status,
       mcp_handshake_path: handshakeLog, action_log_path: actionLog,
       containment: 'requires bwrap launcher; official CLI server and model subprocess run under isolated HOME/XDG, scratch cwd; provider network shared',
       max_request_ms: args['--max-request-ms'], training_admission: false };
