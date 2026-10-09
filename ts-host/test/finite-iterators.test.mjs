@@ -60,6 +60,16 @@ test('a callable-folder function loops over entries() and matchAll() when a turn
   assert.equal(outcome.value, 2 + 1 + 1 + 1 + 2);
 });
 
+test('a counted loop may join its bound to an early-exit condition or to a second counter comparison', async () => {
+  const { checkConstrainedSource } = await import('../dist/compiler/policy.js');
+  const ts = (await import('typescript')).default;
+  const verdict = loop => checkConstrainedSource(ts.createSourceFile('x.ts',
+    `let found = false; const n = 3, m = 2;\n${loop}`, ts.ScriptTarget.ES2022, true)).map(item => item.message);
+  assert.deepEqual(verdict('for (let i = 0; i < n && !found; i++) {}'), []);
+  assert.deepEqual(verdict('for (let i = 0; i < n && i < m; i++) {}'), []);
+  assert.match(verdict('for (let i = 0; i < n || found; i++) {}')[0], /one bound.*optionally joined by &&.*`i < n && !found`/);
+});
+
 test('runtime: matchAll and Map/Set views iterate finitely', () => {
   assert.deepEqual([...finite('a1b22'.matchAll(/\d+/g))].map(m => m[0]), ['1', '22']);
   const map = new Map([['a', 1], ['b', 2]]);

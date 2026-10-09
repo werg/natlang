@@ -146,7 +146,7 @@ TypeScript outside callable folders is unrestricted.
 ## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
-counted `for` loops, and array methods. A counted loop reads its bound once,
+counted `for` loops (the condition may join the counter bound to an early exit with `&&`, as in `i < n && !found`), and array methods. A counted loop reads its bound once,
 when it starts; the bound must be a finite number and the counter must advance
 toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
 defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a

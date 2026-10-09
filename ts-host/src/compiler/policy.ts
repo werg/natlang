@@ -164,7 +164,9 @@ export function finiteCounterComparison(condition: ts.Expression | undefined, co
   if (!ts.isBinaryExpression(root) || root.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return;
   const left = isCounterComparison(root.left);
   const right = isCounterComparison(root.right);
-  if (left === right) return;
+  if (!left && !right) return;
+  // Two comparisons of the counter: the first bounds the loop and the second is an extra exit (`i < n && i < m`).
+  if (left && right) return { comparison: unwrapped(root.left) as ts.BinaryExpression, guard: root.right };
   return left ? { comparison: unwrapped(root.left) as ts.BinaryExpression, guard: root.right } :
     { comparison: unwrapped(root.right) as ts.BinaryExpression, guard: root.left };
 }
@@ -181,7 +183,7 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   const condition = node.condition;
   const boundedCondition = finiteCounterComparison(condition, counter);
   if (!boundedCondition)
-    return 'compare the counter with a bound using <, <=, > or >=';
+    return 'compare the counter with one bound using <, <=, > or >=, optionally joined by && to an early-exit condition such as `i < n && !found`';
   const comparison = boundedCondition.comparison;
   const counterLeft = ts.isIdentifier(comparison.left) && comparison.left.text === counter;
   const bound = counterLeft ? comparison.right : comparison.left;
