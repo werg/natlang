@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,15 +92,35 @@ def provider_context_occurrences(value, block_id):
     if isinstance(value, list): return sum(provider_context_occurrences(child, block_id) for child in value)
     return 0
 
-def bind_exact_provider_contexts(records):
-    """Project only same-run provider context receipts into the shared renderer's context-only API."""
+def bind_exact_provider_contexts(records, source_approval, repo_root):
+    """Project authenticated provider reads into the renderer as context only.
+
+    Same-run writer-produced blocks retain their existing graph-bound path.
+    Configured function definitions use the pinned runtime's read implementation
+    and are never represented as a writer event or recurrence edge.
+    """
     bindings = []
+    runtime_candidates = []
+    for raw_path, entry in (source_approval.get("input_pins") or {}).items():
+        if not isinstance(entry, dict) or not raw_path.endswith("/frozen-runtime.json"):
+            continue
+        path = (repo_root / raw_path).resolve()
+        if path.is_file() and sha_file(path) == entry.get("sha256"):
+            runtime_candidates.append(path)
+    runtime_manifest = runtime_candidates[0] if len(runtime_candidates) == 1 else None
+    runtime_root = runtime_manifest.parent if runtime_manifest else None
+    runtime_data = json.loads(runtime_manifest.read_text()) if runtime_manifest else {}
+    combinator_rel = "src/neuralese/combinators.ts"
+    combinator_hash = (runtime_data.get("files") or {}).get(combinator_rel)
+    combinator_path = runtime_root / combinator_rel if runtime_root else None
+    if combinator_path and (not combinator_path.is_file() or sha_file(combinator_path) != combinator_hash):
+        raise ValueError("pinned runtime read-definition source does not match its frozen manifest")
     for record in records:
         source_ref = record.get("source_ref") or {}
         receipts = source_ref.get("provider_expanded_read_contexts") or []
         metadata = []
         for receipt in receipts:
-            if receipt.get("origin") != "same-run-producer": continue
+            if receipt.get("origin") not in {"same-run-producer", "configured-function-definition"}: continue
             block, write = receipt.get("block") or {}, receipt.get("producer_write") or {}
             read, turn = receipt.get("block_read") or {}, receipt.get("model_turn") or {}
             block_id, body, body_hash = block.get("id"), block.get("body"), block.get("body_sha256")
@@ -114,7 +135,6 @@ def bind_exact_provider_contexts(records):
                                     else record.get("target"))
             target_hash = sha(canonical(source_action_target or {}).encode())
             required = {
-                "schema": "natlang.provider-expanded-read-context/2",
                 "invocation_id": source_ref.get("invocation_id"),
                 "parent_invocation_id": receipt.get("parent_invocation_id"),
                 "source_row_sha256": source_ref.get("source_row_sha256"),
@@ -126,23 +146,84 @@ def bind_exact_provider_contexts(records):
                 "read_node": read.get("node"), "model_turn_node": turn.get("node"),
                 "producer_write_node": write.get("node"),
             }
-            if (receipt.get("schema") != required["schema"] or not isinstance(block_id, str)
-                    or not block_id.startswith("nz1_") or block.get("type") != "Neuralese<string>"
-                    or not isinstance(body, str) or sha(body.encode("utf-8")) != body_hash
+            configured_definition = receipt.get("origin") == "configured-function-definition"
+            expected_schema = ("natlang.provider-expanded-read-context/1" if configured_definition
+                               else "natlang.provider-expanded-read-context/2")
+            required_hashes = (receipt.get("source_row_sha256"), receipt.get("trace_sha256"),
+                               receipt.get("transport_provenance_sha256"), receipt.get("raw_request_sha256"),
+                               receipt.get("rendered_request_sha256"), receipt.get("source_request_sha256"),
+                               receipt.get("source_response_sha256"), receipt.get("source_action_target_sha256"))
+            common_invalid = (receipt.get("schema") != expected_schema or not isinstance(block_id, str)
+                    or not block_id.startswith("nz1_") or not isinstance(body, str)
+                    or sha(body.encode("utf-8")) != body_hash
+                    or any(not isinstance(v, str) or re.fullmatch(r"[0-9a-f]{64}", v) is None
+                           for v in required_hashes)
+                    or receipt.get("source_row_sha256") != required["source_row_sha256"]
+                    or receipt.get("invocation_id") != required["invocation_id"]
                     or any(not isinstance(v, str) or not v for k, v in required.items()
-                           if k not in {"source_trajectory_index"})
+                           if k != "source_trajectory_index"
+                           and not (configured_definition and k == "producer_write_node"))
                     or not isinstance(required["source_trajectory_index"], int)
                     or receipt.get("source_action_target_sha256") != target_hash
                     or receipt.get("source_response_sha256") != (record.get("decision") or {}).get("source_raw_response_sha256")
-                    or receipt.get("writer_target_selected") is not False
                     or receipt.get("learned_vectors") is not False
                     or receipt.get("qualification_certificate") is not False
                     or receipt.get("training_admission") is not False
-                    or receipt.get("context_occurrences") != occurrences
+                    or receipt.get("context_occurrences") != occurrences)
+            if common_invalid:
+                raise ValueError(f"{record.get('id')}: malformed or mismatched exact provider context receipt {block_id}")
+            if configured_definition:
+                definition = receipt.get("definition") or {}
+                readout = receipt.get("readout") or {}
+                expected_definition = "nz-fn:" + str(block_id)
+                source_text = combinator_path.read_text() if combinator_path else ""
+                read_source = re.search(r"(?ms)\bread\s*:\s*\{(?P<definition>[^}]+)\}", source_text)
+                if (runtime_manifest is None or not combinator_hash
+                        or definition.get("id") != expected_definition
+                        or not isinstance(definition.get("revision"), str)
+                        or readout.get("read_body_id") != block_id
+                        or readout.get("read_source_sha256") != body_hash
+                        or any(readout.get(flag) is not False for flag in
+                               ("learned_vectors", "qualification_certificate", "training_admission"))
+                        or read_source is None or body not in read_source.group("definition")):
+                    raise ValueError(f"{record.get('id')}: configured read definition lacks an exact frozen-runtime binding")
+                if (read.get("kind") != "block_read" or read.get("call_id") != required["invocation_id"]
+                        or read.get("block") != block_id or turn.get("kind") != "model_turn"
+                        or turn.get("call_id") != required["invocation_id"]
+                        or not any(isinstance(edge, dict) and edge.get("node") == read.get("node")
+                                   and edge.get("block") == block_id for edge in turn.get("inputs", []))
+                        or receipt.get("producer_write") is not None
+                        or not isinstance(read.get("node"), str) or not isinstance(turn.get("node"), str)):
+                    raise ValueError(f"{record.get('id')}: configured read trace is not an exact context-only read")
+                item = {"schema": "natlang.external-context-input/1",
+                        "origin": "runtime-definition-context-only", "block_id": block_id,
+                        "type": block["type"], "body_sha256": body_hash,
+                        "invocation_id": required["invocation_id"],
+                        "source_row_sha256": required["source_row_sha256"],
+                        "trace_sha256": receipt.get("trace_sha256"),
+                        "transport_provenance_sha256": required["transport_provenance_sha256"],
+                        "raw_request_sha256": receipt.get("raw_request_sha256"),
+                        "rendered_request_sha256": receipt.get("rendered_request_sha256"),
+                        "source_request_sha256": required["source_request_sha256"],
+                        "source_response_sha256": required["source_response_sha256"],
+                        "source_trajectory_index": required["source_trajectory_index"],
+                        "read_node": required["read_node"], "model_turn_node": required["model_turn_node"],
+                        "runtime_manifest_sha256": sha_file(runtime_manifest),
+                        "runtime_definition_source": combinator_rel,
+                        "runtime_definition_source_sha256": combinator_hash,
+                        "runtime_definition_id": definition["id"],
+                        "context_occurrences": occurrences,
+                        "writer_target_selected": False, "learner_representation": "runtime-definition-context-only",
+                        "learned_vectors": False, "qualification_certificate": False,
+                        "training_admission": False}
+                bindings.append({"record_id": record.get("id"), **item})
+                metadata.append(item)
+                continue
+            if (receipt.get("writer_target_selected") is not False
                     or not isinstance(receipt.get("writer_witness"), dict)
                     or (receipt.get("additional_read_turn_pairs") is not None
                         and not isinstance(receipt.get("additional_read_turn_pairs"), list))):
-                raise ValueError(f"{record.get('id')}: malformed or mismatched exact provider context receipt {block_id}")
+                raise ValueError(f"{record.get('id')}: malformed same-run provider context receipt {block_id}")
             item = {
                 "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
                 "block_id": block_id, "type": block["type"], "body_sha256": body_hash,
@@ -579,7 +660,7 @@ def main():
         bound = (repo_root / rel).resolve()
         if not bound.is_file() or sha_file(bound) != expected:
             raise ValueError(f"source approval artifact missing/hash mismatch: {rel}")
-    provider_context_bindings = bind_exact_provider_contexts(delta_records)
+    provider_context_bindings = bind_exact_provider_contexts(delta_records, source_approval, repo_root)
     def iter_jsonl(path):
         with path.open("r", encoding="utf-8") as f:
             for line in f:
