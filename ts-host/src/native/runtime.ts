@@ -10,7 +10,7 @@ import { arrayToStringNeuralese, concatNeuralese, invokeWithReceiver, joinNeural
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
-import { TypeEnv, containsRefinement, formatType, parseType, type Type } from './types.js';
+import { DEFAULT_DIALECT, TypeEnv, containsRefinement, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
@@ -24,7 +24,7 @@ import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } 
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+import { dialectBinding, isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
@@ -601,6 +601,7 @@ export class NativeRuntime {
       try { aliases[name] = parseType(source); } catch { /* Keep TypeScript-only aliases outside portable checks. */ }
     }
     const env = new TypeEnv(aliases);
+    env.dialects = dialectBinding(this.neuralese);
     const normalized = [...inputs];
     for (let index = 0; index < Math.min(definition.params.length, normalized.length); index++) {
       const input = normalized[index];
@@ -634,6 +635,12 @@ export class NativeRuntime {
     const type = formatType(wanted), bodySha = hexDigest(text);
     if (!port) throw new NeuraleseUnsupportedError(`${metadata.sourceKind === 'typed-json-result' ? 'plain JSON' : 'plain-text'} ` +
       `${type} needs a configured Neuralese write port`);
+    // The port writes only its own dialect; a slot of another dialect cannot hold what it writes.
+    const wantedDialect = wanted.kind === 'neuralese' && wanted.dialect !== DEFAULT_DIALECT ? wanted.dialect : port.dialect;
+    if (wantedDialect !== port.dialect) throw new Reject([{ path: metadata.argumentName ? `argument/${metadata.argumentName}` : 'return',
+      code: 'neuralese-dialect-mismatch', expected: `${type} in dialect ${JSON.stringify(wantedDialect)}`,
+      got: `text, which this runtime's port writes in dialect ${JSON.stringify(port.dialect)}; pass a value already in ` +
+        `${JSON.stringify(wantedDialect)}, or declare the slot as Neuralese<T> (the runtime's dialect)` }]);
     const callId = this.currentCallId ?? this.options.runId;
     const producer = { source_kind: metadata.sourceKind, source: metadata.source, marker_context: metadata.markerContext,
       call_id: callId, ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
@@ -709,6 +716,7 @@ export class NativeRuntime {
     this.lastObserved = before;
     const env = new TypeEnv(callableTypes(node.codebase)).child(node.types);
     env.classes = node.hostClasses;
+    env.dialects = dialectBinding(this.neuralese);
     const outcome = await this.episode(node, env);
     const source = this.trace.events[0]?.definition_source;
     if (outcome.kind === 'done' && this.exactHostTraceCapture?.captureOutput &&

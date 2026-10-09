@@ -33,6 +33,11 @@ export interface NeuraleseStore {
   get(id: string): Promise<NeuraleseBlock | undefined>;
   meta(id: string): Promise<NeuraleseBlockMeta | undefined>;
   has(id: string): Promise<boolean>;
+  /**
+   * Metadata of a block this store holds without I/O (a process-local store), for synchronous checks such as a
+   * value's dialect when it is coerced to a type (native/values.ts). Undefined when the store would have to ask.
+   */
+  peek?(id: string): NeuraleseBlockMeta | undefined;
   /** Keep a block through garbage collection (for example while a file or a running call refers to it). */
   pin(id: string): Promise<void>;
   unpin(id: string): Promise<void>;
@@ -113,6 +118,10 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     return found && { ...found.meta };
   }
   async has(id: string): Promise<boolean> { return this.blocks.has(id); }
+  peek(id: string): NeuraleseBlockMeta | undefined {
+    const found = this.blocks.get(id);
+    return found && { ...found.meta };
+  }
   async pin(id: string): Promise<void> {
     if (!this.blocks.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
     this.pins.set(id, (this.pins.get(id) ?? 0) + 1);

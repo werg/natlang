@@ -22,10 +22,15 @@ natlang compilations show support            # what was stored, how its cases ar
 
 ```
 main.ts                   crisp orchestration: targets, rounds, verification, storing, offline jobs
+policy.ts                 crisp rules and pluggable wrappers: targets, decline text, loop progress, guidance checks
 promote.nl                promotion policy (promotionPolicy nl|shadow): promote, keep or demote a case or tier from its evidence
-writeCase.nl              directory reducer: one group's folder in, case.ts out (or a reason to skip)
-writeCase/semanticCheck   decision: is a condition how the decision is made, or does it need meaning
-writeCase/sameApproach    decision: do two normalized programs do the same work
+worthLooking.nl           target policy (targetPolicy nl|shadow): is a function worth a look now
+summarizeDecline.nl       decline text (declinePolicy nl|shadow): the main obstacle and what would change it
+chooseCondition.nl        directory reducer: one group's folder in, a measured condition out (or a reason to skip)
+chooseCondition/semanticCheck   decision: is a condition how the decision is made, or does it need meaning
+chooseCondition/sameApproach    decision: do two normalized programs do the same work
+writeBody.nl              directory reducer: the chosen condition in, case.ts out
+writeGuidance.nl          short positive guidance for the student, stored as the compilation's instructions.md (tier 2)
 ```
 
 The crisp half lives in the runtime package (`ts-host/src/calls/`): `study` (examples, approaches with anti-unified
@@ -51,10 +56,27 @@ verified and the report goes back into `evidence/report.md`. Accepted cases are 
 dropped. When no case passes, or the reducer declines, the decline is recorded and the function is not looked at again
 until its call volume doubles or its revision changes.
 
+## Pluggable policies, split writer, guidance (2026-10-09)
+
+- Store settings `targetPolicy` and `declinePolicy` (`crisp` default, `nl`, `shadow`; set with `natlang traces config`)
+  select the crisp rule or `worthLooking.nl` / `summarizeDecline.nl`, as `promotionPolicy` selects `promote.nl`. Under
+  `shadow` the crisp answer serves and the agreement is traced. The crisp bound of `minCalls` agent calls holds under
+  every mode.
+- A group's writer is two calls: `chooseCondition` returns a condition, the host measures it exactly (`group.measure`
+  must show it valid, admitting at least one call of the group and none of another), then `writeBody` writes `case.ts`.
+- The rounds loop is bounded by `--rounds` (a resource limit) and ends early when a round leaves every group's outcome,
+  report and case unchanged (`madeProgress` in policy.ts: terminates by the limit, never stops while a group still gets
+  new information, spends nothing on a round with identical input).
+- Defaults of the CLI options and limits, each with its reason, are `DEFAULTS` in policy.ts; `--max-groups` sets the group cap.
+- `writeGuidance.nl` distils the accepted groups' recorded calls into guidance (at most 1500 characters, every point an
+  action). The crisp check rejects an over-long text or sentences written as prohibitions; one repair attempt, then no
+  guidance. The text is stored as the compilation's `instructions.md`, which makes tier 2 (student plus guidance)
+  appear in the ladder; it earns promotion through the shared evidence rule. `--no-guidance` skips it.
+
 ## Groups, spend, findings (2026-10-09)
 
 The host splits a function's calls by what they did; each group (at least three training calls, at most eight groups)
-gets one `writeCase` call over a small folder (group.md, examples, others.md, report.md) with an exact `group.measure`
+gets a `chooseCondition` and then a `writeBody` call over a small folder (group.md, examples, others.md, report.md) with an exact `group.measure`
 service. The cases are assembled, verified together, and a rejected case goes back to its group. Promotion also needs
 `promotionLiveComparisons` (3) comparisons on live calls. `natlang compilations savings|findings|acknowledge|export-corpus`
 show what serving saved against what specializing spent, what compiling found, and export cases and declines as a corpus.

@@ -20,8 +20,8 @@ You decide whether a case or a tier should move up, stay, or move down. summary 
 
 Work in these steps and write down the numbers you use:
 
-1. Failures. Count only handed_off, worse and audit_worse as failures. Do not count guard_misses or infrastructure.
-2. Sample size. A share of 1 worse in 3 is not a finding. Do not promote before compared reaches comparisons and live_compared reaches liveComparisons. Do not demote on fewer than auditMinimum audits, or fewer than callMinimum served plus handed-off calls, or fewer than comparisons comparisons, unless every one of the recent comparisons is worse (at least 5 of them).
+1. Failures. Count handed_off, worse and audit_worse as failures. guard_misses and infrastructure are outside the failure count.
+2. Sample size. A share of 1 worse in 3 is a small sample. Promote when compared reaches comparisons and live_compared reaches liveComparisons. Demote when audited reaches auditMinimum, or served plus handed_off reaches callMinimum, or compared reaches comparisons; a demotion is also open when every one of the recent comparisons is worse (at least 5 of them).
 3. Share. Compute worse divided by compared, live_worse divided by live_compared, audit_worse divided by audited, and handed_off divided by served plus handed_off. A share over rule.bound is bad.
 4. Recency. If recent_compared is at least 5 and recent_worse is more than rule.bound times recent_compared, the subject is getting worse now, even if its whole history is fine. For an active subject that is a reason to demote when step 3 is also close to the bound. For a shadow subject it is a reason to wait.
 5. Decide.
