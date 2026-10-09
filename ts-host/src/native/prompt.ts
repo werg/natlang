@@ -155,9 +155,5 @@ export const LAST_TURN_NOTICE = '\n\n[This is your last turn in this call: call 
   'status "blocked" with what is missing, or status "failed" with why.]';
 /** The compact_history tool's result. */
 export const COMPACTED_RESULT = 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.';
-/** The digest operator's instructions (DECISIONS.md 43): its write site writes a short Neuralese digest of a large value. */
-export const DIGEST_PROMPT = 'Write a digest of the value below for the listing of the call that receives it: what the value is, ' +
-  'how it is organised, and what in it bears on the call\'s instructions, so that the call knows what to look up. The full value ' +
-  'stays in the call\'s variable for exact reading, so do not copy exact details; keep the digest short.';
 /** The listing's note after a digest: the variable holds the value itself. */
 export const digestNote = (holder: string) => `  // digest of the value; ${holder} holds all of it`;

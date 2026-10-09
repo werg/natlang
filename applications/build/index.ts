@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { ONCE_EFFECTS, type FolderHandle, type NatlangRuntime } from '@natlang/node';
+import { ONCE_EFFECTS, type FolderHandle, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
 import build from './build.nl';
 import type { BuildReport, Evidence, Task, TaskResult } from './types.js';
 
@@ -20,7 +20,8 @@ export type * from './types.js';
 
 /** The pluggable policy points, and the implementation each runs when the host does not choose. */
 export type PolicyPoint = 'ready' | 'choose' | 'validity';
-export type Implementation = 'crisp' | 'natural-language';
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+export type Implementation = Exclude<PluggableSetting, undefined>;
 export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { ready: 'crisp', choose: 'natural-language', validity: 'natural-language' };
 
 /** What the natural-language stages see of the `build` service. Types are those of types.ts. */
@@ -149,8 +150,12 @@ export class BuildWorkspace {
         outputs: entry.outputs.map(([path, sha256]) => ({ path, sha256 })) } : null };
   }
 
-  /** Whether the ledger entry still describes the files exactly; the first difference otherwise. */
-  private async mismatch(task: Task): Promise<string | null> {
+  /**
+   * Whether the ledger entry still describes the files exactly: null, or the first difference (declaration, then inputs,
+   * then outputs). The one comparison in the build: `reuse` refuses on it, and the crisp implementation of the validity
+   * point (`build/step/validity.ts`) asks for it through the service.
+   */
+  async mismatch(task: Task): Promise<string | null> {
     const entry = this.ledger[task.id];
     if (!entry) return 'no record of an earlier run';
     if (entry.fingerprint !== fingerprint(task)) return 'declaration changed';

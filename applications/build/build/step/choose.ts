@@ -3,6 +3,7 @@
  * `build.implementation('choose')` selects the smallest id (crisp) or `choose/pick.nl` (natural-language), which weighs
  * the tasks' descriptions and reads a named input from files.
  */
+import { pluggable } from '@natlang/node';
 import { build } from 'natlang:services';
 import pick from './choose/pick.nl';
 import type { FolderHandle } from '@natlang/node';
@@ -14,6 +15,6 @@ export function crisp(ready: Task[]): string {
 }
 
 export default async function choose(ready: Task[], goal: string, files?: FolderHandle): Promise<string> {
-  if (await build.implementation('choose') === 'natural-language') return pick(ready, goal, files);
-  return crisp(ready);
+  return pluggable({ crisp: () => crisp(ready), nl: () => pick(ready, goal, files) }, await build.implementation('choose'),
+    { name: 'build.choose' })();
 }

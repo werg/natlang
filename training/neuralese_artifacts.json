@@ -1,0 +1,141 @@
+{
+  "schema": "natlang.neuralese-artifacts/1",
+  "policy": "Directly trained Neuralese artifacts by id. Bytes are pinned by immutable manifests in training/artifact-manifests; a changed artifact gets a new id. Dialect and backbone are part of identity; registration is not qualification.",
+  "artifacts": [
+    {
+      "id": "memetic-decision-lfm2.5-350m-20261004-v1",
+      "kind": "bundle",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "trained",
+        "source": "runs/dgx-development-generated/decision-data-20261004"
+      },
+      "training": {
+        "corpora": [],
+        "trainer": "ts-host/scripts/skills/memetic-decision.mjs",
+        "commit": "913c4a988601e9fbbed4cb5bde4282664ef1ebc4",
+        "run": "runs/dgx-development-generated/decision-data-20261004/memetic-decision-v1"
+      },
+      "qualification": {
+        "status": "unqualified",
+        "evidence": [
+          "runs/dgx-development-generated/decision-data-20261004/memetic-decision-v1/improvement-steps.jsonl"
+        ]
+      },
+      "origin": {
+        "artifacts.nz": "/mnt/external/natlang-development-data/runs/dgx-development-generated/decision-data-20261004/memetic-decision-v1/artifacts.nz"
+      },
+      "registered": "2026-10-09T20:11:19+00:00",
+      "notes": "Memetic optimiser (LEARNING_CONTINUUM M3) first run on 6 decision families: 37 soft skills (text-init, delta-apply, optim). Training data decision-data-20261004 is not a registered corpus.",
+      "path": "data/neuralese/artifacts/memetic-decision-lfm2.5-350m-20261004-v1",
+      "files": [
+        "artifacts.nz"
+      ]
+    },
+    {
+      "id": "method-arms-decision-lfm2.5-350m-20261004-v2",
+      "kind": "bundle",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "extra_dialects": [
+        "adapter/1;base=5ee7ce3f3171;kind=xs;r=4;u=0;layers=6-15;targets=out,ffn_down;seed=0"
+      ],
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "trained",
+        "source": "runs/dgx-development-generated/decision-data-20261004"
+      },
+      "training": {
+        "corpora": [],
+        "trainer": "ts-host/scripts/skills/run-method-arms.mjs",
+        "commit": "913c4a988601e9fbbed4cb5bde4282664ef1ebc4",
+        "run": "runs/dgx-development-generated/decision-data-20261004/method-arms-v2"
+      },
+      "qualification": {
+        "status": "unqualified",
+        "evidence": [
+          "runs/dgx-development-generated/decision-data-20261004/method-arms-v2/improvement-steps.jsonl"
+        ]
+      },
+      "origin": {
+        "artifacts.nz": "/mnt/external/natlang-development-data/runs/dgx-development-generated/decision-data-20261004/method-arms-v2/artifacts.nz"
+      },
+      "registered": "2026-10-09T20:11:19+00:00",
+      "notes": "Method-arm outputs on decision families (LEARNING_CONTINUUM M0/M4): 43 soft skills (Neuralese<string>) and 43 xs adapters, served by the reference server at :8094 against the 350M port heads; per-arm results in improvement-steps.jsonl. Training data decision-data-20261004 is not a registered corpus.",
+      "path": "data/neuralese/artifacts/method-arms-decision-lfm2.5-350m-20261004-v2",
+      "files": [
+        "artifacts.nz"
+      ]
+    },
+    {
+      "id": "system-prompt-bank-lfm2.5-350m-text-init-20261004-v1",
+      "kind": "prompt-bank",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/native/system-prompts.ts (piece texts; provenance.pieces holds their sha256)",
+        "builder": "ts-host/scripts/neuralese-system-prompt-bank.mjs"
+      },
+      "training": null,
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "bank.nz": "/mnt/external/natlang-development-data/runs/neuralese-system-prompts-20261004/bank-text-init-v1.nz"
+      },
+      "registered": "2026-10-09T20:08:10+00:00",
+      "notes": "Token-embedding text init (provenance.init text-embedding) of the runtime prompt pieces for the LFM2.5-350M port space; 21 pieces. Not valid for Maple or Mellum spaces.",
+      "path": "data/neuralese/artifacts/system-prompt-bank-lfm2.5-350m-text-init-20261004-v1",
+      "files": [
+        "bank.nz"
+      ]
+    },
+    {
+      "id": "system-prompt-bank-lfm2.5-350m-text-init-20261004-v2",
+      "kind": "prompt-bank",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/native/system-prompts.ts (piece texts; provenance.pieces holds their sha256)",
+        "builder": "ts-host/scripts/neuralese-system-prompt-bank.mjs"
+      },
+      "training": null,
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "bank.nz": "/mnt/external/natlang-development-data/runs/neuralese-system-prompts-20261004/bank-text-init-v2.nz"
+      },
+      "registered": "2026-10-09T20:08:11+00:00",
+      "notes": "Token-embedding text init (provenance.init text-embedding) of the runtime prompt pieces for the LFM2.5-350M port space; 22 pieces, adds compacted-result; used by the v13 soft conversion (HANDOVER 2026-10-04). Not valid for Maple or Mellum spaces.",
+      "path": "data/neuralese/artifacts/system-prompt-bank-lfm2.5-350m-text-init-20261004-v2",
+      "files": [
+        "bank.nz"
+      ]
+    }
+  ]
+}

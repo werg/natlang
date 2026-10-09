@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v1",
+  "extends": "raw-recurrence-v2",
+  "description": "raw-recurrence-v2 for the Mellum line (28-layer Maple-family MoE after the full-latent QAT conversion, exported by maple/qat_export.py) with backbone-inherent differences only. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "backbone_training": "qat",
+        "qat_latent_lr": 0.003,
+        "member_weight": 0.1,
+        "member_tokens": 2048,
+        "member_eval_windows": 4
+      }
+    },
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 27,
+          "contexts": 512
+        }
+      },
+      "recurrence_warmup": {
+        "parameters": {
+          "backbone_training": "qat",
+          "qat_latent_lr": 0.003,
+          "member_weight": 0.1,
+          "member_tokens": 2048,
+          "member_eval": 4,
+          "member_mask_system": true,
+          "member_full_weight": 1.0
+        }
+      }
+    }
+  }
+}

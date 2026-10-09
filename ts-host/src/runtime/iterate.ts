@@ -11,7 +11,9 @@ import { hexDigest } from '../native/hash.js';
 import { isLive, liveId } from '../native/values.js';
 import { currentFrame, runInFrame } from './context.js';
 import { callableMeta } from './callable.js';
-import { invokeDefinition, type CallableDefinition } from './kernel.js';
+import { invokeDefinition } from './kernel.js';
+import { builtinBody } from '../builtin/index.js';
+import { builtinDefinition } from './builtin.js';
 import { resolveFrame } from './runtime.js';
 import { graphNode, invocationNodeId, traceFor, valueInputs } from '../native/graph.js';
 
@@ -124,11 +126,8 @@ function updateStatistics(previous: SiteStatistics | undefined, steps: number, a
   return stats;
 }
 
-export const DEFAULT_JUDGE_INSTRUCTIONS = `An iterative process has been running for a while. Decide whether it is still making meaningful progress.
-Inspect the trajectory: use trajectory.summary(), trajectory.steps(), trajectory.repeats(), and trajectory.states(start, end) to page through states.
-Distinguish real improvement from repetition, oscillation between the same few states, unproductive churn, and a goal that looks impossible.
-An unusually long run that is still improving should continue.
-Return { verdict: "continue", reason } if further steps are likely to help, or { verdict: "divergent", reason } if the process is stuck or cannot succeed. Give a concrete reason.`;
+/** The progress judge's instructions: the body of the built-in program builtin/progressJudge.nl. */
+export const DEFAULT_JUDGE_INSTRUCTIONS = builtinBody('progressJudge');
 
 /**
  * System prompt addition for a natural-language stopping predicate. Such a loop has no hard bound, so its predicate is
@@ -136,31 +135,18 @@ Return { verdict: "continue", reason } if further steps are likely to help, or {
  * progress judge's to stop.
  */
 export function predicatePrompt(completedSteps: number, unchangedSteps: number): string {
-  return [
-    'This call is the stopping condition of an iterative loop (iterateOn). Answer true to stop the loop with the current ' +
-      'state as its result, or false to run another step.',
-    `The loop has completed ${completedSteps} step${completedSteps === 1 ? '' : 's'}.` +
-      (completedSteps === 0 ? ' This is the initial state, before any step.' :
-        unchangedSteps > 0 ? ` The state has not changed over the last ${unchangedSteps} step${unchangedSteps === 1 ? '' : 's'}.` :
-          ' The last step changed the state.'),
-    'Judge whether the criterion is met in substance by the current state. Accept a state that reasonably meets it; do not ' +
-      'hold out for perfection or for details the criterion does not ask for, since every further step costs a model call ' +
-      'and the loop ends only when you accept.',
-    'If the state has stopped changing, further steps are unlikely to change your answer: if it meets the criterion in ' +
-      'substance, answer true. Do not answer true for a state that fails the criterion; a loop that cannot succeed is ' +
-      'stopped by its progress review, not by this answer.',
-  ].join('\n');
+  const progress = `The loop has completed ${completedSteps} step${completedSteps === 1 ? '' : 's'}.` +
+    (completedSteps === 0 ? ' This is the initial state, before any step.' :
+      unchangedSteps > 0 ? ` The state has not changed over the last ${unchangedSteps} step${unchangedSteps === 1 ? '' : 's'}.` :
+        ' The last step changed the state.');
+  // The fixed text is the built-in program builtin/stoppingCondition.nl; {progress} stands for the sentence above.
+  return builtinBody('stoppingCondition').replace('{progress}', () => progress);
 }
 
 /** The library progress judge: a natlang lambda with read-only access to the whole trajectory. */
 export const defaultProgressJudge: ProgressJudgeFunction = async (trajectory, context) => {
   const frame = currentFrame() ?? resolveFrame();
-  const definition: CallableDefinition = { id: 'natlang:progress_judge', name: 'progress_judge',
-    description: 'Library progress judge for iterateOn.', body: DEFAULT_JUDGE_INSTRUCTIONS,
-    params: [{ name: 'trajectory', type: 'Live<"IterationTrajectory", "shape", "summary,states,steps,repeats">' },
-      { name: 'step', type: 'string' }],
-    returns: 'ProgressVerdict', types: { ProgressVerdict: '{ verdict: "continue" | "divergent", reason: string }' },
-    codebase: {}, subtype: 'function' };
+  const definition = builtinDefinition('progressJudge');
   const step = `${context.stepName}${context.stepInstructions ? `: ${context.stepInstructions}` : ''}` +
     (context.predicateInstructions ? `\nStop when: ${context.predicateInstructions}` : '');
   return await invokeDefinition(frame, definition, [trajectory, step]) as ProgressVerdict;

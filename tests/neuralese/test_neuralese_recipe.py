@@ -647,3 +647,33 @@ def test_child_signal_forwarder_tolerates_exit_between_poll_and_signal():
     forwarder._handle(signal.SIGTERM, None)
     assert forwarder.stopped == [True]
     forwarder.attach(ExitsDuringSignal())
+
+
+def test_registered_artifacts_bind_by_id_and_are_hash_checked(tmp_path, monkeypatch):
+    import torch
+    from safetensors.torch import save_file
+    from natlang_neuralese import artifacts
+    from natlang_neuralese.train.recipe import resolve_stage_inputs, validate_input_bindings
+
+    (tmp_path / 'training').mkdir()
+    source = tmp_path / 'bank.nz'
+    header = {'exports': {'p': {'type': 'Neuralese<string>', 'value': {'$neuralese': {'id': 'b'}}}},
+              'blocks': {'b': {'dialect': 'nd:test@1'}}}
+    save_file({'b': torch.zeros(2, 4)}, str(source), metadata={'natlang': json.dumps(header)})
+    artifacts.register(tmp_path, {'id': 'bank-recipe-test-v1', 'kind': 'prompt-bank', 'dialect': 'nd:test@1',
+                                  'backbone': {'model': 'm', 'revision': 'r'}, 'init': {'method': 'text'},
+                                  'qualification': {'status': 'unqualified'}}, {'bank.nz': source})
+    monkeypatch.setattr(artifacts, 'REPO', tmp_path)
+    recipe = declared()
+    recipe['input_bindings'] = {'bank': {'artifact': 'bank-recipe-test-v1'}}
+    recipe['stages'][0]['inputs'] = {'records': 'bank'}
+    validate_input_bindings(recipe)
+    resolved = resolve_stage_inputs(recipe, recipe['stages'][0], {})['records']
+    assert resolved['artifact'] == 'bank-recipe-test-v1' and resolved['path'].endswith('bank-recipe-test-v1/bank.nz')
+    assert resolved['sha256'] == artifacts.digest(source)
+    recipe['input_bindings'] = {'bank': {'artifact': 'bank-recipe-test-v1', 'sha256': 'x'}}
+    with pytest.raises(ValueError, match='only artifact'):
+        validate_input_bindings(recipe)
+    recipe['input_bindings'] = {'bank': {'artifact': 'missing-artifact-v1'}}
+    with pytest.raises(ValueError, match='unknown artifact'):
+        resolve_stage_inputs(recipe, recipe['stages'][0], {})

@@ -28,11 +28,21 @@ def student_identity(model: str, state: str | None) -> dict:
     return identity
 
 
+def default_cache(model: str) -> str | None:
+    """The converted-weights cache belongs to published Maple only: another family member (Mellum, an exported QAT
+    conversion) loaded with it would silently get Maple's weights."""
+    return DEFAULT_CACHE if Path(model).resolve() == Path(DEFAULT_MODEL).resolve() else None
+
+
 def load_student(model: str = DEFAULT_MODEL, state: str | None = None, device: str = "cuda",
-                 cache: str | None = DEFAULT_CACHE, order: str | None = None):
-    """Returns (MapleForCausalLM, tokenizer). Without ``state``: published Maple with attention ternarized once.
-    With it: the adapters, scales and member parts of the state, in its expert order, every parameter frozen."""
+                 cache: str | None = "default", order: str | None = None):
+    """Returns (MapleForCausalLM, tokenizer). Without ``state``: published Maple (or another family member's
+    deployed checkpoint) with attention ternarized once. With it: the adapters, scales and member parts of the state,
+    in its expert order, every parameter frozen. ``cache="default"``: Maple's converted cache for published Maple."""
     from transformers import AutoTokenizer
+
+    if cache == "default":
+        cache = default_cache(model)
 
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=False)
     if state is None:

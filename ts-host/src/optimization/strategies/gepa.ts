@@ -2,7 +2,12 @@ import type { Candidate } from '../../adaptation/types.js';
 import { canonical } from '../../adaptation/identity.js';
 import type { SearchCandidate } from '../types.js';
 import type { EvaluationSuite } from '../../evaluation/types.js';
-/** Per-example frontier parent selection, derived from Ax GEPA's validation winners archive. */
+/**
+ * Per-example frontier parent selection, derived from Ax GEPA's validation winners archive. The program-improver
+ * application keeps a crisp twin of this rule (applications/program-improver/improveStep/parents.ts, selection.ts): callable
+ * folders may import only their siblings and packages, so it cannot import this. test/gepa-frontier-spec.test.mjs holds
+ * both to one spec; change the rule in both and in that test.
+ */
 export function frontierParents(population: readonly SearchCandidate[]): string[] {
   const cases = population[0]?.validation.results.map(result => result.caseId) ?? [];
   const winners: string[] = [];

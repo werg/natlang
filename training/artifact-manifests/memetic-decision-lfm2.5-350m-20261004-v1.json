@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "memetic-decision-lfm2.5-350m-20261004-v1",
+  "kind": "bundle",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/memetic-decision-lfm2.5-350m-20261004-v1",
+  "files": [
+    {
+      "path": "artifacts.nz",
+      "bytes": 20163272,
+      "sha256": "03451a29ea58810c32d78dddd6f6095ea4d2050eb3e097ebb75dcad51e10e2fd",
+      "nz": {
+        "exports": [
+          "soft_skill_nz1_242x6zvqzek32kvij6kv5alda5mphlodqizzizxxqb74cx5lsoeq",
+          "soft_skill_nz1_26nefbbsqr4vqfr3ruglsfoghfv6txnfslrr577kz26ef274sxtq",
+          "soft_skill_nz1_2tiedq73i747smopnt2bpgie73ir2nqdewli6wdul7a5yctfw5na",
+          "soft_skill_nz1_4here2jg7pybjlsdc3gj3tygxy2qfglguymws7ksuxtklw4gvnya",
+          "soft_skill_nz1_4jaon2f5kk7g63usigoswreuvhn6ddmdfv43fkma5mblmxtewexq",
+          "soft_skill_nz1_4rbyeqzgghmr3bcd677elwyltrmxgfamyshcowzoin4erdw34uea",
+          "soft_skill_nz1_5qp3aabd2w3vzx7lme5psgikhmkni2oskce6oxyd5nhhjv4ltira",
+          "soft_skill_nz1_5vdqksye4zqf7wqgdb4l3vrzuupppwwdhwgxiswbepzkisgyhdna",
+          "soft_skill_nz1_7j2oajjif3xy3u7hjyhfcehk2lb4v5mk6af7lobhkayixn23cfjq",
+          "soft_skill_nz1_7kf3yus7y6olt23hl7xqnobhpvoqnmptgmbnybvxnirqq2up35oq",
+          "soft_skill_nz1_b4k7kooykicesxdk44k65t4eruvknegbr25zqosl5ujdtiqunpoa",
+          "soft_skill_nz1_ccfolry4bsn6au7nzp2pgxlg2n6wmtshqv53smowxfodsdpw5ecq",
+          "soft_skill_nz1_dvzwi2kosh3mza7c7mkg64it2cvpvfpftnucjhu3lbxu7tawhgaq",
+          "soft_skill_nz1_ht2z2sczadmkdm2qcm6aes4qjyd5fahwwi6gaxuolznvpsxgqwfq",
+          "soft_skill_nz1_hvgiripfdgmkfwpknycqgsyjzb3wxl4om7zsbcy53qafry5n353q",
+          "soft_skill_nz1_jlfmoy32q5pad6odmtw6jgyzx75hd3ekg4rwygqx2f7vy5i74z2a",
+          "soft_skill_nz1_kjkymmk7l7uhvv4qwzlxaaflkzb45hw2t6wnohnqtphbva3zak7a",
+          "soft_skill_nz1_ll7cqjaka4xqrlgpnlbvi6bspcgrhdaqcmfgtwato6wbhvyx7czq",
+          "soft_skill_nz1_m3x6ouswtyk6w3tedrabbf73ojx6bttvsswwalsujp66qa2shkyq",
+          "soft_skill_nz1_muywokmaxu5xii4uccntj2mgmchmualmxbfp2alh75uzs2543qtq",
+          "soft_skill_nz1_noftnrlsochrb72yqyupi2iuwsedb67g5divjsj3irzlcbfpm2ka",
+          "soft_skill_nz1_ocijqiq3kjgz4xcomra5munf4swdxngeazc7t7hhwk7oejh7ae6a",
+          "soft_skill_nz1_pe46nr46o5erod6jnuizcg7to77k53qlxq6oaw27p5xwpuoi3esa",
+          "soft_skill_nz1_qvufaf6iurdqhi6tumznuwk3zbpyxs2xtvrityjabnvckkdzme3q",
+          "soft_skill_nz1_rpimq53nnguwgkiad7uj4cwfgxmq37wsp45gcsey2srokk6zlroa",
+          "soft_skill_nz1_swvn5bw433elvpoks4y7x7us5mokic5irghmd7hjnohshvc2l5eq",
+          "soft_skill_nz1_sxbre7wgrlqg2jpn7yowa7chmoz3sqmi7g3sumli6ajwdvwjgp7a",
+          "soft_skill_nz1_tuo6hvf3zplolh36ya7ux7zp5qdq3p4y23b346bcc52rl2cxp2tq",
+          "soft_skill_nz1_u57s7rkat5oncijeqzpfr5aswsddtormwjekophqtxajil5bx7va",
+          "soft_skill_nz1_u65berqd7rqi2mqkcy33cehrczxvm5nz7ksly3l6xptxpr3j7iha",
+          "soft_skill_nz1_u6nevjodloprgbnepyyrwpgmrier667scbzyszy3vc7zqtn55akq",
+          "soft_skill_nz1_ujzflswlv2ut6kbdol2koikl2ii7blknm5ryu7sy6nfw5dix76ba",
+          "soft_skill_nz1_vgkylchnk7en5sd7thdckamq4w7e56vufnc7hqu5erky4lbmylqa",
+          "soft_skill_nz1_w3qsurtbzf47rwthfdmxwyye3fkvpgt5zxhdlki7dda27ndm3lba",
+          "soft_skill_nz1_wuqaomcckuwlwqtvunbozkzt4k7fz5e3atcikjgpvxmcyc5xygya",
+          "soft_skill_nz1_zj35vxvggvybr2vzq3dozm3r22pdv3p5kulxuttqjjdx2fopkhia",
+          "soft_skill_nz1_zvi4hvlmighjq4r3kpi4pajlutxmrwnyi2rg2wuv5n4gc3hbvcnq"
+        ],
+        "blocks": 37,
+        "dialects": [
+          "nd:natlang@1"
+        ],
+        "widths": [
+          1024
+        ]
+      }
+    }
+  ],
+  "bytes": 20163272
+}

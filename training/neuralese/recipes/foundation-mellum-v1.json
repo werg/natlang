@@ -1,0 +1,16 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "token-preserving-foundation-mellum-v1",
+  "extends": "token-preserving-foundation-maple-v1",
+  "description": "foundation-maple for the Mellum line at cutoff 27 (layers - 1) with 512 context windows. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 27,
+          "contexts": 512
+        }
+      }
+    }
+  }
+}

@@ -13,9 +13,10 @@
  */
 import { DECISION_SYSTEM_PROMPT } from './decision.js';
 import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neuralese.js';
-import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, DIGEST_PROMPT, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
+import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
   GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
   TOOLS_PROMPT } from './prompt.js';
+import { DIGEST_PROMPT } from '../builtin/index.js';
 import { DEFAULT_JUDGE_INSTRUCTIONS, predicatePrompt } from '../runtime/iterate.js';
 
 export const SYSTEM_PROMPT_TYPE = 'Neuralese<SystemPrompt>';
