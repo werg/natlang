@@ -91,13 +91,16 @@ if(command==='probe'||command==='flat-probe'){
  try{
   if(command==='draft'){
    if(!protocol.observedTraining?.length)throw Error('Draft diagnostic requires pinned actual training observations.');
-   const helpers=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},await runtimeImport('runtime/node.js'),{constrained:true,target:'node'});
+   const helpers=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts'],'transformations.ts':AUTHORED_IMPROVER['improveStep/transformations.ts']}},await runtimeImport('runtime/node.js'),{constrained:true,target:'node'});
    if(!helpers.ok)throw Error(JSON.stringify(helpers.diagnostics));
    const bookkeeping=helpers.require('main.ts');
    const authored=loadVirtualNatlang(AUTHORED_IMPROVER,'improveStep.nl');
    const sourceFiles=Object.entries(protocol.files).map(([path,text])=>({path,text})),evidence=protocol.observedTraining;
    const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
-   const proposal=await task.run(()=>baseline.propose(authored.rewriteProgram,bookkeeping.request(protocol.policy,'',evidence,sourceFiles)));
+   const opportunity={kind:evidence.some(row=>!row.passed)?'quality':'efficiency',reason:'Pinned prior development observations.'};
+   const diagnosis=await task.run(()=>authored.diagnose({evidence,brief:bookkeeping.brief(protocol.policy,evidence,sourceFiles),goal:protocol.policy.goal,objective:protocol.policy.objective??'quality',opportunity,history:[]}));
+   const hypothesis=await task.run(()=>authored.hypothesize({diagnosis,sourceFiles,mode:protocol.policy.mode,allowedFiles:protocol.policy.allowedFiles,history:[]}));
+   const proposal=await task.run(()=>baseline.propose(protocol.policy.mode==='structural'?authored.editSourceStructural:authored.editSource,bookkeeping.request(protocol.policy,hypothesis,diagnosis,evidence,sourceFiles)));
    const plan=proposal.value.summary;
    const checked=await evaluator.check(proposal.folder);
    result={plan,edit:proposal.value,checked,files:Object.fromEntries(proposal.folder.filePaths().map(path=>[path,new TextDecoder().decode(proposal.folder.readBytesSync(path))])),ledger:gateway.snapshot(),disposition:'draft-diagnostic',studentMeasured:false,interpretation:'Actual optimizer planning/editing with pinned prior development observations; compiler/edit-scope check only. No new student or held-out improvement claim.'};
@@ -107,9 +110,9 @@ if(command==='probe'||command==='flat-probe'){
    const {folder,evaluator,...portable}=improved;result={...portable,source:folder.digest};
   }else{
    const train=await evaluator.evaluate(baseline.snapshot(),{split:'train'}),validation=await evaluator.evaluate(baseline.snapshot(),{split:'validation'});
-   const editor=loadVirtualNatlang(protocol.improverSource??AUTHORED_IMPROVER,'improveStep.nl').rewriteProgram;
+   const editor=loadVirtualNatlang(protocol.improverSource??AUTHORED_IMPROVER,'improveStep.nl')[protocol.policy.mode==='structural'?'editSourceStructural':'editSource'];
    const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,seed:{mode:'derived',root:0},onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
-   const proposal=await task.run(()=>baseline.propose(editor,{brief:'Source: '+JSON.stringify(protocol.files)+'; actual training: '+JSON.stringify(evaluator.page(train.evidence)),objective:protocol.policy.objective??'quality',goal:protocol.policy.goal,mode:protocol.policy.mode,hypothesis:'Make the strongest coherent structural simplification supported by these actual student executions. Diagnose the traces yourself.',sourceFiles:baseline.snapshot().filePaths().map(path=>({path,text:new TextDecoder().decode(baseline.snapshot().readBytesSync(path))})),evidence:evaluator.page(train.evidence),allowedFiles:protocol.policy.allowedFiles}));
+   const proposal=await task.run(()=>baseline.propose(editor,{brief:'Source: '+JSON.stringify(protocol.files)+'; actual training: '+JSON.stringify(evaluator.page(train.evidence)),objective:protocol.policy.objective??'quality',goal:protocol.policy.goal,mode:protocol.policy.mode,hypothesis:{kind:'structure',statement:'Make the strongest coherent structural simplification supported by these actual student executions.',files:protocol.policy.allowedFiles,predictedChange:'fewer model requests at equal quality'},diagnosis:{observations:[],pattern:'Read the traces in the brief and diagnose them.'},sourceFiles:baseline.snapshot().filePaths().map(path=>({path,text:new TextDecoder().decode(baseline.snapshot().readBytesSync(path))})),allowedFiles:protocol.policy.allowedFiles}));
    const checked=await evaluator.check(proposal.folder);const candidate=checked.valid?await evaluator.evaluate(proposal.folder,{split:'validation'}):null;
    const candidateTrain=checked.valid?await evaluator.evaluate(proposal.folder,{split:'train'}):null;
    const accepted=!!candidate?.gatesPassed&&!!candidateTrain?.gatesPassed&&(candidate.quality>validation.quality||candidate.quality===validation.quality&&candidate.modelCalls<validation.modelCalls);

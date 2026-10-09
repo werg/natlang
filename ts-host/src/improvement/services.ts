@@ -7,3 +7,16 @@ export function evaluate(folder: FolderSnapshot, request: {split:'train'|'valida
  * Validation report references are selection receipts, not readable evidence. Use their scores/quality directly.
  * Individual outcomes' evidence IDs are provenance, not page references. */
 export function page(evidence:string,start?:number,limit?:number): TrainingOutcome[];`;
+/** The journal of experiment plans: what is decided before an edit is recorded, and a resumed run recalls it. */
+export const PLANS_DECLARATION = `/** The plan recorded for this experiment number, or null when it has none. */
+export function recall(iteration: number): Promise<unknown>;
+/** Record the plan of this experiment number before its edit begins. */
+export function record(iteration: number, plan: unknown): Promise<void>;`;
+/** Plans in a journal directory when there is one, else in memory for the run. */
+export function planService(journal?: { read<T>(key: string): { value?: T } | undefined; record<T>(key: string, value: T): void }) {
+  const memory = new Map<number, unknown>();
+  return {
+    recall: async (iteration: number) => journal ? journal.read<unknown>('plan:' + iteration)?.value ?? null : memory.get(iteration) ?? null,
+    record: async (iteration: number, plan: unknown) => { if (journal) journal.record('plan:' + iteration, plan); else memory.set(iteration, plan); },
+  };
+}

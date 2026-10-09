@@ -14,6 +14,7 @@ import { UsageGateway, BudgetExhausted } from '../evaluation/usage.js';
 import { pairedChanges, evaluationSummary } from '../evaluation/report.js';
 import { summarize } from '../evaluation/metrics.js';
 import { runAuthoredSearch } from './authored-engine.js';
+import { checkPolicySettings } from './policies.js';
 import {TOOLS_PROMPT} from '../native/prompt.js';
 import { AUTHORED_IMPROVER } from '../improvement/authored-source.js';
 import { RunStore } from './run-store.js';
@@ -48,7 +49,7 @@ async function search(prepared: PreparedSuite, options: OptimizationOptions, res
   validateBudget(limits);
   const settings = { strategy, seed, limits, authored: fingerprint(AUTHORED_IMPROVER), opening:fingerprint({prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384}), minibatchSize: options.minibatchSize ?? 4, maxPopulation: options.maxPopulation ?? 16,
     maxHistory: options.maxHistory ?? 1000,
-    maxRepairs: options.maxRepairs ?? 1, dependencies: options.dependencies ?? {}, finalTest: options.finalTest ?? true,
+    maxRepairs: options.maxRepairs ?? 1, policies: checkPolicySettings(options.policies), dependencies: options.dependencies ?? {}, finalTest: options.finalTest ?? true,
     reflectionIdentity: options.reflectionIdentity ?? null, judgeIdentity: options.judgeIdentity ?? null,
     selection: prepared.suite.selection ?? null, holdoutReservation: options.holdoutReservation ?? {} };
   if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(settings.minibatchSize) || settings.minibatchSize < 1 ||

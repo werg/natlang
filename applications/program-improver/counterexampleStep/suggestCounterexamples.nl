@@ -2,6 +2,14 @@
 args:
   goal: string
   evidence: unknown[]
-returns: unknown[][]
+  maxSuggestions?: number
+returns: CounterexampleSuggestions
 ---
-Propose at most four new argument lists exposing a missing boundary or interaction in the intended behavior. Use the goal and observed training failures. Return inputs only. Expected outcomes belong to the independent oracle. Do not request evaluation, read protected cases, or invent gold.
+Suggest concrete deployment inputs that distinguish a plausible faulty implementation from the requested behavior.
+
+1. Read goal and the training failures in evidence.
+2. Name the boundary or interaction that the failures suggest is untested.
+3. Write at most maxSuggestions argument lists (four when it is absent) that exercise it, in inputs.
+4. Write reason: one sentence on what the inputs probe.
+
+Expected outcomes belong to the independent oracle, which checks the inputs; return the inputs alone.

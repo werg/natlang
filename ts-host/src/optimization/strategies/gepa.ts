@@ -2,21 +2,17 @@ import type { Candidate } from '../../adaptation/types.js';
 import { canonical } from '../../adaptation/identity.js';
 import type { SearchCandidate } from '../types.js';
 import type { EvaluationSuite } from '../../evaluation/types.js';
+import { better, frontier, type Member } from '../../gepa/index.js';
 /**
- * Per-example frontier parent selection, derived from Ax GEPA's validation winners archive. The program-improver
- * application keeps a crisp twin of this rule (applications/program-improver/improveStep/parents.ts, selection.ts): callable
- * folders may import only their siblings and packages, so it cannot import this. test/gepa-frontier-spec.test.mjs holds
- * both to one spec; change the rule in both and in that test.
+ * The GEPA selection math (frontier, seeded draw, better, prune) is one module, src/gepa, which the program-improver
+ * application also imports as `natlang:gepa`. This file adapts component-search candidates to it.
  */
-export function frontierParents(population: readonly SearchCandidate[]): string[] {
-  const cases = population[0]?.validation.results.map(result => result.caseId) ?? [];
-  const winners: string[] = [];
-  for (const caseId of cases) {
-    const best = Math.max(...population.map(candidate => candidate.validation.results.find(result => result.caseId === caseId)?.quality ?? -1));
-    for (const candidate of population) if (candidate.validation.results.find(result => result.caseId === caseId)?.quality === best) winners.push(candidate.id);
-  }
-  return winners.sort();
+export function memberOf(candidate: SearchCandidate): Member {
+  return { id: candidate.id, quality: candidate.validation.quality ?? 0,
+    scores: candidate.validation.results.map(result => ({ caseId: result.caseId, quality: result.quality ?? 0 })) };
 }
+/** The per-case winners of a population, sorted (a candidate once per case it wins). */
+export function frontierParents(population: readonly SearchCandidate[]): string[] { return frontier(population.map(memberOf)); }
 /** Conservative three-way composition: conflicting instruction changes are never combined. */
 export function mergeCandidates(baseline: Candidate, left: Candidate, right: Candidate): Candidate | null {
   const merged: Record<string, Candidate[string]> = {};
@@ -41,10 +37,8 @@ export function selectionEligible(candidate: SearchCandidate, policy: Evaluation
     (policy.maxCost === undefined || use.cost !== null && use.cost <= policy.maxCost);
 }
 export function meanBetter(left: SearchCandidate, right: SearchCandidate, policy: EvaluationSuite['selection'] = {}): boolean {
-  if (!selectionEligible(left, policy)) return false;
-  if (!selectionEligible(right, policy)) return true;
-  if (left.validation.quality !== right.validation.quality) return left.validation.quality! > right.validation.quality!;
-  if (!policy.tieBreak || policy.tieBreak === 'baseline') return false;
-  const a = measures(left)[policy.tieBreak], b = measures(right)[policy.tieBreak];
-  return a !== null && (b === null || a < b);
+  const tie = policy.tieBreak && policy.tieBreak !== 'baseline' ? policy.tieBreak : undefined;
+  const view = (candidate: SearchCandidate) => ({ candidate, quality: candidate.validation.quality });
+  return better(view(left), view(right), { eligible: item => selectionEligible(item.candidate, policy),
+    measure: tie ? item => measures(item.candidate)[tie] : undefined });
 }

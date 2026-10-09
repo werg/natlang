@@ -320,3 +320,81 @@ test('source evaluator reuses native fixtures and executes the edited program, n
  folder.writeText('classify.nl','---\nargs: { value: string }\nreturns: string\n---\nReturn the first word of value.\n');
  const report=await evaluator.evaluate(folder.snapshot(),{split:'validation'});assert.equal(report.quality,1);assert.equal(report.gatesPassed,true);
 });
+
+// --- Pluggable search policies of the component-search engine (src/optimization/policies.ts) ---
+const policyModel = (answers = {}) => {
+  const baseDriver = rewriteComponents(() => 'Return the first word of value.');
+  const seen = [];
+  const driver = async (request, signal) => {
+    const opening = String(request.messages[1]?.content);
+    for (const [phrase, code] of Object.entries(answers)) if (opening.includes(phrase)) {
+      seen.push(phrase);
+      return scriptedModel(() => code).driver(request, signal);
+    }
+    return baseDriver(request, signal);
+  };
+  return { driver, seen };
+};
+const PARENT = 'Choose which population member the next experiment starts from';
+const MOVE = 'Choose the kind of the next experiment';
+const COMPONENTS = 'Choose the component keys the next edit rewrites';
+const executorFor = () => scriptedModel(opening => opening.includes('first word') ? 'return value.split(" ")[0]' : 'return value').driver;
+
+test('natural-language search policies choose within their crisp bounds and the engine records who chose', async () => {
+  const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+  const model = policyModel({ [PARENT]: 'return members[0].id', [MOVE]: 'return "edit"', [COMPONENTS]: 'return [facts.eligible[0].key]' });
+  const result = await optimize(suite, { executor: executorFor(), reflection: model.driver, seed: 11, out: join(fixture.root, 'nl'),
+    policies: { chooseParent: 'nl', chooseMove: 'nl', chooseComponents: 'nl' }, budget: { ...suite.suite.budget, maxModelCalls: 100 } });
+  assert.equal(result.report.selectedValidation.quality, 1);
+  assert.ok(model.seen.includes(PARENT) && model.seen.includes(COMPONENTS) && model.seen.includes(MOVE));
+  const decided = result.state.history.find(event => event.type === 'accepted');
+  assert.deepEqual(decided.chose, { chooseParent: 'nl', chooseComponents: 'nl', chooseMove: 'nl' });
+  assert.equal(result.state.plan, undefined, 'a finished experiment leaves no plan');
+});
+
+test('a natural-language choice outside the crisp bound is refused with the bound', async () => {
+  for (const [answers, message] of [[{ [COMPONENTS]: 'return ["nonexistent"]' }, /eligible/], [{ [PARENT]: 'return "not-a-member"' }, /population member/],
+    [{ [MOVE]: 'return "compose"' }, /population has one member/]]) {
+    const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+    const policies = { chooseParent: 'nl', chooseMove: 'nl', chooseComponents: 'nl' };
+    await assert.rejects(() => optimize(suite, { executor: executorFor(), reflection: policyModel({ [PARENT]: 'return members[0].id', [MOVE]: 'return "edit"',
+      [COMPONENTS]: 'return [facts.eligible[0].key]', ...answers }).driver, seed: 11, out: join(fixture.root, 'bad'), policies, budget: { ...suite.suite.budget, maxModelCalls: 100 } }), message);
+  }
+  const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+  await assert.rejects(() => optimize(suite, { executor: executorFor(), reflection: policyModel().driver, out: join(fixture.root, 'unknown'), policies: { chooseThings: 'nl' } }), /search policies are/);
+});
+
+test('shadow mode serves the crisp choice: the search is the crisp search', async () => {
+  const run = async policies => {
+    const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+    const model = policyModel({ [PARENT]: 'return members[0].id', [MOVE]: 'return "edit"', [COMPONENTS]: 'return [facts.eligible[0].key]' });
+    return optimize(suite, { executor: executorFor(), reflection: model.driver, seed: 29, out: join(fixture.root, 'run'), ...(policies ? { policies } : {}), budget: { ...suite.suite.budget, maxModelCalls: 100 } });
+  };
+  const plain = await run(), shadow = await run({ chooseParent: 'shadow', chooseMove: 'shadow', chooseComponents: 'shadow' });
+  assert.deepEqual(shadow.artifact.components, plain.artifact.components);
+  assert.equal(shadow.state.rng, plain.state.rng, 'the crisp draws were made exactly as without shadowing');
+  assert.equal(shadow.state.incumbent, plain.state.incumbent);
+});
+
+test('the plan of an experiment is journaled before the edit and a resumed run reuses it', async () => {
+  const makeReflection = abort => {
+    const base = rewriteComponents(() => 'Return the first word of value.');
+    return (request, signal) => {
+      if (abort && String(request.messages[1]?.content).includes('Improve the selected instruction components') && !abort.signal.aborted) abort.abort(new Error('interrupt mid-experiment'));
+      return base(request, signal);
+    };
+  };
+  const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+  const whole = await optimize(suite, { executor: executorFor(), reflection: makeReflection(), seed: 44, out: join(fixture.root, 'whole') });
+  const abort = new AbortController();
+  const interrupted = await optimize(suite, { executor: executorFor(), reflection: makeReflection(abort), seed: 44, out: join(fixture.root, 'interrupted'), signal: abort.signal });
+  assert.equal(interrupted.state.stopReason, 'cancelled');
+  const journaled = JSON.parse(readFileSync(join(interrupted.directory, 'checkpoint.json'), 'utf8')).plan;
+  assert.equal(journaled.iteration, 0);
+  assert.ok(journaled.parent && journaled.keys.length && journaled.mini.length, 'the plan names the parent, the components and the minibatch');
+  const resumed = await resumeOptimization(suite, interrupted.directory, { executor: executorFor(), reflection: makeReflection(), seed: 44 });
+  assert.deepEqual(resumed.artifact.components, whole.artifact.components);
+  assert.equal(resumed.state.rng, whole.state.rng, 'the draws were made once');
+  assert.equal(resumed.state.ledger.proposals, whole.state.ledger.proposals, 'the proposal was charged once');
+  assert.deepEqual(resumed.state.selector, whole.state.selector);
+});

@@ -7,13 +7,17 @@ import { createNatlangRuntime, type InvocationTrace, type ModelDriver } from '..
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { AUTHORED_IMPROVER } from './authored-source.js';
 import { SourceEvaluator, sourceFiles,SOURCE_EVALUATION_VERSION } from './host.js';
-import { EVALUATOR_DECLARATION } from './services.js';
+import { EVALUATOR_DECLARATION, PLANS_DECLARATION, planService } from './services.js';
 import { IterationLimitError,IterationDivergedError } from '../runtime/iterate.js';
 import {NatlangCallError} from '../runtime/kernel.js';
 import { BudgetExhausted, UsageGateway } from '../evaluation/usage.js';
 import type { BudgetLimits } from '../evaluation/types.js';
 import type { ImprovementCase, ProgramContract, TransformationSpec } from './types.js';
-export type ImprovementPolicy = { maxExperiments: number; mode: 'instruction' | 'structural'; strategy: 'gepa' | 'adaptive'; objective?:'quality'|'source-size'|'model-calls'; goal: string; outerLesson?:string; allowedFiles: string[]; maxPopulation: number };
+export type ImprovementPolicy = { maxExperiments: number; mode: 'instruction' | 'structural'; strategy: 'gepa' | 'adaptive'; objective?:'quality'|'source-size'|'model-calls'; goal: string; outerLesson?:string; allowedFiles: string[]; maxPopulation: number;
+  /** The kind of change a run performs: a key of improveStep/transformations.ts (repairProgram, simplifyProgram, ...). */
+  transformation?:string;
+  /** The mode of each pluggable search policy: crisp (default), nl or shadow. */
+  policies?:Partial<Record<'findOpportunity'|'chooseParent'|'selectIncumbent'|'shouldStop','crisp'|'nl'|'shadow'>> };
 export type ImprovementState = { iteration: number; done: boolean; incumbent: string; quality: number; population: { source: string; quality: number; parent: string }[];
   history: { source: string; parent: string; accepted: boolean; selected: boolean; reason: string }[]; stopReason: string };
 export type ImproveProgramOptions = { folder: Folder; contract: ProgramContract; cases: ImprovementCase[]; policy: ImprovementPolicy;
@@ -53,11 +57,11 @@ export async function improveProgram(options: ImproveProgramOptions) {
     return evaluator.evaluate(folder,{...request,seed});
   };
   const task = createNatlangRuntime({ model: { driver: (request,signal) => gateway.request(options.improver,request,signal??options.signal,'reflection'), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
-    exactHostTraceCapture: options.captureExactRewriteIO ? { definitionSources: ['improveStep/rewriteProgram.nl'],
+    exactHostTraceCapture: options.captureExactRewriteIO ? { definitionSources: ['improveStep/editSource.nl','improveStep/editSourceStructural.nl'],
       inputArguments: ['request'], captureOutput: true, maxBytes: 8_000_000 } : undefined,
-    trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), services: { evaluator: { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) } },
-    serviceDeclarations: { evaluator: EVALUATOR_DECLARATION },
-    serviceScopes: { evaluator:['improveStep.nl'] }, limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
+    trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), services: { evaluator: { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) }, plans: planService(journal) },
+    serviceDeclarations: { evaluator: EVALUATOR_DECLARATION, plans: PLANS_DECLARATION },
+    serviceScopes: { evaluator:['improveStep.nl'], plans:['improveStep.nl'] }, limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
   const initial: ImprovementState = { iteration: 0, done: false, incumbent: baselineSource.digest, quality: 0, population: [], history: [], stopReason: '' };
   const checkpoint = journal?.checkpoint<{ source: string; state: ImprovementState }>();
   let revision = checkpoint?.revision ?? 0;

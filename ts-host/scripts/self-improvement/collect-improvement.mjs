@@ -1,7 +1,6 @@
 /** Run real authored improvement trajectories. Failed runs stay visible and never become positive SFT. */
 import { readFile,writeFile,mkdir } from 'node:fs/promises';
 import { join,dirname } from 'node:path';
-import { AUTHORED_IMPROVER } from '../../dist/improvement/authored-source.js';
 import { createHash } from 'node:crypto';
 import {validateBudget} from '../../dist/evaluation/suite.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
@@ -31,7 +30,7 @@ async function collect(row) {
   };
   try {
     let improverSource;
-    if(row.improverReducer){const authored={...AUTHORED_IMPROVER};const template=authored['reducers/'+row.improverReducer+'.nl'];if(!template)throw Error('unknown authored transformation reducer');authored['improveStep/rewriteProgram.nl']=template.replace('request: TransformationRequest','request: RewriteRequest').replace('returns: TransformationExplanation','returns: RewriteResult')+'\nEdit directly using await folder.file(path).writeText(text) in eval. Do not propose or evaluate from this helper. Return the actual {summary,changed,preserves}.\n';improverSource=Folder.fromFiles(authored).snapshot();}
+    if(row.improverReducer){row.policy={...row.policy,transformation:row.improverReducer};}
     const result=await improveProgram({improverSource,folder:Folder.fromFiles(row.files),contract:row.contract,cases:row.cases,policy:row.policy,directory:join(output,row.id+'.journal'),
       improver:driver(exchange=>exchanges.push(structuredClone(exchange))),executor:driver(exchange=>targetExchanges.push(structuredClone(exchange)),process.env.NATLANG_TARGET_ENDPOINT??endpoint,process.env.NATLANG_TARGET_MODEL??model),executorId:process.env.NATLANG_TARGET_MODEL??model,trace:trace=>traces.push(trace),
       budget:{...limits,...(endpoint.includes('api.openai.com')?{maxCost:5,pricing:{inputPerMillion:2.5,outputPerMillion:15},requestBounds:{maxInputTokens:16000,maxOutputTokens:4096}}:{})},signal:AbortSignal.timeout(600000)});

@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { stagedImprover } from './support/improver.mjs';
 import { exportCollection } from '../scripts/skills/export-training.mjs';
 import { stagePublication } from '../scripts/skills/stage-training-publication.mjs';
 import { recordedDriver } from '../scripts/self-improvement/replay-followup-study.mjs';
@@ -135,9 +136,7 @@ test('positive skill episode exactly replays through ablations, materializer, an
 
   const runtimeModule = path => import(pathToFileURL(join(runtimePath, path)).href);
   const { authorSkillEpisode } = await runtimeModule('dist/improvement/skill-authoring.js');
-  const authorModel = scriptedModel(opening => opening.includes('Choose one coherent, evidenced hypothesis') ?
-    `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify('---\nname: task-procedure\ndescription: Use when adding one to a number; not for text formatting.\n---\n\nReturn value plus one.\n')}); return await bookkeeping.finish(folder,"clarify applicability",["support discovery failure"]);` :
-    'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+  const authorModel = scriptedModel(stagedImprover({edit:`await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify('---\nname: task-procedure\ndescription: Use when adding one to a number; not for text formatting.\n---\n\nReturn value plus one.\n')}); return {summary:"clarify applicability",preserves:["support discovery failure"]};`}));
   const targetModel = scriptedModel(opening => opening.includes('Use when adding one') ? 'return value + 1' : 'return value');
   const authorExchanges = [], executorExchanges = [];
   const author = recordingDriver(authorModel, authorExchanges), executor = recordingDriver(targetModel, executorExchanges);

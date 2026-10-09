@@ -1,9 +1,9 @@
-import type {ImprovementPolicy,TrainingEvidence} from '../types';
-import type {ExperimentFolder,ExperimentEvaluator} from './capabilities';
-import {opportunity} from './context';
+import type {ImprovementPolicy,Opportunity,TrainingEvidence} from '../types';
+import type {ExperimentFolder,ExperimentEvaluator,Decisions} from './capabilities';
+import {opportunityFacts} from './crisp';
 /** Read measured training feedback, never validation answers. */
-export async function inspect(folder:ExperimentFolder,evaluator:ExperimentEvaluator,parentId:string,policy:ImprovementPolicy):Promise<{evidence:TrainingEvidence[];opportunity:{kind:'fixture'|'quality'|'efficiency'|'source-size'|'none';reason:string}}> {
+export async function inspect(folder:ExperimentFolder,evaluator:ExperimentEvaluator,parentId:string,policy:ImprovementPolicy,decide:Pick<Decisions,'findOpportunity'>):Promise<{evidence:TrainingEvidence[];opportunity:Opportunity}> {
   const training=await evaluator.evaluate(folder.at(parentId),{split:'train',seed:policy.seed??0});
   const evidence=evaluator.page(training.evidence);
-  return {evidence,opportunity:opportunity(policy,evidence)};
+  return {evidence,opportunity:await decide.findOpportunity(policy,opportunityFacts(policy,evidence))};
 }

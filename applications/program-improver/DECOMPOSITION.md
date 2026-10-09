@@ -1,6 +1,24 @@
 # Program improver: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented on main 2026-10-09 (plans/OWNER_REVIEW.md, review after the fact). What differs from the draft below:
+
+- `improveStep.nl` still asks the model to run `lifecycle.step` in eval (question 1): `iterateOn` loads a `.nl` step, so a
+  crisp pipeline step waits for runtime support. The step now receives the `plans` journal service as well as `evaluator`.
+- The stages are `diagnose`, `hypothesize`, `editSource` (instruction) and `editSourceStructural` (structural). The doc's
+  `finish` is the host: the edit returns `{summary, preserves}` and the host derives the changed paths from the diff.
+- Refinement types are crisp verifiers in `improveStep/crisp.ts` (and `ts-host/src/optimization/policies.ts`) rather than
+  `Is<...>` types, which are judged by a model; the closed `Disposition` union and typed `lastExperiment` are in `types.ts`.
+- The shared GEPA module is `ts-host/src/gepa`, reached from the application as the platform module `natlang:gepa`
+  (callable folders may import only siblings and packages). It is a module rather than a `gepa` service, so the crisp
+  defaults run in the application and in the engine from the same code.
+- `chooseComponents` reads, per eligible key, the parent's covering training cases and how many failed (the feedback the
+  doc counted is produced after the keys are chosen). `findOpportunity = none` ends the search (`no-opportunity`).
+- `transformations.ts` is the data table (a TypeScript module, since callable folders import siblings); the names are the
+  keys, so `policy.transformation: 'repairProgram'` replaces the former string substitution of reducer files.
+- Counterexample `shouldStop` and the nested pluggable for the counterexample loop stay model prose in
+  `counterexampleStep.nl`; the one `suggestCounterexamples` returns `{inputs, reason}`.
+
+The text below is the design as drafted.
 
 This is the natlang program that improves natlang programs (plans/NATLANG_PROGRAM_IMPROVEMENT.md). The host entry is
 `improveProgram` (`ts-host/src/improvement/program.ts:24`, re-exported by `main.ts:3`); the authored program in this
