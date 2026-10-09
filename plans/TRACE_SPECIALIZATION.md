@@ -329,6 +329,11 @@ they may go.
   latency to the live call.
 - **Active**: the body's result is returned. Audits (6.3) continue. A divergence or regression rate above the
   acceptance bound demotes the case automatically, and the demotion is recorded with the evidence.
+- The rule is one module, `calls/evidence.ts`, shared with the tier engine (TIERED_ENGINE.md): cases and tiers are judged
+  by the same counters and thresholds. The deciding policy is pluggable under the store setting `promotionPolicy`
+  (`crisp` default: this rule, applied as evidence arrives; `nl`: `applications/specializer/promote.nl`, decided by
+  the specializer loop and never per call; `shadow`: both, crisp applies, agreement is traced). Compiled cases are
+  the crisp tier (3) of the engine's ladder; the specializer's output builds the ladder.
 - A case is bound to the definition revision, the build, the service declarations it calls, and the
   executor identity whose traces it was learned from. A change to any of them puts it back in shadow (newest code
   always: no frozen old case keeps running against new code).
