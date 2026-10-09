@@ -19,7 +19,7 @@ def canonical(value: Any) -> bytes:
 
 
 def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
-          output: Path, receipt: Path) -> dict[str, Any]:
+          output: Path, receipt: Path, *, replace_existing_skill_sha256: str | None = None) -> dict[str, Any]:
     source = source.resolve(strict=True)
     skill_path = skill_path.resolve(strict=True)
     source_bytes = source.read_bytes()
@@ -57,12 +57,26 @@ def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
             raise ValueError(f"source row {index} must contain exactly one .nl program file")
         module = nl_files[0].removesuffix(".nl")
         companion = f"{module}/skills/judge-against-criteria/SKILL.md"
-        if companion in program_files:
-            raise ValueError(f"source row {index} already contains {companion}")
         original = copy.deepcopy(overlay)
-        program_files[companion] = skill
+        prior_skill = program_files.get(companion)
+        if prior_skill is not None:
+            prior_sha = sha(prior_skill.encode("utf-8"))
+            if replace_existing_skill_sha256 is None:
+                raise ValueError(f"source row {index} already contains {companion}; replacement must be explicitly hash-bound")
+            if prior_sha != replace_existing_skill_sha256:
+                raise ValueError(f"existing skill hash mismatch for {companion}: {prior_sha}")
+            program_files[companion] = skill
+            skill_change = {"kind": "replace-existing-skill", "prior_sha256": prior_sha}
+        else:
+            if replace_existing_skill_sha256 is not None:
+                raise ValueError(f"source row {index} has no existing {companion} to replace")
+            program_files[companion] = skill
+            skill_change = {"kind": "add-skill-companion", "prior_sha256": None}
         reconstructed = copy.deepcopy(overlay)
-        del reconstructed["semantics"]["files"][companion]
+        if prior_skill is None:
+            del reconstructed["semantics"]["files"][companion]
+        else:
+            reconstructed["semantics"]["files"][companion] = prior_skill
         if reconstructed != original:
             raise ValueError("overlay changed source content beyond the exact skill companion")
         output_row = canonical(overlay) + b"\n"
@@ -76,6 +90,7 @@ def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
             "overlay_row_sha256_including_lf": sha(output_row),
             "root_code_sha256": sha(row["curriculum"]["reference"]["root"][0][1]["code"].encode("utf-8")),
             "skill_path": companion, "skill_sha256": sha(skill_bytes), "skill_bytes": len(skill_bytes),
+            "skill_change": skill_change,
             "expected_sha256_before": sha(canonical(row["semantics"]["expected"])),
             "expected_sha256_after": sha(canonical(overlay["semantics"]["expected"])),
             "folder_files_sha256_before": sha(canonical(row["semantics"]["folder_files"])),
@@ -93,7 +108,7 @@ def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
         "skill_path": str(skill_path), "skill_sha256": sha(skill_bytes),
         "overlay_path": str(output), "overlay_sha256": sha(output.read_bytes()),
         "cases": cases,
-        "transform": "At the JSON object level, only the program-bound companion SKILL.md entry is added. Rows are emitted in canonical key order, so output line bytes are not claimed identical to source line bytes. Facts, gold, existing files, split, group, source revision, and root code are verified unchanged.",
+        "transform": "At the JSON object level, only the selected program-bound companion SKILL.md entry is added or explicitly hash-bound replaced. Rows are emitted in canonical key order, so output line bytes are not claimed identical to source line bytes. Facts, gold, other files, split, group, source revision, and root code are verified unchanged.",
         "rows": proofs,
     }
     with receipt.open("x", encoding="utf-8") as stream:
@@ -107,11 +122,14 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--selections", type=Path, required=True, help="JSON array of {label,index,seed}")
     parser.add_argument("--skill", type=Path, required=True)
+    parser.add_argument("--replace-existing-skill-sha256",
+                        help="allow replacement only when the existing program-bound skill has this exact SHA-256")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
     selections = json.loads(args.selections.read_text(encoding="utf-8"))
-    result = build(args.source, selections, args.skill, args.output, args.receipt)
+    result = build(args.source, selections, args.skill, args.output, args.receipt,
+                   replace_existing_skill_sha256=args.replace_existing_skill_sha256)
     print(json.dumps({"status": "built", "overlay": result["overlay_path"],
                       "overlay_sha256": result["overlay_sha256"],
                       "receipt": str(args.receipt), "rows": len(result["rows"])}, sort_keys=True))
