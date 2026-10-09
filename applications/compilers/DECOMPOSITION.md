@@ -11,6 +11,22 @@ Every part of every stage, with a decision:
 The executors are small, fast models, so instructions spell rules out, and each function is one task a small model
 can finish reliably.
 
+## Status: target design
+
+The tables below are the target decomposition. Today `compilers/compiler/` has these natural-language functions:
+
+- front end per language (`c`, `python`, `rust`): `parse`, `declare`, `analyze`, `lower`;
+- `runtime` (one call writes every runtime definition);
+- middle end `opt/`: `plan`, `simplify`, `mem2reg`, `flow`, `gvn`, `dce`, `licm`, `loops`, `inline`;
+- back end `aarch64/`: `select`, `allocate`, `liveness`, `frame`, `data`, `peephole`, `emit`.
+
+The TypeScript outside the callable folder is `index.ts` (the checked driver), `main.ts`, `toolchain.ts` and `toolchain.py`
+(the service) and `types.ts`. **Every crisp helper named in the tables (`<lang>/lex.ts`, `<lang>/strings.ts`, `opt/pipeline.ts`,
+`opt/cfg.ts`, `aarch64/rewrite.ts`, `aarch64/apply-frame.ts`, `aarch64/print.ts`) is marked "(planned)": none exists yet.** Until
+they do, `plan` and `emit` stay model calls (see "Changes from today"). A `fn` unit that has
+no file in the list above (for example `opt/dominators`, `opt/sroa`, `aarch64/assign`) is likewise planned; see "Changes from
+today" for the full list of new units. Update this section as each unit lands.
+
 ## Policy
 
 - **Natural language: the algorithmic content of a compiler.** That is everything a compiler textbook teaches:
@@ -40,8 +56,8 @@ can finish reliably.
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| Lexing: source to tokens with lines (Python: INDENT/DEDENT; Rust: lifetimes, `..=`) | crisp | `<lang>/lex.ts` | A regular-language scan with no decisions. Small models mis-tokenize long sources. |
-| Split into top-level declarations by bracket matching | crisp | `<lang>/lex.ts` | Mechanical. It lets each declaration be parsed on its own. |
+| Lexing: source to tokens with lines (Python: INDENT/DEDENT; Rust: lifetimes, `..=`) | crisp | `<lang>/lex.ts` (planned) | A regular-language scan with no decisions. Small models mis-tokenize long sources. |
+| Split into top-level declarations by bracket matching | crisp | `<lang>/lex.ts` (planned) | Mechanical. It lets each declaration be parsed on its own. |
 | Parse one top-level declaration (statements, and expressions by a spelled precedence/associativity table) | fn, per declaration, in parallel | `<lang>/parse` | The grammar is the front end's content. One declaration fits a small model's call. |
 | File scope: structs, globals, prototypes, functions to a symbol table | fn | `<lang>/scope` | Its own data, needed by every function's analysis. |
 | Name resolution: block scopes and shadowing, each name to its declaration | fn, per function | `<lang>/resolve` | Scope bookkeeping is a separate task from typing. Small models conflate them. |
@@ -50,7 +66,7 @@ can finish reliably.
 | Diagnostics: errors with lines | inline | each analysis | Reported where they are found. |
 | Struct layout and type mapping (C: int i32, long i64, …; Python: list as `%list`; Rust: widths, `%vec`) | inline | `<lang>/declare` | A spelled table, small. |
 | Global initializers, constant-folded | inline | `<lang>/declare` | Few. |
-| String literals: collect, number `@.str.N`, escape to `c"…\00"` | crisp | `<lang>/strings.ts` | Escaping and numbering are mechanical. Small models miscount lengths. |
+| String literals: collect, number `@.str.N`, escape to `c"…\00"` | crisp | `<lang>/strings.ts` (planned) | Escaping and numbering are mechanical. Small models miscount lengths. |
 | Library and runtime declarations, with each runtime function's contract | inline | `<lang>/declare` | A spelled list of the allowed contracts. |
 | Signatures of every function | inline | `<lang>/declare` | Follows from the type table. |
 | IR generation for one function: allocas, statements, expressions, short-circuit, loops, returns, with a template per construct | fn, per function, in parallel | `<lang>/lower` | The core translation. One function's body must come out as one well-formed IR function. |
@@ -61,8 +77,8 @@ can finish reliably.
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| Pipeline per level (O1: sroa, mem2reg, instcombine, simplifycfg, adce; O2: adds inline, sccp, gvn, loop-simplify, licm, loop-rotate, indvars, lsr, unroll; O3: a second round), skipping passes that cannot apply | crisp | `opt/pipeline.ts` | LLVM's pipelines are fixed lists. Applicability (no allocas, no loops, no calls) is a mechanical test. Today a model call picks it. |
-| CFG edges from IR text: blocks, successors, predecessors | crisp | `opt/cfg.ts` | Parsing terminators is plumbing. |
+| Pipeline per level (O1: sroa, mem2reg, instcombine, simplifycfg, adce; O2: adds inline, sccp, gvn, loop-simplify, licm, loop-rotate, indvars, lsr, unroll; O3: a second round), skipping passes that cannot apply | crisp | `opt/pipeline.ts` (planned) | LLVM's pipelines are fixed lists. Applicability (no allocas, no loops, no calls) is a mechanical test. Today a model call picks it. |
+| CFG edges from IR text: blocks, successors, predecessors | crisp | `opt/cfg.ts` (planned) | Parsing terminators is plumbing. |
 | Dominator tree (Cooper–Harvey–Kennedy, reverse postorder) | fn | `opt/dominators` | Analysis content, with a spelled iterative algorithm. |
 | Dominance frontiers | fn | `opt/frontiers` | Its own small algorithm. Only mem2reg needs it. |
 | Natural loops: back edges, bodies, latches, exits, preheaders, nesting | fn | `opt/loops-info` | Its own data, used by five passes. |
@@ -94,23 +110,23 @@ can finish reliably.
 | Part | Decision | Unit | Why |
 |---|---|---|---|
 | Data: initializer layout (padding, endianness, doubles as bits) | fn | `aarch64/data` | Layout rules. |
-| Data: section directives and symbol naming | crisp | `aarch64/print.ts` | Formatting. |
+| Data: section directives and symbol naming | crisp | `aarch64/print.ts` (planned) | Formatting. |
 | Calling convention: AAPCS64 argument and result registers, variadic calls, the stack at calls | inline | `aarch64/select` | A spelled table. It cannot be separated from selection. |
 | Instruction selection: a pattern per IR instruction, over virtual registers, emitting PHI pseudo-instructions | fn, per function | `aarch64/select` | The core. Pattern tables spelled out. |
 | PHI elimination: copies in predecessors, critical edges split | fn | `aarch64/phi-elim` | LLVM's PHIElimination. A separate step for small models. |
 | Live intervals by backward dataflow; calls crossed | fn | `aarch64/liveness` | Analysis. |
 | Linear-scan assignment: pools, expiry, spill choice, giving the register or slot of each virtual register | fn | `aarch64/assign` | The allocation decision. Its result is data. |
-| Rewrite with the assignment: physical registers, reload and store around spills | crisp | `aarch64/rewrite.ts` | Applying a decided map is mechanical. |
+| Rewrite with the assignment: physical registers, reload and store around spills | crisp | `aarch64/rewrite.ts` (planned) | Applying a decided map is mechanical. |
 | Frame layout: frame record, saved registers in pairs, slots by alignment, 16-byte total | fn | `aarch64/frame` | Layout decisions. Its result is data (offsets). |
-| Prologue and epilogue insertion, slot references to `[sp, #off]`, large offsets through x16 | crisp | `aarch64/apply-frame.ts` | Applying a decided layout, from fixed templates. |
+| Prologue and epilogue insertion, slot references to `[sp, #off]`, large offsets through x16 | crisp | `aarch64/apply-frame.ts` (planned) | Applying a decided layout, from fixed templates. |
 | Peepholes: a spelled rule table over windows of 2–3 instructions | fn | `aarch64/peephole` | One pass, with its rules listed. |
-| Emission: directives, labels, `.size` | crisp | `aarch64/print.ts` | Formatting. Today this is a model call (`emit`). |
+| Emission: directives, labels, `.size` | crisp | `aarch64/print.ts` (planned) | Formatting. Today this is a model call (`emit`). |
 | Running the program and comparing outputs | service | `toolchain` | The check. |
 
 ## Drivers
 
 `compiler.nl` sequences the stages in natural language (the pass manager), and `index.ts` is the checked driver. Both
-call the crisp helpers through the callable folder, and both check with the `toolchain` service.
+call the crisp helpers through the callable folder (once they exist; see Status), and both check with the `toolchain` service.
 
 ## Changes from today
 

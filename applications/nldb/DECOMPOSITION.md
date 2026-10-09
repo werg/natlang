@@ -11,6 +11,16 @@ Every part of the database, with a decision:
 The executors are small, fast models, so rules are spelled out, and each function is one task a small model can
 finish reliably.
 
+## Status: target design
+
+The tables below are the target decomposition. Four crisp helpers they name do not exist yet and are marked "(planned)":
+`database/plan-steps.ts`, `execute/index-search.ts`, `execute/pages.ts` and `define/files.ts`. Until they do, that work
+(renumbering plan steps, binary search and sorted insertion, page formatting, file moves) is done by the natural-language
+functions that exist today: `database/plan.nl`, `database/execute/*.nl` and `database/define/*.nl`. The host side also has
+`neuralese.ts`, which the tables below do not mention: it is the host's block storage and similarity index for `neuralese`
+columns (content-addressed safetensors blocks, dialect pinning, IVF index), described in `NEURALESE.md`. Like `index.ts`
+and `sqlite/` it is host code (exact storage), not a natural-language part.
+
 ## Policy
 
 - **Natural language: a relational engine's content.**
@@ -62,7 +72,7 @@ finish reliably.
 | Predicate push-down, with the rules for left, semi and anti joins; exact and semantic parts split, semantic filters placed last | fn | `database/push-down` | One rewrite. |
 | Access paths: scan to lookup on an indexed column (equality before range, then fewest rows) | fn | `database/access-paths` | One rewrite. |
 | Join order and methods: hash join on equality, smaller side built, most selective pair first | fn | `database/join-order` | One rewrite. |
-| Drop no-op steps, renumber inputs | crisp | `database/plan-steps.ts` | Bookkeeping. |
+| Drop no-op steps, renumber inputs | crisp | `database/plan-steps.ts` (planned) | Bookkeeping. |
 | Sequence the rewrites | inline | `database/plan` | Orchestration. |
 
 ## Executor
@@ -71,7 +81,7 @@ finish reliably.
 |---|---|---|---|
 | Run steps in order, independent steps at once; a question's rows in the statement's column order | inline | `database/execute` | Orchestration. |
 | Scan: pages in order, fields renamed `alias.x`, where by the `Condition` rules | fn | `execute/scan` | An operator. |
-| Lookup: find `[value, _id]` pairs for values or a range | crisp | `execute/index-search.ts` | Binary search is a low-level capability. |
+| Lookup: find `[value, _id]` pairs for values or a range | crisp | `execute/index-search.ts` (planned) | Binary search is a low-level capability. |
 | Lookup: fetch only the pages whose `_id` span covers the ids; then where | fn | `execute/lookup` | An operator. It uses the helper. |
 | Filter: exact conditions first | fn | `execute/filter` | An operator. |
 | Filter: conditions of meaning, judged once per distinct value | fn, decision | `execute/filter/meets` | A scored judgment, run per value in parallel. |
@@ -81,9 +91,9 @@ finish reliably.
 | Sort: SQLite's null order, stable; LIMIT and OFFSET | fn | `execute/sort` | An operator. |
 | Row changes of an insert, update or delete (set expressions evaluated per target row) | fn | `execute/row-changes` | Its own rules. Each change sees the earlier ones. |
 | Page writer: `_id` from nextId, the last page or a new one at 256 rows, update in place, delete, catalog counts | fn | `execute/write` | Storage decisions. |
-| Page line format: compact JSON, `_id` first, column order | crisp | `execute/pages.ts` | Formatting. |
+| Page line format: compact JSON, `_id` first, column order | crisp | `execute/pages.ts` (planned) | Formatting. |
 | Index maintenance: which pairs change per indexed column (an unchanged value keeps its pair; null is indexed) | fn | `execute/reindex` | It decides the changes. |
-| Sorted insertion and removal of pairs | crisp | `execute/index-search.ts` | A low-level capability. |
+| Sorted insertion and removal of pairs | crisp | `execute/index-search.ts` (planned) | A low-level capability. |
 | Check values: types and not-null per column | fn | `execute/check-values` | Integrity rules, spelled out. |
 | Check conditions in words ("at least 0"), judged per distinct value | fn, decision | `execute/check-values/holds` | A scored judgment of a rule in words. |
 | Check unique and key, through the index or the pages | fn | `execute/check-unique` | An integrity rule with its own reads. |
@@ -99,7 +109,7 @@ finish reliably.
 | Rewrite rows for add, drop or rename column | fn | `define/migrate-rows` | Its own rules. Touches every page. |
 | Build an index from all rows | fn | `define/build-index` | Its own task. It uses the crisp sorted helper. |
 | Verify a new constraint over all stored rows | fn | `define/verify-constraint` | Integrity rules over existing data. |
-| Rename or drop a table or index (file moves and deletes) | crisp | `define/files.ts` | Plumbing. |
+| Rename or drop a table or index (file moves and deletes) | crisp | `define/files.ts` (planned) | Plumbing. |
 
 ## Host
 
@@ -107,6 +117,7 @@ finish reliably.
 |---|---|---|---|
 | One request at a time; commit only an outcome reported done; redo log before files; recovery on open | host | `index.ts` | Exact durability. |
 | SQLite engine | host | `index.ts`, `sqlite/` | The optimized variant. |
+| Neuralese columns: content-addressed block storage, dialect pinning, similarity index | host | `neuralese.ts` | Exact storage and vector search over blocks (see `NEURALESE.md`). |
 
 ## Changes from today
 
