@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.student_skill_collection_candidate/1",
+  "collection_id": "task-workflows-v5-candidate",
+  "status": "held-proposal-not-activated",
+  "based_on_collection": "training/student-skills/task-workflows-v4",
+  "based_on_manifest": {
+    "path": "training/student-skills/task-workflows-v4/collection-manifest-v2.json",
+    "sha256": "835b460dba90ef3f57035dff005f4bb02012ca225875176c7936b76caf3f523e"
+  },
+  "scope": "Generic evidence-carry guidance for multi-step work, accumulated notes, and delegation. No case IDs, world names, gold answers, or domain-specific predicates in the added skill.",
+  "rationale": "A fresh same-source diagnostic showed that decision-relevant facts can be reduced to a bare status when notes are carried forward. This candidate adds a source-neutral procedure for retaining the evidence, criterion, output purpose, and current-versus-historical distinctions needed by later steps. This is a proposal rationale, not a qualification claim.",
+  "files": [
+    {
+      "path": "skills/calculate-from-data/SKILL.md",
+      "sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f",
+      "bytes": 734,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/calculate-from-data/SKILL.md",
+      "reuses_sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f"
+    },
+    {
+      "path": "skills/complete-the-call/SKILL.md",
+      "sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f",
+      "bytes": 840,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/complete-the-call/SKILL.md",
+      "reuses_sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f"
+    },
+    {
+      "path": "skills/inspect-callable-apis/SKILL.md",
+      "sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795",
+      "bytes": 789,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/inspect-callable-apis/SKILL.md",
+      "reuses_sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795"
+    },
+    {
+      "path": "skills/judge-against-criteria/SKILL.md",
+      "sha256": "29d2f2f52173edabcbd767c0ae5589a544c2ee4e2e7d72cd95e78d6044786d2a",
+      "bytes": 2517,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/judge-against-criteria/SKILL.md",
+      "reuses_sha256": "29d2f2f52173edabcbd767c0ae5589a544c2ee4e2e7d72cd95e78d6044786d2a"
+    },
+    {
+      "path": "skills/move-and-verify-files/SKILL.md",
+      "sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267",
+      "bytes": 693,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/move-and-verify-files/SKILL.md",
+      "reuses_sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267"
+    },
+    {
+      "path": "skills/resume-after-partial-effects/SKILL.md",
+      "sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592",
+      "bytes": 705,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v4/skills/resume-after-partial-effects/SKILL.md",
+      "reuses_sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592"
+    },
+    {
+      "path": "skills/carry-forward-evidence/SKILL.md",
+      "sha256": "876f1c52743793ba8e4a4fce8404d11fd732f21f773b838bf69664e8cabd6cc9",
+      "bytes": 2546,
+      "status": "proposed-addition"
+    }
+  ],
+  "activation": false,
+  "training_admission": false,
+  "external_diagnostic_authorized": false
+}
