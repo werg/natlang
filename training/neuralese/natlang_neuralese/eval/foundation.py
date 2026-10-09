@@ -34,6 +34,38 @@ def fingerprint(path):
     return digest.hexdigest()
 
 
+def optional_channel_diagnostics(heads, backbone, raw, h_cut, logits, chosen):
+    """Report comparable auxiliary channel metrics without changing raw gates.
+
+    Vocabulary-free sketch feedback has no next-token readout. Treat that
+    diagnostic as not applicable; token identity and full-depth raw embedding
+    checks remain mandatory and are computed independently by the caller.
+    """
+    result = {'head_profile': heads.profile}
+    readout_logits = getattr(heads.feedback, 'readout_logits', None)
+    if not callable(readout_logits):
+        result.update({
+            'learned_channel_diagnostic': 'not-applicable-no-vocabulary-readout',
+            'learned_channel_diagnostic_note': 'Raw identity gates are independent of this profile; this feedback module does not predict vocabulary logits.',
+        })
+        return result
+    shallow_logits = readout_logits(h_cut)
+    feedback = heads.feedback(h_cut).float()
+    target = backbone.embed(chosen).float()
+    teacher = F.log_softmax(logits.float(), -1)
+    student = F.log_softmax(shallow_logits.float(), -1)
+    result.update({
+        'learned_channel_diagnostic': 'vocabulary-feedback',
+        'learned_feedback_teacher_argmax_agreement': float((shallow_logits.argmax(-1) == chosen).float().mean()),
+        'learned_feedback_teacher_kl': float((teacher.exp() * (teacher - student)).sum(-1).mean()),
+        'learned_feedback_raw_greedy_embedding_relative_mse': float((feedback - target).square().mean() / target.square().mean()),
+    })
+    if heads.profile == 'legacy-rms-v1':
+        result['legacy_read_norm_relative_mse'] = float(
+            (heads.interface(raw).float() - raw.float()).square().mean() / raw.float().square().mean())
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--heads', type=Path, required=True)
@@ -77,23 +109,16 @@ def main(argv=None):
             logits = plain['logits']
             chosen = logits.argmax(-1)
             reference = reference_next_embedding(backbone, plain['h_final'])
-            shallow_logits = heads.feedback.readout_logits(plain['h_cut'])
-            feedback = heads.feedback(plain['h_cut']).float()
-            target = backbone.embed(chosen).float()
-            teacher = F.log_softmax(logits.float(), -1)
-            student = F.log_softmax(shallow_logits.float(), -1)
-            rows.append({
+            row = {
                 'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
                 'positions': ids.shape[1],
                 'raw_transport_max_abs': float((transport - raw).abs().max()),
                 'identity_readback_logits_max_abs': float((readback['logits'] - logits).abs().max()),
                 'identity_readback_argmax_agreement': float((readback['logits'].argmax(-1) == chosen).float().mean()),
                 'full_output_reference_max_abs': float((reference - backbone.embed(chosen)).abs().max()),
-                'legacy_read_norm_relative_mse': float((heads.interface(raw).float() - raw.float()).square().mean() / raw.float().square().mean()),
-                'learned_feedback_teacher_argmax_agreement': float((shallow_logits.argmax(-1) == chosen).float().mean()),
-                'learned_feedback_teacher_kl': float((teacher.exp() * (teacher - student)).sum(-1).mean()),
-                'learned_feedback_raw_greedy_embedding_relative_mse': float((feedback - target).square().mean() / target.square().mean()),
-            })
+            }
+            row.update(optional_channel_diagnostics(heads, backbone, raw, plain['h_cut'], logits, chosen))
+            rows.append(row)
             print(json.dumps(rows[-1]), flush=True)
     passed = all(row['raw_transport_max_abs'] == 0 and row['identity_readback_logits_max_abs'] == 0
                  and row['full_output_reference_max_abs'] == 0 for row in rows)
