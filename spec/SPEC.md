@@ -74,7 +74,9 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `uses` lists package
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `model: NAME` runs every
+call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
+when the runtime has none. `uses` lists package
 items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
 joins its context under its base name, with its own companion folder. `args`, `returns` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
@@ -263,7 +265,7 @@ it; a call that failed may run again. The service object's lifetime is the scope
 so a host hands a fresh object to each unit of work that may repeat the effect on
 purpose. Reads are not listed: they must see the current state.
 
-A service may come with a declaration: the TypeScript declaration of its members,
+A service may come with a declaration (the `serviceDeclarations` runtime option): the TypeScript declaration of its members,
 with their doc comments, as a declaration file would give them. The model is
 shown it as `declare namespace name { … }` and can read it with `read_code`,
 but the implementation runs in the host and is neither readable nor editable. A
@@ -272,7 +274,7 @@ way, so that only code the program owns can be changed. Importable packages are
 external in the same way: `read_code("pkg")` lists a package's exports from
 its type declarations, and `read_code("pkg.name")` shows one with its docs.
 
-A service can be scoped to functions: it is then usable only in their calls and
+A service can be scoped to functions (`serviceScopes`): it is then usable only in their calls and
 the calls they make, as a specialist can reach systems its caller cannot. Its
 declaration stays readable everywhere, and a call that cannot use it is told
 which functions can.
@@ -308,7 +310,9 @@ system prompt) and returns the most probable one. The normalised distribution
 is the call's trace event `decision_readout` and its note, so a decision is a
 probability vector that proper scoring rules (Brier, ranked probability score,
 log loss) can grade and, on a Neuralese server, differentiate
-(`objectives.decision` in `natlang:learning`, [learning.md](ext/learning.md)). A model config with
+(`objectives.decision` in `natlang:learning`, [learning.md](ext/learning.md)). Host code reads it with
+`runtime.decide(fn, ...args)` and eval code with `decide(fn, ...args)`, which return
+`{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed
 call. A backend that cannot score replies falls back to the ordinary tool loop;
 the loader rejects `readout: decision` on a type that is not finite.

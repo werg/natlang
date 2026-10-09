@@ -8,7 +8,8 @@ The runtime records every call: the definition and its revision, the parent call
 and the eval that started it, exact inputs and captures, the result, each service
 call with its arguments and result, folder changes, the eval programs run, and
 cost. Values beyond a bound are recorded by hash and type; a program may exclude
-definitions or arguments, which are then recorded by type only.
+definitions or arguments, which are then recorded by type only (`"recording": { "exclude": ["auth/*.nl", "login.password"] }`
+in `natlang.json`: a source glob, or `functionName.argument`).
 
 A call may be served by a compilation of its definition's revision: an ordered
 list of crisp cases, each a guard over the call's arguments and a body with the
