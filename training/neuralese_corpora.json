@@ -20596,6 +20596,36 @@
       "independent_new_worlds": 0,
       "license": "Inherited authored operational source provenance",
       "notes": "Same five sourcev4cases/fourgroups/golds/evidence/files/scopes;10literalpromptoccurrences add currentpass pendingfactreturn boundary. Source SHA9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a. DOC-954 scripted currentruntime text-marker-emulation reference accepted/exactsixfilechecks/four scopedreads. Earlier failed wrapperdiagnostics explicitly superseded and retained. No provider/modelcalls in reference, no learnedchannelcertificate/admission. One separate actualZAI recovery fromfreshsource launched; activeoutputsexcluded."
+    },
+    {
+      "id": "free-provider-google-planned-pool-sources-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-google-model-pool-mixed-decisions-v2/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/models.json",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/run_gemini_decision_pool.py",
+        "provider-google-model-pool-mixed-decisions-v2/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v2/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+        "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/run_gemini_decision_pool.py",
+        "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v3/source-manifest.json"
+      ],
+      "split": "inherited-train",
+      "source_class": "planned-typed-pool-source-inputs-and-frozen-generator-artifacts",
+      "admission": "held-input-sources-not-generated-trajectories",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-pool-v1-closed-held-20261009-v1"
+      ],
+      "independent_new_worlds": 0,
+      "license": "Inherited exact decision source train roles/groups/licenses; upstream source SHA pinned",
+      "notes": "Two disjoint1024case cohorts19families each; v2generating/v3queuedbehind sameprojectlock. Source states <=1000JSONchars, <=8labels, roletrain only. V3excludes all existingtypedcohortIDs. Frozen exactdrivers/config/launchreceipt pinned. No labels/state/workerlog mutablefilesincluded; actualoutputs require separateclosed publication+quality/currentIRreview. Allfreeverifiedmodels eligible, aliasquota conservative, no paidfallback/distillationflag."
     }
   ],
   "coverage_backlog": [

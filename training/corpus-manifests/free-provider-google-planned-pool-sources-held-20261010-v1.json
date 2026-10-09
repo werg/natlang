@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-planned-pool-sources-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/cases.jsonl",
+      "bytes": 676051,
+      "sha256": "bb4b40568997d33e58bd07dbd9031d9c57085a85f27b24b2ae8f2a8fa162402e",
+      "lines": 1024
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9403,
+      "sha256": "23e0d7c577144b4d3ad88ed2c33bd189e7e42f139c921b1cbd110eb0bacb73c3"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1094,
+      "sha256": "be3d5e7dcd22823dda018549f13ddc64553a638c2123a0815903a56f34c91805"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v2/source-manifest.json",
+      "bytes": 986,
+      "sha256": "332baf70d078f66a183c9067bdc886d0bb2a638875c9fe96f3b0c254dc57a400"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/cases.jsonl",
+      "bytes": 641958,
+      "sha256": "e80fa6a36eb0697e40a78e57ab07bb9ecf55ef4a36587de8da26ffb3c39ccb59",
+      "lines": 1024
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9403,
+      "sha256": "23e0d7c577144b4d3ad88ed2c33bd189e7e42f139c921b1cbd110eb0bacb73c3"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/launch-receipt-v1.json",
+      "bytes": 1027,
+      "sha256": "52ac7a48fbe3754aeae6dad06cd75c44f38353afa2900458b0770b89fef7051c"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v3/source-manifest.json",
+      "bytes": 1150,
+      "sha256": "766531c1be9b6e72db67845bd1befb6d7471c8b96797397e9fde19cbaca1c582"
+    }
+  ],
+  "bytes": 1398428
+}
