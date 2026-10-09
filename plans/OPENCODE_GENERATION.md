@@ -67,6 +67,16 @@ expand concurrency after observing successful generation and provider limits.
 Keep failed attempts, source pins, splits, and action reviews. Runtime success
 and parent-case acceptance do not automatically admit every action to training.
 
+`scripts/run_opencode_step5_collector.mjs` owns only the collector child it
+spawns. On launcher `SIGINT` or `SIGTERM`, it forwards that signal to the child,
+records `interrupted` plus the requested signal, and escalates to `SIGKILL` only
+after 30 seconds if the child has not exited. Its outer timeout uses the same
+bounded shutdown and records `timed_out`; a child spawn failure is recorded as
+`spawn_error`. These lifecycle labels describe the collector process only and
+do not prove that a provider request started or that the isolated OpenCode
+bridge shut down. Preserve bridge capture logs and verify that bridge's own
+lifecycle separately.
+
 ## Ownership
 
 Run Pop's workers from `/home/werg/natlang`. The DGX agent manages DGX execution.
