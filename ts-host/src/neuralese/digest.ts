@@ -10,7 +10,7 @@
  *
  * The digest instructions are the prompt piece `digest`; under a system-prompt bank their soft form is sent instead.
  */
-import { DIGEST_PROMPT } from '../native/prompt.js';
+import { DIGEST_PROMPT } from '../builtin/index.js';
 import { neuraleseRef, textToParts, type NeuraleseRef } from '../native/neuralese.js';
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { activeSystemPrompts, softenText, type SystemPromptBank } from '../native/system-prompts.js';

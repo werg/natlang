@@ -103,7 +103,8 @@ test('a large argument is listed as its digest; the variable keeps the value; sm
 
 test('the digest instructions and listing note match the fixture the server is pinned to', async () => {
   const { readFileSync } = await import('node:fs');
-  const { DIGEST_PROMPT, digestNote } = await import('../dist/native/prompt.js');
+  const { digestNote } = await import('../dist/native/prompt.js');
+  const { DIGEST_PROMPT } = await import('../dist/builtin/index.js');
   const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/digest-site.json', import.meta.url), 'utf8'));
   assert.equal(DIGEST_PROMPT, fixture.messages[0].content);
   assert.equal(digestNote('state'), fixture.note);

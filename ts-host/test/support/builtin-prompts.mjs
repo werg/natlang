@@ -9,7 +9,6 @@ import { defineNatlang } from '../../dist/runtime/callable.js';
 import { promptPieces } from '../../dist/native/system-prompts.js';
 import { judge } from '../../dist/calls/judge.js';
 import { GAME_POLICY_SOURCE } from '../../dist/self-play/policy.js';
-import { DIGEST_PROMPT } from '../../dist/native/prompt.js';
 import { loadVirtualNatlang } from '../../dist/runtime/virtual-project.js';
 
 /** Per-run identifiers are not part of what the model reads. */
@@ -57,7 +56,7 @@ export async function renderBuiltinPrompts() {
         reference: behavior(3, [{ service: 'log', method: 'write', args: ['x'] }]), candidate: behavior(4), seed });
     out.compareBehaviors = requests;
   }
-  out.digest = DIGEST_PROMPT;
+  out.digest = promptPieces().find(piece => piece.id === 'digest').text;
   out.gamePolicySource = GAME_POLICY_SOURCE;
   // The game policy as a model call.
   {

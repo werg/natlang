@@ -4,7 +4,8 @@
  * sees the two behaviors in an order fixed by the call, not knowing which one is the case.
  */
 import { hexDigest } from '../native/hash.js';
-import { invokeDefinition, type CallableDefinition } from '../runtime/kernel.js';
+import { invokeDefinition } from '../runtime/kernel.js';
+import { builtinDefinition } from '../runtime/builtin.js';
 import { currentFrame } from '../runtime/context.js';
 import type { NatlangRuntime } from '../runtime/runtime.js';
 import { sameData, subtreeEffects, type ObservedEffect, type ValueSource } from './replay.js';
@@ -42,13 +43,8 @@ export function compareBehaviors(reference: Behavior, candidate: Behavior): { eq
   return { equal: differences.length === 0, differences };
 }
 
-const JUDGE_INSTRUCTIONS = `Two executions of the same function are described in first and second. task gives the function's instructions, its signature, the inputs of this call, and any feedback recorded about this call.
-
-Decide which execution carries out the instructions better for these inputs. Judge by the instructions and the inputs: the right result, and the right effects (service calls, file changes, written variables). An execution that performs an effect the instructions do not ask for, or skips one they need, is worse. A service call whose arguments differ only in how a value is written (999 or "999") is the same call. Do not prefer an execution for being longer or more elaborate. Answer "equal" when both are acceptable and neither is better.`;
-
-const JUDGE: CallableDefinition = { id: 'natlang:compareBehaviors', name: 'compareBehaviors', body: JUDGE_INSTRUCTIONS,
-  params: [{ name: 'task', type: 'string' }, { name: 'first', type: 'string' }, { name: 'second', type: 'string' }],
-  returns: "'first' | 'second' | 'equal'", types: {}, codebase: {}, subtype: 'function' };
+/** The comparison judge is the built-in program builtin/compareBehaviors.nl. */
+const judgeDefinition = () => builtinDefinition('compareBehaviors');
 
 const describe = (behavior: Behavior): string => {
   const cap = (text: string, limit = 6000) => text.length > limit ? `${text.slice(0, limit)} …(${text.length} characters)` : text;
@@ -74,7 +70,7 @@ export async function judge(runtime: NatlangRuntime, input: { instructions: stri
     `Inputs: ${JSON.stringify(input.inputs, null, 1)?.slice(0, 8000)}`,
     ...(input.annotations?.length ? [`Feedback recorded about this call: ${JSON.stringify(input.annotations).slice(0, 3000)}`] : [])].join('\n\n');
   const [first, second] = candidateFirst ? [input.candidate, input.reference] : [input.reference, input.candidate];
-  const answer = await runtime.run(() => invokeDefinition(currentFrame()!, JUDGE, [task, describe(first), describe(second)],
+  const answer = await runtime.run(() => invokeDefinition(currentFrame()!, judgeDefinition(), [task, describe(first), describe(second)],
     { manifest: { internal: true } }), { specialization: 'off', name: 'judge' }) as 'first' | 'second' | 'equal';
   const candidateWon = (answer === 'first') === candidateFirst;
   return { verdict: answer === 'equal' ? 'equivalent' : candidateWon ? 'better' : 'worse', differences };

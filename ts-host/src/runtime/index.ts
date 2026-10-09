@@ -17,6 +17,8 @@ export { Iteration, IterationDivergedError, IterationStepError, IterationLimitEr
   defaultProgressJudge } from './iterate.js';
 export type { IterationStatisticsStore, SiteStatistics, ProgressJudgeFunction, StepRecord } from './iterate.js';
 export { nl, iterateOn, refine, assume, untrusted } from './surface.js';
+export { builtin, builtinDefinition, builtinRecords } from './builtin.js';
+export { builtinNames } from '../builtin/index.js';
 export { pluggable } from './pluggable.js';
 export { promotionPolicy, reviewPromotions, sanitizeDecision, type PolicyFunction, type ReviewedSubject } from './promotion.js';
 export type { PluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
