@@ -198,7 +198,7 @@ function refinedSignature(definition: CallableDefinition): { env: TypeEnv; param
  * The task's services with the declared refined results (`refinements.services`) checked: a service result is judged like
  * an nl return, and a failure throws to whoever called the service.
  */
-function checkedServices(task: Frame['task'], services: Readonly<Record<string, object>>, model: ReturnType<Frame['task']['model']>, callId: string,
+function checkedServices(task: Frame['task'], frame: Frame, services: Readonly<Record<string, object>>, model: ReturnType<Frame['task']['model']>, callId: string,
   emit: (kind: string, data: Record<string, unknown>) => void, signal?: AbortSignal): Readonly<Record<string, object>> {
   const declared = task.runtime.options.refinements?.services;
   if (!declared || !Object.keys(declared).length) return services;
@@ -207,7 +207,7 @@ function checkedServices(task: Frame['task'], services: Readonly<Record<string, 
   for (const [name, text] of Object.entries(declared)) {
     try { types[name] = parseType(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
   }
-  const checker = task.refinementChecker(), judges = task.refinementJudges(model);
+  const checker = task.refinementChecker(), judges = task.refinementJudges(model, frame);
   return checkServiceResults(services as Record<string, unknown>, types, async (value, type, label) => {
     const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit }, label);
     if (failures.length) throw failureError(failures[0]!);
@@ -448,7 +448,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (signature?.params.some(type => containsRefinement(type, signature.env))) {
     try {
       const checker = task.refinementChecker();
-      const judges = task.refinementJudges(task.model(definition.model));
+      const judges = task.refinementJudges(task.model(definition.model), frame);
       const failures = (await Promise.all(signature.params.map((type, index) => inputs[index] === undefined ? [] :
         checker.checkValue(inputs[index], type, signature.env, { phase: 'argument', ...judges, callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
           emit: (kind, data) => traceFor(frame.parentCallId)?.emit(kind, { ...data, callee: definition.name }) },
@@ -492,7 +492,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(checkedServices(task, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
+  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
       [{ node: invocationNodeId(callId), port: 'caller' }])));
@@ -506,7 +506,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,
     guidance: model.guidance,
-    ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model) } } : {}),
+    ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
     decisionSystemPrompt: () => DECISION_SYSTEM_PROMPT + (addendum ? `\n\n${addendum}` : '') }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
@@ -550,7 +550,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     // The agent's own check has cached its verdicts, so this costs no further scoring pass.
     if (signature?.refinedReturns) {
       const failures = await task.refinementChecker().checkValue(result.value, signature.returns, signature.env,
-        { phase: 'return', ...task.refinementJudges(model), callId, signal: frame.signal ?? task.signal,
+        { phase: 'return', ...task.refinementJudges(model, frame), callId, signal: frame.signal ?? task.signal,
           emit: (kind, data) => { runtime!.trace.emit(kind, data); } });
       if (failures.length) {
         outcome = 'failed'; detail = `${failures[0]!.code}: ${failures[0]!.message}`;
@@ -668,7 +668,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     // A compiled case's result must satisfy refinements too; if not, the case fails and the agent takes the call.
     if (containsRefinement(node.type.returns, env)) {
       const failures = await task.refinementChecker().checkValue(structural, node.type.returns, env,
-        { phase: 'return', ...task.refinementJudges(task.model(definition.model)), callId, signal: input.frame.signal ?? task.signal,
+        { phase: 'return', ...task.refinementJudges(task.model(definition.model), input.frame), callId, signal: input.frame.signal ?? task.signal,
           emit: (kind, data) => { traceFor(callId)?.emit(kind, data); } });
       if (failures.length) throw failureError(failures[0]!);
     }

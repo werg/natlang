@@ -12,7 +12,7 @@ import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
 import { decisionScorer } from '../native/decision.js';
-import { RefinementChecker, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
+import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
 
 /** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
 export type SpecializationMode = 'off' | 'shadow' | 'on';
@@ -287,14 +287,24 @@ export class NatlangTask {
    * The judge and the escalation judge for a call running on `model`: the configured `refinements.judge` model when
    * there is one, else the call's own. Undefined when the driver cannot score replies.
    */
-  refinementJudges(model: ModelConfig | undefined): { judge?: RefinementJudge; escalation?: RefinementJudge } {
+  refinementJudges(model: ModelConfig | undefined, frame?: Frame): { judge?: RefinementJudge; escalation?: RefinementJudge } {
     const settings = this.runtime.options.refinements;
-    const judgeOf = (config: ModelConfig | undefined): RefinementJudge | undefined => {
-      const scorer = config ? decisionScorer(config.driver) : undefined;
-      return config && scorer ? decisionJudge(scorer, { id: config.id ?? (config.driver as { model?: string }).model ?? (config.driver.name || 'model') }) : undefined;
+    const judgeOf = (name: string | undefined, config: ModelConfig | undefined): RefinementJudge | undefined => {
+      if (!config) return undefined;
+      const id = config.id ?? (config.driver as { model?: string }).model ?? (config.driver.name || 'model');
+      const scorer = decisionScorer(config.driver);
+      if (scorer) return decisionJudge(scorer, { id });
+      // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
+      return frame ? callJudge(async (value, predicate, signal) => {
+        const { invokeDefinition } = await import('./kernel.js');
+        const result = await invokeDefinition({ ...frame, ...(signal ? { signal } : {}) }, { id: 'refinement:holds', name: 'holds',
+          body: JUDGE_CALL_INSTRUCTIONS, params: [{ name: 'value', type: 'unknown' }, { name: 'predicate', type: 'string' }], returns: 'boolean',
+          types: {}, codebase: {}, subtype: 'function', ...(name ? { model: name } : {}) }, [value, predicate], { manifest: { internal: true } });
+        return result === true;
+      }, `call:${id}`) : undefined;
     };
-    const judge = judgeOf(settings?.judge ? this.model(settings.judge) : model);
-    const escalation = settings?.escalate ? judgeOf(this.model(settings.escalate)) : undefined;
+    const judge = judgeOf(settings?.judge, settings?.judge ? this.model(settings.judge) : model);
+    const escalation = settings?.escalate ? judgeOf(settings.escalate, this.model(settings.escalate)) : undefined;
     return { ...(judge ? { judge } : {}), ...(escalation ? { escalation } : {}) };
   }
   model(name?: string): ModelConfig | undefined {

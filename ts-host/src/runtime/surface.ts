@@ -107,7 +107,7 @@ export async function refine<T, P extends string>(value: T, predicate: P): Promi
   const frame = resolveFrame();
   const task = frame.task;
   const failures = await task.refinementChecker().check([{ path: 'value', predicate: text, value }],
-    { phase: 'refine', ...task.refinementJudges(task.model()), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
+    { phase: 'refine', ...task.refinementJudges(task.model(), frame), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
       emit: (kind, data) => emitRefinement(frame, kind, data) });
   if (failures.length) throw failureError(failures[0]!);
   return value as Is<T, P>;
