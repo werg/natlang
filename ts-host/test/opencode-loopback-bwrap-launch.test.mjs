@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { buildBubblewrapArgs } from '../../scripts/opencode-loopback-bwrap-launch.mjs';
 
 test('bubblewrap command exposes only the workspace adapter, pinned package tree, and one writable run directory', () => {
@@ -14,7 +16,7 @@ test('bubblewrap command exposes only the workspace adapter, pinned package tree
     return false;
   };
   assert.equal(has('--ro-bind', '/usr', '/usr'), true);
-  assert.equal(has('--ro-bind', '/home/werg/natlang/scripts', '/home/werg/natlang/scripts'), true);
+  assert.equal(has('--ro-bind', realpathSync(fileURLToPath(new URL('../../scripts', import.meta.url))), '/home/werg/natlang/scripts'), true);
   assert.equal(has('--ro-bind', nodeModules, nodeModules), true);
   assert.equal(has('--bind', output, output), true);
   assert.equal(has('--share-net'), true, 'provider egress remains enabled for official transport');

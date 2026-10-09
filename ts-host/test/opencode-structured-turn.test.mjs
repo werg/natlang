@@ -618,7 +618,7 @@ test('action MCP falls back to its supported protocol version and records action
   const scratch = mkdtempSync(join(tmpdir(), 'natlang-opencode-mcp-protocol-test-'));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   const actionLog = join(scratch, 'actions.jsonl');
-  const server = resolve('scripts/opencode-natlang-action-mcp-server.mjs');
+  const server = resolve(import.meta.dirname, '../../scripts/opencode-natlang-action-mcp-server.mjs');
   const input = [
     { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25' } },
     { jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2024-11-05' } },

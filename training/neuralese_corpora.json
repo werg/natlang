@@ -18506,7 +18506,44 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261009-1000"
       },
-      "notes": "Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical)."
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical)."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "summary.json",
+        "surface.json",
+        "prepared.jsonl",
+        "replayed.jsonl",
+        "replay.log"
+      ],
+      "split": "by-repository (5% test; source groups repository and instance)",
+      "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
+      "admission": "held-pending-text-twin-rendering-with-the-fixed-renderer-and-recipe-cohort-declaration",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+        "nebius-swe-rebench-tasks-20261009-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "training/neuralese/scripts/harness_bench_build.sh",
+        "code_commit": "b4543ebd873a53f5aaac7f5d264d1ca95af0170d",
+        "builder": "natlang.harness_bench.records/1",
+        "dialect": "openhands-v0.54",
+        "mapping": "pi",
+        "surface_sha256": "c8e3d62f0460046edc09a3be683445387f5a22a388b4836005bc8d9938b533cf",
+        "surface_file_sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050",
+        "criteria": "harness-bench-criteria/2",
+        "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
+      },
+      "notes": "Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v1"
     },
     {
       "id": "luna-v30-source-repairs-counterfactuals-generation-only-20261009-v1",

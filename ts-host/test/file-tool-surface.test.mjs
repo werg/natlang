@@ -6,12 +6,12 @@ import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, scopedFileToolNames, 
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
-  .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
+  .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } })
   .map(item => item.function.name);
 
 test('a directory reducer offers the file tools of its surface, and its prompt names only those', () => {
   const tools = new NativeToolAgent(async () => ({ calls: [] }))
-    .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } });
+    .tools({ runtime: { frame: { adHocDepth: 0 } }, rememberOfferedTools() {}, lam: { codebase: {}, projectTransaction: { folder: { access: 'write' } }, type: { kind: 'prim', name: 'unknown' } } });
   const delegate = tools.find(item => item.function.name === 'delegate').function;
   assert.match(delegate.parameters.properties.returns.description, /Natlang result type expression/);
   assert.match(delegate.parameters.properties.returns.description, /boolean, string, number/);
@@ -63,7 +63,7 @@ test('file guidance preserves each supplied handle view and explicit output auth
     const prompt = directoryReducerPrompt(surface);
     assert.match(prompt, /Read a supplied FileHandle directly/);
     assert.match(prompt, /folder\.file\(sourceFile\.path\) may refer to a different view/);
-    assert.match(prompt, /cannot create or edit sibling files/);
+    assert.match(prompt, /can access only that file through its folder/);
     assert.match(prompt, /Pass an output FileHandle explicitly/);
     assert.match(prompt, /structured object or array, verify saved JSON with readJson<T>\(\) and return that parsed value directly/);
     assert.match(prompt, /Use readText\(\) as the result only when the declared return type is string/);

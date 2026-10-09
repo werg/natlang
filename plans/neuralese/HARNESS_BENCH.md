@@ -49,8 +49,10 @@ and they are the part that needs nothing but the recorded trajectory.
    - bash keeps the teacher's recorded output (only its environment could produce it), reformatted the way pi formats
      bash: OpenHands' exit-code and cwd trailers become pi's error diagnostic, bounded to the tail.
 
-   Every step is verified. A read must show exactly the text the teacher saw, and an edit or write must succeed or
-   fail as the teacher's did. At the first disagreement (a command changed files, or tool semantics differ), replay
+   Every step is verified. A read must show exactly the text the teacher saw, an edit or write must succeed or
+   fail as the teacher's did, and a bash observation must not be OpenHands' notice that the command is still running
+   (its soft timeout, "no new output after N seconds … send keys … use the timeout parameter in execute_bash", or the
+   "timed out after N seconds" form): pi's bash waits for the command and never shows it. At the first disagreement (a command changed files, or tool semantics differ), replay
    stops and reports the step; earlier steps are verified. Repositories are bare partial clones cached under
    `~/data/harness-bench/repos` (NVMe).
 4. **Records** (`natlang_neuralese.harness_bench.records`). Writes `natlang.teacher_training_turn.native/1`, the
@@ -164,24 +166,33 @@ cohort map, mixed into the existing native cohorts, never replacing them.
 5. The live harness changes in §5, then evaluation (§6).
 
 **First build (step 1 done), 2026-10-09/10:** `build-20261009-1000` at code commit 744bdd4f, surface sha256 c8e3d62f…,
-registered as `harness-bench-swe-rebench-openhands-pi-records-20261010-v1` (manifest in `training/corpus-manifests/`,
-files under `data/neuralese/corpora/`). Corpus-level training admission is held pending text-twin rendering with the
-fixed renderer and the recipe cohort declaration (step 2); per-record admission is in the records.
+registered as `harness-bench-swe-rebench-openhands-pi-records-20261010-v1`, now **superseded**: 6 of its records show
+OpenHands' bash soft-timeout notice in a pi bash result (§8).
 
-| Measure | Count |
-| --- | --- |
-| Resolved trajectories prepared | 492 |
-| Replayed | 489 (3 clone failures, NREL/hescore-hpxml) |
-| Fully verified | 305 |
-| Verified up to the first divergence | 184 |
-| Steps verified | 22,538 of 22,722 attempted |
-| Records (all pass `harness-bench-criteria/2`) | 3,852 (3,740 train / 112 test) |
-| Digest parts | 20,359 |
+**Current build, 2026-10-10:** `build-20261010-1000`, the same surface.json and prepared.jsonl (copied), replay and
+records re-run at code commit b4543ebd (a bash timeout notice is a divergence point), registered as
+`harness-bench-swe-rebench-openhands-pi-records-20261010-v2` (manifest in `training/corpus-manifests/`, files under
+`data/neuralese/corpora/`). Corpus-level training admission is held pending text-twin rendering with the fixed
+renderer and the recipe cohort declaration (step 2); per-record admission is in the records.
 
-Divergences (first per trajectory): `task_tracker` 113, `execute_bash` interactive input 31, read shows other text 22,
-read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, other `str_replace_editor` 1.
-Tool calls lost after a divergence: 1,487 of 6,089 in the 113 `task_tracker` trajectories, 1,151 of 1,895 in the 31
-interactive-input ones (§8).
+| Measure | v2 (current) | v1 (superseded) |
+| --- | --- | --- |
+| Resolved trajectories prepared | 492 | 492 |
+| Replayed | 489 (3 clone failures, NREL/hescore-hpxml) | 489 |
+| Fully verified | 305 | 305 |
+| Verified up to the first divergence | 184 | 184 |
+| Steps verified | 22,468 of 22,652 attempted | 22,538 of 22,722 |
+| Records (all pass `harness-bench-criteria/2`) | 3,843 (3,731 train / 112 test) | 3,852 (3,740 / 112) |
+| Digest parts | 20,302 | 20,359 |
+| Records showing the soft-timeout notice | 0 | 6 |
+
+Divergences (first per trajectory, v2): `task_tracker` 112, bash soft timeout (OpenHands-only interaction) 31, read
+shows other text 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, `execute_bash`
+interactive input 1, other `str_replace_editor` 1. The fix moved 31 trajectories: 29 cut one step earlier (before the
+hung call instead of at the `C-c`), one two steps earlier, and one (`task_tracker` at step 49 in v1) cut at step 10;
+70 verified steps fewer. In v1:
+`task_tracker` 113, `execute_bash` interactive input 31. Tool calls lost after a divergence (v1 counts): 1,487 of 6,089
+in the 113 `task_tracker` trajectories, 1,151 of 1,895 in the 31 interactive-input ones (§8).
 
 ## 8. Open questions
 
@@ -222,10 +233,12 @@ interactive-input ones (§8).
   - rewriting the hung call to carry `timeout: 30` with pi's timeout result and dropping the `C-c` turn reads well,
     but adds an argument the teacher did not choose, and it is wrong for pagers (pi would have returned output);
   - a `bash_input` / process-session tool (like Codex's write_stdin) changes pi's surface: owner's decision.
-  Proposal: keep truncating, but one step earlier. Today the hung call's step is kept, and its observation carries
-  OpenHands' soft-timeout instructions ("send keys (C-c, C-z, C-d) … use the timeout parameter in execute_bash"),
-  which describe a tool pi does not have; 6 records of this build show that text. Replay should treat a soft-timeout
-  observation as the divergence (reason `bash interactive (soft timeout)`), and environment re-execution later
+  Truncation now happens one step earlier (**fixed 2026-10-10**, v2 build). v1 kept the hung call's step, and its
+  observation carried OpenHands' soft-timeout instructions ("send keys (C-c, C-z, C-d) … use the timeout parameter in
+  execute_bash"), which describe a tool pi does not have; 6 v1 records showed that text. Replay now treats an
+  OpenHands timeout notice in a bash observation (exact form, soft `has no new output after N seconds` or
+  `timed out after N seconds`) as the divergence, with reason `bash soft timeout (OpenHands-only interaction)` (or
+  `bash timeout …`); applications/pi/test/replay-timeout.test.mjs covers it. Environment re-execution later
   recovers these trajectories with pi's own observations.
 - Cross-tokenizer teachers: supervision is on actions (text) and the students' own self-distillation, never logit KL
   to the teacher.
