@@ -1,0 +1,1566 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-step5-bridge9-case07three-native-text-20261009-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/proof.json",
+      "bytes": 9174,
+      "sha256": "42bfa08d60a8db57440704fb453b967e6b9b066ba382c057c23f6c924728b2a7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/root-derived-native-text-composition-adoption-v1.json",
+      "bytes": 2662,
+      "sha256": "7c6df7c00ea810c13b30f5e3f6197e591de3b3a477a2e0dee021c6ff565eee11"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/root-union-tokenizer-review-v1.json",
+      "bytes": 3027,
+      "sha256": "34bc2db4b9ffdde8f2ba01a2a359387f3c3060f85e9d1f7c475ef6c612d612d2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/campaign-v1/jobs/000002-f5352165affc830e.result.json",
+      "bytes": 951036,
+      "sha256": "9d63bc202664fbeea75b06c75588758018115ef1ca341d42d3e425f7dae16887"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/campaign-v1/jobs/000002-f5352165affc830e.trace.jsonl",
+      "bytes": 207135,
+      "sha256": "b8b40ead11d0207751ccfb9529e512648365a64196871438a8dd79ea51d61dbc",
+      "lines": 216
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/action-mcp-calls.jsonl",
+      "bytes": 12157,
+      "sha256": "ca3920be7a52fa400b6271c011c5bb5c8275613bdc1e12eac0ce2b30349627e3",
+      "lines": 24
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/bootstrap-config.json",
+      "bytes": 2917,
+      "sha256": "2195424fe91c186c41698789dee6ee9e92a7d2355d288335c2e96d077ce4967e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/bootstrap-events.jsonl",
+      "bytes": 834,
+      "sha256": "a198b14ea10705674a5d6152b7fa2d4d5134b572b2e9ff92a671987251dd7a0a",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/cli-invocations.jsonl",
+      "bytes": 68587,
+      "sha256": "11046770a31714a86dc4177ca32bdd7066a4a310c55471e0f405744ec9e712aa",
+      "lines": 34
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/cli-stdout.raw",
+      "bytes": 38685,
+      "sha256": "08c4edcb3096523847c524676b21379acc287cbd9547cc1c48d9b39e59a4aeca"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "75b6b0b3c5237c1506aa8fbcac4208938815666b3f8eb60d7ff0a16e17ee23ec"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 94265,
+      "sha256": "e7d8e61709b943a8d88ce8a4894d9f8a6b89a056590072b0b853a292b64aed11"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/snapshot-manifest.json",
+      "bytes": 4718,
+      "sha256": "8f1515fa9faddfdf5f96be0e862387f5c218c3ba7aebb7c6fcbeea762b627366"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v2/inputs/selected-nine-held-materializations.jsonl",
+      "bytes": 1199814,
+      "sha256": "603a983f0b6220d609ce112ab82635ffd5ecfc5788aacff71c035a16fd93ff33",
+      "lines": 9
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/delta-native-records.jsonl",
+      "bytes": 1201695,
+      "sha256": "4c069161ec9e2ff690b17deb6fb2f94f168c9700f8b56e25e4c8f7824d861a42",
+      "lines": 9
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/proposal-manifest.json",
+      "bytes": 10805,
+      "sha256": "4cdc43aae40c014dd1554590577313af607e2deb646a1ba72a013d423953796a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 64529,
+      "sha256": "8946cce0623366cd88735d4eb2832a7b228fe453a79878ad2c00a97d4c2cffcb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/snapshot-manifest.json",
+      "bytes": 15556,
+      "sha256": "54ac975bd576fbace3c34c213c65d6f72f4ab45aec794a89cc40965009ff8d29"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/text_corpus.py",
+      "bytes": 84930,
+      "sha256": "e15c3a219e00bec0674cd110ea30fc69b0ae788f424edc1dabdfdae9a0e7ffae"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_autoregressive_history.py",
+      "bytes": 12009,
+      "sha256": "c1975be1390e608bbec32371d4e6c387deff1265dae6d36b253a7d58c0e8a598"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/grad.py",
+      "bytes": 53910,
+      "sha256": "d60da9f6c257caec0515c08030f1728a2349a97da83714bec292cadef405fd4f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recipe.py",
+      "bytes": 29391,
+      "sha256": "0ab7863e374cf54c90b703abf12277cea5c8683629ae096f8984e2ebce9fc0a7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/staging.py",
+      "bytes": 8902,
+      "sha256": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectories.py",
+      "bytes": 143535,
+      "sha256": "9385cf2ecfd2320922cb75a2f47cb1f683383efb1e84bbaed6b22bc5c2bd3716"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/compact-review-packet-v4.json",
+      "bytes": 28027,
+      "sha256": "2a52c6eddf85869a3b46b1c533e7c6958fc7faaaef779d0a93d7a8a6b53872e7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 66706,
+      "sha256": "f3896f98bbfa36f351e393f3d9ab2780ee3d19b3d17bb59e393e75b586724f35"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/snapshot-manifest.json",
+      "bytes": 15556,
+      "sha256": "a97adf96e194f6ed757fc696550062417537ed7d3e92b5324aa5d744c0560c84"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/text_corpus.py",
+      "bytes": 84930,
+      "sha256": "e15c3a219e00bec0674cd110ea30fc69b0ae788f424edc1dabdfdae9a0e7ffae"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_autoregressive_history.py",
+      "bytes": 12009,
+      "sha256": "c1975be1390e608bbec32371d4e6c387deff1265dae6d36b253a7d58c0e8a598"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/grad.py",
+      "bytes": 54371,
+      "sha256": "c11ae1ec5833dbc481126d83b0a213e06126aa6ed8b61c2de7b60bebca76e929"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recipe.py",
+      "bytes": 29391,
+      "sha256": "0ab7863e374cf54c90b703abf12277cea5c8683629ae096f8984e2ebce9fc0a7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/staging.py",
+      "bytes": 8902,
+      "sha256": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectories.py",
+      "bytes": 143535,
+      "sha256": "9385cf2ecfd2320922cb75a2f47cb1f683383efb1e84bbaed6b22bc5c2bd3716"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-provenance.jsonl",
+      "bytes": 22977,
+      "sha256": "40490a987364aaa141d6ff36eec559509790732bc3d3d7e69808157a692cd003",
+      "lines": 9
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-text.jsonl",
+      "bytes": 664521,
+      "sha256": "5deed7597c5618b7f00c57a2b08b4ddb032c6ed2407154e382daa8d4b61db697",
+      "lines": 9
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/provider-context-bindings.jsonl",
+      "bytes": 24709,
+      "sha256": "6ec7b8d0c4998c2778f4c78179be4e3d208e7b5cebd4590ba83c70aa98502993",
+      "lines": 10
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/receipt.json",
+      "bytes": 5428,
+      "sha256": "3b8f8ebd27657994a6f26fa3565ea60cd11a3e8136013de7c432bbbad0841cdf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/source-coverage.jsonl",
+      "bytes": 3753,
+      "sha256": "173e7397c85097910a38fb63798f76a9c95a6c4cdc9f4e720184dd2f341948b6",
+      "lines": 9
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/launch-plan-v2.json",
+      "bytes": 13049,
+      "sha256": "9c07b0c6b73569687465999dc5227ae581a6a9b872e8376d15393b1b166206d9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/action-review-packet-v2.json",
+      "bytes": 68176,
+      "sha256": "f9711b731dc5103c776147ce1c1f1439e721609d244c5fff185bd64bb46dc9b0"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/materialization-manifest-v5.json",
+      "bytes": 13508,
+      "sha256": "aea5e7315d3cf388a4b3cab479ee628cceb0255141ac9aa3b13434f4d9efad35"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/native-turns-raw-v2.jsonl",
+      "bytes": 1488577,
+      "sha256": "9ead690251c5e18889e15aa7f043e52b6dad7e6aa78d4251cccde8ea6ddcd168",
+      "lines": 11
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/semantic-assessment-v1.json",
+      "bytes": 3512,
+      "sha256": "732bd725ec59488d30a7cc5eedf7e147dba9f5a35ff03a41edfbf7e1ec233814"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/root-native-review-v1/proof.json",
+      "bytes": 280,
+      "sha256": "194a7bef977ac598cb34c6e27aa06a4d4c72f029c40ed70b567f4f4b2243883f"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/root-native-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 17352,
+      "sha256": "eb73b49644e9a4d024b3f697d9431be33af60cafab5be5c24afc1f13072bd816"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/proof.json",
+      "bytes": 13435,
+      "sha256": "e39ab0c48250d7ecabc067f932a02ee112ad7cabfdcd9d61db5457f26fba258d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/publication-code-snapshot-v1/scripts/assemble_admitted_neuralese_cohort.py",
+      "bytes": 36682,
+      "sha256": "5be093b10fce71b250448ac200e1248373ef21e4eedcf36ecd6eccb50327a888"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/review.py",
+      "bytes": 4550,
+      "sha256": "a207410b00d4a36c02921ea23f85e0e317cd6627741d9b2c75230b2988f7a5c5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/review_v2.py",
+      "bytes": 4852,
+      "sha256": "7be5363b9c483e2c341294ad882f9de874c9ef6dc4bd5c4c6b9163331c5197ef"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/root-native-text-composition-adoption-v1.json",
+      "bytes": 4076,
+      "sha256": "f7776ec917a82e0f04e8690f21e8563bd44c8a91f636a4c318f192d631f7fa99"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/root-native-text-composition-review-v1.json",
+      "bytes": 3603,
+      "sha256": "2c4d18c677bc6a385709fd7332400a504f11cbe3b2b8ab7ce4f8146bfeb73dc2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/campaign-v1/jobs/000007-195b378742e69684.result.json",
+      "bytes": 229557,
+      "sha256": "9e32062d6ac22f5fe26da67054d9746c52fe4a54dea42751013e3c5866102be1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/campaign-v1/jobs/000007-195b378742e69684.trace.jsonl",
+      "bytes": 27940,
+      "sha256": "082a2bb47398322b8a13ad45b13d74b8c38bb435561c3ca0b37b93bd46f20486",
+      "lines": 42
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/action-mcp-calls.jsonl",
+      "bytes": 638,
+      "sha256": "66f3ddaa7df900ec1d4930a8200b404346685e5e3c5babc48be22e1a0862ab33",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/bootstrap-config.json",
+      "bytes": 3205,
+      "sha256": "d3342d632f3e15c9887e902369fab715d47d9ce7724cd14a56f5e53ef31cf961"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/bootstrap-events.jsonl",
+      "bytes": 926,
+      "sha256": "ec3f1d400dc536c6d428ba663f13744eb5e56dd50b6df2fa2bc7921433cc85b7",
+      "lines": 11
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/cli-invocations.jsonl",
+      "bytes": 9690,
+      "sha256": "28c65dc54b0fa5aa51a519e72ffc74e3cea16418a3b45d92aa9475953e5076a5",
+      "lines": 5
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/cli-stdout.raw",
+      "bytes": 3306,
+      "sha256": "03656648caa73717ff86f303332cdf5f9b9e70538e0826f3b23bd7dac3f21224"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/lifecycle.json",
+      "bytes": 192,
+      "sha256": "414f18c85dca0ba80795ac47dee1878fd5acf740d6036f87bbb1fcf3c979c7bf"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/opencode-home/data/opencode/log/opencode.log",
+      "bytes": 17700,
+      "sha256": "8eed677de186377214b699d47f0d0efa9912a24df81713c783f23480e2275faa"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/snapshot-manifest.json",
+      "bytes": 5878,
+      "sha256": "8231b7aee1758b395e0f198259bb886f43009b00b8841e56a77296b054f720b1"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/compact-review-packet-v3.json",
+      "bytes": 29770,
+      "sha256": "ae5bac180faff83aff267c03898f12df5d220c938486e6160000547bda19a456"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/delta-native-records.jsonl",
+      "bytes": 289490,
+      "sha256": "bd75ac5b8d54703acf1476e411c340bf10202cb7834a7876c371be0ad05bfc13",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/proposal-manifest.json",
+      "bytes": 10751,
+      "sha256": "32a6787d39c6d515b6109b72ebe598f3df31249966053517bdffa5e339cd84ac"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/selected-native-raw.jsonl",
+      "bytes": 288599,
+      "sha256": "7278ddf9f07f0ccad78886fc5b80291e1636d665951b4d1c61d78e838d7ac9ca",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-provenance.jsonl",
+      "bytes": 2703,
+      "sha256": "1587259954b269c0b6b7c154deb9bf625aeaa9fec0095008449d2106253908b9",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-text.jsonl",
+      "bytes": 246241,
+      "sha256": "93cb9702ff7d6bf9fa8591b849c6bdb5eb661e553ea15fbd196ce9ec49619099",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/receipt.json",
+      "bytes": 5492,
+      "sha256": "8be364c4c852fb8ec92aa01c6eefad5f0f4686a0446d3eab473156b23ab87f0a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/source-coverage.jsonl",
+      "bytes": 1248,
+      "sha256": "8a4c4b899efcce4719cf6c898f8cd3e398bbc58aee6a15123e3daa4110220025",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/launch-plan-v2.json",
+      "bytes": 11344,
+      "sha256": "2ba79123b533854147deace8941509405052c98ce4b9d7687f3a1e85c088e0e4"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/action-assessments-v1.json",
+      "bytes": 1455,
+      "sha256": "8a20b1be5cd59408d69e63bf1d84324481e4707c8c46112b902ee2b72a0b806a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/action-review-packet-v4.json",
+      "bytes": 18578,
+      "sha256": "0318153fd37fbfa61ee2e7ba23599b841bd5cc1397670f30c0a6d462aac3cfa9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/materialization-manifest-v1.json",
+      "bytes": 5565,
+      "sha256": "b85c02b54e4dc8fd691712899f4626eb156f70d36a6e2d5ca9aeb2d619359096"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/native-turns-raw-v1.jsonl",
+      "bytes": 288599,
+      "sha256": "7278ddf9f07f0ccad78886fc5b80291e1636d665951b4d1c61d78e838d7ac9ca",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/root-native-review-v1/proof.json",
+      "bytes": 279,
+      "sha256": "93fafab38dbffe51f92ab89e95c20968a1577702af2cd9beb90d53170dc4c69e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/root-native-review-v1/root-selected-action-admission-v1.json",
+      "bytes": 8055,
+      "sha256": "61e37c6fddbc4c960e8c725e8e58c0d15473cefac8686cffa4ffd41fa00b2983"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-v3.cases.jsonl",
+      "bytes": 50606,
+      "sha256": "64dad0c8678a792abd7a19380dce20421f3fa21f6506985398d34bb38ba0f03c",
+      "lines": 8
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/frozen-runtime/frozen-runtime.json",
+      "bytes": 122624,
+      "sha256": "4a0af9b19f9255f0e95a314f0b931d6ecac692e923ef43f9fe5fb2a870a76ed5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/frozen-runtime/src/neuralese/combinators.ts",
+      "bytes": 14462,
+      "sha256": "05bc722b9a1c3c596286e6f635ba78d3efc9d1ee47ede2173096dbac56899780"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+      "bytes": 220885,
+      "sha256": "b2c7c7659c3d355e0e7d0183873938ce3bc54341e2fabfca6e612fc50605076f",
+      "lines": 5
+    }
+  ],
+  "bytes": 11196732
+}
