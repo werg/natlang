@@ -8,6 +8,34 @@ Machine-specific experiments bind the shared handlers and exact predecessor
 artifacts. Code moves through `origin/main`; data and
 checkpoints move through the corpus registry and immutable manifests.
 
+## Sharing implementation and decisions across experiments
+
+The October 9 course correction exposed a coordination failure: sharing the
+trainer source did not prevent an obsolete local recipe from restarting sketch
+training after the mapped-input decision had been acknowledged. Stale compiled
+TypeScript also ignored admission guidance despite the current source containing
+the correct behavior. Neither incident is an acceptable model-specific difference.
+
+Related experiments share stage handlers, objectives, schedules, read/write
+transforms, checkpoint restoration and evaluation primitives. Recipes bind data,
+exact predecessor weights and explicit backbone/resource differences; they must
+not copy an objective into a machine-specific implementation. Changes to the
+common training path must update its canonical declaration and both machine
+handover notes. A frozen active run keeps its recorded implementation until a
+deliberate checkpoint handoff; it does not silently inherit later source edits.
+
+The recipe runner records resolved commands, inputs and frozen package identity.
+Default new generation runtime snapshots now compile current TypeScript in an
+isolated tree and pin source, compiler and compiled-output hashes, rather than
+trusting the checkout's existing `dist`. Matched autoregressive diagnostics use
+the shared projected-history evaluator and exact hashed window selections.
+
+This consolidation is still incomplete: text and trajectory objective/schedule
+deduplication is owned by the DGX agent; optimizer handoffs must preserve matching
+parameter moments rather than silently resetting every group. The C++ raw-token
+read port also remains unqualified. These are shared work items, not separate
+experimental policies or completed claims.
+
 ## Active text foundation: mapped drift, then autoregressive feedback (2026-10-09 correction)
 
 The shared owner decision from 2026-10-08 replaces repeated sketch passes in
