@@ -1,6 +1,18 @@
 # Evidence: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented (reviewed after the fact, plans/OWNER_REVIEW.md). Files: `plan_search.nl`, `select.nl`, `claims.nl`,
+`gaps.nl`, `write_answer.nl`, `refinements.ts`, `index.ts` (`answer`, `cite`, `citationProblems`).
+
+Implementation notes:
+- Refinement types that need the search result or the passages (selected ids are hits, `quote` occurs in the passage,
+  `span_id` is a given passage, `revision` equals the passage's) are not `Is<>` types: a crisp checker sees only the
+  value, and a judge would be a model call. The host checks them (`hitProblem`, `EvidenceCollection.citationProblems`),
+  fills `revision` (`EvidenceCollection.cite`) and sends the exact problem back once. `SearchPhrases` and `HitIds` are
+  `Is<>` types with crisp checkers. The judged types (`Draft.gaps`, `Draft.answer`) are not adopted.
+- Two invalid selections end as `status: unresolved` with the detail; two invalid claim lists end as `invalid-citation`.
+- `Passage.text` and `Hit.preview` are `Untrusted<string>`.
+- Owner questions 1 and 2 are left open (no support judgment, no re-plan on an empty search). `Passage` and `Claim`
+  stay owned here; the publisher re-exports them (question 3).
 
 The evidence atlas answers a question from loaded documents and checks every citation exactly. The exact side
 (spans, revisions, search, read, verify) is right. Findings in the natural-language half:
