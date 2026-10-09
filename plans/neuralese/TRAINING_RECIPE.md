@@ -34,11 +34,9 @@ replace the active map training path.
    output at position i predicts the input embedding at position i+1. Distill a
    full-depth reference first; its zero correction gives exact next-token
    embeddings. The out port is at the top layer: the foundation's reference is
-   `cutoff: "full"` on every backbone. A shallow cutoff belongs to the sketch, the
-   inputs generated autoregressively through the shared shallow layers only, so a block
-   is written without generating its inputs through the whole transformer (between a
-   perceiver and the ordinary autoregressive model); the sketch is first supervised against gold next-token embeddings, then trains
-   with the full stack and consumers (final owner correction 2026-10-06).
+   `cutoff: "full"` on every backbone. The October 8 input-map decision supersedes
+   the October 6 sketch training curriculum. A shallow sketch or MTP initializer
+   is a separate inference experiment, not the foundation input generator.
    Raw embeddings are not RMS
    normalized. Training completion is not qualification.
 3. **Runtime qualification:** validate the actual production encode/read/write
