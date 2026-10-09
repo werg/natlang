@@ -79,18 +79,24 @@ def qualify_raw_transport(engine, texts, *, limit=8):
 
     class DirectRawSession(GradSession):
         """Token-aligned control bypassing port read projection/markers."""
-        def _embed_items(self, items, leaves):
+        def _embed_items(self, items, leaves, starts=None):
             pieces, run = [], []
+            position = 0
             def flush():
                 if run:
                     pieces.append(self.backbone.embed(torch.tensor([run], device=engine.device)))
                     run.clear()
             for kind, value in items:
+                if starts is not None:
+                    starts.append(position)
                 if kind == 'tok':
                     run.append(value)
+                    position += 1
                 else:
                     flush()
-                    pieces.append(self._payload(value, leaves).to(self.backbone.embedding_weight.dtype)[None])
+                    payload = self._payload(value, leaves).to(self.backbone.embedding_weight.dtype)[None]
+                    pieces.append(payload)
+                    position += payload.shape[1]
             flush()
             return torch.cat(pieces, 1)
 
