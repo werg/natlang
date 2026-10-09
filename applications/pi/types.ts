@@ -583,3 +583,10 @@ export type Observation = {
   /** Everything the companion already knows about workspace files (possibly stale for files changed since). */
   known: FileKnowledge[];
 };
+
+/** Which parts of a long tool output the agent sees, and what the rest holds. Lines are numbered from 1; ranges are inclusive. */
+export type OutputShape = {
+  keep: { from: number; to: number }[];
+  /** What the output as a whole says, including the parts left out, in one or two sentences. */
+  gist: string;
+};

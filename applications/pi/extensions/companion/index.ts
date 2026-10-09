@@ -10,18 +10,20 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
-import type { Message } from '@earendil-works/pi-ai';
+import type { Message, ToolCall } from '@earendil-works/pi-ai';
 import type { NatlangRuntime } from '@natlang/node';
 import { defineDoc, defineDocFamily } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
 import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
 import { hook } from '../../vendor/durable/src/harness/define.ts';
 import type { Harness } from '../../vendor/durable/src/harness/harness.ts';
-import type { Extension, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
+import type { Extension, HookApi, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
-import type { Briefing, FileKnowledge, FileSummary, Observation } from '../../types.ts';
+import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
+import type { Implementation } from '../../host/harness.ts';
 import observe from './observe.nl';
+import shape from './shape.nl';
 
 /** The briefing shown to this conversation's agent, and the entry it was written after. */
 export const CompanionDoc = defineDoc<{ briefing?: Briefing; basis?: number }>({
@@ -128,12 +130,42 @@ function companionService(runtime: Runtime, context: Context, cwd: string) {
 }
 
 /**
- * A long output as the agent sees it: its head and tail around a note naming the recall handle. Which part to keep is
- * mechanism here (head and tail, like pi's own truncation); what the elided part means is the briefing's job.
+ * A long output as the agent sees it, crisp: its head and tail around a note naming the recall handle (like pi's own
+ * truncation). The natural-language twin, `shape.nl`, chooses the lines; `renderShape` shows its choice.
  */
 export function shapeOutput(text: string, handle: string): string {
   const elided = text.length - SHAPE_HEAD - SHAPE_TAIL;
   return `${text.slice(0, SHAPE_HEAD)}\n[… ${elided} characters elided by the companion; recall("${handle}") returns the full output …]\n${text.slice(-SHAPE_TAIL)}`;
+}
+
+/**
+ * A long output as the agent sees it, by `shape`: the gist and recall note, then the kept lines in order with a mark
+ * for each gap. Mechanism: ranges are clamped and merged, and the kept lines stop at `budget` characters whatever the
+ * shape asked for.
+ */
+export function renderShape(text: string, handle: string, shape: OutputShape, budget = SHAPE_HEAD + SHAPE_TAIL): string {
+  const lines = text.split('\n');
+  const ranges = (shape.keep ?? []).map(range => [Math.max(1, Math.floor(range.from)), Math.min(lines.length, Math.floor(range.to))] as const)
+    .filter(([from, to]) => from <= to).sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [from, to] of ranges) {
+    const last = merged.at(-1);
+    if (last && from <= last[1] + 1) last[1] = Math.max(last[1], to); else merged.push([from, to]);
+  }
+  const out = [`[The companion shortened this output of ${lines.length} lines: ${shape.gist.trim()} recall("${handle}") returns it whole.]`];
+  let used = 0, next = 1;
+  for (const [from, to] of merged) {
+    let line = from;
+    for (; line <= to && used + lines[line - 1]!.length + 1 <= budget; line++) {
+      if (line === from && from > next) out.push(`[… lines ${next}–${from - 1} …]`);
+      out.push(lines[line - 1]!);
+      used += lines[line - 1]!.length + 1;
+    }
+    if (line <= to) { next = line; break; }
+    next = to + 1;
+  }
+  if (next <= lines.length) out.push(`[… lines ${next}–${lines.length} …]`);
+  return out.join('\n');
 }
 
 /** The briefing as the agent reads it. Deterministic: an unchanged briefing renders the same text. */
@@ -150,6 +182,11 @@ export type CompanionOptions = {
   harness(): Harness;
   /** Called with each failure the companion keeps going after. */
   onReport?(error: unknown): void;
+  /**
+   * Pluggable hot path: how a long tool output is shortened. "crisp" (default): its head and tail; "natural-language":
+   * `shape.nl` chooses the lines and says what the rest holds.
+   */
+  shaping?: Implementation;
 };
 
 /** The companion extension; its functions run on `natlang`. */
@@ -198,6 +235,24 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
     },
   });
 
+  /**
+   * The agent's view of a long output, by the shaping setting. The natural-language shape is memoized for the call, so
+   * a rerun of the hook shows the same lines; when it fails, the crisp shape stands in and the failure is reported.
+   */
+  const shaped = async (call: ToolCall, text: string, api: HookApi, context: Context): Promise<string> => {
+    if (options.shaping !== 'natural-language') return shapeOutput(text, call.id);
+    try {
+      const memo = `companion.shape.${call.id}`;
+      const chosen = await api.memo<OutputShape>(memo, context) ?? await api.memo(memo, JSON.parse(JSON.stringify(
+        await natlang.run(() => shape(`${call.name} ${JSON.stringify(call.arguments)}`, text, SHAPE_HEAD + SHAPE_TAIL),
+          { name: `companion.shape#${call.id}` }))) as OutputShape, context);
+      return renderShape(text, call.id, chosen);
+    } catch (error) {
+      options.onReport?.(error);
+      return shapeOutput(text, call.id);
+    }
+  };
+
   /** Start a companion run for the conversation unless one is pending or running. */
   const start = async (conversationId: ConversationId, basis: number | undefined, context: Context) => {
     try {
@@ -242,7 +297,7 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
           const conversation = await options.harness().conversation(api.conversationId, context);
           await conversation?.commit(async tx => { await tx.doc(CompanionOutputs, api.conversationId, call.id, { tool: call.name, text }); }, context);
         } catch (error) { options.onReport?.(error); return undefined; }
-        return { ...result, content: [{ type: 'text', text: shapeOutput(text, call.id) }, ...parts.filter(part => part.type !== 'text')] };
+        return { ...result, content: [{ type: 'text', text: await shaped(call, text, api, context) }, ...parts.filter(part => part.type !== 'text')] };
       },
     }), hook(GenerationTask, {
       // After every tool round: the agent has new information, and the companion catches up while it thinks.

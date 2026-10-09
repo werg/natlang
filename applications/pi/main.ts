@@ -14,8 +14,9 @@
  *   --scheduler natural-language            the scheduler's policy in natural language (default crisp)
  *   --admission natural-language            admission in natural language (default crisp)
  *   --planning natural-language             the system-entry plan and the context estimate in natural language
- *   --pure                                  all four in natural language
+ *   --pure                                  all of these in natural language (with --companion, shaping too)
  *   --companion                             run the companion beside the agent (COMPANION.md): background briefings
+ *   --shaping natural-language              the companion shortens long tool outputs by judgment (default: head and tail)
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
  *   --quiet                                 no phase log on stderr
@@ -40,7 +41,7 @@ import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
-  '--session', '--context', '--scheduler', '--admission', '--planning', '--out', '--minutes'];
+  '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--out', '--minutes'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
@@ -113,6 +114,7 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   let opened: Harness | undefined;
   // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
   if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
+    shaping: args.includes('--pure') || option(args, '--shaping') === 'natural-language' ? 'natural-language' : 'crisp',
     onReport: error => log(`  [companion] ${error instanceof Error ? error.message : String(error)}`) }));
   const harness = await openPi({
     storage: await openNodeSqliteStorage(sessionPath),
