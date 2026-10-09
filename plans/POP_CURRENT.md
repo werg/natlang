@@ -11,15 +11,33 @@ Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navi
 
 ## GPU: full-depth autoregressive foundation continuation
 
-Current state: the AR continuation and paired GPU diagnostics below have
-completed. No GPU trainer is active while the next common-recipe continuation
-is being prepared. The shared causal-prefix supervision and checkpoint tests
-pass79 focused CPU tests. The next continuation
-must use the immutable mapped best23936 pair, not the regressed final24960.
+Current state: corrected continuation `luna-ar-feedback-prefix-4962-best23936-v1`
+is running from immutable mapped best23936, not regressed final24960. Declared
+recipe `luna-ar-feedback-prefix-4962-best23936-20261009-v1.json` has SHA
+`70e416d7558727d0eced37cd465827184da5cc64198bd5c26ec25ffc0317a99c`;
+its frozen122-file common package is from `9a16218c`. Startup confirms all four
+optimizer groups and31 schedule observations restored. Cap is4096 additional
+updates (absolute28032), with128-update evaluation/checkpoint cadence. The
+shared causal-prefix supervision and checkpoint tests pass79 focused CPU tests.
+Input is the complete4962-row root-adopted text union (3258train/1704test), SHA
+`30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576`,
+verified on both machines. It adds82 train documents to the previous4880 input;
+held rows are unchanged. No new sample admission from composing these bytes.
 An abandoned closed repair's empty checkpoint-space reserve was released after
 a privileged host-process check found no FD or job references; receipt is
 `.coordination/closed-anchor-reserve-release-v1.json` (1,435,903,552 bytes).
 Recheck available storage and atomic-save reservation before launch.
+
+Closed final24960's full checkpoint was canonicalized into its regular corpus
+path, then remotely verified and offloaded through the shared tool. Its original
+external path is now a historical alias and requires restoration before use.
+Restore the exact state with:
+`python3 scripts/sync_training_corpora.py restore --machine pop --host dgx --remote-repo /home/werg/natlang --id neuralese-ar-final24960-diagnostic-artifacts-20261009-v2 --file training-run/autoregressive_text_fixup/checkpoint.pt`.
+Receipt: `.coordination/artifact-evictions/neuralese-ar-final24960-diagnostic-artifacts-20261009-v2--5b3d63800c01e324.json`.
+The current run's source best23936 remains local. Root disk floor for this
+external-output job is4GiB; external preflight floor5.8GB covers estimated
+5.13GB checkpoint peak. The old8GiB root floor reserved training space on the
+wrong filesystem and is not the launch requirement.
 
 Course correction: sharing a repository did not prevent divergent recipes and
 stale sketch assumptions. Pop incorrectly resumed sketch training after the
