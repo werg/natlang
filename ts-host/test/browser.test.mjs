@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { scriptedModel } from './support/natlang.mjs';
+import { scriptedModel, browserTest as test } from './support/natlang.mjs';
 
 /** The browser bundle, loaded with Node's `process` hidden so any Node dependency fails. */
 async function api() {

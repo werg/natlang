@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { browserTest as test } from './support/natlang.mjs';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { browserNodeImports } from '../scripts/browser-node-imports.mjs';
