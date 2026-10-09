@@ -32,13 +32,22 @@ def clip_finite_gradients(parameters, maximum=1.):
 
 
 def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=(),
-                         lora_names=None):
+                         lora_names=None, latent_lrs=None):
+    """``latent_lrs`` (name → lr): QAT dense latents that get their own AdamW group at that rate (see
+    ``adapters.qat_latent_scales``) instead of sharing the Muon rate."""
+    latent_lrs = dict(latent_lrs or {})
+    latents = []
+    if latent_lrs and lora_names is not None:
+        kept = [(n, q) for n, q in zip(lora_names, lora) if n not in latent_lrs]
+        latents = [(n, q) for n, q in zip(lora_names, lora) if n in latent_lrs]
+        lora_names, lora = [n for n, _ in kept], [q for _, q in kept]
     groups = [{'params': list(params.values()), 'lr': lr}]
     if lora:
         groups.append({'params': lora, 'lr': lora_lr})
     if heads:
         groups.append({'params': heads, 'lr': heads_lr})
     if policy == 'adamw':
+        groups += [{'params': [q], 'lr': latent_lrs[n]} for n, q in latents]
         return torch.optim.AdamW(groups, weight_decay=0)
     named = [(f'soft.{name}', value) for name, value in params.items()]
     # Real backbone names (Maple QAT) let Muon take the dense latents and AdamW the scales, routers and norms;
@@ -61,6 +70,9 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
         for rate, values in rest:
             child.add_param_group({**original, 'params': values, 'lr': rate})
     optimizer.param_groups = optimizer._groups()
+    for name, latent in latents:
+        optimizer.add_param_group({'params': [latent], 'lr': latent_lrs[name], 'weight_decay': 0.0})
+        optimizer.schema[-1]['name'] = 'backbone.' + name
     return optimizer
 
 
@@ -96,12 +108,22 @@ def atomic_checkpoint(path, state):
         raise
 
 
-def validate_resume(state, identity):
+def _with_defaults(identity, defaults):
+    """An identity saved before an option existed ran with that option's default (new options default to the old
+    behaviour), so a missing saved option counts as its current default."""
+    identity = dict(identity or {})
+    if defaults:
+        identity['options'] = {**{k: v for k, v in defaults.items()}, **dict(identity.get('options') or {})}
+    return identity
+
+
+def validate_resume(state, identity, *, defaults=None):
     """Same inputs and training controls. Source code may differ (owner 2026-10-07: jobs resume on the newest code);
-    returns the changed module paths so the run records them."""
+    returns the changed module paths so the run records them. ``defaults``: parser defaults of the current options."""
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('unsupported recurrence checkpoint')
-    saved = dict(state.get('identity') or {})
+    keys = set((identity.get('options') or {}))
+    saved = _with_defaults(state.get('identity'), {k: v for k, v in (defaults or {}).items() if k in keys})
     current = dict(identity)
     saved_code, current_code = saved.pop('code', {}) or {}, current.pop('code', {}) or {}
     if saved != current:
@@ -142,7 +164,7 @@ def restore_iteration_rng(state, write_rng, stop_rng, baseline):
     baseline.update(state['baseline'])
 
 
-def validate_continuation(state, identity, *, allowed_changes=()):
+def validate_continuation(state, identity, *, allowed_changes=(), defaults=None):
     """Explicit new code stage, retaining full optimizer/RNG and fixed inputs.
 
     The caller records the source checkpoint hash separately. This does not relax
@@ -150,9 +172,10 @@ def validate_continuation(state, identity, *, allowed_changes=()):
     """
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('unsupported recurrence continuation checkpoint')
-    old = state.get('identity', {})
+    keys = set((identity.get('options') or {}))
+    old = _with_defaults(state.get('identity', {}), {k: v for k, v in (defaults or {}).items() if k in keys})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'qat_latent_lr'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     previous.setdefault('stop_supervision', 'generated-length')

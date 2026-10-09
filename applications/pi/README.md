@@ -105,6 +105,9 @@ a training job (about 170 generated tokens/s across all requests, about 28 per s
   token estimate) has crisp twins behind the hot-path setting (`--planning`, default crisp), which cut prepare
   from 4–7 minutes to about 1.5.
 
+- Known timing deviation: pi's "runs a round in parallel by default" test expects two 20 ms tool bodies to overlap.
+  The port creates both tool tasks in one commit and runs them concurrently, but each body runs after its own
+  natural-language call phase (minutes), so the two 20 ms windows overlap only by chance.
 - Companion (`--companion`, COMPANION.md): first live comparison on `stale-build`, one run each side by side under
   the same load (2026-10-09). With the companion: done and passing in 94 minutes, 5 agent turns, 6 tool calls, 3
   briefings shown. Without: the build passed the check but the run had no answer when the 150-minute limit hit, after

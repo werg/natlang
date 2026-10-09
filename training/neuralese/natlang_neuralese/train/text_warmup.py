@@ -880,6 +880,10 @@ def main(argv=None):
                         'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
                         'self-consistent with the model\'s own projection)')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
+    p.add_argument('--qat-latent-lr',type=float,default=0.,
+                   help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
+                        '(a code flips after its latent moves ~0.5 of it); 0: Muon at the backbone rate, under which '
+                        'codes practically never flip (v10: 3.6e-6 of them)')
     p.add_argument('--member-weight',type=float,default=0.,
                    help='nested-family students (MAPLE_NESTED §4a): after the projection-first phase, each update '
                         'also trains one member (in rotation) on the window: CE + KL(full || member), times this '
@@ -1026,7 +1030,14 @@ def main(argv=None):
     backbone_names={n.removeprefix('backbone.') for n,q in named if n.startswith('backbone.')}
     from .optim import PortMuonAdamW
     if a.optimizer=='muon':
-        optimizer=PortMuonAdamW(named,lr=a.lr,vocab_size=backbone.embedding_weight.shape[0])
+        latent_lrs={}
+        if a.qat_latent_lr and a.backbone_training=='qat':
+            # Each dense QAT latent at its own rate in units of its matrix's ternary scale (see qat_latent_scales).
+            from .adapters import qat_latent_scales
+            latent_lrs={'backbone.'+n:a.qat_latent_lr*v for n,v in qat_latent_scales(backbone).items()}
+            print(json.dumps({'event':'qat_latent_groups','latents':len(latent_lrs),
+                              'lr_min':min(latent_lrs.values(),default=None),'lr_max':max(latent_lrs.values(),default=None)}),flush=True)
+        optimizer=PortMuonAdamW([(n,q) for n,q in named if n not in latent_lrs],lr=a.lr,vocab_size=backbone.embedding_weight.shape[0])
         for child in (optimizer.muon,optimizer.auxiliary):
             if child is None:continue
             original=dict(child.param_groups[0]); buckets={}
@@ -1034,6 +1045,10 @@ def main(argv=None):
             first,*rest=buckets.items();child.param_groups[0].update(params=first[1],lr=first[0])
             for rate,qs in rest:child.add_param_group({**original,'params':qs,'lr':rate})
         optimizer.param_groups=optimizer._groups()
+        for n,q in named:
+            if n in latent_lrs:
+                optimizer.add_param_group({'params':[q],'lr':latent_lrs[n],'weight_decay':0.,'qat_latent_lr':latent_lrs[n]})
+                optimizer.schema[-1]['name']=n
     else:
         optimizer=torch.optim.AdamW([{'params':[q for n,q in named if n.startswith('backbone.')],'lr':a.lr},
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
@@ -1287,7 +1302,7 @@ def main(argv=None):
     del restored, resumed, continuation, restored_memory, saved_offload_state
     for group in optimizer.param_groups:
         projection=all(any(q is v for n,v in named if n.startswith('heads.')) for q in group['params'])
-        group['foundation_base_lr']=a.sketch_lr if projection else a.lr
+        group['foundation_base_lr']=group.get('qat_latent_lr') or (a.sketch_lr if projection else a.lr)
         group['foundation_projection']=projection
     if not was_resumed and not has_saved_memory_estimator and a.continue_from and memory_bootstrap_compatible:
         memory_bootstrap_count=_seed_warmup_memory_estimator(

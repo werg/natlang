@@ -38,14 +38,22 @@ def window_labels(ids: torch.Tensor, prefix: int) -> torch.Tensor:
 
 
 def member_backward(backbone, member, ids: torch.Tensor, labels: torch.Tensor, *, weight: float,
-                    kl_weight: float = 1.0, chunk: int = 256):
+                    kl_weight: float = 1.0, chunk: int = 256, full_weight: float = 0.0):
     """Backpropagate ``weight · (CE_member + kl_weight · KL(full ‖ member))`` over the labelled positions; the full
     model is the detached teacher (the stage's own objective trains it). The member stays selected through backward,
-    because checkpointed layers recompute their forward then and must route as the member did. Returns LossParts."""
+    because checkpointed layers recompute their forward then and must route as the member did. ``full_weight`` adds
+    the full model's own CE on the window (full_weight · CE_full), anchoring the shared weights the member term moves.
+    Returns LossParts."""
     hf = backbone.hf
     head = hf.get_output_embeddings().weight
-    with torch.no_grad():
+    if full_weight:
         full = run(hf, None, ids).last_hidden_state
+        full_loss, _ = chunked_ce_kl(full, head, labels, chunk=chunk)
+        (full_weight * full_loss).backward()
+        full = full.detach()
+    else:
+        with torch.no_grad():
+            full = run(hf, None, ids).last_hidden_state
     hf.set_member(member.key, experts=member.experts, layers=member.layers)
     try:
         hidden = hf.model(input_ids=ids).last_hidden_state
