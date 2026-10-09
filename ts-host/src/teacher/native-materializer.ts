@@ -827,15 +827,54 @@ function containsIncompleteDiagnostic(value: unknown): boolean {
 function hasExactRawModelCall(source: Dict, call: Dict): boolean {
   const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
   const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
-  return rawCalls.some(raw => {
-    if (!raw || typeof raw !== 'object') return false;
-    const fn = (raw as Dict).function;
-    if (!fn || typeof fn !== 'object') return false;
-    const name = (fn as Dict).name, args = (fn as Dict).arguments;
-    if (name !== call.source_tool || typeof args !== 'string') return false;
-    try { return canonical(JSON.parse(args)) === canonical(call.arguments); }
-    catch { return false; }
-  });
+  return rawCalls.some(raw => rawModelCallMatches(raw, call));
+}
+
+function rawModelCallMatches(raw: unknown, call: Dict): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const fn = (raw as Dict).function;
+  if (!fn || typeof fn !== 'object' || Array.isArray(fn)) return false;
+  const name = (fn as Dict).name, args = (fn as Dict).arguments;
+  if (name !== call.source_tool || typeof args !== 'string') return false;
+  try { return canonical(JSON.parse(args)) === canonical(call.arguments); }
+  catch { return false; }
+}
+
+/** Bind a sampled child action only when its child lineage and captured response calls are present in the source row. */
+function capturedProviderSampledChildAction(row: NativeRow, source: Dict, invocationId: string | undefined,
+  parents: Map<string, string>): Dict | undefined {
+  if (!invocationId || !parents.has(invocationId)) return undefined;
+  const guidance = row.collection_guidance && typeof row.collection_guidance === 'object' &&
+    !Array.isArray(row.collection_guidance) ? (row.collection_guidance as Dict).child_actions : undefined;
+  if (!guidance || typeof guidance !== 'object' || Array.isArray(guidance) ||
+      (guidance as Dict).source !== 'provider' || (guidance as Dict).sampled !== true) return undefined;
+  const provenance = row.provenance;
+  if (provenance.collection_role !== 'teacher' || provenance.transport !== 'pi-provider' ||
+      typeof provenance.provider !== 'string' || !provenance.provider ||
+      typeof provenance.model !== 'string' || !provenance.model) return undefined;
+  const sha256 = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  if (!sha256(source.request_sha256) || !sha256(source.raw_response_sha256)) return undefined;
+  const response = source.model_response && typeof source.model_response === 'object' &&
+    !Array.isArray(source.model_response) ? source.model_response as Dict : undefined;
+  const rawCalls = Array.isArray(response?.raw_calls) ? response.raw_calls as Dict[] : undefined;
+  const calls = source.assistant && typeof source.assistant === 'object' &&
+    Array.isArray((source.assistant as Dict).calls) ? (source.assistant as Dict).calls as Dict[] : undefined;
+  // A tool-free text response has no captured raw call to join; keep its actor unknown here.
+  if (!rawCalls?.length || !calls?.length || rawCalls.length !== calls.length) return undefined;
+  const unmatchedRawCalls = [...rawCalls];
+  for (const call of calls) {
+    const match = unmatchedRawCalls.findIndex(raw => rawModelCallMatches(raw, call));
+    if (match < 0) return undefined;
+    unmatchedRawCalls.splice(match, 1);
+  }
+  if (unmatchedRawCalls.length) return undefined;
+  const rawCallSha256 = hexDigest(canonical(rawCalls));
+  return { schema: 'natlang.action_provenance/1', kind: 'captured_provider_sampled_child_action',
+    actor: 'provider', source: 'captured-provider-response', sampled: true,
+    capture_join_verified: true, verification_basis: 'child-invocation-parent plus exact raw-call and request/response digest join',
+    provider: provenance.provider, model: provenance.model, invocation_id: invocationId,
+    parent_invocation_id: parents.get(invocationId), request_sha256: source.request_sha256,
+    provider_response_sha256: source.raw_response_sha256, raw_calls_sha256: rawCallSha256 };
 }
 
 /** Preserve provider-expanded Neuralese read bodies as context provenance.
@@ -1434,6 +1473,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
       const authoredRootAction = record(source.action_provenance ?? {}, 'action provenance').kind === 'authored_reference_root_eval';
+      const normalizedActionProvenance = source.action_provenance && typeof source.action_provenance === 'object' &&
+        !Array.isArray(source.action_provenance) ? structuredClone(source.action_provenance) as Dict :
+        capturedProviderSampledChildAction(row, source, invocation, parents);
       const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
         (row.collection_guidance as Dict).training_admission === false;
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
@@ -1457,8 +1499,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
-          ...(source.action_provenance && typeof source.action_provenance === 'object' && !Array.isArray(source.action_provenance) ?
-            { action_provenance: structuredClone(source.action_provenance) } : {}),
+          ...(normalizedActionProvenance ? { action_provenance: normalizedActionProvenance } : {}),
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
             ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?

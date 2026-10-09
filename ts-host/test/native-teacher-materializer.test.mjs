@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
@@ -11,6 +12,9 @@ const [decisionReview, materializer] = await Promise.all([
 ]);
 const { nativeDecisionTargetDigest } = decisionReview;
 const { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } = materializer;
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
+  value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
 const opening = { role: 'user', content: '1 [ ] Compute the result. Current inputs: {"n": 3}' };
@@ -864,6 +868,54 @@ test('each call links to its own actions when the trajectory interleaves a root 
   assert.equal(write.trace_seq, 12);
   assert.equal(child.trace_seq, 21, 'the child links to its own log, not to the root finish it resembles');
   assert.equal(finish.trace_seq, 30);
+});
+
+test('captured provider child provenance requires child lineage and an exact raw response call join', () => {
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/captured-provider-sampled-child-action-v1.json', import.meta.url), 'utf8'));
+  assert.equal(fixture.fixture_source_file_sha256, '117e8aef90abb7a5ce9372dd7f5df0136f8028ad24873c573a73132727d62e2d');
+  const row = fixture.row;
+  const childInvocation = 'task-1-7e3c8993-2d61-4a9c-a3ef-36cdfa2ccb6a/1';
+  const rootInvocation = row.outcome.invocation_ledger.find(entry => entry.invocation_id === childInvocation).parent_invocation_id;
+  const materialized = materializeNativeRows([row]);
+  const child = materialized.turns.find(turn => turn.source_ref.invocation_id === childInvocation);
+  const sampledProvenance = child.source_ref.action_provenance;
+  assert.equal(sampledProvenance.kind, 'captured_provider_sampled_child_action');
+  assert.equal(sampledProvenance.actor, 'provider');
+  assert.equal(sampledProvenance.sampled, true);
+  assert.equal(sampledProvenance.capture_join_verified, true);
+  assert.equal(sampledProvenance.provider, 'openai-codex');
+  assert.equal(sampledProvenance.model, 'gpt-6-luna');
+  assert.equal(sampledProvenance.invocation_id, childInvocation);
+  assert.equal(sampledProvenance.parent_invocation_id, rootInvocation);
+  assert.equal(sampledProvenance.request_sha256, row.trajectory[0].request_sha256);
+  assert.equal(sampledProvenance.provider_response_sha256, row.trajectory[0].raw_response_sha256);
+  const rawCalls = row.trajectory[0].model_response.raw_calls;
+  assert.equal(sampledProvenance.raw_calls_sha256, createHash('sha256').update(canonical(rawCalls)).digest('hex'));
+
+  // A teacher-role label alone does not turn an uncaptured child into provider evidence;
+  // an explicit authored root annotation is preserved byte-for-byte.
+  const reference = nativeRow('unproven-reference-child');
+  const authored = { kind: 'authored_reference_root_eval', source: 'curriculum.reference.root', sampled: false };
+  reference.trajectory[0].action_provenance = authored;
+  reference.provenance = { model: 'claimed-model', provider: 'claimed-provider', collection_role: 'teacher', transport: 'reference-driver' };
+  reference.collection_guidance = { child_actions: { source: 'provider', sampled: true } };
+  reference.outcome.invocation_ledger = [{ invocation_id: 'authored-root', parent_invocation_id: null },
+    { invocation_id: 'unproven-child', parent_invocation_id: 'authored-root' }];
+  reference.trajectory.push({ phase: 'action', invocation_id: 'unproven-child', context: [system, opening], tools_offered: schema,
+    request_sha256: 'a'.repeat(64), raw_response_sha256: 'b'.repeat(64), model_response: { raw_calls: [] },
+    assistant: { content: '', calls: [{ tool: 'eval', source_tool: 'eval', arguments: { code: 'return true;' }, call_id: null }] } });
+  reference.id = 'unproven-reference-child';
+  const unproven = materializeNativeRows([reference]);
+  const unknownChild = unproven.turns.find(turn => turn.source_ref.invocation_id === 'unproven-child');
+  assert.equal(unknownChild.source_ref.action_provenance, undefined);
+  assert.deepEqual(unproven.authored_actions[0].source_ref.action_provenance, authored);
+
+  const mismatchedRawCalls = structuredClone(fixture.row);
+  mismatchedRawCalls.id = 'unjoined-raw-calls';
+  mismatchedRawCalls.trajectory[0].model_response.raw_calls.push({ function: { name: 'write', arguments: '{}' } });
+  const mismatchTurn = materializeNativeRows([mismatchedRawCalls]).turns[0];
+  assert.equal(mismatchTurn.source_ref.action_provenance, undefined,
+    'extra captured calls must not be silently ignored when binding the assistant action');
 });
 
 test('a call identical to an earlier one, the same instructions on the same input, links to its own actions', () => {
