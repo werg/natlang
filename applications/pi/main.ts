@@ -22,6 +22,8 @@
  *   --quiet                                 no phase log on stderr
  * `natlang run applications/pi -- eval [NAME...] [--out DIR] [--minutes N] [options]`: the tasks in tasks/, each on a
  * fresh git copy of its repository, judged by its check command.
+ * `natlang run applications/pi -- surface [--cwd DIR] [--companion]`: the agent's system prompt and tool schemas as JSON
+ * (surface.ts), for training records built from other agents' trajectories.
  */
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -36,6 +38,7 @@ import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.
 import type { EntryId } from './vendor/durable/src/types.ts';
 import { codingRegistry, createEnvs } from './extensions/index.ts';
 import { companion } from './extensions/companion/index.ts';
+import { agentSurface } from './surface.ts';
 import type { Harness } from './vendor/durable/src/harness/harness.ts';
 import { openPi, type Implementation } from './index.ts';
 
@@ -147,6 +150,10 @@ export async function runTask(target: TargetContext, args: string[], task: strin
 export async function main(target: TargetContext): Promise<number> {
   const args = target.args;
   if (args[0] === 'eval') return evaluate(target, args.slice(1));
+  if (args[0] === 'surface') {
+    process.stdout.write(JSON.stringify(agentSurface({ cwd: option(args, '--cwd') ?? '/workspace', companion: args.includes('--companion') })) + '\n');
+    return 0;
+  }
   const task = positional(args).join(' ').trim();
   if (!task) { target.io.error.write('usage: natlang run applications/pi -- [options] TASK...\n'); return 2; }
   const cwd = resolve(target.workspace, option(args, '--cwd') ?? '.');

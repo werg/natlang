@@ -10,7 +10,7 @@ import type { Extension, PromptInput, PromptSection } from '../../vendor/durable
 import { formatSkillsForPrompt, Resources, type ContextFile, type Skill } from '../../host/resources.ts';
 
 /** The tools' contributions to the prompt (core/tools/{read,bash,edit,write}.ts). */
-const CONTRIBUTIONS: Record<string, { snippet: string; guidelines: readonly string[] }> = {
+export const CONTRIBUTIONS: Record<string, { snippet: string; guidelines: readonly string[] }> = {
   read: { snippet: 'Read file contents', guidelines: ['Use read to examine files instead of cat or sed.'] },
   bash: { snippet: 'Execute bash commands (ls, grep, find, etc.)', guidelines: ['You can inspect PI_* environment variables for current model and session details.'] },
   edit: {
