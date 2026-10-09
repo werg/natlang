@@ -631,6 +631,13 @@ def main(argv=None):
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
                         help="gold-aligned auxiliary relative-MSE anchor for full content and shallow feedback projections against detached raw next-token embeddings; set 0 only for an explicit diagnostic ablation")
+    parser.add_argument("--projection-anchor-decay-steps", type=int, default=0,
+                        help="the projection anchor's weight falls linearly to 0 over this many updates from the start "
+                             "of the lineage stage (owner 2026-10-09: the Neuralese-to-token-embedding anchor belongs to "
+                             "the warm-in only; afterwards readers adapt via --read-adapter). 0: constant")
+    parser.add_argument("--read-adapter", action=argparse.BooleanOptionalAction, default=False,
+                        help="reader-side Neuralese input adaptation: every vector entering the read port passes a "
+                             "zero-initialised full-rank residual map trained by the readers (heads.NeuraleseReadAdapter)")
     parser.add_argument("--projection-anchor-backbone-scale", type=float, default=0.05,
                         help="gradient multiplier from the projection anchor into backbone states; projection parameters receive full gradient")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
@@ -640,7 +647,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "member_mask_system", "member_full_weight", "qat_latent_lr", "projection_anchor_weight", "projection_anchor_backbone_scale", "projection_anchor_decay_steps", "read_adapter"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -729,6 +736,7 @@ def main(argv=None):
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
     option_defaults = {action.dest: action.default for action in parser._actions if action.dest != 'help'}
+    anchor_now = [args.projection_anchor_weight]  # the scheduled projection-anchor weight of the current update
     if args.inspect_training_config:
         print(json.dumps(vars(args), sort_keys=True, indent=2))
         return
@@ -1082,9 +1090,9 @@ def main(argv=None):
                     messages, producer.get('tools'), site_prefix(producer), producer_source(name, producer),
                     resolve_values({**leaves, **payloads}), text_weight=args.writer_text_weight,
                     stop_weight=args.stop_weight if args.stop_supervision == 'gold-native-boundary' else 0.,
-                    projection_anchor_weight=args.projection_anchor_weight,
+                    projection_anchor_weight=anchor_now[0],
                     projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
-                if args.projection_anchor_weight:
+                if anchor_now[0]:
                     projection_anchor_values.append(float(session.last_projection_anchor_loss))
                 return loss
             target = producer_text_target(producer, texts, names)
@@ -1093,10 +1101,10 @@ def main(argv=None):
                 resolve_values({**leaves, **payloads}),
                 # Keep the anchor's configured scale independent of the
                 # writer CE multiplier applied to the combined return below.
-                projection_anchor_weight=(args.projection_anchor_weight / args.writer_text_weight
+                projection_anchor_weight=(anchor_now[0] / args.writer_text_weight
                                           if args.writer_text_weight else 0.),
                 projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
-            if args.projection_anchor_weight:
+            if anchor_now[0]:
                 projection_anchor_values.append(float(session.last_projection_anchor_loss))
             return args.writer_text_weight * loss
         auxiliary = gold_replay if (args.writer_text_weight or (args.stop_supervision == 'gold-native-boundary' and args.stop_weight)) and torch.is_grad_enabled() else None
@@ -1422,6 +1430,8 @@ def main(argv=None):
     # The writer's own modules (feedback, content projection) learn from the readers of what they write.
     # Native final normalization is a frozen reference. At full depth the
     # causal feedback is already exact; learn payload/stop without corrupting it.
+    if args.read_adapter:
+        heads.add_read_adapter()
     head_params = [p for name, p in heads.named_parameters()
                    if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
@@ -1459,7 +1469,9 @@ def main(argv=None):
             backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
             if not getattr(backbone, 'tied', True):
                 backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
-        heads.load_state_dict(resumed['heads'])
+        missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
+        if unexpected or any(not k.startswith('read_adapter.') for k in missing):
+            raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
         try:
             optimizer.load_state_dict(resumed['optimizer'])
         except ValueError as error:
@@ -1572,9 +1584,9 @@ def main(argv=None):
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
             distill_weight=distill, context_weight=args.context_weight if training_objective else 0.,
             feedback_weight=args.feedback_weight,
-            projection_anchor_weight=args.projection_anchor_weight if training_objective else 0.,
+            projection_anchor_weight=anchor_now[0] if training_objective else 0.,
             projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
-        if training_objective and args.projection_anchor_weight:
+        if training_objective and anchor_now[0]:
             projection_anchor_values.append(float(session.last_projection_anchor_loss))
         if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
             plan = reader_geometry[0]
@@ -1713,6 +1725,14 @@ def main(argv=None):
     start_step = 0
     if resumed is not None:
         start_step, cursor, errors, used = resumed['step'], resumed['cursor'], resumed['errors'], set(resumed['used'])
+    # The anchor decays from where this stage began: a resume keeps its origin, a continuation starts a new one.
+    anchor_origin = (resumed.get('anchor_origin', start_step) if resumed is not None and not new_continuation
+                     else start_step)
+    def scheduled_anchor(step):
+        if not args.projection_anchor_decay_steps:
+            return args.projection_anchor_weight
+        return args.projection_anchor_weight * max(0.0, 1.0 - (step - anchor_origin) / args.projection_anchor_decay_steps)
+    if resumed is not None:
         baseline.update(resumed['baseline'])
         random.setstate(resumed['python_rng'])
         write_choice.setstate(resumed['write_rng'])
@@ -1828,7 +1848,7 @@ def main(argv=None):
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
-            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}),
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
             'probe_selection_sha256': probe_selection_hash,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
@@ -1864,6 +1884,7 @@ def main(argv=None):
                       'scope': 'process-lifetime setup only; future graph collection unchanged'}), flush=True)
     with torch.enable_grad():
         for step in range(start_step, args.steps):
+            anchor_now[0] = scheduled_anchor(step)
             step_started = time.perf_counter()
             phase_wall_seconds = {}
             step_gc_seconds, step_gc_calls = host_gc_seconds, host_gc_calls
@@ -2159,7 +2180,7 @@ def main(argv=None):
             'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
-            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}),
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,
             'backbone': source_metadata.get('backbone') or {'base': args.base},
             'training_identity': identity})
     # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.

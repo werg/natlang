@@ -82,7 +82,7 @@ def splice(backbone: PortBackbone, heads: PortHeads, inputs: ReadInputs) -> torc
         vectors = torch.cat(blocks, 0).to(embeds.dtype)
         if vectors.shape[0] != positions.shape[0]:
             raise ValueError("payload length does not match placeholder positions")
-        out[b, positions] = heads.interface(vectors).to(embeds.dtype)
+        out[b, positions] = heads.read_in(vectors).to(embeds.dtype)
     return out
 
 

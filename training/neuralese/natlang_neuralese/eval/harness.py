@@ -194,7 +194,7 @@ def cache_agreement(backbone: PortBackbone, heads: PortHeads, prefixes: list[lis
         back = read_back(backbone, heads, written.block_start, payload)
         tokens, cached = greedy_continue(backbone, back["cache"], back["logits"], steps=steps)
         close = torch.tensor([[backbone.controls.close_id]], device=device)
-        sequence = torch.cat([backbone.embed(ids), heads.interface(payload), backbone.embed(close),
+        sequence = torch.cat([backbone.embed(ids), heads.read_in(payload), backbone.embed(close),
                               backbone.embed(torch.tensor([tokens], device=device))], 1)
         full = backbone.forward_embeds(sequence)["logits"][0]
         start = ids.shape[1] + payload.shape[1]

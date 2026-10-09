@@ -38,6 +38,24 @@ class InterfaceNorm(RMSNorm):
         super().__init__(embedding.shape[1], eps=eps, gain=embedding_rms(embedding))
 
 
+class NeuraleseReadAdapter(nn.Module):
+    """Reader-side adaptation for Neuralese inputs (owner 2026-10-09): every vector entering the read port passes
+    x + W·norm(x) (full rank, W zero-initialised, so it starts as the identity) before the backbone reads it. Writers
+    are free to drift away from token-embedding space once the warm-up's projection anchor is phased out; readers
+    learn their own input map for Neuralese positions instead of reading them through the token-embedding geometry.
+    Token positions never pass it."""
+
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+        self.norm = RMSNorm(dim, eps=eps)
+        self.proj = nn.Linear(dim, dim, bias=True)
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.proj(self.norm(x).to(self.proj.weight.dtype)).to(x.dtype)
+
+
 class FeedbackProjection(nn.Module):
     """Maps the shallow residual h_k[i] to the next sketch input s[i+1].
 
@@ -363,14 +381,30 @@ class PortHeads(nn.Module):
 
     def port_config(self) -> dict:
         config = {"stop_source": self.stop_source, "stop_position": self.stop.use_position}
+        if getattr(self, "read_adapter", None) is not None:
+            config["read_adapter"] = "full-residual-v1"
         if not self.read_markers:
             config["profile"] = self.profile
             config["content_transport"] = self.content.transport
         return config
 
+    def add_read_adapter(self) -> "NeuraleseReadAdapter":
+        """Attach the reader-side Neuralese input adaptation (identity at creation)."""
+        if getattr(self, "read_adapter", None) is None:
+            dim = self.interface.weight.shape[0] if hasattr(self.interface, "weight") else self.content.proj.in_features
+            reference = next(self.content.parameters())
+            self.read_adapter = NeuraleseReadAdapter(dim).to(device=reference.device)
+        return self.read_adapter
+
+    def read_in(self, payload: torch.Tensor) -> torch.Tensor:
+        """Every Neuralese vector entering the read port: the interface norm, then the reader's adaptation."""
+        value = self.interface(payload)
+        adapter = getattr(self, "read_adapter", None)
+        return adapter(value) if adapter is not None else value
+
     def read_embeddings(self, backbone, payload, *, close_only=False):
         """One read transport shared by serving, replay and training."""
-        value = self.interface(payload).to(backbone.embedding_weight.dtype)
+        value = self.read_in(payload).to(backbone.embedding_weight.dtype)
         if not self.read_markers:
             return value
         batch = payload.shape[0]

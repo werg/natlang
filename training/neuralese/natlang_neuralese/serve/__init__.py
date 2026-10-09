@@ -71,6 +71,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     heads = PortHeads(backbone, cutoff=cutoff, max_length=saved_length, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
     heads.set_content_transport(metadata.get("content_transport", heads.content.transport))
+    if metadata.get("read_adapter") or (state is not None and any(k.startswith("read_adapter.") for k in state.get("heads", {}))):
+        heads.add_read_adapter()  # the reader's Neuralese input adaptation, restored with the heads below
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state
