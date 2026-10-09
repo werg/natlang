@@ -9,10 +9,11 @@
  */
 import { resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
-import { CallStore, Folder, TRACES_DECLARATIONS, assembleCases, createNatlangRuntime, crispDecline, groupsOf, machineStoreRoot, measure,
+import { CallStore, Folder, TRACES_DECLARATIONS, reviewPromotions, assembleCases, createNatlangRuntime, crispDecline, groupsOf, machineStoreRoot, measure,
   betterFinding, detectFindings, renderFunction, renderGroup, renderReport, runJob, saveAccepted, study, tracesService, verifyCases, type CaseCheck, type DeclineReason,
   type Group, type HotDefinition, type NatlangRuntime, type Study } from '@natlang/node';
 import writeCase from './writeCase.nl';
+import decidePromotion from './promote.nl';
 import type { CaseResult } from './types.js';
 
 type Options = { definition?: string; program?: string; loop: boolean; interval: number; rounds: number; jobs: number; minCalls?: number;
@@ -284,6 +285,15 @@ export async function main(context: TargetContext): Promise<number> {
         ran++;
       }
       if (ran) log(`${ran} shadow/audit job(s) done`);
+    }
+    // Promotion and demotion by the store's policy, off the hot path; under `crisp` the store already applied its rule.
+    if (!stopping && !options.dryRun && store.settings().promotionPolicy !== 'crisp') {
+      try {
+        const meter: Meter = { tokens: 0 }, runtime = judgeRuntime(context, meter);
+        const reviewed = await reviewPromotions(store, summary => runtime.run(() => decidePromotion(JSON.stringify(summary))) as Promise<never>);
+        for (const item of reviewed.filter(entry => entry.applied || entry.decision.decision !== 'keep'))
+          log(`promotion ${item.subject} ${item.id} (${item.state}): ${item.decision.decision}${item.applied ? ' applied' : ''}: ${item.decision.reason}`);
+      } catch (error) { log(`promotion review failed: ${error instanceof Error ? error.message : String(error)}`); }
     }
     if (!options.loop || stopping) break;
     for (let waited = 0; waited < options.interval && !stopping; waited++) await new Promise(done => setTimeout(done, 1000));
