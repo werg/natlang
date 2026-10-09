@@ -6,7 +6,9 @@ import { join } from 'node:path';
 import { createNatlangRuntime, openFolder } from '../dist/index.js';
 import { BuildWorkspace, buildGoal, buildServices } from '../../applications/dist/build/index.js';
 import buildDriver from '../../applications/dist/build/build.nl.js';
-import { scriptedModel } from './support/natlang.mjs';
+import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+
+const CRISP = await appCrisp('build');
 
 const node = process.execPath;
 
@@ -147,15 +149,28 @@ function scripted(overrides = {}) {
 }
 
 /** One build in its own root. Returns the report, the workspace's events and the stages the model was asked. */
-async function run(tasks, goal, { overrides, setup = () => {}, policy, folder = mkdtempSync(join(tmpdir(), 'natlang-build-')), keep = false } = {}) {
+async function run(tasks, goal, { overrides, setup = () => {}, policy, folder = mkdtempSync(join(tmpdir(), 'natlang-build-')), keep = false, repair } = {}) {
   mkdirSync(join(folder, 'out'), { recursive: true });
   if (!existsSync(join(folder, 'input.txt'))) writeFileSync(join(folder, 'input.txt'), 'hello');
   setup(folder);
   const workspace = await new BuildWorkspace(folder, { policy }).open();
   const { model, seen } = scripted(overrides);
-  const runtime = createNatlangRuntime({ model: model.driver });
+  // `repair` maps a stage to the code that answers a refinement rejection of that stage; the feedback is kept.
+  const feedback = [], base = model.driver;
+  const driver = Object.assign(async request => {
+    const last = request.messages.at(-1);
+    if (repair && last.role === 'tool' && /refinement-unsatisfied/.test(String(last.content))) {
+      feedback.push(String(last.content));
+      return { calls: [['eval', { code: repair }]] };
+    }
+    return base(request);
+  }, {});
+  const judged = withJudge(driver);
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: driver, calls: false, refinements: { crisp: CRISP }, trace: trace => traces.push(trace) });
   const report = await buildGoal(runtime, workspace, goal, tasks, openFolder(folder).root());
-  return { report, folder, events: workspace.drainEvents(), seen, model };
+  const checks = traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
+  return { report, folder, events: workspace.drainEvents(), seen, model, feedback, judged, checks };
 }
 const finish = ({ folder }) => rmSync(folder, { recursive: true, force: true });
 
@@ -281,7 +296,8 @@ test('an interrupted process is an unknown outcome that is inspected before any 
   const workspace = await new BuildWorkspace(folder, { timeoutMs: 100 }).open();
   const { model } = scripted();
   try {
-    const report = await createNatlangRuntime({ model: model.driver }).run(() => buildDriver('slow', tasks), buildServices(workspace));
+    withJudge(model.driver);
+    const report = await createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP } }).run(() => buildDriver('slow', tasks), buildServices(workspace));
     assert.equal(report.status, 'unknown');
     assert.equal(report.diagnosis.cause, 'interrupted');
     assert.equal(report.diagnosis.retry, 'inspect-first');
@@ -332,7 +348,7 @@ test('an output edited by hand is never overwritten, and a wrong validity verdic
   try {
     await run(chain(), 'goal', { folder: second });
     // The judge wrongly says everything is valid; the workspace refuses to reuse source (its input changed) and the round runs it.
-    const liar = await run(chain(), 'goal', { folder: second, overrides: { judge: `return { valid: true, reason: 'looks fine' };` },
+    const liar = await run(chain(), 'goal', { folder: second, overrides: { judge: `return { valid: true, reason: 'up to date' };` },
       setup: dir => writeFileSync(join(dir, 'input.txt'), 'goodbye') });
     assert.equal(liar.report.status, 'done');
     // Both tasks were judged valid and both reuses were refused: goal's input is the output source just remade.
@@ -450,4 +466,85 @@ test('tasks cannot reach the host cache or ledger, and paths stay inside the roo
     assert.match((await attempt(['../outside'], ['o.txt'])).detail, /escapes workspace/);
     assert.match((await attempt([], ['/tmp/abs.txt'], [node, '-e', '0'])).detail, /invalid workspace path/);
   } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------- refinements
+
+test('every predicate of types.ts has a crisp checker', () => {
+  const types = readFileSync(new URL('../../applications/build/types.ts', import.meta.url), 'utf8');
+  const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
+  assert.deepEqual([...declared].filter(key => !(key in CRISP)), []);
+  assert.deepEqual(Object.keys(CRISP).filter(key => !declared.has(key)), []);
+});
+
+test('the crisp checkers decide plans, verdicts, diagnoses and reports', () => {
+  const check = (needle, value) => CRISP[Object.keys(CRISP).find(key => key.includes(needle))](value);
+  const plan = { goal: 'g', needed: ['a', 'g'], order: ['a', 'g'], cycle: [] };
+  assert.equal(check('a plan whose', plan), true);
+  assert.equal(check('a plan whose', { ...plan, needed: ['g', 'a'] }), false, 'needed is sorted');
+  assert.equal(check('a plan whose', { ...plan, order: ['a'] }), false, 'every needed task is placed or in the cycle');
+  assert.equal(check('a plan whose', { ...plan, order: ['a'], cycle: ['g'] }), true);
+  assert.equal(check('a plan whose', { ...plan, order: ['a', 'g', 'a'] }), false);
+  assert.equal(check('valid exactly', { valid: true, reason: 'up to date' }), true);
+  assert.equal(check('valid exactly', { valid: true, reason: 'looks fine' }), false);
+  assert.equal(check('valid exactly', { valid: false, reason: 'up to date' }), false);
+  assert.equal(check('valid exactly', { valid: false, reason: 'output modified: out/a.txt' }), true);
+  assert.equal(check('valid exactly', { valid: false, reason: 'input changed: ' }), false);
+  const diagnosis = { task: 't', cause: 'command-failed', culprit: '', summary: '', fix: '', retry: 'after-fix' };
+  assert.equal(check('a diagnosis whose', diagnosis), true);
+  assert.equal(check('a diagnosis whose', { ...diagnosis, retry: 'no' }), false);
+  assert.equal(check('a diagnosis whose', { ...diagnosis, cause: 'interrupted', retry: 'inspect-first' }), true);
+  assert.equal(check('a diagnosis whose', { ...diagnosis, cause: 'weather' }), false);
+  const report = { goal: 'g', status: 'done', order: ['g'], results: [{ status: 'ok' }] };
+  assert.equal(check('a report whose', report), true);
+  assert.equal(check('a report whose', { ...report, results: [{ status: 'failed' }] }), false);
+  assert.equal(check('a report whose', { ...report, order: [] }), false);
+  assert.equal(check('a report whose', { ...report, status: 'failed', order: [] }), true);
+});
+
+test('a whole build checks every result by crisp checker and never reaches the judge', async () => {
+  const result = await run(chain(), 'goal');
+  try {
+    assert.equal(result.report.status, 'done');
+    assert.ok(result.checks.length >= 4, 'plan, verdicts and report were checked');
+    assert.deepEqual([...new Set(result.checks.filter(check => check.source === 'crisp').map(check => check.outcome))], ['pass']);
+    assert.deepEqual(result.judged, []);
+  } finally { finish(result); }
+});
+
+test('a diagnosis that advises no retry for a failing command is sent back and repaired, without the judge', async () => {
+  const tasks = [{ id: 'goal', needs: [], description: 'goal', argv: [node, '-e', 'process.exit(7)'], inputs: [], outputs: ['out/goal.txt'] }];
+  const wrong = DEFAULTS.diagnose.replace("cause === 'other' ? 'no' : 'after-fix'", "'no'");
+  const result = await run(tasks, 'goal', { overrides: { diagnose: wrong }, repair: DEFAULTS.diagnose });
+  try {
+    assert.equal(result.report.status, 'failed');
+    assert.equal(result.report.diagnosis.retry, 'after-fix');
+    assert.equal(result.feedback.length, 1);
+    assert.match(result.feedback[0], /inspect-first for interrupted, no for other and after-fix for every other cause/);
+    assert.ok(result.checks.some(check => check.outcome === 'fail' && check.source === 'crisp'));
+    assert.deepEqual(result.judged, []);
+  } finally { finish(result); }
+});
+
+test('a validity verdict whose reason does not match its flag is repaired before the round uses it', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-build-'));
+  try {
+    await run(chain(), 'goal', { folder });
+    const wrong = "return { valid: true, reason: 'the files look fine' };";
+    const second = await run(chain(), 'goal', { folder, policy: { validity: 'natural-language' }, overrides: { judge: wrong }, repair: VALIDITY });
+    assert.equal(second.report.status, 'done');
+    assert.deepEqual(Array.from(second.report.reused), ['source', 'goal']);
+    assert.match(second.feedback[0], /valid exactly when the reason is up to date/);
+    assert.ok(second.report.judgments.every(row => row.reason === 'up to date'));
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('a plan that loses a needed task is sent back to the order stage', async () => {
+  const lossy = DEFAULTS.order.replace('return { goal, needed, order: placed, cycle: remaining.sort() };', 'return { goal, needed, order: placed.slice(1), cycle: remaining.sort() };');
+  const result = await run(chain(), 'goal', { overrides: { order: lossy }, repair: DEFAULTS.order });
+  try {
+    assert.equal(result.report.status, 'done');
+    assert.deepEqual(Array.from(result.report.plan.order), ['source', 'goal']);
+    assert.match(result.feedback[0], /order and cycle together hold each needed task exactly once/);
+  } finally { finish(result); }
 });

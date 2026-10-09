@@ -28,7 +28,4 @@ export const refinements: Record<string, (value: any) => boolean | undefined> = 
     const wanted: Entry[] = (value.outcomes as TradeOutcome[]).flatMap(outcome => isRecord(outcome) ? entriesOf(outcome) : []);
     return JSON.stringify(value.entries) === JSON.stringify(wanted);
   },
-  // Empty or blank is decided here; whether a statement is concrete is the judge's.
-  'a concrete commitment that names what the NPC will do, stated in one sentence': value =>
-    typeof value !== 'string' || !value.trim() || /\n/.test(value.trim()) ? false : undefined,
 };

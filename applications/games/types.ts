@@ -14,7 +14,7 @@ export type Settings = Is<{ validate: Engine, settle: Engine, resolve: Engine, r
 // ---------------------------------------------------------------- refined slots
 // The slots a model writes carry a predicate; the state a host builds and the commit arithmetic keep plain types (their
 // invariants are established by the creators and by the commits). Every predicate below has an exact crisp checker in
-// refinements.ts, except Detail, whose judge runs after a crisp check of the empty case.
+// refinements.ts. (NpcPlan.detail would take a judged predicate; it is proposed in DECOMPOSITION.md and not wired.)
 
 /** The shape of every id a model names: merchants, goods, items, recipients and targets. */
 export type Name = Is<string, "a name: a letter followed by letters, digits, '_' or '-'">;
@@ -26,8 +26,7 @@ export type Quantity = Is<number, "a positive safe integer">;
 export type EventId = Is<string, "an event id: 'event-' followed by digits">;
 /** The id of a memory entry: an event, or a note on an event. */
 export type EntryId = Is<string, "a memory entry id: 'event-' followed by digits, optionally followed by '.note-' and digits">;
-/** What an NPC promises. */
-export type Detail = Is<string, "a concrete commitment that names what the NPC will do, stated in one sentence">;
+
 
 /** A fact the world recorded as data: `operation` names it (economy.intent, economy.settle, combat.resolve, npc.act). */
 export type GameEvent = Record<string, unknown>;
@@ -132,7 +131,7 @@ export type NpcObservation = { actor: string, event_id: string, event: NpcEvent,
   memory: Memory[], commitments: Commitment[] };
 
 /** A reply and one world action: none; give (item to target, one unit); promise (to target, a concrete detail). */
-export type NpcPlan = { say: string, action: 'none' | 'give' | 'promise', item?: Name, target?: Name, detail?: Detail };
+export type NpcPlan = { say: string, action: 'none' | 'give' | 'promise', item?: Name, target?: Name, detail?: string };
 
 /** What the village decided for an event, as data for the commit. */
 export type NpcEffects = { basis: number, actor: string, event_id: EventId, event: NpcEvent, notes: Note[], plan: NpcPlan };

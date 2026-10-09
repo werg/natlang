@@ -4,7 +4,7 @@ args:
   task: Task
   result: TaskResult
   graph: Graph
-returns: Diagnosis
+returns: CheckedDiagnosis
 ---
 Diagnose result, the outcome of task that did not finish ok. result.detail is the workspace's message: for a command
 it is "exit N: " and the command's output, or the process error; for a refusal it names the rule and the path.

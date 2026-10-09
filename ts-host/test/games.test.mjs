@@ -524,14 +524,12 @@ function playWith(model, scene, settings, extra = {}) {
 }
 const checks = traces => traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
 
-test('every predicate of types.ts has a crisp checker, except the one the judge decides', () => {
+test('every predicate of types.ts has a crisp checker', () => {
   const types = readFileSync(new URL('../../applications/games/types.ts', import.meta.url), 'utf8');
   const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
   const keys = new Set(Object.keys(CRISP));
   assert.deepEqual([...declared].filter(key => !keys.has(key)), []);
   assert.deepEqual([...keys].filter(key => !declared.has(key)), []);
-  assert.equal(CRISP['a concrete commitment that names what the NPC will do, stated in one sentence']('Bring the map'), undefined);
-  assert.equal(CRISP['a concrete commitment that names what the NPC will do, stated in one sentence'](' '), false);
 });
 
 test('crisp checkers decide the exact predicates; a whole tick in natural language needs no judge', async () => {
@@ -574,19 +572,4 @@ test('settings that name shadow for a part with one implementation are refused b
   await assert.rejects(runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS) }, { ...defaultSettings, narrate: 'shadow' })),
     error => error.code === 'refinement-unsatisfied' && /remember and narrate are each nl or crisp/.test(error.message));
   assert.deepEqual(model.seen, []);
-});
-
-test('a vague promise goes to the judge, is sent back, and is repaired; a blank one never reaches the judge', async () => {
-  const vague = { say: 'I will help.', action: 'promise', target: 'guest', detail: 'Something' };
-  const model = repairing({ respond: vague, truth: value => value !== 'Something' },
-    `return ${JSON.stringify({ ...vague, detail: 'Find the map by dusk' })};`);
-  const { report } = await playWith(model, { ...ASK, state: VILLAGE() }, crispSettings);
-  assert.equal(report.ok, true, report.problem);
-  assert.equal(report.state.actors[0].commitments[0].detail, 'Find the map by dusk');
-  assert.match(model.feedback[0], /a concrete commitment that names what the NPC will do/);
-  assert.deepEqual(model.judged.map(([value]) => value), ['Something', 'Find the map by dusk']);
-  const blank = repairing({ respond: { ...vague, detail: '  ' } }, `return ${JSON.stringify({ ...vague, detail: 'Find the map by dusk' })};`);
-  const second = await playWith(blank, { ...ASK, state: VILLAGE() }, crispSettings);
-  assert.equal(second.report.ok, true, second.report.problem);
-  assert.deepEqual(blank.judged.map(([value]) => value), ['Find the map by dusk']);
 });

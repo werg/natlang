@@ -141,7 +141,7 @@ spelled as numbered steps over named data, and exact arithmetic is done in eval.
 ## Refinements
 
 Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md) on the slots a model writes. Decisions: (a) adopted
-with a crisp checker in `refinements.ts` (no model call), (b) adopted with the natural-language judge, (c) left to the
+with a crisp checker in `refinements.ts` (no model call), (b) a natural-language judge (proposed only: a model-facing change is measured live first), (c) left to the
 commit check, which already enforces it exactly, (d) not adopted: the value alone does not show the property.
 The state a host builds (`Merchant`, `Totals`, `EconomyState`, `CombatState`, `NpcActor`) keeps plain types: its
 invariants are established by the creators and preserved by the commits, and crisp code builds it from arithmetic.
@@ -165,7 +165,7 @@ invariants are established by the creators and preserved by the commits, and cri
 | `Hit.amount` | `Is<number, "2, or 1 when the target guarded">` | (a) Weakened to "1 or 2"; whether the target guarded is in the submissions, and the commit checks it. |
 | `CombatResolution` | `Is<CombatResolution, "each fighter moved at most one cell; ...">` | (c) Needs the state before the round; the commit. |
 | `NpcPlan.item` when action is give | `Is<string, "an item the NPC holds at least one of">` | (d) Needs the inventory; `validate` and the commit. |
-| `NpcPlan.detail` when action is promise | `Is<string, "a concrete, non-empty commitment">` | (b) `Detail`: a concrete commitment that names what the NPC will do, in one sentence. Blank or multi-line is decided crisply; concreteness is the judge's. One short string per promise. |
+| `NpcPlan.detail` when action is promise | `Is<string, "a concrete, non-empty commitment">` | (b) Proposed, awaiting live evaluation (not wired): `Is<string, "a concrete commitment that names what the NPC will do, stated in one sentence">`, judged once per promise, with a crisp check of the blank case. |
 | `Note.about` | `Is<string[], "ids of entries in the NPC's memory">` | (a) The id shape (`event-N` or `event-N.note-K`); membership in the memory stays with the commit. |
 | `Commitment.evidence_id` | `Is<string, "the id of the event that prompted the promise">` | (a) The event-id shape; that it is this event is the commit's. |
 | `NpcEffects.event_id` | `Is<string, "the id the state would assign next, not yet applied">` | (a) The event-id shape; the next and not-yet-applied checks need the state and stay in the commit. |
@@ -174,8 +174,8 @@ invariants are established by the creators and preserved by the commits, and cri
 
 Counts: (a) 12, (b) 1, (c) 4, (d) 6.
 
-Instruction sentences that restated a type were removed: `choose` no longer says "a positive whole number" and
-`respond` no longer says "concrete, checkable".
+No instruction sentence was changed: instructions that restate a type (`choose`'s "positive whole number", `respond`'s
+"concrete, checkable") stay until the live comparison of guard against type (plans/REFINEMENT_TYPES.md section 5).
 
 ## Limitations met while porting
 
