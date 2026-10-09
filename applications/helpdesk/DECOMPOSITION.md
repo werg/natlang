@@ -1,6 +1,8 @@
 # Helpdesk: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented on 2026-10-09 (the owner asked for everything to go to main; plans/OWNER_REVIEW.md lists it for review
+after the fact). The sections below describe the code as built; "As built" at the end records where it differs from the
+first draft.
 
 Today the package is 194 lines of TypeScript (`index.ts`) plus 75 lines of HTTP (`server.ts`) and two small
 natural-language functions (`triage.nl`, `draft_reply.nl`). The state machine is crisp, which is right. The policies
@@ -214,7 +216,37 @@ Each is sampled on the live executor (about 48 samples per variant) and logged i
    add helpdesk to that entry).
 6. **`escalate/plan`** is new text; measure the note and holding reply on recorded overdue tickets.
 
+## As built
+
+- Files: `types.ts` (shared types and the `Checked*` aliases), `refinements.ts` (crisp checkers; the compiled `.nl`
+  modules register them), `triage/urgency.nl`, `triage/summarize.nl`, `reply/missingDetails.nl`, `reply/draft.nl`,
+  `deadline/deadlineFor.nl`, `escalate/plan.nl`, `inbox/rank.nl`. `triage.nl` and `draft_reply.nl` are gone.
+- Settings (`DeskOptions`, and `--deadline-mode`, `--inbox-mode`, `--escalation-mode`, `--service-policy FILE`,
+  `--ranking-policy FILE` on the server target): `deadlineMode` and `inboxMode` default to `crisp` (today's behaviour);
+  `shadow` serves the crisp side and records `pluggable_shadow` events. `escalationMode` defaults to `nl`.
+- Deadline units: the pluggable returns milliseconds; the `nl` side multiplies `deadlineFor`'s minutes by 60000. The
+  allowed wait is decided in the triage follow-up and travels in the `triaged` event (`Ticket.allowedMs`), so `reduce`
+  stays synchronous arithmetic: `due = waitingSince + (allowedMs ?? normal)`.
+- Crisp floors: a deadline or ranking that the `nl` side gets wrong (not a positive number, not a permutation of the
+  open ticket ids) is replaced by the crisp answer and reported through `onFailure`; a failed escalation plan is replaced
+  by `crispEscalationPlan` (pager by urgency, the summary as note, no holding reply), so a page is never lost to a model
+  failure.
+- `rank` and `escalate/plan.holding_reply` need facts outside their value, so the desk checks them in code
+  (`isRanking`; a holding reply is kept only when `late_messages` is 2 or more) instead of with `Is<...>`.
+- Ticket gained `missing`, `allowedMs` and `escalation`; stored tickets without them are filled on load. `onEscalate`
+  receives `(ticket, plan)`. The plan reaches the ticket through a `planned` follow-up event, after the pager callback.
+- Refinements adopted with crisp checkers: topic (two to four words; "product area" is not checked), summary (one
+  sentence), draft (two to five sentences of plain markdown-free text), deadline minutes. The judged candidates
+  (`missingDetails` entries) and the context-bound ones stay open; a judged predicate would add a model call per value.
+
 ## Questions for the owner
+
+Decided on 2026-10-09 when the owner delegated the review (answers kept as built):
+1. The holding reply stays data for an agent to send; the desk never sends it.
+2. The deadline is pluggable, with the table as the default.
+3. Authentication stays outside this app (`server.ts` trusts its callers).
+
+First-draft questions, for the record:
 
 1. Should an escalation send the holding reply automatically? This document keeps it as data for the agent to send,
    because the desk's customers should not receive model text without an agent.

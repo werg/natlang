@@ -1,6 +1,7 @@
 # Terminal: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented on 2026-10-09 (the owner asked for everything to go to main; plans/OWNER_REVIEW.md lists it for review
+after the fact). "As built" at the end records where the code differs from the first draft.
 
 The terminal chooses one exact recipe for a request and explains the actual completion. Today `index.ts` is 230
 lines: the job registry and process runner (crisp, correct), the reducer `step` (`index.ts:111-146`) with eight
@@ -125,7 +126,34 @@ returns: Is<string, "states the status, the detail and what is unknown">
 4. **`Untrusted<string>` rendering** of command output and note content.
 5. **The message table** is not model-facing; wording stays byte-identical in the first move.
 
+## As built
+
+- Files: `recipes.json` (the five recipes and the four limits, each limit with the reason it exists), `messages.json`
+  (ten message templates with `{value}` slots, wording byte-identical to the former strings), `data.ts` (loaders that check
+  shape; `renderMessage` names the missing message or value in its error), `interpret/readNote.nl`,
+  `interpret/chooseRecipe.nl`, `explain/explain.nl`. `interpret.nl` and `explain.nl` are gone; `step` calls
+  `readNote` (when a workspace folder is given) and then `chooseRecipe`.
+- `TerminalEvent.cancel_requested` is a boolean field set by `RecipeTerminal.complete`; `detail` is now the actual result
+  only (the "Cancellation was requested. Actual result:" prefix is gone) and `confirm` compares the field too. The history
+  row keeps it.
+- `explain` reads a `Completion` (`status`, `detail: Untrusted<string>`, `cancel_requested`, ids) built from the event;
+  `readNote` returns `Untrusted<string>`, and `chooseRecipe` takes it as `note`.
+- `chooseRecipe` returns a plain string: catalog membership needs the catalog, which a value-only refinement cannot see
+  and a judge would not know, so `step` checks it exactly and answers "No supported recipe" for anything else. The
+  other judged candidates (`explain` result, `readNote` path) stay open until a judge is configured for them.
+- Types: `ResultStatus`, `SessionStatus` and `TerminalEvent.status` are unions now.
+- `natlangWorkspaceRecipes(root, data = loadRecipeData())` and `CommandRecipeLibrary(root, defs, limits)` read the limits
+  from the file; a limit passed in overrides it. The data files are found beside the module or in the application's
+  source folder (a build output has no copies).
+
 ## Questions for the owner
+
+Decided on 2026-10-09 when the owner delegated the review (answers kept as built):
+1. A request during a running job is still declined; queueing is not built.
+2. `timeoutMs` stays per recipe, in `recipes.json`.
+3. `readNote` stays an app copy until a built-in reader exists.
+
+First-draft questions, for the record:
 
 1. A request arriving during a running job is declined today. Should it queue (a list in `Session`, started at
    completion)? The state invariant still holds with a queue, and the decision to queue is a policy that could be
