@@ -2,5 +2,5 @@
 // buildDeclaration in index.ts.
 declare module 'natlang:services' {
   import type { BuildWorkspace } from './index.ts';
-  export const build: Pick<BuildWorkspace, 'implementation' | 'inspect' | 'execute' | 'reuse'>;
+  export const build: Pick<BuildWorkspace, 'implementation' | 'inspect' | 'execute' | 'reuse' | 'mismatch'>;
 }

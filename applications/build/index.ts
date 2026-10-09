@@ -150,8 +150,12 @@ export class BuildWorkspace {
         outputs: entry.outputs.map(([path, sha256]) => ({ path, sha256 })) } : null };
   }
 
-  /** Whether the ledger entry still describes the files exactly; the first difference otherwise. */
-  private async mismatch(task: Task): Promise<string | null> {
+  /**
+   * Whether the ledger entry still describes the files exactly: null, or the first difference (declaration, then inputs,
+   * then outputs). The one comparison in the build: `reuse` refuses on it, and the crisp implementation of the validity
+   * point (`build/step/validity.ts`) asks for it through the service.
+   */
+  async mismatch(task: Task): Promise<string | null> {
     const entry = this.ledger[task.id];
     if (!entry) return 'no record of an earlier run';
     if (entry.fingerprint !== fingerprint(task)) return 'declaration changed';
