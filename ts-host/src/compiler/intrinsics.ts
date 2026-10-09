@@ -214,11 +214,17 @@ function live<T>(binding: T): T;
 function iterateOn${ITERATE_ON_SIGNATURE};
 /**
  * Check value against a natural-language predicate and return it as an Is<T, P>; throws refinement-unsatisfied (or
- * refinement-undecided inside the uncertainty band).
+ * refinement-undecided inside the uncertainty band). refine<Is<T, "p">>(value) reads the predicate from the type.
+ * @natlangIntrinsic refine
  */
 function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>>;
-/** Declare, without checking, that value satisfies predicate. The assumption is recorded in the trace. */
+function refine<R extends Is<unknown, string>>(value: unknown): Promise<R>;
+/**
+ * Declare, without checking, that value satisfies predicate. The assumption is recorded in the trace.
+ * @natlangIntrinsic assume
+ */
 function assume<T, P extends string>(value: T, predicate: P): Is<T, P>;
+function assume<R extends Is<unknown, string>>(value: unknown): R;
 `;
 
 /** The free readout is an eval/project global, not a runtime package export. */

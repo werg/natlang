@@ -169,10 +169,23 @@ test('crisp checkers decide when they return a boolean and defer when they retur
   } finally { delete crispTable[SHORT]; }
 });
 
-test('without a scoring driver an unjudged predicate is undecided', async () => {
-  const driver = async () => ({ calls: [['return_result', { status: 'success', value: 'Hello.' }]] });
-  const t = run({ driver }, { 'reply.nl': REPLY }, { repairs: 0 }, fn => fn('x'));
-  await assert.rejects(t.result(), error => error.code === 'refinement-undecided');
+test('without a scoring driver the judge runs as an ordinary boolean call and is traced as judge: call', async () => {
+  const asked = [];
+  const driver = async ({ messages }) => {
+    const text = messages.map(message => String(message.content)).join('\n');
+    if (/Decide whether value satisfies predicate/.test(text)) {
+      asked.push(text);
+      return { calls: [['return_result', { status: 'success', value: !/rude/.test(text) }]] };
+    }
+    const rude = !messages.some(message => message.role === 'tool' && /^rejected/.test(String(message.content)));
+    return { calls: [['return_result', { status: 'success', value: rude ? 'rude reply' : 'Hello.' }]] };
+  };
+  const t = run({ driver }, { 'reply.nl': REPLY }, { repairs: 2 }, fn => fn('x'));
+  assert.equal(await t.result(), 'Hello.');
+  const checks = events(t.traces, 'refinement_check');
+  assert.ok(checks.length >= 2 && checks.every(check => check.judge === 'call'), JSON.stringify(checks.map(check => check.judge)));
+  assert.deepEqual(checks.slice(0, 2).map(check => check.outcome), ['fail', 'pass']);
+  assert.equal(asked.length, 2);
 });
 
 test('service results declared refined are checked like an nl return', async () => {
@@ -194,6 +207,24 @@ test('service results declared refined are checked like an nl return', async () 
   const answer = await runtime.run(() => fn('x'));
   assert.match(answer, /^refinement-unsatisfied: Revise the value at mail\.draft so that it is "a reply that is polite".* \| good$/);
   assert.deepEqual(judged.sort(), ['bad', 'good']);
+});
+
+test('with a call store, verdicts persist across runtimes', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { openCallStore } = await import('../dist/calls/store.js');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-verdicts-'));
+  const store = openCallStore(root);
+  try {
+    for (const expectedJudged of [1, 0]) {
+      const model = stubModel({ answers: ['Thank you.'], truth: () => true });
+      const t = run(model, { 'reply.nl': REPLY }, {}, fn => fn('a'), { runtime: { calls: store } });
+      assert.equal(await t.result(), 'Thank you.');
+      assert.equal(model.judged.length, expectedJudged);
+    }
+    assert.equal(store.refinementVerdicts().count(), 1);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test('settings are validated; obligations are found in unions and aliases', () => {

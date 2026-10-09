@@ -427,11 +427,13 @@ the value is shown as data, the predicate as the question, and P(true) is read f
 `false`. A verdict is cached by `(sha256 of the canonical value, normalized predicate, judge id)`, so the same value
 is not judged twice. The value passes at P(true) at or above `threshold` (default 0.5). Inside an optional
 uncertainty `band` the `policy` applies: `accept`, `reject` (fail with `refinement-undecided`), or `escalate`
-to the model named by `escalate`. A model that cannot score replies cannot judge: the check is
-`refinement-undecided` unless a crisp checker decides.
+to the model named by `escalate`. A model that cannot score replies judges with an ordinary natural-language
+call returning a boolean (traced as `judge: "call"`). A result eval returns or finishes, and a refined local, are
+judged before they are kept, so a failure is repaired like any rejected eval. `refine<Is<T, "p">>(value)` and
+`assume<R>(value)` read the predicate from the type.
 
 **Errors.** `refinement-unsatisfied`: the predicate was judged false. `refinement-undecided`: the probability fell
-inside the band under the `reject` policy, or nothing could judge. `refinement-predicate-invalid`: `P` is empty
+inside the band under the `reject` policy, or no judge was available. `refinement-predicate-invalid`: `P` is empty
 or not a string literal. Each message is one sentence that names the predicate and the fix. A call that ends on a
 refinement rejects with `RefinementCallError` (a `NatlangCallError` with `code`); a rejected argument, service
 result or `refine` throws `RefinementError`.
@@ -441,7 +443,7 @@ result or `refine` throws `RefinementError`.
 (`"service.method": "Is<string, \"…\">"`). `mode` is `crisp` (default: a crisp checker that returns a boolean
 decides, `undefined` defers to the judge), `nl` (judge only), or `shadow` (the judge decides; every crisp/judge
 disagreement is traced as `refinement_shadow`). Crisp checkers come from the runtime option
-`refinements.crisp` or the `refinements` table exported by `native/types.ts`, keyed by the normalized predicate.
+`refinements.crisp` the `refinements` table exported by `native/types.ts`, or a `refinements.ts` module of the program that exports `refinements` (loaded by the launcher), keyed by the normalized predicate. With a call store, verdicts are kept in its `refinement_verdicts` table.
 
 **Trace.** Every check is a `refinement_check` event: path, predicate, value, outcome, probability, judge and where
 the verdict came from (`crisp`, `judge`, `cache`, `escalation`). `refinement_assumed` records an `assume`.

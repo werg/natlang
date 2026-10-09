@@ -356,6 +356,28 @@ for (const variant of variants) {
     assert.deepEqual(statistics.export(), {});
   });
 
+  scenario('refinement verdicts are keyed, replaceable, counted, cleared, and survive reopening', ({ store, reopen }) => {
+    const verdicts = store.refinementVerdicts();
+    assert.equal(verdicts.get('v|p|j'), undefined);
+    verdicts.set('v|p|j', { probability: 0.25, judge: 'j' });
+    verdicts.set('v2|p|j', { probability: 0.9, judge: 'j' });
+    verdicts.set('v|p|j', { probability: 0.75, judge: 'j' });
+    assert.deepEqual(verdicts.get('v|p|j'), { probability: 0.75, judge: 'j' });
+    assert.equal(verdicts.count(), 2);
+    const again = reopen().refinementVerdicts();
+    assert.deepEqual(again.get('v2|p|j'), { probability: 0.9, judge: 'j' });
+    again.clear();
+    assert.equal(again.count(), 0);
+  });
+
+  scenario('a store written before the verdict table existed gains it when opened', ({ store, reopen }) => {
+    store.db.exec('DROP TABLE refinement_verdicts');
+    const migrated = reopen().refinementVerdicts();
+    assert.equal(migrated.get('v|p|j'), undefined);
+    migrated.set('k', { probability: 0.5, judge: 'j' });
+    assert.equal(migrated.count(), 1);
+  });
+
   scenario('data and settings survive reopening the store', ({ store, reopen }) => {
     put(store, 'p/1', { events: 5 });
     store.writeSettings({ minCalls: 3 });

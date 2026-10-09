@@ -12,6 +12,13 @@ import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic, suffixWithCallOf } from './inline.js';
 import { authoredCallables, finiteCounterComparison, guardArguments, loopLabel, makesCalls } from './policy.js';
 
+/** The predicates of an `Is<T, P>` type (nested refinements give several), read from its brand property. */
+export function refinementPredicates(checker: ts.TypeChecker, node: ts.TypeNode): string[] {
+  const type = checker.getTypeFromTypeNode(node);
+  const brand = checker.getPropertiesOfType(type).find(property => property.escapedName.toString().startsWith('__@natlangRefinement'));
+  return brand ? checker.getPropertiesOfType(checker.getTypeOfSymbol(brand)).map(property => property.name) : [];
+}
+
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
   plans: ReadonlyMap<string, InlineLambdaPlan>;
@@ -388,6 +395,14 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         if (isTypedRead) {
           const args = node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression);
           return f.createCallExpression(runtime('readNeuralese'), undefined, args);
+        }
+        // refine<Is<T, "p">>(value) and assume<R>(value): the predicate of the type argument becomes the second argument.
+        const refinement = options.checker && source.typeArguments?.length === 1 && source.arguments.length === 1 ?
+          resolveIntrinsic(options.checker, callee) : undefined;
+        if (options.checker && (refinement === 'refine' || refinement === 'assume')) {
+          const predicates = refinementPredicates(options.checker, source.typeArguments![0]!);
+          if (predicates.length) return f.createCallExpression(ts.visitNode(callee, visit) as ts.Expression, undefined,
+            [ts.visitNode(node.arguments[0]!, visit) as ts.Expression, f.createStringLiteral(predicates.join('; and '))]);
         }
         const isMethod = ts.isPropertyAccessExpression(callee) && callee.name.text === 'iterateOn';
         const isFree = !isMethod && options.checker && resolveIntrinsic(options.checker, callee) === 'iterateOn';
