@@ -44,12 +44,12 @@ test('counterexample suite versions consume a shared finite oracle allowance wit
 });
 test('authored counterexample loop admits independent gold and executes the normal authored repair',async()=>{
  const model=scriptedModel(stagedImprover({other:opening=>opening.includes('Perform one counterexample-guided')?
-  'const observed=await counterexamples.evidence(folder.snapshot());const suggestion=await suggestCounterexamples(goal,observed);const admitted=await counterexamples.admit(suggestion.inputs);const repaired=await counterexamples.repair(folder.snapshot());await folder.select(repaired.folder);return {round:state.round+1,done:repaired.eligible&&repaired.quality===1,suite:admitted.suite,remainingChecks:admitted.remainingChecks,quality:repaired.quality,reason:repaired.disposition};':
+  'const observed=await counterexamples.evidence(folder.snapshot());const suggestion=await suggestCounterexamples(goal,observed);const admitted=await counterexamples.admit(suggestion.inputs);const repaired=await counterexamples.repair(folder.snapshot());await folder.select(repaired.folder);const decision=await counterexamples.stop();return {round:state.round+1,done:decision.stop,suite:admitted.suite,remainingChecks:admitted.remainingChecks,quality:repaired.quality,reason:decision.reason};':
   opening.includes('Suggest concrete deployment inputs')?'return {inputs:[[7]],reason:"probe a larger value"}':null,
   edit:'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"repair",preserves:["number signature"]};'}));
  const folder=Folder.fromFiles({'main.ts':'export function solve(value:number):number{return value;}'});
  const result=await counterexampleGuidedImprove({folder,contract,cases,policy:{maxExperiments:1,maxPopulation:3,mode:'structural',strategy:'adaptive',goal:'increment',allowedFiles:['main.ts']},improver:model.driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget:{maxModelCalls:20,maxRollouts:24,maxProposals:3},oracle:{identity:'independent-increment',expected:async args=>args[0]+1},maxRounds:2,maxChecks:2});
- assert.equal(result.state.quality,1);assert.equal(result.state.round,1);assert.equal(result.suite.cases.length,4);
+ assert.equal(result.state.quality,1);assert.equal(result.state.round,1);assert.equal(result.state.reason,'The repaired training suite passes.');assert.equal(result.suite.cases.length,4);
  assert.equal(result.suite.remainingChecks,1);assert.match(await result.folder.readText('main.ts'),/value\+1/);
  assert.match(await folder.readText('main.ts'),/return value;/);
 });
@@ -86,5 +86,5 @@ test('implementation workflow executes its specialized editor with prepared sour
  let specialized=false;
  const model=scriptedModel(stagedImprover({edit:()=>{specialized=true;return 'if(!request.transformation.includes("Implement the requested application in native natlang"))throw Error("missing transformation");if(request.sourceFiles[0].path!=="main.ts")throw Error("missing source");await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;}");return {summary:"implement increment",preserves:["number contract"]};';}}));
  const result=await implementBehavior({folder:Folder.fromFiles({'main.ts':'export function solve(value:number):number{return value;}'}),contract,cases,policy:{maxExperiments:2,maxPopulation:3,mode:'structural',strategy:'adaptive',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{maxModelCalls:20,maxRollouts:20,maxProposals:3}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(specialized,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,4);
+ assert.equal(result.disposition,'improved',result.error);assert.equal(specialized,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,3);
 });

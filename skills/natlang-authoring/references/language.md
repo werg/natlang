@@ -97,6 +97,7 @@ The model carries out the instructions for one call: it answers directly when th
 import { iterateOn } from '@natlang/node';
 const final = await iterateOn(shorten, draft).withLimit({ maxSteps: 5 }).until(text => words(text) <= 60);
 const plan = await step.iterateOn(initial).until(done);    // every natural-language function has .iterateOn
+const result = await folder.iterateOn(crispStep, state, policy).withMeasure(s => limit - s.round).until(s => s.done);  // a directory reducer may be a TypeScript function (folder, state, policy)
 ```
 
 `until` resolves to the first state that satisfies the predicate; `streamUntil`, `onStep`, `withSiteId`, `checkProgress`, the measure/limit requirement and the three failure errors (`IterationDivergedError`, `IterationStepError`, `IterationLimitError`, each carrying `lastState` and the trajectory) are in [Iteration and termination](../../../spec/SPEC.md#iteration-and-termination).

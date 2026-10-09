@@ -278,6 +278,7 @@ declare module 'natlang:gepa' {
   export function leaders(members: readonly Member[], objective?: Objective): string[];
   export function chooseIncumbent(members: readonly Member[], incumbent: string, objective?: Objective): string;
   export function prune<T extends Member>(members: readonly T[], protectedIds: Iterable<string>, limit: number): T[];
+  export function componentProblem(parent: Record<string, unknown>, candidate: unknown, keys: readonly string[]): string;
 }
 `;
 

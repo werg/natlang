@@ -2,9 +2,18 @@
 
 Status: implemented on main 2026-10-09 (plans/OWNER_REVIEW.md, review after the fact). What differs from the draft below:
 
-- Owner decision 2026-10-10: the tool-economy sentences of the old `rewriteProgram.nl` (use the given source files directly, inspect only clipped parts, finish once the edit is supported, write each replacement once) stay out, both here and in the shared system prompt. Measure in the teacher window whether the split stages waste tool calls without them (actions per experiment, repeated reads, reprinted evidence) before adding any of it back.
-- `improveStep.nl` still asks the model to run `lifecycle.step` in eval (question 1): `iterateOn` loads a `.nl` step, so a
-  crisp pipeline step waits for runtime support. The step now receives the `plans` journal service as well as `evaluator`.
+- Owner decision 2026-10-10: the tool-economy sentences of the old `rewriteProgram.nl` (use the given source files directly, inspect only clipped parts, finish once the edit is supported, write each replacement once) were restored as positive per-stage steps in `editSource`, `editSourceStructural`, `hypothesize` and `diagnose` (the shared system prompt is unchanged). Measure in the teacher window whether they cut tool calls per experiment, repeated reads and reprinted evidence.
+- One experiment is the crisp `improveStep/lifecycle.ts` (question 1 answered): `folder.iterateOn`, `folder.propose` and
+  `folder.apply` take a host or TypeScript function `(folder, ...args)` as a directory reducer (a general language feature, not an
+  improver special case; spec/ext/directory-reducers.md, skills/natlang-authoring/references/patterns.md). It runs on a private
+  transaction copy of the folder, which is installed when it returns and discarded when it throws, exactly as for a `.nl`
+  reducer; a `.nl` that is not a `kind: directory-reducer` is still refused. `improveProgram` applies
+  `improveStep.lifecycle.step(folder, evaluator, plans, state, policy)` with the evaluator and the `plans` journal held by the host,
+  so no model call sequences an experiment and no `.nl` stage can reach the evaluator. `improveStep.nl` remains only as the typed
+  root of the callable folder `improveStep/` (the project compiler recognizes a callable folder by a `.nl` beside it; a TypeScript
+  module with a folder of the same name is a plain project folder there, and its relative imports would need `.js` extensions and its
+  `.nl` imports generated declarations); it is never sent to a model. A step that fails because a natural-language policy
+  chose outside its crisp bound is `incomplete-search`, not an infrastructure failure (the authored `PolicyBoundError`).
 - The stages are `diagnose`, `hypothesize`, `editSource` (instruction) and `editSourceStructural` (structural). The doc's
   `finish` is the host: the edit returns `{summary, preserves}` and the host derives the changed paths from the diff.
 - Refinement types are crisp verifiers in `improveStep/crisp.ts` (and `ts-host/src/optimization/policies.ts`) rather than
@@ -16,8 +25,29 @@ Status: implemented on main 2026-10-09 (plans/OWNER_REVIEW.md, review after the 
   doc counted is produced after the keys are chosen). `findOpportunity = none` ends the search (`no-opportunity`).
 - `transformations.ts` is the data table (a TypeScript module, since callable folders import siblings); the names are the
   keys, so `policy.transformation: 'repairProgram'` replaces the former string substitution of reducer files.
-- Counterexample `shouldStop` and the nested pluggable for the counterexample loop stay model prose in
-  `counterexampleStep.nl`; the one `suggestCounterexamples` returns `{inputs, reason}`.
+- The counterexample loop's stop is the shared `shouldStop` policy (same slot, same `policy.policies.shouldStop` setting, same
+  `improveStep/shouldStop.nl` with a second list of steps selected by `facts.search`): the crisp default is the prose rule as
+  written (no admitted example, the repaired training suite passing, the oracle allowance exhausted, a repair that did not
+  complete), `ts-host/src/improvement/counterexample-stop.ts`. The host measures the round's facts and the step calls
+  `counterexamples.stop()`; the model no longer reports them. The one `suggestCounterexamples` returns `{inputs, reason}`.
+- `rewriteComponents` is a TypeScript directory reducer around the natural-language `editComponents.nl`
+  (`componentSearchStep/rewriteComponents.ts`): the candidate is the components.json the edit leaves, the constraints (only
+  the selected keys differ; kinds, slot ids and segment counts are unchanged; segments are an array of strings) are checked
+  exactly by `componentProblem` in the shared module `natlang:gepa`, which the engine's `search.check` applies again, and one
+  retry carries the problem text in `request.problem`. The `Is<Candidate, ...>` type of the first draft is this check. The
+  "return that exact object" instruction and the constraint paragraph are gone from the `.nl`. (`componentSearchStep.nl`, the
+  step of the component engine, is still model-run; it is not part of this move.)
+- Training export: `ts-host/scripts/self-improvement/export-followup-training.mjs` and `scripts/skills/export-training.mjs` key on
+  the definition source a trace records (table and shared helpers in `scripts/self-improvement/improver-stages.mjs`): the
+  current stages (`diagnose`, `hypothesize`, `editSource`, `editSourceStructural`, the natural-language policies,
+  `suggestCounterexamples`) and, for runs recorded earlier, the single `rewriteProgram` editor with its model-run step. Each row
+  carries `improver_stage {stage, generation, definition_source, shape, mode}` and a `supervision` block (whole-trajectory: prompts,
+  instructions and inputs trained, tool output and mechanical feedback after the first reply at the lower feedback weight,
+  nothing masked; the classes mirror `serve/grad.py _context_weights`). With no step invocation to record the outcome, a stage is
+  admitted from the run's own state history: an edit by the entry whose candidate is its resulting source, a diagnosis or
+  hypothesis by the edit of its experiment (linked by the values passed on, in order), a policy by its replay and the verifier
+  that bounded it (a shadow disagreement keeps it as context). Definitions recorded but not exported are listed in the
+  manifest's `omitted` with the reason. `captureExactRewriteIO` now captures every stage's exact arguments and result.
 
 The text below is the design as drafted.
 
@@ -357,10 +387,7 @@ improvements per experiment, rejections by reason, and tokens per experiment.
 
 ## Questions for the owner
 
-1. `improveStep.nl` asks the model to run `lifecycle.step` in eval (`improveStep.nl:8`). The natlang-native design
-   is a crisp pipeline that calls the natural-language stages (`diagnose`, `hypothesize`, `editSource`) directly, with
-   no model call for sequencing. That requires `iterateOn` to accept a TypeScript callable from the authored bundle
-   (today it loads a `.nl`, `program.ts:30`). Is that supported, or does the one-line `.nl` stay until it is?
+1. (Answered 2026-10-10.) The experiment is a crisp function that calls the natural-language stages: `iterateOn` accepts a host or TypeScript function as a directory reducer (see the status block). No `.nl` step remains.
 2. The seven reducers become rows of a data table. Training data and tests refer to their names
    (`workflows.ts:14-17`, `reducers/*.nl`). Keep the names as table keys and aliases?
 3. Natural-language `shouldStop` with a stall rule is new behavior, not a relocation. Include it in the first move

@@ -9917,3 +9917,8 @@ and these derivatives earn zero independent-world credit.
 if complete, check trainer/gates/checkpoint headroom, and prepare the controlled
 shared-KL continuation when the current frozen training run ends. Continue the
 50-minute monitoring cadence and check the coordination inbox each cycle.
+
+
+## Retired lines (owner decision 2026-10-10)
+
+The owner authorized deleting the old candidate code. Retired: the Sharp-MiniCPM5 and Sharp-Spark-X2.5 student candidates (including "Train Sharp-Spark on v5"), the Ling backbone candidate, the Bonsai teacher and remote teacher-host tooling, and the pre-Neuralese crisp teacher/SFT polish scripts. Mellum is the student backbone. Removed scripts referenced above: `ling_grouped_experts.py`, `recover_native_evaluation.py`, `remote_teacher_bootstrap.py`, `roll_teacher_runtime.py`, `serve_minicpm.sh`, `start_reviewed_remote_successor.py`, `teacher_redo_loop.sh`, `verify_source_audit_identities.py`, `watch_bonsai.sh`. Full list in plans/LEGACY_CODE_REMOVAL.md; data and storage were not touched by this removal.

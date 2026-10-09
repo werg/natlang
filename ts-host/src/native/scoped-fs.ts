@@ -105,8 +105,24 @@ export const APPLY_TO_FOLDER: unique symbol = Symbol.for('natlang.applyToFolder'
 export type FolderReducer = { [APPLY_TO_FOLDER]?: (folder: FolderHandle, args: unknown[]) => Promise<unknown> };
 function applyReducer(folder: FolderHandle, reducer: unknown, args: unknown[]): Promise<unknown> {
   const apply = (reducer as FolderReducer | undefined)?.[APPLY_TO_FOLDER];
-  if (typeof apply !== 'function') throw new TypeError('folder.apply needs a natlang directory reducer');
-  return apply.call(reducer, folder, args);
+  if (typeof apply === 'function') return apply.call(reducer, folder, args);
+  // A natural-language function that is not a directory reducer takes no folder; it is not applied as a plain function.
+  if (typeof reducer === 'function' && !Object.hasOwn(reducer, Symbol.for('natlang.callable'))) return applyFunction(folder, reducer as (folder: FolderHandle, ...args: unknown[]) => unknown, args);
+  throw new TypeError('folder.apply needs a directory reducer: a natlang `kind: directory-reducer` function or a host/TypeScript function (folder, ...args)');
+}
+/**
+ * A plain (host or TypeScript) function as a directory reducer. It has the contract of a natlang one: it runs on a
+ * private transaction copy of the folder and receives that copy as its first argument; its changes are validated and
+ * installed when it returns, and discarded when it throws.
+ */
+async function applyFunction(folder: FolderHandle, reducer: (folder: FolderHandle, ...args: unknown[]) => unknown, args: unknown[]): Promise<unknown> {
+  const transaction = await folder.beginTransaction(true);
+  try {
+    const value = await reducer(transaction.folder.root(), ...args);
+    transaction.validateSync();
+    transaction.commitSync();
+    return value;
+  } finally { if (transaction.open) transaction.abort(); }
 }
 
 /** Replace exactly one span of `text`; `fuzzy` matches one whole line ignoring whitespace differences. */
