@@ -18065,7 +18065,8 @@
         "neuralese-semantic-iterate-reducers-v22-source-v5-20261009-v5/runtime-reference-proof-frozen-reference-driver-v3/runtime-reference-proof.json",
         "neuralese-semantic-iterate-reducers-v22-source-v5-20261009-v5/source.cases.jsonl"
       ],
-      "description": "Root-adopted 22 sampled action rows and 19 target-bound ordinary text rows from the multi-source six-successes review (source families V21, V22, V24, and V25). Includes exact source/admission/replay/visibility and text omission provenance. No authored controller, whole trajectory, recurrence, runtime, or new-world admission."
+      "description": "Root-adopted 22 sampled action rows and 19 target-bound ordinary text rows from the multi-source six-successes review (source families V21, V22, V24, and V25). Includes exact source/admission/replay/visibility and text omission provenance. No authored controller, whole trajectory, recurrence, runtime, or new-world admission.",
+      "admission": "Root adopted 22 ordinary sampled native actions (19 nested sampled-child and 3 sampled top-level) plus 19 target-bound ordinary text documents. Two visibility holds and three text-context omissions remain explicit. No authored-controller actions, whole-trajectory, recurrence, runtime, or new-world admission; active training inputs unchanged."
     }
   ],
   "coverage_backlog": [
