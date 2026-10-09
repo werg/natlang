@@ -20465,6 +20465,35 @@
       "license": "Inherited original decision source train roles/groups/licenses; source-manifest pins full upstream dataset",
       "independent_new_worlds": 0,
       "notes": "256unique inherited train IDs,233typed-valid. Nonpaired allocations:3.5Lite120/120, Gemma26B109/131,Gemma31B4/5; V8 pins exact scorer results/usage/raw errors/all rowhashes. Invalid probability sums preserved, not normalized. Frozen exact adapter/runtime files included. V2 ownership transfer observed no overlap, active V2 outputs excluded. No admission/new-world credit."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v4",
+      "include": [
+        "cases.jsonl",
+        "frozen-adapter-v1/TEACHER_DECISION_LABELS.md",
+        "frozen-adapter-v1/teacher-decision-labels.mjs",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "authored-static-current-IR-from-typed-provider-decisions",
+      "admission": "held-pending-source-and-static-reference-quality-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-pool-v1-closed-held-20261009-v1"
+      ],
+      "license": "Inherited exact source licenses, preserved per compatible batch",
+      "independent_new_worlds": 0,
+      "notes": "131/256 labels pass strict payload, existing scoreGraded gates and exact source top, producing36 collection/inline-lambda IR cases. NL instructions include runtime item question and separate scope captures, gold omitted. Three actual scripted replays accepted with six-field capture visibility;24 native turns marked authored-static-reference-pending, not teacher code/reasoning. Remaining125 labels explicitly rejected. Proof is runtime execution/capture evidence, not semantic admission or learned-channel qualification. Original raw labels/provenance retained in parent registry. Earlier v3 controller snapshot is superseded by v4; retained locally, not training."
     }
   ],
   "coverage_backlog": [
@@ -20488,6 +20517,7 @@
     "Groq short held labels groq-short-decision-held-labels-20261009-v1 require explicit current Natlang IR conversion and source/quality admission. Preserve source groups; typed teacher labels are not full trajectories or independent new worlds.",
     "free-provider-typed-screens-held-20261009-v1 preserves closed successes and provider-format failures. Required: current Natlang IR/inline-lambda adapter conversion and source/quality review; do not admit probability envelopes or count failed rows. Broader mixed-family screens remain running and must receive separate immutable publication when closed.",
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
-    "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs."
+    "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
+    "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion."
   ]
 }

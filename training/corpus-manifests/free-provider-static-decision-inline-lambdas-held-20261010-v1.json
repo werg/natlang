@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-static-decision-inline-lambdas-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v4",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 603861,
+      "sha256": "ef5575f6599774138ddccaebfdc31dea1d898270b759230f5577eab6d2a566b3",
+      "lines": 36
+    },
+    {
+      "path": "frozen-adapter-v1/TEACHER_DECISION_LABELS.md",
+      "bytes": 3835,
+      "sha256": "f2d15a75c0e98892c4e45d7206d64d39ca47076ac26d3d91c2a34e7c26c70cb1"
+    },
+    {
+      "path": "frozen-adapter-v1/teacher-decision-labels.mjs",
+      "bytes": 33342,
+      "sha256": "f2a8f879fd9308e6b05f80f9b2f531b0dbfa08abfa0fc0ba3979dff5a0a569ed"
+    },
+    {
+      "path": "label-manifest.json",
+      "bytes": 257040,
+      "sha256": "194c61e958408a2961428e5e3a68764b47cf1c5e37f24ee77c95f85f9dad8ab9"
+    },
+    {
+      "path": "native.held.jsonl",
+      "bytes": 1838406,
+      "sha256": "45c97497714357e2cc1e3681c49b52f2ee14435d838127472de546662e318890",
+      "lines": 24
+    },
+    {
+      "path": "rejections.jsonl",
+      "bytes": 58394,
+      "sha256": "63828290d38764f2ec86de566f35bdc7dab1556982a0138a8f7f71e51fe880b8",
+      "lines": 125
+    },
+    {
+      "path": "replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 727629,
+      "sha256": "416dbf69af4f7aff32eac204aae946c94381bacc88ce7f73f85e0b64b778d4de",
+      "lines": 3
+    },
+    {
+      "path": "scorer-manifest.json",
+      "bytes": 34057,
+      "sha256": "dcd01dc15f921c0fd8c45033366a423bb6278d58a2864de9d6cf3ce0d563c381"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 6202,
+      "sha256": "e50996559057e1a2f0ba70552dc50f12c2177333a7e5e4a4981695c5a5fbf11e"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1196,
+      "sha256": "204a71e514d53c376103159e3119fec48252dbe5d6ba0120c37a3e3c27bc9eeb"
+    }
+  ],
+  "bytes": 3563962
+}
