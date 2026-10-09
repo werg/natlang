@@ -46,6 +46,8 @@ export type NativeRuntimeHooks = {
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
     neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[] };
+  /** Reads of fields a value's declared type does not have, checked in every eval. */
+  checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -1817,6 +1819,7 @@ export class NativeSession {
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
+      ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source) } : {}),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
     // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
     if (compiled.ok) {
