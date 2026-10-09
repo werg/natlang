@@ -93,6 +93,10 @@
       "types": "./dist/skills/node.d.ts",
       "default": "./dist/skills/node.js"
     },
+    "./fusion": {
+      "types": "./dist/fusion/index.d.ts",
+      "default": "./dist/fusion/index.js"
+    },
     "./improvement": "./dist/improvement/index.js"
   },
   "files": [

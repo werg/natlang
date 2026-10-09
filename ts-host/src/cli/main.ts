@@ -25,6 +25,9 @@ import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
   type NatlangRuntimeOptions } from '../runtime/runtime.js';
 import { fileTraceSink, applicationContextRecords, loadCallables, loadNatlang } from '../runtime/node-files.js';
 import { bindAdaptation } from '../adaptation/compatibility.js';
+import { analyzeFusion, prepareFusion } from '../fusion/prepare.js';
+import { formatFusionReport } from '../fusion/report.js';
+import { parseFusionSettings, type FusionSettings } from '../fusion/settings.js';
 import { parseAdaptation } from '../adaptation/schema.js';
 import { executorIdentityForChoice } from '../model/config.js';
 import { invokeDefinition } from '../runtime/kernel.js';
@@ -88,7 +91,7 @@ Options:
   --no-color          Disable terminal color.
   --yes               Permit a required managed runtime download.`;
   if (topic === 'check' || topic === 'build') return `Check or compile a project:
-  natlang check [PROJECT] [--json]
+  natlang check [PROJECT] [--json] [--fusion] [--fusion-planner crisp|nl|shadow]
   natlang build [PROJECT] [--out DIR] [--target node|browser] [--json]
 
 PROJECT is a directory or tsconfig.json (default: .). Both commands write a
@@ -174,7 +177,7 @@ type Parsed = { words: string[]; options: Map<string, string | true>; rest: stri
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
   const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
-    '--lines', '--jsonl', '--filter', '--no-adaptation']);
+    '--lines', '--jsonl', '--filter', '--no-adaptation', '--fusion']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -449,6 +452,12 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
     programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {
+    // Fused hand-offs (plans/FUSED_PIPELINES.md): off unless natlang.json says otherwise.
+    const fusionSetting = spec.package ? fusionSettings(parsed, spec.root) : undefined;
+    if (fusionSetting && fusionSetting.mode !== 'off') {
+      const fusion = await prepareFusion(runtime, spec.root, fusionSetting);
+      if (fusion) (runtime.options as { fusion?: typeof fusion }).fusion = fusion;
+    }
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
     if (typeof main !== 'function') throw new Error(`${spec.target.entry} does not export ${name}()`);
@@ -499,6 +508,27 @@ async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
   return launch(parsed, { root: installed.root, targetName, target, installed: true,
     package: { name: installed.name, version: installed.version, digest: installed.digest, root: installed.root },
     dependencies: installed.dependencies, stateKey: `${installed.name}/${installed.version}` });
+}
+
+/** The fusion settings of the package at `root` (natlang.json), with `--fusion-planner` over them. */
+function fusionSettings(parsed: Parsed, root: string): FusionSettings {
+  let raw: unknown;
+  try { raw = (JSON.parse(readFileSync(join(root, 'natlang.json'), 'utf8')) as { fusion?: unknown }).fusion; } catch { raw = undefined; }
+  const settings = parseFusionSettings(raw), planner = option(parsed, '--fusion-planner');
+  if (planner && planner !== 'crisp' && planner !== 'nl' && planner !== 'shadow') throw new Error('--fusion-planner must be crisp, nl or shadow');
+  return planner ? { ...settings, planner: planner as FusionSettings["planner"] } : settings;
+}
+
+/** The fusion report for `natlang check`; analysis problems never fail a check. */
+async function fusionForCheck(parsed: Parsed, project: string) {
+  try {
+    const root = resolve(project), settings = fusionSettings(parsed, root);
+    if (settings.planner === 'crisp') return (await analyzeFusion(root, settings)).report;
+    return await withModelRuntime(parsed, async runtime => (await analyzeFusion(root, settings, runtime)).report);
+  } catch (error) {
+    if (error instanceof TypeError) throw error;
+    return undefined;
+  }
 }
 
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
@@ -732,17 +762,21 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     output(topic ? topicHelp(topic) : help(), false); return 0;
   }
   if (command === 'check' || command === 'build') {
-    acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json'] : ['--json']); noTrailingArguments(parsed);
+    acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json'] : ['--json', '--fusion', '--fusion-planner', '--profile', '--provider', '--model', '--yes']);
+    noTrailingArguments(parsed);
     const target = option(parsed, '--target');
     if (target && target !== 'node' && target !== 'browser') throw new Error('--target must be node or browser');
     const result = buildProject({ project: words[0] ?? '.', emit: command === 'build', outDir: option(parsed, '--out'),
       runtimeTypes: { specifiers: RUNTIME_MODULE.specifiers, types: RUNTIME_MODULE.types },
       ...(target ? { target: target as 'node' | 'browser' } : {}) });
+    // Fused pipelines (plans/FUSED_PIPELINES.md): the candidate hand-offs and the selected planner's plan.
+    const fusion = command === 'check' && result.ok ? await fusionForCheck(parsed, words[0] ?? '.') : undefined;
     if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest,
-      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}) }, true);
+      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}), ...(fusion ? { fusion } : {}) }, true);
     else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` +
       (result.refinedSlots?.length ? `\nrefined slots (checked at run time):\n${result.refinedSlots.map(slot =>
         `  ${slot.function} ${slot.slot}: ${JSON.stringify(slot.predicate)}`).join('\n')}` : '') +
+      (fusion && fusion.counts.edges ? `\n${formatFusionReport(fusion, parsed.options.has('--fusion'))}` : '') +
       (result.diagnostics.length ? `\n${formatDiagnostics(result.diagnostics)}` : '') :
       formatDiagnostics(result.diagnostics), false);
     return result.ok ? 0 : 1;

@@ -15,6 +15,7 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
+import { engageFusion } from './fusion.js';
 import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
 import { Deopt, admit, handoffNote, isDeopt } from '../calls/dispatch.js';
@@ -475,6 +476,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
+  // Fused hand-offs (runtime/fusion.ts): a planned edge retypes this call's result or one parameter to Neuralese<T>.
+  const fusion = engageFusion(frame, definition, inputs, (callFrame, fused, args) => invokeDefinition(callFrame, fused, args, options));
+  if (fusion) definition = fusion.definition;
   const signature = refinedSignature(definition);
   // An argument into a refined parameter is checked at the caller; a failure leaves the callee unstarted.
   if (signature?.params.some(type => containsRefinement(type, signature.env))) {
@@ -601,6 +605,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       }
     }
     hostValue = toHost(result.value); hasValue = true;
+    fusion?.produced?.(hostValue);
     return hostValue;
   } catch (error) {
     if (!(error instanceof NatlangCallError)) detail = error instanceof Error ? error.message : String(error);

@@ -29,6 +29,8 @@ export type NatlangPackageManifest = {
   specialization?: 'off' | 'shadow' | 'on';
   /** How `Is<T, "predicate">` slots are checked: threshold, uncertainty band, policy, mode (plans/REFINEMENT_TYPES.md). */
   refinements?: Record<string, unknown>;
+  /** Fused hand-offs between functions: mode, planner, certificate (plans/FUSED_PIPELINES.md); validated by `parseFusionSettings`. */
+  fusion?: Record<string, unknown>;
 };
 
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
@@ -58,7 +60,7 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('package manifest must be an object');
   const raw = value as Record<string, unknown>;
   const known = new Set(['schema', 'name', 'version', 'description', 'include', 'targets', 'exports', 'dependencies', 'engines',
-    'recording', 'specialization', 'refinements']);
+    'recording', 'specialization', 'refinements', 'fusion']);
   for (const key of Object.keys(raw)) if (!known.has(key)) throw new TypeError(`unknown package manifest field: ${key}`);
   if (raw.schema !== PACKAGE_SCHEMA) throw new TypeError(`package schema must be ${PACKAGE_SCHEMA}`);
   if (typeof raw.name !== 'string' || !PACKAGE_NAME.test(raw.name)) throw new TypeError('invalid package name');
@@ -105,9 +107,11 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
     throw new TypeError('refinements must be an object');
   // The fields are validated by parseRefinementSettings where the runtime is configured (native/refinement-settings.ts).
   const refinements = raw.refinements as Record<string, unknown> | undefined;
+  if (raw.fusion !== undefined && (!raw.fusion || typeof raw.fusion !== 'object' || Array.isArray(raw.fusion))) throw new TypeError('fusion must be an object');
+  const fusion = raw.fusion as Record<string, unknown> | undefined;
   return { schema: PACKAGE_SCHEMA, name: raw.name, version: raw.version, include,
     ...(recording ? { recording } : {}),
-    ...(refinements ? { refinements } : {}),
+    ...(refinements ? { refinements } : {}), ...(fusion ? { fusion } : {}),
     ...(raw.specialization !== undefined ? { specialization: raw.specialization as 'off' | 'shadow' | 'on' } : {}),
     ...(raw.description === undefined ? {} : { description: requireString(raw.description, 'description') }),
     ...(Object.keys(targets).length ? { targets } : {}), ...(exports ? { exports } : {}),
