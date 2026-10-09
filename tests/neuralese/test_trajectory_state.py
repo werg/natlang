@@ -1,7 +1,81 @@
 import pytest
 import torch
 
-from natlang_neuralese.train.trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume
+from natlang_neuralese.train.trajectory_state import (
+    AsyncAtomicCheckpointWriter, atomic_checkpoint, immutable_cpu_snapshot,
+    trajectory_optimizer, validate_resume,
+)
+
+
+def test_immutable_cpu_snapshot_detaches_nested_tensor_state():
+    from collections import OrderedDict
+
+    source = torch.tensor([1., 2.], requires_grad=True)
+    state = {'model': OrderedDict(weight=source), 'rng': (1, 2, 3)}
+    state['model']._metadata = {'version': 1}
+    snapshot = immutable_cpu_snapshot(state)
+    source.data.fill_(9.)
+    assert snapshot['model']['weight'].device.type == 'cpu'
+    assert snapshot['model']['weight'].tolist() == [1., 2.]
+    assert snapshot['model']['weight'].requires_grad is False
+    assert snapshot['model']._metadata == {'version': 1}
+    assert snapshot['rng'] == (1, 2, 3)
+
+
+def test_async_atomic_checkpoint_writes_snapshot_and_runs_callback(tmp_path):
+    destination = tmp_path / 'state.pt'
+    source = torch.tensor([3., 4.])
+    callbacks = []
+    writer = AsyncAtomicCheckpointWriter()
+    writer.submit(destination, {'step': 7, 'tensor': source},
+                  after_write=lambda snapshot: callbacks.append(snapshot['step']))
+    source.fill_(8.)
+    writer.drain()
+    saved = torch.load(destination, map_location='cpu', weights_only=False)
+    assert saved['step'] == 7
+    assert torch.equal(saved['tensor'], torch.tensor([3., 4.]))
+    assert callbacks == [7]
+    assert not destination.with_suffix('.pending').exists()
+
+
+def test_async_atomic_checkpoint_failure_propagates_and_writer_recovers(tmp_path, monkeypatch):
+    import natlang_neuralese.train.trajectory_state as state_module
+
+    writer = AsyncAtomicCheckpointWriter()
+    destination = tmp_path / 'state.pt'
+    real_atomic_checkpoint = state_module.atomic_checkpoint
+
+    def fail_once(path, state):
+        if state['step'] == 1:
+            raise OSError('disk full')
+        return real_atomic_checkpoint(path, state)
+
+    monkeypatch.setattr(state_module, 'atomic_checkpoint', fail_once)
+    writer.submit(destination, {'step': 1})
+    with pytest.raises(OSError, match='disk full'):
+        writer.drain()
+    writer.submit(destination, {'step': 2}, wait=True)
+    assert torch.load(destination, map_location='cpu', weights_only=False)['step'] == 2
+
+
+def test_async_atomic_checkpoint_propagates_post_write_failure(tmp_path):
+    writer = AsyncAtomicCheckpointWriter()
+    destination = tmp_path / 'state.pt'
+
+    def fail_after_write(_snapshot):
+        raise OSError('best receipt failed')
+
+    writer.submit(destination, {'step': 3}, after_write=fail_after_write)
+    with pytest.raises(OSError, match='best receipt failed'):
+        writer.drain()
+    assert torch.load(destination, map_location='cpu', weights_only=False)['step'] == 3
+    writer.submit(destination, {'step': 4}, wait=True)
+    assert torch.load(destination, map_location='cpu', weights_only=False)['step'] == 4
+
+
+def test_immutable_cpu_snapshot_rejects_unsupported_leaves():
+    with pytest.raises(TypeError, match='unsupported checkpoint snapshot leaf'):
+        immutable_cpu_snapshot({'bad': object()})
 
 
 def test_sketch_horizon_change_requires_declared_continuation():

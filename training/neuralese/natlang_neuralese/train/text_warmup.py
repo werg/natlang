@@ -14,7 +14,9 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
-from .trajectory_state import atomic_checkpoint, clip_finite_gradients, drop_file_cache, gradient_norm
+from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
+                               available_system_memory_bytes, clip_finite_gradients,
+                               drop_file_cache, gradient_norm, immutable_cpu_snapshot)
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
@@ -1317,6 +1319,12 @@ def main(argv=None):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
     checkpoint_reserve=None
+    checkpoint_snapshot_size_bound=None
+    checkpoint_writer=AsyncAtomicCheckpointWriter()
+    def drain_checkpoint_writer_at_exit():
+        try:checkpoint_writer.drain()
+        except Exception:traceback.print_exc()
+    atexit.register(drain_checkpoint_writer_at_exit)
     last_report=None
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
@@ -1485,10 +1493,13 @@ def main(argv=None):
             # without a matching receipt its exact step is unknown.
             serving_heads_step=-1
 
-    def write_heads_export_status(*,export_error=None,emergency=False):
+    def write_heads_export_status(*,export_error=None,emergency=False,
+                                  checkpoint_step=None,heads_step=None):
+        checkpoint_step=step if checkpoint_step is None else int(checkpoint_step)
+        heads_step=serving_heads_step if heads_step is None else int(heads_step)
         status={'schema':'natlang.neuralese-text-warmup-heads-export/1',
-            'checkpoint_step':step,'heads_step':serving_heads_step,
-            'heads_step_known':serving_heads_step>=0,'heads_current':serving_heads_step==step,
+            'checkpoint_step':checkpoint_step,'heads_step':heads_step,
+            'heads_step_known':heads_step>=0,'heads_current':heads_step==checkpoint_step,
             'checkpoint_authoritative_for_resume':True,
             'emergency_export_attempted':bool(emergency)}
         if export_error is not None:
@@ -1503,38 +1514,53 @@ def main(argv=None):
             except OSError:pass
             return False
 
-    def export_heads(report=None):
-        nonlocal serving_heads_step
+    def build_heads_export(report=None, *, export_step=None, snapshot=False):
+        export_step=step if export_step is None else int(export_step)
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
         from .adapters import lora_state,adapter_layers
         initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
         serving=heads.state_dict()
         trained_map={k.removeprefix('input_map.'):v for k,v in serving.items() if k.startswith('input_map.')}
         serving={k:v for k,v in serving.items() if not k.startswith('input_map.')}
-        exported={**initial,'heads':serving,**({'neuralese_input_map':trained_map} if trained_map else {}),'control_rows':backbone.control_rows.detach().cpu(),
+        control_rows=backbone.control_rows.detach()
+        if not snapshot:control_rows=control_rows.cpu()
+        exported={**initial,'heads':serving,**({'neuralese_input_map':trained_map} if trained_map else {}),'control_rows':control_rows,
           'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
-          'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
+          'backbone_trainables':{n:(q.detach() if snapshot else q.detach().cpu())
+                                 for n,q in backbone.hf.named_parameters() if n in backbone_names},
           'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
           'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
           **({'maple_qat':True} if a.backbone_training=='qat' else {}),
           'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
-          'warmup':{'step':step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
+          'warmup':{'step':export_step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
                     'report_path':str((a.out/'report.json').resolve()),
                     'report_sha256':sha(a.out/'report.json') if (a.out/'report.json').is_file() else None}}
         # Parent adapters may have a different rank than the fresh-policy default.
         ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
         if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
+        return immutable_cpu_snapshot(exported) if snapshot else exported
+
+    def export_heads(report=None):
+        nonlocal serving_heads_step
+        exported=build_heads_export(report)
         atomic_checkpoint(a.out/'heads.pt',exported)
         serving_heads_step=step
+        return True
 
     last_save=[time.monotonic()]
-    def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True):
+    def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
+             retain_best=False, wait=False):
         last_save[0]=time.monotonic()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
+        estimate=(checkpoint_snapshot_size_bound + Path(a.heads).stat().st_size + 64*1024*1024
+                  if checkpoint_snapshot_size_bound is not None else None)
+        available=available_system_memory_bytes()
+        async_write=(not wait and emergency_recovery is None and estimate is not None
+                     and available is not None and available >= int(estimate*1.25))
         state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
-          'student_parameters':{n:q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
+          'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
           'optimizer':optimizer.state_dict(),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
@@ -1547,15 +1573,30 @@ def main(argv=None):
               'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
               'observations':offload_observations[-64:]}}
         if emergency_recovery is not None:state['emergency_recovery']=emergency_recovery
-        atomic_checkpoint(state_path,state)
-        export_error=None
-        if write_export:
-            try:export_heads(report)
-            except Exception as error:
-                export_error=error
-                write_heads_export_status(export_error=export_error)
-                raise
-        write_heads_export_status(export_error=export_error)
+        export_snapshot=build_heads_export(report,export_step=step,snapshot=async_write) if write_export else None
+        report_snapshot=(immutable_cpu_snapshot(report) if async_write else report) if retain_best else None
+        saved_step=int(step)
+        def after_checkpoint(_snapshot):
+            nonlocal serving_heads_step
+            export_error=None
+            if export_snapshot is not None:
+                try:
+                    atomic_checkpoint(a.out/'heads.pt',export_snapshot)
+                    serving_heads_step=saved_step
+                except Exception as error:
+                    export_error=error
+                    write_heads_export_status(export_error=error,checkpoint_step=saved_step)
+                    raise
+            write_heads_export_status(export_error=export_error,checkpoint_step=saved_step)
+            if retain_best:
+                retain_best_checkpoint(a.out,report_snapshot)
+        try:
+            if async_write:
+                checkpoint_writer.submit(state_path,state,after_write=after_checkpoint)
+            else:
+                checkpoint_writer.write_synchronously(state_path,state,after_write=after_checkpoint)
+        except Exception:
+            raise
     if a.eval_only:
         report=evaluate(observe_schedule=False)
         (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -1574,10 +1615,10 @@ def main(argv=None):
             if continuation_rng is not None:restore_training_rng_state(continuation_rng,a.device)
         (a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
-        save(baseline);retain_best_checkpoint(a.out,baseline)
+        save(baseline,wait=True);retain_best_checkpoint(a.out,baseline)
+    checkpoint_snapshot_size_bound=warmup_checkpoint_size_upper_bound(named,heads,optimizer)
     checkpoint_reserve=CheckpointDiskReserve(
-        a.out/'.checkpoint-space.reserve',
-        warmup_checkpoint_size_upper_bound(named,heads,optimizer))
+        a.out/'.checkpoint-space.reserve',checkpoint_snapshot_size_bound)
     atexit.register(checkpoint_reserve.cleanup)
     try:
         checkpoint_reserve.acquire()
@@ -1586,6 +1627,8 @@ def main(argv=None):
                           'training_started':False,'step':step,'error':str(error)}),flush=True)
         checkpoint_reserve.cleanup()
         raise SystemExit(2)
+    # Drain pending output before reserve cleanup during interpreter shutdown.
+    atexit.register(drain_checkpoint_writer_at_exit)
     def recover_postcommit_persistence_failure(error):
         current_rng=capture_training_rng_state(a.device)
         try:
@@ -1907,14 +1950,22 @@ def main(argv=None):
             improved=best is None or score<best['score']
             if improved:best={'step':step,'score':score,'report':report}
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-            save(report,write_export=improved)
-            if improved:retain_best_checkpoint(a.out,report)
+            try:
+                save(report,write_export=improved,retain_best=improved)
+            except Exception as error:
+                recover_postcommit_persistence_failure(error)
+                return
         elif step%a.checkpoint_every==0 or time.monotonic()-last_save[0]>=60*a.checkpoint_minutes:
-            save(write_export=False)
+            try:
+                save(write_export=False)
+            except Exception as error:
+                recover_postcommit_persistence_failure(error)
+                return
         if report is not None and report.get('qualified'):
             return 'qualified'
         try:
-            checkpoint_reserve.ensure()
+            if not checkpoint_writer.pending:
+                checkpoint_reserve.ensure()
         except CheckpointReserveError as error:
             recover_postcommit_persistence_failure(error)
         return None
@@ -1924,6 +1975,11 @@ def main(argv=None):
         if path and Path(path).is_file():drop_file_cache(path)
     for _ in range(step,a.steps):
         if stop[0]:break
+        try:
+            checkpoint_writer.check()
+        except Exception as error:
+            recover_postcommit_persistence_failure(error)
+            return
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
         passes=controls['sequence_passes'];sketch_only=False
         if input_map:passes=min(passes,2)
@@ -2020,7 +2076,8 @@ def main(argv=None):
         # Interruptible: on a signal, persist the full resumable state at once. The held evaluation is not needed
         # to resume and would delay the stop past the container's kill timeout.
         try:
-            save(last_report if last_report is not None and last_report['step']==step else None,write_export=False)
+            save(last_report if last_report is not None and last_report['step']==step else None,
+                 write_export=False,wait=True)
         except Exception as error:
             recover_postcommit_persistence_failure(error)
             return
@@ -2037,11 +2094,11 @@ def main(argv=None):
         improved=best is None or score<best['score']
         if improved:best={'step':step,'score':score,'report':report}
         (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-        save(report)
-        if improved:retain_best_checkpoint(a.out,report)
+        save(report,retain_best=improved,wait=True)
     except Exception as error:
         recover_postcommit_persistence_failure(error)
         return
+    checkpoint_writer.drain()
     checkpoint_reserve.cleanup()
 
 if __name__=='__main__':main()

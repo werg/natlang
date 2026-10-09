@@ -1,6 +1,8 @@
 """Optimizer and atomic, complete state checkpoints for recurrence training."""
 import os
 import random
+import threading
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -106,6 +108,138 @@ def atomic_checkpoint(path, state):
         # Remove it so a post-commit recovery save can use the reserved space.
         pending.unlink(missing_ok=True)
         raise
+
+
+def immutable_cpu_snapshot(value):
+    """Copy a checkpoint tree into detached CPU tensors and immutable metadata values.
+
+    The returned tree has no tensor storage shared with a live model or optimizer,
+    so a background writer can serialize it while training continues. Unsupported
+    leaf types fail closed instead of risking a shallow or device-backed copy.
+    """
+    if isinstance(value, torch.Tensor):
+        return value.detach().to(device='cpu', copy=True)
+    if value is None or isinstance(value, (str, bytes, bool, int, float, complex)):
+        return value
+    if isinstance(value, (torch.device, torch.dtype)):
+        return value
+    if isinstance(value, torch.Size):
+        return torch.Size(value)
+    if isinstance(value, OrderedDict):
+        result = OrderedDict((immutable_cpu_snapshot(k), immutable_cpu_snapshot(v))
+                             for k, v in value.items())
+        if hasattr(value, '_metadata'):
+            result._metadata = immutable_cpu_snapshot(value._metadata)
+        return result
+    if isinstance(value, defaultdict):
+        result = defaultdict(value.default_factory)
+        result.update((immutable_cpu_snapshot(k), immutable_cpu_snapshot(v))
+                      for k, v in value.items())
+        return result
+    if isinstance(value, dict):
+        return {immutable_cpu_snapshot(k): immutable_cpu_snapshot(v)
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [immutable_cpu_snapshot(item) for item in value]
+    if isinstance(value, tuple):
+        items = tuple(immutable_cpu_snapshot(item) for item in value)
+        return type(value)(*items) if hasattr(value, '_fields') else items
+    if isinstance(value, set):
+        return {immutable_cpu_snapshot(item) for item in value}
+    if isinstance(value, frozenset):
+        return frozenset(immutable_cpu_snapshot(item) for item in value)
+    raise TypeError(f'unsupported checkpoint snapshot leaf: {type(value).__module__}.{type(value).__qualname__}')
+
+
+def available_system_memory_bytes():
+    """Return conservative host/cgroup memory availability, or ``None`` if unknown."""
+    available = None
+    try:
+        for line in Path('/proc/meminfo').read_text().splitlines():
+            if line.startswith('MemAvailable:'):
+                available = int(line.split()[1]) * 1024
+                break
+    except (OSError, ValueError, IndexError):
+        pass
+    limits = []
+    for root in (Path('/sys/fs/cgroup'), Path('/sys/fs/cgroup/memory')):
+        try:
+            limit_text = (root / ('memory.max' if root.name == 'cgroup' else 'memory.limit_in_bytes')).read_text().strip()
+            current_text = (root / ('memory.current' if root.name == 'cgroup' else 'memory.usage_in_bytes')).read_text().strip()
+            if limit_text != 'max':
+                limit, current = int(limit_text), int(current_text)
+                if limit > 0 and limit < (1 << 60):
+                    limits.append(max(0, limit - current))
+        except (OSError, ValueError):
+            pass
+    if limits:
+        available = min(limits + ([available] if available is not None else []))
+    return available
+
+
+class AsyncAtomicCheckpointWriter:
+    """Single-writer async persistence for an already detached checkpoint snapshot.
+
+    Snapshot construction stays on the training thread at a committed update
+    boundary. At most one write is outstanding; the next submission drains it,
+    providing bounded RAM/disk use and deterministic path ordering. An
+    ``after_write`` callback runs on the writer thread and must use only the
+    provided snapshot plus values already detached/copied by the caller.
+    """
+
+    def __init__(self):
+        self._thread = None
+        self._error = None
+        self._lock = threading.Lock()
+
+    def _finish(self, thread):
+        thread.join()
+        with self._lock:
+            error = self._error
+            self._thread = None
+            self._error = None
+        if error is not None:
+            raise error
+
+    def check(self):
+        thread = self._thread
+        if thread is not None and not thread.is_alive():
+            self._finish(thread)
+
+    @property
+    def pending(self):
+        return self._thread is not None and self._thread.is_alive()
+
+    def write_synchronously(self, path, state, *, after_write=None):
+        """Use the caller's update boundary for low-memory or emergency saves."""
+        self.drain()
+        atomic_checkpoint(path, state)
+        if after_write is not None:
+            after_write(state)
+
+    def drain(self):
+        thread = self._thread
+        if thread is not None:
+            self._finish(thread)
+
+    def submit(self, path, state, *, after_write=None, wait=False):
+        self.drain()
+        snapshot = immutable_cpu_snapshot(state)
+
+        def write():
+            try:
+                atomic_checkpoint(path, snapshot)
+                if after_write is not None:
+                    after_write(snapshot)
+            except BaseException as error:
+                with self._lock:
+                    self._error = error
+
+        thread = threading.Thread(target=write, name='neuralese-checkpoint-writer', daemon=False)
+        self._thread = thread
+        thread.start()
+        if wait:
+            self.drain()
 
 
 def _with_defaults(identity, defaults):
