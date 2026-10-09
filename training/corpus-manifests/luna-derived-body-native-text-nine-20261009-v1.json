@@ -1,0 +1,2196 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-derived-body-native-text-nine-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-01/jobs/000000-10eb3bdcbc6c2d4f.result.json",
+      "bytes": 3903010,
+      "sha256": "f848d81fdfbb2553853dde3d3d99540908f3cc10f54c11a44832afce44f0a24c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-01/jobs/000000-10eb3bdcbc6c2d4f.trace.jsonl",
+      "bytes": 943283,
+      "sha256": "f0a7cfd30acea340711ebb05fcc9f8716ccc10326c65e9401aae50be5de753ee",
+      "lines": 620
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3903010,
+      "sha256": "f848d81fdfbb2553853dde3d3d99540908f3cc10f54c11a44832afce44f0a24c",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 1698,
+      "sha256": "fdb92df673e84d2aea9e9822c33ba8fa9e0756e2caf97f77f8e526037fad696f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-02/jobs/000001-4bd175fac6edbf9a.result.json",
+      "bytes": 2813520,
+      "sha256": "d902b2b6a9f8c3d1a9b49cefcd5886d0a6246e9f68106b4d38fe094e7a3421e9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-02/jobs/000001-4bd175fac6edbf9a.trace.jsonl",
+      "bytes": 635995,
+      "sha256": "1847c3ffe8672b59445d3ce40d0f5d78a2ee54997ba00ab033df3755b598fc3e",
+      "lines": 442
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 2813520,
+      "sha256": "d902b2b6a9f8c3d1a9b49cefcd5886d0a6246e9f68106b4d38fe094e7a3421e9",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 1698,
+      "sha256": "00f7658a73cd90dbaec64c5563f1056e9f5c27765853fb77b96034d3a68bd2d4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-03/jobs/000002-b8a9bdc3ed9962b5.result.json",
+      "bytes": 2500641,
+      "sha256": "d2768b1e9f6f5c9c46677cd1c6980f0b602fcf014ded4e3e8228e1eba948e167"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-03/jobs/000002-b8a9bdc3ed9962b5.trace.jsonl",
+      "bytes": 670765,
+      "sha256": "baae32bc463a8fa18943d0a99a0649182ca6aaa18c3301967b4989fd9abad487",
+      "lines": 399
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 2500641,
+      "sha256": "d2768b1e9f6f5c9c46677cd1c6980f0b602fcf014ded4e3e8228e1eba948e167",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 1698,
+      "sha256": "520d956b8741061663f14af230788235b4b2318cbc7cc7a7fb5e2efe82ace935"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/action-review-v3.json",
+      "bytes": 17970298,
+      "sha256": "62d64acbbef55879875343cd0b55c9721301dd4818065438111210db8f3097e2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-00.json",
+      "bytes": 159320,
+      "sha256": "4ac0f485eb8d842d4c1de4763a688efee860172cb819cca4dbe6d33d765cef1c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-01.json",
+      "bytes": 183544,
+      "sha256": "a669f8e7700935f3478f594f7e12142b39802ef629b7154af7612b8d87533b41"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-02.json",
+      "bytes": 174912,
+      "sha256": "8110975a6a2b8acadcadeab6a8db5cdad67be70e678e93d8251030fb1d7252f4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-03.json",
+      "bytes": 166531,
+      "sha256": "3751d27ef48bc0820b4f693ad6765d6df0d153c8374483aa322b97d2368bfcb0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-04.json",
+      "bytes": 170631,
+      "sha256": "c3d03a548eb1eccd101d12fa50face60cdcd1f2ed6f9b8251bde35bada1e2377"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-05.json",
+      "bytes": 132537,
+      "sha256": "bf71553bae1a26ff56a5768f9684ae5ecb66611b70ac3f1452dac25fe32ed160"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-06.json",
+      "bytes": 159778,
+      "sha256": "5ceaec3c7c2a95d8d5112ca911ca85122dfdab1195c676ea99a2fe9ee07af277"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-07.json",
+      "bytes": 162163,
+      "sha256": "9ec8679e219dbf68612d9bd17c6f3e2b29c0f59b15d8bbea254965105148b8c1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/candidate-08.json",
+      "bytes": 168123,
+      "sha256": "deb05ad396286ecd7b1e3dcba70137b6184486027077d9d45944dd86ba49f8f6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/code-snapshot-v1/prepare_verified_observed_text_writer_candidate.mjs",
+      "bytes": 16028,
+      "sha256": "ccce0c1680f9a08bc6b6493667372013589dd70d4b34d0ffaa701480edd5af59"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/code-snapshot-v1/snapshot-manifest-v1.json",
+      "bytes": 872,
+      "sha256": "be62ccc2a2d61456f857b25a6d9346e32edeb9244881fb4fd096619956fb7a4e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/code-snapshot-v1/verified_code_closure.mjs",
+      "bytes": 2497,
+      "sha256": "76890dec105ec3e4917de185b77ec690637cf0c327dcad248481dad948a4e15f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/composition-review-proposal-v1.json",
+      "bytes": 16603,
+      "sha256": "0526ceb6564313870c77236990f29aa0a01ae5f31980a149db4f1e8baa6b4ef7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/composition-review-proposal-v2.json",
+      "bytes": 17289,
+      "sha256": "da67aaa967711120b0bb585fb42dc49492958e3ebf20ebc2befaff9884aff204"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/composition-review-proposal-v3.json",
+      "bytes": 19909,
+      "sha256": "422a61240690bbde0af03003e8cfebb90910bad474e29c959e46083a63bc63ea"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/immutable-code-rebind-proposal-v1.json",
+      "bytes": 15904,
+      "sha256": "e342b4bca2b0fd8064a969d8e7c8570cd14b4c8aec1d8d718e4095d930b01f12"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v2/materializer-code-snapshot-v1/materialize_root_approved_derived_writer_row.mjs",
+      "bytes": 7875,
+      "sha256": "ba4cf54e4e9a6f2965473f3a217bd06b721c7cd9893b728017f3f8c391fce6a5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v2/materializer-code-snapshot-v1/snapshot-manifest-v1.json",
+      "bytes": 850,
+      "sha256": "3026a87055c54a7f65781f67ba5d0bf7a0a25ca8491bc4d169600f66f41b65d5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v2/materializer-code-snapshot-v1/verified_code_closure.mjs",
+      "bytes": 2497,
+      "sha256": "76890dec105ec3e4917de185b77ec690637cf0c327dcad248481dad948a4e15f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/delta-derived-native-records-v2.jsonl",
+      "bytes": 1587676,
+      "sha256": "70b9d77d811a6b05fea4391bdb30ebe6cf17d205b425dfb63173d0dae21f5085",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/delta-native-pieces-v2.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-00.json",
+      "bytes": 205116,
+      "sha256": "b44485da063b8796b8c94cc98fc3a765d8cd8bd5f80e54c5535bafc235247966"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-01.json",
+      "bytes": 220718,
+      "sha256": "4213bdfd9e5ce2a01646bb9e24cc961cdecd94e430549626298585294c9efec7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-02.json",
+      "bytes": 216671,
+      "sha256": "e8a5e3e92584ef448bcc4cd95734e2b41c74a70d1adb953825c91044edf8e16d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-03.json",
+      "bytes": 210917,
+      "sha256": "c23d74adf86fc7cf2623383278a7c8822a3e2de0f012534834ea8454d011ec11"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-04.json",
+      "bytes": 213707,
+      "sha256": "d3d7e1bbc85faa6bc69133349a8590297abe5fd25405a920b431a09fbb8eb83d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-05.json",
+      "bytes": 148621,
+      "sha256": "9aeb158d94748039d02fb6d4594c62d7153b10a389ceb4880ef7677cf3e22df4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-06.json",
+      "bytes": 206360,
+      "sha256": "765fc04d74ae81c054ded42de3666e4ed5f442709e6ab336adce747f5925d10e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-07.json",
+      "bytes": 214395,
+      "sha256": "33775e39383dc507da4981045acaf8a115eb71a34d90c779bc8ebcc2eb7d2150"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/derived-native-08.json",
+      "bytes": 212066,
+      "sha256": "771d01a13415d5810460f3eab3abb1c6ed1661b08a100e1eb4ecb10f8dc5a7ed"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/materializer-code-snapshot-v1/materialize_root_approved_derived_writer_row.mjs",
+      "bytes": 7875,
+      "sha256": "ba4cf54e4e9a6f2965473f3a217bd06b721c7cd9893b728017f3f8c391fce6a5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/materializer-code-snapshot-v1/snapshot-manifest-v1.json",
+      "bytes": 842,
+      "sha256": "3a660c2492d677b9e6c812e0b18cbc3c7ba3db65af023a30f4702957ab929343"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/materializer-code-snapshot-v1/verified_code_closure.mjs",
+      "bytes": 2497,
+      "sha256": "76890dec105ec3e4917de185b77ec690637cf0c327dcad248481dad948a4e15f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/native-compact-proposal-v2/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/native-compact-proposal-v2/delta-native-records.jsonl",
+      "bytes": 1590907,
+      "sha256": "5df984e49dc5da13a8a466d21fa86e42d6044f760530be048c17f2572af2d179",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/native-compact-proposal-v2/proposal-manifest.json",
+      "bytes": 11065,
+      "sha256": "b168c437dbd2ed98c3abb33c26df3714f47ba2d0cb85cc6ddb716e3fad91dfdc"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/native-delta-v3/native-compact-proposal-v2/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-empty-pieces-v1.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-empty-pieces-v2.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-replacement-native-row-v1.json",
+      "bytes": 152665,
+      "sha256": "b7c934e6e8b9b34689baf835da6af24d494c0adef6660b5d4f2495bd37244b10"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-replacement-records-v1.jsonl",
+      "bytes": 152665,
+      "sha256": "b7c934e6e8b9b34689baf835da6af24d494c0adef6660b5d4f2495bd37244b10",
+      "lines": 1637
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-replacement-records-v2.jsonl",
+      "bytes": 132073,
+      "sha256": "2b70c7be18f2e2adea707e17d04c4e0320a0b9f1e3a18e7a4ffd0f6f9564588d",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/README.md",
+      "bytes": 1438,
+      "sha256": "d69f5a53172d100f6f5e0a52d945099f237971e76b4569cbd22a86633526c21c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/delta-provenance.jsonl",
+      "bytes": 2041,
+      "sha256": "29d6ba76ac69726b195f5fd28bcf3b09d675b523eaa9c7efa0042402014cf85d",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/delta-text.jsonl",
+      "bytes": 66097,
+      "sha256": "e47b17e5d871ebe328a9af032474600db74b6c8447d4cce96deb3ee76c601dba",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/output-manifest.json",
+      "bytes": 1433,
+      "sha256": "78f86043a1762ef98ec8edc669341b55e712df9d78aaedc565c668f6a5e56745"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/packet-manifest.json",
+      "bytes": 1971,
+      "sha256": "02d945b6b9a1d488ce872eaede0c6026a5e5f17aa00fb62535992ebe2968d20e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/provider-context-bindings.jsonl",
+      "bytes": 2393,
+      "sha256": "90ff2fd421def1c2bf7823b438d15802f298d1226d54b7c1254e90decc6d3b59",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/receipt.json",
+      "bytes": 5451,
+      "sha256": "591cde22f6784e36b1ee63743d7ccf06d174631497ba4fe5dc38a5b21f930b2a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/river-replacement-v1/river-text-replacement-view-v2/source-coverage.jsonl",
+      "bytes": 511,
+      "sha256": "43bbd1a9d5ce2c21cdfd8e2bd573540847ab5ea6cc4c9e5362dcf10a59dc7fb9",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-00.jsonl",
+      "bytes": 205116,
+      "sha256": "b44485da063b8796b8c94cc98fc3a765d8cd8bd5f80e54c5535bafc235247966",
+      "lines": 2432
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-proof-v2.json",
+      "bytes": 15363,
+      "sha256": "508cdfb6ab439b240d21c33321082e34dbaf4651427f377c5a3b56600137a407"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-00.jsonl",
+      "bytes": 205116,
+      "sha256": "b44485da063b8796b8c94cc98fc3a765d8cd8bd5f80e54c5535bafc235247966",
+      "lines": 2432
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-01.jsonl",
+      "bytes": 220718,
+      "sha256": "4213bdfd9e5ce2a01646bb9e24cc961cdecd94e430549626298585294c9efec7",
+      "lines": 2504
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-02.jsonl",
+      "bytes": 216671,
+      "sha256": "e8a5e3e92584ef448bcc4cd95734e2b41c74a70d1adb953825c91044edf8e16d",
+      "lines": 2432
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-03.jsonl",
+      "bytes": 210917,
+      "sha256": "c23d74adf86fc7cf2623383278a7c8822a3e2de0f012534834ea8454d011ec11",
+      "lines": 2521
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-04.jsonl",
+      "bytes": 213707,
+      "sha256": "d3d7e1bbc85faa6bc69133349a8590297abe5fd25405a920b431a09fbb8eb83d",
+      "lines": 2521
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-05.jsonl",
+      "bytes": 148621,
+      "sha256": "9aeb158d94748039d02fb6d4594c62d7153b10a389ceb4880ef7677cf3e22df4",
+      "lines": 1142
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-06.jsonl",
+      "bytes": 206360,
+      "sha256": "765fc04d74ae81c054ded42de3666e4ed5f442709e6ab336adce747f5925d10e",
+      "lines": 2432
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-07.jsonl",
+      "bytes": 214395,
+      "sha256": "33775e39383dc507da4981045acaf8a115eb71a34d90c779bc8ebcc2eb7d2150",
+      "lines": 2468
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/native-replay-v2-08.jsonl",
+      "bytes": 212066,
+      "sha256": "771d01a13415d5810460f3eab3abb1c6ed1661b08a100e1eb4ecb10f8dc5a7ed",
+      "lines": 2435
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/proof.json",
+      "bytes": 9174,
+      "sha256": "42bfa08d60a8db57440704fb453b967e6b9b066ba382c057c23f6c924728b2a7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/replay_native.py",
+      "bytes": 1977,
+      "sha256": "5123b56445cc9c04756fe673f24c9018d8c6587755345e3419ab52cb5c2b23c7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/replay_native_v2.py",
+      "bytes": 2555,
+      "sha256": "eefc57bdab87c47079c1f205fba33e6458b7562379645d6cb9df0a1d556ec364"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/replay_text.py",
+      "bytes": 1570,
+      "sha256": "73063defcc02995e275737d86d26d6b4338489df11a7b5d361d04a7db102aa2a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/replay_text_v2.py",
+      "bytes": 1569,
+      "sha256": "2a7a3b8b33bfd108d8f3a6af33b8376fd16e6c4e6d5e505988130c4c20b14eb9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/review.py",
+      "bytes": 4450,
+      "sha256": "f66880264ed257a578effdd9db13dba5ac424809de95fe99146b708b1fb331b7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/root-derived-native-text-composition-adoption-v1.json",
+      "bytes": 2662,
+      "sha256": "7c6df7c00ea810c13b30f5e3f6197e591de3b3a477a2e0dee021c6ff565eee11"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/root-derived-native-text-composition-review-v1.json",
+      "bytes": 2548,
+      "sha256": "0d41a70ea5604cf093bfdda93b104b5b866acb2ba6a67e70199bd1b4c5a11fab"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/README.md",
+      "bytes": 1439,
+      "sha256": "50d3ece0a3c7baa7e185f02300a091968f74b887504be21c2617516a9e9049c4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/delta-provenance.jsonl",
+      "bytes": 22400,
+      "sha256": "da111490049dd86237c99e5680c588af5e336a5ca6df7684778a3b4db5b57312",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/delta-text.jsonl",
+      "bytes": 937479,
+      "sha256": "df9bf2a2d207ac5f80b228988531074c1aa8653c6e1e0679b29d8656cf303442",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "041da3d70653aca26e009b8f3f93120ad5ca15d93cd5baa3e8d15a2861fe7b6e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "66bb4a575b048050634660b8e15d2fc11e5b927efedf64379e3537dec57e093d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/provider-context-bindings.jsonl",
+      "bytes": 18128,
+      "sha256": "c0970cedd99437241c303a3043efb349686efbebec9bc867b6a6102fef0c7201",
+      "lines": 8
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/receipt.json",
+      "bytes": 5447,
+      "sha256": "1c5b5aa35126a877673289b720697d698b9c550163e252e2eb105e227a960e61"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay/source-coverage.jsonl",
+      "bytes": 4626,
+      "sha256": "3da18d4a9333c052b6b2a634848a3f0c6e43de0349772b4db07113cc2a94f978",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay-proof.json",
+      "bytes": 3758,
+      "sha256": "cbf967c5a24d571d08f6e4837614f29a4a7c722c62024958489cfe18f35ed77c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/text-replay.log",
+      "bytes": 2125,
+      "sha256": "611485987f3ee86c5df28c4a8c985d9d147abd48f85ffd5f665d4016ed659c21"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-00-replay.json",
+      "bytes": 159320,
+      "sha256": "4ac0f485eb8d842d4c1de4763a688efee860172cb819cca4dbe6d33d765cef1c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-01-replay.json",
+      "bytes": 183544,
+      "sha256": "a669f8e7700935f3478f594f7e12142b39802ef629b7154af7612b8d87533b41"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-02-replay.json",
+      "bytes": 174912,
+      "sha256": "8110975a6a2b8acadcadeab6a8db5cdad67be70e678e93d8251030fb1d7252f4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-03-replay.json",
+      "bytes": 166531,
+      "sha256": "3751d27ef48bc0820b4f693ad6765d6df0d153c8374483aa322b97d2368bfcb0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-04-replay.json",
+      "bytes": 170631,
+      "sha256": "c3d03a548eb1eccd101d12fa50face60cdcd1f2ed6f9b8251bde35bada1e2377"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-05-replay.json",
+      "bytes": 132537,
+      "sha256": "bf71553bae1a26ff56a5768f9684ae5ecb66611b70ac3f1452dac25fe32ed160"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-06-replay.json",
+      "bytes": 159778,
+      "sha256": "5ceaec3c7c2a95d8d5112ca911ca85122dfdab1195c676ea99a2fe9ee07af277"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-07-replay.json",
+      "bytes": 162163,
+      "sha256": "9ec8679e219dbf68612d9bd17c6f3e2b29c0f59b15d8bbea254965105148b8c1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-08-replay.json",
+      "bytes": 168123,
+      "sha256": "deb05ad396286ecd7b1e3dcba70137b6184486027077d9d45944dd86ba49f8f6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/candidate-09-replay.json",
+      "bytes": 121761,
+      "sha256": "121ed2ce6c1c2e7d866a0a7a368605a87f3585f8436e39f889c37661b8e7c566"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/proof.json",
+      "bytes": 3909,
+      "sha256": "6edc544d76cfb926639b3793ea4ed4b95f648ee1e46a308ec75c0817470793cb"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-00-admission-v2.json",
+      "bytes": 5312,
+      "sha256": "11ab760d81775a488c3342062f96fc427ad758aad2f12c5702206652a27b7f4c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-01-admission-v2.json",
+      "bytes": 5379,
+      "sha256": "aad4feb2bba497494f17b33852d0dd2d1a29dd6d502953177d4afce28b7f1785"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-02-admission-v2.json",
+      "bytes": 5342,
+      "sha256": "a4721faf3d8e525e3dccd45276d307b37340bb754e7b15053f3dd408496029e2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-03-admission-v2.json",
+      "bytes": 5339,
+      "sha256": "8c5c8d4880f74ca072193a69503f20fcd19bbfca91dbd2656ffb2ab05cce5a61"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-04-admission-v2.json",
+      "bytes": 5311,
+      "sha256": "5fe0986ec7fefccc5e9902e024402c1ce94838b8195ee3a95a541f45a12cf544"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-05-admission-v2.json",
+      "bytes": 5369,
+      "sha256": "879ebf3a681f32f0ef84f13fdef2348a2d1e6ed6e2609acb71119e450b2f914a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-06-admission-v2.json",
+      "bytes": 5333,
+      "sha256": "08ae3ac352f43cbfb985983697896f4722e49a7968b8f8becbf2f4ea2c599d58"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-07-admission-v2.json",
+      "bytes": 5340,
+      "sha256": "420ee03d79f3a5d4ebbcce5a8deaa5c85169651325f8bcde012b8502bbbaa2f8"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-body-08-admission-v2.json",
+      "bytes": 5338,
+      "sha256": "aa208cd167a15861b1620ada646630cb3b7a63d663c4ea570f67f53377177e68"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-nine-derived-body-admission-index-v2.json",
+      "bytes": 3690,
+      "sha256": "86cc4a8563a57f41c73d143740fc4553d7bfe37da62bae2ddd3b5ddbc018b7d9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-immutable-rebind-review-v1/root-river-body-admission-v2.json",
+      "bytes": 5252,
+      "sha256": "5871f2ca63aaf3e9eb8f3df261a01fcdd8738af6ea910ba632ca2dbf4282cfe1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-builder-code-snapshot-v1/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 64529,
+      "sha256": "8946cce0623366cd88735d4eb2832a7b228fe453a79878ad2c00a97d4c2cffcb"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-builder-code-snapshot-v1/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-builder-code-snapshot-v1/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-builder-code-snapshot-v1/snapshot-manifest-v1.json",
+      "bytes": 1743,
+      "sha256": "c9252e8c41a47ee31677bf97e9dfc2906ec9a9cf9127759e186c072d9e22b888"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/README.md",
+      "bytes": 1439,
+      "sha256": "50d3ece0a3c7baa7e185f02300a091968f74b887504be21c2617516a9e9049c4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/delta-provenance.jsonl",
+      "bytes": 22400,
+      "sha256": "da111490049dd86237c99e5680c588af5e336a5ca6df7684778a3b4db5b57312",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/delta-text.jsonl",
+      "bytes": 937479,
+      "sha256": "df9bf2a2d207ac5f80b228988531074c1aa8653c6e1e0679b29d8656cf303442",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "2b1c12e3608cf59de84ed46599c43fdf57b9b87dbbf4f177559b8c9cf70e8d09"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "4c16217d3eff30710943063511910b572358a3bde0c053442c9698fbc598088c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/provider-context-bindings.jsonl",
+      "bytes": 18128,
+      "sha256": "c0970cedd99437241c303a3043efb349686efbebec9bc867b6a6102fef0c7201",
+      "lines": 8
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/receipt.json",
+      "bytes": 5447,
+      "sha256": "9169de753aa24809143a783fc911e88015cc923ff2b805aa5ada23187ae08384"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2/source-coverage.jsonl",
+      "bytes": 4626,
+      "sha256": "3da18d4a9333c052b6b2a634848a3f0c6e43de0349772b4db07113cc2a94f978",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-proof-v1.json",
+      "bytes": 7673,
+      "sha256": "1efd950eec28634d72faf6c68c758ef056461fc6f3ba55deff3e1d06fe7c51c6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/README.md",
+      "bytes": 1439,
+      "sha256": "50d3ece0a3c7baa7e185f02300a091968f74b887504be21c2617516a9e9049c4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/delta-provenance.jsonl",
+      "bytes": 22400,
+      "sha256": "da111490049dd86237c99e5680c588af5e336a5ca6df7684778a3b4db5b57312",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/delta-text.jsonl",
+      "bytes": 937479,
+      "sha256": "df9bf2a2d207ac5f80b228988531074c1aa8653c6e1e0679b29d8656cf303442",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "041da3d70653aca26e009b8f3f93120ad5ca15d93cd5baa3e8d15a2861fe7b6e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "66bb4a575b048050634660b8e15d2fc11e5b927efedf64379e3537dec57e093d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/provider-context-bindings.jsonl",
+      "bytes": 18128,
+      "sha256": "c0970cedd99437241c303a3043efb349686efbebec9bc867b6a6102fef0c7201",
+      "lines": 8
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/receipt.json",
+      "bytes": 5447,
+      "sha256": "1c5b5aa35126a877673289b720697d698b9c550163e252e2eb105e227a960e61"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1/source-coverage.jsonl",
+      "bytes": 4626,
+      "sha256": "3da18d4a9333c052b6b2a634848a3f0c6e43de0349772b4db07113cc2a94f978",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/text-delta-v2-frozen-replay-v1.log",
+      "bytes": 2125,
+      "sha256": "611485987f3ee86c5df28c4a8c985d9d147abd48f85ffd5f665d4016ed659c21"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/scoped-writer-action-candidate-packet-v1.json",
+      "bytes": 447257,
+      "sha256": "e7f786cc533fd1e24c068ae6c16e92710a725a38f73cfa25563e0f7f89efb299"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/source-oracle-v1.json",
+      "bytes": 22980,
+      "sha256": "af33d3d1f4cab885cb203f4980fbb60bdad88296bfc39ba8520880c7bb9458f0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/dispatch-plan-approved-v2.json",
+      "bytes": 13197,
+      "sha256": "adc42257cee7dcc5c52d8cee61e1c06d668934469c9593471aa291b435fd8cb4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/nine-action-publication-code-snapshot-v1/assemble_admitted_neuralese_cohort.py",
+      "bytes": 34715,
+      "sha256": "fcda9303051ae3898de43053f03a987050b50d76da66fe42ac157b174d86cd89"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/nine-action-publication-code-snapshot-v1/build_neuralese_gold_text_delta.py",
+      "bytes": 60698,
+      "sha256": "52024806b1a61ed2f6fa5e767025ec11c408ef691c8cceafaea0fbf4a2f88285"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/nine-action-publication-code-snapshot-v1/manifest.json",
+      "bytes": 869,
+      "sha256": "bd78187fadd88db3e70af916d08e3131f9ff6042082c49075d3efda056f47fa1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-dispatch-approval-v1.json",
+      "bytes": 1577,
+      "sha256": "febdace8d17b25bf945644359fbb65ba5657e0a25073ca2499f063c58d334182"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/case-0-full-native.jsonl",
+      "bytes": 6314406,
+      "sha256": "56e29848e1593bba027365d7cc782564c397e61f605fc17ade6ec522129131ea",
+      "lines": 44
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/case-1-full-native.jsonl",
+      "bytes": 4633111,
+      "sha256": "d0de57675c4e9dc8792d2467141969ea2e1377382c02c566851c5ef1ef221ffe",
+      "lines": 31
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/case-2-full-native.jsonl",
+      "bytes": 4043667,
+      "sha256": "b3d4210907bf942f00f7bde85aed3969788ef44121d86b1d5131ce7bd41efbb9",
+      "lines": 27
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/decode_and_union.py",
+      "bytes": 2781,
+      "sha256": "8b7c9c73b4a059a681937fd7e085b9c6e15bd5040c0eff6b164791d254bf2d0c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/replay.mjs",
+      "bytes": 5774,
+      "sha256": "025f454275d69ef4067214cf8e9eda4ede7d15b88b5cd33e587a0c126fe5796c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/replay_text.py",
+      "bytes": 2675,
+      "sha256": "2338de2feb66246fd448c7b1e4112f010b30426dfe3edbf2b349bb6be6f0f119"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/root-selected-action-admission-v1.json",
+      "bytes": 15643,
+      "sha256": "70b4f1062ece33f14b7ac5f38693042497ed3cf8a17f13687c1e837e4a458942"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/root-union-tokenizer-review-v1.json",
+      "bytes": 3027,
+      "sha256": "34bc2db4b9ffdde8f2ba01a2a359387f3c3060f85e9d1f7c475ef6c612d612d2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 60698,
+      "sha256": "52024806b1a61ed2f6fa5e767025ec11c408ef691c8cceafaea0fbf4a2f88285"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/data/text_corpus.py",
+      "bytes": 78570,
+      "sha256": "10cbefcb4e75c425372b18f700534f0ab20a1410844985b6e36a1be25a78895c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/grad.py",
+      "bytes": 53910,
+      "sha256": "d60da9f6c257caec0515c08030f1728a2349a97da83714bec292cadef405fd4f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/recipe.py",
+      "bytes": 26705,
+      "sha256": "679e5e1c3f4cd8d09ec42633522705d8df2d372431ffb92c156c9974dc016319"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/staging.py",
+      "bytes": 8533,
+      "sha256": "3b214918589207065175868d13d0eeed437d57a7651c2b9d220bddb96331287e"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/trajectories.py",
+      "bytes": 125432,
+      "sha256": "9a6003a4628b71c3e3c7ad9402a8648fa431c3c002d57695bb4105269568e4de"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/code/training/neuralese/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/proof.json",
+      "bytes": 22326,
+      "sha256": "fb5e8fa69471b43cfce9fc612fa95daab1f3b76e16bf8147f44c4900e2ff355b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/replay.log",
+      "bytes": 2125,
+      "sha256": "611485987f3ee86c5df28c4a8c985d9d147abd48f85ffd5f665d4016ed659c21"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/README.md",
+      "bytes": 1439,
+      "sha256": "50d3ece0a3c7baa7e185f02300a091968f74b887504be21c2617516a9e9049c4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/delta-provenance.jsonl",
+      "bytes": 21280,
+      "sha256": "dc779bc74134b52b146761b14ad596461c8495d3e50e136331fc6909629222d8",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/delta-text.jsonl",
+      "bytes": 911898,
+      "sha256": "f62861a28300a0934d0cad326847e365fd764a2a742a624a6e9233d37e813651",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "369498f55e7da5d325a7e6625f134acc8d2a55c32246f0d1c363bf86a87563c2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "108bd4e78262daa8db605fa971d202fd9a5412aa981d2ee4fd4018d04bca0c91"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/provider-context-bindings.jsonl",
+      "bytes": 17872,
+      "sha256": "9bcdec2b73686a962ec692ab83cb861a08c4adb484921d3e3ed2e91a1e145995",
+      "lines": 8
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/receipt.json",
+      "bytes": 5398,
+      "sha256": "40bf4e9d928269e3d006dec37c509490248a6dc63fffd379f191bcffff3e31a2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/text-replay/result/source-coverage.jsonl",
+      "bytes": 3762,
+      "sha256": "95541233ff0354977808fba06b8a4f02bd613792cae40ebd70bee80483c1e1d0",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/source-inventory-v1.json",
+      "bytes": 13806,
+      "sha256": "f69bf92500d7a955763540898af83ce71e775c48c916b183555c7d7c465644b6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/inputs/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/inputs/delta-native-records.jsonl",
+      "bytes": 1535336,
+      "sha256": "cc8278c81ac6414fe51c6c10d0c86dc5bdf0696351e09dc67ba0644e494ffaea",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/native-compact-proposal-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/native-compact-proposal-v1/delta-native-records.jsonl",
+      "bytes": 1538009,
+      "sha256": "f7dfb8c0893f247ee03a79be23484d16a66643e85f8460f5066fc81c59f5578f",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/native-compact-proposal-v1/proposal-manifest.json",
+      "bytes": 10608,
+      "sha256": "11dc476a47c215b859222cbff78bd80f40897069f5e5ee639a97fa4ac5b0c3d2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/native-compact-proposal-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/proposal-review-packet-v1.json",
+      "bytes": 11959,
+      "sha256": "9a01baa691a0b98d7853a002c2cd63739172d52cf8661206b632d488decfbbd5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/root-native-text-composition-adoption-v1.json",
+      "bytes": 2192,
+      "sha256": "663902f8a2445cb3dfa2bd7db4ea9db99811de33614d0855ad329b698e324b15"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/root-native-text-composition-review-v1.json",
+      "bytes": 1972,
+      "sha256": "e2c8f772b79541a2cc7451de36468d427e17833061ccff2bfb892fba5428281a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/README.md",
+      "bytes": 1439,
+      "sha256": "50d3ece0a3c7baa7e185f02300a091968f74b887504be21c2617516a9e9049c4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/delta-provenance.jsonl",
+      "bytes": 21280,
+      "sha256": "dc779bc74134b52b146761b14ad596461c8495d3e50e136331fc6909629222d8",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/delta-text.jsonl",
+      "bytes": 911898,
+      "sha256": "f62861a28300a0934d0cad326847e365fd764a2a742a624a6e9233d37e813651",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "369498f55e7da5d325a7e6625f134acc8d2a55c32246f0d1c363bf86a87563c2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "108bd4e78262daa8db605fa971d202fd9a5412aa981d2ee4fd4018d04bca0c91"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/provider-context-bindings.jsonl",
+      "bytes": 17872,
+      "sha256": "9bcdec2b73686a962ec692ab83cb861a08c4adb484921d3e3ed2e91a1e145995",
+      "lines": 8
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/receipt.json",
+      "bytes": 5398,
+      "sha256": "40bf4e9d928269e3d006dec37c509490248a6dc63fffd379f191bcffff3e31a2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/nine-action-native-text-proposal-v1/text-delta-v2/source-coverage.jsonl",
+      "bytes": 3762,
+      "sha256": "95541233ff0354977808fba06b8a4f02bd613792cae40ebd70bee80483c1e1d0",
+      "lines": 9
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/source/three-distinct-v7-skill-v1.jsonl",
+      "bytes": 127542,
+      "sha256": "9fd47176a2bb6712e3ba5c48c13c1a7ecbd6d6de4e834fcdb68619c4383dbb65",
+      "lines": 3
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/text_corpus.py",
+      "bytes": 78570,
+      "sha256": "10cbefcb4e75c425372b18f700534f0ab20a1410844985b6e36a1be25a78895c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/grad.py",
+      "bytes": 53910,
+      "sha256": "d60da9f6c257caec0515c08030f1728a2349a97da83714bec292cadef405fd4f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/recipe.py",
+      "bytes": 26705,
+      "sha256": "679e5e1c3f4cd8d09ec42633522705d8df2d372431ffb92c156c9974dc016319"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/staging.py",
+      "bytes": 8533,
+      "sha256": "3b214918589207065175868d13d0eeed437d57a7651c2b9d220bddb96331287e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectories.py",
+      "bytes": 125432,
+      "sha256": "9a6003a4628b71c3e3c7ad9402a8648fa431c3c002d57695bb4105269568e4de"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/renderer-package-manifest-v1.json",
+      "bytes": 15773,
+      "sha256": "1e8c9e95b79f22ef3477f686bfdf5767fcae25a2602512ecf1ab2c97ee4d8dfd"
+    },
+    {
+      "path": "luna-staged-eval-return-writer-fix-20261009-v1/evidence/materializer-code-manifest-v2.json",
+      "bytes": 28130,
+      "sha256": "57821768b3b113aa7df67ee5ef0354b4c1687572eff78341ea663855ac64738b"
+    },
+    {
+      "path": "luna-staged-eval-return-writer-fix-20261009-v1/evidence/materializer-code-v1/materializer-code/dist/teacher/native-materializer.js",
+      "bytes": 109322,
+      "sha256": "222d375b9f5f84bff180579e1880a2cfca67d9b3bd498e88469cb26d6e3fd690"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+      "bytes": 1941,
+      "sha256": "76ad042a1fb45c9b3a002a469be6c160645543a35750a426541cc012d0e3c136"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json",
+      "bytes": 6284,
+      "sha256": "db43586b406e5d4d6535e4e11bdd46a53120d1695eb7c4988e3d24b6993c8ee8"
+    }
+  ],
+  "bytes": 76449479
+}
