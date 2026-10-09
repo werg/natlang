@@ -43,8 +43,10 @@ probe the provider.
 
 ## Step 5 Preview Free
 
-Use `--model opencode/step-5-preview-free --variant low` with the official
-OpenCode client. The bootstrap pins both its main and small model to this free
+Use the CLI-backed launcher `opencode-cli-loopback-bwrap-launch.mjs` with
+`--model step-5-preview-free --variant low --tool-surface standard`. The launcher
+takes the bare free model ID; the collector and generated OpenCode configuration
+use `opencode/step-5-preview-free`. The bootstrap pins both its main and small model to this free
 alias and supplies an explicit session title. Keep the ordinary built-in tool
 schemas available under permission asks: removing them causes this provider's
 free-tier route to reject requests. The bridge rejects native permission
@@ -70,7 +72,14 @@ unsupported. The bridge asks for one strict JSON text object, parses it without
 delimiter repair, and records that the provider did not enforce the response
 schema. It can escape literal control characters inside JSON strings without
 changing their decoded contents; malformed delimiters remain rejected. It
-preserves the parsed action object and audited assistant usage in the raw
+also accepts one whole-response JSON or unlabeled code fence around an otherwise
+valid envelope. Literal backticks inside JSON string payloads are preserved;
+extra prose, additional fences outside JSON strings, and undeclared tools fail
+validation. Original response hashes and normalization kind remain recorded.
+Provider retry events distinguish synthetic bridge status from the upstream
+HTTP status, which the CLI may not expose. Preserve those failures as transport
+evidence rather than incorrect model answers. The adapter preserves the parsed
+action object and audited assistant usage in the raw
 response. `SIGINT` and `SIGTERM` close the adapter
 and official SDK server; during SDK startup the signal is also passed through
 and startup is aborted before the adapter is created. Starting this script
