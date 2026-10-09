@@ -1,3 +1,36 @@
+## Pop shared architecture and live mapped continuation — 2026-10-09 14:15 UTC
+
+- Canonical lineage is shared across LFM and the DGX owner's new Mellum student:
+  mapped text adaptation → full-depth autoregressive feedback fixup → exact-weight
+  runtime qualification → recurrence. Shared trainer, recipe runner and default
+  declarations have been consolidated; obsolete sketch text-training controls
+  were removed. Serving sketch initialization remains separate. See
+  `plans/neuralese/TRAINING_RECIPE.md` and `plans/neuralese/DECISIONS.md`.
+- Pop GPU is running immutable `luna-map-refresh-step22272-v5`, recipe
+  `training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json`
+  (SHA `2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84`).
+  Frozen code is `d915133f`; source checkpoint step22272 restores complete
+  optimizer/schedule/RNG. Input remains the target-bound4880 corpus, SHA
+  `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
+  At eval23424 the gate is false: pass1 long-start agreement .994602,
+  excessCE .000138 and embedding excess .01792. Improving metrics do not grant
+  qualification. No AR training has launched yet.
+- New launches use `71b80e10`: AR fixup can retain real preceding context within
+  16K while limiting generated target spans to256 via shared lazy windows.
+  QAT/member CLI options are exposed through the shared recipe handlers; no
+  LFM objective defaults were changed. Do not hotpatch the active container.
+- Actual CPU AR primitive control, exact import closure and commands are pinned
+  in `runs/neuralese-ar-feedback-cpu-primitive-control-20261009-v2/receipt-v2.json`
+  (SHA `a88aeab7c8c2e624b9e08b32613caef06d3a570e8f3dbb3b76b9ff09651e46a4`).
+  This is a finite-gradient/optimizer control, not runtime or quality qualification.
+- Six purposeful Luna repairs passed case oracles; their199 actions remain held.
+  Review proposal at `runs/luna-six-successes-199-action-quality-review-20261009-v1`
+  nominates27 actions; causal visibility and root admission are still pending.
+  No new-world or admitted training counts accrue from case success alone.
+- DGX was notified to pull the shared graph/QAT/AR updates. Its agent owns
+  Mellum execution; Pop does not manage DGX jobs. The stopped sketch run remains
+  held artifact evidence, synced through its curated17-file manifest.
+
 ## Pop course correction: restore mapped-input training — 2026-10-09
 
 The user caught a genuine regression: Pop resumed sketch warm-up although the
