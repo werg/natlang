@@ -1,0 +1,53 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+  "files": [
+    {
+      "path": "conversion.json",
+      "bytes": 1657,
+      "sha256": "c4ec9589b07634c8b27845a7211beb14c8dd335bad39e7536da89268143a5dea"
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 3318,
+      "sha256": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+      "lines": 2
+    },
+    {
+      "path": "prepared.jsonl",
+      "bytes": 112584690,
+      "sha256": "0fe4d3fa701f8014f40609690fee3e96b7e9fef0e86e3ae4371e98c14700bc28",
+      "lines": 492
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 544621474,
+      "sha256": "be22d6f7074d87ddfd5303453671defa429164da8f57373d0d1d155e3b0fe5e5",
+      "lines": 3843
+    },
+    {
+      "path": "replay.log",
+      "bytes": 48213,
+      "sha256": "cb41dcd1cfc0ed69d445bcb65326a26a393731593ad9f081982828e827f6a5a0"
+    },
+    {
+      "path": "replayed.jsonl",
+      "bytes": 107634220,
+      "sha256": "a81c3e4ee1a90772885a245041af84c8e852cb894a2d7a8097e4c41c9ff8a933",
+      "lines": 489
+    },
+    {
+      "path": "summary.json",
+      "bytes": 365,
+      "sha256": "ad82cb1bb06f879e5562c61a31905fca038efe5a8e9c2eb8195603759f2f0b4b"
+    },
+    {
+      "path": "surface.json",
+      "bytes": 5520,
+      "sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050"
+    }
+  ],
+  "bytes": 764899457
+}
