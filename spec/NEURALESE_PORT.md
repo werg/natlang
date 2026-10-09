@@ -194,9 +194,17 @@ the headers is sent as an `{"error": …}` event; `[DONE]` ends the stream.
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (block body). 400 `neuralese-bad-block` for a malformed body, 400 `neuralese-id-mismatch` when the content hashes to another ID. The first block of an ID is kept (a later upload may add a missing `type`). Answers 201 with its meta. | both |
 | `GET /v1/neuralese/blocks/{id}` | The block body. | both |
 | `GET /v1/neuralese/blocks/{id}/meta` | The block's meta. | both |
-| `POST /v1/neuralese/blocks/{id}/pin` | Count one pin on the block: a pinned block survives every collection. 404 `neuralese-unknown-block` for an absent block. Answers `{"ok": true}`. | both |
-| `POST /v1/neuralese/blocks/{id}/unpin` | Release one pin. Answers `{"ok": true}`. | both |
-| `POST /v1/neuralese/collect` | `{"referenced": [id…]}`: drop every stored block that is neither referenced nor pinned. Answers `{"removed": [id…]}`. | both |
+| `POST /v1/neuralese/blocks/{id}/pin` | Count one pin on the block for the requesting owner (owners, below; anonymous pins belong to the owner `""`): a pinned block survives every collection, and an owner's pin also holds the block for that owner. 404 `neuralese-unknown-block` for an absent block. Answers `{"ok": true}`. | both |
+| `POST /v1/neuralese/blocks/{id}/unpin` | Release one of the requesting owner's pins. Answers `{"ok": true}`. | both |
+| `POST /v1/neuralese/collect` | `{"referenced": [id…]}`. With an owner: afterwards the owner holds exactly the stored blocks in `referenced` (and those it pins); each block it released is dropped unless another owner holds or pins it. Without an owner: drop every stored block that no owner holds or pins and `referenced` does not name. Answers `{"removed": [id…]}`. | both |
+
+**Owners.** A client names itself (a session or runtime ID) in the `x-natlang-owner` request header. The owner holds
+every block it uploads (`PUT`) and every block ID a successful response names to it (a written block, a fetched block,
+a gradient); pins and collections are per owner, so one session's collection never drops another session's blocks.
+A client that receives `neuralese-unknown-block` for a block it referenced (the server restarted or the block was
+collected) uploads the block again from its own content-addressed store and retries. Whether blocks, holds and pins
+survive a server restart is a server option (the reference's `--store-dir`), not part of the wire protocol; `info`
+reports it. The WebAssembly service has no request headers and serves a single, anonymous owner.
 
 ### Writing blocks
 
@@ -249,6 +257,7 @@ that a client loads first.
 | `grad_order` | Highest gradient order (2). | reference only |
 | `adapters` | Adapter kinds applied directly (`["xs", "tiny"]`, reference) or `"lora"` (fork: adapters need `PUT …/lora`). | both, different types |
 | `projections` | `{name: {"source", "target", "identity"}}`: projections that decode adapter codes. | reference only |
+| `store` | `{"owners": true, "persistent": bool}`: owner-scoped holds, pins and collection; whether blocks outlive a restart. | both |
 | `server` | `"llama.cpp"`. | fork only |
 
 `GET /health`, `GET /v1/health` (`{"status": "ok"}`) and `GET /v1/models` are served
