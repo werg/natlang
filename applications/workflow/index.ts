@@ -1,184 +1,87 @@
 /**
- * A durable, single-writer order workflow (inventory, payment, shipping) with explicit recovery.
- * Natlang chooses the next action from the durable state; the service rejects invalid transitions,
- * writes an intent before each external effect, keeps an idempotent remote receipt, and preserves
- * `pending` when an acknowledgement is lost, so an unknown outcome is reconciled rather than retried.
+ * A durable, single-writer order workflow (inventory, payment, shipping) with explicit recovery, whose policy is
+ * natural language. `handle.nl` chooses the next action (and, for an unknown outcome, whether to look again or send the
+ * same request again; for a cancellation or failure, which effects to undo), `inform.nl` writes what the customer is
+ * told. The service (service.ts) is the mechanism: it validates every transition, writes the intent before the remote
+ * effect, keeps idempotent receipts and commits atomically. `step` decides on a snapshot and applies the decision to
+ * the revision it read.
  */
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { KeyedEventLoop, nl } from '@natlang/node';
+import { KeyedEventLoop } from '@natlang/node';
+import handle from './handle.nl';
+import inform from './inform.nl';
+import { ledgerDeclaration, ledgerService } from './ledger.js';
+import { WorkflowService, type Implementation } from './service.js';
+import type { Decision, Limits, OutboxEntry, Snapshot, WorkflowEvent, WorkflowState } from './types.js';
 
-export type Action = 'reserve' | 'charge' | 'ship' | 'refund' | 'release' | 'reconcile' | 'wait';
-export type WorkflowEvent = { kind: 'continue' | 'cancel' | 'reconcile', fault?: 'rate_limit' | 'definite_failure' | 'lost_ack' };
-export type Operation = { key: string, action: Action, status: 'intent' | 'done' | 'failed', detail: string };
-export type WorkflowState = { order_id: string, amount: number, revision: number, phase: string, pending: string,
-  obligations: string[], history: Operation[] };
-export type Decision = { action: Action, reason: string };
-type Receipt = { key: string, action: Action, order_id: string, amount: number, status: 'done' };
+export * from './service.js';
+export * from './ledger.js';
+export type * from './types.js';
 
-async function readJson<T>(path: string, fallback: T): Promise<T> {
-  try { return JSON.parse(await readFile(path, 'utf8')) as T; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fallback; throw error; }
-}
-async function atomicJson(path: string, value: unknown): Promise<void> {
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(value, null, 2));
-  await rename(temporary, path);
-}
-const phases: Partial<Record<Action, string>> = { reserve: 'reserved', charge: 'charged', ship: 'shipped', refund: 'refunded', release: 'released' };
-const prerequisites: Partial<Record<Action, string[]>> = {
-  reserve: ['new'], charge: ['reserved'], ship: ['charged'],
-  refund: ['charged', 'shipping-failed', 'canceling'], release: ['reserved', 'refunded', 'canceling', 'charge-failed'],
+/** What a run of natural-language work needs: the services its stages call. */
+export type RunServices = { services: Record<string, unknown>, serviceDeclarations: Record<string, string> };
+/** Runs natural-language work in a task with these services (e.g. `(fn, options) => runtime.run(fn, options)`). */
+export type Run = <T>(fn: () => Promise<T>, options: RunServices) => Promise<T>;
+
+export const DEFAULT_LIMITS: Limits = { transientRetries: 2, checksBeforeRetry: 2, recheckMs: 30_000 };
+
+export type StepOptions = {
+  run: Run,
+  /** Which implementation of the next-action hot path runs (default: natural language). */
+  policy?: Implementation,
+  limits?: Partial<Limits>,
 };
+export type Stepped = { state: WorkflowState, decision: Decision, message: OutboxEntry | null };
 
-export class WorkflowService {
-  private readonly root: string;
-  private readonly events: Record<string, unknown>[] = [];
-  private queue: Promise<unknown> = Promise.resolve();
-
-  constructor(root: string) { this.root = resolve(root); }
-
-  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(operation, operation);
-    this.queue = run.catch(() => {});
-    return run;
+/**
+ * Decide and apply one step for an order event from its durable state, then tell the customer if there is something to
+ * tell. The decision is made on a snapshot (the order and the remote's receipt for its pending key); `apply` takes it
+ * only if the order is still at that revision.
+ */
+export async function stepFull(service: WorkflowService, orderId: string, event: WorkflowEvent, options: StepOptions): Promise<Stepped> {
+  const policy = options.policy ?? 'natural-language';
+  const limits = { ...DEFAULT_LIMITS, ...options.limits };
+  const run = <T>(fn: () => Promise<T>) => options.run(fn, { services: { ledger: ledgerService() }, serviceDeclarations: { ledger: ledgerDeclaration } });
+  const before = await service.read(orderId);
+  const snapshot: Snapshot = { state: before, event, receipt: before.pending ? await service.receipt(before.pending) : null };
+  // Pluggable hot path: the same Decision from the crisp table or from the natural-language policy.
+  const decision = policy === 'crisp' ? handle.crisp(snapshot, limits) : await run(() => handle(snapshot, limits));
+  const after = await service.apply(orderId, before.revision, event, decision);
+  if (after.revision === before.revision) return { state: after, decision, message: null };
+  const outgoing = await run(() => inform({ before, after, decision, event }));
+  if (!outgoing) return { state: after, decision, message: null };
+  const key = `${orderId}:message:${after.revision}`;
+  try {
+    const queued = await service.enqueue(orderId, key, outgoing);
+    return { state: queued, decision, message: queued.outbox.find(row => row.key === key) ?? null };
+  } catch (error) {
+    service.note({ operation: 'workflow.message-refused', order_id: orderId, key, detail: String((error as Error).message) });
+    return { state: after, decision, message: null };
   }
-
-  private async files(): Promise<{ local: string, remote: string }> {
-    await mkdir(this.root, { recursive: true });
-    return { local: join(this.root, 'workflows.json'), remote: join(this.root, 'remote-receipts.json') };
-  }
-
-  open(orderId: string, amount: number): Promise<WorkflowState> {
-    return this.exclusive(async () => {
-      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(orderId) || !Number.isSafeInteger(amount) || amount <= 0) throw new Error('invalid order');
-      const files = await this.files();
-      const workflows = await readJson<Record<string, WorkflowState>>(files.local, {});
-      const existing = workflows[orderId];
-      if (existing) {
-        if (existing.amount !== amount) throw new Error('order amount changed');
-        return structuredClone(existing);
-      }
-      const state: WorkflowState = { order_id: orderId, amount, revision: 0, phase: 'new', pending: '', obligations: [], history: [] };
-      workflows[orderId] = state;
-      await atomicJson(files.local, workflows);
-      this.events.push({ operation: 'workflow.open', order_id: orderId, amount });
-      return structuredClone(state);
-    });
-  }
-
-  async read(orderId: string): Promise<WorkflowState> {
-    const state = (await readJson<Record<string, WorkflowState>>((await this.files()).local, {}))[orderId];
-    if (!state) throw new Error(`unknown order: ${orderId}`);
-    return structuredClone(state);
-  }
-
-  apply(orderId: string, expectedRevision: number, event: WorkflowEvent, decision: Decision): Promise<WorkflowState> {
-    return this.exclusive(async () => {
-      const files = await this.files();
-      const workflows = await readJson<Record<string, WorkflowState>>(files.local, {});
-      const state = workflows[orderId];
-      if (!state) throw new Error(`unknown order: ${orderId}`);
-      if (state.revision !== expectedRevision) return structuredClone(state);
-      if (!event || !['continue', 'cancel', 'reconcile'].includes(event.kind)) throw new Error('invalid workflow event');
-      if (!decision || !['reserve', 'charge', 'ship', 'refund', 'release', 'reconcile', 'wait'].includes(decision.action))
-        throw new Error('invalid decision');
-      if (event.kind === 'reconcile' || state.pending) {
-        if (decision.action !== 'reconcile' && decision.action !== 'wait') throw new Error('uncertain operation must be reconciled');
-        if (decision.action === 'reconcile') {
-          if (!state.pending) throw new Error('nothing to reconcile');
-          const receipt = (await readJson<Record<string, Receipt>>(files.remote, {}))[state.pending];
-          const key = state.pending;
-          if (receipt) this.ack(state, receipt);
-          else state.obligations = [`outcome unresolved: ${state.pending}`];
-          this.events.push({ operation: 'workflow.reconcile', order_id: orderId, key, found: !!receipt });
-        }
-      } else if (decision.action !== 'wait') {
-        const action = decision.action;
-        if (!prerequisites[action]?.includes(state.phase)) throw new Error(`invalid ${action} in ${state.phase}`);
-        if (event.kind === 'cancel' && !['refund', 'release'].includes(action)) throw new Error('cancel requires compensation');
-        const key = `${orderId}:${action}`;
-        if (state.history.find(row => row.key === key)?.status === 'done') throw new Error('completed operation replay');
-        state.pending = key;
-        state.obligations = [`outcome unresolved: ${key}`];
-        state.history.push({ key, action, status: 'intent', detail: '' });
-        state.revision++;
-        // The intent is durable before the remote call, so a second process can inspect it.
-        await atomicJson(files.local, workflows);
-        this.events.push({ operation: 'workflow.intent', order_id: orderId, key, action });
-        const fault = event.fault ?? '';
-        if (fault === 'rate_limit' || fault === 'definite_failure') this.fail(state, action, fault);
-        else {
-          const remote = await readJson<Record<string, Receipt>>(files.remote, {});
-          if (!remote[key]) {
-            remote[key] = { key, action, order_id: orderId, amount: state.amount, status: 'done' };
-            await atomicJson(files.remote, remote);
-          }
-          if (fault !== 'lost_ack') this.ack(state, remote[key]);
-          else this.events.push({ operation: 'workflow.response-lost', order_id: orderId, key });
-        }
-      }
-      state.revision++;
-      await atomicJson(files.local, workflows);
-      return structuredClone(state);
-    });
-  }
-
-  private ack(state: WorkflowState, receipt: Receipt): void {
-    if (receipt.order_id !== state.order_id || receipt.key !== state.pending) throw new Error('remote receipt does not match intent');
-    const entry = state.history.findLast(row => row.key === receipt.key)!;
-    entry.status = 'done';
-    state.phase = phases[entry.action]!;
-    state.pending = '';
-    state.obligations = [];
-    this.events.push({ operation: 'workflow.ack', order_id: state.order_id, key: receipt.key, phase: state.phase });
-  }
-
-  private fail(state: WorkflowState, action: Action, detail: string): void {
-    const entry = state.history.findLast(row => row.key === state.pending)!;
-    entry.status = 'failed'; entry.detail = detail;
-    state.pending = '';
-    state.obligations = [];
-    if (action === 'charge') state.phase = 'charge-failed';
-    if (action === 'ship') state.phase = 'shipping-failed';
-    if (action === 'refund' || action === 'release') state.obligations = [`compensation failed: ${entry.key}`];
-    this.events.push({ operation: 'workflow.failure', order_id: state.order_id, key: entry.key, detail });
-  }
-
-  async remoteEffects(): Promise<Receipt[]> {
-    return Object.values(await readJson<Record<string, Receipt>>((await this.files()).remote, {}));
-  }
-
-  drainEvents(): Record<string, unknown>[] { return this.events.splice(0); }
 }
 
 /** Decide and apply one step for an order event, from its current durable state. */
-export async function step(service: WorkflowService, orderId: string, event: WorkflowEvent): Promise<WorkflowState> {
-  const current = await service.read(orderId);
-  const decision: Decision = await nl`Choose exactly one next action for the order in current, given event: reserve, charge, ship,
-refund, release, reconcile or wait. When current.pending is nonempty, choose reconcile for a reconciliation event and otherwise
-wait; never repeat an uncertain charge. For a new order reserve inventory; after reserve charge; after charge ship. On a definite
-shipping failure or a cancellation after payment, refund, then release inventory. On a charge failure, release inventory. A
-completed shipment waits. Use the history and obligations, and give a brief reason.`(current, event);
-  return service.apply(orderId, current.revision, event, decision);
+export async function step(service: WorkflowService, orderId: string, event: WorkflowEvent, options: StepOptions): Promise<WorkflowState> {
+  return (await stepFull(service, orderId, event, options)).state;
 }
 
-/** An event for one order; `wake` comes from the desk itself when an uncertain outcome is due for reconciliation. */
+/** An event for one order; `wake` comes from the desk itself when an unresolved order is due to be looked at again. */
 export type DeskEvent = { id: string; kind: 'continue' | 'cancel' | 'reconcile' | 'wake'; order_id?: string;
   fault?: WorkflowEvent['fault']; at?: number };
 export type DeskState = { order: WorkflowState | null; reconcileAt: number | null };
 
 /**
  * Orders handled side by side: one event loop per order, so one order's model decision does not hold up another's,
- * while the service still applies every transition through its single writer. An order left with an uncertain outcome
- * (an acknowledgement that never came) is reconciled on its own `reconcileAfterMs` later, also after a restart.
+ * while the service still applies every transition through its single writer. The time an unresolved order is looked at
+ * again is state: the policy names it (`Decision.waitMs`, else `reconcileAfterMs`), and it is restored after a restart
+ * from the durable `pending`.
  */
 export class WorkflowDesk {
   readonly loops: KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>;
 
-  constructor(readonly service: WorkflowService, options: { run: <T>(fn: () => Promise<T>, signal: AbortSignal) => Promise<T>;
-    reconcileAfterMs?: number; onFailure?: (orderId: string, error: unknown) => void }) {
+  constructor(readonly service: WorkflowService, options: { run: Run; signal?: never; policy?: Implementation; limits?: Partial<Limits>;
+    reconcileAfterMs?: number; onFailure?: (orderId: string, error: unknown) => void;
+    /** Runs one event's step with the loop's abort signal (e.g. to cancel natural-language work). */
+    guard?: <T>(fn: () => Promise<T>, signal: AbortSignal) => Promise<T> }) {
     const delay = options.reconcileAfterMs ?? 30_000;
     this.loops = new KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>({
       key: event => event.order_id!,
@@ -190,13 +93,16 @@ export class WorkflowDesk {
       reduce: async (state, event, context) => {
         const orderId = event.order_id ?? state.order?.order_id;
         if (!orderId) throw new Error('an order event needs order_id');
-        const kind = event.kind === 'wake' ? 'reconcile' : event.kind;
-        const order = await step(service, orderId, { kind, ...(event.fault ? { fault: event.fault } : {}) });
-        return { order, reconcileAt: order.pending ? context.now + delay : null };
+        const kind = event.kind === 'wake' ? (state.order?.pending ? 'reconcile' : 'continue') : event.kind;
+        const work = () => stepFull(service, orderId, { kind, ...(event.fault ? { fault: event.fault } : {}) },
+          { run: options.run, ...options.policy ? { policy: options.policy } : {}, ...options.limits ? { limits: options.limits } : {} });
+        const stepped = await (options.guard ? options.guard(work, context.signal) : work());
+        const wait = stepped.decision.waitMs;
+        return { order: stepped.state, reconcileAt: stepped.state.pending ? context.now + (wait ?? delay) : wait ? context.now + wait : null };
       },
       view: state => state.order,
       wakeAt: state => state.reconcileAt,
-      step: (fn, context) => options.run(fn, context.signal),
+      step: (fn, context) => options.guard ? options.guard(fn, context.signal) : fn(),
       onFailure: (orderId, failure) => options.onFailure?.(orderId, failure.error),
     });
   }
