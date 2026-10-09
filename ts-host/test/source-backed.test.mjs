@@ -151,7 +151,7 @@ test('streaming materializer reports aggregate counters for an empty corpus with
     await writeFile(input, '');
     const run = spawnSync(process.execPath, [new URL('../scripts/materialize-native-teacher.mjs', import.meta.url).pathname, input, output], {encoding: 'utf8'});
     assert.equal(run.status, 0, run.stderr);
-    assert.deepEqual(JSON.parse(run.stdout), {output, accepted_rows: 0, rejected_rows: 0, training_decisions: 0});
+    assert.deepEqual(JSON.parse(run.stdout), {output, accepted_rows: 0, rejected_rows: 0, training_decisions: 0, authored_actions_held: 0});
     assert.equal(await readFile(output, 'utf8'), '');
     assert.deepEqual((await readdir(root)).sort(), ['input.jsonl', 'output.jsonl']);
   } finally { await rm(root, {recursive: true, force: true}); }

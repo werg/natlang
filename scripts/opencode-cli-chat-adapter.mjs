@@ -512,7 +512,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
         const part = event?.part ?? {};
         const sessionID = event?.sessionID ?? part.sessionID;
         if (typeof sessionID === 'string' && sessionID) observedSessionIDs.add(sessionID);
-        if ((event?.type === 'step_start' || part.type === 'step-start') && terminalActionBoundary?.session_id === sessionID)
+        if ((event?.type === 'step_start' || part.type === 'step-start') && terminalActionBoundary && terminalActionBoundary.session_id === sessionID)
           terminalActionBoundary.continued_after_submit = true;
         const isToolEvent = String(event?.type ?? '').toLowerCase().includes('tool') || part.type === 'tool';
         if (isToolEvent) {
