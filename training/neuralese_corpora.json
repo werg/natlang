@@ -17964,8 +17964,7 @@
       ],
       "admission": "Root adopted 17 reviewed ordinary native actions and 17 exact serving-boundary text documents. The native delta contains 1 explicitly reviewed authored-static action and 16 provider-sampled actions. One malformed return_result action remains explicitly omitted. No new recurrence, whole-trajectory, runtime, hidden-state, learned-writer, or world-credit admission; active training inputs unchanged.",
       "notes": "Compact selected-file evidence and delta only; no cumulative base copy. Text rows are an exact serving-boundary rendering with tokenizer e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. Renderer/tokenizer code closure is referenced by the previously published text-serving-boundary-refresh corpus. Runtime snapshot-v3 is included for native materializer replay. Root composition adoption binds totals 5701 native (3666 train/2035 test), 4897 text (3193 train/1704 test), and 5004 recurrence records (3115 train/1889 test); this addition contributes 0 recurrence records. Includes locator map v2 for exact current-stream paths and registered parent stream reuse; live process/workdir locators are explicitly excluded."
-    }
-  ,
+    },
     {
       "id": "neuralese-foundation-text-4880-sketch-run-held-artifacts-20261009-v1",
       "owner": "pop",
@@ -17990,7 +17989,27 @@
         "train.jsonl"
       ],
       "admission": "artifact-only-diagnostic-no-training-no-qualification"
-    }],
+    },
+    {
+      "id": "natlang-specialization-cases-declines-20261009-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/natlang-specialization-cases-declines-20261009-v1",
+      "include": [
+        "README.md",
+        "cases.jsonl",
+        "declines.jsonl",
+        "findings.jsonl"
+      ],
+      "split": "source",
+      "source_class": "specializer-compiled-cases-and-declines-from-recorded-calls",
+      "admission": "held-crisp-versus-natural-language-evidence-only",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [],
+      "license": "internal: recorded runs of this repository's programs on DGX",
+      "notes": "Exported 2026-10-09 by natlang compilations export-corpus (ts-host/src/calls/corpus.ts) from the DGX call store: 7 compiled cases (examples/specialization support, pi scheduler pass/step, harness boundary) with the recorded calls each was checked on and the judge's verdicts, and 8 declines with reasons (semantic, unstable, no-clusters, budget) and sample calls. Evidence of which parts of natural-language functions are crisp, for the harness bench and the Neuralese student; inputs may contain conversation text from pi runs. Admission for any training use is a separate decision."
+    }
+  ],
   "coverage_backlog": [
     "S1 source-policy, ambiguous provenance aliases and protected split closure remain separate from its passed schema audit.",
     "S2 generated families need migration to current neuralese records and paired improvement/transfer admission; copying them does not integrate them.",

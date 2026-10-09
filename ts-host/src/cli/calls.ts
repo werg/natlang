@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CallStore, machineStoreRoot } from '../calls/store.js';
+import { exportSpecializationCorpus } from '../calls/corpus.js';
 import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
 import type { CallRecord, CallStoreSettings, CaseRole, CaseTier } from '../calls/types.js';
 
@@ -269,7 +270,14 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     print(store.acknowledgeFinding(id) ? `acknowledged #${id}` : `no finding #${id}`, false);
     return 0;
   }
-  throw new Error('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge');
+  if (action === 'export-corpus') {
+    const out = text(args, '--out');
+    if (!out) throw new Error('usage: natlang compilations export-corpus --out DIR [--definition NAME]');
+    const summary = exportSpecializationCorpus(store, resolve(out), { definition: text(args, '--definition') });
+    print(json ? summary : `wrote ${summary.cases} cases, ${summary.declines} declines and ${summary.findings} findings (${summary.calls} calls) to ${resolve(out)}`, json);
+    return 0;
+  }
+  throw new Error('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge|export-corpus');
 }
 
 /** The specializer application in this checkout. */

@@ -40,6 +40,7 @@ export * from '../calls/offline.js';
 export * from '../calls/specializer.js';
 export * from '../calls/groups.js';
 export * from '../calls/findings.js';
+export * from '../calls/corpus.js';
 export { tracesService, TRACES_DECLARATIONS } from '../calls/service.js';
 export type { TraceCall } from '../calls/service.js';
 export { loadNatlang, loadCallables, applicationContextRecords, nodeSourceFiles, fileTraceSink } from './node-files.js';
