@@ -6,7 +6,7 @@ This script writes a text file from corpus rows, runs llama-perplexity on it, an
 with our model (``natlang_neuralese.maple.model``), reporting per-chunk NLL from both. With n_ctx > 512 the
 sliding-window rule is exercised.
 
-    python scripts/maple_llamacpp_parity.py --gguf ... --checkpoint /home/werg/data/models/maple-preview-bf16 \
+    python scripts/maple_llamacpp_parity.py --gguf ... --checkpoint MAPLE_PREVIEW_DIR \
         --data runs/maple-joint-20261005/qwen3-render-v1.jsonl --out runs/maple-nested-20261005/m0.3
 """
 

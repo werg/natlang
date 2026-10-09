@@ -2,7 +2,7 @@
 our corpus, the per-layer expert order, and what nested prefixes and LxE members (``--members``) cost before any
 training.
 
-    python -m natlang_neuralese.maple.routing --model /home/werg/data/models/maple-preview-bf16 \\
+    python -m natlang_neuralese.maple.routing --model MODEL_DIR \\
         --data runs/maple-joint-20261005/qwen3-render-v1.jsonl --out runs/maple-nested-20261005/n0-v1
 
 Rows are rendered SFT turns (``prompt`` + ``completion``). Rows are split by program into an ordering part
