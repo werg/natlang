@@ -161,6 +161,7 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   record.id = record.id.replace(':evidence-scoped-soft-state-iterative-derived-decision-v1', `:evidence-scoped-guided-soft-state-derived-decision-${hasFinalEnums ? 'v2' : 'v1'}`);
   record.source_revisions = [revision];
   record.generation.generator = revision;
+  record.generation.shared_note_guidance_revision = GUIDED_SOFT_REVISION;
   record.generation.capture_contract = {
     task_contract: 'the parent retains task instruction and output path; note children receive the explicit decision rule, declared field formats, and current pass constraints only',
     soft_state: 'Progress is { pass: number, notes: Neuralese<string> }; the seed and each pass return Neuralese<string>',
