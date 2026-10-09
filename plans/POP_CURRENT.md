@@ -1,17 +1,18 @@
 # Pop current work
 
-Last reviewed: 2026-10-09 13:11 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Last reviewed: 2026-10-09 14:24 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 
 ## Ownership and coordination
 
 - Pop owns execution here; DGX owns its execution. Canonical checkout on both: `/home/werg/natlang`. Do not launch from retired mirrors or change DGX jobs.
 - Run `python3 scripts/coordination_inbox.py check --ack` at session start, before resource changes and each monitoring cycle. Use Git for code and the corpus registry/manifests plus `sync_training_corpora.py` for selected data artifacts.
 - The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
+- Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop map run is frozen and does not include later shared-runtime changes.
 
 ## GPU: mapped-input foundation continuation
 
-The superseded sketch-consumer repair was stopped; its best step3328 is not a
-qualified source. The active Pop job is the mapped-input continuation
+The superseded sketch-consumer repair is closed and is artifact evidence only;
+its best step3328 is not a qualified source. The active Pop job is the mapped-input continuation
 `luna-map-refresh-step22272-v5` (container `98c449e7ef60`), launched from the
 shared runtime at commit `d915133f695ced59fde70d71100735cc9ccd2ca7` using the
 pinned image `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
@@ -29,22 +30,43 @@ heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239bc94e4393d08e0572`;
 the admitted87 target-bound documents are already in it and must not be appended
 again. Native records/pieces are source bindings, not extra text rows.
 
-At latest verified monitoring, training had reached step22296 (24 updates). Fresh baseline
-at22272 was unqualified as expected. Early updates are diagnostic only; no
-mapped-alignment, autoregressive, runtime transport, stopping or recurrence
-gate is claimed yet. Driver output is under
+At the latest verified monitoring (14:24 UTC), the serialized current checkpoint
+is step23680, the best checkpoint remains step23040, and training had reached
+step23754 in the log.
+The latest gate is false with zero consecutive passes; this continuation has not
+inherited qualification from its source checkpoint. At step23680, held input-map
+and full-depth embedding errors were 0.11274 and 0.11679, with pass-1 CE delta
+0.000584. The map/full error gap has narrowed from 0.02555 at step22272 to
+0.00405, but strict alignment still fails. At step23680, pass-1 token agreement
+was 0.97802 for assistant reasoning, 0.98779 for tool content, 0.99688 for user
+content, and 0.99759 for assistant replies. These measurements support moving
+toward real autoregressive exposure after the warm-in rather than waiting for
+exact map/full parity; they do not qualify autoregressive behavior, transport,
+stopping, or task execution. GPU was 100% at 4729 MiB; free space was 8.5 GiB
+on `/` and 5.1 GiB on `/srv/storage`. Driver output is under
 `/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-from-qualified-22272-20261009-v5/preflight-v1/`.
 The recipe launch preflight binds code, input, image, cache/token mounts and
 resource floor. Continue monitoring exact current/best checkpoint metadata and
 fresh evaluation results; do not reuse results from the old data or sketch run.
 
+The DGX owner direction is to phase the raw-token-embedding projection anchor
+out after warm-in using a declared decay, then adapt the read port to learned
+Neuralese vectors with a full-rank residual read adapter. It is not a request to
+hot-patch this frozen map job. Existing evaluation-only autoregressive controls
+remain limited: a fixed one-window full-projection control survived 256/256
+tokens, while strict multi-stratum alignment remains false. Treat those as
+evidence for the next declared stage, not as broad runtime qualification.
+
 ### Shutdown and storage
 
 The active immutable runtime predates the repaired recipe signal forwarding. If an early stop is necessary, signal its ancestry-verified trainer child and verify the emergency checkpoint; do not rely on Docker stopping the outer PID1. Normal completion is safe. Future launches should use shared signal fix18770099; actual CPU-only Docker routing proof is in `runs/neuralese-recipe-signal-forwarding-proof-20261009-v1/receipt.json`.
 
-Old repair Docker shutdown lost73 unsaved updates: serialized current1920 versus final log1993. Preserve current1920, chosen best1280, incident receipt and original recurrence best1024. No emergency checkpoint was produced by that failed stop.
+The stopped sketch-consumer repair is preserved as held artifact evidence, not an
+active training route. Its earlier Docker shutdown failed to save 73 updates
+(serialized step1920 versus final log step1993); preserve that failure receipt,
+current/best checkpoints, and the earlier recurrence checkpoint separately.
 
-Available space approximately root14GiB / external5.7GiB, including a1.436GB checkpoint reserve. Current/best are different files after1792; avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
+Latest storage check: 8.5 GiB free on `/` and 5.1 GiB free on `/srv/storage`; the active run keeps its checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
 
 ## Generation and review
 
@@ -52,9 +74,8 @@ Available space approximately root14GiB / external5.7GiB, including a1.436GB che
 
 Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
-- Three five-case waves have completed; latest wave3 reseeds all five source-bound train cases passed their runtime outcomes. Results remain held pending per-action review; accepted case output is not training admission.
-- Latest wave3 plan: `extension-wave-v1/dispatch-wave3-reseed-v1/dispatch-plan-v1.json`, SHA49e99f4b1b35e68561e9c4e6a38620662ac23500ff485829f8f92a44abc370ff. It pins exact overlay source4bc9…, current runtime7532… and aggregate proofbcd7… separately from original source visibility proof5939…. Future plans should name the aggregate as their primary source proof.
-- Next five tasks come from V26 editing, archive, grant and records train sources. Its previous apparent “generation” was static reference proof, not model trajectories. Current-runtime preflight exposed a fixture matching filenames inside carried historical text instead of the current FileHandle preamble. Selector-only fixture correction passes16/16; runtime access boundaries, gold and source splits are unchanged. Preserve old failures and bind fresh exact proof before launching.
+- The recent held packet has been reduced from199 proposals to22 after two definite visibility holds. All22 remaining proposals are held and unadmitted; runtime outcomes or packet-level acceptance do not grant training admission.
+- Earlier wave3 plan and its source/runtime proofs remain preserved under this campaign. Treat them as historical evidence; do not use their previous “latest wave” wording as current status.
 - Review every observed action and skill disclosure before admission. No global v6 activation, new-world credit or blanket task-level admission.
 
 ### Step5 Preview Free
