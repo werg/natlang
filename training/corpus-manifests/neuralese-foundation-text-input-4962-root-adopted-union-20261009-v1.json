@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+  "files": [
+    {
+      "path": "composition-report-v1.json",
+      "bytes": 93094,
+      "sha256": "abc3ba3479a044bebd3660358b3729aa714d152798f6abddc3ce2051098968a8"
+    },
+    {
+      "path": "loader-validation-recipe-v1.json",
+      "bytes": 3166,
+      "sha256": "beebdb50482afd9f4ca89a48b1cb9faaf7b1d899e1f38ca7304c100de6738fea"
+    },
+    {
+      "path": "loader-validation-stderr-v1.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "loader-validation-stdout-v1.txt",
+      "bytes": 2738,
+      "sha256": "bddac2e0397c0572ece66a5e24b9b43d84e3583f585317dc86cb11edd0bfcd9e"
+    },
+    {
+      "path": "root-current-loader-stderr-v1.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "root-current-loader-stdout-v1.txt",
+      "bytes": 2738,
+      "sha256": "bddac2e0397c0572ece66a5e24b9b43d84e3583f585317dc86cb11edd0bfcd9e"
+    },
+    {
+      "path": "root-input-composition-review-v1.json",
+      "bytes": 752,
+      "sha256": "f86c58c6b79e23155d7ab8a28616f5c6a1afb21e144b48fd5862058b223b2666"
+    },
+    {
+      "path": "source/root-adopted-text-union-source-snapshot-v1.json",
+      "bytes": 3030,
+      "sha256": "f3629cf912501fe26d0d0842ba279fceeddd63c34239ecc108f4f0bba5ec9dbe"
+    },
+    {
+      "path": "text-data.jsonl",
+      "bytes": 253055573,
+      "sha256": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576",
+      "lines": 4962
+    },
+    {
+      "path": "validate_text_rows_cpu.py",
+      "bytes": 2627,
+      "sha256": "1af0d9edfa283fef8a4aa5464193b9178552a57aef6753d8875eec49ca7fadbd"
+    }
+  ],
+  "bytes": 253163718
+}

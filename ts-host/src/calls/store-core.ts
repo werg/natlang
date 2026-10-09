@@ -340,7 +340,7 @@ export class CallStore {
       if (total <= target) break;
       this.db.prepare('UPDATE calls SET events_hash = NULL WHERE call_id = ?').run(row.call_id);
       this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(row.call_id);
-      total = before - this.collect();
+      total -= this.collect();
     }
     for (const row of batch(`SELECT call_id FROM calls WHERE ${unpinned} ORDER BY started_at ASC LIMIT 20000`)) {
       if (total <= target) break;
