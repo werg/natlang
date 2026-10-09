@@ -12,6 +12,8 @@
  * which is why those are awaited here for every build.
  */
 import { registerLocalEndpoint } from '../model/chat-completion.js';
+import type { NeuraleseStore } from '../native/neuralese-store.js';
+import { openBrowserNeuraleseStore } from './neuralese-opfs-store.js';
 
 /** The Emscripten module's surface the service uses. */
 export type NeuraleseWasmModule = {
@@ -104,11 +106,21 @@ export async function chooseNeuraleseBuild(scope: { navigator?: any; crossOrigin
 
 export type NeuraleseDevice = { name: string; description: string; gpu: boolean };
 export type StartedNeuralese = { endpoint: string; dialect: string; cutoff: number; devices?: NeuraleseDevice[]; gpu_layers?: number;
+  /**
+   * The runtime's block archive for this service (`neuraleseServerModelTurn({ store })`, `createNatlangRuntime({
+   * neuralese: { store } })`): blocks the engine lacks (after a page reload or an engine restart) are restored from it.
+   */
+  store: NeuraleseStore;
   close(): Promise<void> };
 
-/** Browser: start the service in a Web Worker (`worker`, running `neuralese-worker`) and serve `endpoint`. */
+/**
+ * Browser: start the service in a Web Worker (`worker`, running `neuralese-worker`) and serve `endpoint`. `store` is
+ * the block archive (default: OPFS when the browser offers it, `openBrowserNeuraleseStore`). The in-page service has a
+ * single owner, this page's runtime: its block store is not shared, so requests need no `owner` (x-natlang-owner) and
+ * the store's blocks are the only ones restore has to bring back.
+ */
 export async function startBrowserNeuralese(options: NeuraleseWasmOptions & { worker: Worker; moduleUrl: string; model: Blob; heads: Blob;
-  endpoint?: string }): Promise<StartedNeuralese> {
+  endpoint?: string; store?: NeuraleseStore }): Promise<StartedNeuralese> {
   const { worker } = options;
   let next = 0;
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
@@ -123,10 +135,11 @@ export async function startBrowserNeuralese(options: NeuraleseWasmOptions & { wo
     pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
     worker.postMessage({ id, ...message }, transfer);
   });
-  const { model, heads, worker: _, endpoint: __, moduleUrl, ...rest } = options;
+  const { model, heads, worker: _, endpoint: __, moduleUrl, store: ___, ...rest } = options;
+  const store = options.store ?? await openBrowserNeuraleseStore();
   const hello = await call<{ dialect: string; cutoff: number; devices?: NeuraleseDevice[]; gpu_layers?: number }>({ kind: 'load', moduleUrl, model, heads, options: rest });
   const endpoint = options.endpoint ?? 'http://neuralese.local';
   const stop = serveLocally(endpoint, (method, path, body) =>
     call<NeuraleseWasmResponse>({ kind: 'request', method, path, body }, [body.buffer as ArrayBuffer]));
-  return { endpoint, ...hello, async close() { stop(); await call({ kind: 'unload' }); worker.terminate(); } };
+  return { endpoint, ...hello, store, async close() { stop(); await call({ kind: 'unload' }); worker.terminate(); } };
 }

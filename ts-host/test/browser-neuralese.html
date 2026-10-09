@@ -40,7 +40,8 @@
     report.dialect = service.dialect;
     report.devices = service.devices;
     report.gpu_layers = service.gpu_layers;
-    const store = new natlang.MemoryNeuraleseStore();
+    // The runtime's block archive (OPFS when offered): blocks the engine lacks after a reload are restored from it.
+    const store = service.store;
     const driver = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store });
     // A plain turn, then a turn that writes a block (forced plan), then reading that block back from the store.
     started = performance.now();

@@ -230,7 +230,12 @@ a gradient); pins and collections are per owner, so one session's collection nev
 A client that receives `neuralese-unknown-block` for a block it referenced (the server restarted or the block was
 collected) uploads the block again from its own content-addressed store and retries. Whether blocks, holds and pins
 survive a server restart is a server option (the reference's `--store-dir`), not part of the wire protocol; `info`
-reports it. The WebAssembly service has no request headers and serves a single, anonymous owner.
+reports it. The WebAssembly service has no request headers and serves a single, anonymous owner. In a browser the
+client's own store is the runtime's OPFS block archive (`OpfsNeuraleseStore`, `ts-host/src/browser/neuralese-opfs-store.ts`):
+one file per block in the origin-private file system, named by its ID and holding the block's safetensors body (as
+`PUT` sends it), its metadata indexed when the archive opens and its bytes checked against the ID when read. The in-page
+service keeps blocks only in memory, so after a page reload or an engine restart the runtime restores every block a
+request names from that archive. Blocks move between the archive and `.nz` files by ID (`importNz`, `exportNz`).
 
 ### Writing blocks
 

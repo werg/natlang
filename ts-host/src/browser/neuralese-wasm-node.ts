@@ -1,10 +1,14 @@
 /** Node: the WebAssembly Neuralese service in process, with the model files' directories mounted (NODEFS). */
 import { basename, dirname } from 'node:path';
+import { MemoryNeuraleseStore, type NeuraleseStore } from '../native/neuralese-store.js';
 import { NeuraleseWasmService, serveLocally, type NeuraleseWasmFactory, type NeuraleseWasmOptions, type StartedNeuralese } from './neuralese-wasm.js';
 
-/** Node: load the module, mount the files' directories and serve `endpoint` (default `http://neuralese.local`). */
+/**
+ * Node: load the module, mount the files' directories and serve `endpoint` (default `http://neuralese.local`). `store`
+ * is the block archive restore uploads from (default: in memory).
+ */
 export async function startNodeNeuralese(options: NeuraleseWasmOptions & { factory: NeuraleseWasmFactory; model: string; heads: string;
-  endpoint?: string }): Promise<StartedNeuralese & { service: NeuraleseWasmService }> {
+  endpoint?: string; store?: NeuraleseStore }): Promise<StartedNeuralese & { service: NeuraleseWasmService }> {
   // The threaded build (neuralese-wasm-mt) needs its worker pool sized up front.
   const module = await options.factory({ pthreadPoolSize: options.threads ?? 1 });
   const mounted = new Map<string, string>();
@@ -27,5 +31,5 @@ export async function startNodeNeuralese(options: NeuraleseWasmOptions & { facto
     chain = run.then(() => undefined, () => undefined);
     return run;
   });
-  return { endpoint, ...hello, service, async close() { stop(); await service.unload(); } };
+  return { endpoint, ...hello, service, store: options.store ?? new MemoryNeuraleseStore(), async close() { stop(); await service.unload(); } };
 }

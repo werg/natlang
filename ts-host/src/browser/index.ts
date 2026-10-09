@@ -60,6 +60,8 @@ export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type Neuralese
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
+export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,
+  type OpfsDirectoryHandle } from './neuralese-opfs-store.js';
 export { encodeBlockBody, decodeBlockBody } from '../model/neuralese-server.js';
 export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from '../model/neuralese-info.js';
