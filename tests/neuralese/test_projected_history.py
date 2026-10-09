@@ -4,10 +4,28 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from natlang_neuralese.train.execution import causal_gold_prefix_mask
 from natlang_neuralese.eval.projected_history import (
     _first_divergence_details, _gold_reference_survival, _token_id_window_fingerprints,
     projected_history_metrics,
 )
+
+
+def test_shared_causal_prefix_mask_keeps_first_mismatch_for_each_batch_row():
+    gold = torch.tensor([[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4]])
+    generated = torch.tensor([[9, 2, 3, 4], [1, 2, 9, 4], [1, 2, 3, 4]])
+    assert causal_gold_prefix_mask(generated, gold).tolist() == [
+        [True, False, False, False], [True, True, True, False], [True, True, True, True]]
+
+
+@pytest.mark.parametrize('generated,gold', [
+    (torch.empty(1, 0, dtype=torch.long), torch.empty(1, 0, dtype=torch.long)),
+    (torch.ones(2, dtype=torch.long), torch.ones(2, dtype=torch.long)),
+    (torch.ones(1, 2, dtype=torch.long), torch.ones(1, 3, dtype=torch.long)),
+])
+def test_shared_causal_prefix_mask_rejects_unaligned_or_empty_tokens(generated, gold):
+    with pytest.raises(ValueError, match='nonempty aligned'):
+        causal_gold_prefix_mask(generated, gold)
 
 
 class CausalCycle(torch.nn.Module):

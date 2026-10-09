@@ -15,7 +15,7 @@ import torch
 
 from ..serve import load_engine
 from ..train.output_embedding_projection import sha
-from ..train.execution import full_depth_projected_feedback_step
+from ..train.execution import causal_gold_prefix_mask, full_depth_projected_feedback_step
 from ..train.text_warmup import (
     chunked_readout, document_windows, gold_completion, load_text_rows,
     select_held_document_windows,
@@ -197,7 +197,7 @@ def _gold_reference_survival(prediction, losses, span):
     if prediction.shape != span.shape or losses.shape != span.shape or span.ndim != 2:
         raise ValueError('prediction, loss and gold target shapes must match')
     matches = prediction.eq(span)
-    survival = torch.cat((torch.ones_like(matches[:, :1]), matches[:, :-1]), dim=1).cumprod(dim=1).bool()
+    survival = causal_gold_prefix_mask(prediction, span)
     surviving_losses = losses[survival]
     surviving_correct = matches[survival]
     first_mismatch = []

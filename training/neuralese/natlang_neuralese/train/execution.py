@@ -33,6 +33,20 @@ from ..model.heads import PayloadSample, PortHeads, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortBackbone, PortCache
 
 
+def causal_gold_prefix_mask(generated: torch.Tensor, gold: torch.Tensor) -> torch.Tensor:
+    """Select context-valid gold decisions, including the first mismatch.
+
+    Target t has a gold token history only when every generated token before
+    t matches gold. The mismatching decision is useful supervision; later gold
+    targets belong to a different history. This token-history condition alone
+    does not establish equivalence of continuous Neuralese payloads.
+    """
+    if generated.ndim != 2 or generated.shape != gold.shape or not gold.shape[1]:
+        raise ValueError('nonempty aligned rank-two generated and gold tokens required')
+    matches = generated.eq(gold)
+    return torch.cat((torch.ones_like(matches[:, :1]), matches[:, :-1]), dim=1).cumprod(dim=1).bool()
+
+
 @dataclass
 class Prefilled:
     cache: PortCache        # block-start snapshot: every layer at the open marker
