@@ -144,3 +144,13 @@ test('semantic selection example uses typed Boolean verdicts instead of object t
   assert.ok(BUILT_IN_DOCS.nl.includes('items.filter((item, i) => verdicts[i] === true)'));
   assert.ok(BUILT_IN_DOCS.nl.includes('T describes the result, not the capture object'));
 });
+
+
+test('answer and note calls distinguish returned values from requested file edits', () => {
+  for (const prompt of [TOOLS_PROMPT, promptAtNlDepthLimit(TOOLS_PROMPT)]) {
+    assert.ok(prompt.includes('When the instruction asks for a decision, extraction, or revised notes, return that value.'));
+    assert.ok(prompt.includes('Use input and captured files as evidence; save or edit a file only when this call asks for that file change.'));
+    assert.ok(prompt.includes('For prose notes, preserve supported facts rather than exact wording, unless the task requires verbatim copying.'));
+    assert.ok(prompt.includes('Use eval for exact computation'));
+  }
+});

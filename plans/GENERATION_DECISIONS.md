@@ -3224,3 +3224,7 @@ different preparations do not inherit stale progress. Both paths verified.
   explicit positive phase LR, unchanged heldout bytes, and exact lineage. No reset
   via init-adapter and no broadening admission gates. Live launch awaits verified
   diverse candidates and audits. First four reducers exercise collection mechanics.
+
+### 2026-10-09 — return revised notes; edit files when requested
+
+Fresh V17 archive scenario3 kept the correct final decision but failed input-file preservation: sampled child call/16, action23 executed `evidence.writeText(updated)` while its inline instruction requested returned readable prose. `evidence` was an implicitly captured FileHandle. Root held this action/root; oracle correctness does not excuse changing source evidence. Shared interpreter guidance now says decision/extraction/revised-note calls return their value, input/captured files are evidence, and file writes follow an instruction requesting that change. No file capability or editing feature was removed. Prose revisions preserve supported facts rather than exact wording unless verbatim copying is requested, addressing the same run's self-authored “Historical note changed” assertion. Source/oracles/current frozen campaigns are unchanged; new campaigns must pin a fresh runtime. TypeScript compile and12 system-prompt tests pass; improved generation success is not yet established.
