@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/wiki",
+  "version": "0.2.0",
+  "description": "A local collaborative wiki whose edit pipeline, page-structure maintenance and cell evaluation policy are written in natural language.",
+  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "types.ts", "merge.nl", "merge", "maintain.nl", "maintain", "cells.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
