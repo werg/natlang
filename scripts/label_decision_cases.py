@@ -104,6 +104,31 @@ def _retry_after_seconds(value):
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
+def _google_retry_metadata(decoded):
+    """Read Google's quota identity and RetryInfo, including compatibility envelopes."""
+    delays, quotas = [], []
+    def visit(value):
+        if isinstance(value, dict):
+            if str(value.get('@type', '')).endswith('RetryInfo'):
+                delay = _retry_after_seconds(str(value.get('retryDelay', '')).removesuffix('s'))
+                if delay is not None:
+                    delays.append(delay)
+            if value.get('quotaId'):
+                quotas.append(str(value['quotaId']))
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+        elif isinstance(value, str) and value.lstrip().startswith(('{', '[')):
+            try:
+                visit(json.loads(value))
+            except json.JSONDecodeError:
+                pass
+    visit(decoded)
+    return max(delays, default=None), sorted(set(quotas))
+
+
 def _decode_http_answer(content):
     """Accept one JSON value with an optional Markdown wrapper, never arbitrary suffix prose."""
     if not isinstance(content, str):
@@ -188,7 +213,19 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
             decoded = None
         history_entry = {'attempt': attempt + 1, 'status': response_status,
                          'response_sha256': response_hash}
+        if response_status != 200 and isinstance(decoded, dict):
+            provider_error = decoded.get('error', {})
+            if isinstance(provider_error, dict):
+                history_entry['provider_error'] = {
+                    'code': provider_error.get('code'), 'status': provider_error.get('status'),
+                    'message': str(provider_error.get('message', '')).replace(api_key or '\0', '[REDACTED]')[:2000],
+                }
         retry_after = _retry_after_seconds(headers.get('retry-after'))
+        google_delay, quota_ids = _google_retry_metadata(decoded)
+        if google_delay is not None:
+            retry_after = max(retry_after or 0, google_delay)
+        if quota_ids:
+            history_entry['quota_ids'] = quota_ids
         if retry_after is not None:
             history_entry['retry_after_seconds'] = retry_after
         history.append(history_entry)

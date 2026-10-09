@@ -9796,3 +9796,8 @@ and eviction evidence: `runs/ling-grouped-duplicate-audit-20261009-v1/`; final r
 SHA-256 `b88f68c63298695fa2a8a41ae1c90f3f6bfc8f0df766bc317fcdc183a710f861`.
 Rebuild with `python3 scripts/ling_grouped_experts.py /srv/storage/natlang/candidates/ling3-tiny-hf /srv/storage/natlang/candidates/ling3-tiny-grouped`
 from `/home/werg/natlang`, using offline dependencies and no GPU.
+
+
+### 2026-10-09 — Per-model Gemini quota pool
+
+User requested using all eligible Gemini model budgets. Shared `run_gemini_decision_pool.py` now dispatches four parallel HTTP calls across ready verified free text groups, one per group, with persistent pacing, per-model exponential cooldowns, nested RetryInfo, and a project-state owner lock. Gold-free prompts and strict validation reuse `label_decision_cases.py`; no duplicate teacher adapter or paid fallback. Inventory and procedures: `plans/GEMINI_GENERATION_POOL.md`. Preview aliases conservatively share stable quotas. Actual reset delays seed the exhausted 3.5/3.6/3.8 Flash groups; active 3.1Lite standalone budget is excluded. Pop PID 769051 runs 256 further inherited train cases/19 families under `runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v1`, all held/zero new worlds. Initial 3.5Lite answers succeeded; Gemma26B produced invalid distributions and Gemma31B returned a retryable error, preserved for review. The preceding 3.5Lite mixed128 closed 128/128 typed-valid; this is not semantic admission. The running pool froze the adapter at launch before the later error-message telemetry addition; its manifest identifies the exact bytes. Do not resume this output with changed code; a later launch needs a fresh output.
