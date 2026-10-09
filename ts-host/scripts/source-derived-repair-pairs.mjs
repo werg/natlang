@@ -396,6 +396,9 @@ function resolveRepoArtifact(root, relativePath) {
 export function sourceDerivedRepairReviewPair(item) {
   if (item?._causal_action_v5_validated === true) {
     const pair = structuredClone(item.preference_pair_candidate);
+    pair.program_id = item.source.program_id;
+    pair.split = item.source.split;
+    pair.source_groups = [...item.source.source_groups];
     pair.tools = item.provider_request.tools_offered;
     pair.evidence = { kind: 'source-derived-causal-action-repair', proposal_item_id: item.candidate_id,
       source_id: item.source.source_id, source_row_sha256: item.source.row_sha256_including_lf,
