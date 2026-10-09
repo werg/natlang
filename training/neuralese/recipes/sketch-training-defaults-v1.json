@@ -3,7 +3,7 @@
   "id": "sketch-training-defaults-v1",
   "profile": "latent-sketch-v2",
   "status": "canonical-defaults",
-  "implementation": "natlang_neuralese.train.sketch_defaults.SKETCH_TRAINING_DEFAULTS",
+  "implementation": "natlang_neuralese.train.trajectories.CONSUMER_TRAINING_DEFAULTS",
   "defaults": {
     "sketch_gradient": "local_stage",
     "sketch_target_weight": 0.1,

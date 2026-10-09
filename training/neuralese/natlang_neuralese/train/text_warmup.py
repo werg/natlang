@@ -970,11 +970,38 @@ def configure_student(engine, policy='full', rank=16, secondary_head='feedback')
     return named
 
 
-def _apply_requested_sketch_cutoff(engine, cutoff, device):
-    """Make the CLI cutoff the actual latent-sketch depth on the loaded engine."""
+def install_shallow_channel(engine, *, cutoff, max_length=None):
+    """A fresh shallow-latent channel (profile latent-sketch-v2) from a qualified full-depth raw reference.
+
+    An explicit architecture change, never an in-place checkpoint migration or an inherited generated-channel
+    qualification: the channel has fresh projection, content-residual and stop parameters. Payload j comes from the
+    top state at j - 1, the shallow state from j - 1 predicts it, and the close token comes from the last top state.
+    """
+    from ..model.heads import PortHeads
+    parent=engine.heads
+    proof=dict(getattr(engine,'foundation',None) or {})
+    if parent.profile!='raw-token-v1' or parent.cutoff!=engine.backbone.num_layers:
+        raise ValueError('channel handoff requires a full-depth raw causal reference')
+    if proof.get('qualified') is not True:
+        raise ValueError('channel handoff requires qualified foundation evidence')
+    heads=PortHeads(engine.backbone,cutoff=cutoff,max_length=max_length or parent.max_length,
+                    stop_source='final',stop_position=False,profile='latent-sketch-v2')
+    heads.content.reference.load_state_dict(parent.feedback.state_dict())
+    heads.to(device=engine.backbone.embedding_weight.device).eval()
+    heads.configure_frozen_reference()
+    engine.heads=heads
+    engine.max_block=heads.max_length
+    engine.dialect=heads.dialect
+    engine.foundation={**proof,'runtime_qualified':False,'autonomous_stopping_qualified':False,
+        'reference_foundation':proof,'channel_profile':heads.profile,
+        'scope':'Full-depth reference only; new shallow latent channel needs separate replay and consumer qualification.'}
+    return heads
+
+
+def apply_requested_channel_cutoff(engine, cutoff, device):
+    """Make the CLI cutoff the actual shallow-channel depth on the loaded engine."""
     if engine.heads.profile=='raw-token-v1':
-        from .sketch_handoff import install_latent_sketch
-        install_latent_sketch(engine,cutoff=cutoff,profile='latent-sketch-v2')
+        install_shallow_channel(engine,cutoff=cutoff)
     elif engine.heads.profile=='latent-sketch-v2' and engine.heads.cutoff!=cutoff:
         # A requested cutoff is part of this run's identity. Rebuild the
         # same-shaped projection modules at that depth instead of silently
@@ -1006,7 +1033,7 @@ def load_initial(heads, checkpoint, device, cutoff):
     else:
         from ..serve import load_engine
         engine=load_engine(heads_checkpoint=str(heads),device=device);parent=None
-    _apply_requested_sketch_cutoff(engine,cutoff,device)
+    apply_requested_channel_cutoff(engine,cutoff,device)
     return engine,parent
 
 

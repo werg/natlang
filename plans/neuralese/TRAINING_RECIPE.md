@@ -367,7 +367,7 @@ embeddings in their normal slots. This does not assert that a fresh random sketc
 already generates good consumer content.
 
 The canonical consumer setup is `sketch-training-defaults-v1.json`, implemented
-in `train/sketch_defaults.py` so frozen runtimes retain the exact defaults.
+as `CONSUMER_TRAINING_DEFAULTS` in `train/trajectories.py` (the retired `train/sketch_defaults.py` held the same values; a test pins them) so frozen runtimes retain the exact defaults.
 A bare trajectory trainer now selects `local_stage`, same-slot sketch target0.1,
 source-state auxiliary gradient0.05, control-row training, top-state transport,
 written child handoffs, depth5, source-sized uncompressed values, native writer and
@@ -482,7 +482,7 @@ the parent SHA. Existing resume still rejects changed controls. See the declared
 
 ## Cross-machine policy synchronization
 
-Pop and Maple consumer declarations use the same canonical `sketch_defaults.py`
+Pop and Maple consumer declarations use the same canonical `CONSUMER_TRAINING_DEFAULTS`
 policy. `latent-sketch-consumer-maple-v2.json` now selects `local_stage` explicitly.
 The earlier `latent-sketch-consumer-v2.json` records a historical Pop `one_step`
 run; it is not the current launch specification. Owners must inspect effective
