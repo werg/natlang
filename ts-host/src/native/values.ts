@@ -140,6 +140,8 @@ export type CoerceOptions = { /** Keep structurally compatible extra record prop
 
 export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', options: CoerceOptions = {}): Value {
   const wanted = env.resolve(type);
+  // A refinement is structural here (its base); the predicate is checked by native/refinement.ts where the value enters.
+  if (wanted.kind === 'refined') return coerce(raw, wanted.base, env, path, options);
   if (wanted.kind === 'host') {
     if (checkHost(raw, wanted.contract, env.classes)) return raw as Value;
     return reject(path, 'type-mismatch', wanted.name, isLive(raw) ? liveLabel(raw as object) : preview(raw));
@@ -282,6 +284,7 @@ export function problems(value: Value, type: Type, env: TypeEnv, path: string): 
   function walk(item: Value, current: Type, at: string): void {
     if (item === MISSING) { holes.push({ path: at, code: 'hole', expected: formatType(current) }); return; }
     const resolved = env.resolve(current);
+    if (resolved.kind === 'refined') return walk(item, resolved.base, at);
     if (resolved.kind === 'union') {
       for (const member of resolved.members) {
         try { coerce(item, member, env, at); walk(item, member, at); return; }
