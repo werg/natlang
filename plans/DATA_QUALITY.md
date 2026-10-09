@@ -4,6 +4,18 @@ This continues the complete raw-result audit in [REJECTION_REVIEW.md](REJECTION_
 Raw histories and old source shards remain evidence. Admission is recomputed; neither an old acceptance nor a
 nearby answer is automatically promoted into current training data.
 
+## Scoped native-action review — 2026-10-09
+
+Review a sampled action against **its own invocation's** validated instruction and return type. The enclosing task's result type does not constrain a nested Boolean or `{eligible, evidence}` helper. Native records carry the compiler/runtime witness in `source_ref.inline_instruction_site.site` (`returns.natlang`, `realized_instruction`, parameters and captures). Keep that exact witness visible in review packets, with the context/target/source digests.
+
+A useful source read, intermediate computation or inspection can be a correct ordinary action without completing the function. A status-only success is valid when the same invocation already staged the correct typed result; bind the earlier stage and terminal action rather than demanding a redundant value or readout. An opaque typed result is not invalid merely because it is not printable in that row. Missing a staged-value witness warrants a hold, not an invented shape error.
+
+For duplicates, compare the full context and target after removing only structural tool-call identifiers. Retain Neuralese block identities and semantic arguments. Keep one useful representative; identical outputs under different inputs are not duplicates. Low-information seed placeholders can be explicitly excluded for corpus quality while preserving faithful typed readout examples where useful.
+
+Separate ordinary-action correctness from body-target and recurrence admission. A faithful typed readout of an incorrect upstream note can be locally correct without endorsing the note's factual judgments. A source-grounded repair may remain useful inside a rejected parent. Incorrect facts, unjustified additional proof conditions and brittle wording gates require their own semantic review; a final accepted oracle does not certify intermediate judgments.
+
+Known negative evidence is distinct from unresolved uncertainty. Conversely, a supported compact predicate can satisfy a decision contract: require supporting detail only when the downstream contract needs reassessment, rather than requiring every original fact repeated. Availability/transport failures are infrastructure evidence, not semantic negatives or DPO pairs. Distinguish adapter-generated HTTP status from an observed upstream status; record unknown upstream details as unknown.
+
 ## Were the slow cases stuck?
 
 | Case | Fresh replies / completion tokens | Finding |
