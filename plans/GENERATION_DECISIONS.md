@@ -3228,3 +3228,14 @@ different preparations do not inherit stale progress. Both paths verified.
 ### 2026-10-09 — return revised notes; edit files when requested
 
 Fresh V17 archive scenario3 kept the correct final decision but failed input-file preservation: sampled child call/16, action23 executed `evidence.writeText(updated)` while its inline instruction requested returned readable prose. `evidence` was an implicitly captured FileHandle. Root held this action/root; oracle correctness does not excuse changing source evidence. Shared interpreter guidance now says decision/extraction/revised-note calls return their value, input/captured files are evidence, and file writes follow an instruction requesting that change. No file capability or editing feature was removed. Prose revisions preserve supported facts rather than exact wording unless verbatim copying is requested, addressing the same run's self-authored “Historical note changed” assertion. Source/oracles/current frozen campaigns are unchanged; new campaigns must pin a fresh runtime. TypeScript compile and12 system-prompt tests pass; improved generation success is not yet established.
+
+### 2026-10-09 — Ling grouped duplicate payload cache eviction
+
+The local `ling3-tiny-grouped` directory was confirmed to be an exact, reproducible
+conversion of `ling3-tiny-hf`, then its 25 grouped safetensors payload shards were
+evicted to recover storage. The grouped directory retains its config, tokenizer,
+index, converter-produced code, and explicit `CACHE_EVICTED.json` marker; it is
+intentionally incomplete and must not be loaded until rebuilt. The 32 original HF
+shards remain unchanged. The full byte-range equivalence audit and eviction receipt
+are in `runs/ling-grouped-duplicate-audit-20261009-v1/`; receipt SHA-256 is
+`b88f68c63298695fa2a8a41ae1c90f3f6bfc8f0df766bc317fcdc183a710f861`.
