@@ -52,7 +52,6 @@ async function main(argv) {
   }
   receipt.collector_pid = child.pid ?? null;
   receipt.status = 'running';
-  await persistReceipt();
   let stopCause = null, escalation;
   const stopChild = (cause, signal) => {
     if (stopCause) return;
@@ -70,10 +69,13 @@ async function main(argv) {
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   const timer = setTimeout(() => stopChild('timeout', 'SIGINT'), timeoutMs);
-  const result = await new Promise(resolve => {
+  const resultPromise = new Promise(resolve => {
     child.once('error', error => resolve({ error }));
     child.once('close', (code, signal) => resolve({ code, signal }));
-  }).finally(() => {
+  });
+  const runningReceiptWrite = persistReceipt();
+  await runningReceiptWrite;
+  const result = await resultPromise.finally(() => {
     clearTimeout(timer); clearTimeout(escalation);
     process.off('SIGINT', onSigint); process.off('SIGTERM', onSigterm);
   });
