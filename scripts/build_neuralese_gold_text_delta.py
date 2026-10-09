@@ -420,6 +420,13 @@ def resolve_base_text_prefix_metadata(binding, receipt_path: Path, *, root: Path
 def selected_delta_omissions(omissions, delta_ids):
     return [item for item in omissions if item.get("id") in delta_ids]
 
+def admission_source_groups_match(admission, row):
+    """Require exact source-group binding across receipt schema variants."""
+    groups = admission.get("source_groups")
+    if groups is None and isinstance(admission.get("source_group"), str):
+        groups = [admission["source_group"]]
+    return isinstance(groups, list) and groups == row.get("source_groups", [])
+
 def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT):
     """Validate the mixed-disposition root review and return only admitted rows.
 
@@ -674,9 +681,7 @@ def main():
             if root_derived_writer_admission:
                 group_ok = admission.get("source_group") in row.get("source_groups", [])
             elif root_per_action_admission:
-                groups = row.get("source_groups", [])
-                group_ok = (isinstance(admission.get("source_group"), str)
-                            and admission["source_group"] in groups)
+                group_ok = admission_source_groups_match(admission, row)
             else:
                 groups = admission.get("source_groups")
                 if groups is None and isinstance(admission.get("source_group"), str): groups = [admission["source_group"]]

@@ -288,6 +288,19 @@ def test_mixed_root_per_action_receipt_selects_only_14_exactly_admitted_rows(tmp
                and row["decision"] == "admit-ordinary-native-action" for row in admitted)
 
 
+def test_per_action_group_binding_compares_complete_group_list():
+    row = {"source_groups": ["inline-curriculum:case-a", "v17:case-a"]}
+    assert MODULE.admission_source_groups_match(
+        {"source_groups": ["inline-curriculum:case-a", "v17:case-a"]}, row)
+    assert MODULE.admission_source_groups_match(
+        {"source_group": "inline-curriculum:case-a"},
+        {"source_groups": ["inline-curriculum:case-a"]})
+    assert not MODULE.admission_source_groups_match(
+        {"source_group": "inline-curriculum:case-a"}, row)
+    assert not MODULE.admission_source_groups_match(
+        {"source_groups": ["v17:case-a"]}, row)
+
+
 def test_mixed_root_per_action_receipt_rejects_true_flag_on_held_row(tmp_path):
     receipt = _mixed_root_action_receipt(tmp_path)
     receipt["rows"][14]["training_admission"] = True
