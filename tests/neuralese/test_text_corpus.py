@@ -98,6 +98,27 @@ def test_held_text_preview_accepts_single_split_without_weakening_production_ren
         raise AssertionError("production renderer must keep its independent held split requirement")
 
 
+def test_text_provenance_preserves_exact_action_provenance_for_each_source_record():
+    action = {"kind": "authored_reference_root_eval", "source": "curriculum.reference.root",
+              "sampled": False, "code_sha256": "a" * 64}
+    base = {"split": "train", "source_groups": ["authored:one"],
+            "training_admission": {"approved": True},
+            "messages": [{"role": "user", "content": "Run the supplied action."}],
+            "target": {"role": "assistant", "content": "done"},
+            "tools": [], "source_ref": {"action_provenance": action}}
+    authored = {**base, "id": "authored-action"}
+    anchor = {**base, "id": "held-anchor", "split": "test", "source_groups": ["held:two"],
+              "source_ref": {}, "messages": [{"role": "user", "content": "Different held task."}],
+              "target": {"role": "assistant", "content": "held"}}
+    _, _, omissions, provenance = gold_text_rows([authored, anchor], [], tokenizer=_Tokenizer())
+    assert not omissions
+    authored_provenance = next(row for row in provenance if row["id"] == "authored-action")
+    assert authored_provenance["source_action_provenance"] == [
+        {"id": "authored-action", "action_provenance": action}]
+    anchor_provenance = next(row for row in provenance if row["id"] == "held-anchor")
+    assert "source_action_provenance" not in anchor_provenance
+
+
 def test_gold_text_hydrates_marker_output_writer_and_preserves_exact_code():
     block_id = "nz1_" + "a" * 52
     body = "Supported facts from this pass; unresolved fields remain pending."

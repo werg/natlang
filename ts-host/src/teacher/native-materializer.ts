@@ -1433,17 +1433,19 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (semanticApproval && !validNativeDecisionApproval(semanticApproval, { trajectory_id: row.id,
           source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
+      const authoredRootAction = record(source.action_provenance ?? {}, 'action provenance').kind === 'authored_reference_root_eval';
       const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
         (row.collection_guidance as Dict).training_admission === false;
-      const decisionApproved = !authoredGuidancePending && !semanticHold && !afterChunkCutoff &&
+      const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
+      const decisionApproved = (!authoredRootAction || !!semanticApproval) && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext && !invalidStatusOnlySuccess;
       const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target);
-      const authoredRootAction = record(source.action_provenance ?? {}, 'action provenance').kind === 'authored_reference_root_eval';
-      if (authoredRootAction) authoredActions.push({ version: 'natlang.authored_action_hold/1',
+      if (authoredRootAction && !decisionApproved) authoredActions.push({ version: 'natlang.authored_action_hold/1',
         id: `${row.id}:authored-action:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest, invocation_id: invocation ?? null,
-          program_ir_id: programId }, provenance: row.provenance, task: row.task, collection_guidance: row.collection_guidance ?? null,
+          program_ir_id: programId, action_provenance: structuredClone(record(source.action_provenance,
+            `${row.id}.trajectory[${index}].action_provenance`)) }, provenance: row.provenance, task: row.task, collection_guidance: row.collection_guidance ?? null,
         context: publicValue(contextSource), tools: publicValue(source.tools_offered ?? []), target,
         actions: calls.map(call => ({ tool: call.tool, source_tool: call.source_tool, arguments: publicValue(call.arguments),
           call_id: call.call_id, outcome: publicValue(call.outcome) })),
@@ -1452,9 +1454,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         training_admission: { approved: false, kind: 'authored-root-action-pending-review',
           reason: 'authored reference root action requires separate root training approval' },
         trace_admission: { admitted: false, kind: 'authored-root-action-pending-review' } });
-      if (!authoredRootAction) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
+      if (!authoredRootAction || decisionApproved) rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
+          ...(source.action_provenance && typeof source.action_provenance === 'object' && !Array.isArray(source.action_provenance) ?
+            { action_provenance: structuredClone(source.action_provenance) } : {}),
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
             ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?
@@ -1480,31 +1484,34 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         source_program_ids: programId === null ? [] : [programId],
         source_groups: [...new Set([...(programId === null ? [] : [programId]),
           ...(Array.isArray(taskIr.source_groups) ? taskIr.source_groups.filter((group): group is string => typeof group === 'string') : [])])],
-        source: `${role}-native`,
-        gold_sources: [...(Array.isArray(taskIr.gold_sources) ? taskIr.gold_sources : []), `checked-${role}-trajectory`, 'exact-runtime-oracle'],
+        source: authoredRootAction ? 'authored-static-native' : `${role}-native`,
+        gold_sources: [...(Array.isArray(taskIr.gold_sources) ? taskIr.gold_sources : []),
+          authoredRootAction ? 'authored-reference-root-action' : `checked-${role}-trajectory`, 'exact-runtime-oracle'],
         license: taskIr.license ?? 'project-generated',
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
         target,
-        teacher_reasoning: retainedReasoning,
+        teacher_reasoning: authoredRootAction ? null : retainedReasoning,
         // Only reasoning a model wrote is a target: rationales a model wrote for scripted actions (static
         // demonstrations) train like a teacher's reasoning. Authored action plans and stock action notes are
         // template text: kept in context, never trained (owner 2026-10-06).
-        ...(row.provenance.synthetic_reasoning ? { teacher_reasoning_trained:
-          row.provenance.synthetic_reasoning === 'rationalized-actions/1' } : {}),
-        teacher_execution_plan: executionPlan,
+        ...(authoredRootAction ? { teacher_reasoning_trained: false } :
+          row.provenance.synthetic_reasoning ? { teacher_reasoning_trained:
+            row.provenance.synthetic_reasoning === 'rationalized-actions/1' } : {}),
+        teacher_execution_plan: authoredRootAction ? null : executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
         // Keep the final verdict with each decision for downstream continuation validation, without copying files.
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
-        training_admission: { kind: authoredGuidancePending ? 'authored-root-guided-pending-review' :
+        training_admission: { kind: authoredRootAction && semanticApproval ? 'reviewed-authored-static-native-action' :
+          authoredGuidanceBlocked ? 'authored-root-guided-pending-review' :
           semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
-          ...(authoredGuidancePending ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
+          ...(authoredGuidanceBlocked ? { reason: 'authored-root-guided sample awaits separate root training approval' } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: authoredGuidancePending ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -1513,15 +1520,16 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             redundantSkillRead ? 'retrieves unchanged skill instructions again' :
             detour ? 'repeats an earlier call of this call with the same result' :
             refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
-        trace_admission: { admitted: !authoredGuidancePending,
-          kind: authoredGuidancePending ? 'authored-root-guided-pending-review' : 'exact-native-runtime-oracle',
+        trace_admission: { admitted: !authoredGuidancePending && !authoredRootAction,
+          kind: authoredRootAction ? 'authored-root-static-reference-not-provider-sampled' :
+            authoredGuidancePending ? 'authored-root-guided-pending-review' : 'exact-native-runtime-oracle',
           final_outcome_sha256: outcomeDigest },
         decision: { index,
           ...(statusOnlySuccessValidation.length ? { status_only_success_validation: statusOnlySuccessValidation } : {}),
           durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
           tool_schemas: offered,
-          assistant: { content: assistant.content ?? '', reasoning: retainedReasoning,
-            execution_plan: executionPlan,
+          assistant: { content: assistant.content ?? '', reasoning: authoredRootAction ? null : retainedReasoning,
+            execution_plan: authoredRootAction ? null : executionPlan,
             calls },
           failed_action: failedAction,
           training_approved: decisionApproved,

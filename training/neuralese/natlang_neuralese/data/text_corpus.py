@@ -1306,9 +1306,14 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         if not text.strip():
             omitted.append({"id": rid, "reason": "empty_native_turn"})
             continue
+        source_ref = record.get("source_ref") if isinstance(record.get("source_ref"), Mapping) else {}
+        action_provenance = source_ref.get("action_provenance") if isinstance(source_ref, Mapping) else None
+        source_action_provenance = ([{"id": rid, "action_provenance": copy.deepcopy(action_provenance)}]
+                                    if isinstance(action_provenance, Mapping) else [])
         prepared.append({"text": text, "token_ids": token_ids, "tokenizer_sha256": fingerprint,
                          "supervised_suffix_start": suffix_start,
                          "split": split, "source_groups": groups, "id": rid,
+                         "source_action_provenance": source_action_provenance,
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
                                                             for item in context_attestations],
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
@@ -1331,6 +1336,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             representative = dedup[key]
             representative["source_groups"] = sorted(set(representative["source_groups"] + row["source_groups"]))
             representative["source_record_ids"].append(row["id"])
+            representative["source_action_provenance"].extend(row["source_action_provenance"])
             representative["neuralese_context_attestations"].extend(row["neuralese_context_attestations"])
             representative["capture_context_augmentation_attestations"].extend(
                 row["capture_context_augmentation_attestations"])
@@ -1347,6 +1353,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                    "text_sha256": _sha(row["text"].encode("utf-8")),
                    "token_ids_sha256": _sha(_canonical(row["token_ids"]).encode("utf-8")),
                    "tokenizer_sha256": fingerprint,
+                   **({"source_action_provenance": row["source_action_provenance"]}
+                      if row["source_action_provenance"] else {}),
                    "neuralese_context_attestations": row["neuralese_context_attestations"],
                    "capture_context_augmentation_attestations": row["capture_context_augmentation_attestations"]}
                   for row in rows]

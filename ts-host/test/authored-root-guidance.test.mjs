@@ -13,6 +13,8 @@ const collector = dist ? await import(pathToFileURL(join(dist, 'teacher/collecto
 const { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, nativeJobRunner } = collector;
 const materializer = dist ? await import(pathToFileURL(join(dist, 'teacher/native-materializer.js'))) :
   await import('../dist/teacher/native-materializer.js');
+const decisionReview = dist ? await import(pathToFileURL(join(dist, 'native/decision-review.js'))) :
+  await import('../dist/native/decision-review.js');
 
 const rootCode = [
   "type Progress = { step: number; notes: Neuralese<string> };",
@@ -85,6 +87,13 @@ test('declared authored root eval runs once while child NL turns stay provider s
     assert.equal(converted.turns.length, row.trajectory.length - 1, 'authored root action remains provenance only');
     assert.equal(converted.authored_actions.length, 1);
     assert.equal(converted.authored_actions[0].target.tool_calls[0].function.name, 'eval');
+    assert.deepEqual(converted.authored_actions[0].source_ref.action_provenance,
+      row.trajectory[0].action_provenance, 'retain the exact authored action provenance in its source reference');
+    const provenanceFixture = structuredClone(row);
+    provenanceFixture.trajectory[1].action_provenance = { kind: 'fixture-provider-action', sampled: true, marker: 'preserve-exactly' };
+    const provenanceRows = materializer.materializeNativeRows([provenanceFixture]);
+    assert.deepEqual(provenanceRows.turns[0].source_ref.action_provenance,
+      provenanceFixture.trajectory[1].action_provenance, 'retain provider action provenance without changing its value');
     assert.ok(converted.authored_actions[0].actions[0].outcome, 'retain the authored root action outcome');
     assert.equal(converted.authored_actions[0].outcome.accepted, true, 'keep answer attestation separate from action admission');
     assert.equal(converted.authored_actions[0].training_admission.approved, false);
@@ -95,6 +104,36 @@ test('declared authored root eval runs once while child NL turns stay provider s
       'retain exact-oracle attestation while collection-review holds block admission');
     assert.ok(converted.turns.every(turn => turn.trace_admission.admitted === false));
     assert.ok(converted.turns.every(turn => turn.training_admission.kind === 'authored-root-guided-pending-review'));
+
+    const authored = converted.authored_actions[0];
+    const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+      source_row_sha256: materializer.nativeRowDigest(row), decision_index: 0,
+      target_sha256: decisionReview.nativeDecisionTargetDigest(authored.target), review_sha256: 'a'.repeat(64),
+      reason: 'fixture exact action review', evidence: ['reviewed authored action target and exact source code pin'] };
+    const approved = materializer.materializeNativeRows([row], { decisionApprovals: [approval] });
+    const approvedRoot = approved.turns.find(turn => turn.id.endsWith(':decision:0000'));
+    assert.ok(approvedRoot, 'an explicitly reviewed authored action uses the shared native row schema');
+    assert.equal(approved.authored_actions.length, 0, 'approved root is represented once as a native row');
+    assert.equal(approvedRoot.source, 'authored-static-native');
+    assert.deepEqual(approvedRoot.source_ref.action_provenance, row.trajectory[0].action_provenance);
+    assert.equal(approvedRoot.teacher_reasoning, null);
+    assert.equal(approvedRoot.teacher_reasoning_trained, false);
+    assert.equal(approvedRoot.teacher_execution_plan, null);
+    assert.equal(approvedRoot.training_admission.approved, true);
+    assert.equal(approvedRoot.trace_admission.admitted, false, 'static source execution is not provider/runtime qualification');
+    for (const guidance of [undefined, { training_admission: true, root_action: { sampled: false } }]) {
+      const unreviewed = structuredClone(row);
+      if (guidance === undefined) delete unreviewed.collection_guidance;
+      else unreviewed.collection_guidance = guidance;
+      const result = materializer.materializeNativeRows([unreviewed]);
+      assert.equal(result.turns.some(turn => turn.id.endsWith(':decision:0000')), false,
+        'authored root remains held when guidance is absent or permissive without exact action approval');
+      assert.equal(result.authored_actions.length, 1);
+      assert.equal(result.authored_actions[0].training_admission.approved, false);
+    }
+    assert.throws(() => materializer.materializeNativeRows([row], { decisionApprovals: [
+      { ...approval, target_sha256: '0'.repeat(64) },
+    ] }), /semantic decision approval target or evidence mismatch/);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
