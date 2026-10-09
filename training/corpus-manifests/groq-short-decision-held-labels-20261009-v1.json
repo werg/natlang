@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "groq-short-decision-held-labels-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-groq-short-decisions-v1",
+  "files": [
+    {
+      "path": "baseline-v1.json",
+      "bytes": 521,
+      "sha256": "62fc927c2228c94c51e58a7e7fe1797378b19d18fc014659557864c76f29b3e3"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 7359,
+      "sha256": "863781e0f461202b9c29bbcba72f858270a7355bf184853bbf2b06b4db4f56d7",
+      "lines": 16
+    },
+    {
+      "path": "closeout-v1.json",
+      "bytes": 896,
+      "sha256": "b67f533ec1d8c8ff1218d27937e73229d7e997277e80465ee33a54938296f1c8"
+    },
+    {
+      "path": "labels.jsonl",
+      "bytes": 12427,
+      "sha256": "61e3c91d40ee1d650b84e24ebb3037071d8b4f1566b5176a13d571ec7c36fd01",
+      "lines": 16
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 719,
+      "sha256": "b919bf27252ccc031fa27537e207d03662c78c6ca61c6c9e5ae878c1ce1c9250"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1816,
+      "sha256": "d659b10c0ac3778ec121992e5fbca05f7b346b854307dc5ee7662ee60e4df33e"
+    }
+  ],
+  "bytes": 23738
+}

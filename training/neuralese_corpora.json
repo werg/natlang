@@ -19772,6 +19772,28 @@
       "license": "internal: project-generated counterfactual cases and sampled Luna teacher outputs",
       "independent_new_worlds": 0,
       "notes": "Five completed source-derived counterfactual cases from existing train groups (v22:accessible-procurement:world; v22:document-claim-scope:world; v22:records-retention-disposition:world; v22:research-cohort-classification:world). Whole sampled trajectories and explicitly pinned evidence only; no action-level admission, no DPO/negative inference, no runtime/recurrence qualification, and no independent new-world credit. training_admission=false. Exact 41-file allowlist; no recursive campaign inclusion, mutable authority, private provider state, raw collector logs, database/config/credentials, cache, or runtime tree. Source, root generation approval, scripted reference proof, campaign closeout, and quality review are included by exact pin. Omissions: No action-only extracted rows or admission overlay.; No full runtime tree; runtime receipt is hash-pinned and remains in the local immutable runtime path.; No raw provider/session database or private process state."
+    },
+    {
+      "id": "groq-short-decision-held-labels-20261009-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-groq-short-decisions-v1",
+      "include": [
+        "cases.jsonl",
+        "labels.jsonl",
+        "labels.jsonl.manifest.json",
+        "baseline-v1.json",
+        "launch-receipt-v1.json",
+        "closeout-v1.json"
+      ],
+      "split": null,
+      "source_class": "sampled-typed-decision-labels",
+      "admission": "held-pending-source-quality-review-and-current-IR-conversion",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [],
+      "license": "Inherited source licenses in cases.jsonl; generated teacher probability annotations",
+      "independent_new_worlds": 0,
+      "notes": "16 existing train noul cases (15 BoolQ,1 Civil Comments toxicity), chosen for short complete inputs under Groq free TPM. Gold excluded from teacher requests. Source groups and original per-row source/license retained. GPT-OSS120B label envelope matches shared decision scorer; baseline on this tiny selected cohort is not a representative evaluation. No full interpreter trajectory or recurrence qualification. Required conversion: current Natlang typed decision/inline-lambda IR adapter and explicit source/quality admission; do not silently admit numeric labels."
     }
   ],
   "coverage_backlog": [
@@ -19791,6 +19813,7 @@
     "Cross-eval ordinary JavaScript helper persistence is unresolved: function identity transport exists, but old lexical closures retain eval callbacks, inline plans and mutable cells outside staged-local transactions. ba34baa7 clarifies current behavior without claiming an ergonomic fix. Future design should specify saved closure lifetime and transaction/capture semantics.",
     "V18 authored source drafts runs/neuralese-semantic-iterate-reducers-v18-20261008-v1..v5 are superseded by generation-approved V6. Preserve draft history locally; exclude superseded scripted trajectories from training. Final V6 explicitly supplies slot duration/end times and requests all privacy schema fields while still excluding direct identifiers. Active V6 generation is separate from immutable task-source publication.",
     "V22 actual-action preview retains three text omissions for accepted actions: task-1-6un6z1/7 has unresolved block nz1_xiglf4qbkmxq4w5acodoxcrnsk4t7f5hcsazlfsvqsojqypbk72q; task-1-6un6z1/4 and task-1-bph5xl/7 have provider-expanded context/action binding mismatches. Its 22 authenticated execution-output-to-reader bindings are not selected learned writers: require event-qualified source/action mapping and replay qualification before learned-edge claims. Direct plain-prose return_result for Neuralese<string> is now covered by a CPU scripted two-child runtime/materializer test; no V22 raw row or admission changed.",
-    "V17 revision2/v3 authored-root overlays and all descendants remain explicit held diagnostics: root placeholder uses Draft so pending is excluded, and eligibleIds literal unions expose future score-derived ranking. The corrected authored source is runs/neuralese-semantic-iterate-v17-guided-20261008-v7 (revision6; source rows have InitialDraft and plain-string eligibleIds). Do not admit or publish outputs from old source runs until regenerated from corrected rows and independently reviewed. Specifically, the four Archive derived body receipts and 4 native / 3 text compact proposal in luna-criterion-evidence-carry-v5-state-refresh-20261009-v1/archive-derived-delta-v1 are superseded for publication by source-quality-hold-v2; preserve all bytes and omissions. The old bus/wetland v4/v5 comparison is diagnostic only and its actual row/group/skill/seed mapping is pinned in comparison-v1/evidence/source-identity-correction-v2.json; its skill arms use different seeds and all four rows use the superseded source. Corrected bus, wetland, and Archive train scenario1 source overlays with the source-neutral v6 skill are pending root review and bounded generation; no source/action/trajectory admission."
+    "V17 revision2/v3 authored-root overlays and all descendants remain explicit held diagnostics: root placeholder uses Draft so pending is excluded, and eligibleIds literal unions expose future score-derived ranking. The corrected authored source is runs/neuralese-semantic-iterate-v17-guided-20261008-v7 (revision6; source rows have InitialDraft and plain-string eligibleIds). Do not admit or publish outputs from old source runs until regenerated from corrected rows and independently reviewed. Specifically, the four Archive derived body receipts and 4 native / 3 text compact proposal in luna-criterion-evidence-carry-v5-state-refresh-20261009-v1/archive-derived-delta-v1 are superseded for publication by source-quality-hold-v2; preserve all bytes and omissions. The old bus/wetland v4/v5 comparison is diagnostic only and its actual row/group/skill/seed mapping is pinned in comparison-v1/evidence/source-identity-correction-v2.json; its skill arms use different seeds and all four rows use the superseded source. Corrected bus, wetland, and Archive train scenario1 source overlays with the source-neutral v6 skill are pending root review and bounded generation; no source/action/trajectory admission.",
+    "Groq short held labels groq-short-decision-held-labels-20261009-v1 require explicit current Natlang IR conversion and source/quality admission. Preserve source groups; typed teacher labels are not full trajectories or independent new worlds."
   ]
 }
