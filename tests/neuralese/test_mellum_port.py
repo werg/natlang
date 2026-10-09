@@ -208,3 +208,31 @@ def test_ternarization_ramp_interpolates_from_bf16_to_deployed(tmp_path):
         assert model.model.layers[0].self_attn.q_proj.parametrizations.weight.original.grad is not None
     finally:
         QUANT_MIX["value"] = 1.0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernels are CUDA-only")
+def test_fused_ramp_and_lion_match_the_eager_rules():
+    from natlang_neuralese.maple import ternary
+    from natlang_neuralese.train.optim import LionSR
+
+    torch.manual_seed(0)
+    w = (torch.randn(4, 256, 512, device="cuda") * 0.02).to(torch.bfloat16)
+    try:
+        for mix in (1.0, 0.3):
+            # Reference rounded once from FP32 (the eager ramp rounds after each BF16 op).
+            eager = (w.float() + mix * (ternary.ternarize(w).float() - w.float())).to(w.dtype)
+            ternary.QUANT_MIX.update(value=mix, fused=True)
+            fused = ternary.ramped_ternarize_ste(w)
+            if mix == 1.0:  # deployed codes: only threshold ties may differ
+                assert float((fused != eager).float().mean()) < 1e-3
+            else:  # ramp: at most one BF16 ulp (FMA vs separate rounding)
+                assert torch.allclose(fused.float(), eager.float(), rtol=2 ** -7, atol=1e-6)
+        latent = torch.nn.Parameter(w.clone())
+        ternary.ramped_ternarize_ste(latent).sum().backward()
+        assert torch.equal(latent.grad, torch.ones_like(latent))  # straight-through
+    finally:
+        ternary.QUANT_MIX.update(value=1.0, fused=False)
+    p = torch.nn.Parameter(torch.zeros(1 << 20, device="cuda", dtype=torch.bfloat16))
+    p.grad = torch.ones_like(p)
+    LionSR([p], lr=1e-3, fused=True, chunk=1 << 18).step()
+    assert abs(float(p.float().mean()) + 1e-3) < 2e-5  # stochastic rounding keeps sub-ulp steps in expectation

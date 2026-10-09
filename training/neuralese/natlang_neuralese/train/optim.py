@@ -115,14 +115,27 @@ def stochastic_round_(target: torch.Tensor, value: torch.Tensor) -> None:
     target.copy_(((bits + noise) & -65536).view(torch.float32))
 
 
+def _lion_chunk(p, g, m, lr, beta1, beta2, decay):
+    """One fused Lion update of a BF16 chunk with stochastic rounding; returns (new p, new momentum)."""
+    gf, mf, value = g.float(), m.float(), p.float()
+    value = value * (1 - lr * decay) - lr * torch.sign(beta1 * mf + (1 - beta1) * gf)
+    bits = value.view(torch.int32)
+    rounded = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
+    return rounded.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
+
+
+_fused_lion_chunk = torch.compile(_lion_chunk, dynamic=True)
+
+
 class LionSR(torch.optim.Optimizer):
     """Lion (sign of interpolated momentum; one BF16 momentum buffer) for BF16 latents with stochastic-rounding
     writes: the memory-lean optimizer of Mellum's full-latent QAT (2 copies of the weights instead of 4-6). The update
     magnitude is ``lr`` per element, so for ternary latents ``lr`` is set in units of the codes' scale."""
 
-    def __init__(self, params, lr: float, betas=(0.9, 0.99), weight_decay: float = 0.0, chunk: int = 1 << 26):
+    def __init__(self, params, lr: float, betas=(0.9, 0.99), weight_decay: float = 0.0, chunk: int = 1 << 26,
+                 fused: bool = False):
         super().__init__(params, dict(lr=lr, betas=betas, weight_decay=weight_decay))
-        self.chunk = chunk
+        self.chunk, self.fused = chunk, fused
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -150,6 +163,14 @@ class LionSR(torch.optim.Optimizer):
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
         flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
+        if self.fused and p.is_cuda and p.dtype == torch.bfloat16:
+            for start in range(0, flat_p.numel(), self.chunk):
+                end = start + self.chunk
+                value, momentum = _fused_lion_chunk(flat_p[start:end], flat_g[start:end], flat_m[start:end],
+                                                    group["lr"], beta1, beta2, group["weight_decay"])
+                flat_p[start:end].copy_(value)
+                flat_m[start:end].copy_(momentum)
+            return
         for start in range(0, flat_p.numel(), self.chunk):
             end = start + self.chunk
             g = flat_g[start:end].float()

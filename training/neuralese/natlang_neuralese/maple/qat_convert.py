@@ -129,7 +129,8 @@ def run_train(a):
     model.model.checkpoint_layers = a.checkpoint_layers
     scales = {name: ternary_scale(latent) for name, latent in latents}
     groups = [{"params": [latent], "lr": a.lr * scales[name], "name": name} for name, latent in latents]
-    optimizer = LionSR(groups, lr=a.lr)
+    optimizer = LionSR(groups, lr=a.lr, fused=True)
+    QUANT_MIX["fused"] = True
     optimizer.step_in_backward()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -225,7 +226,7 @@ def main(argv=None):
     r.add_argument("--teacher", required=True)
     r.add_argument("--out", required=True)
     r.add_argument("--steps", type=int, default=2000)
-    r.add_argument("--lr", type=float, default=3e-3, help="Lion step in units of each latent's ternary scale")
+    r.add_argument("--lr", type=float, default=3e-4, help="Lion step in units of each latent's ternary scale")
     r.add_argument("--ce-weight", type=float, default=1.0)
     r.add_argument("--kl-weight", type=float, default=1.0)
     r.add_argument("--ramp-steps", type=int, default=1000, help="ternarization mix ramps 0 → 1 over these updates")

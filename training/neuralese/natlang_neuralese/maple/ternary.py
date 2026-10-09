@@ -58,15 +58,48 @@ def ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
 
 # Gradual ternarization (full-latent QAT of a BF16 model): forwards use w + mix·(Q(w) − w), straight-through, with mix
 # ramped 0 → 1 over the conversion (HF 1.58-bit fine-tuning: an abrupt switch loses most of the model). 1 = deployed.
-QUANT_MIX = {"value": 1.0}
+# ``fused``: one compiled kernel per latent (24x the eager rule on Mellum's experts); its reductions sum in another
+# order, so ~4e-5 of the codes differ at threshold ties. Training forwards only (the conversion sets it); export and
+# parity keep the eager rule.
+QUANT_MIX = {"value": 1.0, "fused": False}
+
+
+def _ramped_value(weight, mix):
+    x = weight.float()
+    magnitude = x.abs()
+    mask = magnitude > THRESHOLD_FACTOR * magnitude.mean(-1, keepdim=True)
+    count = mask.sum(-1, keepdim=True)
+    alpha = (torch.where(mask, magnitude, 0).sum(-1, keepdim=True) / count.clamp_min(1)).to(torch.bfloat16).float()
+    quantized = (torch.sign(x) * mask * alpha).to(weight.dtype).float()
+    return (x + mix * (quantized - x)).to(weight.dtype)
+
+
+_fused_ramped_value = torch.compile(_ramped_value, dynamic=False)
+_MIX_TENSORS: dict = {}
+
+
+class _FusedRamp(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, weight, mix):
+        return _fused_ramped_value(weight, mix)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad, None
 
 
 def ramped_ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
     mix = QUANT_MIX["value"]
-    if mix >= 1.0:
-        return ternarize_ste(weight)
     if mix <= 0.0:
         return weight
+    if QUANT_MIX["fused"] and weight.is_cuda:
+        key = (weight.device, mix)
+        if key not in _MIX_TENSORS:
+            _MIX_TENSORS.clear()
+            _MIX_TENSORS[key] = torch.tensor(mix, device=weight.device)
+        return _FusedRamp.apply(weight, _MIX_TENSORS[key])
+    if mix >= 1.0:
+        return ternarize_ste(weight)
     return weight + mix * (ternarize(weight.detach()) - weight.detach())
 
 
