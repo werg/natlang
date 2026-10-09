@@ -192,6 +192,109 @@ export function verifyStep5SourceBinding({ plan, sourceCasesText, sourceProofTex
     exact_source_fake_proof_sha256: proofPin.sha256 };
 }
 
+/** Verify that the running bridge scripts are exactly the imported closure pinned by the plan. */
+export async function verifyStep5ArtifactClosure({ plan, repoRoot = process.cwd() }) {
+  if (plan?.schema !== 'natlang.step5_authored_root_source_case_launch_plan/1')
+    return { ok: true, skipped: true };
+  const root = resolve(repoRoot);
+  const resolveRepoPath = value => {
+    if (typeof value !== 'string' || !value) throw new Error('closure path must be a nonempty string');
+    const path = resolve(root, value);
+    if (path !== root && !path.startsWith(`${root}${sep}`))
+      throw new Error('bridge closure path escapes the canonical repository');
+    return path;
+  };
+  const snapshotPin = plan.bridge_code_import_closure_snapshot;
+  if (!snapshotPin || typeof snapshotPin.path !== 'string' || typeof snapshotPin.sha256 !== 'string' ||
+      !Number.isSafeInteger(snapshotPin.bytes))
+    throw new Error('plan lacks a pinned immutable bridge closure manifest');
+  const snapshotPath = resolveRepoPath(snapshotPin.path);
+  const snapshotBytes = await readFile(snapshotPath);
+  if (snapshotBytes.length !== snapshotPin.bytes || sha256(snapshotBytes) !== snapshotPin.sha256)
+    throw new Error('immutable bridge closure manifest bytes do not match the plan pin');
+  let snapshot;
+  try { snapshot = JSON.parse(snapshotBytes.toString('utf8')); }
+  catch { throw new Error('immutable bridge closure manifest is not valid JSON'); }
+  if (snapshot?.schema !== 'natlang.step5_bridge_code_snapshot/1' ||
+      !snapshot.files || typeof snapshot.files !== 'object' || Array.isArray(snapshot.files))
+    throw new Error('unsupported immutable bridge closure manifest');
+  const closure = plan.bridge_code_import_closure;
+  if (!closure || typeof closure !== 'object' || Array.isArray(closure))
+    throw new Error('plan lacks the declared bridge import closure');
+  const manifestNames = Object.keys(snapshot.files).sort();
+  const closureNames = Object.keys(closure).sort();
+  if (JSON.stringify(manifestNames) !== JSON.stringify(closureNames))
+    throw new Error('plan bridge closure entries do not match the immutable snapshot manifest');
+  for (const name of manifestNames) {
+    const manifestEntry = snapshot.files[name];
+    const planEntry = closure[name];
+    if (!manifestEntry || !planEntry || planEntry.path !== manifestEntry.execution_path ||
+        planEntry.bytes !== manifestEntry.bytes || planEntry.sha256 !== manifestEntry.sha256 ||
+        planEntry.immutable_snapshot_path !== manifestEntry.snapshot_path)
+      throw new Error(`bridge closure entry ${name} differs from the immutable snapshot manifest`);
+    const executionBytes = await readFile(resolveRepoPath(manifestEntry.execution_path));
+    const snapshotFileBytes = await readFile(resolveRepoPath(manifestEntry.snapshot_path));
+    if (executionBytes.length !== manifestEntry.bytes || sha256(executionBytes) !== manifestEntry.sha256)
+      throw new Error(`current bridge execution file ${name} differs from its pinned content`);
+    if (snapshotFileBytes.length !== manifestEntry.bytes || sha256(snapshotFileBytes) !== manifestEntry.sha256 ||
+        !executionBytes.equals(snapshotFileBytes))
+      throw new Error(`immutable bridge snapshot file ${name} differs from its pinned content`);
+  }
+
+  const runtime = plan.runtime;
+  const collector = plan.collector;
+  if (!runtime || !collector || typeof runtime.path !== 'string' || typeof collector.entry !== 'string')
+    throw new Error('plan lacks a collector runtime or entry binding');
+  const runtimeManifestPin = runtime.manifest;
+  if (!runtimeManifestPin || typeof runtimeManifestPin.path !== 'string' ||
+      typeof runtimeManifestPin.sha256 !== 'string')
+    throw new Error('plan lacks a pinned collector runtime manifest');
+  const runtimeManifestBytes = await readFile(resolveRepoPath(runtimeManifestPin.path));
+  if (sha256(runtimeManifestBytes) !== runtimeManifestPin.sha256 ||
+      (Number.isSafeInteger(runtimeManifestPin.bytes) && runtimeManifestBytes.length !== runtimeManifestPin.bytes))
+    throw new Error('collector runtime manifest bytes do not match the plan pin');
+  let runtimeManifest;
+  try { runtimeManifest = JSON.parse(runtimeManifestBytes.toString('utf8')); }
+  catch { throw new Error('collector runtime manifest is not valid JSON'); }
+  const runtimeManifestRelative = runtimeManifestPin.path.startsWith(`${runtime.path}/`)
+    ? runtimeManifestPin.path.slice(runtime.path.length + 1) : null;
+  if (!runtimeManifestRelative || resolveRepoPath(`${runtime.path}/${runtimeManifestRelative}`) !== resolveRepoPath(runtimeManifestPin.path))
+    throw new Error('collector runtime manifest is outside the pinned runtime directory');
+  const expectedEntry = `${runtime.path}/dist/teacher/cli.js`;
+  const expectedEntrySha = runtimeManifest.files?.['dist/teacher/cli.js'];
+  if (collector.entry !== expectedEntry || typeof expectedEntrySha !== 'string' ||
+      collector.entry_sha256 !== expectedEntrySha ||
+      collector.runtime_manifest_sha256 !== runtimeManifestPin.sha256)
+    throw new Error('collector entry/runtime manifest do not match the pinned frozen runtime');
+  const commandEntry = String(plan.command_templates?.collector ?? '').trim().split(/\s+/)[0];
+  if (commandEntry !== collector.entry)
+    throw new Error('collector command template entry differs from the pinned collector runtime entry');
+  const collectorBytes = await readFile(resolveRepoPath(collector.entry));
+  if (sha256(collectorBytes) !== expectedEntrySha)
+    throw new Error('collector runtime entry bytes differ from the frozen runtime manifest');
+  const exactProof = plan.reference_protocol?.exact_source_fake_proof;
+  const sourceProof = runtime.source_specific_proof;
+  const claimedProofRuntime = exactProof?.runtime_manifest_sha256;
+  const sourceProofRuntime = sourceProof?.runtime_manifest_sha256;
+  if (claimedProofRuntime !== undefined && claimedProofRuntime !== runtimeManifestPin.sha256)
+    throw new Error('exact-source fake proof runtime differs from the collector frozen runtime');
+  if (sourceProofRuntime !== undefined && sourceProofRuntime !== runtimeManifestPin.sha256)
+    throw new Error('runtime source-specific proof does not bind the collector frozen runtime');
+  if (exactProof?.path && sourceProof?.path && exactProof.path !== sourceProof.path)
+    throw new Error('exact-source fake proof path differs from the runtime proof binding');
+  if (exactProof?.sha256 && sourceProof?.sha256 && exactProof.sha256 !== sourceProof.sha256)
+    throw new Error('exact-source fake proof hash differs from the runtime proof binding');
+  if (exactProof?.path && exactProof?.sha256) {
+    const proofBytes = await readFile(resolveRepoPath(exactProof.path));
+    if (sha256(proofBytes) !== exactProof.sha256)
+      throw new Error('exact-source fake proof bytes differ from the plan pin');
+  }
+  return { ok: true, snapshot_manifest_path: snapshotPin.path, snapshot_manifest_sha256: snapshotPin.sha256,
+    closure_files_verified: manifestNames.length, collector_entry: collector.entry,
+    collector_entry_sha256: expectedEntrySha, runtime_manifest_sha256: runtimeManifestPin.sha256,
+    exact_source_fake_proof_runtime_sha256: claimedProofRuntime ?? sourceProofRuntime ?? null };
+}
+
 async function main(argv) {
   const args = new Map();
   for (let i = 0; i < argv.length; i += 2) {
@@ -207,6 +310,7 @@ async function main(argv) {
     readFile(args.get('--collector-argv-json'), 'utf8')
   ]);
   const plan = JSON.parse(planText);
+  const closureBinding = await verifyStep5ArtifactClosure({ plan, repoRoot: process.cwd() });
   const modelBinding = verifyStep5ModelPair({ plan,
     bootstrapConfig: JSON.parse(bootstrapConfigText), collectorArgv: JSON.parse(collectorArgvText),
     bootstrapConfigText, bootstrapConfigPath: args.get('--bootstrap-config') });
@@ -226,7 +330,8 @@ async function main(argv) {
     ]);
     sourceBinding = verifyStep5SourceBinding({ plan, sourceCasesText, sourceProofText });
   }
-  process.stdout.write(`${JSON.stringify({ ...modelBinding, ...(sourceBinding ? { source_binding: sourceBinding } : {}) })}\n`);
+  process.stdout.write(`${JSON.stringify({ ...modelBinding, ...(sourceBinding ? { source_binding: sourceBinding } : {}),
+    ...(closureBinding ? { artifact_closure: closureBinding } : {}) })}\n`);
 }
 
 if (process.argv[1]?.endsWith('/opencode-step5-preflight.mjs'))
