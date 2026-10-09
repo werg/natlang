@@ -10,6 +10,11 @@
   `python3 scripts/coord.py inbox --ack`. Answer requests with `coord.py reply`
   or `close`; send with `coord.py send --to pop|dgx|all --subject ...`. Keep
   your machine's state in `coord.py status --set`, not in a stream of notes.
+- Give each concurrently running agent its own coordination reader identity:
+  use `coord.py --as <machine>-<agent-role>` or `COORD_AS`. Codex helpers must
+  not acknowledge the owner's default `<machine>-codex` cursor. Forward
+  decisions and requests outside your task to the owner; acknowledgement is
+  not implementation or acceptance of a decision.
 - Synchronize code through small commits and frequent fetch/merge/push to
   `origin/main`; preserve the other agent's uncommitted work. Do not copy source
   trees between machines. See `plans/MACHINE_COORDINATION.md`.

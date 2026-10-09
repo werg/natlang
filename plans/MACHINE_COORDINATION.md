@@ -35,8 +35,13 @@ How it works:
   retries them.
 - Every reader has its own cursor (`.coordination/cursors/`). A Claude session
   reads as `<machine>-claude-<session>`, Codex as `<machine>-codex`; `--as`
-  overrides. Several sessions on one machine therefore never consume each
-  other's messages. A new session starts where the machine's other readers are.
+  overrides. Concurrent Codex agents must each set a distinct `--as` or
+  `COORD_AS`; the default Codex identity is shared, not session-specific.
+  Helpers using the owner's identity can acknowledge a decision before the
+  owner sees it. Pop observed this on October 9 and now uses separate helper
+  identities. Forward decisions and requests outside your task to the owner.
+  A new reader starts where the machine's other readers are; use `log` or
+  `show` to review earlier decisions. Acknowledgement is not adoption.
 - `request` messages stay open until someone `reply`s or `close`s them, and
   every reader on the addressed machine sees them until then.
 - Each machine has one overwritten status page (`status --set`), so the other
