@@ -188,7 +188,7 @@ function gameModel({ choose = actor => TRADES[actor], tactic, respond, remember 
 function play(scene, settings, options) {
   const model = gameModel(options);
   model.judged = withJudge(model.driver);
-  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP } });
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
   return runtime.run(() => playTurn(scene, settings)).then(report => ({ report, model }));
 }
 
@@ -245,7 +245,7 @@ test('shadow mode runs both implementations of a pluggable part, serves the natu
   const traces = [];
   const model = gameModel();
   withJudge(model.driver);
-  const runtime = createNatlangRuntime({ model: model.driver, trace: trace => traces.push(trace), refinements: { crisp: CRISP } });
+  const runtime = createNatlangRuntime({ model: model.driver, trace: trace => traces.push(trace) });
   const shadow = { validate: 'shadow', settle: 'shadow', resolve: 'shadow', remember: 'nl', narrate: 'nl' };
   const report = await runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS, { seed: 33 }) }, shadow));
   assert.equal(report.ok, true, report.problem);
@@ -365,7 +365,7 @@ test('the crisp resolution gives the natural-language result: guard, clamping, t
   const tactics = { a: hitting[0].plan, b: hitting[1].plan, c: hitting[2].plan };
   const model = gameModel({ tactic: id => tactics[id] });
   withJudge(model.driver);
-  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP } });
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
   const nl = await runtime.run(() => playTurn({ kind: 'combat', state }, { ...defaultSettings, validate: 'crisp' }));
   assert.deepEqual(nl.state.fighters, guarded.fighters);
   assert.equal(nl.state.round, 1);
@@ -519,7 +519,7 @@ function repairing(options, fix) {
 
 function playWith(model, scene, settings, extra = {}) {
   const traces = [];
-  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP, ...extra }, trace: trace => traces.push(trace) });
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { ...extra }, trace: trace => traces.push(trace) });
   return runtime.run(() => playTurn(scene, settings)).then(report => ({ report, traces }));
 }
 const checks = traces => traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
@@ -568,7 +568,7 @@ test('a settlement whose entries are not the traded outcomes is repaired in the 
 test('settings that name shadow for a part with one implementation are refused before any stage runs', async () => {
   const model = gameModel();
   withJudge(model.driver);
-  const runtime = createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP } });
+  const runtime = createNatlangRuntime({ model: model.driver, calls: false });
   await assert.rejects(runtime.run(() => playTurn({ kind: 'economy', state: createEconomy(MERCHANTS) }, { ...defaultSettings, narrate: 'shadow' })),
     error => error.code === 'refinement-unsatisfied' && /remember and narrate are each nl or crisp/.test(error.message));
   assert.deepEqual(model.seen, []);

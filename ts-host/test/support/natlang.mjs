@@ -7,7 +7,7 @@ import { buildPending } from '../../dist/native/values.js';
 import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.js';
 import YAML from 'yaml';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** A TypeScript module item (callable-folder `.ts` file). */
 export function ts(name, text, children = {}, types = {}) {
@@ -67,15 +67,13 @@ export function scriptedModel(respond) {
 }
 
 /**
- * The crisp refinement checkers of a built application (`applications/dist/<app>/index.js` and the `refinements.js` beside
- * it), loaded the way the launcher loads them, for the runtime option `refinements: { crisp }`.
+ * The crisp refinement checkers of a built application: the table its `refinements.ts` exports. The application's compiled
+ * `.nl` modules register it themselves, so a runtime needs no `crisp` option; tests read it to check the table itself.
  */
 export async function appCrisp(app) {
-  const { loadProgramRefinements } = await import('../../dist/cli/program-refinements.js');
   const dist = fileURLToPath(new URL('../../../applications/dist', import.meta.url));
-  return loadProgramRefinements(join(dist, app, 'index.js'), join(dist, app));
+  return (await import(pathToFileURL(join(dist, app, 'refinements.js')).href)).refinements;
 }
-
 /**
  * Gives a driver a scoring pass for the refinement judge: `truth(value, predicate)` says whether the value satisfies the
  * predicate (default: yes). The values it was asked about are returned, as `[value, predicate]` pairs.

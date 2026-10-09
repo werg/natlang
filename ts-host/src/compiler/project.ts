@@ -465,7 +465,7 @@ export function compileProject(options: BuildOptions): BuildResult {
   if (options.write !== false && options.writeDeclarations !== false && fs.write) for (const [path, text] of Object.entries(declarations))
     if (!fs.isFile(path) || fs.read(path) !== text) fs.write(path, text);
   if (ok && options.emit !== false) {
-    const generated = new Map<string, { record: NatlangRecord; commonjs: boolean }>();
+    const generated = new Map<string, { record: NatlangRecord; commonjs: boolean; target: string }>();
     const generatedNz = new Map<string, { bytes: Uint8Array; commonjs: boolean }>();
     const natlangImports = (file: ts.SourceFile) => {
       const found = new Set<string>();
@@ -487,7 +487,7 @@ export function compileProject(options: BuildOptions): BuildResult {
         if (!record) { problem(rel(file.fileName), `cannot import ${specifier}: no such natlang function`); continue; }
         found.add(specifier);
         generated.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js',
-          { record, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
+          { record, target, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
       }
       return found;
     };
@@ -531,11 +531,33 @@ export function compileProject(options: BuildOptions): BuildResult {
       if (options.write !== false) fs.write?.(fileName, text);
     };
     const emitted = program.emit(undefined, emit, undefined, false, { before: [transformer] });
-    for (const [path, { record, commonjs }] of generated) {
+    // The crisp checkers of a program's refined predicates (plans/REFINEMENT_TYPES.md section 3): the nearest
+    // `refinements.ts` above a `.nl` module is loaded with it, so every host that imports the function finds them.
+    const sourceNames = new Set(program.getSourceFiles().map(file => resolve(file.fileName)));
+    const refinementsFor = (target: string): string | undefined => {
+      const top = resolve(compilerOptions.rootDir!);
+      for (let dir = dirname(resolve(target)); dir === top || dir.startsWith(top + sep); dir = dirname(dir)) {
+        const candidate = join(dir, 'refinements.ts');
+        if (sourceNames.has(candidate)) return candidate;
+        if (dir === top) break;
+      }
+      return undefined;
+    };
+    for (const [path, { record, commonjs, target }] of generated) {
       const specifier = JSON.stringify(specifierFor(commonjs)), json = JSON.stringify(record);
+      const crisp = refinementsFor(target);
+      let local = '';
+      if (crisp) {
+        const emitted = join(outDir, relative(compilerOptions.rootDir!, crisp)).replace(/\.ts$/, '.js');
+        const from = relative(dirname(path), emitted).split(sep).join('/');
+        local = JSON.stringify(from.startsWith('.') ? from : `./${from}`);
+      }
       emit(path, commonjs ?
-        `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\nexports.default = require(${specifier}).__natlang.named(${JSON.stringify(record.name)}, ${json});\n` :
-        `import { __natlang } from ${specifier};\nexport default __natlang.named(${JSON.stringify(record.name)}, ${json});\n`);
+        `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\n` +
+          (crisp ? `require(${specifier}).__natlang.registerCrisp(require(${local}).refinements, ${local});\n` : '') +
+          `exports.default = require(${specifier}).__natlang.named(${JSON.stringify(record.name)}, ${json});\n` :
+        `import { __natlang } from ${specifier};\n` + (crisp ? `import { refinements as __crisp } from ${local};\n__natlang.registerCrisp(__crisp, ${local});\n` : '') +
+          `export default __natlang.named(${JSON.stringify(record.name)}, ${json});\n`);
     }
     for (const [path, { bytes, commonjs }] of generatedNz) {
       const specifier = JSON.stringify(specifierFor(commonjs));

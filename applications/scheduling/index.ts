@@ -11,9 +11,6 @@ import type { ScheduleResult, ScheduleWorkspace } from './workspace.js';
 export * from './workspace.js';
 export * from './calendar.js';
 export type * from './types.js';
-// The crisp checkers of the refined results (refinements.ts): a host that runs the planner in its own runtime passes them as
-// `refinements: { crisp: refinements }`.
-export { refinements } from './refinements.js';
 
 /** What a run of natural-language work needs: the services its stages call. */
 export type RunServices = { services: Record<string, unknown>, serviceDeclarations: Record<string, string> };

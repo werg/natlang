@@ -113,8 +113,8 @@ Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). Decisions: (
 `refinements.ts` (no model call), (b) a natural-language judge (proposed only: awaiting live evaluation, not wired),
 (c) left to the check that already enforces it exactly (`ledger.validate`, `ledger.checkMessage`, the commit), (d) not
 adopted: the value alone does not show the property. The refined result types are `Checked*` aliases in `types.ts`,
-named in the `returns` of the stage that produces the value; the host and the crisp policy keep the plain types.
-`index.ts` exports the table as `refinements`, for a host that runs the policy in its own runtime.
+named in the `returns` of the stage that produces the value; the host and the crisp policy keep the plain types. The compiled `.nl` modules register
+`refinements.ts` themselves, so an embedding host needs nothing more.
 
 | Slot | Proposed type | Decision |
 |---|---|---|

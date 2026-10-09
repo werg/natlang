@@ -239,10 +239,11 @@ Done after the first push:
 - Judge fallback: a driver without `decide` judges through an ordinary `holds(value, predicate): boolean` call on the same
   model (`callJudge`, internal call, fixed instructions), traced as `judge: "call"`. Scoring stays the preferred path.
   The call judge runs on the runtime's default model unless `refinements.judge` names one.
-- Program crisp checkers: a `refinements.ts` beside the entry module (or above it, inside the package) exporting
-  `refinements: { [predicate]: (value) => boolean | undefined }`. The build compiles it as ordinary host code; the launcher
-  (`cli/program-refinements.ts`) imports the emitted module and passes it as `refinements.crisp`. Embedded runtimes pass
-  `crisp` themselves.
+- Program crisp checkers: a `refinements.ts` in the package, exporting `refinements: { [predicate]: (value) => boolean |
+  undefined }`. The build compiles it as ordinary host code and every compiled `.nl` module below it imports it and calls
+  `registerCrisp` (`runtime/lowered.ts`), which fills the process-wide table of `native/types.ts`; so the launcher, an
+  embedder and a test find the checkers the same way, by importing the program. A runtime's own `refinements.crisp` is
+  consulted first. The same predicate registered with different code is an error.
 - Call store: table `refinement_verdicts (key, probability, judge, created_at)` created on open like the other tables (the
   store has no schema version number; `CREATE TABLE IF NOT EXISTS` is its migration), exposed as
   `store.refinementVerdicts()` and used as the verdict cache of any runtime with a call store, unless `refinements.cache`
@@ -266,10 +267,10 @@ Each application's `DECOMPOSITION.md` records a decision per candidate: (a) cris
 app's `types.ts`, named in the `returns` of the stage that produces the value, so crisp code builds and passes the plain
 types. Limitations met:
 
-- **`types.ts` must `import type { Is } from '@natlang/node'`.** Without the import, the `Is` in `types.ts` and the `Is` that
-  the generated `.d.nl.ts` declarations import are two different brands (`Property '[natlangRefinement]' is missing`).
-  The ambient `Is` of `compiler/intrinsics.ts` and the exported `Is` of `runtime/surface.ts` declare separate unique symbols;
-  one declaration should serve both. Not fixed here.
+- **Fixed: the `Is` brand was split.** The ambient `Is` (compiler intrinsics) and the exported `Is` (runtime surface) each
+  declared a `unique symbol`, so a refined type in `types.ts` and the same type in a generated `.d.nl.ts` were different
+  types. Both brands (`Is`, `Untrusted`) are now string-keyed (`__natlangRefinement`, `__natlangUntrusted`), which is
+  structurally the same in every declaration, so `types.ts` needs no import.
 - **Refined fields on shared state types force casts in crisp code** (`as Settings`, `as Fighter[]`), because a plain `number`
   does not fit `Is<number, "...">`. Refining the stage's `returns` through an alias avoids it for state that crisp code builds.
 - **A refinement failure that a stage never repairs inside a loop can exhaust memory.** With a scripted model that answers the
@@ -277,8 +278,9 @@ types. Limitations met:
   grew to the heap limit instead of ending in `refinement-unsatisfied`. Not diagnosed; reproduce with a stage override
   whose result breaks its predicate and no repair answer.
 - **The default call store keeps judge verdicts across runs**, so a test that counts judge calls must pass `calls: false`.
-- **`refinements.ts` is loaded by `natlang run` for an app with a `targets` entry.** Applications run by an embedder
-  (scheduling, workflow) export their table from `index.ts` and the embedder passes it as `refinements.crisp`.
+- **Fixed: crisp checkers were found only through the launcher** (an app without a `targets` entry fell through to the
+  judge). The compiled `.nl` modules now register the nearest `refinements.ts` themselves; the launcher loader and the
+  `index.ts` re-exports are gone.
 - **Predicates that need the call's other arguments or the world** (a patch's `old` occurring once, a plan's edits matching
   the classified sites) cannot be judged from the value; they stay with the verifier (category c) or are weakened to the
   part the value shows.

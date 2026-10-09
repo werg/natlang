@@ -152,7 +152,7 @@ async function run({ overrides = {}, policy, attempts = 3, files = Object.keys(s
   }, {});
   const judged = withJudge(driver);
   const traces = [];
-  const runtime = createNatlangRuntime({ model: driver, calls: false, refinements: { crisp: CRISP }, trace: trace => traces.push(trace) });
+  const runtime = createNatlangRuntime({ model: driver, calls: false, trace: trace => traces.push(trace) });
   const result = await migrate(runtime, repository, 'Rename sum to add while preserving the calculation', { attempts, seeds, checks: ['scenario'] });
   const checks = traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
   return { result, root, repository, seen, openings, feedback, judged, checks };

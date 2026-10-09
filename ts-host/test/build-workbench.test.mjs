@@ -167,7 +167,7 @@ async function run(tasks, goal, { overrides, setup = () => {}, policy, folder = 
   }, {});
   const judged = withJudge(driver);
   const traces = [];
-  const runtime = createNatlangRuntime({ model: driver, calls: false, refinements: { crisp: CRISP }, trace: trace => traces.push(trace) });
+  const runtime = createNatlangRuntime({ model: driver, calls: false, trace: trace => traces.push(trace) });
   const report = await buildGoal(runtime, workspace, goal, tasks, openFolder(folder).root());
   const checks = traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
   return { report, folder, events: workspace.drainEvents(), seen, model, feedback, judged, checks };
@@ -297,7 +297,7 @@ test('an interrupted process is an unknown outcome that is inspected before any 
   const { model } = scripted();
   try {
     withJudge(model.driver);
-    const report = await createNatlangRuntime({ model: model.driver, calls: false, refinements: { crisp: CRISP } }).run(() => buildDriver('slow', tasks), buildServices(workspace));
+    const report = await createNatlangRuntime({ model: model.driver, calls: false }).run(() => buildDriver('slow', tasks), buildServices(workspace));
     assert.equal(report.status, 'unknown');
     assert.equal(report.diagnosis.cause, 'interrupted');
     assert.equal(report.diagnosis.retry, 'inspect-first');

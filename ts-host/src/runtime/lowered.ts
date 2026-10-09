@@ -8,7 +8,8 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { portablePrimitiveLiteral, type TargetDescriptor } from '../compiler/targets.js';
 import { coerce, isPlainRecord } from '../native/values.js';
-import { parseType, TypeEnv } from '../native/types.js';
+import { parseType, refinements as crispTable, TypeEnv } from '../native/types.js';
+import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, guard } from './context.js';
 import { callableMeta, callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
@@ -394,6 +395,23 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
 export function named(name: string, record: NatlangRecord): NatlangCallable {
   registerFileRecords(record);
   return namedCallable(name, record);
+}
+
+/**
+ * Register the crisp checkers a program's `refinements.ts` exports (compiled `.nl` modules call this when the program
+ * has such a module). Keys are normalized predicates. The same predicate with different code is an error, because the
+ * table is process-wide.
+ */
+export function registerCrisp(table: unknown, source = 'refinements'): void {
+  if (!table || typeof table !== 'object' || Array.isArray(table))
+    throw new TypeError(`${source} must export \`refinements\`: an object from predicate text to (value) => boolean | undefined`);
+  for (const [predicate, checker] of Object.entries(table)) {
+    if (typeof checker !== 'function') throw new TypeError(`${source}: refinements[${JSON.stringify(predicate)}] must be a function`);
+    const key = normalizePredicate(predicate), known = crispTable[key];
+    if (known && known !== checker && known.toString() !== checker.toString())
+      throw new Error(`${source}: a crisp checker for ${JSON.stringify(key)} is already registered with different code`);
+    crispTable[key] = checker as (value: unknown) => boolean | undefined;
+  }
 }
 
 /** A callable folder such as `natlang.d/`, as a record of callables. */
