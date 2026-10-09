@@ -3239,3 +3239,7 @@ intentionally incomplete and must not be loaded until rebuilt. The 32 original H
 shards remain unchanged. The full byte-range equivalence audit and eviction receipt
 are in `runs/ling-grouped-duplicate-audit-20261009-v1/`; receipt SHA-256 is
 `b88f68c63298695fa2a8a41ae1c90f3f6bfc8f0df766bc317fcdc183a710f861`.
+
+## 2026-10-09 — Attribute preference negatives to the erroneous decision
+
+Root inspected the three held source-derived eligibility pairs. Each recorded sampled target is appropriate eval/nl delegation of the supplied eligibility criterion; the observed host value is wrong because its child answer is wrong. Do not label valid parent delegation code as the incorrect response or prefer a static direct answer solely from a downstream false value. Preserve the original three held pairs, descend to the actual erroneous provider response, and bind its exact prompt/source/schema before considering preference admission. Root receipt: `runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/counterfactual-eligibility-repairs-v2/root-delegation-attribution-hold-v1.json`. No data admission or source/oracle mutation.

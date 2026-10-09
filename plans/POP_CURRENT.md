@@ -48,7 +48,7 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 ### Failure repairs and skills
 
 - Exact-context source audit confirms three genuine positive-eligibility false judgments (BIR-2C, RWA-1C, ESR-2A), with evidence visible and faithful host capture. These are not converter/read/transport failures.
-- Shared `build-preference-pairs.mjs --source-derived-repairs PROPOSAL.json` now preserves three checked counterfactual repairs in a held sidecar. Ordinary preference output is empty. Synthetic chosen targets are explicit; no task/hidden-state equivalence or DPO admission. Per-item review/promotion remains unfinished; see latest handover pins.
+- Shared `build-preference-pairs.mjs --source-derived-repairs PROPOSAL.json` now preserves three checked counterfactual repairs in a held sidecar. Ordinary preference output is empty. Synthetic chosen targets are explicit; no task/hidden-state equivalence or DPO admission. Root review found all three negative targets are appropriate delegation code whose children returned incorrect values. Keep held; locate the actual wrong leaf response and exact context before DPO promotion, to avoid teaching against delegation. See `root-delegation-attribution-hold-v1.json` beside the proposal.
 - V6 `judge-against-criteria` adds a generic positive conjunction example; other six v5 skills unchanged. Tracked diagnostic authorization scopes its current use. Evaluate results and discovery before broader activation/SFT.
 
 ## Corpus inventory
