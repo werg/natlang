@@ -137,6 +137,13 @@ test('delegated draft edits carry the caller contract and latest state', () => {
   assert.ok(BUILT_IN_DOCS.nl.includes('capture the applicable output contract'));
 });
 
+test('typed nl.with example separates captured context, child arguments, and returned value', () => {
+  assert.ok(TOOLS_PROMPT.includes('Here decisionRule is captured context; source and notes are child arguments.'));
+  assert.ok(TOOLS_PROMPT.includes('await revise(currentFile, state.notes)'));
+  assert.ok(TOOLS_PROMPT.includes('Return updated from the step or carry it into the next state.'));
+  assert.ok(TOOLS_PROMPT.includes('child update, or action has already been rejected'));
+});
+
 test('semantic selection example uses typed Boolean verdicts instead of object truthiness', () => {
   assert.ok(TOOLS_PROMPT.includes('items.filter((item, i) => verdicts[i] === true)'));
   assert.ok(TOOLS_PROMPT.includes('objects and strings are not Boolean verdicts'));
