@@ -59,7 +59,7 @@ def _json_schema(case):
         'required': ['probabilities'], 'additionalProperties': False}}
 
 
-def _http_payload(case, model, reasoning_effort, max_output_tokens):
+def _http_payload(case, model, reasoning_effort, max_output_tokens, response_format='json_schema'):
     labels = case.get('options') if case.get('kind') == 'choice' else case.get('levels')
     task = {'kind': case['kind'], 'question': case['question'], 'state': case['state']}
     if labels is not None:
@@ -72,16 +72,23 @@ def _http_payload(case, model, reasoning_effort, max_output_tokens):
         'For choice or score, return a probability distribution over every supplied label; '
         'all probabilities must be between 0 and 1 and sum to 1. Return only the requested JSON object.'
     )
-    return {
+    if response_format != 'json_schema':
+        task['output_schema'] = _json_schema(case)['schema']
+    payload = {
         'model': model,
         'messages': [
             {'role': 'system', 'content': system},
             {'role': 'user', 'content': json.dumps(task, ensure_ascii=False, separators=(',', ':'))},
         ],
-        'response_format': {'type': 'json_schema', 'json_schema': _json_schema(case)},
-        'reasoning_effort': reasoning_effort,
         'max_tokens': max_output_tokens,
     }
+    if response_format == 'json_schema':
+        payload['response_format'] = {'type': 'json_schema', 'json_schema': _json_schema(case)}
+    elif response_format == 'json_object':
+        payload['response_format'] = {'type': 'json_object'}
+    if reasoning_effort != 'omit':
+        payload['reasoning_effort'] = reasoning_effort
+    return payload
 
 
 def _retry_after_seconds(value):
@@ -104,8 +111,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_backoff,
-                  max_backoff, reasoning_effort, max_output_tokens):
-    payload = _http_payload(case, model, reasoning_effort, max_output_tokens)
+                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema'):
+    payload = _http_payload(case, model, reasoning_effort, max_output_tokens, response_format)
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     request_hash = hashlib.sha256(body).hexdigest()
     request = urllib.request.Request(endpoint, data=body, method='POST', headers={
@@ -231,7 +238,9 @@ def main():
     parser.add_argument('--retries', type=int, default=3, help='bounded retries for HTTP 429/5xx or network errors')
     parser.add_argument('--initial-backoff', type=float, default=30)
     parser.add_argument('--max-backoff', type=float, default=300)
-    parser.add_argument('--reasoning-effort', choices=['low', 'medium', 'high'], default='low')
+    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'low', 'medium', 'high'], default='low')
+    parser.add_argument('--response-format', choices=['json_schema', 'json_object', 'text'], default='json_schema',
+                        help='provider wire format; all responses still undergo identical strict JSON validation')
     parser.add_argument('--max-output-tokens', type=int, default=256)
     parser.add_argument('--request-interval-seconds', type=float, default=0,
                         help='minimum interval between case request starts; HTTP backend only')
@@ -256,6 +265,7 @@ def main():
             'selection': {'families': sorted(set(args.family)), 'limit': args.limit},
             'adapter_sha256': hashlib.sha256(open(__file__, 'rb').read()).hexdigest(),
             'request_settings': {'reasoning_effort': args.reasoning_effort,
+                                 'response_format': args.response_format,
                                  'max_output_tokens': args.max_output_tokens,
                                  'request_interval_seconds': args.request_interval_seconds},
             'training_admission': False,
@@ -333,7 +343,8 @@ def main():
                                  timeout=args.timeout, retries=args.retries,
                                  initial_backoff=args.initial_backoff, max_backoff=args.max_backoff,
                                  reasoning_effort=args.reasoning_effort,
-                                 max_output_tokens=args.max_output_tokens)
+                                 max_output_tokens=args.max_output_tokens,
+                                 response_format=args.response_format)
 
     started, count, errors = time.time(), 0, 0
     last_request_start = None
