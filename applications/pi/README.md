@@ -46,12 +46,20 @@ judge a commit's own staged writes (hold or terminate, wait validation, the runt
 ## Variants
 
 Context building, the system-entry plan with the context estimate, the scheduler's policy and admission run on every
-turn and every phase. Each has pi-durable's crisp code and the natural-language functions behind one interface:
+turn and every phase. Each has pi-durable's crisp code and the natural-language functions behind natlang's shared
+`pluggable()` (`ts-host/src/runtime/pluggable.ts`), selected by a mode: `crisp`, `nl` (`natural-language` is accepted
+as an older spelling) or `shadow`, which runs both, uses the natural-language result and records a `pluggable_shadow`
+trace event saying whether the two agree.
 
 - default: the four are crisp; everything else is natural language;
-- `--context natural-language`, `--scheduler natural-language`, `--admission natural-language`: one at a time;
-- `--planning natural-language`: the system-entry plan and the context estimate (prepare runs both every turn);
-- `--pure`: all four in natural language, so every function in this app runs.
+- `--context MODE`, `--scheduler MODE`, `--admission crisp|nl`: one at a time (admission has no shadow mode, since
+  each side commits its admission);
+- `--planning MODE`: the system-entry plan and the context estimate (prepare runs both every turn);
+- `--pure`: `nl` for every point not set by its own flag, so every function in this app runs.
+
+In shadow mode the scheduler's policy is compared with pi's rules restated over facts (`crispSchedulerPolicy`), not
+with the scheduler's inline code; decisions agree when they match apart from their cleanup and the wording of their
+messages.
 
 ## Running
 
@@ -88,7 +96,7 @@ text, the request fails with `neuralese-unsupported-backend`. There is no text f
 - `npm run test:conformance`: pi-durable's harness suites (generation, generation-recovery, compaction, context,
   prompt, inbox, submissions, tools, tools-recovery, structured, tasks) with the natural-language task kinds
   substituted, against a real executor (`PI_EXECUTOR_ENDPOINT`, `PI_EXECUTOR_MODEL`; `PI_CONTEXT`, `PI_SCHEDULER`,
-  `PI_ADMISSION` select natural-language implementations). The suites check exact entries and documents, so they test
+  `PI_ADMISSION`, `PI_PLANNING` select a mode, as the flags do). The suites check exact entries and documents, so they test
   whether the functions are exact. Results: see Status.
 - `eval` runs the coding tasks in `tasks/` on fresh git copies, judged by their check commands.
 

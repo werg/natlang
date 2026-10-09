@@ -11,7 +11,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
 import type { Message, ToolCall } from '@earendil-works/pi-ai';
-import type { NatlangRuntime } from '@natlang/node';
+import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
 import { defineDoc, defineDocFamily } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
 import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
@@ -21,7 +21,6 @@ import type { Extension, HookApi, ToolExecutionResult } from '../../vendor/durab
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
 import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
-import type { Implementation } from '../../host/harness.ts';
 import { transcriptText } from '../../host/natlang-provider.ts';
 import observe from './observe.nl';
 import shape from './shape.nl';
@@ -188,14 +187,15 @@ export type CompanionOptions = {
   /** Called with each failure the companion keeps going after. */
   onReport?(error: unknown): void;
   /**
-   * Pluggable hot path: how a long tool output is shortened. "crisp" (default): its head and tail; "natural-language":
-   * `shape.nl` chooses the lines and says what the rest holds.
+   * Pluggable hot path: how a long tool output is shortened. `crisp` (default): its head and tail; `nl`: `shape.nl`
+   * chooses the lines and says what the rest holds; `shadow`: both, the natural-language shape shown and the two compared.
    */
-  shaping?: Implementation;
+  shaping?: PluggableSetting;
 };
 
 /** The companion extension; its functions run on `natlang`. */
 export function companion(natlang: NatlangRuntime, options: CompanionOptions): Extension {
+  const shaping = pluggableMode(options.shaping, 'crisp');
   const task = defineTask<{ basis?: number }, { phase: 'observe' }, null, object>({
     name: TASK, version: 1, initial: () => ({ phase: 'observe' }),
     phases: {
@@ -245,16 +245,20 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
    * a rerun of the hook shows the same lines; when it fails, the crisp shape stands in and the failure is reported.
    */
   const shaped = async (call: ToolCall, text: string, api: HookApi, context: Context): Promise<string> => {
-    if (options.shaping !== 'natural-language') return shapeOutput(text, call.id);
-    try {
+    const crisp = () => shapeOutput(text, call.id);
+    const judged = async () => {
       const memo = `companion.shape.${call.id}`;
       const chosen = await api.memo<OutputShape>(memo, context) ?? await api.memo(memo, JSON.parse(JSON.stringify(
-        await natlang.run(() => shape(`${call.name} ${JSON.stringify(call.arguments)}`, text, SHAPE_HEAD + SHAPE_TAIL),
-          { name: `companion.shape#${call.id}` }))) as OutputShape, context);
+        await shape(`${call.name} ${JSON.stringify(call.arguments)}`, text, SHAPE_HEAD + SHAPE_TAIL))) as OutputShape, context);
       return renderShape(text, call.id, chosen);
+    };
+    const choose = pluggable({ crisp, nl: judged }, shaping, { name: 'companion.shape' });
+    if (shaping === 'crisp') return choose();
+    try {
+      return await natlang.run(choose, { name: `companion.shape#${call.id}` });
     } catch (error) {
       options.onReport?.(error);
-      return shapeOutput(text, call.id);
+      return crisp();
     }
   };
 

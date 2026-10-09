@@ -1,8 +1,9 @@
 /**
  * pi-durable's public module with `Harness.open` replaced by the port's (host/harness.ts portOptions): the built-in
- * task names resolve to the natural-language task kinds, and PI_CONTEXT / PI_SCHEDULER / PI_ADMISSION
- * ("natural-language") select the pluggable implementations. Aliased as "@earendil-works/pi-durable" in
- * vitest.config.ts, so pi-durable's own harness suites test the port.
+ * task names resolve to the natural-language task kinds, and PI_CONTEXT / PI_SCHEDULER / PI_ADMISSION / PI_PLANNING
+ * (`crisp`, the default; `nl`, or its older spelling `natural-language`; `shadow`) select the pluggable
+ * implementations. Aliased as "@earendil-works/pi-durable" in vitest.config.ts, so pi-durable's own harness suites
+ * test the port.
  *
  * Executor: PI_EXECUTOR_ENDPOINT (default http://127.0.0.1:8083), PI_EXECUTOR_MODEL, PI_EXECUTOR_CONCURRENCY;
  * PI_TRACE_DIR keeps the natlang traces; PI_PHASE_LOG prints each phase.
@@ -14,9 +15,9 @@ import * as durable from '../../vendor/durable/src/index.ts';
 import type { HarnessOptions, Storage } from '../../vendor/durable/src/index.ts';
 import type { Context } from '@earendil-works/chord';
 // @ts-ignore: the runtime's build has no types for this relative import
-import { createNatlangRuntime, fileTraceSink, loadNatlang, openAICompatibleModelTurn } from '../../../../ts-host/dist/index.js';
+import { createNatlangRuntime, fileTraceSink, loadNatlang, openAICompatibleModelTurn, pluggableMode } from '../../../../ts-host/dist/index.js';
 import type { Entry } from '../../host/tasks.ts';
-import { portOptions, type Implementation } from '../../host/harness.ts';
+import { portOptions } from '../../host/harness.ts';
 
 export * from '../../vendor/durable/src/index.ts';
 
@@ -36,7 +37,7 @@ const natlang = createNatlangRuntime({
 // Live functions: a long run uses edited instructions from each phase's next call on (owner rule: newest code always).
 const entry = (name: string) => loadNatlang(`${root}${name}.nl`, root, { live: true }) as unknown as Entry;
 const entries = { generation: entry('generation'), tool: entry('tool'), compaction: entry('compaction') };
-const pick = (name: string): Implementation => process.env[name] === 'natural-language' ? 'natural-language' : 'crisp';
+const pick = (name: string) => pluggableMode(process.env[name], 'crisp');
 export const phaseLog: string[] = [];
 
 export const Harness = {

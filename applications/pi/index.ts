@@ -5,8 +5,9 @@
  * The host is pi-durable itself, vendored at f10993b (`vendor/durable`): the Session line and SQLite storage, the
  * scheduler's mechanics, the registry and the Harness API. The registry the Harness reads resolves the built-in task
  * names to the natural-language kinds, so every task pi-durable creates (a run's generation, a round's tool tasks,
- * compactions) runs here. Context building, the scheduler's policy and admission are pluggable: pi's crisp code by
- * default, the natural-language functions when selected. See PORT.md.
+ * compactions) runs here. Context building, the system-entry plan and estimate, the scheduler's policy and admission are
+ * pluggable (`pluggable()`, modes `crisp`, `nl`, `shadow`): pi's crisp code by default, the natural-language functions
+ * when selected, or both compared in shadow mode. See PORT.md.
  */
 import type { Context } from '@earendil-works/chord';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
@@ -15,7 +16,7 @@ import type { NatlangRuntime } from '@natlang/node';
 import { Harness, type HarnessOptions, type HarnessSettings } from './vendor/durable/src/index.ts';
 import type { Extension, Registry } from './vendor/durable/src/harness/types.ts';
 import type { Storage } from './vendor/durable/src/types.ts';
-import { portOptions, type Implementation, type Implementations } from './host/harness.ts';
+import { portOptions, type Implementations } from './host/harness.ts';
 import { substituteTasks } from './host/registry.ts';
 import type { Entry, TaskHost } from './host/tasks.ts';
 import generation from './generation.nl';
@@ -34,7 +35,7 @@ export type PiOptions = {
   now?: () => number;
   onReport?: (error: unknown) => void;
   onPhase?: TaskHost['onPhase'];
-  /** Pluggable hot paths; crisp by default. */
+  /** Pluggable hot paths: `crisp` (the default), `nl` or `shadow` per point. */
   implementations?: Partial<Implementations>;
   /** Runs per phase before the task faults (default 2). */
   attempts?: number;
@@ -62,5 +63,5 @@ export async function openPi(options: PiOptions, context: Context = BACKGROUND_C
   return harness;
 }
 
-export type { Extension, Harness, Implementation, Implementations };
+export type { Extension, Harness, Implementations };
 export { substituteTasks };

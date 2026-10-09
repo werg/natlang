@@ -1,5 +1,6 @@
 // Wiring evidence (scripted model, no live executor): generation/prepare reaches the shared harness items through
-// `uses:`, and harness/context.ts selects pi-durable's derivation or the natural-language one by the host setting.
+// `uses:`, and harness/context.ts selects pi-durable's derivation or the natural-language one by the host setting
+// through pluggable(); shadow runs both, serves the natural-language view and records whether they agree.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,7 @@ function services(mode, calls) {
   } };
 }
 
-for (const mode of ['crisp', 'natural-language']) {
+for (const mode of ['crisp', 'nl', 'natural-language', 'shadow']) {
   test(`prepare calls context(), cut and estimate through uses: (${mode} context)`, async () => {
     const calls = [];
     const model = scriptedModel(opening => {
@@ -29,7 +30,8 @@ for (const mode of ['crisp', 'natural-language']) {
       return null;
     });
     const prepare = loadNatlang(`${app}/generation/prepare.nl`, app);
-    const runtime = createNatlangRuntime({ model: model.driver });
+    const traces = [];
+    const runtime = createNatlangRuntime({ model: model.driver, trace: trace => traces.push(trace) });
     const facts = { task: { id: 1, kind: 'pi.generation', conversationId: 1, input: {}, checkpoint: { phase: 'prepare', attempt: 1 } },
       mode: 'run', agent: { thinkingLevel: 'off', tools: [], sections: [] }, settings: { stream: {}, retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 },
         compaction: { enabled: true, reserveTokens: 1, keepRecentTokens: 1, backgroundTokens: 0 }, toolExecution: 'parallel',
@@ -37,6 +39,9 @@ for (const mode of ['crisp', 'natural-language']) {
     const info = { provider: 'p', modelId: 'm', name: 'm', contextWindow: 0, maxTokens: 0, reasoning: false };
     const result = await runtime.run(() => prepare(facts, facts.task.checkpoint, info), { services: services(mode, calls) });
     assert.equal(result, `function function function ${mode === 'crisp' ? 'crisp' : 'derived'}`);
-    assert.deepEqual(calls, [[mode === 'crisp' ? 'view' : 'scan', 7]]);
+    const expected = { crisp: [['view', 7]], shadow: [['scan', 7], ['view', 7]] }[mode] ?? [['scan', 7]];
+    assert.deepEqual(calls.sort(), expected);
+    const shadows = traces.flatMap(trace => trace.events).filter(event => event.kind === 'pluggable_shadow');
+    assert.deepEqual(shadows.map(event => [event.name, event.served, event.agree]), mode === 'shadow' ? [['pi.context', 'nl', false]] : []);
   });
 }

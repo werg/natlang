@@ -126,7 +126,7 @@ test('a long tool output reaches the agent shaped, and recall returns it whole',
   await harness.close(context);
 });
 
-test('with natural-language shaping, the companion keeps the lines shape.nl chose, once per call', async () => {
+test('with nl shaping, the companion keeps the lines shape.nl chose, once per call', async () => {
   const shapes = [];
   const scripted = m.scriptedModel(opening => {
     if (opening.includes('You accompany a coding agent')) return `return { focus: 'x', facts: [], warnings: [], suggestions: [] };`;
@@ -149,7 +149,7 @@ test('with natural-language shaping, the companion keeps the lines shape.nl chos
     execute: async () => ({ content: [{ type: 'text', text: lines.join('\n') }] }) }] });
   let harness;
   const reports = [];
-  registry.install(m.companion.companion(natlang, { harness: () => harness, shaping: 'natural-language', onReport: error => reports.push(String(error)) }));
+  registry.install(m.companion.companion(natlang, { harness: () => harness, shaping: 'nl', onReport: error => reports.push(String(error)) }));
   faux.setResponses([
     m.ai.fauxAssistantMessage([m.ai.fauxToolCall('bash', { command: 'npm test' }, { id: 'c1' })], { stopReason: 'toolUse' }),
     m.ai.fauxAssistantMessage('done'),

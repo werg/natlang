@@ -96,7 +96,8 @@ const untilAborted = async (_args, _api, context) => {
   throw context.abortSignal?.reason ?? new Error('aborted');
 };
 
-function setup() {
+/** A harness on the natural-language admission and the scheduler policy in `scheduler` mode; `traces` collects the natlang traces. */
+function setup(scheduler = 'nl') {
   const calls = [];
   const scripted = m.scriptedModel(opening => {
     const found = CODE.find(([marker]) => opening.includes(marker));
@@ -104,7 +105,8 @@ function setup() {
     if (process.env.DEBUG) console.error('call', calls.at(-1), found ? '' : opening.slice(0, 300));
     return found ? found[1] : null;
   });
-  const natlang = m.natlang.createNatlangRuntime({ model: scripted.driver });
+  const traces = [];
+  const natlang = m.natlang.createNatlangRuntime({ model: scripted.driver, trace: trace => traces.push(trace) });
   const faux = m.ai.fauxProvider();
   const models = m.ai.createModels();
   models.setProvider(faux.provider);
@@ -115,12 +117,12 @@ function setup() {
   const reports = [];
   const open = async () => {
     harness = await m.durable.Harness.open(new m.memory.MemoryStorage(), { models, registry,
-      schedulerPolicy: m.policies.schedulerPolicy(host, 'natural-language'), admission: m.policies.admissionPolicy(host, 'natural-language'),
+      schedulerPolicy: m.policies.schedulerPolicy(host, scheduler), admission: m.policies.admissionPolicy(host, 'nl'),
       onReport: error => { reports.push(error); if (process.env.DEBUG) console.error('report', error); } }, context);
     const conversation = await harness.root(context, { agent: { model: { provider: 'faux', modelId: 'faux-1' } } });
     return { harness, conversation };
   };
-  return { calls, faux, registry, context, open, reports };
+  return { calls, traces, faux, registry, context, open, reports };
 }
 
 test('an input is admitted, scheduled, stepped and settled through the natural-language policy', async () => {
@@ -140,6 +142,27 @@ test('an input is admitted, scheduled, stepped and settled through the natural-l
   assert.equal((await conversation.submit({ type: 'input', content: 'other', requestId: 'r1' }, s.context)).id, again.id);
   await again.wait(s.context);
   await harness.close(s.context);
+});
+
+test('in shadow mode the scheduler serves the natural-language decisions and records their agreement with pi\'s rules', async () => {
+  const s = setup('shadow');
+  s.faux.setResponses([m.ai.fauxAssistantMessage('Hello there')]);
+  const { harness, conversation } = await s.open();
+  harness.resume();
+  const submission = await conversation.submit({ type: 'input', content: 'hi' }, s.context);
+  assert.equal((await submission.wait(s.context)).status, 'done');
+  await harness.waitForIdle(s.context);
+  await harness.close(s.context);
+  const events = s.traces.flatMap(trace => trace.events).filter(event => event.kind === 'pluggable_shadow');
+  for (const name of ['pi.scheduler.pass', 'pi.scheduler.step']) assert.ok(events.some(event => event.name === name), `${name} was compared`);
+  assert.deepEqual(events.filter(event => !event.agree), [], 'the scripted decisions are pi\'s rules, so every comparison agrees');
+  assert.ok(events.every(event => event.served === 'nl'));
+});
+
+test('admission has no shadow mode; crisp keeps pi-durable\'s own', () => {
+  assert.throws(() => m.policies.admissionPolicy({ natlang: null }, 'shadow'), /not "shadow"/);
+  assert.equal(m.policies.admissionPolicy({ natlang: null }, 'crisp'), undefined);
+  assert.equal(m.policies.schedulerPolicy({ natlang: null }, 'crisp'), undefined);
 });
 
 test('a busy conversation queues a steer and rejects input that asks to be rejected', async () => {

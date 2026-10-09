@@ -1,7 +1,10 @@
 /**
  * The natural-language implementations of the pluggable scheduler policy and of admission (PORT.md "The scheduler",
- * owner decision 4). pi-durable's crisp code stays the default: `schedulerPolicy` and `admissionPolicy` return
- * undefined for "crisp", so the vendored Harness keeps its own inline policy and `admitSubmission`.
+ * owner decision 4), selected by a pluggable mode (`crisp`, `nl`, `shadow`). pi-durable's crisp code stays the default:
+ * `schedulerPolicy` and `admissionPolicy` return undefined for `crisp`, so the vendored Harness keeps its own inline
+ * policy and `admitSubmission`. In `shadow` each scheduler policy point runs `pluggable()` over pi's rules restated
+ * over facts (`crispSchedulerPolicy`) and the natural-language call, serves the natural-language decision and records
+ * whether the two agree. Admission has no shadow mode: each side commits its own decision.
  *
  * The vendored scheduler reads each policy point's facts on the Session line, calls the policy outside any commit, and
  * commits the decision guarded on the records it read (vendor/PATCHES.md). Here each policy point is one
@@ -10,13 +13,14 @@
  * bound to the conversation: committed reads, and one guarded commit of admission operations.
  */
 import type { Context } from '@earendil-works/chord';
-import type { NatlangRuntime } from '@natlang/node';
+import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
 import { copyJson } from '@earendil-works/chord';
 import { UserEntry } from '../vendor/durable/src/entries.ts';
 import { ConversationBusy } from '../vendor/durable/src/errors.ts';
 import { startRun } from '../vendor/durable/src/harness/generation.ts';
 import { InboxDoc } from '../vendor/durable/src/harness/inbox.ts';
 import { LiveDoc } from '../vendor/durable/src/harness/live.ts';
+import { crispSchedulerPolicy } from '../vendor/durable/src/harness/policy.ts';
 import type { AdmissionPolicy, AdmissionRequest, SchedulerPolicy } from '../vendor/durable/src/harness/types.ts';
 import type { ConversationId, EntryDraft, SubmissionId, TaskId, Tx } from '../vendor/durable/src/types.ts';
 import { applyOps } from '../ops.ts';
@@ -28,8 +32,6 @@ import abortTask from '../scheduler/abortTask.nl';
 import abortConversation from '../scheduler/abortConversation.nl';
 import admit from '../admit.nl';
 import { StateChanged } from '../ops.ts';
-
-export type Implementation = 'crisp' | 'natural-language';
 
 export type PolicyHost = {
   natlang: NatlangRuntime;
@@ -61,16 +63,26 @@ export function byRequest(requestId: string): Promise<SubmissionRecord | null>;
  */
 export function commit(ops: AdmissionOp[], expect: AdmissionExpect): Promise<{ id: number; placed: number[] }>;`;
 
-/** The selected scheduler policy: undefined for "crisp" (pi-durable's inline policy), else the natural-language one. */
-export function schedulerPolicy(host: PolicyHost, implementation: Implementation): SchedulerPolicy | undefined {
-  if (implementation === 'crisp') return undefined;
-  const call = async <T>(point: string, fn: (facts: never) => Promise<unknown>, facts: unknown, context: Context): Promise<T> => {
+/**
+ * A scheduler decision as shadow mode compares it: without its cleanup (pi-durable's crisp settlement has none) and
+ * with the wording of its messages reduced to whether there is one.
+ */
+const decisionShape = (decision: unknown): string => JSON.stringify(decision, (key, value) =>
+  key === 'cleanup' ? undefined : (key === 'message' || key === 'report') && typeof value === 'string' ? true : value);
+
+/** The selected scheduler policy: undefined for `crisp` (pi-durable's inline policy), else the natural-language one, compared with pi's rules in `shadow`. */
+export function schedulerPolicy(host: PolicyHost, setting: PluggableSetting): SchedulerPolicy | undefined {
+  const mode = pluggableMode(setting, 'crisp');
+  if (mode === 'crisp') return undefined;
+  type Point = Exclude<keyof SchedulerPolicy, 'applyCleanup'>;
+  const call = async <T>(point: Point, fn: (facts: never) => Promise<unknown>, facts: unknown, context: Context): Promise<T> => {
     const services = { ...host.services, scheduler: { live: (conversationId: number) => host.live(conversationId, context).then(plain) } };
+    const decide = pluggable({ crisp: () => crispSchedulerPolicy[point](plain(facts) as never, context) as unknown,
+      nl: () => fn(plain(facts) as never) }, mode, { name: `pi.scheduler.${point}`, same: (exact, judged) => decisionShape(exact) === decisionShape(judged) });
     const attempts = Math.max(1, host.attempts ?? 3);
     for (let attempt = 1; ; attempt++) {
       try {
-        const decision = await host.natlang.run(() => fn(plain(facts) as never), {
-          services, serviceDeclarations: { scheduler: SCHEDULER_DECLARATION }, name: `scheduler/${point}` });
+        const decision = await host.natlang.run(decide, { services, serviceDeclarations: { scheduler: SCHEDULER_DECLARATION }, name: `scheduler/${point}` });
         host.onCall?.({ point, attempt });
         return decision as T;
       } catch (error) {
@@ -194,9 +206,14 @@ export function admissionService(request: AdmissionRequest, context: Context) {
   };
 }
 
-/** The selected admission: undefined for "crisp" (pi-durable's `admitSubmission`), else `admit.nl`. */
-export function admissionPolicy(host: Pick<PolicyHost, 'natlang' | 'services'>, implementation: Implementation): AdmissionPolicy | undefined {
-  if (implementation === 'crisp') return undefined;
+/**
+ * The selected admission: undefined for `crisp` (pi-durable's `admitSubmission`), else `admit.nl`. There is no `shadow`:
+ * both sides admit by committing, so running both would admit the submission twice.
+ */
+export function admissionPolicy(host: Pick<PolicyHost, 'natlang' | 'services'>, setting: PluggableSetting): AdmissionPolicy | undefined {
+  const mode = pluggableMode(setting, 'crisp');
+  if (mode === 'shadow') throw new TypeError('admission is "crisp" or "nl", not "shadow": each side commits its own admission, so both cannot run.');
+  if (mode === 'crisp') return undefined;
   return {
     async admit(request, context) {
       const result = await host.natlang.run(() => (admit as unknown as (draft: SubmissionDraft) => Promise<AdmitResult>)(plain(request.draft) as SubmissionDraft), {

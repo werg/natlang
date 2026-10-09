@@ -16,13 +16,16 @@
  *                                           /v1/neuralese/info, and Neuralese parts then reach it as blocks
  *   --cwd DIR                               the agent's working directory (default: the workspace)
  *   --session FILE                          the SQLite session (default: a new one under the state directory)
- *   --context natural-language              context building in natural language (default crisp)
- *   --scheduler natural-language            the scheduler's policy in natural language (default crisp)
- *   --admission natural-language            admission in natural language (default crisp)
- *   --planning natural-language             the system-entry plan and the context estimate in natural language
- *   --pure                                  all of these in natural language (with --companion, shaping too)
+ *   Pluggable hot paths, each crisp|nl|shadow (default crisp; nl runs the natural-language functions, shadow runs
+ *   both, uses the natural-language result and records whether they agree; natural-language is accepted for nl):
+ *   --context MODE                          context building
+ *   --scheduler MODE                        the scheduler's policy
+ *   --admission crisp|nl                    admission (no shadow: both sides commit)
+ *   --planning MODE                         the system-entry plan and the context estimate
+ *   --shaping MODE                          with --companion: how long tool outputs are shortened (crisp: head and
+ *                                           tail; nl: by judgment)
+ *   --pure                                  nl for every point not set explicitly (with --companion, shaping too)
  *   --companion                             run the companion beside the agent (COMPANION.md): background briefings
- *   --shaping natural-language              the companion shortens long tool outputs by judgment (default: head and tail)
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
  *   --quiet                                 no phase log on stderr
@@ -41,7 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createModels, createProvider, type AssistantMessage, type Models } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
-import { NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, type NeuraleseStore, type TargetContext } from '@natlang/node';
+import { NatlangRuntime, neuraleseServerModelTurn, openAICompatibleModelTurn, pluggableMode, type NeuraleseStore, type PluggableMode, type TargetContext } from '@natlang/node';
 import { declareReader, natlangApi, type AgentReader, type ModelDriver } from './host/natlang-provider.ts';
 import { openNodeSqliteStorage } from './vendor/durable/src/storage/sqlite/node.ts';
 import type { EntryId } from './vendor/durable/src/types.ts';
@@ -50,7 +53,7 @@ import { companion } from './extensions/companion/index.ts';
 import { agentSurface } from './surface.ts';
 import { replayFile } from './bench/replay.ts';
 import type { Harness } from './vendor/durable/src/harness/harness.ts';
-import { openPi, type Implementation } from './index.ts';
+import { openPi, type Implementations } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
@@ -116,9 +119,11 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
   return { models, ref: { provider: 'agent', modelId } };
 }
 
-function implementations(args: string[]): { context: Implementation; scheduler: Implementation; admission: Implementation; planning: Implementation } {
-  const pick = (name: string): Implementation => args.includes('--pure') || option(args, `--${name}`) === 'natural-language' ? 'natural-language' : 'crisp';
-  return { context: pick('context'), scheduler: pick('scheduler'), admission: pick('admission'), planning: pick('planning') };
+/** The mode a pluggable point's flag names: its value, else nl under --pure, else crisp. */
+const mode = (args: string[], name: string): PluggableMode => pluggableMode(option(args, `--${name}`), args.includes('--pure') ? 'nl' : 'crisp');
+
+function implementations(args: string[]): Implementations {
+  return { context: mode(args, 'context'), scheduler: mode(args, 'scheduler'), admission: mode(args, 'admission'), planning: mode(args, 'planning') };
 }
 
 const textOf = (message: AssistantMessage | undefined) =>
@@ -151,7 +156,7 @@ export async function runTask(target: TargetContext, args: string[], task: strin
   let opened: Harness | undefined;
   // The companion (COMPANION.md) watches the agent's work in the background and briefs it each request.
   if (args.includes('--companion')) registry.install(companion(natlang, { harness: () => opened!,
-    shaping: args.includes('--pure') || option(args, '--shaping') === 'natural-language' ? 'natural-language' : 'crisp',
+    shaping: mode(args, 'shaping'),
     onReport: error => log(`  [companion] ${error instanceof Error ? error.message : String(error)}`) }));
   const harness = await openPi({
     storage: await openNodeSqliteStorage(sessionPath),
