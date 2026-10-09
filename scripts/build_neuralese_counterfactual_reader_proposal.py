@@ -7,6 +7,7 @@ actual later reader action, preserving the actual source graph and clearly
 labeling the proposed learned writer-to-reader relation as nonhistorical.
 """
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -69,6 +70,166 @@ def classify_reader_action(row, producer_body):
     return {"kind": name or "unknown-tool-action", "state_update": "unreviewed"}
 
 
+def _replace_message_block_with_read(value, block_id, read_name, body):
+    """Replace only exact typed body references with an explicit proposed read port."""
+    if isinstance(value, dict):
+        if value.get("type") == "neuralese" and value.get("id") == block_id:
+            return {"type": "read", "name": read_name, "source": body}, 1
+        changed, occurrences = {}, 0
+        for key, child in value.items():
+            if key == "arguments" and isinstance(child, str):
+                try:
+                    parsed = json.loads(child)
+                except json.JSONDecodeError:
+                    changed[key] = child
+                else:
+                    replacement, count = _replace_message_block_with_read(parsed, block_id, read_name, body)
+                    changed[key] = json.dumps(replacement, ensure_ascii=False, separators=(",", ":"))
+                    occurrences += count
+            else:
+                replacement, count = _replace_message_block_with_read(child, block_id, read_name, body)
+                changed[key] = replacement
+                occurrences += count
+        return changed, occurrences
+    if isinstance(value, list):
+        replaced, occurrences = [], 0
+        for child in value:
+            replacement, count = _replace_message_block_with_read(child, block_id, read_name, body)
+            replaced.append(replacement); occurrences += count
+        return replaced, occurrences
+    return value, 0
+
+
+def materialize_counterfactual_recurrence_rows(edges, derived_rows, reader_rows):
+    """Build held R rows pairing approved derived body targets with admitted readers.
+
+    The writer's body is a separately admitted text target projected as a Neuralese
+    write. Each reader keeps its exact sampled target and changes only the matching
+    authenticated typed input block into a read from that proposed writer. No row
+    created here inherits training admission.
+    """
+    selected = [edge for edge in edges
+                if edge.get("observed_reader", {}).get("root_action_disposition", {}).get("status")
+                == "root-admitted-action"]
+    writers, readers = {}, {}
+    relation_ids = []
+    for edge in selected:
+        producer = edge["producer"]
+        observed = edge["observed_reader"]
+        producer_id = producer["derived_native_record_id"]
+        reader_id = observed["native_record_id"]
+        row_entry = derived_rows.get(producer_id)
+        if not row_entry:
+            raise ValueError(f"counterfactual producer row is missing: {producer_id}")
+        derived = row_entry["row"] if isinstance(row_entry, dict) and "row" in row_entry else row_entry
+        target = copy.deepcopy(derived.get("target"))
+        calls = target.get("tool_calls") if isinstance(target, dict) else None
+        if not isinstance(calls, list) or len(calls) != 1:
+            raise ValueError(f"derived target is not a single return_result action: {producer_id}")
+        function = calls[0].get("function") or {}
+        if function.get("name") != "return_result":
+            raise ValueError(f"derived target is not return_result: {producer_id}")
+        try:
+            arguments = json.loads(function.get("arguments", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"derived return_result arguments are malformed: {producer_id}") from exc
+        body = arguments.get("value")
+        block_id = producer.get("writer_block_id")
+        body_hash = sha_bytes(body.encode("utf-8")) if isinstance(body, str) else None
+        if (not isinstance(block_id, str) or not block_id.startswith("nz1_")
+                or body_hash != producer.get("body_sha256")
+                or derived.get("derived_target", {}).get("exact_body_sha256") != body_hash
+                or producer.get("target_role") != "approved-derived-body-supervision-not-sampled-action"):
+            raise ValueError(f"derived body target differs from its exact approved producer: {producer_id}")
+        write_name = "soft-state:" + block_id
+        writer_id = "counterfactual-writer:" + producer_id
+        prior_writer = writers.get(producer_id)
+        if prior_writer is None:
+            writer = copy.deepcopy(derived)
+            writer["id"] = writer_id
+            writer_target = copy.deepcopy(target)
+            writer_arguments = dict(arguments)
+            writer_arguments["value"] = {"$write": {"name": write_name,
+                "type": "Neuralese<string>", "source": body}}
+            writer_target["tool_calls"][0]["function"]["arguments"] = json.dumps(
+                writer_arguments, ensure_ascii=False, separators=(",", ":"))
+            writer["target"] = writer_target
+            writer["training_admission"] = {"approved": False,
+                "kind": "counterfactual-writer-view-pending-root-review"}
+            writer["counterfactual_recurrence_view"] = {
+                "schema": "natlang.counterfactual-recurrence-view/1",
+                "role": "derived-body-as-proposed-learned-writer",
+                "relation_ids": [], "write_name": write_name, "block_id": block_id,
+                "body_sha256": body_hash,
+                "body_admission_receipt": edge["producer"]["root_body_admission_receipt"],
+                "original_eval_hidden_states_equivalent": False,
+                "original_learned_writer_state_observed": False,
+                "recurrence_admission": False, "runtime_qualification": False,
+                "training_admission": False}
+            writers[producer_id] = writer
+        elif prior_writer["counterfactual_recurrence_view"]["body_sha256"] != body_hash:
+            raise ValueError(f"producer has inconsistent bodies across reader edges: {producer_id}")
+
+        reader_entry = reader_rows.get(reader_id)
+        if not reader_entry:
+            raise ValueError(f"observed reader row is missing: {reader_id}")
+        reader = reader_entry["row"] if isinstance(reader_entry, dict) and "row" in reader_entry else reader_entry
+        # Observed edge target pins use the sorted-key native-row digest
+        # (sha_json); sha_js_json is reserved for the materializer's derived
+        # target receipt, which deliberately pins insertion-order JSON.stringify.
+        if sha_json(reader.get("target") or {}) != observed.get("target_sha256"):
+            raise ValueError(f"reader target differs from exact admitted action: {reader_id}")
+        receipt_matches = [receipt for receipt in (reader.get("source_ref", {}).get(
+            "provider_expanded_read_contexts") or []) if (receipt.get("block") or {}).get("id") == block_id]
+        if len(receipt_matches) != 1:
+            raise ValueError(f"reader lacks one exact source read receipt for block: {reader_id}")
+        receipt = receipt_matches[0]
+        actual_body = (receipt.get("block") or {}).get("body")
+        if (actual_body != body or sha_bytes(actual_body.encode("utf-8")) != body_hash
+                or (receipt.get("block_read") or {}).get("node") != observed.get("reader_node")
+                or (receipt.get("model_turn") or {}).get("node") != observed.get("model_turn_node")):
+            raise ValueError(f"reader source body/ports differ from exact graph edge: {reader_id}")
+        reader_id_new = "counterfactual-reader:" + reader_id
+        if reader_id_new not in readers:
+            projected = copy.deepcopy(reader)
+            original_messages_sha = sha_js_json(reader.get("messages") or [])
+            new_messages, occurrences = _replace_message_block_with_read(
+                reader.get("messages") or [], block_id, write_name, body)
+            expected_occurrences = receipt.get("context_occurrences")
+            if type(expected_occurrences) is not int or occurrences != expected_occurrences or occurrences < 1:
+                raise ValueError(f"reader input port replacement count mismatch: {reader_id}")
+            projected["id"] = reader_id_new
+            projected["messages"] = new_messages
+            projected["training_admission"] = {"approved": False,
+                "kind": "counterfactual-reader-view-pending-root-review"}
+            projected["counterfactual_recurrence_view"] = {
+                "schema": "natlang.counterfactual-recurrence-view/1",
+                "role": "observed-reader-with-proposed-learned-writer-input",
+                "relation_ids": [], "read_name": write_name, "block_id": block_id,
+                "body_sha256": body_hash,
+                "original_native_record_id": reader_id,
+                "original_messages_sha256": original_messages_sha,
+                "counterfactual_messages_sha256": sha_js_json(new_messages),
+                "reader_action_admission_receipt": edge["observed_reader"]["root_action_disposition"],
+                "original_target_sha256": observed["target_sha256"],
+                "original_source_graph_edge": observed["observed_source_graph_edge"],
+                "read_inputs": observed["read_inputs"], "model_turn_inputs": observed["model_turn_inputs"],
+                "original_eval_hidden_states_equivalent": False,
+                "original_learned_writer_state_observed": False,
+                "recurrence_admission": False, "runtime_qualification": False,
+                "training_admission": False}
+            readers[reader_id] = projected
+        elif readers[reader_id]["counterfactual_recurrence_view"]["read_name"] != write_name:
+            raise ValueError(f"reader has conflicting proposed producer ports: {reader_id}")
+        relation = edge["proposal_id"]
+        writers[producer_id]["counterfactual_recurrence_view"]["relation_ids"].append(relation)
+        readers[reader_id]["counterfactual_recurrence_view"]["relation_ids"].append(relation)
+        relation_ids.append(relation)
+    for row in [*writers.values(), *readers.values()]:
+        row["counterfactual_recurrence_view"]["relation_ids"].sort()
+    return [*writers.values(), *readers.values()]
+
+
 def load_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -117,10 +278,21 @@ def main():
                         help="review-only JSONL edges")
     parser.add_argument("--manifest", type=Path, required=True,
                         help="review/provenance manifest")
+    parser.add_argument("--recurrence-out", type=Path,
+                        help="optional held counterfactual R rows: derived writer targets plus selected reader views")
+    parser.add_argument("--recurrence-pieces-out", type=Path,
+                        help="required with --recurrence-out; empty when all proposed body sources stay inline")
     args = parser.parse_args()
+    if (args.recurrence_out is None) != (args.recurrence_pieces_out is None):
+        raise ValueError("--recurrence-out and --recurrence-pieces-out must be supplied together")
     if args.out.resolve() == args.manifest.resolve():
         raise ValueError("candidate output and manifest must be distinct paths")
-    if args.out.exists() or args.manifest.exists():
+    output_paths = [args.out, args.manifest]
+    if args.recurrence_out is not None:
+        output_paths.extend([args.recurrence_out, args.recurrence_pieces_out])
+    if len({path.resolve() for path in output_paths}) != len(output_paths):
+        raise ValueError("proposal output paths must be distinct")
+    if any(path.exists() for path in output_paths):
         raise FileExistsError("refusing to overwrite an existing proposal output or manifest")
 
     index = load_json(args.admission_index)
@@ -403,6 +575,26 @@ def main():
             len(json.loads(path.read_text()).get("downstream_reader_bindings") or [])
             for path in args.candidate):
         raise ValueError("producer or reader edge count differs from exact source index")
+    recurrence_rows = None
+    recurrence_bytes = None
+    recurrence_pieces_bytes = None
+    if args.recurrence_out is not None:
+        recurrence_rows = materialize_counterfactual_recurrence_rows(edges, delta_rows, reader_rows)
+        recurrence_bytes = b"".join(canonical(row) + b"\n" for row in recurrence_rows)
+        # Current counterfactual views keep authenticated body text inline in the
+        # standard $write.source/read.source ports, so they introduce no soft-piece refs.
+        recurrence_pieces_bytes = b""
+        edges_by_producer = {}
+        for edge in edges:
+            if edge.get("observed_reader", {}).get("root_action_disposition", {}).get("status") == "root-admitted-action":
+                edges_by_producer.setdefault(edge["producer"]["derived_native_record_id"], []).append(edge["proposal_id"])
+        row_ids = {row["id"] for row in recurrence_rows}
+        expected_writers = {"counterfactual-writer:" + ident for ident in edges_by_producer}
+        expected_readers = {"counterfactual-reader:" + row["observed_reader"]["native_record_id"]
+                            for row in edges if row.get("observed_reader", {}).get(
+                                "root_action_disposition", {}).get("status") == "root-admitted-action"}
+        if row_ids != expected_writers | expected_readers:
+            raise ValueError("counterfactual R rows do not exactly cover admitted producer/reader views")
     builder_path = Path(__file__).resolve()
     builder_snapshot = args.out.parent / "code-snapshot" / builder_path.name
     if builder_snapshot.exists():
@@ -429,6 +621,21 @@ def main():
         "producer_count": len(producer_ids), "observed_reader_binding_count": len(edges),
         "unique_reader_action_count": len({r["observed_reader"]["native_record_id"] for r in edges}),
         "candidate_rows_sha256": sha_bytes(out_bytes), "candidate_rows": args.out.as_posix(),
+        "counterfactual_recurrence": ({
+            "path": args.recurrence_out.as_posix(), "sha256": sha_bytes(recurrence_bytes),
+            "bytes": len(recurrence_bytes), "rows": len(recurrence_rows),
+            "writer_rows": sum(row["counterfactual_recurrence_view"]["role"] ==
+                                "derived-body-as-proposed-learned-writer" for row in recurrence_rows),
+            "reader_rows": sum(row["counterfactual_recurrence_view"]["role"] ==
+                                "observed-reader-with-proposed-learned-writer-input" for row in recurrence_rows),
+            "training_admission": False, "recurrence_admission": False,
+            "original_eval_hidden_states_equivalent": False,
+            "pieces": {"path": args.recurrence_pieces_out.as_posix(),
+                       "sha256": sha_bytes(recurrence_pieces_bytes), "bytes": len(recurrence_pieces_bytes),
+                       "rows": 0, "reason": "all exact source/body strings are inline in standard $write.source and read.source ports"},
+            "relations": len([edge for edge in edges if edge.get("observed_reader", {}).get(
+                "root_action_disposition", {}).get("status") == "root-admitted-action"]),
+        } if recurrence_rows is not None else None),
         "builder": {
             "source_path": builder_path.as_posix(), "source_sha256": sha_bytes(builder_bytes),
             "immutable_snapshot_path": builder_snapshot.as_posix(),
@@ -446,10 +653,14 @@ def main():
     }
     manifest_bytes = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     # Recheck immediately before mutation, then create every output exclusively.
-    if args.out.exists() or args.manifest.exists() or builder_snapshot.exists():
+    if any(path.exists() for path in output_paths) or builder_snapshot.exists():
         raise FileExistsError("refusing to overwrite an existing proposal artifact")
-    for output_path, payload in ((builder_snapshot, builder_bytes), (args.out, out_bytes),
-                                 (args.manifest, manifest_bytes)):
+    output_payloads = [(builder_snapshot, builder_bytes), (args.out, out_bytes)]
+    if recurrence_rows is not None:
+        output_payloads.extend([(args.recurrence_out, recurrence_bytes),
+                                (args.recurrence_pieces_out, recurrence_pieces_bytes)])
+    output_payloads.append((args.manifest, manifest_bytes))
+    for output_path, payload in output_payloads:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         with os.fdopen(fd, "wb") as stream:
