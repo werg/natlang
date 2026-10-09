@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { snapshotOpenCodeCliCaptures } from '../scripts/snapshot_opencode_cli_captures.mjs';
 
 const required = [
-  'cli-stdout.raw', 'cli-invocations.jsonl', 'action-mcp-calls.jsonl',
+  'cli-invocations.jsonl', 'action-mcp-calls.jsonl',
   'bootstrap-config.json', 'bootstrap-events.jsonl', 'mcp-handshake.jsonl',
   'lifecycle.json', 'opencode-home/data/opencode/log/opencode.log',
 ];
@@ -20,12 +20,18 @@ test('snapshots stopped bridge captures to a separate immutable tree with hashes
       await mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
       await writeFile(path, name === 'lifecycle.json' ? '{"status":"stopped"}\n' : `capture:${name}\n`);
     }
+    await writeFile(join(source, 'cli-stdout.raw'), 'provider stream bytes');
     const result = await snapshotOpenCodeCliCaptures({ sourceDirectory: source, outputDirectory: output, scope: 'case-02' });
     const manifest = JSON.parse(await readFile(result.manifest_path, 'utf8'));
     assert.equal(manifest.scope, 'case-02');
-    assert.equal(manifest.files.length, required.length);
+    assert.equal(manifest.files.length, required.length + 1);
     assert.ok(manifest.files.some(file => file.snapshot_path.endsWith('/opencode.log')));
     await assert.rejects(snapshotOpenCodeCliCaptures({ sourceDirectory: source, outputDirectory: output, scope: 'again' }));
+    await rm(join(source, 'cli-stdout.raw'));
+    const noStream = await snapshotOpenCodeCliCaptures({ sourceDirectory: source,
+      outputDirectory: join(root, 'snapshot-no-stream'), scope: 'case with no stream bytes' });
+    const noStreamManifest = JSON.parse(await readFile(noStream.manifest_path, 'utf8'));
+    assert.ok(noStreamManifest.omissions.includes('Optional capture was not emitted: cli-stdout.raw'));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
