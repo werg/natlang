@@ -12,7 +12,10 @@ Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navi
 ## GPU: full-depth autoregressive foundation continuation
 
 Current state: corrected continuation `luna-ar-feedback-prefix-4962-best23936-v1`
-is running from immutable mapped best23936, not regressed final24960. Declared
+was gracefully paused at serialized step24704 for two serial GPU own-history
+diagnostics. All optimizer/schedule state is retained. Resume uses the exact
+frozen child argv and existing stage checkpoint, not a fresh outer recipe.
+It continues from immutable mapped best23936, not regressed final24960. Declared
 recipe `luna-ar-feedback-prefix-4962-best23936-20261009-v1.json` has SHA
 `70e416d7558727d0eced37cd465827184da5cc64198bd5c26ec25ffc0317a99c`;
 its frozen122-file common package is from `9a16218c`. Startup confirms all four
@@ -61,8 +64,12 @@ Shared `eval/self_feedback.py` compares ordinary embeddings and actual projected
 payloads on the same continuation, and scores projected/crisp continuations with
 the ordinary model on their respective histories. Its proposed per-stratum gates
 (.99 argmax agreement, .02 KL nats/token, .05 own-output CE gap) were declared
-before measurements. Code and146 tests are landed; GPU exercise and canonical
-qualification integration remain open. No new certificate has been issued.
+before measurements. Code and146 tests are landed. The best23936 GPU diagnostic completed: short
+spans pass the proposed gate, medium/long and first/last strata fail. A matched
+immutable intermediate24448 comparison is running. Reports live beneath
+`/srv/storage/natlang-artifacts/luna-self-feedback-best23936-20261009-v1/result-parent-v3/`;
+launch declaration v4 retains that v3 output parent. These are diagnostics, not
+certificates; canonical qualification integration remains open.
 Do not duplicate this evaluator for another backbone. Coordinate integration
 with the DGX-owned C1–C3 work through request
 `2026-10-09T19:31:19.113313Z-pop-85c7`.
@@ -229,9 +236,32 @@ retain their recorded implementation.
 
 ## Corpus inventory
 
-Current published admitted facets:5773 native (3738train/2035test),4962 text (3258/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. The live GPU run used the immutable4880 text input; publication does not mutate it. Fresh sampled actions remain held until explicit per-action review and composition adoption.
+Current published admitted facets:5773 native (3738train/2035test),4962 text (3258/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. The current GPU continuation uses the immutable4962 text input; publication does not mutate it. Fresh sampled actions remain held until explicit per-action review and composition adoption.
 
 - Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
 - Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
 - Shared sync copies verified file aliases as bytes; immutable selected-file manifests must exclude private process databases/logs/caches. Unsafe retired manifests remain untracked and held. Do not commit or reactivate them.
 - Never silently switch the active training input. Publish fresh facets through registry/admission/provenance first, then explicitly declare the next recipe or continuation.
+
+## Free-provider expansion under review
+
+User requested review of `mnfst/awesome-free-llm-apis`. Verify its claims against
+provider documentation/live catalog rather than treating its quotas as current.
+Priority candidates: Kilo anonymous free gateway (200 requests/hour/IP; explicit
+free-model IDs), Groq GPT-OSS120B for short tasks (8K TPM/200K TPD published free
+token limits), Z.AI `glm-4.7-flash` for longer trajectories (free, 200K context;
+actual account concurrency unverified). Mistral is optional pending actual free
+API allowance shown in the account. No generation quality claim yet.
+
+Private blank credential templates were prepared at
+`~/.config/natlang/{groq,zai,mistral}.env` (mode0600), with respectively
+`GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`. Kilo needs no key for anonymous
+free access. Keys remain outside Git/logs/chat. Existing shared external HTTP
+transport should be reused; do not clone a launcher per provider. Integration
+planning is read-only so far: no provider inference or worker launch yet.
+
+Sources: https://kilo.ai/docs/gateway/authentication ;
+https://console.groq.com/docs/rate-limits ;
+https://docs.z.ai/guides/overview/pricing ;
+https://docs.z.ai/guides/llm/glm-4.7 ;
+https://docs.mistral.ai/admin/billing-usage/subscriptions .
