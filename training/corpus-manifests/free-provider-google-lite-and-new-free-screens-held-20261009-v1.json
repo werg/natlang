@@ -1,0 +1,236 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-lite-and-new-free-screens-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/collector-0.log",
+      "bytes": 51457,
+      "sha256": "b750d5aad1fff5b98d1677fc125c39b9feab33979bb76b6043fdc9c56057dfb4"
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json",
+      "bytes": 370290,
+      "sha256": "da0d5c6d524fc8d40e8d8d4b2baeeba87ca897403f7c4d2f8210151686bc04f8"
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/jobs/000000-0902f25e0b417661.partial.json.evidence-6e26c9b0-00c4-4613-b4f1-9fe89493c1b8.jsonl",
+      "bytes": 2936906,
+      "sha256": "5f2c4eac136962b45624d9c2bd3d6c12cc85e80da0e383203175d7ce9667d6cf",
+      "lines": 310
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/jobs/000000.error.json",
+      "bytes": 2101,
+      "sha256": "b08fc357ef3a3b8dca48e0990896d10644583a849005f88f8312fd9a5cb7bd81"
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/journal.jsonl",
+      "bytes": 42976,
+      "sha256": "4b1d2658dfb36cb148fcc9f6b061e1780321cd4d441152cebe7c40a437886a33",
+      "lines": 55
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 855,
+      "sha256": "d0218d8a76e2cba3968f62665edfd62946fcff350f11dfb70858bba37f6a37e9"
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/queue.jsonl",
+      "bytes": 907,
+      "sha256": "c4d26767c6d842aa3a2177e02b44bb58f884ef80890920b39f9c0fe7011b513c",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1682,
+      "sha256": "c24ccf4817383b3aa8208b393b94c4e88c1671a6971d395a00f0d901be07da36"
+    },
+    {
+      "path": "provider-gemini-3-flash-preview-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 42976,
+      "sha256": "4b1d2658dfb36cb148fcc9f6b061e1780321cd4d441152cebe7c40a437886a33"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-minimal-screen-v1/labels.jsonl",
+      "bytes": 4758,
+      "sha256": "48f6f6dfc074653e58f21631d9f9d19323056c928f9a2963536cc16960916498",
+      "lines": 4
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-minimal-screen-v1/labels.jsonl.manifest.json",
+      "bytes": 846,
+      "sha256": "e40b7b94591d3ae84b79307db55eb7f8d730703e2438757b668a92f7c7b33663"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-minimal-screen-v1/launch-receipt-v1.json",
+      "bytes": 1037,
+      "sha256": "0a5de433eda6a750de4614c7acc2a1ccf7e8a74b8934d0f454f9e6c63e802be8"
+    },
+    {
+      "path": "provider-google-gemini-3.1-flash-lite-minimal-screen-v1/worker.log",
+      "bytes": 220,
+      "sha256": "ef05b2bc433b634b046f873074aaec7da08f435cbeb57d39d798ac89c74acfae"
+    },
+    {
+      "path": "provider-google-gemini-3.5-flash-lite-mixed-decisions-v1/labels.jsonl",
+      "bytes": 150926,
+      "sha256": "3f0059d6060930b1a97c7f6d26a9b6ea667791f3ba06f8003d93cd515be9aeb6",
+      "lines": 128
+    },
+    {
+      "path": "provider-google-gemini-3.5-flash-lite-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 785,
+      "sha256": "eee794cd130bee5a67215b321d0fa9b2fab071e1de6f2634d3de609113609944"
+    },
+    {
+      "path": "provider-google-gemini-3.5-flash-lite-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1055,
+      "sha256": "f008d047f6ad4380ad307bf4a662f93e88dd3ec6a3b132e0f0987494354e2310"
+    },
+    {
+      "path": "provider-google-gemini-3.5-flash-lite-mixed-decisions-v1/worker.log",
+      "bytes": 5938,
+      "sha256": "416235cfedb2f3c68876e14acfbd8cecdd813f1f186f873159ffdb56c50ba1fa"
+    },
+    {
+      "path": "provider-groq-short-decisions-v1/cases.jsonl",
+      "bytes": 7359,
+      "sha256": "863781e0f461202b9c29bbcba72f858270a7355bf184853bbf2b06b4db4f56d7",
+      "lines": 16
+    },
+    {
+      "path": "provider-kilo-cohere-north-mini-code-free-short-decisions-v1/labels.jsonl",
+      "bytes": 4027,
+      "sha256": "1bfc88905e3b0208a29bcf8ba1669a6299745c032c8bbcce6ce03fca8e725adf",
+      "lines": 4
+    },
+    {
+      "path": "provider-kilo-cohere-north-mini-code-free-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 822,
+      "sha256": "c449a13cca65da0d9dbd2088777dc941d2f077605c504da090873db768a816e0"
+    },
+    {
+      "path": "provider-kilo-cohere-north-mini-code-free-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1041,
+      "sha256": "6ffec82c151298b7c6b73b27376e4a9c21b7082192d8e1021c92e2ea33becce2"
+    },
+    {
+      "path": "provider-kilo-cohere-north-mini-code-free-short-decisions-v1/worker.log",
+      "bytes": 219,
+      "sha256": "0d12d5ddef11d81155c68ef8babae1674dea36d742c164a341860d04174b72c0"
+    },
+    {
+      "path": "provider-kilo-poolside-laguna-xs-2.1-free-short-decisions-v1/labels.jsonl",
+      "bytes": 4106,
+      "sha256": "acffef2899beaabdb6bcd52385ed832ee06c8ac936ce9fb007aac22ab895ffaa",
+      "lines": 4
+    },
+    {
+      "path": "provider-kilo-poolside-laguna-xs-2.1-free-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 822,
+      "sha256": "6218f22907c27be30ca6f7a2fe0a217cf3fc3b95d25c9a9afb342e1f9b662ddf"
+    },
+    {
+      "path": "provider-kilo-poolside-laguna-xs-2.1-free-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1041,
+      "sha256": "99e7f141e09cefb980f03d070b8234bf341dfca318bcae5e3b91b4d0f6c12957"
+    },
+    {
+      "path": "provider-kilo-poolside-laguna-xs-2.1-free-short-decisions-v1/worker.log",
+      "bytes": 220,
+      "sha256": "ec4c4fb5da4c886d8be70344c141e54a65e5730241a669e17566d22b3e3f2b74"
+    },
+    {
+      "path": "provider-kilo-thinkingmachines-inkling-small-free-short-decisions-v1/labels.jsonl",
+      "bytes": 3891,
+      "sha256": "79acda1b66c76c51687f4a8fd7f46d9f7917fc49576cc1ea871418d8d56e3b30",
+      "lines": 4
+    },
+    {
+      "path": "provider-kilo-thinkingmachines-inkling-small-free-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 838,
+      "sha256": "8467ed49fb23474c92ab55a3d2df15d72431e4f0ca1d1c1857dda781b6153463"
+    },
+    {
+      "path": "provider-kilo-thinkingmachines-inkling-small-free-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1065,
+      "sha256": "fb7000673b114db11db7feafe809eb92902b74690937c635e4522495357d0685"
+    },
+    {
+      "path": "provider-kilo-thinkingmachines-inkling-small-free-short-decisions-v1/worker.log",
+      "bytes": 222,
+      "sha256": "7e2da49592174d9076758d631d695bc048ee698a0f1f95eec997a35ee80f838f"
+    },
+    {
+      "path": "provider-openrouter-poolside-laguna-xs-2.1-free-zero-price-screen-v1/labels.jsonl",
+      "bytes": 4393,
+      "sha256": "4ca17aee52e2ca15e21fece6c0fafaa9d5d979df11f98e9dd88c74eaf80f45a7",
+      "lines": 4
+    },
+    {
+      "path": "provider-openrouter-poolside-laguna-xs-2.1-free-zero-price-screen-v1/labels.jsonl.manifest.json",
+      "bytes": 825,
+      "sha256": "e82d3f5d790bff9ec87a0e3d8af9fd58987ffbf38e8a104a43b7c89996643034"
+    },
+    {
+      "path": "provider-openrouter-poolside-laguna-xs-2.1-free-zero-price-screen-v1/launch-receipt-v1.json",
+      "bytes": 1076,
+      "sha256": "18fdd73e8507f28a20cd48b7635fb32473b0a5b040d3795c660254638f69e135"
+    },
+    {
+      "path": "provider-openrouter-poolside-laguna-xs-2.1-free-zero-price-screen-v1/worker.log",
+      "bytes": 222,
+      "sha256": "ae52d127c832bcf2348aaae878eebf95fa2420ad5359cf1c319316aa1012259c"
+    },
+    {
+      "path": "quality-review-v6/gemini-3.5-flash-lite-mixed128-scorer-output.json",
+      "bytes": 3817,
+      "sha256": "4fc2ed1204b6a0572eb55507ee87c50850cf717410088d62f54b53cbafcbb115"
+    },
+    {
+      "path": "quality-review-v6/kilo-cohere-north-mini-code-short4-scorer-output.json",
+      "bytes": 534,
+      "sha256": "97c4e4ccafadb3d7bb0ec3faab4570a43a648e9f6ebe80c94caaf0b0d3b9ce5a"
+    },
+    {
+      "path": "quality-review-v6/kilo-inkling-small-short4-scorer-output.json",
+      "bytes": 548,
+      "sha256": "bdd1afb4ff0ebcbf284ace8144e0320077bbd3fcb1dba1ab827a50eed0ccc9f2"
+    },
+    {
+      "path": "quality-review-v6/kilo-poolside-laguna-short4-scorer-output.json",
+      "bytes": 534,
+      "sha256": "15399cb5f4dafe26f06ed7617c32be506c3880c5fb01a4a0308dc577902bae36"
+    },
+    {
+      "path": "quality-review-v6/openrouter-poolside-laguna-short4-scorer-output.json",
+      "bytes": 541,
+      "sha256": "a55e32f1b47dbd2c2fbef5f9ccecdc3a48a84004aa12d2cce0c72e7a36a53937"
+    },
+    {
+      "path": "quality-review-v6/provider-quality-review-v6.json",
+      "bytes": 53626,
+      "sha256": "92721dd42d84342ff6fb141dd91ec04a3cbb1351bced909bbff82660c84981b8"
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/cases.jsonl",
+      "bytes": 70600,
+      "sha256": "84bae10bb04f573e5b9e37c56cb7039d8fe545d6381fa816065089279f10b78a",
+      "lines": 128
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/source-manifest.json",
+      "bytes": 1050,
+      "sha256": "8a461e15c97506c50e22268592ac997e2541d92c85c80d43136ccfe466ac325d"
+    }
+  ],
+  "bytes": 3779154
+}
