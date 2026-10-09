@@ -1,0 +1,136 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-map-v5-ar-state-evidence-20261009-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-map-v5-ar-state-evidence-20261009-v1/payload-v1",
+  "files": [
+    {
+      "path": "ar_v1/direct-stage-launch-intent-v2.json",
+      "bytes": 4747,
+      "sha256": "e3815783e9d4110bb40dc1108bf4ff6b39b66deb10d1dda082814c25e88bda6f"
+    },
+    {
+      "path": "ar_v1/frozen-runtime-9182c74d-v2/runtime-snapshot-manifest-v1.json",
+      "bytes": 11972,
+      "sha256": "ce185647ead8a74669c72c6a3a2b7a7e0af5fe6a77427d3313f95af473b943e2"
+    },
+    {
+      "path": "ar_v1/frozen-source-step23936-v1/freeze-receipt-v1.json",
+      "bytes": 2048,
+      "sha256": "57423955b5cbda2e49841c8c27dc2cfe953fc65a6154500fda46c64955af2cfb"
+    },
+    {
+      "path": "ar_v1/schedule-handoff-v1/cpu-restore-validation-v1.json",
+      "bytes": 1503,
+      "sha256": "124369b44ccafaa74abfb3c27f07656755a42987a129a9d856a22686620c95d0"
+    },
+    {
+      "path": "ar_v1/schedule-handoff-v1/focused-pytest-v1.txt",
+      "bytes": 730,
+      "sha256": "5ade125d5c0d6533d96a88955fee2e24b5fdf56bca5d387fcc576e64a278c9fa"
+    },
+    {
+      "path": "ar_v2/direct-stage-launch-intent-v3.json",
+      "bytes": 5641,
+      "sha256": "bc02ee4c8a8bd3e6a62e9ba4b0cb7995ba6120711dc7fa1f84385d33ccebe103"
+    },
+    {
+      "path": "ar_v2/frozen-runtime-cf582398-v1/runtime-snapshot-manifest-v1.json",
+      "bytes": 11999,
+      "sha256": "4b2d22f13139ccdad8df6da613330544fa5a982f6eba5c981affa06d34226f43"
+    },
+    {
+      "path": "ar_v2/launch-preflight-v3.json",
+      "bytes": 12849,
+      "sha256": "702b5317fea3d946ad1390229c4db8eb374a825229d24ca4acd9186b288755ab"
+    },
+    {
+      "path": "ar_v2/preflight-receipt-v3.json",
+      "bytes": 2029,
+      "sha256": "357b86b15ac8ea0cc71289b4ef59061d25454bdc32a7e0ee8cacfdff12f5fb08"
+    },
+    {
+      "path": "ar_v2/root-launch-receipt-v1.json",
+      "bytes": 331,
+      "sha256": "2dd8accd87ea124c9353c3cd407bdb107a84957ddb6d05797396111ed1568957"
+    },
+    {
+      "path": "ar_v2/schedule-handoff-v1/cpu-restore-validation-v1.json",
+      "bytes": 1575,
+      "sha256": "4050c023ceae0df8f4353dac47bf49253ef54da4b59593b61946777391d1bed4"
+    },
+    {
+      "path": "ar_v2/schedule-handoff-v1/focused-pytest-v1.txt",
+      "bytes": 730,
+      "sha256": "5ade125d5c0d6533d96a88955fee2e24b5fdf56bca5d387fcc576e64a278c9fa"
+    },
+    {
+      "path": "mapped_v5/direct-stage-launch-intent.json",
+      "bytes": 4777,
+      "sha256": "99b8cca4e83fe76d72a83713442c43de9ac9f1e7d9029cf10ba77d8f7a58da67"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/direct-stage-plan.json",
+      "bytes": 24327,
+      "sha256": "6da60078262f66758a2b63e20f8b065c1f7cd8f682408236a90f52be7219cf13"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/direct-stage-result.json",
+      "bytes": 112196,
+      "sha256": "ea14f507b512af03517123dcd3fab7e43e9a47a28d27cf19d59c74c73f640556"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/baseline.json",
+      "bytes": 105254,
+      "sha256": "39d109bd091aa3a7902b3b352f083523030873f457bd51f46257fae3ce00a475"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.json",
+      "bytes": 110444,
+      "sha256": "b760e0965a624a7c615d8984017a2badcc7413b6a454d560b34bc2bcf75b9c02"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.pt",
+      "bytes": 1220824330,
+      "sha256": "adc6bfd59a5e0e67fa243270035f32da4688d25a73cdbb5a0da83276c11ecb1d"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/best-heads.pt",
+      "bytes": 628875541,
+      "sha256": "c73d46511451ded3e6d304bce489765e0c08be458c44fe47500e022bf6834f48"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/checkpoint.pt",
+      "bytes": 1225548293,
+      "sha256": "3f56c9e130b7c5f81426550d5dd43f8c149207d8f533f99bf390d96296012639"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/eval.jsonl",
+      "bytes": 1655672,
+      "sha256": "2fda3fa10a925cc2cf9d1fc1a187e787ddd4dcff0ac287254cc2d4ba346b28b6",
+      "lines": 21
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/heads-export-status.json",
+      "bytes": 254,
+      "sha256": "8b4d42d23fc2d61ecca34ca1a57c7f263cebae74e2bd1cf5e2c350ca6191da7c"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/plan.json",
+      "bytes": 116899,
+      "sha256": "a226eb3e0adf7fa82d319d7c7252c9b6726c7c7b49542d5763373216e53b7d1a"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/report.json",
+      "bytes": 105150,
+      "sha256": "6f313530458df6aad62bb3f6a96686514db3602aa4bd3e4c00bd982bda8f03fc"
+    },
+    {
+      "path": "mapped_v5/direct-stage-run/map_text_refresh/train.jsonl",
+      "bytes": 21712508,
+      "sha256": "fe27773ba2448a408bad9537f6c45b8888b91e49b7886be9a6b58f993b9525f8",
+      "lines": 2571
+    }
+  ],
+  "bytes": 3099251799
+}

@@ -18067,6 +18067,41 @@
       ],
       "description": "Root-adopted 22 sampled action rows and 19 target-bound ordinary text rows from the multi-source six-successes review (source families V21, V22, V24, and V25). Includes exact source/admission/replay/visibility and text omission provenance. No authored controller, whole trajectory, recurrence, runtime, or new-world admission.",
       "admission": "Root adopted 22 ordinary sampled native actions (19 nested sampled-child and 3 sampled top-level) plus 19 target-bound ordinary text documents. Two visibility holds and three text-context omissions remain explicit. No authored-controller actions, whole-trajectory, recurrence, runtime, or new-world admission; active training inputs unchanged."
+    },
+    {
+      "id": "neuralese-map-v5-ar-state-evidence-20261009-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-map-v5-ar-state-evidence-20261009-v1/payload-v1",
+      "admission": "artifact-only-checkpoint-and-preflight-restore-evidence-no-training-or-qualification",
+      "include": [
+        "mapped_v5/direct-stage-launch-intent.json",
+        "mapped_v5/direct-stage-run/direct-stage-plan.json",
+        "mapped_v5/direct-stage-run/direct-stage-result.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/baseline.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/best-checkpoint.pt",
+        "mapped_v5/direct-stage-run/map_text_refresh/best-heads.pt",
+        "mapped_v5/direct-stage-run/map_text_refresh/checkpoint.pt",
+        "mapped_v5/direct-stage-run/map_text_refresh/eval.jsonl",
+        "mapped_v5/direct-stage-run/map_text_refresh/heads-export-status.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/plan.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/report.json",
+        "mapped_v5/direct-stage-run/map_text_refresh/train.jsonl",
+        "ar_v1/direct-stage-launch-intent-v2.json",
+        "ar_v1/frozen-runtime-9182c74d-v2/runtime-snapshot-manifest-v1.json",
+        "ar_v1/frozen-source-step23936-v1/freeze-receipt-v1.json",
+        "ar_v1/schedule-handoff-v1/cpu-restore-validation-v1.json",
+        "ar_v1/schedule-handoff-v1/focused-pytest-v1.txt",
+        "ar_v2/direct-stage-launch-intent-v3.json",
+        "ar_v2/frozen-runtime-cf582398-v1/runtime-snapshot-manifest-v1.json",
+        "ar_v2/launch-preflight-v3.json",
+        "ar_v2/preflight-receipt-v3.json",
+        "ar_v2/root-launch-receipt-v1.json",
+        "ar_v2/schedule-handoff-v1/cpu-restore-validation-v1.json",
+        "ar_v2/schedule-handoff-v1/focused-pytest-v1.txt"
+      ],
+      "notes": "Closed mapped-v5 step24843 checkpoint and step23936 immutable best pair, plus failed-v1 and preflight/restore-v2 receipts. AR v2 mutable logs/checkpoints excluded. heads_current=false for step24843. Payload files are leaf symlink aliases in real group directories; transfer materializes bytes with --copy-links. No source payload duplication on Pop. Registry publication records immutable files only. The mapped v5 checkpoint at24843 has no paired current heads (heads_current=false; heads step23936). Best23936 full checkpoint/head pair is preserved, with strict gate failed; .99 remains advisory. AR v1 failed before updates. AR v2 preflight/restore receipts and launch-start receipt are not completed training or qualification evidence. No training admission.",
+      "status": "published-artifact-evidence-only"
     }
   ],
   "coverage_backlog": [
