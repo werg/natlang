@@ -553,6 +553,22 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False):
     return sources
 
 
+def authenticated_context_writer_sources(records, *, preview_only=False):
+    """Build the shared source-hash and approved-writer index for context rendering.
+
+    Recurrence training uses the same writer evidence as ordinary gold-text
+    rendering so a typed context can become a differentiable reader edge only
+    when one exact same-split, same-source writer is available.
+    """
+    record_rows = list(records)
+    source_hashes = {
+        record.get("id", ""): (record.get("_source_record_sha256") or
+            _sha(_canonical(dict(record)).encode("utf-8")))
+        for record in record_rows
+    }
+    return source_hashes, _soft_writer_sources(record_rows, source_hashes, preview_only=preview_only)
+
+
 def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups,
                                        authenticated_context_bodies=None):
     """Map exact message blocks to hash-bound writer or creation source text."""
@@ -948,7 +964,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     return attestations
 
 
-def _hydrate_tool_argument_blocks(messages, bodies):
+def _hydrate_tool_argument_blocks(messages, bodies, read_bodies=None):
     """Turn attested block parts nested in tool arguments into ordinary text parts."""
     hydrated = json.loads(json.dumps(messages, ensure_ascii=False))
     used = []
@@ -985,6 +1001,13 @@ def _hydrate_tool_argument_blocks(messages, bodies):
                             raise ValueError(f"tool argument Neuralese block has no hash-bound source: {block_id}")
                         used.append(block_id)
                         body = bodies[block_id]
+                        escaped = json.dumps(body, ensure_ascii=False)[1:-1]
+                        rendered.append({"type": "text", "text": escaped})
+                    elif isinstance(part, dict) and part.get("type") == "read":
+                        name, body = part.get("name"), part.get("source")
+                        if (not isinstance(name, str) or not isinstance(body, str)
+                                or body not in (read_bodies or {}).get(name, set())):
+                            raise ValueError("tool argument read lacks exact writer/provider body attestation")
                         escaped = json.dumps(body, ensure_ascii=False)[1:-1]
                         rendered.append({"type": "text", "text": escaped})
                     else:
@@ -1025,7 +1048,16 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources):
     for item in provider_attestations:
         item.pop("body", None)
     context_attestations.extend(provider_attestations)
-    message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
+    read_bodies = {}
+    for name, candidates in writer_sources.items():
+        for candidate in candidates:
+            if candidate.get("writer_split") == split and isinstance(candidate.get("body"), str):
+                read_bodies.setdefault(candidate.get("write_name"), set()).add(candidate["body"])
+    for item in provider_attestations:
+        if isinstance(item.get("write_name"), str) and isinstance(item.get("body"), str):
+            read_bodies.setdefault(item["write_name"], set()).add(item["body"])
+    message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies,
+                                                       read_bodies=read_bodies)
     messages = crisp_messages(message_inputs, piece_map, notes, neuralese_bodies=neuralese_bodies)
 
     by_digest = {}
@@ -1110,11 +1142,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                  {p["name"]: p["text"] for p in pieces
                   if isinstance(p.get("name"), str) and isinstance(p.get("text"), str)})
     prepared, omitted = [], []
-    source_hashes = {}
-    for record in record_rows:
-        rid = record.get("id", "")
-        source_hashes[rid] = record.get("_source_record_sha256") or _sha(_canonical(dict(record)).encode("utf-8"))
-    writer_sources = _soft_writer_sources(record_rows, source_hashes, preview_only=preview_only)
+    source_hashes, writer_sources = authenticated_context_writer_sources(
+        record_rows, preview_only=preview_only)
     for record in record_rows:
         rid = record.get("id", "")
         admitted = (not preview_only
