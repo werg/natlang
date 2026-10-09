@@ -74,8 +74,11 @@ export class IterationStepError extends IterationFailure {
 }
 /** A caller-supplied `withLimit` bound was reached. */
 export class IterationLimitError extends IterationFailure {
-  constructor(message: string, lastState: unknown, trajectory: IterationTrajectory<unknown>) {
-    super(message, lastState, trajectory); this.name = 'IterationLimitError';
+  /** `iteration-unbounded` when a TypeScript predicate (or review-off loop) has neither measure nor step limit. */
+  readonly code?: 'iteration-unbounded';
+  constructor(message: string, lastState: unknown, trajectory: IterationTrajectory<unknown>, code?: 'iteration-unbounded') {
+    super(code ? `${code}: ${message}` : message, lastState, trajectory); this.name = 'IterationLimitError';
+    if (code) this.code = code;
   }
 }
 
@@ -329,7 +332,7 @@ export class Iteration<T> {
         throw new IterationLimitError(doneMeta ?
           'an iteration with progress review off requires withLimit({ maxSteps }) or withMeasure(...)' :
           'an iteration with a TypeScript stopping predicate requires withLimit({ maxSteps }) or withMeasure(...); ' +
-          'a natural-language predicate (until(nl`…`)) needs neither', state, trajectory as never);
+          'a natural-language predicate (until(nl`…`)) needs neither', state, trajectory as never, 'iteration-unbounded');
       while (true) {
         task.checkOpen();
         frame.signal?.throwIfAborted();

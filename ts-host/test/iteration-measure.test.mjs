@@ -103,3 +103,13 @@ test('a satisfied initial stopping check returns without applying an edit', asyn
   assert.equal(result, original);
   assert.equal(calls, 0);
 });
+
+test('an unbounded iteration with a TypeScript predicate carries the iteration-unbounded code; other limits do not', async () => {
+  await assert.rejects(() => run(() => iterateOn(n => n + 1, 0).until(() => false)), error => {
+    assert.ok(error instanceof IterationLimitError); assert.equal(error.code, 'iteration-unbounded');
+    assert.match(error.message, /^iteration-unbounded: /); return true;
+  });
+  await assert.rejects(() => run(() => iterateOn(n => n + 1, 0).withLimit({ maxSteps: 2 }).until(() => false)), error => {
+    assert.ok(error instanceof IterationLimitError); assert.equal(error.code, undefined); return true;
+  });
+});
