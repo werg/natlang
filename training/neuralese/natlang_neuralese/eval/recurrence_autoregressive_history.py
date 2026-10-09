@@ -9,6 +9,7 @@ content class, and unavailable stratum.  All scoring delegates to
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import torch
@@ -21,6 +22,60 @@ from .projected_history import autoregressive_history_metrics
 SOURCE_SCHEMA = 'natlang.matched-ar-evaluator-source/1'
 SELECTION_SCHEMA = 'natlang.matched-ar-window-selection/1'
 WINDOW_KINDS = frozenset({'prose', 'code', 'tool_argument'})
+
+
+def _subtract_spans(start, end, exclusions):
+    result = []
+    cursor = start
+    for left, right in sorted((a, b) for a, b in exclusions if a < end and b > start):
+        left, right = max(start, left), min(end, right)
+        if cursor < left:
+            result.append((cursor, left))
+        cursor = max(cursor, right)
+    if cursor < end:
+        result.append((cursor, end))
+    return result
+
+
+def _source_class_regions(text):
+    """Find exact serialized source regions for prose, code and tool arguments."""
+    assistant = []
+    for match in re.finditer(r'<\|im_start\|>assistant[^\n]*\n', text):
+        end = text.find('<|im_end|>', match.end())
+        if end >= 0:
+            assistant.append((match.end(), end))
+    tool_calls, tool_wrappers = [], []
+    marker_open, marker_close = '<|tool_call_start|>', '<|tool_call_end|>'
+    cursor = 0
+    while True:
+        start = text.find(marker_open, cursor)
+        if start < 0:
+            break
+        end = text.find(marker_close, start + len(marker_open))
+        if end < 0:
+            break
+        region = (start + len(marker_open), end)
+        if any(left <= region[0] and region[1] <= right for left, right in assistant):
+            tool_calls.append(region)
+            tool_wrappers.append((start, end + len(marker_close)))
+        cursor = end + len(marker_close)
+    code = []
+    for left, right in assistant:
+        body = text[left:right]
+        for match in re.finditer(r'```.*?```', body, re.S):
+            code.append((left + match.start() + 3, left + match.end() - 3))
+    # The code string is a real eval argument in this corpus. Its serialized
+    # escaped bytes are the supervised target surface, distinct from its wrapper.
+    for left, right in tool_calls:
+        payload = text[left:right]
+        for match in re.finditer(r"\bcode\s*=\s*'((?:\\.|[^'\\])*)'", payload):
+            code.append((left + match.start(1), left + match.end(1)))
+    tool_arguments = [part for left, right in tool_calls for part in _subtract_spans(left, right, code)]
+    prose_exclusions = tool_wrappers + [span for span in code
+                                     if any(left <= span[0] and span[1] <= right
+                                            for left, right in assistant)]
+    prose = [part for left, right in assistant for part in _subtract_spans(left, right, prose_exclusions)]
+    return {'prose': prose, 'code': code, 'tool_argument': tool_arguments}
 
 
 def _pin_file(pin, label):
@@ -123,7 +178,8 @@ def _cell(value):
 
 
 def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recipe_sha256,
-                              text_data_sha256, context_limit, open_id):
+                              text_data_sha256, tokenizer_sha256, context_limit, open_id,
+                              offsets_by_row):
     """Validate exact source-coordinate windows without loading or running a model."""
     if not isinstance(manifest, dict) or manifest.get('schema') != SELECTION_SCHEMA:
         raise ValueError(f'window selection must use {SELECTION_SCHEMA}')
@@ -131,6 +187,8 @@ def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recip
         raise ValueError('window selection belongs to a different source recipe')
     if manifest.get('text_data_sha256') != text_data_sha256:
         raise ValueError('window selection belongs to different text data')
+    if manifest.get('tokenizer_sha256') != tokenizer_sha256:
+        raise ValueError('window selection belongs to a different tokenizer')
     if manifest.get('split') != 'test':
         raise ValueError('matched AR diagnostic windows must come from the test split')
     if manifest.get('max_context_tokens') != context_limit:
@@ -198,6 +256,9 @@ def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recip
         ids = row.get('token_ids')
         if not isinstance(ids, list) or not ids or any(type(token) is not int or token < 0 for token in ids):
             raise ValueError(f'{window_id}: source row has no valid token IDs')
+        offsets = offsets_by_row.get(item['row_id'])
+        if not isinstance(offsets, list) or len(offsets) != len(ids):
+            raise ValueError(f'{window_id}: tokenizer offsets are missing or misaligned')
         start, end, prefix_start = item.get('target_start'), item.get('target_end'), item.get('prefix_start')
         if type(start) is not int or type(end) is not int or type(prefix_start) is not int:
             raise ValueError(f'{window_id}: token coordinates must be integers')
@@ -212,8 +273,34 @@ def validate_window_selection(manifest, rows, role_codes_by_row, *, source_recip
         role_codes = role_codes_by_row.get(item['row_id'])
         if not isinstance(role_codes, list) or len(role_codes) != len(ids):
             raise ValueError(f'{window_id}: assistant-role labels are missing or misaligned')
-        if any(code != ROLE_CODES.index('assistant_reply') for code in role_codes[start:end]):
-            raise ValueError(f'{window_id}: target span is not entirely an assistant reply')
+        allowed_roles = ({ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+                         if cell[0] == 'prose' else {ROLE_CODES.index('assistant_reply')})
+        if any(code not in allowed_roles for code in role_codes[start:end]):
+            raise ValueError(f'{window_id}: target span is outside its declared assistant role class')
+        evidence = item.get('class_evidence')
+        allowed_boundaries = {
+            'prose': {'assistant_prose_or_reasoning'},
+            'code': {'assistant_fenced_code_body', 'serialized_eval_code_argument'},
+            'tool_argument': {'assistant_tool_call_payload_outside_code_string'},
+        }[cell[0]]
+        if not isinstance(evidence, dict) or evidence.get('boundary_type') not in allowed_boundaries:
+            raise ValueError(f'{window_id}: target class lacks its expected source-boundary evidence')
+        region_start, region_end = evidence.get('region_char_start'), evidence.get('region_char_end')
+        target_char_start, target_char_end = evidence.get('target_char_start'), evidence.get('target_char_end')
+        if any(type(value) is not int for value in (region_start, region_end, target_char_start, target_char_end)):
+            raise ValueError(f'{window_id}: class evidence character coordinates must be integers')
+        if not (0 <= region_start <= target_char_start < target_char_end <= region_end <= len(text)):
+            raise ValueError(f'{window_id}: class evidence coordinates are outside the source document')
+        if hashlib.sha256(text[region_start:region_end].encode()).hexdigest() != evidence.get('region_sha256'):
+            raise ValueError(f'{window_id}: class evidence region hash mismatch')
+        if hashlib.sha256(text[target_char_start:target_char_end].encode()).hexdigest() != evidence.get('target_text_sha256'):
+            raise ValueError(f'{window_id}: class evidence target-text hash mismatch')
+        if (region_start, region_end) not in _source_class_regions(text)[cell[0]]:
+            raise ValueError(f'{window_id}: declared target class does not match serialized source boundaries')
+        if offsets[start][0] != target_char_start or offsets[end - 1][1] != target_char_end:
+            raise ValueError(f'{window_id}: tokenizer offsets do not match the declared target characters')
+        if any(a < region_start or b > region_end or b <= a for a, b in offsets[start:end]):
+            raise ValueError(f'{window_id}: target tokens extend beyond their declared class region')
         prefix_ids = [open_id, *ids[prefix_start:start]]
         target_ids = ids[start:end]
         if item.get('prefix_token_ids_sha256') != token_ids_sha256(prefix_ids):
@@ -304,11 +391,18 @@ def main(argv=None):
                 any(type(token) is not int or token < 0 or token >= len(engine.tokenizer) for token in ids)):
             raise ValueError(f"selected text row {row.get('id')} has invalid token IDs/tokenizer fingerprint")
     rows = list(selected_rows.values())
+    offsets_by_row = {}
+    for row in rows:
+        encoded = engine.tokenizer(row['text'], add_special_tokens=False, return_offsets_mapping=True)
+        if encoded['input_ids'] != row['token_ids']:
+            raise ValueError(f"selected text row {row['id']} no longer matches its exact tokenizer IDs")
+        offsets_by_row[row['id']] = [tuple(offset) for offset in encoded['offset_mapping']]
     role_codes = _row_role_codes(rows, engine.tokenizer, engine.backbone.controls.open_id,
                                 engine.backbone.controls.close_id)
     windows = validate_window_selection(selection, rows, role_codes,
         source_recipe_sha256=source['recipe_sha256'], text_data_sha256=expected_text_sha,
-        context_limit=source['context_limit'], open_id=engine.backbone.controls.open_id)
+        tokenizer_sha256=tokenizer_sha256, context_limit=source['context_limit'],
+        open_id=engine.backbone.controls.open_id, offsets_by_row=offsets_by_row)
 
     output_rows = []
     for window in windows:

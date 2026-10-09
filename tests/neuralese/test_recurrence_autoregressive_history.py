@@ -5,6 +5,7 @@ import pytest
 
 from natlang_neuralese.eval.recurrence_autoregressive_history import (
     _load_selected_text_rows,
+    _source_class_regions,
     token_ids_sha256,
     validate_window_selection,
 )
@@ -12,13 +13,19 @@ from natlang_neuralese.train.text_warmup import ROLE_CODES
 
 
 def _row(row_id='held-1', *, split='test', groups=None, text='a held document'):
+    body = 'abcdefghij'
     return {
         'id': row_id,
         'split': split,
-        'text': text,
+        'text': '<|im_start|>assistant\n' + body + '<|im_end|>',
         'source_groups': groups or [row_id],
         'token_ids': list(range(10)),
     }
+
+
+def _offsets(row):
+    body_start = len('<|im_start|>assistant\n')
+    return {row['id']: [(body_start + i, body_start + i + 1) for i in range(len(row['token_ids']))]}
 
 
 def _selection(row):
@@ -28,6 +35,7 @@ def _selection(row):
         'schema': 'natlang.matched-ar-window-selection/1',
         'source_recipe_sha256': 'recipe-sha',
         'text_data_sha256': 'text-sha',
+        'tokenizer_sha256': 'tokenizer-sha',
         'split': 'test',
         'max_context_tokens': 8,
         'expected_cells': [
@@ -43,6 +51,15 @@ def _selection(row):
             'prefix_start': 3, 'target_start': 8, 'target_end': 10,
             'prefix_token_ids_sha256': token_ids_sha256(prefix),
             'target_token_ids_sha256': token_ids_sha256(target),
+            'class_evidence': {
+                'boundary_type': 'assistant_prose_or_reasoning',
+                'region_char_start': len('<|im_start|>assistant\n'),
+                'region_char_end': len('<|im_start|>assistant\n') + 10,
+                'region_sha256': hashlib.sha256(b'abcdefghij').hexdigest(),
+                'target_char_start': len('<|im_start|>assistant\n') + 8,
+                'target_char_end': len('<|im_start|>assistant\n') + 10,
+                'target_text_sha256': hashlib.sha256(b'ij').hexdigest(),
+            },
         }],
         'unavailable_cells': [{'stratum': {'kind': 'code', 'target_tokens': 3},
                                'reason': 'No independently grouped held code window of this length.'}],
@@ -52,31 +69,38 @@ def _selection(row):
 def test_selection_validates_exact_window_hashes_roles_and_unavailable_cells():
     row = _row()
     roles = {row['id']: [ROLE_CODES.index('assistant_reply')] * len(row['token_ids'])}
+    offsets = _offsets(row)
     actual = validate_window_selection(_selection(row), [row], roles,
-        source_recipe_sha256='recipe-sha', text_data_sha256='text-sha',
-        context_limit=8, open_id=99)
+        source_recipe_sha256='recipe-sha', text_data_sha256='text-sha', tokenizer_sha256='tokenizer-sha',
+        context_limit=8, open_id=99, offsets_by_row=offsets)
     assert len(actual) == 1
     assert actual[0]['prefix_token_ids'] == [99, 3, 4, 5, 6, 7]
     assert actual[0]['target_token_ids'] == [8, 9]
 
 
-@pytest.mark.parametrize('mutation', ['wrong_target_hash', 'user_target', 'wrong_prefix', 'missing_unavailable'])
+@pytest.mark.parametrize('mutation', ['wrong_target_hash', 'user_target', 'wrong_prefix',
+                                     'missing_unavailable', 'wrong_tokenizer', 'wrong_class_text'])
 def test_selection_rejects_mismatched_or_unaccounted_window(mutation):
     row = _row()
     manifest = _selection(row)
     roles = {row['id']: [ROLE_CODES.index('assistant_reply')] * len(row['token_ids'])}
+    offsets = _offsets(row)
     if mutation == 'wrong_target_hash':
         manifest['windows'][0]['target_token_ids_sha256'] = '0' * 64
     elif mutation == 'user_target':
         roles[row['id']][8] = ROLE_CODES.index('user')
     elif mutation == 'wrong_prefix':
         manifest['windows'][0]['prefix_start'] = 2
-    else:
+    elif mutation == 'missing_unavailable':
         manifest['unavailable_cells'] = []
+    elif mutation == 'wrong_tokenizer':
+        manifest['tokenizer_sha256'] = 'different'
+    else:
+        manifest['windows'][0]['class_evidence']['target_text_sha256'] = '0' * 64
     with pytest.raises(ValueError):
         validate_window_selection(manifest, [row], roles,
-            source_recipe_sha256='recipe-sha', text_data_sha256='text-sha',
-            context_limit=8, open_id=99)
+            source_recipe_sha256='recipe-sha', text_data_sha256='text-sha', tokenizer_sha256='tokenizer-sha',
+            context_limit=8, open_id=99, offsets_by_row=offsets)
 
 
 def test_streaming_reader_retains_only_selected_rows_and_checks_split_groups(tmp_path):
@@ -103,3 +127,14 @@ def test_streaming_reader_rejects_missing_or_duplicate_selected_source(tmp_path)
     path.write_text(json.dumps(row) + '\n')
     with pytest.raises(ValueError, match='missing'):
         _load_selected_text_rows(path, ['not-present'])
+
+
+def test_source_classes_separate_eval_code_from_other_tool_argument_text():
+    text = "<|im_start|>assistant\nLead<|tool_call_start|>[eval(code='const x = 1;')]<|tool_call_end|>Tail<|im_end|>"
+    regions = _source_class_regions(text)
+    code = [text[start:end] for start, end in regions['code']]
+    args = [text[start:end] for start, end in regions['tool_argument']]
+    prose = [text[start:end] for start, end in regions['prose']]
+    assert code == ['const x = 1;']
+    assert '[eval(code=' in ''.join(args) and 'const x = 1;' not in ''.join(args)
+    assert prose == ['Lead', 'Tail']
