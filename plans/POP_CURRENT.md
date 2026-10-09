@@ -102,13 +102,33 @@ active training route. Its earlier Docker shutdown failed to save 73 updates
 (serialized step1920 versus final log step1993); preserve that failure receipt,
 current/best checkpoints, and the earlier recurrence checkpoint separately.
 
-Latest storage check: about9.3 GiB free on `/` and5.7 GiB free on `/srv/storage`; the active run keeps its checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
+Latest storage check: about9.3 GiB free on `/` and2.8 GiB free on `/srv/storage`, plus the active run's separately allocated1.4 GiB checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
 
 ## Generation and review
 
 ### Five Luna workers
 
-Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
+Current campaign: `runs/luna-v26-counterfactual-fivecase-20261009-v1/dispatch-approved-v1/`.
+Root approved plan SHA `fdca2f69aff6aa00b9623db31f48a2727d375eaa99085e07bf61fd94d53e543d`;
+five workers have observed provider activity. Five train-only counterfactuals
+inherit V26 source groups, with zero new-world credit. Runtime snapshot
+`f17354c5ee64009031b057e38b4742fd1a68dec62317e5a49f7c897c6e7710fc`
+was built from current source through the shared isolated compiler, including
+the crisp-string read fix. Its1140 file hashes were independently verified.
+The old runtime proposal was replaced before launch. Check journals/claims for
+live completion status; completed tasks remain held pending action review.
+
+The separate four-case packet under
+`runs/luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/`
+has50 reviewed native actions approved by the standard per-action receipt
+`root-selected-50-admission-v1.json` (SHA `87e30fd3a02f3acbb7b71564b3c186a0f088cfcbce8b6a8ed09bdc9dc17d03a9`).
+Root replayed the exact captured-request audit. Missing-score suspicions cleared
+through authenticated expanded provider inputs, not oracle metadata. Shared
+text conversion and final composition publication are pending;179 actions and
+four authored roots remain held. No recurrence/whole-trace/learned-vector credit.
+Shared diagnostic fix96f9c697 clarifies `nl.with` result/capture generics and
+`decide`'s callable contract; future snapshots include it, active frozen runs
+retain their recorded implementation.
 
 - The recent held packet has been reduced from199 proposals to22 after two definite visibility holds. The22 selected native actions and19 derived text documents were independently replayed and explicitly adopted;177 other actions remain held. Task acceptance does not grant whole-trajectory or recurrence admission.
 - Earlier wave3 plan and its source/runtime proofs remain preserved under this campaign. Treat them as historical evidence; do not use their previous “latest wave” wording as current status.
@@ -126,7 +146,7 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
 ## Corpus inventory
 
-Current admitted facets:5723 native (3688train/2035test),4916 text (3212/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets are excluded until explicit adoption.
+Current published admitted facets:5723 native (3688train/2035test),4916 text (3212/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets, including the50 approved actions awaiting composition above, are excluded from these published totals until explicit adoption.
 
 - Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
 - Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
