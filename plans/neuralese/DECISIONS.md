@@ -1312,3 +1312,12 @@ Owner decision. The promptable summarizer is not a new operator; existing pieces
   backbone: Maple vs Mellum) no longer arises with Maple retired. The artifact registry pins each artifact's backbone
   and revision, which covers stored blocks and banks.
 - Revisit only if two same-width backbones serve Neuralese at the same time.
+
+### 2026-10-10 — harness-bench cohort admitted to training
+
+Owner decision: the harness-bench corpus (v3 records with view parts and its LFM2.5 and Mellum text twins) enters both
+students' training as the declared `harness_bench` cohort of `raw-recurrence-v3` and `raw-recurrence-mellum-v2`: 0.25
+of text windows mixed into the native text, whole-trajectory supervision (context weight 1.0, tool output and
+mechanical feedback 0.25), and the recurrence stage with `--view written --distill` after each student's runtime
+qualification and the view gate. Admission takes effect when the trainer supports per-cohort document sampling,
+per-role loss weights and the recurrence options; that trainer work is part of this decision.
