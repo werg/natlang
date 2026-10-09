@@ -1,6 +1,6 @@
 # Refinements (`Is<T, P>`): settings, errors and recovery
 
-`Is<T, "predicate">` slots are checked by the runtime; see the [spec](../../../spec/SPEC.md) ("Is<T, P> refinement types") for the rules and [constraints belong in types](../../natlang-authoring/references/refinements.md) for authoring.
+`Is<T, "predicate">` slots are checked by the runtime; see the [refinements extension](../../../spec/ext/refinements.md#ist-p-refinement-types) for the rules and [constraints belong in types](../../natlang-authoring/references/refinements.md) for authoring.
 
 ## What the host does
 
@@ -41,7 +41,7 @@ Each check emits `refinement_check` (`phase`: `return`, `argument`, `service`, `
 
 ## `Untrusted<T>`: provenance and the compile error
 
-`Untrusted<T>` marks text from outside the program; the runtime shows it to models as a fenced data block labelled `untrusted data from <source>` and the compiler rejects it in instruction text. See the [spec](../../../spec/SPEC.md) ("Untrusted<T>").
+`Untrusted<T>` marks text from outside the program; the runtime shows it to models as a fenced data block labelled `untrusted data from <source>` and the compiler rejects it in instruction text. See the [refinements extension](../../../spec/ext/refinements.md#untrustedt).
 
 - Where it enters: declare a service result in `natlang.json` `refinements.services` with the type text, for example `"index.search": "{ total: number, evidence: { id: string, message: Untrusted<string> }[] }"` (the label is `index.search`; named types from `types.ts` are not resolved there, so write the structure); type a parameter or `types.ts` field `Untrusted<string>` (the label is `argument <name> of <function>`); or call `untrusted(value, "label")` from `@natlang/node` in host code, which returns an `Untrusted<T>` and is the way to hand a plain string to an untrusted slot. In `types.ts`, import the type: `import type { Untrusted } from "@natlang/node"`.
 - Provenance is by content, in a per-task registry with a host-level one behind it; the first label for a text wins, and a derived string (a slice) is not tracked. Mark exact fields, not whole records, or common trusted values (`"api"`) turn into data blocks.
