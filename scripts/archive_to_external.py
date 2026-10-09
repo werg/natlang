@@ -44,6 +44,53 @@ BUILTIN_EXCLUDE_GLOBS = (str(HOME / 'data' / 'mellum-qat' / 'teacher-*'),)
 MARKER = '.keep-on-nvme'
 
 
+def process_cwds() -> set[str]:
+    cwds = set()
+    for pid in os.listdir('/proc'):
+        if pid.isdigit():
+            try:
+                cwds.add(os.readlink(f'/proc/{pid}/cwd'))
+            except OSError:
+                pass
+    return cwds
+
+
+def run_dir(path: Path, roots) -> Path | None:
+    """The run (first-level directory under its root) a file belongs to."""
+    for root in roots:
+        if root in path.parents:
+            rel = path.relative_to(root).parts
+            return root / rel[0] if len(rel) > 1 else None
+    return None
+
+
+def busy_run_dirs(roots, held, cwds) -> set[Path]:
+    """Runs some process works in or holds a file of: not finished, whatever their files' ages."""
+    busy = set()
+    for item in set(held) | set(cwds):
+        if item.startswith('/'):
+            found = run_dir(Path(item), roots)
+            if found:
+                busy.add(found)
+    return busy
+
+
+# Package and kernel caches that rebuild themselves: cleared, not archived.
+REGENERABLE_CACHES = ('pip', 'uv', 'node-gyp', 'yarn', 'ccache', 'triton', 'torch/inductor', 'torch_extensions')
+
+
+def clear_regenerable(apply: bool, cache=HOME / '.cache') -> list[dict]:
+    cleared = []
+    for name in REGENERABLE_CACHES:
+        path = cache / name
+        if path.is_dir() and not path.is_symlink():
+            size = int(subprocess.run(['du', '-sb', str(path)], capture_output=True, text=True).stdout.split()[0] or 0)
+            if apply:
+                shutil.rmtree(path, ignore_errors=True)
+            cleared.append({'path': str(path), 'gb': round(size / GIB, 2), 'cleared': apply})
+    return cleared
+
+
 def open_paths() -> set[str]:
     """Every path any readable process holds open (fds) or mapped."""
     held = set()
@@ -130,8 +177,9 @@ def excluded(file: Path, excludes: list[Path], globs=BUILTIN_EXCLUDE_GLOBS, root
     return None
 
 
-def candidates(roots, *, min_bytes, min_age, excludes, held, now=None):
-    """(path, size, reason-or-None) for every large file under the roots; reason None means it may move."""
+def candidates(roots, *, min_bytes, min_age, excludes, held, now=None, busy=(), idle_min_age=None):
+    """(path, size, reason-or-None) for every large file under the roots; reason None means it may move. Files of
+    runs no process uses (not in ``busy``) may move after ``idle_min_age`` instead of ``min_age``."""
     now = now or time.time()
     for root in roots:
         if not root.is_dir():
@@ -146,11 +194,18 @@ def candidates(roots, *, min_bytes, min_age, excludes, held, now=None):
                 if not path.is_file() or path.is_symlink() or st.st_size < min_bytes:
                     continue
                 reason = excluded(path, excludes, roots=roots)
-                if reason is None and now - st.st_mtime < min_age:
+                owner = run_dir(path, roots)
+                age = min_age
+                if idle_min_age is not None and owner is not None and owner not in busy:
+                    age = idle_min_age
+                elif idle_min_age is not None and owner in busy:
+                    reason = reason or f'run directory {owner.name} in use'
+                min_age_here = age
+                if reason is None and now - st.st_mtime < min_age_here:
                     reason = f'modified {(now - st.st_mtime) / 3600:.1f} h ago'
                 # A training input is read for days without being modified; relatime still updates atime at least
                 # daily, so a recent access keeps a hot input on the NVMe.
-                if reason is None and now - st.st_atime < min_age:
+                if reason is None and now - st.st_atime < min_age_here:
                     reason = f'read {(now - st.st_atime) / 3600:.1f} h ago'
                 if reason is None and str(path) in held:
                     reason = 'open by a process'
@@ -252,13 +307,20 @@ def main(argv=None):
     p.add_argument('--root', type=Path, action='append', help='override the roots')
     p.add_argument('--report', action='store_true', help='also report ~/.cache and git-ignored large items')
     p.add_argument('--list-limit', type=int, default=40)
+    p.add_argument('--idle-run-min-age-hours', type=float, default=None,
+                   help='shorter age for files of runs no process uses (a cleanout); default: --min-age-hours')
+    p.add_argument('--clear-regenerable-caches', action='store_true',
+                   help='delete package/kernel caches under ~/.cache that rebuild themselves ' + str(REGENERABLE_CACHES))
+    p.add_argument('--until-done', action='store_true', help='repeat --budget-gb batches until nothing is movable')
     a = p.parse_args(argv)
     roots = tuple(a.root) if a.root else ROOTS
     excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes()
     held = open_paths()
+    busy = busy_run_dirs(roots, held, process_cwds())
+    idle_age = None if a.idle_run_min_age_hours is None else a.idle_run_min_age_hours * 3600
     movable, kept = [], []
     for path, size, reason in candidates(roots, min_bytes=int(a.min_gb * GIB), min_age=a.min_age_hours * 3600,
-                                         excludes=excludes, held=held):
+                                         excludes=excludes, held=held, busy=busy, idle_min_age=idle_age):
         (kept if reason else movable).append((size, str(path), reason))
     movable.sort(reverse=True)
     summary = {'apply': a.apply, 'movable_files': len(movable), 'movable_gb': round(sum(s for s, *_ in movable) / GIB, 1),
@@ -269,8 +331,13 @@ def main(argv=None):
         a.archive.mkdir(parents=True, exist_ok=True)
         manifest = a.archive / MANIFEST_NAME
         for size, path, _ in movable:
-            if sum(r['bytes'] for r in moved) + size > budget:
+            if sum(r['bytes'] for r in moved) + size > budget and not a.until_done:
                 continue
+            if a.until_done and sum(r['bytes'] for r in moved) + size > budget:
+                budget += int(a.budget_gb * GIB)  # next batch: re-check the disk floor and that it is still closed
+                if str(path) in open_paths():
+                    failed.append({'path': path, 'error': 'opened since selection'})
+                    continue
             if shutil.disk_usage(a.archive).free - size < a.hdd_floor_gb * GIB:
                 failed.append({'path': path, 'error': 'external disk floor'})
                 continue
@@ -284,6 +351,8 @@ def main(argv=None):
                    would_move=[{'path': p, 'gb': round(s / GIB, 1)} for s, p, _ in movable[:a.list_limit]],
                    kept_largest=[{'path': p, 'gb': round(s / GIB, 1), 'why': r}
                                  for s, p, r in sorted(kept, reverse=True)[:a.list_limit]])
+    if a.clear_regenerable_caches:
+        summary['regenerable_caches'] = clear_regenerable(a.apply)
     if a.report:
         summary['report'] = report_extras(int(a.min_gb * GIB))
     print(json.dumps(summary, indent=1))

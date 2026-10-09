@@ -89,3 +89,23 @@ def test_dry_run_moves_nothing(tmp_path, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out['movable_files'] == 1 and out['moved_files'] == 0
     assert source.is_file() and not source.is_symlink() and not (tmp_path / 'hdd').exists()
+
+
+def test_idle_runs_move_sooner_and_busy_runs_stay(tmp_path):
+    root = tmp_path / 'runs'
+    big(root / 'done' / 'ckpt.pt', age_hours=8)
+    big(root / 'live' / 'ckpt.pt', age_hours=8)
+    busy = archive.busy_run_dirs((root,), {str(root / 'live' / 'log.txt')}, {'/somewhere/else'})
+    assert busy == {root / 'live'}
+    got = {p.parent.name: r for p, _, r in archive.candidates(
+        (root,), min_bytes=1024, min_age=24 * 3600, excludes=[], held=set(), busy=busy, idle_min_age=6 * 3600)}
+    assert got['done'] is None and 'in use' in got['live']
+
+
+def test_only_named_regenerable_caches_are_cleared(tmp_path):
+    (tmp_path / 'pip' / 'x').mkdir(parents=True)
+    (tmp_path / 'huggingface' / 'hub').mkdir(parents=True)
+    dry = archive.clear_regenerable(False, cache=tmp_path)
+    assert [d['path'] for d in dry] == [str(tmp_path / 'pip')] and (tmp_path / 'pip').exists()
+    archive.clear_regenerable(True, cache=tmp_path)
+    assert not (tmp_path / 'pip').exists() and (tmp_path / 'huggingface' / 'hub').exists()
