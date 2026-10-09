@@ -1,0 +1,2157 @@
+{
+  "id": "opencode-step5-bridge9-case07three-native-text-20261009-v1",
+  "status": "verified",
+  "checked": 306,
+  "verification_scope": "local",
+  "verified_hostname": "pop-os",
+  "machine_boot_id": "44584c88-cd62-4894-871f-d8d551f44c52",
+  "verified_repo": "/home/werg/natlang",
+  "manifest_sha256": "8a47bd480f10fc6825bde8169f6884fa48b94a958f461bbdcc72741aef144d16",
+  "time": "2026-10-09T04:43:26.840539+00:00",
+  "errors": [],
+  "file_stats": {
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/proof.json": [
+      66311,
+      7602688,
+      9174,
+      1791520023799918812,
+      1791520023799918812
+    ],
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/root-composition-review-v1/root-derived-native-text-composition-adoption-v1.json": [
+      66311,
+      7602818,
+      2662,
+      1791520229509958692,
+      1791520229509958692
+    ],
+    "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/root-nine-writer-review-v2/root-union-tokenizer-review-v1.json": [
+      66311,
+      7509577,
+      3027,
+      1791517041289314279,
+      1791517041289314279
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/campaign-v1/jobs/000002-f5352165affc830e.result.json": [
+      66311,
+      7509343,
+      951036,
+      1791516763412708857,
+      1791516763414708854
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/campaign-v1/jobs/000002-f5352165affc830e.trace.jsonl": [
+      66311,
+      7509379,
+      207135,
+      1791516763398708877,
+      1791516763400708874
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/action-mcp-calls.jsonl": [
+      66311,
+      7509516,
+      12157,
+      1791516838908774580,
+      1791516838908774580
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/bootstrap-config.json": [
+      66311,
+      7509517,
+      2917,
+      1791516838908954568,
+      1791516838908954568
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/bootstrap-events.jsonl": [
+      66311,
+      7509518,
+      834,
+      1791516838909086054,
+      1791516838909086054
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/cli-invocations.jsonl": [
+      66311,
+      7509515,
+      68587,
+      1791516838907684087,
+      1791516838907684087
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/cli-stdout.raw": [
+      66311,
+      7509526,
+      38685,
+      1791516838910005888,
+      1791516838910005888
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/lifecycle.json": [
+      66311,
+      7509520,
+      192,
+      1791516838909329340,
+      1791516838909329340
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/mcp-handshake.jsonl": [
+      66311,
+      7509519,
+      133,
+      1791516838909211158,
+      1791516838909211158
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/opencode-home/data/opencode/log/opencode.log": [
+      66311,
+      7509525,
+      94265,
+      1791516838909329340,
+      1791516838909329340
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/capture-snapshot-v1/snapshot-manifest.json": [
+      66311,
+      7509527,
+      4718,
+      1791516838911603941,
+      1791516838911603941
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v2/inputs/selected-nine-held-materializations.jsonl": [
+      66311,
+      7602494,
+      1199814,
+      1791518970669125393,
+      1791518970669125393
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/delta-native-records.jsonl": [
+      66311,
+      7602518,
+      1201695,
+      1791519063374982020,
+      1791519063374982020
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/proposal-manifest.json": [
+      66311,
+      7602521,
+      10805,
+      1791519097138211741,
+      1791519097138211741
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v4/native-proposal/recurrence-audit.json": [
+      66311,
+      7602520,
+      4510,
+      1791519080210072997,
+      1791519080210072997
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/build_neuralese_gold_text_delta.py": [
+      66311,
+      7602658,
+      64529,
+      1791519988817931706,
+      1791519988817931706
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/root_derived_writer_admission.py": [
+      66311,
+      7602660,
+      6137,
+      1791519988818196642,
+      1791519988818196642
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/scripts/root_integration_adoption.py": [
+      66311,
+      7602659,
+      6626,
+      1791519988818052162,
+      1791519988818052162
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/snapshot-manifest.json": [
+      66311,
+      7602675,
+      15556,
+      1791519988901726925,
+      1791519988901726925
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/__init__.py": [
+      66311,
+      7602702,
+      76,
+      1791055501566617557,
+      1791519988831661263
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/__init__.py": [
+      66311,
+      7602718,
+      324,
+      1791055501566689712,
+      1791519988834321318
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/fixtures.py": [
+      66311,
+      7602719,
+      4024,
+      1791055501566721993,
+      1791519988834427637
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/records.py": [
+      66311,
+      7602720,
+      5373,
+      1791055501566721993,
+      1791519988834488832
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/render.py": [
+      66311,
+      7602704,
+      9273,
+      1791204700753447698,
+      1791519988831723921
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/shortcuts.py": [
+      66311,
+      7602722,
+      4039,
+      1791115156649659332,
+      1791519988834923005
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/stream.py": [
+      66311,
+      7602721,
+      10895,
+      1791099246883158211,
+      1791519988834733360
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/text_corpus.py": [
+      66311,
+      7602717,
+      84930,
+      1791519913997549702,
+      1791519988834208146
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/devices.py": [
+      66311,
+      7602686,
+      1127,
+      1791369401783611239,
+      1791519988828083168
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/digest.py": [
+      66311,
+      7602926,
+      5173,
+      1791139286324626680,
+      1791519988875490582
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/__init__.py": [
+      66311,
+      7602753,
+      240,
+      1791055501566721993,
+      1791519988841524235
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/bench.py": [
+      66311,
+      7602754,
+      4504,
+      1791055501567156086,
+      1791519988841636074
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py": [
+      66311,
+      7602756,
+      5674,
+      1791059767574894672,
+      1791519988842430403
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py": [
+      66311,
+      7602746,
+      5271,
+      1791287362427408259,
+      1791519988840254816
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/foundation.py": [
+      66311,
+      7602743,
+      6943,
+      1791504976744545825,
+      1791519988839703483
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/harness.py": [
+      66311,
+      7602755,
+      15709,
+      1791060103331807430,
+      1791519988841879520
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/latent_sketch.py": [
+      66311,
+      7602750,
+      16291,
+      1791320663261260045,
+      1791519988841069292
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/local_stage.py": [
+      66311,
+      7602751,
+      6873,
+      1791307728523971467,
+      1791519988841306416
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py": [
+      66311,
+      7602761,
+      14566,
+      1791464660031358836,
+      1791519988843308508
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/projected_history.py": [
+      66311,
+      7602759,
+      18468,
+      1791462240215743534,
+      1791519988842944285
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py": [
+      66311,
+      7602744,
+      10761,
+      1791505199767235120,
+      1791519988839830000
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py": [
+      66311,
+      7602745,
+      1427,
+      1791257490301179359,
+      1791519988840029524
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_autoregressive_history.py": [
+      66311,
+      7602758,
+      12009,
+      1791513054306808444,
+      1791519988842758337
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py": [
+      66311,
+      7602747,
+      2403,
+      1791288109391806730,
+      1791519988840456874
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/residual_transition.py": [
+      66311,
+      7602749,
+      2239,
+      1791296317683958547,
+      1791519988840848528
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py": [
+      66311,
+      7602748,
+      4182,
+      1791289377461833044,
+      1791519988840625190
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py": [
+      66311,
+      7602760,
+      7582,
+      1791441710727527994,
+      1791519988843061405
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py": [
+      66311,
+      7602757,
+      3033,
+      1791070402537690490,
+      1791519988842632922
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py": [
+      66311,
+      7602752,
+      1065,
+      1791320663261349042,
+      1791519988841415922
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/trajectory_execution.py": [
+      66311,
+      7602742,
+      16753,
+      1791373523367489082,
+      1791519988839513607
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__init__.py": [
+      66311,
+      7602763,
+      257,
+      1791055501567156086,
+      1791519988843389410
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__main__.py": [
+      66311,
+      7602765,
+      11210,
+      1791225191109451941,
+      1791519988843919683
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/adapters.py": [
+      66311,
+      7602771,
+      4839,
+      1791173650573241961,
+      1791519988844940947
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/gguf.py": [
+      66311,
+      7602764,
+      8812,
+      1791300493312870327,
+      1791519988843689191
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/__init__.py": [
+      66311,
+      7602930,
+      0,
+      1791500366315089822,
+      1791519988875800844
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/openhands.py": [
+      66311,
+      7602931,
+      10944,
+      1791500366316089820,
+      1791519988876052215
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/laws.py": [
+      66311,
+      7602772,
+      2377,
+      1791055501567440840,
+      1791519988845067033
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/__init__.py": [
+      66311,
+      7602674,
+      0,
+      1791186531366161300,
+      1791519988824944918
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/export_member.py": [
+      66311,
+      7602669,
+      8308,
+      1791197789123660842,
+      1791519988823289746
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/family.py": [
+      66311,
+      7602667,
+      4087,
+      1791503375739815984,
+      1791519988822652692
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/foundation_heads.py": [
+      66311,
+      7602668,
+      2724,
+      1791498210084311841,
+      1791519988822911187
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/fused_moe.py": [
+      66311,
+      7602663,
+      18593,
+      1791492563235626644,
+      1791519988820811362
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py": [
+      66311,
+      7602670,
+      3787,
+      1791295732225815765,
+      1791519988823631416
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/maple_port.py": [
+      66311,
+      7602665,
+      1423,
+      1791492563241626636,
+      1791519988822041537
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/model.py": [
+      66311,
+      7602664,
+      31439,
+      1791497128140642139,
+      1791519988821321378
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/nested_train.py": [
+      66311,
+      7602666,
+      17261,
+      1791493542916416363,
+      1791519988822384289
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/routing.py": [
+      66311,
+      7602672,
+      6466,
+      1791196028987226101,
+      1791519988824176909
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/student.py": [
+      66311,
+      7602673,
+      3207,
+      1791205922840090064,
+      1791519988824914330
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/ternary.py": [
+      66311,
+      7602671,
+      18649,
+      1791325198328013741,
+      1791519988823876686
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/__init__.py": [
+      66311,
+      7602797,
+      435,
+      1791055501567440840,
+      1791519988849159341
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/capacity.py": [
+      66311,
+      7602794,
+      2261,
+      1791300420928830532,
+      1791519988848682107
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/causal_feedback.py": [
+      66311,
+      7602774,
+      7044,
+      1791485938773619848,
+      1791519988845126875
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/dialect.py": [
+      66311,
+      7602798,
+      1769,
+      1791055501567627289,
+      1791519988849211319
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/heads.py": [
+      66311,
+      7602796,
+      19008,
+      1791300173212974800,
+      1791519988849048684
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/hf_port.py": [
+      66311,
+      7602793,
+      14640,
+      1791498210085311839,
+      1791519988848451475
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/input_map.py": [
+      66311,
+      7602801,
+      1674,
+      1791465950572680387,
+      1791519988849789753
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/isolated_sequence.py": [
+      66311,
+      7602795,
+      10891,
+      1791405088306156187,
+      1791519988848912469
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/lfm2_port.py": [
+      66311,
+      7602775,
+      34184,
+      1791503375740815983,
+      1791519988845437026
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/projections.py": [
+      66311,
+      7602800,
+      5842,
+      1791127886737341113,
+      1791519988849557568
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/tiny_adapters.py": [
+      66311,
+      7602799,
+      14535,
+      1791173650573241961,
+      1791519988849346522
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/nz.py": [
+      66311,
+      7602927,
+      1349,
+      1791127231400534420,
+      1791519988875584388
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/prompt_bank.py": [
+      66311,
+      7602701,
+      5405,
+      1791131739458072601,
+      1791519988831445158
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/read.py": [
+      66311,
+      7602687,
+      4541,
+      1791369401783611239,
+      1791519988828167066
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__init__.py": [
+      66311,
+      7602808,
+      6908,
+      1791498210085311839,
+      1791519988851148749
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__main__.py": [
+      66311,
+      7602804,
+      5387,
+      1791369401784611238,
+      1791519988850191736
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/batch.py": [
+      66311,
+      7602806,
+      5597,
+      1791305473738069556,
+      1791519988850652379
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/chat.py": [
+      66311,
+      7602805,
+      21603,
+      1791373362905688650,
+      1791519988850420374
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/crossing.py": [
+      66311,
+      7602815,
+      3060,
+      1791127231401534419,
+      1791519988852638882
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/engine.py": [
+      66311,
+      7602810,
+      44280,
+      1791373972315930723,
+      1791519988851646252
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/grad.py": [
+      66311,
+      7602803,
+      53910,
+      1791505181958259930,
+      1791519988849865585
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/guidance.py": [
+      66311,
+      7602814,
+      10633,
+      1791150512241408764,
+      1791519988852435761
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/http.py": [
+      66311,
+      7602812,
+      21641,
+      1791173650574241960,
+      1791519988851983483
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py": [
+      66311,
+      7602807,
+      3230,
+      1791330582513206319,
+      1791519988850878613
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/store.py": [
+      66311,
+      7602813,
+      8069,
+      1791058305846346956,
+      1791519988852218324
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/token_cache.py": [
+      66311,
+      7602809,
+      1820,
+      1791279586636573670,
+      1791519988851374913
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/vllm_rollout.py": [
+      66311,
+      7602811,
+      14181,
+      1791300173212974800,
+      1791519988851783098
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/shared_space.py": [
+      66311,
+      7602928,
+      9065,
+      1791186531367161298,
+      1791519988875717938
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/__init__.py": [
+      66311,
+      7602862,
+      225,
+      1791320534113841799,
+      1791519988862330262
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/adapters.py": [
+      66311,
+      7602838,
+      8911,
+      1791325198330013739,
+      1791519988857545075
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/backbone_policy.py": [
+      66311,
+      7602853,
+      4750,
+      1791345413103587544,
+      1791519988860504100
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/bootstrap_data.py": [
+      66311,
+      7602842,
+      2836,
+      1791507264488754419,
+      1791519988858292836
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/causal_bootstrap.py": [
+      66311,
+      7602841,
+      19523,
+      1791257546082118246,
+      1791519988858089455
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/checkpoint_safety.py": [
+      66311,
+      7602857,
+      8418,
+      1791382178649431724,
+      1791519988861425196
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/decision.py": [
+      66311,
+      7602858,
+      13477,
+      1791134754361951134,
+      1791519988861671227
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_e2e.py": [
+      66311,
+      7602861,
+      12958,
+      1791173650574241960,
+      1791519988862150876
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_projection.py": [
+      66311,
+      7602859,
+      7870,
+      1791131739458072601,
+      1791519988861786793
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/execution.py": [
+      66311,
+      7602848,
+      39568,
+      1791328232004554662,
+      1791519988859414849
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/export_trajectory.py": [
+      66311,
+      7602840,
+      3492,
+      1791227661417420329,
+      1791519988857836521
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_curriculum.py": [
+      66311,
+      7602839,
+      9304,
+      1791402680705186667,
+      1791519988857729240
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_data.py": [
+      66311,
+      7602867,
+      11889,
+      1791403435203235756,
+      1791519988863478283
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/foundation_schedule.py": [
+      66311,
+      7602852,
+      16943,
+      1791449036297204640,
+      1791519988860268057
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/inline_instructions.py": [
+      66311,
+      7602855,
+      27436,
+      1791415840004860281,
+      1791519988860970013
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint.py": [
+      66311,
+      7602837,
+      9887,
+      1791202028150482767,
+      1791519988857446570
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint_kd.py": [
+      66311,
+      7602866,
+      6239,
+      1791186531368161296,
+      1791519988863245186
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/losses.py": [
+      66311,
+      7602849,
+      21367,
+      1791301444826228877,
+      1791519988859623219
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory.py": [
+      66311,
+      7602864,
+      3689,
+      1791283917176046025,
+      1791519988862868290
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_estimator.py": [
+      66311,
+      7602836,
+      9632,
+      1791349502510499908,
+      1791519988857225115
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_policy.py": [
+      66311,
+      7602854,
+      14768,
+      1791400355991124901,
+      1791519988860708312
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/optim.py": [
+      66311,
+      7602845,
+      5890,
+      1791325198330013739,
+      1791519988858820585
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/output_embedding_projection.py": [
+      66311,
+      7602834,
+      8118,
+      1791220030716922210,
+      1791519988856833151
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/port_handoff.py": [
+      66311,
+      7602844,
+      2986,
+      1791225951560997218,
+      1791519988858731659
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection.py": [
+      66311,
+      7602863,
+      7516,
+      1791127231401534419,
+      1791519988862442001
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection_e2e.py": [
+      66311,
+      7602860,
+      14064,
+      1791135298368864908,
+      1791519988862028236
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recipe.py": [
+      66311,
+      7602843,
+      29391,
+      1791510716774066004,
+      1791519988858497850
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recurrence.py": [
+      66311,
+      7602865,
+      2927,
+      1791264138043789617,
+      1791519988863074536
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_defaults.py": [
+      66311,
+      7602846,
+      1689,
+      1791310111180811939,
+      1791519988859046458
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_handoff.py": [
+      66311,
+      7602847,
+      2025,
+      1791300173213974798,
+      1791519988859148850
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/staging.py": [
+      66311,
+      7602835,
+      8902,
+      1791518152065661739,
+      1791519988856995726
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/text_warmup.py": [
+      66311,
+      7602832,
+      129653,
+      1791506648050565852,
+      1791519988855714695
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectories.py": [
+      66311,
+      7602833,
+      143535,
+      1791517925462087454,
+      1791519988856559608
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_probe.py": [
+      66311,
+      7602851,
+      15821,
+      1791374084954790633,
+      1791519988860035983
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_state.py": [
+      66311,
+      7602850,
+      13116,
+      1791503529700595505,
+      1791519988859817223
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py": [
+      66311,
+      7602856,
+      7391,
+      1791505385261976698,
+      1791519988861183593
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v6/renderer-snapshot-v1/training/neuralese/natlang_neuralese/write.py": [
+      66311,
+      7602700,
+      12504,
+      1791300173213974798,
+      1791519988831200460
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/compact-review-packet-v4.json": [
+      66311,
+      7602943,
+      28027,
+      1791520720997059456,
+      1791520720997059456
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/build_neuralese_gold_text_delta.py": [
+      66311,
+      7602828,
+      66706,
+      1791520375843090456,
+      1791520375843090456
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/root_derived_writer_admission.py": [
+      66311,
+      7602829,
+      6137,
+      1791520375843190464,
+      1791520375843190464
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/scripts/root_integration_adoption.py": [
+      66311,
+      7602830,
+      6626,
+      1791520375843234506,
+      1791520375843234506
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/snapshot-manifest.json": [
+      66311,
+      7602882,
+      15556,
+      1791520376114752547,
+      1791520376114752547
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/__init__.py": [
+      66311,
+      7602909,
+      76,
+      1791055501566617557,
+      1791520375870848929
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/__init__.py": [
+      66311,
+      7602925,
+      324,
+      1791055501566689712,
+      1791520375880645248
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/fixtures.py": [
+      66311,
+      7602932,
+      4024,
+      1791055501566721993,
+      1791520375880865270
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/records.py": [
+      66311,
+      7602933,
+      5373,
+      1791055501566721993,
+      1791520375881247216
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/render.py": [
+      66311,
+      7602911,
+      9273,
+      1791204700753447698,
+      1791520375871848928
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/shortcuts.py": [
+      66311,
+      7602935,
+      4039,
+      1791115156649659332,
+      1791520375882582798
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/stream.py": [
+      66311,
+      7602934,
+      10895,
+      1791099246883158211,
+      1791520375881975851
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/data/text_corpus.py": [
+      66311,
+      7602924,
+      84930,
+      1791519913997549702,
+      1791520375880134210
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/devices.py": [
+      66311,
+      7602893,
+      1127,
+      1791369401783611239,
+      1791520375860848944
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/digest.py": [
+      66311,
+      7603139,
+      5173,
+      1791139286324626680,
+      1791520376084098957
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/__init__.py": [
+      66311,
+      7602966,
+      240,
+      1791055501566721993,
+      1791520375985848755
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/bench.py": [
+      66311,
+      7602967,
+      4504,
+      1791055501567156086,
+      1791520375986974552
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/cache_diagnostics.py": [
+      66311,
+      7602969,
+      5674,
+      1791059767574894672,
+      1791520375988650572
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/ffn_dispatch.py": [
+      66311,
+      7602959,
+      5271,
+      1791287362427408259,
+      1791520375900829440
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/foundation.py": [
+      66311,
+      7602956,
+      6943,
+      1791504976744545825,
+      1791520375898995293
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/harness.py": [
+      66311,
+      7602968,
+      15709,
+      1791060103331807430,
+      1791520375987723515
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/latent_sketch.py": [
+      66311,
+      7602963,
+      16291,
+      1791320663261260045,
+      1791520375902848881
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/local_stage.py": [
+      66311,
+      7602964,
+      6873,
+      1791307728523971467,
+      1791520375983848758
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/mtp_draft_probe.py": [
+      66311,
+      7602974,
+      14566,
+      1791464660031358836,
+      1791520375990726953
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/projected_history.py": [
+      66311,
+      7602972,
+      18468,
+      1791462240215743534,
+      1791520375989989792
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_port_handoff.py": [
+      66311,
+      7602957,
+      10761,
+      1791505199767235120,
+      1791520375899764184
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/raw_writer_trace.py": [
+      66311,
+      7602958,
+      1427,
+      1791257490301179359,
+      1791520375899848886
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_autoregressive_history.py": [
+      66311,
+      7602971,
+      12009,
+      1791513054306808444,
+      1791520375989557552
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/recurrence_runtime.py": [
+      66311,
+      7602960,
+      2403,
+      1791288109391806730,
+      1791520375900848884
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/residual_transition.py": [
+      66311,
+      7602962,
+      2239,
+      1791296317683958547,
+      1791520375902559973
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/scheduler_throughput.py": [
+      66311,
+      7602961,
+      4182,
+      1791289377461833044,
+      1791520375902052762
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/sketch_cutoff_probe.py": [
+      66311,
+      7602973,
+      7582,
+      1791441710727527994,
+      1791520375990220654
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/stopping_diagnostics.py": [
+      66311,
+      7602970,
+      3033,
+      1791070402537690490,
+      1791520375989100686
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/text_warmup_runtime.py": [
+      66311,
+      7602965,
+      1065,
+      1791320663261349042,
+      1791520375984848757
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/eval/trajectory_execution.py": [
+      66311,
+      7602955,
+      16753,
+      1791373523367489082,
+      1791520375897848889
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__init__.py": [
+      66311,
+      7602976,
+      257,
+      1791055501567156086,
+      1791520375990854172
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/__main__.py": [
+      66311,
+      7602978,
+      11210,
+      1791225191109451941,
+      1791520375991883370
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/adapters.py": [
+      66311,
+      7602984,
+      4839,
+      1791173650573241961,
+      1791520375994143185
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/export/gguf.py": [
+      66311,
+      7602977,
+      8812,
+      1791300493312870327,
+      1791520375991575924
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/__init__.py": [
+      66311,
+      7603143,
+      0,
+      1791500366315089822,
+      1791520376085534487
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/harness_bench/openhands.py": [
+      66311,
+      7603144,
+      10944,
+      1791500366316089820,
+      1791520376085848604
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/laws.py": [
+      66311,
+      7602985,
+      2377,
+      1791055501567440840,
+      1791520375994303786
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/__init__.py": [
+      66311,
+      7602881,
+      0,
+      1791186531366161300,
+      1791520375853681081
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/export_member.py": [
+      66311,
+      7602876,
+      8308,
+      1791197789123660842,
+      1791520375849767728
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/family.py": [
+      66311,
+      7602874,
+      4087,
+      1791503375739815984,
+      1791520375847848964
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/foundation_heads.py": [
+      66311,
+      7602875,
+      2724,
+      1791498210084311841,
+      1791520375848925480
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/fused_moe.py": [
+      66311,
+      7602870,
+      18593,
+      1791492563235626644,
+      1791520375844848969
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/gate_diagnostic.py": [
+      66311,
+      7602877,
+      3787,
+      1791295732225815765,
+      1791520375849848961
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/maple_port.py": [
+      66311,
+      7602872,
+      1423,
+      1791492563241626636,
+      1791520375846946863
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/model.py": [
+      66311,
+      7602871,
+      31439,
+      1791497128140642139,
+      1791520375846198540
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/nested_train.py": [
+      66311,
+      7602873,
+      17261,
+      1791493542916416363,
+      1791520375847554611
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/routing.py": [
+      66311,
+      7602879,
+      6466,
+      1791196028987226101,
+      1791520375852205336
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/student.py": [
+      66311,
+      7602880,
+      3207,
+      1791205922840090064,
+      1791520375852848957
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/maple/ternary.py": [
+      66311,
+      7602878,
+      18649,
+      1791325198328013741,
+      1791520375850848960
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/__init__.py": [
+      66311,
+      7603010,
+      435,
+      1791055501567440840,
+      1791520376007034792
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/capacity.py": [
+      66311,
+      7603007,
+      2261,
+      1791300420928830532,
+      1791520376004848727
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/causal_feedback.py": [
+      66311,
+      7602987,
+      7044,
+      1791485938773619848,
+      1791520375994375791
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/dialect.py": [
+      66311,
+      7603011,
+      1769,
+      1791055501567627289,
+      1791520376007705659
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/heads.py": [
+      66311,
+      7603009,
+      19008,
+      1791300173212974800,
+      1791520376006631486
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/hf_port.py": [
+      66311,
+      7603006,
+      14640,
+      1791498210085311839,
+      1791520376004696420
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/input_map.py": [
+      66311,
+      7603014,
+      1674,
+      1791465950572680387,
+      1791520376008848721
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/isolated_sequence.py": [
+      66311,
+      7603008,
+      10891,
+      1791405088306156187,
+      1791520376005927968
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/lfm2_port.py": [
+      66311,
+      7602988,
+      34184,
+      1791503375740815983,
+      1791520375994848742
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/projections.py": [
+      66311,
+      7603013,
+      5842,
+      1791127886737341113,
+      1791520376008786264
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/model/tiny_adapters.py": [
+      66311,
+      7603012,
+      14535,
+      1791173650573241961,
+      1791520376008070092
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/nz.py": [
+      66311,
+      7603140,
+      1349,
+      1791127231400534420,
+      1791520376084602992
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/prompt_bank.py": [
+      66311,
+      7602908,
+      5405,
+      1791131739458072601,
+      1791520375869848931
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/read.py": [
+      66311,
+      7602894,
+      4541,
+      1791369401783611239,
+      1791520375861848943
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__init__.py": [
+      66311,
+      7603021,
+      6908,
+      1791498210085311839,
+      1791520376014018478
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/__main__.py": [
+      66311,
+      7603017,
+      5387,
+      1791369401784611238,
+      1791520376010796060
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/batch.py": [
+      66311,
+      7603019,
+      5597,
+      1791305473738069556,
+      1791520376011738135
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/chat.py": [
+      66311,
+      7603018,
+      21603,
+      1791373362905688650,
+      1791520376011152497
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/crossing.py": [
+      66311,
+      7603028,
+      3060,
+      1791127231401534419,
+      1791520376018772025
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/engine.py": [
+      66311,
+      7603023,
+      44280,
+      1791373972315930723,
+      1791520376014848711
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/grad.py": [
+      66311,
+      7603016,
+      54371,
+      1791520036427362455,
+      1791520376009848719
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/guidance.py": [
+      66311,
+      7603027,
+      10633,
+      1791150512241408764,
+      1791520376018024384
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/http.py": [
+      66311,
+      7603025,
+      21641,
+      1791173650574241960,
+      1791520376016957635
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/recurrence_checkpoint.py": [
+      66311,
+      7603020,
+      3230,
+      1791330582513206319,
+      1791520376011848716
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/store.py": [
+      66311,
+      7603026,
+      8069,
+      1791058305846346956,
+      1791520376017502987
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/token_cache.py": [
+      66311,
+      7603022,
+      1820,
+      1791279586636573670,
+      1791520376014781778
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/serve/vllm_rollout.py": [
+      66311,
+      7603024,
+      14181,
+      1791300173212974800,
+      1791520376016167054
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/shared_space.py": [
+      66311,
+      7603141,
+      9065,
+      1791186531367161298,
+      1791520376084848606
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/__init__.py": [
+      66311,
+      7603075,
+      225,
+      1791320534113841799,
+      1791520376048848660
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/adapters.py": [
+      66311,
+      7603051,
+      8911,
+      1791325198330013739,
+      1791520376033936391
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/backbone_policy.py": [
+      66311,
+      7603066,
+      4750,
+      1791345413103587544,
+      1791520376042803025
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/bootstrap_data.py": [
+      66311,
+      7603055,
+      2836,
+      1791507264488754419,
+      1791520376036187599
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/causal_bootstrap.py": [
+      66311,
+      7603054,
+      19523,
+      1791257546082118246,
+      1791520376034848681
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/checkpoint_safety.py": [
+      66311,
+      7603070,
+      8418,
+      1791382178649431724,
+      1791520376046114090
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/decision.py": [
+      66311,
+      7603071,
+      13477,
+      1791134754361951134,
+      1791520376046803672
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_e2e.py": [
+      66311,
+      7603074,
+      12958,
+      1791173650574241960,
+      1791520376048661092
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/delta_projection.py": [
+      66311,
+      7603072,
+      7870,
+      1791131739458072601,
+      1791520376046848663
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/execution.py": [
+      66311,
+      7603061,
+      39568,
+      1791328232004554662,
+      1791520376038848675
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/export_trajectory.py": [
+      66311,
+      7603053,
+      3492,
+      1791227661417420329,
+      1791520376034824996
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_curriculum.py": [
+      66311,
+      7603052,
+      9304,
+      1791402680705186667,
+      1791520376034402514
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/exposure_data.py": [
+      66311,
+      7603080,
+      11889,
+      1791403435203235756,
+      1791520376051965685
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/foundation_schedule.py": [
+      66311,
+      7603065,
+      16943,
+      1791449036297204640,
+      1791520376042153879
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/inline_instructions.py": [
+      66311,
+      7603068,
+      27436,
+      1791415840004860281,
+      1791520376043848668
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint.py": [
+      66311,
+      7603050,
+      9887,
+      1791202028150482767,
+      1791520376032848684
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/joint_kd.py": [
+      66311,
+      7603079,
+      6239,
+      1791186531368161296,
+      1791520376050848657
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/losses.py": [
+      66311,
+      7603062,
+      21367,
+      1791301444826228877,
+      1791520376040162417
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory.py": [
+      66311,
+      7603077,
+      3689,
+      1791283917176046025,
+      1791520376049848659
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_estimator.py": [
+      66311,
+      7603049,
+      9632,
+      1791349502510499908,
+      1791520376032603353
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/memory_policy.py": [
+      66311,
+      7603067,
+      14768,
+      1791400355991124901,
+      1791520376042848669
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/optim.py": [
+      66311,
+      7603058,
+      5890,
+      1791325198330013739,
+      1791520376037985959
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/output_embedding_projection.py": [
+      66311,
+      7603047,
+      8118,
+      1791220030716922210,
+      1791520376031023442
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/port_handoff.py": [
+      66311,
+      7603057,
+      2986,
+      1791225951560997218,
+      1791520376037344727
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection.py": [
+      66311,
+      7603076,
+      7516,
+      1791127231401534419,
+      1791520376049633845
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/projection_e2e.py": [
+      66311,
+      7603073,
+      14064,
+      1791135298368864908,
+      1791520376048087097
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recipe.py": [
+      66311,
+      7603056,
+      29391,
+      1791510716774066004,
+      1791520376036982879
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/recurrence.py": [
+      66311,
+      7603078,
+      2927,
+      1791264138043789617,
+      1791520376050807725
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_defaults.py": [
+      66311,
+      7603059,
+      1689,
+      1791310111180811939,
+      1791520376038305618
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/sketch_handoff.py": [
+      66311,
+      7603060,
+      2025,
+      1791300173213974798,
+      1791520376038647679
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/staging.py": [
+      66311,
+      7603048,
+      8902,
+      1791518152065661739,
+      1791520376031936924
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/text_warmup.py": [
+      66311,
+      7603045,
+      129653,
+      1791506648050565852,
+      1791520376028848690
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectories.py": [
+      66311,
+      7603046,
+      143535,
+      1791517925462087454,
+      1791520376029848689
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_probe.py": [
+      66311,
+      7603064,
+      15821,
+      1791374084954790633,
+      1791520376040848672
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/trajectory_state.py": [
+      66311,
+      7603063,
+      13116,
+      1791503529700595505,
+      1791520376040721956
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/train/verified_heads_handoff.py": [
+      66311,
+      7603069,
+      7391,
+      1791505385261976698,
+      1791520376044848666
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/renderer-snapshot-v1/training/neuralese/natlang_neuralese/write.py": [
+      66311,
+      7602907,
+      12504,
+      1791300173213974798,
+      1791520375869781551
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-omissions.jsonl": [
+      66311,
+      7602886,
+      0,
+      1791520409586810459,
+      1791520409586810459
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-provenance.jsonl": [
+      66311,
+      7602885,
+      22977,
+      1791520409586810459,
+      1791520409586810459
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/delta-text.jsonl": [
+      66311,
+      7602884,
+      664521,
+      1791520409585797924,
+      1791520409585797924
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/provider-context-bindings.jsonl": [
+      66311,
+      7602888,
+      24709,
+      1791520409587197594,
+      1791520409587197594
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/receipt.json": [
+      66311,
+      7602889,
+      5428,
+      1791520409777719211,
+      1791520409777719211
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/compact-selected-nine-v7/text-proposal/source-coverage.jsonl": [
+      66311,
+      7602887,
+      3753,
+      1791520409586946223,
+      1791520409586946223
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/launch-plan-v2.json": [
+      66311,
+      7508763,
+      13049,
+      1791515987293624547,
+      1791515987293624547
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/action-review-packet-v2.json": [
+      66311,
+      7509628,
+      68176,
+      1791517505682626459,
+      1791517505682626459
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/materialization-manifest-v5.json": [
+      66311,
+      7509623,
+      13508,
+      1791517501033950906,
+      1791517501033950906
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/native-turns-raw-v2.jsonl": [
+      66311,
+      7509590,
+      1488577,
+      1791517059702301524,
+      1791517059702301524
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/native-review-v2/semantic-assessment-v1.json": [
+      66311,
+      7509596,
+      3512,
+      1791517258386416926,
+      1791517258386416926
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/root-native-review-v1/proof.json": [
+      66311,
+      7509627,
+      280,
+      1791517503345693864,
+      1791517503345693864
+    ],
+    "opencode-step5-preview-free-20261008-v1/authored-root-source-expansion-step5-v1/case-02-bridge-attempt-v1/root-native-review-v1/root-selected-action-admission-v2.json": [
+      66311,
+      7509652,
+      17352,
+      1791517846788010217,
+      1791517846788010217
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/proof.json": [
+      66311,
+      7602954,
+      13435,
+      1791520754888426766,
+      1791520754888426766
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/publication-code-snapshot-v1/scripts/assemble_admitted_neuralese_cohort.py": [
+      66311,
+      7607461,
+      36682,
+      1791520992278633757,
+      1791520992278633757
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/review.py": [
+      66311,
+      7602940,
+      4550,
+      1791520667968115021,
+      1791520667968115021
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/review_v2.py": [
+      66311,
+      7602951,
+      4852,
+      1791520746071184555,
+      1791520746071184555
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/root-native-text-composition-adoption-v1.json": [
+      66311,
+      7603029,
+      4076,
+      1791520843315733617,
+      1791520843315733617
+    ],
+    "opencode-step5-preview-free-20261008-v1/root-bridge9-case07-three-composition-review-20261009-v1/root-native-text-composition-review-v1.json": [
+      66311,
+      7603005,
+      3603,
+      1791520843315311746,
+      1791520843315311746
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/campaign-v1/jobs/000007-195b378742e69684.result.json": [
+      66311,
+      7514065,
+      229557,
+      1791518364710262246,
+      1791518364717262233
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/campaign-v1/jobs/000007-195b378742e69684.trace.jsonl": [
+      66311,
+      7514069,
+      27940,
+      1791518364705262256,
+      1791518364707262252
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/action-mcp-calls.jsonl": [
+      66311,
+      7514077,
+      638,
+      1791518441577894126,
+      1791518441577894126
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/bootstrap-config.json": [
+      66311,
+      7514078,
+      3205,
+      1791518441578099972,
+      1791518441578099972
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/bootstrap-events.jsonl": [
+      66311,
+      7514079,
+      926,
+      1791518441578117828,
+      1791518441578117828
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/cli-invocations.jsonl": [
+      66311,
+      7514076,
+      9690,
+      1791518441577117830,
+      1791518441577117830
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/cli-stdout.raw": [
+      66311,
+      7514087,
+      3306,
+      1791518441578915760,
+      1791518441578915760
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/lifecycle.json": [
+      66311,
+      7514081,
+      192,
+      1791518441578479393,
+      1791518441578479393
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/mcp-handshake.jsonl": [
+      66311,
+      7514080,
+      133,
+      1791518441578363055,
+      1791518441578363055
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/opencode-home/data/opencode/log/opencode.log": [
+      66311,
+      7514086,
+      17700,
+      1791518441578479393,
+      1791518441578479393
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/capture-snapshot-v1/snapshot-manifest.json": [
+      66311,
+      7514088,
+      5878,
+      1791518441579117826,
+      1791518441579117826
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/compact-review-packet-v3.json": [
+      66311,
+      7602896,
+      29770,
+      1791520588950659173,
+      1791520588950659173
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/delta-native-records.jsonl": [
+      66311,
+      7602643,
+      289490,
+      1791519738283845578,
+      1791519738283845578
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/proposal-manifest.json": [
+      66311,
+      7602646,
+      10751,
+      1791519743498416301,
+      1791519743498416301
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/native-proposal/recurrence-audit.json": [
+      66311,
+      7602644,
+      4510,
+      1791519742506548339,
+      1791519742506548339
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/selected-native-raw.jsonl": [
+      66311,
+      7602641,
+      288599,
+      1791519725095805636,
+      1791519725095805636
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-omissions.jsonl": [
+      66311,
+      7602726,
+      0,
+      1791520056887939820,
+      1791520056887939820
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-provenance.jsonl": [
+      66311,
+      7602725,
+      2703,
+      1791520056887939820,
+      1791520056887939820
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/delta-text.jsonl": [
+      66311,
+      7602724,
+      246241,
+      1791520056887801822,
+      1791520056887801822
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/receipt.json": [
+      66311,
+      7602729,
+      5492,
+      1791520057009756425,
+      1791520057009756425
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/compact-three-selected-v1/text-proposal/source-coverage.jsonl": [
+      66311,
+      7602727,
+      1248,
+      1791520056888022495,
+      1791520056888022495
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/launch-plan-v2.json": [
+      66311,
+      7509671,
+      11344,
+      1791518171387157231,
+      1791518171387157231
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/action-assessments-v1.json": [
+      66311,
+      7516121,
+      1455,
+      1791518536039650120,
+      1791518536039650120
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/action-review-packet-v4.json": [
+      66311,
+      7516129,
+      18578,
+      1791519405061045948,
+      1791519405061045948
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/materialization-manifest-v1.json": [
+      66311,
+      7516120,
+      5565,
+      1791518536039566633,
+      1791518536039566633
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/native-review-v1/native-turns-raw-v1.jsonl": [
+      66311,
+      7515209,
+      288599,
+      1791518471139062292,
+      1791518471139062292
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/root-native-review-v1/proof.json": [
+      66311,
+      7602586,
+      279,
+      1791519451319328782,
+      1791519451319328782
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v12-explicit-case07-after-compact-v1/case-07-fresh-attempt-v2/root-native-review-v1/root-selected-action-admission-v1.json": [
+      66311,
+      7602598,
+      8055,
+      1791519483207843043,
+      1791519483207843043
+    ],
+    "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-v3.cases.jsonl": [
+      66311,
+      7358008,
+      50606,
+      1791506094826768815,
+      1791506094826768815
+    ],
+    "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/frozen-runtime/frozen-runtime.json": [
+      66311,
+      7472939,
+      122624,
+      1791510260247698455,
+      1791510260251698449
+    ],
+    "opencode-step5-preview-free-20261008-v1/type-inference-folder-fix-v1/frozen-runtime/src/neuralese/combinators.ts": [
+      66311,
+      7472710,
+      14462,
+      1791492039703338384,
+      1791510260167559097
+    ],
+    "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl": [
+      66311,
+      7108232,
+      220885,
+      1791489222292433062,
+      1791489222292433062
+    ]
+  },
+  "verification_id": "opencode-step5-bridge9-case07three-native-text-20261009-v1"
+}

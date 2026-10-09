@@ -65,6 +65,7 @@ def main() -> None:
     native_rows = read_jsonl(args.native_rows)
     trace_rows = read_jsonl(args.trace)
     annotations = load_json(args.annotations)
+    launch_plan = load_json(args.launch_plan)
 
     ledger = result.get("outcome", {}).get("action_ledger", [])
     trace_actions = [event for event in trace_rows if event.get("kind") == "action"]
@@ -77,6 +78,15 @@ def main() -> None:
         raise ValueError("source row index is outside source-cases JSONL")
     selected_source_line = source_lines[args.source_row_index]
     source_record = json.loads(selected_source_line)
+    source_binding = launch_plan.get("source", {})
+    expected_source_path = (ROOT / source_binding.get("path", "")).resolve()
+    if (not expected_source_path.is_relative_to(ROOT) or expected_source_path != args.source_cases.resolve()
+            or not expected_source_path.is_file() or sha(expected_source_path.read_bytes()) != source_binding.get("sha256")):
+        raise ValueError("source-cases file does not match the exact launch-plan source path/hash")
+    if source_binding.get("index") != args.source_row_index:
+        raise ValueError("source row index does not match the launch-plan source binding")
+    if sha(selected_source_line.rstrip(b"\r\n")) != source_binding.get("row_sha256"):
+        raise ValueError("selected source row does not match the launch-plan row hash")
 
     packet_rows = []
     seen = set()

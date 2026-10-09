@@ -622,10 +622,12 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     metadata = [item for item in conversion.get("external_context_inputs", [])
                 if isinstance(item, dict)
                 and item.get("schema") == "natlang.external-context-input/1"
-                and item.get("origin") == "same-run-producer"
-                and item.get("learner_representation") in {
+                and ((item.get("origin") == "same-run-producer"
+                      and item.get("learner_representation") in {
                     "typed-read-linked-to-existing-writer",
-                    "typed-read-from-authenticated-runtime-writer-event-context-only"}]
+                    "typed-read-from-authenticated-runtime-writer-event-context-only"})
+                     or (item.get("origin") == "runtime-definition-context-only"
+                         and item.get("learner_representation") == "runtime-definition-context-only"))]
     if not metadata:
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
@@ -669,6 +671,62 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
     for item in metadata:
         block_id = item.get("block_id")
         body_sha256 = item.get("body_sha256")
+        if item.get("origin") == "runtime-definition-context-only":
+            refs = [receipt for receipt in ((record.get("source_ref") or {}).get(
+                "provider_expanded_read_contexts") or [])
+                    if isinstance(receipt, dict)
+                    and receipt.get("schema") == "natlang.provider-expanded-read-context/1"
+                    and receipt.get("origin") == "configured-function-definition"
+                    and (receipt.get("block") or {}).get("id") == block_id]
+            if len(refs) != 1:
+                raise ValueError("runtime-definition context lacks one exact configured-read receipt")
+            receipt = refs[0]
+            block, read, turn = (receipt.get("block") or {}, receipt.get("block_read") or {},
+                                 receipt.get("model_turn") or {})
+            readout, definition = receipt.get("readout") or {}, receipt.get("definition") or {}
+            body = block.get("body")
+            pairs = [(item.get("type"), block.get("type")),
+                     (item.get("body_sha256"), block.get("body_sha256")),
+                     (item.get("invocation_id"), receipt.get("invocation_id")),
+                     (item.get("source_row_sha256"), receipt.get("source_row_sha256")),
+                     (item.get("trace_sha256"), receipt.get("trace_sha256")),
+                     (item.get("transport_provenance_sha256"), receipt.get("transport_provenance_sha256")),
+                     (item.get("raw_request_sha256"), receipt.get("raw_request_sha256")),
+                     (item.get("rendered_request_sha256"), receipt.get("rendered_request_sha256")),
+                     (item.get("source_request_sha256"), receipt.get("source_request_sha256")),
+                     (item.get("source_response_sha256"), receipt.get("source_response_sha256")),
+                     (item.get("read_node"), read.get("node")),
+                     (item.get("model_turn_node"), turn.get("node")),
+                     (item.get("runtime_definition_id"), definition.get("id"))]
+            if (any(left != right for left, right in pairs)
+                    or item.get("learner_representation") != "runtime-definition-context-only"
+                    or item.get("writer_target_selected") is not False
+                    or item.get("learned_vectors") is not False
+                    or item.get("qualification_certificate") is not False
+                    or item.get("training_admission") is not False
+                    or item.get("invocation_id") != reader_invocation
+                    or item.get("source_row_sha256") != reader_source_row
+                    or not isinstance(item.get("type"), str) or not item["type"].startswith("Neuralese<")
+                    or not isinstance(body, str) or _sha(body.encode("utf-8")) != body_sha256
+                    or not isinstance(item.get("runtime_manifest_sha256"), str)
+                    or not isinstance(item.get("runtime_definition_source_sha256"), str)
+                    or not isinstance(item.get("runtime_definition_source"), str)
+                    or readout.get("read_body_id") != block_id or readout.get("read_source_sha256") != body_sha256
+                    or any(readout.get(flag) is not False for flag in
+                           ("learned_vectors", "qualification_certificate", "training_admission"))
+                    or receipt.get("producer_write") is not None
+                    or read.get("kind") != "block_read" or read.get("block") != block_id
+                    or read.get("call_id") != reader_invocation or turn.get("kind") != "model_turn"
+                    or turn.get("call_id") != reader_invocation
+                    or not any(isinstance(edge, dict) and edge.get("node") == read.get("node")
+                               and edge.get("block") == block_id for edge in turn.get("inputs", []))
+                    or typed_neuralese_ref_count(record.get("messages") or [], block_id)
+                       != item.get("context_occurrences")):
+                raise ValueError("runtime-definition context binding does not match its exact read and model turn")
+            attestations.append({key: value for key, value in item.items() if key != "body"} | {
+                "block_id": block_id, "reader_record_id": record.get("id"), "body": body,
+                "source_kind": "provider-expanded-runtime-definition-context-only"})
+            continue
         if (item.get("type") != "Neuralese<string>" or not isinstance(block_id, str)
                 or not block_id.startswith("nz1_") or not isinstance(body_sha256, str)
                 or item.get("learned_vectors") is not False

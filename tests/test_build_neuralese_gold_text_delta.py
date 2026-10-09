@@ -35,6 +35,43 @@ def test_base_anchor_omission_is_separate_from_delta_omissions():
         {"id": "delta-row", "reason": "selected_delta"}]
 
 
+def test_configured_read_context_must_exactly_match_frozen_combinator_source():
+    source = """export const COMBINATORS = {
+  read: { type: '(v: Neuralese<unknown>) => unknown',
+    text: 'Read the value that v holds and return it exactly.' },
+} as const;
+"""
+    definition_type, definition_text = MODULE.extract_combinator_definition(source, "read")
+    body_hash = hashlib.sha256(definition_text.encode()).hexdigest()
+    block_id = "nz1_revision1234567890"
+    receipt = {
+        "schema": "natlang.provider-expanded-read-context/1",
+        "origin": "configured-function-definition",
+        "definition": {"id": "nz-fn:" + block_id, "revision": "revision123456"},
+        "block": {"id": block_id, "type": f"Neuralese<{definition_type}>",
+                  "body": definition_text, "body_sha256": body_hash},
+        "readout": {"schema": "natlang.text-template-readout/1", "call": "return_result",
+                    "value": "decode", "value_type": "string", "read_body_id": block_id,
+                    "read_source_sha256": body_hash, "learned_vectors": False,
+                    "qualification_certificate": False, "training_admission": False},
+    }
+    MODULE.validate_configured_read_context(receipt, definition_type, definition_text)
+
+    # Simulate a truncated body with every local digest updated consistently.
+    truncated = definition_text[:-1]
+    truncated_hash = hashlib.sha256(truncated.encode()).hexdigest()
+    forged = json.loads(json.dumps(receipt))
+    forged["block"]["body"] = truncated
+    forged["block"]["body_sha256"] = truncated_hash
+    forged["readout"]["read_source_sha256"] = truncated_hash
+    try:
+        MODULE.validate_configured_read_context(forged, definition_type, definition_text)
+    except ValueError as exc:
+        assert "exact frozen-runtime source" in str(exc)
+    else:
+        raise AssertionError("internally rehashed truncated instructions must not be accepted")
+
+
 def _sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
