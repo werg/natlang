@@ -160,6 +160,9 @@ function createRecord(contract, batch, sourceMeta) {
   const union = contract.labels.map(JSON.stringify).join(' | ');
   const returnType = contract.kind === 'noul' ? 'boolean' : 'Decision';
   const outputType = contract.kind === 'noul' ? 'Record<string, boolean>' : 'Record<string, Decision>';
+  const kindInstruction = contract.kind === 'noul'
+    ? 'Return true when yes is at least as likely as no; otherwise return false. Do not return a numeric probability.'
+    : 'Apply the scoped criteria and return exactly one declared option or level. Do not return a probability distribution.';
   const controller = `const task = await folder.file('task.json').readJson();
 const decisions: ${outputType} = {};
 for (const file of await folder.files('${dataDirectory}/*.json')) {
@@ -170,7 +173,7 @@ for (const file of await folder.files('${dataDirectory}/*.json')) {
  const criteria = Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria;
  const options = item.options ?? task.options ?? [];
  const levels = item.levels ?? task.levels ?? [];
- const decision = await nl<${returnType}>\`Question: \${question}\\nAnswer from the scoped state. Apply the scoped criteria. Select exactly one answer from the scoped options and levels.\`(caseId, state, question, criteria, options, levels);
+ const decision = await nl<${returnType}>\`Question: \${question}\\nAnswer from the scoped state. Apply the scoped criteria. ${kindInstruction}\`(caseId, state, question, criteria, options, levels);
  decisions[caseId] = decision;
 }
 await folder.file(task.output_path).writeText(JSON.stringify(decisions));
@@ -194,7 +197,8 @@ return decisions;`;
     files: { 'types.ts': `export type Decision = ${union};\n` },
     folderFiles, expectedFiles, expected: childResults,
     minimumSequence: ['read the runtime contract and directory items', 'capture case ID, state, question, criteria, options and levels as separate scope values',
-      'compose the item question into the typed inline instruction and pass all captures separately for every item', 'save and return the exact aggregate map'],
+      `compose the item question into the typed inline instruction and follow the ${contract.kind}-specific output rule`,
+      'pass all captures separately for every item', 'save and return the exact aggregate map'],
     reference: { root: [evalCall(controller), returnCall(childResults)], children: childRefs },
   });
   record.family = `curriculum_teacher_decision_labels_${slug(first.family)}_${contract.kind}`;
@@ -220,7 +224,7 @@ return decisions;`;
     label_manifest_sha256s: [...new Set(batch.map(entry => entry.label.artifact.manifest_sha256))],
     scorer_source_sha256: sourceMeta.scorer_source_sha256,
     scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
-    transformations: { kind: contract.kind, from: 'strict probability judgment', to: contract.kind === 'noul' ? 'Boolean threshold at p >= 0.5' : 'highest-probability source option/level',
+    transformations: { kind: contract.kind, from: 'strict probability judgment', to: contract.kind === 'noul' ? 'Boolean threshold at p >= 0.5; true means yes is at least as likely as no' : 'highest-probability source option/level',
       probabilities_normalized: false, gold_in_prompt: false, reasoning_inferred: false },
     label_receipts: batch.map(entry => ({ id: entry.source.id, label_file_sha256: entry.label.file_sha256,
       label_manifest_sha256: entry.label.artifact.manifest_sha256, label_manifest_schema: entry.label.artifact.schema,

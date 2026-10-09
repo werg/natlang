@@ -20493,7 +20493,38 @@
       ],
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
-      "notes": "131/256 labels pass strict payload, existing scoreGraded gates and exact source top, producing36 collection/inline-lambda IR cases. NL instructions include runtime item question and separate scope captures, gold omitted. Three actual scripted replays accepted with six-field capture visibility;24 native turns marked authored-static-reference-pending, not teacher code/reasoning. Remaining125 labels explicitly rejected. Proof is runtime execution/capture evidence, not semantic admission or learned-channel qualification. Original raw labels/provenance retained in parent registry. Earlier v3 controller snapshot is superseded by v4; retained locally, not training."
+      "notes": "131/256 labels pass strict payload, existing scoreGraded gates and exact source top, producing36 collection/inline-lambda IR cases. NL instructions include runtime item question and separate scope captures, gold omitted. Three actual scripted replays accepted with six-field capture visibility;24 native turns marked authored-static-reference-pending, not teacher code/reasoning. Remaining125 labels explicitly rejected. Proof is runtime execution/capture evidence, not semantic admission or learned-channel qualification. Original raw labels/provenance retained in parent registry. Earlier v3 controller snapshot is superseded by v4; retained locally, not training. Superseded by v2: kind-specific crisp output instructions remove probability/Boolean ambiguity; earlier snapshot retained as held development evidence, excluded from training.",
+      "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v2"
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v5",
+      "include": [
+        "cases.jsonl",
+        "frozen-adapter-v1/TEACHER_DECISION_LABELS.md",
+        "frozen-adapter-v1/teacher-decision-labels.mjs",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "authored-static-current-IR-from-typed-provider-decisions",
+      "admission": "held-pending-source-and-static-reference-quality-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-pool-v1-closed-held-20261009-v1",
+        "free-provider-static-decision-inline-lambdas-held-20261010-v1"
+      ],
+      "license": "Inherited exact source licenses, preserved per compatible batch",
+      "independent_new_worlds": 0,
+      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds."
     }
   ],
   "coverage_backlog": [
@@ -20518,6 +20549,7 @@
     "free-provider-typed-screens-held-20261009-v1 preserves closed successes and provider-format failures. Required: current Natlang IR/inline-lambda adapter conversion and source/quality review; do not admit probability envelopes or count failed rows. Broader mixed-family screens remain running and must receive separate immutable publication when closed.",
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
-    "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion."
+    "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed."
   ]
 }

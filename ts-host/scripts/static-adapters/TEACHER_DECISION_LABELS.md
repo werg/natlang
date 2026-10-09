@@ -4,7 +4,12 @@
 `natlang.program/2` curriculum records. It authors the controller and reference
 scaffold; it does not claim that the provider wrote either. A provider's
 probabilities are retained as a raw receipt and reduced to the selected option
-(or, for `noul`, the Boolean `p >= 0.5`) for each inline child result.
+(or, for `noul`, the Boolean `p >= 0.5`) for each inline child result. The
+runtime-composed instruction is kind-specific: binary cases ask for `true` when
+yes is at least as likely as no and otherwise `false`, with no numeric
+probability; choice and ordinal cases ask for exactly one declared option or
+level, with no probability distribution. The source question itself remains
+verbatim in the runtime-composed instruction.
 
 Example:
 
