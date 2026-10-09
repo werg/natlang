@@ -127,6 +127,19 @@ def _lion_chunk(p, g, m, lr, beta1, beta2, decay):
 _fused_lion_chunk = torch.compile(_lion_chunk, dynamic=True)
 
 
+def _lion_rows(p, g, m, scale, lr, beta1, beta2, decay):
+    gf, mf, value = g.float(), m.float(), p.float()
+    value = value * (1 - lr * decay) - (lr * scale) * torch.sign(beta1 * mf + (1 - beta1) * gf)
+    if p.dtype != torch.bfloat16:  # stochastic rounding only for BF16 latents
+        return value.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
+    bits = value.view(torch.int32)
+    rounded = ((bits + torch.randint_like(bits, 0, 1 << 16)) & -65536).view(torch.float32)
+    return rounded.to(p.dtype), (beta2 * mf + (1 - beta2) * gf).to(m.dtype)
+
+
+_fused_lion_rows = torch.compile(_lion_rows, dynamic=False)
+
+
 class LionSR(torch.optim.Optimizer):
     """Lion (sign of interpolated momentum; one BF16 momentum buffer) for BF16 latents with stochastic-rounding
     writes: the memory-lean optimizer of Mellum's full-latent QAT (2 copies of the weights instead of 4-6). The update
@@ -162,6 +175,12 @@ class LionSR(torch.optim.Optimizer):
         state = self.state[p]
         if "momentum" not in state:
             state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+        if group.get("row_scale") is not None:  # per-row step size (lr x row scale), whole tensor at once
+            value, momentum = _fused_lion_rows(p, p.grad, state["momentum"], group["row_scale"].to(p.device),
+                                               group["lr"], beta1, beta2, group["weight_decay"])
+            p.copy_(value)
+            state["momentum"].copy_(momentum)
+            return
         flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
         if self.fused and p.is_cuda and p.dtype == torch.bfloat16:
             for start in range(0, flat_p.numel(), self.chunk):
