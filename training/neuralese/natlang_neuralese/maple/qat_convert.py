@@ -66,17 +66,48 @@ def ternary_scale(latent: torch.Tensor) -> float:
     return float(value.abs().sum() / nonzero.sum().clamp_min(1))
 
 
-def windows_from(text_data: str, tokenizer, tokens: int, count: int, split: str | None = None) -> list[list[int]]:
-    rows = []
-    for line in open(text_data):
-        row = json.loads(line)
-        if split and row.get("split", "train") != split:
+@torch.no_grad()
+def row_scale(latent: torch.Tensor) -> torch.Tensor:
+    """Per-row ternary scale (Maple's rule), shape (..., 1), FP32."""
+    from .ternary import ternary_codes
+
+    return ternary_codes(latent.detach())[1].float()
+
+
+def windows_from(text_data: str, tokenizer, tokens: int, count: int, split: str | None = None,
+                 skip_system: bool = False, extra_files: tuple[str, ...] = ()) -> list[list[int]]:
+    """Token windows packed across documents. ``skip_system`` drops each chat's system message (our shared NatLang
+    prompt: ~86% of corpus tokens, not predicted by chat models, memorised in one update), so recovery runs on
+    the turns the teacher actually models. ``extra_files`` (code, prose) are packed in alternately."""
+    def documents():
+        for line in open(text_data):
+            row = json.loads(line)
+            if split and row.get("split", "train") != split:
+                continue
+            text = row["text"]
+            if skip_system and text.startswith("<|im_start|>system") and "<|im_end|>" in text:
+                text = text[text.index("<|im_end|>") + len("<|im_end|>"):].lstrip("\n")
+            yield text
+
+    def extras():
+        for path in extra_files:
+            yield Path(path).read_text(errors="replace")
+
+    rows, buffer = [], []
+    sources = [documents()] + ([extras()] if extra_files else [])
+    turn = 0
+    while sources and len(rows) < count:
+        source = sources[turn % len(sources)]
+        try:
+            text = next(source)
+        except StopIteration:
+            sources.remove(source)
             continue
-        ids = tokenizer(row["text"], add_special_tokens=False).input_ids
-        for start in range(0, len(ids) - tokens, tokens):
-            rows.append(ids[start:start + tokens])
-            if len(rows) >= count:
-                return rows
+        turn += 1
+        buffer += tokenizer(text, add_special_tokens=False).input_ids
+        while len(buffer) >= tokens and len(rows) < count:
+            rows.append(buffer[:tokens])
+            buffer = buffer[tokens:]
     return rows
 
 
@@ -100,7 +131,10 @@ def run_teacher(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=False)
     for split, count in (("train", a.windows), ("test", a.held)):
-        windows = windows_from(a.text_data, tokenizer, a.tokens, count, split)
+        extra = tuple(sorted(str(f) for g in a.extra_glob for f in Path("/").glob(g.lstrip("/"))))
+        extra = extra[0::2] if split == "train" else extra[1::2]  # disjoint, interleaved extra files
+        windows = windows_from(a.text_data, tokenizer, a.tokens, count, split, skip_system=a.skip_system,
+                               extra_files=extra)
         ids_all, top_ids, top_logp, ce = [], [], [], []
         with torch.no_grad():
             for w in windows:
@@ -116,7 +150,8 @@ def run_teacher(a):
                     "teacher_ce": ce}, out / f"{split}.pt")
         print(json.dumps({"split": split, "windows": len(windows), "teacher_ce": sum(ce) / max(1, len(ce))}), flush=True)
     (out / "teacher.json").write_text(json.dumps({"model": a.model, "text_data": a.text_data, "tokens": a.tokens,
-                                                  "k": a.k}, indent=1) + "\n")
+                                                  "k": a.k, "skip_system": a.skip_system,
+                                                  "extra_glob": a.extra_glob}, indent=1) + "\n")
 
 
 def run_train(a):
@@ -128,7 +163,9 @@ def run_train(a):
     latents = install_full_latent_qat(model)
     model.model.checkpoint_layers = a.checkpoint_layers
     scales = {name: ternary_scale(latent) for name, latent in latents}
-    groups = [{"params": [latent], "lr": a.lr * scales[name], "name": name} for name, latent in latents]
+    # Step per row in units of that row's ternary scale: a per-tensor unit moved near-zero rows (layers 0-3, 27
+    # gate_up) by up to 3.6x their RMS per update.
+    groups = [{"params": [latent], "lr": a.lr, "row_scale": row_scale(latent), "name": name} for name, latent in latents]
     optimizer = LionSR(groups, lr=a.lr, fused=True)
     QUANT_MIX["fused"] = True
     optimizer.step_in_backward()
@@ -221,6 +258,8 @@ def main(argv=None):
     t.add_argument("--held", type=int, default=32)
     t.add_argument("--tokens", type=int, default=2048)
     t.add_argument("--k", type=int, default=64)
+    t.add_argument("--skip-system", action=argparse.BooleanOptionalAction, default=True)
+    t.add_argument("--extra-glob", action="append", default=[], help="code/prose files packed in (absolute glob)")
     r = sub.add_parser("train")
     r.add_argument("--model", required=True)
     r.add_argument("--teacher", required=True)
