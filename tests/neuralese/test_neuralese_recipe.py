@@ -82,6 +82,10 @@ def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
     by_id={stage['id']:stage for stage in recipe['stages']}
     assert by_id['autoregressive_text_fixup']['requires']==['core_text_warmup']
     assert by_id['autoregressive_text_fixup']['parameters']['ar_feedback_fixup'] is True
+    assert by_id['autoregressive_text_fixup']['parameters']['tokens']==16384
+    assert by_id['autoregressive_text_fixup']['parameters']['target_tokens']==256
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    assert '--target-tokens' in stage_parameter_args({'target_tokens':256})
     assert by_id['adapted_runtime']['requires']==['autoregressive_text_fixup']
     assert 'autoregressive_text_fixup' in by_id['recurrence_warmup']['requires']
     from natlang_neuralese.train.recipe import mapped_fixup_continuation, effective_stage_parameters
@@ -91,6 +95,21 @@ def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
     assert str(checkpoint)=='/run/core/checkpoint.pt'
     assert str(heads)=='/run/core/heads.pt'
     assert effective_stage_parameters(by_id['autoregressive_text_fixup'],[predecessor],recipe)['steps']==23296
+
+
+def test_shared_recipe_serializes_mellum_qat_and_member_controls_to_shared_handlers():
+    from natlang_neuralese.train.recipe import HANDLERS, stage_parameter_args
+    text={'qat_latent_lr':1e-5,'member_weight':0.2,'member_tokens':256,'member_eval_windows':3}
+    recurrence={'qat_latent_lr':2e-5,'member_weight':0.3,'member_tokens':512,
+                'member_eval':5,'member_mask_system':False,'member_full_weight':0.4}
+    assert set(text)<=HANDLERS['core_text_warmup']['parameters']
+    assert set(recurrence)<=HANDLERS['raw_recurrence_training']['parameters']
+    assert stage_parameter_args(text)==[
+        '--qat-latent-lr','1e-05','--member-weight','0.2','--member-tokens','256',
+        '--member-eval-windows','3']
+    assert stage_parameter_args(recurrence)==[
+        '--qat-latent-lr','2e-05','--member-weight','0.3','--member-tokens','512',
+        '--member-eval','5','--no-member-mask-system','--member-full-weight','0.4']
 
 
 def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp_path):

@@ -437,6 +437,27 @@ def test_document_boundaries_are_real_and_every_target_is_supervised_once(length
     assert all(len(w['ids'])<=9 for w in windows)
 
 
+def test_bounded_target_windows_share_full_available_context_without_copying_prefixes():
+    from natlang_neuralese.train.text_warmup import document_windows
+    source=list(range(10,111))
+    windows=document_windows(source,open_id=1000,close_id=1001,tokens=16,
+                             prefix_tokens=3,target_tokens=4)
+    assert windows
+    assert all(len(window['ids'])<=16 for window in windows)
+    # The source document is retained once; windows hold bounded views into it.
+    assert windows[0]['ids']._source is windows[-1]['ids']._source
+    assert max(window['prefix'] for window in windows)==12
+    targets=[token for window in windows for token in window['ids'][window['prefix']:]]
+    assert targets==source+[1001]
+    assert all(len(window['ids'])-window['prefix']<=4 for window in windows)
+
+
+def test_target_token_bound_must_leave_positive_context_capacity():
+    from natlang_neuralese.train.text_warmup import document_windows
+    with pytest.raises(ValueError,match='smaller than tokens'):
+        document_windows(range(5),open_id=1,close_id=2,tokens=8,prefix_tokens=2,target_tokens=8)
+
+
 def test_single_close_target_is_supported_by_mapped_completions():
     from natlang_neuralese.model.input_map import NeuraleseInputMap
     from natlang_neuralese.train.text_warmup import mapped_completions

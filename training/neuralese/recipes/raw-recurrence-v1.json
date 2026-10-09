@@ -65,7 +65,9 @@
       ],
       "parameters": {
         "steps": 1024,
-        "ar_feedback_fixup": true
+        "ar_feedback_fixup": true,
+        "tokens": 16384,
+        "target_tokens": 256
       }
     },
     {

@@ -8,6 +8,7 @@ No task, compression, autonomous stopping or transport certificate is issued.
 from __future__ import annotations
 import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -561,18 +562,29 @@ def retain_best_checkpoint(out, report):
 
 
 def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None,
-                     context_tokens=0):
+                     context_tokens=0, target_tokens=None):
     """Prime with real open; supervise each text token and the real close once.
 
     The first ``context_tokens`` document tokens (the system prompt) are context only: they stay in the
-    window as its crisp prefix, but are never targets, so they carry no loss and no held metric."""
+    window as its crisp prefix, but are never targets, so they carry no loss and no held metric. With
+    ``target_tokens``, ``tokens`` is the maximum total window and each lazy window advances by at most
+    that supervised span, using all available preceding document tokens as context."""
     ids=[open_id]+list(token_ids)+[close_id]
-    stride=tokens-prefix_tokens
+    bounded_target = target_tokens is not None
+    if bounded_target:
+        if type(target_tokens) is not int or target_tokens < 1 or target_tokens >= tokens:
+            raise ValueError('target_tokens must be a positive integer smaller than tokens')
+        stride=target_tokens
+        context_capacity=tokens-target_tokens
+    else:
+        stride=tokens-prefix_tokens
+        context_capacity=prefix_tokens
     context_end=1+max(0,int(context_tokens))
     windows=[]
     for offset in range(0,len(ids),stride):
-        start=max(0,offset-prefix_tokens)
-        chunk=ids[start:offset+stride]
+        start=max(0,offset-context_capacity)
+        end=min(len(ids),offset+stride)
+        chunk=_TokenWindow(ids,start,end) if bounded_target else ids[start:end]
         width=max(1 if offset==0 else offset-start,context_end-start)
         if len(chunk)<=width:continue
         window={'ids':chunk,'prefix':width,'offset':offset,'start':start}
@@ -580,6 +592,35 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
             window['supervised_suffix_start']=max(0,supervised_suffix_start+1-(start+width))
         windows.append(window)
     return windows
+
+
+class _TokenWindow(Sequence):
+    """A bounded view into one document, so short-target long-context windows share storage."""
+    __slots__=('_source','_start','_end')
+
+    def __init__(self, source, start, end):
+        self._source=source;self._start=start;self._end=end
+
+    def __len__(self):
+        return self._end-self._start
+
+    def __getitem__(self, index):
+        if isinstance(index,slice):
+            start,stop,step=index.indices(len(self))
+            return [self._source[self._start+i] for i in range(start,stop,step)]
+        if index<0:index+=len(self)
+        if index<0 or index>=len(self):raise IndexError(index)
+        return self._source[self._start+index]
+
+    def __iter__(self):
+        for index in range(self._start,self._end):yield self._source[index]
+
+    def count(self, value):
+        return sum(token==value for token in self)
+
+    def __eq__(self, other):
+        if isinstance(other,Sequence):return len(self)==len(other) and all(a==b for a,b in zip(self,other))
+        return NotImplemented
 
 
 ROLE_CODES=('other','system','user','tool','assistant_reasoning','assistant_reply')
@@ -732,11 +773,12 @@ def same_alignment_data(previous, current):
     # the held text-CE baseline. Missing fields in legacy checkpoints are
     # intentionally unequal: the old diagnostic's evaluation policy is not
     # authenticated well enough to reuse its value.
-    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens')
+    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens', 'target_tokens')
     old_options, new_options = previous.get('options', {}), current.get('options', {})
-    if any(key not in old_options or key not in new_options for key in fields):
+    if any(key not in old_options or key not in new_options
+           for key in fields if key!='target_tokens'):
         return False
-    if any(old_options[key] != new_options[key] for key in fields):
+    if any(old_options.get(key) != new_options.get(key) for key in fields):
         return False
     for field in ('target', 'text_history', 'supervision_policy'):
         if previous.get(field) != current.get(field):
@@ -747,7 +789,7 @@ def same_alignment_data(previous, current):
 _FOUNDATION_CONTEXT_OPTIONS = (
     # These settings change the depth, token positions, or weighted objective
     # whose held projection plateau and recurrence alignment were measured.
-    'cutoff', 'tokens', 'prefix_tokens',
+    'cutoff', 'tokens', 'prefix_tokens', 'target_tokens',
     'embedding_weight', 'sketch_weight', 'text_weight',
     'projection_patience', 'projection_min_evals',
     'projection_min_improvement', 'backbone_ramp_evals', 'pass_ramp_evals',
@@ -771,9 +813,10 @@ def same_foundation_context(previous, current):
     if any(previous[field] != current[field] for field in fields):
         return False
     old_options, new_options = previous.get('options', {}), current.get('options', {})
-    if any(key not in old_options or key not in new_options for key in _FOUNDATION_CONTEXT_OPTIONS):
+    if any(key not in old_options or key not in new_options
+           for key in _FOUNDATION_CONTEXT_OPTIONS if key!='target_tokens'):
         return False
-    return not any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS)
+    return not any(old_options.get(key) != new_options.get(key) for key in _FOUNDATION_CONTEXT_OPTIONS)
 
 
 def configure_student(engine, policy='full', rank=16, secondary_head='feedback'):
@@ -841,6 +884,8 @@ def main(argv=None):
     for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
     p.add_argument('--device',default='cuda');p.add_argument('--steps',type=int,default=4096)
     p.add_argument('--tokens',type=int,default=1024);p.add_argument('--prefix-tokens',type=int,default=32)
+    p.add_argument('--target-tokens',type=int,default=None,
+                   help='optional bounded supervised span; tokens remains the total context capacity')
     p.add_argument('--cutoff',type=int,default=4)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
@@ -892,7 +937,9 @@ def main(argv=None):
         p.error('positive bounds and at least three tokens required')
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
-    if a.prefix_tokens>=a.tokens-1:p.error('prefix must leave at least two target tokens')
+    if a.target_tokens is None and a.prefix_tokens>=a.tokens-1:p.error('prefix must leave at least two target tokens')
+    if a.target_tokens is not None and (a.target_tokens<1 or a.target_tokens>=a.tokens):
+        p.error('--target-tokens must be positive and smaller than --tokens')
     if not 0<=a.min_agreement<=1 or min(a.max_ce_delta,a.max_relative_mse)<0:p.error('invalid gates')
     torch.set_num_threads(2);torch.manual_seed(a.seed);random.seed(a.seed)
     options={k:str(v.resolve()) if isinstance(v,Path) else v for k,v in vars(a).items() if k!='out'}
@@ -1077,9 +1124,14 @@ def main(argv=None):
         for window in document_windows(tokens,
                 open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
                 tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                supervised_suffix_start=row.get('supervised_suffix_start'),context_tokens=context):
+                supervised_suffix_start=row.get('supervised_suffix_start'),context_tokens=context,
+                target_tokens=a.target_tokens):
             if labels is not None and row['split']=='test':
-                window['roles']=labels[window['start']:window['start']+len(window['ids'])]
+                if a.target_tokens is not None:
+                    window['roles']=_TokenWindow(labels,window['start'],
+                                                 window['start']+len(window['ids']))
+                else:
+                    window['roles']=labels[window['start']:window['start']+len(window['ids'])]
             windows[row['split']].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'groups':row['source_groups']})
@@ -1115,7 +1167,7 @@ def main(argv=None):
     (a.out/'plan.json').write_text(json.dumps({'identity':identity,'receipt':receipt},indent=2)+'\n')
     def ids_for(w):
         rows=[w] if isinstance(w,dict) else w
-        ids=torch.tensor([r['ids'] for r in rows],device=a.device)
+        ids=torch.tensor([list(r['ids']) for r in rows],device=a.device)
         span=ids[:,rows[0]['prefix']:]
         return ids[:,:rows[0]['prefix']],span,balanced_position_weights(span,[r.get('supervised_suffix_start') for r in rows])
     def member_window(w):
@@ -1203,7 +1255,7 @@ def main(argv=None):
     def objective(w,passes,bootstrap=False,readout_chunk_tokens=128,projected_observer=None):
         prefix,span,weights=ids_for(w);baseline={}
         rows=[w] if isinstance(w,dict) else w
-        roles=(torch.tensor([r['roles'][r['prefix']:] for r in rows],device=span.device)
+        roles=(torch.tensor([list(r['roles'][r['prefix']:]) for r in rows],device=span.device)
                if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
         completions=text_history_completions(backbone,heads,prefix,span,passes=passes,
             ar_feedback_fixup=a.ar_feedback_fixup)
@@ -1329,7 +1381,7 @@ def main(argv=None):
                     assistant={ROLE_CODES.index('assistant_reasoning'),ROLE_CODES.index('assistant_reply')}
                     first=next((i for i,c in enumerate(batch[0]['roles']) if i>=1 and c in assistant),None)
                     if first is not None and len(batch[0]['ids'])-first>=16:
-                        whole=torch.tensor([batch[0]['ids']],device=a.device)
+                        whole=torch.tensor([list(batch[0]['ids'])],device=a.device)
                         ar_batch=(whole[:,:first],whole[:,first:])
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
