@@ -121,6 +121,8 @@ def validate_root_recurrence_facet_approval(approval, approval_path, delta_rows,
                 or not all(isinstance(group, str) and group for group in item['source_groups'])):
             raise ValueError(f'root recurrence row lacks exact source/split/kind: {ident}')
         admitted[ident] = item
+    if approval.get('admitted_recurrence_count') != len(admitted):
+        raise ValueError('root recurrence admitted count conflicts with exact row decisions')
     ids = [row.get('id') for row in delta_rows]
     if (not admitted or len(ids) != len(set(ids)) or set(ids) != set(admitted)):
         raise ValueError('recurrence delta IDs do not equal root-admitted facet IDs exactly')
@@ -398,6 +400,10 @@ def assemble_recurrence_facet_proposal(*, args, paths, approval_path, approval, 
       'compact_only': True, 'repo_root': str(repo_root),
       'approval': {'path': str(approval_path.resolve()), 'sha256': receipt_sha,
                    'approved_ids': new_ids, 'facet': 'recurrence'},
+      'argv': sys.argv,
+      'invocation': {'canonical_repo_root': str(repo_root),
+                     'auditor_path': str(audit_script),
+                     'admission_facet': 'recurrence', 'compact_only': True},
       'admitted_facets': {'native': False, 'ordinary_text': False, 'recurrence': True,
                           'task_or_trajectory': False, 'runtime_qualification': False},
       'inputs': {key: {'path': str(path.resolve()), 'sha256': sha(path), 'bytes': path.stat().st_size}

@@ -36,6 +36,7 @@ class AssemblerInvariantTests(unittest.TestCase):
                 "active_gpu_inputs_changed": False, "new_world_credit": 0,
                 "review_path": "review.json", "review_sha256": builder.sha(review),
                 "proof_path": "proof.json", "proof_sha256": builder.sha(proof),
+                "admitted_recurrence_count": 1,
                 "input_pins": {
                     "review.json": {"sha256": builder.sha(review), "bytes": review.stat().st_size},
                     "proof.json": {"sha256": builder.sha(proof), "bytes": proof.stat().st_size},
@@ -52,6 +53,10 @@ class AssemblerInvariantTests(unittest.TestCase):
             selected = builder.validate_root_recurrence_facet_approval(
                 approval, root / "approval.json", [row], root=root)
             self.assertEqual(list(selected), ["cf:r1"])
+            bad_count = dict(approval, admitted_recurrence_count=0)
+            with self.assertRaisesRegex(ValueError, "admitted count conflicts"):
+                builder.validate_root_recurrence_facet_approval(
+                    bad_count, root / "approval.json", [row], root=root)
             changed = dict(row, messages=[{"role": "user", "content": "changed"}])
             with self.assertRaisesRegex(ValueError, "target/context/source mismatch"):
                 builder.validate_root_recurrence_facet_approval(
@@ -89,6 +94,7 @@ class AssemblerInvariantTests(unittest.TestCase):
                 "active_gpu_inputs_changed": False, "new_world_credit": 0,
                 "review_path": "review.json", "review_sha256": builder.sha(review),
                 "proof_path": "proof.json", "proof_sha256": builder.sha(proof), "input_pins": pins,
+                "admitted_recurrence_count": 1,
                 "rows": [{"id": "cf:r1", "decision": "admit-counterfactual-recurrence-record",
                           "facet": "recurrence", "kind": "derived-body-as-proposed-learned-writer",
                           "training_admission": True, "native_sft": False, "ordinary_text": False,
