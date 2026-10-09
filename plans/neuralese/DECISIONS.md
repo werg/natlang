@@ -1178,7 +1178,28 @@ results out of the box: Mellum 13/23 with thinking, 9/23 without (Maple 12/23, L
 the pipeline:
 1. Aggressive full-latent QAT (BF16 latents, ternary codes re-derived every step).
 2. The nested family as real objectives in every stage.
-3. Foundation warm-up, runtime check, then recurrence.
+3. The shared foundation stages: mapped text adaptation, full-depth autoregressive
+   feedback fixup, exact-weight runtime qualification, then recurrence.
 
 The Maple debugging lessons carry over: the member objective, the crisp anchor, QAT latent rates and default-aware
 resume. Maple recurrence v4 runs only until Mellum work needs the GPU.
+
+## 2026-10-09 — Share the architecture and stage graph across students
+
+Pop mistakenly restarted a superseded sketch warm-up despite receiving the
+mapped-input decision. Shared trainer code alone did not prevent stale launch
+recipes and default declarations from selecting the wrong architecture.
+The active text trainer now has one mapped/AR implementation; repeated sketch
+text training and its launch controls have been removed. Serving sketch
+initialization remains a separate consumer component.
+
+LFM and Mellum use the same declared stage graph in `raw-recurrence-v1.json`
+and the shared recipe runner. Backbone ports, QAT/nesting, input snapshots,
+geometry, optimizer settings and qualification thresholds are declared bindings.
+Architecture changes update the shared implementation, canonical recipe and
+default declarations together; machine-specific recipes must not reconstruct a
+different stage graph. Frozen running jobs keep their pinned code and receipts;
+corrections apply through an explicit checkpoint handoff.
+
+The recurrence projection anchor is already shared in commit `582e6b02`
+(`projection_anchor_weight=1.0`, `projection_anchor_backbone_scale=0.05`).
