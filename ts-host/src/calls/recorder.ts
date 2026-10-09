@@ -24,6 +24,8 @@ export interface CallStoreLike {
   enqueue(kind: 'audit' | 'shadow', caseHash: string, callId: string): void;
   /** Attach independent evidence to a recorded call (an evaluation score, a judge's verdict, user feedback). */
   annotate?(callId: string, kind: string, value: unknown, source?: string, pin?: boolean): void;
+  /** Drop the row of a call that started and will not be recorded (a tier attempt that declined before running). */
+  discard?(callId: string): void;
   /** Iteration statistics kept with the machine's records, so iterateOn sites learn across processes. */
   iterationStatistics?(): import('../runtime/iterate.js').IterationStatisticsStore;
   /** Refinement verdicts kept with the machine's records (native/refinement.ts `VerdictCache`). */
@@ -108,6 +110,12 @@ export class CallCapture {
         definition: { id: definition.id, name: definition.name, source: definition.source, key: definition.key, interface: definition.interface,
           site: definition.site }, modelId: this.base.model.id, startedAt: this.startedAt, auditOf: this.auditOf });
     } catch (error) { reportStoreFailure(this.store, error); }
+  }
+
+  /** The call ends without a record: its row of a running call is removed (a strict tier attempt that declined). */
+  discard(): void {
+    if (this.watcher) clearInterval(this.watcher);
+    try { this.store.discard?.(this.base.callId); } catch (error) { reportStoreFailure(this.store, error); }
   }
 
   private watcher?: ReturnType<typeof setInterval>;
