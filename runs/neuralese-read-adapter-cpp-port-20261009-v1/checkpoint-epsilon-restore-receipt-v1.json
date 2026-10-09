@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.neuralese.read-adapter-checkpoint-epsilon/1",
+  "created_at_utc": "2026-10-09T14:38:00Z",
+  "natlang_commit": "76b3de22ad6ec931cd9ffe8cbb8f8cb5fc65079d",
+  "fork_commit": "8155cff42face11c178d7e3c72988581f75da4d9",
+  "behavior": {
+    "variant": "full-residual-v1",
+    "historical_missing_epsilon": "resolves to the variant's fixed 1e-5 default; earlier saves used that constructor default and did not serialize the Python epsilon attribute",
+    "new_saves": "write read_adapter_norm_eps explicitly",
+    "validation": "unknown variants, orphan adapter state, incomplete tensor sets, and malformed explicit epsilon values are rejected"
+  },
+  "modified_code_sha256": {
+    "training/neuralese/natlang_neuralese/model/heads.py": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f",
+    "training/neuralese/natlang_neuralese/export/__main__.py": "550ee92deb8c5e6e29ccc9a0e52d64b1025c98bac800af991d584f03b2dca9b4",
+    "training/neuralese/natlang_neuralese/serve/__init__.py": "7ab3d1048c33e4a1f6bb1c207c46b74bedba498089e2ab3f1030de9edc4e9794",
+    "tests/neuralese/test_read_adapter.py": "32053d9f8f7f8ffabfd4e2e82760c5e6b5211f7124fedd482cf695b94e0f07b7"
+  },
+  "test": {
+    "command": "docker run --rm --network none -v /home/werg/natlang:/home/werg/natlang -w /home/werg/natlang -e PYTHONPATH=/home/werg/natlang/training/neuralese sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de pytest -q tests/neuralese/test_read_adapter.py -k 'eps_is_restorable or old_fixed or checkpoint_metadata'",
+    "result": "6 passed, 2 deselected in 0.14s",
+    "historical_state_method": "Constructed a nonzero 4-dimension full-residual-v1 adapter state with the old metadata shape (variant present, epsilon absent); restored through the shared config helper and compared outputs exactly.",
+    "coverage": [
+      "historical fixed-epsilon restoration preserves exact nonzero transform",
+      "new explicit epsilon accepted",
+      "unknown variant rejected",
+      "NaN epsilon rejected",
+      "incomplete adapter tensors rejected",
+      "epsilon without variant rejected"
+    ]
+  },
+  "limitations": [
+    "The historical-format test uses a synthetic adapter state matching the old saved schema; no actual historical checkpoint file was loaded.",
+    "This validates checkpoint config interpretation, not raw-token/latent-sketch export, a backbone runtime, or a new foundation certificate."
+  ]
+}

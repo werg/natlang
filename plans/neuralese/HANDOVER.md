@@ -1685,3 +1685,10 @@ The current fork pin and receipt are in `training/neuralese/llama-cpp-fork.json`
 and `runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json`.
 Raw-token and latent-sketch GGUF export remain unsupported. The profile-specific
 implementation plan is in `plans/neuralese/READ_ADAPTER_PORT_HANDOFF.md`.
+
+Earlier `full-residual-v1` checkpoints omitted their normalization epsilon because
+that variant used a fixed `1e-5` constructor default. Shared exporter and serving
+restore now resolve only that known historical case to `1e-5`; new saves record
+the epsilon explicitly. Unknown variants, malformed explicit epsilons and
+incomplete adapter tensor sets still fail. The focused restore test receipt is
+`runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v1.json`.
