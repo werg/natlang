@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-river-derived-writer-native-text-delta-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-code-manifest-v1.json",
+      "bytes": 25693,
+      "sha256": "970c19661e69c79dabff9be7f554649bd797713df0c7a3436373242e4b58ad81"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/renderer-package-manifest-v1.json",
+      "bytes": 15773,
+      "sha256": "1e8c9e95b79f22ef3477f686bfdf5767fcae25a2602512ecf1ab2c97ee4d8dfd"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/pieces/delta-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/records/derived-writer-stage2.json",
+      "bytes": 152390,
+      "sha256": "951970ee23429aff84c5abb3a7ef639d6880cf9799994193cf51ada21a5bc97a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/records/derived-writer-stage2.jsonl",
+      "bytes": 131798,
+      "sha256": "48b2f5cb53c58831eba209aa43e327d0034f7189768194297713bb69f57b5241",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/README.md",
+      "bytes": 1438,
+      "sha256": "0c5a6569363696cd9194a6fc3922d693bd9b6802d032840f22ff175cb8309e04"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-provenance.jsonl",
+      "bytes": 2041,
+      "sha256": "037ec5bcff1b63a0d77d93a27058df0c81f6446b04a3dc01c2c32a0d2263023c",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-text.jsonl",
+      "bytes": 66097,
+      "sha256": "e47b17e5d871ebe328a9af032474600db74b6c8447d4cce96deb3ee76c601dba",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/derived-writer-text-delta-review-v1.json",
+      "bytes": 6796,
+      "sha256": "602b93b956e3cafbff4e3068534fd3785a17c63324984e57d43ab6a5ea921ee9"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/output-manifest.json",
+      "bytes": 1433,
+      "sha256": "192e1ffe4e6aad786def396ed021a9f18af93aa360a6536c61ea4f0feb362dd1"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/packet-manifest.json",
+      "bytes": 1971,
+      "sha256": "c2b1a0f5fe313a336abccfef85fe17befec9dd75b13b9e7f0ba98c6c79edb6cb"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/provider-context-bindings.jsonl",
+      "bytes": 2393,
+      "sha256": "90ff2fd421def1c2bf7823b438d15802f298d1226d54b7c1254e90decc6d3b59",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/receipt.json",
+      "bytes": 5369,
+      "sha256": "cf1cad7b6371f6276a55aabd2d781c193555518a07d3091f64a1cb15c9e57928"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/root-derived-native-text-delta-adoption-v1.json",
+      "bytes": 1037,
+      "sha256": "07efb4706a752721498286e4c8daee84f06f9bf4eb95d820f82d0e78176c9617"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/root-derived-native-text-delta-review-v1.json",
+      "bytes": 3278,
+      "sha256": "7e5e1818b49ce6235f67bd9391364470ab32911765a4bb902bc1751a4c532c49"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/source-coverage.jsonl",
+      "bytes": 511,
+      "sha256": "43bbd1a9d5ce2c21cdfd8e2bd573540847ab5ea6cc4c9e5362dcf10a59dc7fb9",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/evidence/river-v3-derived-writer-candidate-v5.json",
+      "bytes": 121591,
+      "sha256": "7a46a84b262553ec60e97c27d55802d8185561d8c88d5b1292fc262679f1f18e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/evidence/root-derived-writer-body-admission-v1.json",
+      "bytes": 2928,
+      "sha256": "dc767c5f547e371f613e4dd92625117d7a6e71cf0c06ced29a1a3e64bb78770c"
+    }
+  ],
+  "bytes": 542989
+}
