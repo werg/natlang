@@ -215,6 +215,87 @@ def test_root_adopted_assembly_does_not_claim_unreviewed_prefix_dedup_or_exclusi
     assert metadata["excluded_train_exact_held_complete_documents"] is None
 
 
+def _mixed_root_action_receipt(tmp_path):
+    review = tmp_path / "review.json"
+    review.write_text('{"review":"pinned"}')
+    input_path = tmp_path / "input.jsonl"
+    input_path.write_text('{"input":true}\n')
+    rows = []
+    dispositions = ["admit-ordinary-native-action"] * 14 + [
+        "hold-source-required-neuralese-reader-contract"] * 3 + [
+        "hold-ambiguous-source-read-scope"] * 2 + [
+        "reject-action-failed"] * 3 + [
+        "exclude-already-admitted-case01-duplicate"] * 3
+    for index, decision in enumerate(dispositions):
+        rows.append({"native_id": f"native-{index}", "decision": decision,
+                     "training_admission": decision == "admit-ordinary-native-action",
+                     "split": "train", "source_group": "source-group",
+                     "source_groups": ["source-group"]})
+    return {
+        "schema": "natlang.root-per-action-training-admission/1",
+        "review_path": "review.json", "review_sha256": _sha(review),
+        "input_pins": {"input.jsonl": {"sha256": _sha(input_path), "bytes": input_path.stat().st_size}},
+        "rows": rows, "admitted_native_count": 14,
+        "held_source_contract_final_count": 3, "held_ambiguous_source_read_scope_count": 2,
+        "failed_count": 3, "already_adopted_count": 3,
+        "whole_trajectory_admission": False, "runtime_qualification": False,
+        "active_gpu_inputs_changed": False, "new_world_credit": False,
+    }
+
+
+def test_mixed_root_per_action_receipt_selects_only_14_exactly_admitted_rows(tmp_path):
+    receipt = _mixed_root_action_receipt(tmp_path)
+    admitted = MODULE.admitted_root_per_action_rows(receipt, root=tmp_path)
+    assert len(admitted) == 14
+    assert all(row["training_admission"] is True
+               and row["decision"] == "admit-ordinary-native-action" for row in admitted)
+
+
+def test_mixed_root_per_action_receipt_rejects_true_flag_on_held_row(tmp_path):
+    receipt = _mixed_root_action_receipt(tmp_path)
+    receipt["rows"][14]["training_admission"] = True
+    try:
+        MODULE.admitted_root_per_action_rows(receipt, root=tmp_path)
+    except ValueError as exc:
+        assert "conflicts with decision" in str(exc)
+    else:
+        raise AssertionError("a held row with a true admission flag must be rejected")
+
+
+def test_mixed_root_per_action_receipt_rejects_admitted_flag_with_wrong_decision(tmp_path):
+    receipt = _mixed_root_action_receipt(tmp_path)
+    receipt["rows"][0]["decision"] = "hold-ambiguous-source-read-scope"
+    try:
+        MODULE.admitted_root_per_action_rows(receipt, root=tmp_path)
+    except ValueError as exc:
+        assert "conflicts with decision" in str(exc)
+    else:
+        raise AssertionError("an admission flag cannot override a non-admit decision")
+
+
+def test_mixed_root_per_action_receipt_rejects_count_conflict(tmp_path):
+    receipt = _mixed_root_action_receipt(tmp_path)
+    receipt["admitted_native_count"] = 13
+    try:
+        MODULE.admitted_root_per_action_rows(receipt, root=tmp_path)
+    except ValueError as exc:
+        assert "admitted_native_count" in str(exc)
+    else:
+        raise AssertionError("the receipt's admitted count must match its admitted rows")
+
+
+def test_mixed_root_per_action_receipt_cannot_overlay_a_held_target(tmp_path):
+    receipt = _mixed_root_action_receipt(tmp_path)
+    admitted_ids = {row["native_id"] for row in receipt["rows"][:14]}
+    admitted_ids.add(receipt["rows"][14]["native_id"])
+    try:
+        MODULE.admitted_root_per_action_rows(receipt, delta_ids=admitted_ids, root=tmp_path)
+    except ValueError as exc:
+        assert "do not equal root-admitted" in str(exc)
+    else:
+        raise AssertionError("a held target must not enter the admitted delta")
+
+
 def test_tokenizers_backend_snapshot_fallback_preserves_serialized_fast_tokenizer(tmp_path):
     from tokenizers import Tokenizer, models, pre_tokenizers
     from transformers import PreTrainedTokenizerFast

@@ -1,0 +1,229 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-step5-scorefact-selected14-native-text-delta-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/jobs/000001-1fd2c06b78a949da.trace.jsonl",
+      "bytes": 45518,
+      "sha256": "dcf8c7c3a23c89b83b7c87d0965848d906eee3248ca9c8365b3ddc4ac845f92f",
+      "lines": 68
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/root-selected-action-admission-v1.json",
+      "bytes": 6180,
+      "sha256": "6f1938d296aecae271457a5c2a2f028a576a2cc1161c2f093c1972cc2eced26e"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/results.jsonl",
+      "bytes": 377354,
+      "sha256": "bf01773dc4dc480ff5700343fc074fb817d6fb027a0dd4594849c315de5af4f4",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-02/jobs/000002-a0e9011d255b747d.trace.jsonl",
+      "bytes": 22812,
+      "sha256": "79bb37e439dffcd1118e6a490fffa7830ac967e0f644fc9013b6e0b8af16e511",
+      "lines": 34
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-02/results.jsonl",
+      "bytes": 154191,
+      "sha256": "153ff1858c2ce16edec8a80b1385a793df8402cfc4c5ac4d18724f6c80ca8f8e",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-03/jobs/000003-e5f8c0c3c3189fc6.trace.jsonl",
+      "bytes": 19522,
+      "sha256": "1315028575d8473d56156286e465abd45c90bf4625d8d305dc1c8ea057b0e071",
+      "lines": 29
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-03/results.jsonl",
+      "bytes": 155896,
+      "sha256": "aba10a38da535007b680798053ce3cfdc5020efee07654b8c76ad874a8ef3d31",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-04/jobs/000004-de828d3ee230c0ca.trace.jsonl",
+      "bytes": 15310,
+      "sha256": "b1181ba9a77384f5b1e0aa1469f32fdcd6ee6a1e63a921ff37b83781e5ff29d2",
+      "lines": 25
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-04/results.jsonl",
+      "bytes": 151752,
+      "sha256": "e5d3d50a376bb287ed2441c5b4a4f6a4f6abb58090d84f2f63c292aa190602b4",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-07/jobs/000007-2569abde8bd4bae4.trace.jsonl",
+      "bytes": 19463,
+      "sha256": "0ab1664aaac501f68dad57850dcdb922ec6fa4b608f4aca985d67725e80c1eae",
+      "lines": 29
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-07/results.jsonl",
+      "bytes": 156874,
+      "sha256": "2a611ea637c882486c2b56489b6309e22565e92a1754b15a4ff6f3f59b197c2a",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-00/jobs/000000-06eb0c65d76ce6b2.trace.jsonl",
+      "bytes": 46415,
+      "sha256": "6717af6ac1de73d28bcc2dee32952eefd33b8c08b5c3ed74a86facad65e70830",
+      "lines": 69
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-00/results.jsonl",
+      "bytes": 461472,
+      "sha256": "5a916fe91ce12e75fe66c0bda9f676ecb2c6e45af6169a63c78f3b0a8b745835",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-05/jobs/000005-907d31ff6e26c3f6.trace.jsonl",
+      "bytes": 22619,
+      "sha256": "f3aff9ea7f2ac3aa8fc3ebaeec42783d5ec6e9d4be865124dc2445e2b44fcbfd",
+      "lines": 34
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-05/results.jsonl",
+      "bytes": 153789,
+      "sha256": "2cf5fb5d4f3a83f0ee2ec6d3c937e07732fa502b011b191cc6da26885dc430c3",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-06/jobs/000006-582ae5e9826f8e05.trace.jsonl",
+      "bytes": 38008,
+      "sha256": "d1cd669974fcce726a157c76bbac3746445ca6154e25aae2b833137ab533a8f8",
+      "lines": 50
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/campaign-scorefact-noop-invalid-retry-v1/case-06/results.jsonl",
+      "bytes": 306151,
+      "sha256": "e68b70aea317827b3ce99f8a5efae2285c82f07314d3716ba4769e7f57496543",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/delta-provenance.jsonl",
+      "bytes": 12468,
+      "sha256": "b5899aafb1d0eff32d38be5a953edd182dabf563d4c5957bacd838a5a234cd45",
+      "lines": 14
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/delta-text.jsonl",
+      "bytes": 1173120,
+      "sha256": "4bf045ffa71a3c611947e7b44692b5b3c448765092fe0559f4e0d25db14d25f0",
+      "lines": 14
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/output-manifest.json",
+      "bytes": 1434,
+      "sha256": "281c008c9e53e838ff9420bf7f5f0d675c3679fae948afdc921b92ff34ab40dd"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/packet-manifest.json",
+      "bytes": 2279,
+      "sha256": "9e5e0907ee688ef91543a1c0cece9c8689fc6ceb4e4b0ffd350b2c869ad4e4be"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/receipt.json",
+      "bytes": 5357,
+      "sha256": "4312af319b2c345973221f22676623d88fc57abba527cd7d730f290508525788"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/root-composition-adoption-v1.json",
+      "bytes": 1620,
+      "sha256": "15caea6f4733ea27f6f608560326d9cf83ecf90f67436211c0686f2b9444fa4c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/root-composition-review-v1.json",
+      "bytes": 4376,
+      "sha256": "3bf795e317274fe332f0641f150465472e933f69b99f1322167858ab22badba7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/compact-delta-v3/source-coverage.jsonl",
+      "bytes": 5863,
+      "sha256": "9be42514068b1d491e19c33385bd8c5d045b176f4a908e746afaf4a15edf1d58",
+      "lines": 14
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/inputs-v3/delta-native-records-v1.jsonl",
+      "bytes": 1358488,
+      "sha256": "c4d3f92f185ae292e4ca1063d5e7fc757215f23c2efb8d68a694e40baa5f40d0",
+      "lines": 14
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/native-admitted-view-v2/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/native-admitted-view-v2/delta-native-records.jsonl",
+      "bytes": 1362156,
+      "sha256": "dd463c6176020ad782c124443684531c60893947cca336efedf7ab389f6994c8",
+      "lines": 14
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/native-admitted-view-v2/proposal-manifest.json",
+      "bytes": 10739,
+      "sha256": "7f24afc0fcacb44ade25615ba2fff9f14358f42293aee0ba736e36632d1974cb"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/native-admitted-view-v2/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-14-delta-v1/publication-packet-v1.json",
+      "bytes": 5290,
+      "sha256": "856bf96bcd00baf1b40ff1c59a07c6beae679b96596ed583124ce4732549059c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/root-composition-adoption-v1.json",
+      "bytes": 1634,
+      "sha256": "80a8a2995598806ea5ae30c45b1f00634fd3805f0096ba06aa3bad3ea35da1c2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-eight-native-fullcontext-review-v1/materialization-review-v3.json",
+      "bytes": 62082,
+      "sha256": "87d6c0a384dd091880363391eaa220c53d74427f0bace70c4804a97f46645f51"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-eight-native-fullcontext-review-v1/native-turns-held-v2.jsonl",
+      "bytes": 2425050,
+      "sha256": "19101284042363adf5e3d63e77e138d577502cf064c9f7c4bc7a73fb7897d2f3",
+      "lines": 25
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-eight-native-fullcontext-review-v1/root-action-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 41435,
+      "sha256": "44ffd8690abebea4ccda80eb297f0be4b7b91d07877958893bca9097c2e24759"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-eight-native-fullcontext-review-v1/root-action-review-v1/verify_v2.py",
+      "bytes": 7633,
+      "sha256": "64def18797405328377d4df1199eca5709752cfdf2b40baa657532b421d63394"
+    }
+  ],
+  "bytes": 8639312
+}

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { KvBudget, collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
-  loadRecords, nativeJobRunner, recordDigest, withExecutionPlans } from '../dist/teacher/collector.js';
+  loadRecords, nativeJobRunner, programRunId, recordDigest, withExecutionPlans } from '../dist/teacher/collector.js';
 
 const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source', source: 'fixture',
   split: 'test', source_ids: [id], source_groups: [id], license: 'test', semantics: {
@@ -634,6 +634,43 @@ test('request retry backoff honors cancellation and records it before sleeping',
     assert.deepEqual((await collecting).missing, [0]);
     assert.equal(calls, 1, 'abort prevents the resend');
   } finally { controller.abort(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('partial resume keeps the execution namespace while logical program identity stays stable', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-execution-namespace-'));
+  const item = { index: 0, record: record('execution-namespace') };
+  let runs = 0;
+  const observedRunIds = [];
+  const options = { ...config(dir), workers: 1, endpoint: 'http://127.0.0.1:1',
+    execution: { identity: 'execution-namespace-fixture/1', run: async (_record, _driver, runtime) => {
+      runs++;
+      observedRunIds.push(runtime.runId);
+      if (runs === 1) throw new Error('interrupt after attempt namespace is persisted');
+      return { outcome: { accepted: true }, trace: [] };
+    } } };
+  assert.deepEqual((await collectBatch([item], options, nativeJobRunner(options))).missing, [0]);
+  const partialPath = join(options.jobs, `${jobKey(item)}.partial.json`);
+  const partial = JSON.parse(await readFile(partialPath, 'utf8'));
+  assert.match(partial.execution_attempt_id, /^[0-9a-f-]{36}$/i);
+  const logicalRunId = programRunId(item.index, expectedProvenance(item.record, options));
+  assert.equal(observedRunIds[0], `${logicalRunId}/execution-${partial.execution_attempt_id}`);
+  await unlink(join(options.jobs, '000000.error.json'));
+  assert.deepEqual((await collectBatch([item], options, nativeJobRunner(options))).missing, []);
+  assert.equal(observedRunIds[1], observedRunIds[0], 'resuming the same partial job retains its runtime/CallStore tree ID');
+  assert.equal(programRunId(item.index, expectedProvenance(item.record, options)), logicalRunId,
+    'the logical request-journal identity remains independent of the concrete attempt namespace');
+  const resultPath = join(options.jobs, `${jobKey(item)}.result.json`);
+  const finished = JSON.parse(await readFile(resultPath, 'utf8'));
+  assert.deepEqual(finished.execution_identity, { schema: 'natlang.teacher_execution_identity/1',
+    logical_run_id: logicalRunId, execution_run_id: observedRunIds[1],
+    execution_attempt_id: partial.execution_attempt_id });
+  await unlink(resultPath);
+  assert.deepEqual((await collectBatch([item], options, nativeJobRunner(options))).missing, []);
+  const fresh = JSON.parse(await readFile(resultPath, 'utf8'));
+  assert.notEqual(observedRunIds[2], observedRunIds[1], 'a completed job rerun gets a new root CallStore namespace');
+  assert.equal(fresh.execution_identity.logical_run_id, logicalRunId);
+  assert.equal(fresh.execution_identity.execution_run_id, observedRunIds[2]);
+  assert.notEqual(fresh.execution_identity.execution_attempt_id, partial.execution_attempt_id);
 });
 
 test('request budget counts each provider resend', async () => {

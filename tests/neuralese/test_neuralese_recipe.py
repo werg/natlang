@@ -203,6 +203,52 @@ def test_named_input_catalog_rejects_unreferenced_artifacts(tmp_path):
         load_recipe(path)
 
 
+def test_trained_map_continuation_requires_handoff_and_uses_same_full_checkpoint_binding(tmp_path):
+    from natlang_neuralese.train.recipe import resolve_stage_inputs, stage_input_args
+    from natlang_neuralese.train.output_embedding_projection import sha
+
+    artifacts = {}
+    for name in ('native-pieces', 'raw-records', 'full-checkpoint',
+                 'checkpoint-manifest', 'serving-heads', 'trained-runtime'):
+        path = tmp_path / name
+        path.write_text(name)
+        artifacts[name] = path
+    bindings = {name: {'path': str(path), 'sha256': sha(path)} for name, path in artifacts.items()}
+    recipe = declared()
+    recipe['input_bindings'] = bindings
+    recipe['stages'][0]['inputs'] = {'records': 'raw-records'}
+    recipe['stages'][1]['inputs'] = {'records': 'raw-records', 'pieces': 'native-pieces'}
+    recipe['stages'][2]['inputs'] = {'records': 'raw-records'}
+    checkpoint = 'full-checkpoint'
+    recipe['stages'].append({
+        'id': 'trained_heads_handoff', 'kind': 'verified_heads_handoff',
+        'requires': ['runtime_qualification'], 'parameters': {},
+        'inputs': {'warmup_checkpoint': checkpoint,
+                   'warmup_manifest': 'checkpoint-manifest',
+                   'warmup_heads': 'serving-heads',
+                   'warmup_runtime_report': 'trained-runtime'},
+    })
+    recipe['stages'].append({
+        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
+        'requires': ['runtime_qualification', 'trained_heads_handoff'],
+        'parameters': {'neuralese_input': 'map', 'rollout_passes': 0},
+        'inputs': {'records': 'raw-records', 'pieces': 'native-pieces',
+                   'heads': 'serving-heads', 'continue_from': checkpoint},
+    })
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    loaded = load_recipe(path)
+    warmup = resolve_stage_inputs(loaded, loaded['stages'][-1], {})
+    assert warmup['continue_from']['sha256'] == sha(artifacts['full-checkpoint'])
+    assert stage_input_args(warmup, 'core_text_warmup')[-2:] == [
+        '--continue-from', str(artifacts['full-checkpoint'].resolve())]
+
+    recipe['stages'][-1]['inputs']['heads'] = 'raw-records'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='exact files validated'):
+        load_recipe(path)
+
+
 def test_foundation_certificate_survives_verified_directory_relocation(tmp_path):
     from natlang_neuralese.train.recipe import require_foundation
     from natlang_neuralese.train.output_embedding_projection import sha
@@ -248,6 +294,10 @@ def test_raw_recipe_declares_full_depth_output_and_native_value_sizing():
     assert parameters['max_write_vectors'] >= 163
     assert parameters['writer_supervision'] == 'native-value'
     assert parameters['stop_supervision'] == 'gold-native-boundary'
+    assert 'memory_gb' not in parameters and 'graph_memory_gb' not in parameters
+    assert parameters['sketch_gradient'] == 'local_stage'
+    assert parameters['sketch_target_weight'] == 0.1
+    assert parameters['sketch_target_backbone_scale'] == 0.05
 
 
 def test_shared_text_recipe_trains_both_projections_to_plateau_then_sequence_passes():

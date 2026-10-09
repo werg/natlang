@@ -216,7 +216,13 @@ export class NatlangTask {
     }
     this.programView = new ProgramView(program, binding);
     this.taskOrdinal = ++taskSequence;
-    this.id = `${options.name ?? 'task'}-${this.taskOrdinal}-${Math.random().toString(36).slice(2, 8)}`;
+    // Call IDs are persisted in a machine-wide store and can be produced by many short-lived
+    // worker processes. A short Math.random suffix is not an execution namespace: independent
+    // processes can reuse it, causing INSERT OR REPLACE to join unrelated call trees. Keep the
+    // ordinal for readability, but give every task a cryptographically unique execution ID.
+    const executionId = globalThis.crypto?.randomUUID?.();
+    if (!executionId) throw new Error('a cryptographic UUID source is required for unique task call-store identities');
+    this.id = `${options.name ?? 'task'}-${this.taskOrdinal}-${executionId}`;
     this.services = options.services ?? runtime.options.services ?? {};
     this.serviceDeclarations = Object.fromEntries(Object.entries(options.serviceDeclarations ?? runtime.options.serviceDeclarations ?? {})
       .map(([name, text]) => [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)]));

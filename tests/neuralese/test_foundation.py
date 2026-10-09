@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from natlang_neuralese.eval.foundation import reference_next_embedding
+from natlang_neuralese.eval.foundation import optional_channel_diagnostics, reference_next_embedding
 from natlang_neuralese.model.heads import ContentProjection, InterfaceNorm, PortHeads
 from natlang_neuralese.serve.engine import Engine
 
@@ -28,6 +28,14 @@ def test_full_output_reference_selects_next_token_not_current_token():
     assert torch.equal(reference_next_embedding(backbone, logits), table[torch.tensor([[1, 0]])])
     mixture = logits.softmax(-1) @ table
     assert not torch.equal(mixture, reference_next_embedding(backbone, logits))
+
+
+def test_vocabulary_free_feedback_skips_only_optional_channel_diagnostics():
+    heads = SimpleNamespace(profile='latent-sketch-v2', feedback=object())
+    result = optional_channel_diagnostics(heads, backbone=None, raw=None, h_cut=None, logits=None, chosen=None)
+    assert result['head_profile'] == 'latent-sketch-v2'
+    assert result['learned_channel_diagnostic'] == 'not-applicable-no-vocabulary-readout'
+    assert 'learned_feedback_raw_greedy_embedding_relative_mse' not in result
 
 
 def test_transparent_reader_preserves_positions_and_payload_without_markers():

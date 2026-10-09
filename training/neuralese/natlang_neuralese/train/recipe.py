@@ -18,16 +18,16 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
-    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data'},
-                        'parameters':{'text_data','student_checkpoint','continue_from','batch','steps','tokens','prefix_tokens','cutoff','group_size',
+    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads'},
+                        'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','cutoff','group_size',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
                           'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
-    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':set(),
+    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':set(),
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
@@ -42,6 +42,10 @@ HANDLERS = {
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
+    'verified_heads_handoff': {'module':'natlang_neuralese.train.verified_heads_handoff',
+                               'required_inputs':{'warmup_checkpoint','warmup_manifest','warmup_heads','warmup_runtime_report'},
+                               'optional_inputs':set(),
+                               'parameters':{'max_ce_delta','max_relative_mse','min_agreement'},'result':'report.json'},
     'token_identity': {'module': 'natlang_neuralese.eval.foundation', 'required_inputs':{'records'}, 'optional_inputs':set(),
                        'parameters': {'limit', 'max_tokens'}, 'result': 'identity.json'},
     'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap', 'required_inputs':{'records'}, 'optional_inputs':{'pieces'},
@@ -130,7 +134,8 @@ def stage_input_args(resolved, kind):
     """Serialize already-validated file roles to the shared handler CLIs."""
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
-    for role in ('records', 'pieces', 'text_data'):
+    for role in ('records', 'pieces', 'text_data', 'continue_from', 'warmup_checkpoint',
+                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     return args
@@ -178,6 +183,27 @@ def load_recipe(path):
             raise ValueError('runtime qualification requires an explicit embedding foundation')
         if kind == 'raw_runtime_qualification':
             runtime_stages.add(name)
+        if kind == 'verified_heads_handoff' and not set(required) & runtime_stages:
+            raise ValueError('verified heads handoff requires the raw runtime qualification stage')
+        if kind == 'core_text_warmup' and 'continue_from' in stage.get('inputs', {}):
+            handoffs = [s for s in recipe['stages'] if s['id'] in required and s['kind']=='verified_heads_handoff']
+            if (len(handoffs) != 1 or
+                    handoffs[0].get('inputs', {}).get('warmup_checkpoint') != stage['inputs']['continue_from'] or
+                    handoffs[0].get('inputs', {}).get('warmup_heads') != stage['inputs'].get('heads')):
+                raise ValueError('continuation checkpoint and heads must be the exact files validated by a required verified_heads_handoff')
+        if kind == 'core_text_warmup' and 'heads' in stage.get('inputs', {}) and 'continue_from' not in stage.get('inputs', {}):
+            raise ValueError('stage-specific heads input requires a verified full-state continuation checkpoint')
+        if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
+            if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
+                raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
+        if kind == 'raw_recurrence_training':
+            runtime_dependencies = [s for s in recipe['stages']
+                                    if s['id'] in required and s['kind'] == 'text_warmup_runtime']
+            if not runtime_dependencies:
+                raise ValueError('recurrence training requires an adapted warm-up runtime gate')
+            if 'heads' not in stage.get('inputs', {}) and not any(
+                    s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
+                raise ValueError('recurrence requires a core warm-up predecessor or exact stage heads binding')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -196,6 +222,9 @@ def require_gate(report, kind):
     elif kind == 'raw_runtime_qualification':
         if report.get('runtime_transport_passed') is not True:
             raise ValueError('raw runtime transport gate failed')
+    elif kind == 'verified_heads_handoff':
+        if report.get('handoff_verified') is not True:
+            raise ValueError('exact trained heads handoff gate failed')
     elif kind == 'raw_recurrence_training':
         if report.get('training_stage_completed') is not True or report.get('errors') != 0:
             raise ValueError('raw recurrence training stage incomplete or errored')
@@ -337,15 +366,29 @@ def main(argv=None):
                 require_gate(predecessor['gate'], predecessor['kind'])
             output = directory / HANDLERS[kind]['result']
             stage_heads = args.heads
+            if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
+                stage_heads = stage_inputs[stage['id']]['heads']['path']
             if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
-                predecessor_kind='raw_runtime_qualification' if kind=='core_text_warmup' else 'core_text_warmup'
-                predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
-                stage_heads=predecessor['artifact']
+                has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
+                if has_exact_stage_heads:
+                    stage_heads = stage_inputs[stage['id']]['heads']['path']
+                elif kind == 'core_text_warmup':
+                    predecessor_kind = 'raw_runtime_qualification'
+                    predecessor = next(r for r in reversed(reports)
+                                       if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
+                    stage_heads = predecessor['artifact']
+                else:
+                    predecessor_kind = 'core_text_warmup'
+                    predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
+                    stage_heads=predecessor['artifact']
             command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
                        str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                        str(output if kind == 'token_identity' else directory), '--device', args.device]
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
+            if kind == 'verified_heads_handoff':
+                raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
+                command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
             stage_parameters = stage['parameters']
             if 'text_data' in stage_inputs[stage['id']]:
                 stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
@@ -365,6 +408,8 @@ def main(argv=None):
                 gate = json.loads(output.read_text())
             elif kind in ('raw_runtime_qualification','text_warmup_runtime'):
                 gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
+            elif kind=='verified_heads_handoff':
+                gate=json.loads((directory/'report.json').read_text())
             elif kind=='core_text_warmup':
                 gate=json.loads((directory/'report.json').read_text())
             else:

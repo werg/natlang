@@ -656,9 +656,12 @@ class ProviderRequestRetriesExhaustedError extends Error {
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
 type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[];
+  /** Retained while resuming this partial job; renewed after a completed job is removed. */
+  execution_attempt_id?: string;
   evidence_snapshots?: PartialEvidenceSnapshot[]; request_starts?: CollectorRequestStart[]; request_attempt_ids?: string[] };
 
 type PartialExecutionSnapshot = { schema: 'natlang.partial_execution_snapshot/1'; run_id: string;
+  logical_run_id?: string; execution_attempt_id?: string;
   failure_reason: string; root_events: Record<string, unknown>[];
   invocations: import('../runtime/runtime.js').InvocationTrace[]; pending_children: boolean };
 const PARTIAL_EVIDENCE_RECORD_VERSION = 'natlang.teacher_partial_evidence_record/1';
@@ -666,6 +669,8 @@ const MAX_PARTIAL_EVIDENCE_RECORD_BYTES = 8_000_000;
 
 function* partialExecutionRecords(snapshot: PartialExecutionSnapshot): Iterable<Record<string, unknown>> {
   yield { kind: 'execution_snapshot', schema: snapshot.schema, run_id: snapshot.run_id,
+    ...(snapshot.logical_run_id ? { logical_run_id: snapshot.logical_run_id } : {}),
+    ...(snapshot.execution_attempt_id ? { execution_attempt_id: snapshot.execution_attempt_id } : {}),
     status: 'interrupted', failure_reason: snapshot.failure_reason, pending_children: snapshot.pending_children,
     root_event_count: snapshot.root_events.length, invocation_count: snapshot.invocations.length };
   for (const event of snapshot.root_events) yield { kind: 'trace_event', trace_role: 'root',
@@ -1066,6 +1071,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const saved = await loadPartial(partialPath, item, expected);
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
+    partial.execution_attempt_id ??= randomUUID();
+    // Save the attempt namespace before any provider/runtime work. A resume keeps this ID,
+    // while a fresh execution after a completed job receives a new one.
+    await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
     partial.request_starts ??= [];
     partial.request_attempt_ids ??= [];
     if (!partial.request_attempt_ids.includes(evidenceAttemptId)) partial.request_attempt_ids.push(evidenceAttemptId);
@@ -1137,6 +1146,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       } : { message: String(error) } } : {}),
     }]);
     const runId = programRunId(item.index, expected);
+    const executionRunId = `${runId}/execution-${partial.execution_attempt_id}`;
     const authoredRoot = authoredRootEval(item.record);
     if (authoredRoot && (handoff || config.execution || (config.collectionRole && config.collectionRole !== 'teacher')))
       throw new Error(`${item.record.id}: authored root eval collection requires an ordinary teacher run without handoff/replay adapters`);
@@ -1151,7 +1161,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
-        if (authoredRoot && request.invocation_id === runId &&
+        if (authoredRoot && request.invocation_id === executionRunId &&
             response.raw_response?.natlang_action_provenance &&
             (response.raw_response.natlang_action_provenance as Record<string, unknown>).kind === 'authored_reference_root_eval' &&
             (response.raw_response.natlang_action_provenance as Record<string, unknown>).code_sha256 === authoredRoot.sha256)
@@ -1178,14 +1188,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           response = replayed ? structuredClone(replayed) :
             { calls: [['eval', { code: item.record.semantics.failure_seed!.code }]], completion_tokens: 1 };
           await persist(response, replayed ? 'handoff_replay' : 'seeded_failure');
-        } else if (authoredRoot && !authoredRootUsed && request.invocation_id === runId) {
+        } else if (authoredRoot && !authoredRootUsed && request.invocation_id === executionRunId) {
           authoredRootUsed = true;
           requestTelemetry.authored_synthetic_root_actions++;
           response = { calls: [['eval', { code: authoredRoot.code, finish: true }]],
             raw_response: { natlang_action_provenance: { kind: 'authored_reference_root_eval', source: 'curriculum.reference.root',
               source_program_id: item.record.id, code_sha256: authoredRoot.sha256, sampled: false } }, completion_tokens: 0 };
           await persist(response, 'authored_reference_root');
-        } else if (authoredRoot && authoredRootUsed && request.invocation_id === runId) {
+        } else if (authoredRoot && authoredRootUsed && request.invocation_id === executionRunId) {
           authoredRootRejected = true;
           throw new AuthoredRootDidNotFinishError();
         } else response = await transport(request, persist);
@@ -1195,13 +1205,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     }, textNeuralese ? { neuralese: true } : {});
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
-      { ...config, systemPrompt: effectiveSystemPrompt(config), runId, signal: providerParentSignal(),
-        onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords(snapshot), 'execution_interrupted'),
+      { ...config, systemPrompt: effectiveSystemPrompt(config), runId: executionRunId, signal: providerParentSignal(),
+        onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords({ ...snapshot,
+          logical_run_id: runId, execution_attempt_id: partial.execution_attempt_id }), 'execution_interrupted'),
         ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}),
         ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
-    const trajectoryReview = observedTrajectoryContract(item.record, runId, run);
+    const trajectoryReview = observedTrajectoryContract(item.record, executionRunId, run);
     requestTelemetry.authored_synthetic_root_actions = partial.turns.filter(turn =>
       (turn.response.raw_response?.natlang_action_provenance as Record<string, unknown> | undefined)?.kind ===
         'authored_reference_root_eval').length;
@@ -1209,6 +1220,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       .map(entry => `${entry.attempt_id}:${entry.logical_turn}`));
     const actionStarts = requestTelemetry.starts.filter(entry => entry.purpose === 'action');
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory, {
+      execution_identity: { schema: 'natlang.teacher_execution_identity/1', logical_run_id: runId,
+        execution_run_id: executionRunId, execution_attempt_id: partial.execution_attempt_id },
       request_telemetry: { ...requestTelemetry, sampled_logical_turns: logicalTurns.size,
         planned_action_turns: actionStarts.filter(entry => entry.plan_status === 'planned').length,
         planner_fallback_turns: actionStarts.filter(entry => entry.plan_status === 'fallback').length,
@@ -1221,7 +1234,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         child_actions: { source: 'provider', sampled: true }, training_admission: false } } : {}),
       ...(handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {}) });
     // The result row already carries the full graph; this sidecar also persists child traces for standalone audits.
-    const traceEvents = collectedInvocationTraceEvents(runId, run.trace, run.invocationTraces ?? []);
+    const traceEvents = collectedInvocationTraceEvents(executionRunId, run.trace, run.invocationTraces ?? []);
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
       traceEvents.map(event => JSON.stringify(event)).join('\n') + '\n');
     await journalWrites;

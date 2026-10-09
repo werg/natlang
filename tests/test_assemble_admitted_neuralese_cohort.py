@@ -16,6 +16,53 @@ SPEC.loader.exec_module(builder)
 
 
 class AssemblerInvariantTests(unittest.TestCase):
+    def _mixed_admission(self, root):
+        target = {"role": "assistant", "content": "approved"}
+        source = root / "source.jsonl"
+        source.write_text(json.dumps({"id": "selected", "target": target}) + "\n")
+        review = root / "review.json"
+        review.write_text('{"review":"pinned"}\n')
+        approval = {
+            "schema": "natlang.root-per-action-training-admission/1",
+            "review_path": "review.json", "review_sha256": builder.sha(review),
+            "input_pins": {"source.jsonl": {"sha256": builder.sha(source), "bytes": source.stat().st_size}},
+            "rows": [
+                {"native_id": "selected", "decision": "admit-ordinary-native-action", "training_admission": True,
+                 "split": "train", "source_group": "g", "target_sha256": builder.target_digest({"target": target})},
+                {"native_id": "held", "decision": "hold-source-required-neuralese-reader-contract", "training_admission": False},
+                {"native_id": "failed", "decision": "reject-action-failed", "training_admission": False},
+            ],
+            "admitted_native_count": 1, "held_source_contract_final_count": 1,
+            "held_ambiguous_source_read_scope_count": 0, "failed_count": 1, "already_adopted_count": 0,
+            "whole_trajectory_admission": False, "runtime_qualification": False,
+            "active_gpu_inputs_changed": False, "new_world_credit": False,
+        }
+        return approval, [{"id": "selected", "target": target, "split": "train", "source_groups": ["g"]}]
+
+    def test_mixed_root_admission_selects_only_true_ordinary_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approval, delta = self._mixed_admission(root)
+            selected = builder.validate_root_per_action_approval(approval, delta, root=root)
+            self.assertEqual(list(selected), ["selected"])
+            self.assertNotIn("held", selected)
+
+    def test_mixed_root_admission_rejects_flag_decision_count_and_held_overlay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approval, delta = self._mixed_admission(root)
+            bad = json.loads(json.dumps(approval)); bad['rows'][1]['training_admission'] = True
+            with self.assertRaisesRegex(ValueError, 'flag conflicts'):
+                builder.validate_root_per_action_approval(bad, delta, root=root)
+            bad = json.loads(json.dumps(approval)); bad['rows'][0]['decision'] = 'hold-source-required-neuralese-reader-contract'
+            with self.assertRaisesRegex(ValueError, 'flag conflicts'):
+                builder.validate_root_per_action_approval(bad, delta, root=root)
+            bad = json.loads(json.dumps(approval)); bad['admitted_native_count'] = 2
+            with self.assertRaisesRegex(ValueError, 'count conflicts'):
+                builder.validate_root_per_action_approval(bad, delta, root=root)
+            with self.assertRaisesRegex(ValueError, 'do not equal root-admitted'):
+                builder.validate_root_per_action_approval(approval, delta + [{"id": "held"}], root=root)
+
     def test_append_preserves_prefix_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

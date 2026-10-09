@@ -291,6 +291,81 @@ def resolve_base_text_prefix_metadata(binding, receipt_path: Path, *, root: Path
 def selected_delta_omissions(omissions, delta_ids):
     return [item for item in omissions if item.get("id") in delta_ids]
 
+def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT):
+    """Validate the mixed-disposition root review and return only admitted rows.
+
+    This schema deliberately retains failed, duplicate and held rows beside the
+    admitted decisions. Do not treat every receipt row as an admission.
+    """
+    if receipt.get("schema") != "natlang.root-per-action-training-admission/1":
+        raise ValueError("unsupported root per-action admission schema")
+    root = root.resolve()
+    review_rel, review_sha = receipt.get("review_path"), receipt.get("review_sha256")
+    if not isinstance(review_rel, str) or not isinstance(review_sha, str):
+        raise ValueError("root per-action receipt lacks its reviewed selection pin")
+    review_path = Path(review_rel)
+    if review_path.is_absolute():
+        raise ValueError("root per-action review path must be repository-relative")
+    review_path = (root / review_path).resolve()
+    if not review_path.is_relative_to(root) or not review_path.is_file() or sha_file(review_path) != review_sha:
+        raise ValueError("root per-action review is missing or its hash does not match")
+    input_pins = receipt.get("input_pins")
+    if not isinstance(input_pins, dict) or not input_pins:
+        raise ValueError("root per-action receipt lacks pinned review inputs")
+    for rel, pin in input_pins.items():
+        path = Path(rel)
+        if path.is_absolute() or not isinstance(pin, dict):
+            raise ValueError("root per-action input pin is malformed")
+        path = (root / path).resolve()
+        if (not path.is_relative_to(root) or not path.is_file()
+                or sha_file(path) != pin.get("sha256")
+                or path.stat().st_size != pin.get("bytes")):
+            raise ValueError(f"root per-action input pin is missing or mismatched: {rel}")
+
+    rows = receipt.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("root per-action receipt has no decision rows")
+    known_decisions = {
+        "admit-ordinary-native-action": "admitted_native_count",
+        "hold-source-required-neuralese-reader-contract": "held_source_contract_final_count",
+        "hold-ambiguous-source-read-scope": "held_ambiguous_source_read_scope_count",
+        "reject-action-failed": "failed_count",
+        "exclude-already-admitted-case01-duplicate": "already_adopted_count",
+    }
+    seen, observed = set(), {field: 0 for field in known_decisions.values()}
+    admitted = []
+    for row in rows:
+        native_id, decision = row.get("native_id"), row.get("decision")
+        if not isinstance(native_id, str) or not native_id or native_id in seen:
+            raise ValueError(f"root per-action receipt has a missing or duplicate native_id: {native_id!r}")
+        seen.add(native_id)
+        field = known_decisions.get(decision)
+        if field is None:
+            raise ValueError(f"root per-action receipt has an unknown decision: {decision!r}")
+        flag = row.get("training_admission")
+        if not isinstance(flag, bool) or flag != (decision == "admit-ordinary-native-action"):
+            raise ValueError(f"root per-action admission flag conflicts with decision for {native_id}")
+        observed[field] += 1
+        if flag:
+            if row.get("split") != "train":
+                raise ValueError(f"root per-action admission is not train-only: {native_id}")
+            admitted.append(row)
+    if receipt.get("admitted_native_count") != len(admitted):
+        raise ValueError("root per-action admitted_native_count conflicts with decision rows")
+    if any(receipt.get(field) != count for field, count in observed.items()):
+        raise ValueError("root per-action disposition counts conflict with decision rows")
+    if sum(observed.values()) != len(rows):
+        raise ValueError("root per-action disposition counts do not cover every decision row")
+    if (receipt.get("whole_trajectory_admission") is not False
+            or receipt.get("runtime_qualification") is not False
+            or receipt.get("active_gpu_inputs_changed") is not False
+            or receipt.get("new_world_credit") is not False):
+        raise ValueError("root per-action receipt includes an unsupported admission facet")
+    approved_ids = [row["native_id"] for row in admitted]
+    if delta_ids is not None and (not isinstance(delta_ids, set) or delta_ids != set(approved_ids)):
+        raise ValueError("delta records do not equal root-admitted per-action IDs")
+    return admitted
+
 def append_prefix(prefix: Path, output: Path, additions: list[dict]):
     with output.open("xb") as f:
         with prefix.open("rb") as src:
@@ -414,6 +489,7 @@ def main():
                              "and source record IDs in order")
     source_approval = json.loads(args.source_approval.read_text())
     root_action_admission = source_approval.get("schema") == "natlang.root-selected-action-admission/1"
+    root_per_action_admission = source_approval.get("schema") == "natlang.root-per-action-training-admission/1"
     admission_rows = source_approval.get("rows", []) if root_action_admission else []
     if root_action_admission:
         approved_ids = [item.get("native_id") for item in admission_rows]
@@ -434,15 +510,31 @@ def main():
                 or qualifications.get("recurrence") is not False
                 or source_approval.get("integration", {}).get("active_GPU_inputs_changed") is not False):
             raise ValueError("root action receipt includes unsupported non-native admission facets")
+    elif root_per_action_admission:
+        admission_rows = admitted_root_per_action_rows(
+            source_approval, delta_ids={row.get("id") for row in delta_records})
+        approved_ids = [item["native_id"] for item in admission_rows]
+    else:
+        approved_ids = source_approval.get("approved_row_ids")
+    delta_ids = {r.get("id") for r in delta_records}
+    if not isinstance(approved_ids, list) or set(approved_ids) != delta_ids or len(approved_ids) != len(delta_ids):
+        raise ValueError("delta records do not equal source approval IDs")
+    if root_action_admission or root_per_action_admission:
         admitted_by_id = {item["native_id"]: item for item in admission_rows}
         for row in delta_records:
             admission = admitted_by_id.get(row.get("id"))
             digest = sha(json.dumps(row.get("target"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
             if not admission or digest != admission.get("target_sha256"):
                 raise ValueError(f"root action admission target binding mismatch: {row.get('id')}")
-            groups = admission.get("source_groups")
-            if groups is None and isinstance(admission.get("source_group"), str): groups = [admission["source_group"]]
-            if row.get("split") != admission.get("split") or not isinstance(groups, list) or groups != row.get("source_groups", []):
+            if root_per_action_admission:
+                groups = row.get("source_groups", [])
+                group_ok = (isinstance(admission.get("source_group"), str)
+                            and admission["source_group"] in groups)
+            else:
+                groups = admission.get("source_groups")
+                if groups is None and isinstance(admission.get("source_group"), str): groups = [admission["source_group"]]
+                group_ok = isinstance(groups, list) and groups == row.get("source_groups", [])
+            if row.get("split") != admission.get("split") or not group_ok:
                 raise ValueError(f"root action admission split/group mismatch: {row.get('id')}")
             # The source conversion can predate root admission and therefore carry
             # an explicit pending marker. Apply the exact root decision in memory
@@ -453,11 +545,6 @@ def main():
                 "approved": True,
                 "receipt_sha256": sha_file(args.source_approval),
             }
-    else:
-        approved_ids = source_approval.get("approved_row_ids")
-    delta_ids = {r.get("id") for r in delta_records}
-    if not isinstance(approved_ids, list) or set(approved_ids) != delta_ids or len(approved_ids) != len(delta_ids):
-        raise ValueError("delta records do not equal source approval IDs")
     for rel, expected in source_approval.get("artifact_hashes", {}).items():
         bound = (ROOT / rel).resolve()
         if not bound.is_file() or sha_file(bound) != expected:
@@ -615,7 +702,8 @@ def main():
                     "source_text_prefix_bytes": args.base_text.stat().st_size,
                     "delta_source_run": str(args.delta_records.parent),
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
-                    "delta_root_action_admission_overlay_records": len(admission_rows) if root_action_admission else 0,
+                    "delta_root_action_admission_overlay_records": len(admission_rows)
+                    if (root_action_admission or root_per_action_admission) else 0,
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "delta_authenticated_provider_context_only_blocks": len(provider_context_bindings),
                     "provider_context_bindings_sha256": sha(context_binding_bytes),
