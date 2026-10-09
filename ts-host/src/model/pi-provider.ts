@@ -29,16 +29,41 @@ function boundedUtf8Preview(value: string, limit = 1024): Record<string, unknown
     prefix += character; prefixBytes += size;
   }
   const tail: { character: string; bytes: number }[] = [];
-  let tailBytes = 0;
+  let tailBytes = 0, tailHead = 0;
   for (const character of value) {
     const bytes = Buffer.byteLength(character, 'utf8');
     tail.push({ character, bytes }); tailBytes += bytes;
-    while (tailBytes > limit) tailBytes -= tail.shift()!.bytes;
+    while (tailBytes > limit) tailBytes -= tail[tailHead++]!.bytes;
+    if (tailHead > 128 && tailHead * 2 > tail.length) { tail.splice(0, tailHead); tailHead = 0; }
   }
   return { encoding: 'final parsed tool arguments JSON string', preview_limit_utf8_bytes: limit,
     prefix_utf8: prefix, prefix_bytes: prefixBytes,
-    tail_utf8: tail.map(item => item.character).join(''), tail_bytes: tailBytes,
+    tail_utf8: tail.slice(tailHead).map(item => item.character).join(''), tail_bytes: tailBytes,
     truncated: Buffer.byteLength(value, 'utf8') > limit };
+}
+
+function boundedStreamCapture(limit = 1024) {
+  let prefix = '', prefixBytes = 0, totalBytes = 0;
+  const tail: { character: string; bytes: number }[] = [];
+  let tailBytes = 0, tailHead = 0;
+  return {
+    push(value: string) {
+      totalBytes += Buffer.byteLength(value, 'utf8');
+      for (const character of value) {
+        const bytes = Buffer.byteLength(character, 'utf8');
+        if (prefixBytes + bytes <= limit) { prefix += character; prefixBytes += bytes; }
+        tail.push({ character, bytes }); tailBytes += bytes;
+        while (tailBytes > limit) tailBytes -= tail[tailHead++]!.bytes;
+        if (tailHead > 128 && tailHead * 2 > tail.length) { tail.splice(0, tailHead); tailHead = 0; }
+      }
+    },
+    finish() {
+      return { encoding: 'concatenated exact streamed tool-call delta text', preview_limit_utf8_bytes: limit,
+        stream_utf8_bytes: totalBytes, prefix_utf8: prefix, prefix_bytes: prefixBytes,
+        tail_utf8: tail.slice(tailHead).map(item => item.character).join(''), tail_bytes: tailBytes,
+        truncated: totalBytes > limit };
+    }
+  };
 }
 
 function containsControlCharacter(value: unknown): boolean {
@@ -276,6 +301,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const MAX_TRACKED_DELTA_FINGERPRINTS = 4096;
       let untrackedDeltaEvents = 0, adjacentDuplicateDeltaEvents = 0;
       let previousDeltaFingerprint = '', currentRepeatRun = 0, longestRepeatRun = 0;
+      const toolDeltaPreview = boundedStreamCapture(1024);
       const emit = (status: ModelStreamProgress['status']) => {
         if (!onProgress) return;
         const progress: ModelStreamProgress = { status, ...counts, startedAt,
@@ -301,6 +327,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
           else if (kind === 'thinking') { counts.thinkingDeltaEvents++; counts.thinkingDeltaBytes += bytes; }
           else {
             counts.toolCallDeltaEvents++; counts.toolCallDeltaBytes += bytes;
+            toolDeltaPreview.push(delta);
             const fingerprint = sha256Text(delta), prior = deltaFingerprints.get(fingerprint);
             if (prior) { prior.occurrences++; }
             else if (deltaFingerprints.size < MAX_TRACKED_DELTA_FINGERPRINTS)
@@ -339,6 +366,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         streamed_tool_call_delta_utf8_bytes: counts.toolCallDeltaBytes,
         streamed_text_delta_utf8_bytes: counts.textDeltaBytes,
         streamed_thinking_delta_utf8_bytes: counts.thinkingDeltaBytes,
+        streamed_tool_call_delta_preview: toolDeltaPreview.finish(),
         final_call_count: raw_calls.length,
         final_raw_calls_json_utf8_bytes: Buffer.byteLength(JSON.stringify(raw_calls), 'utf8'),
         final_calls: raw_calls.map((call, index) => ({ index, name: call.function.name,
