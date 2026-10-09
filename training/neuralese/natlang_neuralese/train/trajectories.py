@@ -46,8 +46,6 @@ Usage: python -m natlang_neuralese.train.trajectories --records converted.jsonl 
 
 from __future__ import annotations
 
-from .optim import named_optimizer_state, parameter_names
-
 import argparse
 import base64
 import hashlib
@@ -1479,12 +1477,11 @@ def main(argv=None):
         missing, unexpected = heads.load_state_dict(resumed['heads'], strict=False)
         if unexpected or any(not k.startswith('read_adapter.') for k in missing):
             raise ValueError(f'resumed heads differ beyond a new read adapter: {missing} {unexpected}')
-        from .optim import parameter_names, restore_optimizer_named
-        report = restore_optimizer_named(optimizer, resumed['optimizer'],
-                                         parameter_names(backbone=backbone, heads=heads))
-        print(json.dumps({'event': 'optimizer_state_restored', **{
-            k: (v if k in ('mode', 'reason', 'restored') else {'count': len(v), 'first': v[:8]})
-            for k, v in report.items()}}), flush=True)
+        try:
+            optimizer.load_state_dict(resumed['optimizer'])
+        except ValueError as error:
+            # The trainable set grew (members' private parts joined): the optimizer starts fresh.
+            print(json.dumps({'event': 'optimizer_state_fresh', 'reason': str(error)[:200]}), flush=True)
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
     if new_continuation and args.content_residual_initialization == 'fresh-zero':
         from .trajectory_state import initialize_content_residual
@@ -1853,7 +1850,7 @@ def main(argv=None):
             'control_rows': backbone.control_rows.detach().cpu(),
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
-            'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': named_optimizer_state(optimizer, parameter_names(backbone=backbone, heads=heads)),
+            'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'backbone_training': args.backbone_training,
             **({'maple_qat': True} if qat_named else {}),
             **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}), 'anchor_origin': anchor_origin,
