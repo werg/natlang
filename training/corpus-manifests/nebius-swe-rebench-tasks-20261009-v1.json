@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "nebius-swe-rebench-tasks-20261009-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/nebius-swe-rebench-tasks-20261009-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 9190,
+      "sha256": "579179c9eccb15c61ca8c42fbf7ea46cc225fddd9ca0a6b3d7bbec9f712f88c3"
+    },
+    {
+      "path": "data/filtered-00000-of-00001.parquet",
+      "bytes": 33886640,
+      "sha256": "b2f037217a849732bf2e9b9d2b59d11561d03b4191a55c3142e1e58248817cfa"
+    },
+    {
+      "path": "data/test-00000-of-00002.parquet",
+      "bytes": 101556119,
+      "sha256": "39d4791f12cf5ee2a2e56d47eeef559642a800534ff053e1ae3acab0a0c87067"
+    },
+    {
+      "path": "data/test-00001-of-00002.parquet",
+      "bytes": 109723276,
+      "sha256": "c50af8bffbfe70fc3a89b2e47825f299bc04c1058318fe2263b7e4857f8193d7"
+    }
+  ],
+  "bytes": 245175225
+}
