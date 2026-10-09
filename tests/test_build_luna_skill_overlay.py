@@ -51,3 +51,22 @@ def test_existing_skill_requires_exact_replacement_hash(tmp_path):
         assert "existing skill hash mismatch" in str(exc)
     else:
         raise AssertionError("a different existing skill body must not be replaced")
+
+
+def test_adds_named_companion_without_replacing_another_skill(tmp_path):
+    source, _, original, judge_path = _source(tmp_path, "Existing criterion skill.\n")
+    carry_path = "module/skills/carry-forward-evidence/SKILL.md"
+    carry = tmp_path / "carry-forward.md"
+    carry.write_text("Carry evidence to the next step.\n")
+    output, receipt = tmp_path / "overlay.jsonl", tmp_path / "receipt.json"
+
+    result = MODULE.build(source, [{"label": "case", "index": 0, "seed": 7}], carry,
+                          output, receipt, skill_name="carry-forward-evidence")
+
+    modified = json.loads(output.read_text())
+    assert modified["semantics"]["files"][judge_path] == "Existing criterion skill.\n"
+    assert modified["semantics"]["files"][carry_path] == "Carry evidence to the next step.\n"
+    del modified["semantics"]["files"][carry_path]
+    assert modified == original
+    assert result["rows"][0]["skill_name"] == "carry-forward-evidence"
+    assert result["rows"][0]["skill_change"] == {"kind": "add-skill-companion", "prior_sha256": None}

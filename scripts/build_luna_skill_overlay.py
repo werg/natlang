@@ -19,11 +19,16 @@ def canonical(value: Any) -> bytes:
 
 
 def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
-          output: Path, receipt: Path, *, replace_existing_skill_sha256: str | None = None) -> dict[str, Any]:
+          output: Path, receipt: Path, *, replace_existing_skill_sha256: str | None = None,
+          skill_name: str = "judge-against-criteria") -> dict[str, Any]:
     source = source.resolve(strict=True)
     skill_path = skill_path.resolve(strict=True)
     source_bytes = source.read_bytes()
     source_hash = sha(source_bytes)
+    if (not isinstance(skill_name, str) or not skill_name
+            or any(not (char.islower() or char.isdigit() or char == "-") for char in skill_name)
+            or skill_name[0] == "-" or skill_name[-1] == "-"):
+        raise ValueError("skill_name must be a lowercase hyphenated companion name")
     skill = skill_path.read_text(encoding="utf-8")
     skill_bytes = skill.encode("utf-8")
     source_lines = source_bytes.splitlines(keepends=True)
@@ -56,7 +61,7 @@ def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
         if len(nl_files) != 1:
             raise ValueError(f"source row {index} must contain exactly one .nl program file")
         module = nl_files[0].removesuffix(".nl")
-        companion = f"{module}/skills/judge-against-criteria/SKILL.md"
+        companion = f"{module}/skills/{skill_name}/SKILL.md"
         original = copy.deepcopy(overlay)
         prior_skill = program_files.get(companion)
         if prior_skill is not None:
@@ -89,7 +94,8 @@ def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,
             "source_row_canonical_sha256": sha(canonical(row)),
             "overlay_row_sha256_including_lf": sha(output_row),
             "root_code_sha256": sha(row["curriculum"]["reference"]["root"][0][1]["code"].encode("utf-8")),
-            "skill_path": companion, "skill_sha256": sha(skill_bytes), "skill_bytes": len(skill_bytes),
+            "skill_path": companion, "skill_name": skill_name,
+            "skill_sha256": sha(skill_bytes), "skill_bytes": len(skill_bytes),
             "skill_change": skill_change,
             "expected_sha256_before": sha(canonical(row["semantics"]["expected"])),
             "expected_sha256_after": sha(canonical(overlay["semantics"]["expected"])),
@@ -124,12 +130,15 @@ def main() -> None:
     parser.add_argument("--skill", type=Path, required=True)
     parser.add_argument("--replace-existing-skill-sha256",
                         help="allow replacement only when the existing program-bound skill has this exact SHA-256")
+    parser.add_argument("--skill-name", default="judge-against-criteria",
+                        help="companion directory name under the program's skills/ directory")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
     selections = json.loads(args.selections.read_text(encoding="utf-8"))
     result = build(args.source, selections, args.skill, args.output, args.receipt,
-                   replace_existing_skill_sha256=args.replace_existing_skill_sha256)
+                   replace_existing_skill_sha256=args.replace_existing_skill_sha256,
+                   skill_name=args.skill_name)
     print(json.dumps({"status": "built", "overlay": result["overlay_path"],
                       "overlay_sha256": result["overlay_sha256"],
                       "receipt": str(args.receipt), "rows": len(result["rows"])}, sort_keys=True))
