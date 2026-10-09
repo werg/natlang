@@ -108,7 +108,11 @@ export function pureLiteralEvalReturn(code: unknown): PureLiteralEvalReturn | un
 }
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
-  { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string };
+  { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string;
+    /** What the digest is written for, when not the receiving call's instructions (an agent's intent at a tool call). */
+    instructions?: string;
+    /** How the reader gets the whole value, when not the holder variable (a recall handle). */
+    note?: string };
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
 export type SiteCounts = Record<string, { converted: number; exact: Record<string, number> }>;
