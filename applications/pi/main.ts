@@ -114,7 +114,7 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       compat: { thinkingFormat: 'qwen-chat-template', supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
         maxTokensField: 'max_tokens' } } as never],
-    api: transport === 'natlang' ? natlangApi((_model, { reasoning }) => driver(reasoning)) : openAICompletionsApi(),
+    api: transport === 'natlang' ? natlangApi((_model, { reasoning }) => driver(reasoning), store) : openAICompletionsApi(),
   }));
   return { models, ref: { provider: 'agent', modelId } };
 }

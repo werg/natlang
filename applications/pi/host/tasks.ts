@@ -80,7 +80,8 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
   // One phase state per attempt: a failure the ai service sees ends what durable may still commit.
   const phaseState: PhaseState = {};
   const services: Record<string, object> = { durable: durableService(runtime, context, host, agent, phaseState), ai: aiService(runtime, context,
-    task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined, phaseState) };
+    task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined, phaseState,
+    host.natlang.options.neuralese?.store) };
   const serviceDeclarations: Record<string, string> = { durable: DURABLE_DECLARATION, ai: AI_DECLARATION };
   if (task.kind === 'pi.tool') {
     services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId, phaseState);

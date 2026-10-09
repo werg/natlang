@@ -197,7 +197,9 @@ interface, and calls the selected implementation at each policy point:
 
 **`ai`** is appendix 5, A.11: `model`, `available`, `turn(model, messages, options, live?)`, `poll`, `cancel`,
 `failure`, `estimateTokens`, `validateArguments` and `newSessionId`. With `live`, `turn` publishes the throttled
-partials into `pi.live` itself.
+partials into `pi.live` itself. `estimateTokens` counts a Neuralese block at its length, read from the runtime's
+Neuralese store; `blockMeta(messages)` (called by `harness/context`) fetches metadata the store lacks from the agent
+model's server once and keeps it there, and a block still unknown fails the estimate, naming it.
 
 **`tools`, bound to a tool task.** `execute(tool, args, limits)` runs the tool's implementation with its execution
 api, output buffer and progress throttle. It returns:

@@ -40,8 +40,12 @@ before(async () => {
       seen.push({ method: request.method, path: request.url, body });
       const send = ({ status, body }) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(body)); };
       if (request.url === '/v1/neuralese/info') return send(info);
-      if (request.url.startsWith('/v1/neuralese/blocks/') && request.url.endsWith('/meta'))
-        return send({ status: 200, body: { id: request.url.split('/')[4], dialect: 'd1', length: 4, width: 8, dtype: 'f32' } });
+      if (request.url.startsWith('/v1/neuralese/blocks/') && request.url.endsWith('/meta')) {
+        const id = request.url.split('/')[4];
+        // A block whose ID starts nz1_lost is one the server does not have.
+        if (id.startsWith('nz1_lost')) return send({ status: 404, body: { error: { message: 'neuralese-unknown-block' } } });
+        return send({ status: 200, body: { id, dialect: 'd1', length: 4, width: 8, dtype: 'f32' } });
+      }
       if (request.url === '/v1/chat/completions') {
         const answer = reply(body);
         if (!answer.chunks) return send(answer);
@@ -162,13 +166,59 @@ test('a text reader refuses a Neuralese part loudly, before any request', async 
   assert.equal(message.stopReason, 'error');
   assert.match(message.errorMessage, /^neuralese-unsupported-backend: /);
   assert.equal(chats().length, 0);
-  // The harness's ai service applies the same rule to every transport, and counts blocks in its estimates.
+  // The harness's ai service applies the same rule to every transport.
   const runtime = { models, signal: undefined };
   const service = m.aiHost.aiService(runtime, m.chord.BACKGROUND_CONTEXT);
   const refused = await service.turn(ref, messages, { thinkingLevel: 'off', sessionId: 's' });
   assert.match(refused.errorMessage, /^neuralese-unsupported-backend: /);
-  const [withBlock, without] = service.estimateTokens([messages[0], { ...messages[0], content: [] }]);
-  assert.equal(withBlock - without, m.provider.NEURALESE_BLOCK_TOKENS);
+});
+
+/** A stored block of `length` vectors of width 8, and its ID. */
+async function storedBlock(store, length, seed = 1) {
+  const data = new Float32Array(length * 8).map((_, i) => seed + i);
+  return (await store.put({ dialect: 'd1', length, width: 8, dtype: 'f32', data: new Uint8Array(data.buffer) })).id;
+}
+const blockMessage = ids => ({ role: 'user', content: [{ type: 'text', text: 'Read: ' }, ...ids.map(id => ({ type: 'neuralese', id }))], timestamp: 1 });
+
+test('a token estimate counts each Neuralese block at its real length, from the runtime\'s store', async () => {
+  const { models } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const [short, long] = [await storedBlock(store, 3), await storedBlock(store, 17, 2)];
+  const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
+  const [none, one, both] = service.estimateTokens([blockMessage([]), blockMessage([short]), blockMessage([short, long])]);
+  assert.equal(one - none, 3);
+  assert.equal(both - none, 20);
+  // The part stays a pure reference: the length is never written into it.
+  assert.deepEqual(blockMessage([short]).content[1], { type: 'neuralese', id: short });
+});
+
+test('metadata the store lacks is fetched once from the agent model\'s server and kept in the store', async () => {
+  const { models, ref } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
+  const messages = [blockMessage([BLOCK]), blockMessage([BLOCK])];
+  assert.throws(() => service.estimateTokens(messages), new RegExp(`^Error: neuralese-unknown-block-length: .*${BLOCK}.*ai\\.blockMeta`));
+  seen.length = 0;
+  assert.deepEqual(await Promise.all([service.blockMeta(messages, ref), service.blockMeta(messages, ref)]), [[], []]);
+  assert.deepEqual(await service.blockMeta(messages, ref), []);
+  assert.deepEqual(seen.map(item => item.path), [`/v1/neuralese/blocks/${BLOCK}/meta`]);
+  assert.equal(store.peek(BLOCK).length, 4);
+  assert.equal(await store.has(BLOCK), false, 'noted metadata does not make the block present');
+  const [withBlock, without] = service.estimateTokens([messages[0], blockMessage([])]);
+  assert.equal(withBlock - without, 4);
+});
+
+test('a block whose length stays unknown is an error naming it, never a guess', async () => {
+  const { models, ref } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const lost = 'nz1_lost' + 'b'.repeat(20);
+  const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
+  assert.deepEqual(await service.blockMeta([blockMessage([lost])], ref), [lost]);
+  assert.throws(() => service.estimateTokens([blockMessage([lost])]),
+    new RegExp(`^Error: neuralese-unknown-block-length: .*${lost}.*GET /v1/neuralese/blocks/${lost}/meta.*it is lost`));
+  // Without a store there is nowhere to read lengths from: the error says so.
+  const bare = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT);
+  assert.throws(() => bare.estimateTokens([blockMessage([BLOCK])]), /^Error: neuralese-unknown-block-length: block nz1_a+ .*no process-local Neuralese store/);
 });
 
 test('the declared reader is checked against the server at startup', async () => {
@@ -246,7 +296,9 @@ test('a written Neuralese block streams as one block-reference event, and the fi
   info = { status: 200, body: { ...info.body, stream: true } };
   try {
     seen.length = 0;
-    const { models, ref } = await agent('--agent-reader', 'd1');
+    const store = new m.natlang.MemoryNeuraleseStore();
+    const { models, ref } = await m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-transport', 'natlang',
+      '--agent-reader', 'd1'], undefined, store);
     const model = models.getModel(ref.provider, ref.modelId);
     const context = { messages: [{ role: 'user', content: 'Note it.', timestamp: 1 }] };
     const final = { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }] };
@@ -260,6 +312,8 @@ test('a written Neuralese block streams as one block-reference event, and the fi
     assert.equal(block.contentIndex, 1);
     assert.deepEqual(block.content, { type: 'neuralese', id: BLOCK });
     assert.deepEqual(block.partial.content[1], { type: 'neuralese', id: BLOCK });
+    // The metadata the block streamed with is in the runtime's store, where estimates read its length.
+    assert.equal(store.peek(BLOCK).length, 4);
     // The same reply sent whole gives the same message.
     info = { status: 200, body: { ...info.body, stream: false } };
     reply = () => ({ status: 200, body: { id: 'r2', choices: [{ finish_reason: 'stop', message: final }] } });

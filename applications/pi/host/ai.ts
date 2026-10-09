@@ -12,9 +12,9 @@ import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
 import type { TaskRuntime } from '../vendor/durable/src/types.ts';
 import { streamResponse } from '../vendor/durable/src/harness/generation.ts';
 import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, ThinkingLevel } from '../types.ts';
-import { ONCE_EFFECTS } from '@natlang/node';
+import { ONCE_EFFECTS, type NeuraleseStore } from '@natlang/node';
 import { plain } from './durable.ts';
-import { modelReader, NEURALESE_BLOCK_TOKENS, isNeuraleseContent, neuraleseBlocks } from './natlang-provider.ts';
+import { blockPositions, modelReader, isNeuraleseContent, neuraleseBlockIds, neuraleseBlocks, noteBlockMeta } from './natlang-provider.ts';
 
 /**
  * A provider's message as the Session line stores it: strict JSON, or a rejection as pi-durable's commit would give
@@ -47,8 +47,10 @@ export type TurnOptions = StreamOptions & { thinkingLevel: ThinkingLevel; sessio
 /**
  * `streamAttempt`: for a generation task, the attempt its request streams into pi.live (pi-durable's generation
  * request always streams; compaction never does), so a turn the executor sends without `live` still streams.
+ * `store`: the runtime's Neuralese store, where token estimates read each block's length.
  */
-export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number, phase: { failed?: string } = {}) {
+export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number, phase: { failed?: string } = {},
+    store?: NeuraleseStore) {
   const resolve = (ref: ModelRef): Model<Api> => {
     const model = ref && runtime.models.getModel(ref.provider, ref.modelId);
     if (!model) throw new Error(`Model ${ref?.provider}/${ref?.modelId} is not available`);
@@ -93,13 +95,21 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
     },
     retryDelayMs(policy: RetryPolicy, attempt: number): number { return retryDelayMs(policy, attempt); },
     estimateTokens(messages: Message[]): number[] {
-      // pi-ai's estimate knows text and images; a Neuralese block counts as NEURALESE_BLOCK_TOKENS.
+      // pi-ai's estimate knows text and images; a Neuralese block occupies its length in positions, read from the store.
       return messages.map(message => {
-        const blocks = neuraleseBlocks(message);
-        if (!blocks) return estimateMessageTokens(message);
+        if (!neuraleseBlocks(message)) return estimateMessageTokens(message);
         const text = { ...message, content: (message.content as unknown[]).filter(part => !isNeuraleseContent(part)) } as Message;
-        return estimateMessageTokens(text) + blocks * NEURALESE_BLOCK_TOKENS;
+        return estimateMessageTokens(text) + blockPositions(message, store);
       });
+    },
+    async blockMeta(messages: Message[], model?: ModelRef): Promise<string[]> {
+      // Blocks the store already describes need nothing; the rest are asked of the agent model's server, once each.
+      const ids = neuraleseBlockIds(messages).filter(id => !store?.peek?.(id));
+      if (!ids.length || !store) return ids;
+      const ref = model ?? (await (runtime as { agent?: (context: Context) => Promise<{ model?: ModelRef }> }).agent?.(context))?.model;
+      const resolved = ref && runtime.models.getModel(ref.provider, ref.modelId);
+      if (!resolved || modelReader(resolved).kind !== 'neuralese') return ids;
+      return noteBlockMeta(resolved.baseUrl, ids, store, { signal: runtime.signal });
     },
     validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string } {
       try {
@@ -132,7 +142,17 @@ export function cancel(model: ModelRef, handle: DeferredHandle): Promise<void>;
 export function failure(message: AssistantMessage): { overflow: boolean; retryable: boolean };
 /** The wait before retry attempt n: min(baseDelayMs * 2^(n-1), maxAgentDelayMs ?? 60000). */
 export function retryDelayMs(policy: RetryPolicy, attempt: number): number;
-/** pi's token estimate of each message: characters / 3.5, rounded up; an image counts as 4800 characters, a Neuralese block as 64 tokens. */
+/**
+ * pi's token estimate of each message: characters / 3.5, rounded up; an image counts as 4800 characters, a Neuralese
+ * block as its length (the context positions it occupies), from the runtime's Neuralese store. Throws
+ * neuralese-unknown-block-length, naming the block, when the store has no metadata for it.
+ */
 export function estimateTokens(messages: Message[]): number[];
+/**
+ * Make the Neuralese blocks of messages known to estimateTokens: metadata the runtime's store lacks is fetched once
+ * from the server of model (default: the agent's model) and kept in the store. Returns the IDs still unknown (the
+ * block is lost: neither the store nor the server has it); empty when every block is known.
+ */
+export function blockMeta(messages: Message[], model?: ModelRef): Promise<string[]>;
 /** Validate and coerce tool arguments against the tool's JSON Schema parameters, as pi does; error is pi's exact message. */
 export function validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string };`;

@@ -34,10 +34,16 @@ export interface NeuraleseStore {
   meta(id: string): Promise<NeuraleseBlockMeta | undefined>;
   has(id: string): Promise<boolean>;
   /**
-   * Metadata of a block this store holds without I/O (a process-local store), for synchronous checks such as a
-   * value's dialect when it is coerced to a type (native/values.ts). Undefined when the store would have to ask.
+   * Metadata of a block this store holds, or was told about with `note`, without I/O (a process-local store), for
+   * synchronous checks such as a value's dialect when it is coerced to a type (native/values.ts) or a block's length
+   * in a context estimate. Undefined when the store would have to ask.
    */
   peek?(id: string): NeuraleseBlockMeta | undefined;
+  /**
+   * Remember the metadata of a block held elsewhere (a model server's `GET /v1/neuralese/blocks/{id}/meta`), so that
+   * `peek` answers for it. It does not make the block present: `has`, `get` and `meta` still answer for held blocks only.
+   */
+  note?(meta: NeuraleseBlockMeta): void;
   /** Keep a block through garbage collection (for example while a file or a running call refers to it). */
   pin(id: string): Promise<void>;
   unpin(id: string): Promise<void>;
@@ -94,6 +100,8 @@ export function checkBlockShape(block: NeuraleseBlockInput): void {
 /** Process-local store; the default for runtimes without a model-side store, and for tests. */
 export class MemoryNeuraleseStore implements NeuraleseStore {
   private readonly blocks = new Map<string, NeuraleseBlock>();
+  /** Metadata of blocks held elsewhere (`note`). */
+  private readonly noted = new Map<string, NeuraleseBlockMeta>();
   private readonly pins = new Map<string, number>();
   async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
     checkBlockShape(block);
@@ -119,8 +127,11 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async has(id: string): Promise<boolean> { return this.blocks.has(id); }
   peek(id: string): NeuraleseBlockMeta | undefined {
-    const found = this.blocks.get(id);
-    return found && { ...found.meta };
+    const found = this.blocks.get(id)?.meta ?? this.noted.get(id);
+    return found && { ...found };
+  }
+  note(meta: NeuraleseBlockMeta): void {
+    if (!this.blocks.has(meta.id)) this.noted.set(meta.id, { ...meta });
   }
   async pin(id: string): Promise<void> {
     if (!this.blocks.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
@@ -134,6 +145,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     const removed: string[] = [];
     for (const id of [...this.blocks.keys()])
       if (!referenced.has(id) && !this.pins.has(id)) { this.blocks.delete(id); removed.push(id); }
+    for (const id of [...this.noted.keys()]) if (!referenced.has(id)) this.noted.delete(id);
     return removed;
   }
   get size(): number { return this.blocks.size; }
