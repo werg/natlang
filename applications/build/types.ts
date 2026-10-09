@@ -1,5 +1,3 @@
-import type { Is } from '@natlang/node';
-
 /**
  * A declared build task: a trusted argv command with the files it reads and writes. The workspace runs it without a
  * shell, inside the root. needs lists the tasks that must finish first. inputs and outputs are paths relative to the

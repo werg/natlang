@@ -15,7 +15,7 @@ import { authoredCallables, finiteCounterComparison, guardArguments, loopLabel, 
 /** The predicates of an `Is<T, P>` type (nested refinements give several), read from its brand property. */
 export function refinementPredicates(checker: ts.TypeChecker, node: ts.TypeNode): string[] {
   const type = checker.getTypeFromTypeNode(node);
-  const brand = checker.getPropertiesOfType(type).find(property => property.escapedName.toString().startsWith('__@natlangRefinement'));
+  const brand = checker.getPropertiesOfType(type).find(property => property.name === '__natlangRefinement');
   return brand ? checker.getPropertiesOfType(checker.getTypeOfSymbol(brand)).map(property => property.name) : [];
 }
 

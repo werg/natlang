@@ -45,8 +45,6 @@ By default the program's model judges every value once and the verdict is cached
 
 A refined `nl` result is a refined value. To pass a plain `string` where `Is<string, P>` is expected, check it with `await refine(value, "predicate")`, which throws `refinement-unsatisfied` when it fails; `assume(value, "predicate")` is the explicit, unchecked, traced alternative, for values the program has established some other way.
 
-In a project's `types.ts`, `import type { Is } from '@natlang/node'` first; the declarations the build emits import it from there.
-
 ## Check the result
 
 `natlang check` types refined slots like any other type. To see the verdicts of a run, read the `refinement_check` events of its trace (predicate, value, probability, judge, outcome); a predicate that fails often is either a task the model cannot do yet or a predicate that says more than it should.

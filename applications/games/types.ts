@@ -1,5 +1,3 @@
-import type { Is } from '@natlang/node';
-
 /** Which implementation runs a pluggable part: its natural-language function, or its crisp reference. */
 export type Engine = 'nl' | 'crisp' | 'shadow';
 

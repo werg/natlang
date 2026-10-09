@@ -111,7 +111,7 @@ export function withCallOf(checker: ts.TypeChecker | undefined, tag: ts.Expressi
 /** Whether `type` (or a member of a union) carries the \`Untrusted<T>\` brand. */
 export function isUntrustedType(checker: ts.TypeChecker, type: ts.Type): boolean {
   if (type.isUnion()) return type.types.some(member => isUntrustedType(checker, member));
-  return checker.getPropertiesOfType(type).some(property => property.escapedName.toString().startsWith('__@natlangUntrusted'));
+  return checker.getPropertiesOfType(type).some(property => property.name === '__natlangUntrusted');
 }
 const isTextType = (type: ts.Type): boolean => type.isUnion() ? type.types.every(isTextType) :
   !!(type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.TemplateLiteral)) || type.isIntersection() && type.types.some(isTextType);

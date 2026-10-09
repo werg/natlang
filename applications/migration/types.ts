@@ -1,5 +1,3 @@
-import type { Is } from '@natlang/node';
-
 export type FileIdentity = { path: string, sha256: string, lines: number };
 export type RepoSnapshot = { revision: string, files: FileIdentity[] };
 export type SearchHit = { path: string, offset: number, line: number, excerpt: string };

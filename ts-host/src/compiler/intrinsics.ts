@@ -62,22 +62,18 @@ export const NEURALESE_TYPE_DOCUMENTATION =
   'materialized through the configured writer; this does not convert nested fields or other payload types. This declaration grants no call or service capability.';
 
 const DECLARATIONS = String.raw`
-/** Brand of a value that satisfies a natural-language predicate; see \`Is\`. */
-declare const natlangRefinement: unique symbol;
 /**
  * A \`T\` whose value satisfies the natural-language predicate \`P\`, checked where the value enters the slot. It is a \`T\`
  * everywhere; crisp code gets one from a refined natlang result, \`refine(value, predicate)\` or \`assume(value, predicate)\`.
  */
-type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
+type Is<T, P extends string> = T & { readonly __natlangRefinement: { [K in P]: true } };
 
-/** Brand of a value that came from outside the program; see \`Untrusted\`. */
-declare const natlangUntrusted: unique symbol;
 /**
  * A \`T\` from outside the program (a file, HTTP, user text, tool output). It is a \`T\` for crisp code; a model sees it only
  * as a quoted data block labelled with its source, and it cannot be interpolated into the text of an \`nl\` call
  * (untrusted-instruction): pass it as an argument. \`untrusted(value, source)\` from the runtime module marks one.
  */
-type Untrusted<T> = T & { readonly [natlangUntrusted]: true };
+type Untrusted<T> = T & { readonly __natlangUntrusted: true };
 
 /** Marker for an unspecified \`nl\` type argument. */
 interface NlUnspecified { readonly __natlangUnspecified: true }

@@ -81,20 +81,18 @@ export function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) =
   return iterate(step as never, initial, ...args);
 }
 
-declare const natlangRefinement: unique symbol;
 /**
  * A `T` whose value satisfies the natural-language predicate `P` (plans/REFINEMENT_TYPES.md). It is a `T` everywhere;
  * crisp code obtains one from a refined natlang result, from `refine(value, predicate)` or from `assume(value, predicate)`.
  */
-export type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
+export type Is<T, P extends string> = T & { readonly __natlangRefinement: { [K in P]: true } };
 
-declare const natlangUntrusted: unique symbol;
 /**
  * A `T` that came from outside the program (plans/REFINEMENT_TYPES.md section 4). It is a `T` for crisp code. The model sees
  * it only as a quoted data block labelled with its source, and the compiler refuses it in instruction text
  * (`untrusted-instruction`).
  */
-export type Untrusted<T> = T & { readonly [natlangUntrusted]: true };
+export type Untrusted<T> = T & { readonly __natlangUntrusted: true };
 
 /**
  * Mark `value` as coming from `source` (a short label such as "stdin" or "index.search") and return it as an

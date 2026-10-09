@@ -165,7 +165,7 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     }
     if (candidate.isIntersection()) {
       // `Untrusted<T>` is `T & brand`: the one intersection with a portable meaning.
-      const isBrand = (part: ts.Type) => part.getProperties().length === 1 && part.getProperties()[0]!.name.startsWith('__@natlangUntrusted');
+      const isBrand = (part: ts.Type) => part.getProperties().length === 1 && part.getProperties()[0]!.name === '__natlangUntrusted';
       const rest = candidate.types.filter(part => !isBrand(part));
       if (rest.length === 1 && rest.length < candidate.types.length) return `Untrusted<${convert(rest[0]!, depth + 1)}>`;
       throw new TargetError('intersection types are not supported as portable targets');

@@ -1,5 +1,3 @@
-import type { Is } from '@natlang/node';
-
 // The scheduler's stages pass these values to each other. Every time is a whole number of minutes after
 // DayView.origin, so no stage handles an epoch number, a date library or a time zone.
 

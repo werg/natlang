@@ -1,5 +1,3 @@
-import type { Is } from '@natlang/node';
-
 /** What a decision can ask the workflow to do next. reconcile and retry act on an operation whose outcome is unknown. */
 export type Action = "reserve" | "charge" | "ship" | "refund" | "release" | "reconcile" | "retry" | "wait";
 
