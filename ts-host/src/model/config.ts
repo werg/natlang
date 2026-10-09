@@ -5,18 +5,38 @@ import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
 
+export type BatchingSettings = {
+  /** server-continuous (default), explicit-batch or serial. */
+  mode?: 'server-continuous' | 'explicit-batch' | 'serial';
+  maxConcurrent?: number;
+  /** Coalescing window in ms (default 2 for explicit-batch, 0 otherwise). */
+  coalesceMs?: number;
+  /** Serve turns of running calls before new calls (default true). */
+  priority?: boolean;
+  /** Optional explicit-batch scoring endpoint: a URL, or true for `{endpoint}/v1/natlang/score`. Explicit-batch mode only. */
+  scoreEndpoint?: string | boolean;
+};
+
 export type ModelProfile = {
   endpoint?: string; provider?: string; model?: string; apiKeyEnv?: string;
   headers?: Record<string, string>; request?: Record<string, unknown>;
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
-  local?: { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[] };
-  /** Model requests in flight at once from this process (turns and decision scoring together); unlimited if unset. */
+  /**
+   * Managed server settings. `contextTokens` is per slot. `parallel` is the slot count; unset, it is sized from memory
+   * (model/server-slots.ts), using `memoryBudgetMiB` (default half of available memory) and `kvBytesPerToken`.
+   */
+  local?: { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[];
+    memoryBudgetMiB?: number; kvBytesPerToken?: number };
+  /** Model requests in flight at once from this process (turns and decision scoring together). A managed local server
+   * defaults to its slot count, other backends to unlimited. `batching.maxConcurrent` takes precedence. */
   concurrency?: number;
+  /** How this backend turns concurrent requests into batches (model/scheduler.ts). */
+  batching?: BatchingSettings;
   runtime?: Omit<ModelConfig, 'driver'> & { seed?: NatlangRuntimeOptions['seed'] };
 };
 
-type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number };
+type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
   | (Common & { kind: 'external'; endpoint: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
@@ -46,7 +66,8 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.local && (profile.provider || profile.endpoint))
     throw new Error('local server options require a managed-local profile');
   if (profile.local) {
-    for (const [key, minimum] of [['contextTokens', 1024], ['gpuLayers', 0], ['parallel', 1], ['cacheRamMiB', 0]] as const) {
+    for (const [key, minimum] of [['contextTokens', 1024], ['gpuLayers', 0], ['parallel', 1], ['cacheRamMiB', 0],
+      ['memoryBudgetMiB', 1], ['kvBytesPerToken', 1]] as const) {
       const value = profile.local[key];
       if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum))
         throw new Error(`local.${key} must be an integer >= ${minimum}`);
@@ -55,14 +76,27 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
       profile.local.args.some(value => typeof value !== 'string')))
       throw new Error('local.args must be an array of strings');
     const ownedFlags = new Set(['-m', '--model', '--model-url', '--host', '--port', '--chat-template-file',
-      '-c', '--ctx-size', '-ngl', '--n-gpu-layers', '--parallel', '--cache-ram']);
+      '-c', '--ctx-size', '-ngl', '--n-gpu-layers', '--parallel', '-np', '--cache-ram']);
     for (const arg of profile.local.args ?? []) if (ownedFlags.has(arg.split('=')[0]!))
       throw new Error(`local.args cannot override managed flag ${arg}; use the dedicated local setting where available`);
   }
   if (profile.concurrency !== undefined && (!Number.isSafeInteger(profile.concurrency) || profile.concurrency < 1))
     throw new Error('concurrency must be an integer >= 1');
+  const batching = profile.batching;
+  if (batching !== undefined) {
+    if (!batching || typeof batching !== 'object' || Array.isArray(batching)) throw new TypeError('batching must be an object');
+    if (batching.mode !== undefined && !['server-continuous', 'explicit-batch', 'serial'].includes(batching.mode))
+      throw new Error('batching.mode must be server-continuous, explicit-batch or serial');
+    if (batching.maxConcurrent !== undefined && (!Number.isSafeInteger(batching.maxConcurrent) || batching.maxConcurrent < 1))
+      throw new Error('batching.maxConcurrent must be an integer >= 1');
+    if (batching.coalesceMs !== undefined && !(Number.isFinite(batching.coalesceMs) && batching.coalesceMs >= 0))
+      throw new Error('batching.coalesceMs must be a number >= 0');
+    if (batching.scoreEndpoint && batching.mode !== 'explicit-batch')
+      throw new Error('batching.scoreEndpoint requires batching.mode explicit-batch');
+  }
   const common = { headers: profile.headers, runtime: profile.runtime,
-    ...(profile.concurrency === undefined ? {} : { concurrency: profile.concurrency }) };
+    ...(profile.concurrency === undefined ? {} : { concurrency: profile.concurrency }),
+    ...(batching === undefined ? {} : { batching }) };
   if (profile.provider) return { ...common, kind: 'pi-provider', provider: profile.provider, model: profile.model!,
     apiKeyEnv: profile.apiKeyEnv, piOptions: profile.piOptions, piPayload: profile.piPayload,
     piMode: profile.piMode ?? 'native', modelOptions: profile.modelOptions };
@@ -107,7 +141,7 @@ export function executorIdentityForChoice(choice: ResolvedModelChoice): import('
     return input;
   };
   const configuration = sanitize(choice) as Record<string, unknown>;
-  delete configuration.concurrency;   // how many requests run at once does not change what the model does
+  delete configuration.concurrency; delete configuration.batching;   // how many requests run at once does not change what the model does
   const behaviorHeaders = Object.fromEntries(Object.entries(choice.headers ?? {}).filter(([key]) => !credential.test(key)));
   if (Object.keys(behaviorHeaders).length) configuration.headersHash = fingerprint(behaviorHeaders, 'natlang.model-headers/v1');
   if (choice.kind === 'external') {

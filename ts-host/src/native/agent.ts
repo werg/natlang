@@ -1031,7 +1031,10 @@ export class NativeToolAgent {
       overflowRetries = 0;
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
-        prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+        prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null,
+        ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
+          in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
+          schedule_priority: response.scheduling.priority } : {}) });
       const turnNode = this.modelTurnNode(session, messages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;

@@ -39,7 +39,9 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   /** null means planning was requested but the provider did not produce a valid plan. */
   execution_plan?: string | null;
   /** The reply stopped at max_tokens. */
-  truncated?: boolean };
+  truncated?: boolean;
+  /** How the model scheduler batched this turn's request (batch id and size, requests in flight, queue wait). */
+  scheduling?: { batch_id: string; batch_size: number; in_flight: number; queue_wait_ms: number; priority: 'running' | 'new' } };
 
 
 /**
@@ -50,7 +52,13 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
  */
 export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[] };
 export type DecisionScores = { log_probs: number[]; tokens?: number[] };
-export type DecisionScorer = (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>;
+export type DecisionScorer = ((request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>) & {
+  /**
+   * Score many requests at once, so the backend can batch them (plans/BATCHED_EXECUTION.md §3.3). One entry per item,
+   * in order; an item that cannot be scored fails alone. Optional: use `scoreMany` from native/decision.ts, which
+   * falls back to issuing the items concurrently.
+   */
+  scoreMany?: (items: DecisionRequest[], signal?: AbortSignal) => Promise<PromiseSettledResult<DecisionScores>[]> };
 
 /** Aggregate-only progress from a streaming provider turn. Contains no generated content. */
 export type ModelStreamProgress = { status: 'progress' | 'completed' | 'failed';
