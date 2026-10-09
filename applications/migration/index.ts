@@ -1,22 +1,48 @@
 /**
- * Repository migration workbench. Candidate revisions live in memory; each is materialized only in
- * a temporary directory for the declared checks, so the original checkout is never written. Natlang
- * proposes exact patches from search evidence and repairs a failing candidate from its check output,
- * inside a bounded `iterateOn` loop. Manifest and check commands are trusted configuration.
+ * Repository migration in natural language. migrate.nl understands the request, surveys the sites that mention the old
+ * thing, classifies each usage, plans, writes and checks one patch per site, applies them, runs the checks, and
+ * repairs from the failures in a bounded loop with a natural-language stopping judgment. This file is the outside
+ * world those stages act on, as the `repository` service: candidate revisions in memory, search, exact line ranges
+ * and counts, applying exact patches, materializing a candidate in a temporary directory to run the declared checks,
+ * and the report of changed files. The original checkout is never written. Manifest and check commands are trusted.
  */
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import { IterationLimitError, iterateOn } from '@natlang/node';
-import propose from './propose.nl';
-import type { Check, Patch, RepoSnapshot, SearchHit, SearchResult, Validation } from './types.js';
+import type { NatlangRuntime } from '@natlang/node';
+import migrateFlow from './migrate.nl';
+import type { Check, ChangedFile, Migration, MigrationReport, Patch, RepoSnapshot, SearchHit, SearchResult, Validation } from './types.js';
 
 export type * from './types.js';
 export type CheckCommand = { id: string, argv: string[], timeoutMs?: number };
-export type ChangedFile = { path: string, before_sha256: string, after_sha256: string };
-export type MigrationReport = { status: 'reviewable' | 'checks-failed', base: string, revision: string, changed: ChangedFile[], checks: Check[] };
+
+/** The pluggable policy points, and the implementation each runs when the host does not choose. */
+export type PolicyPoint = 'exact' | 'settled';
+export type Implementation = 'crisp' | 'natural-language';
+export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { exact: 'natural-language', settled: 'natural-language' };
+
+/** What the natural-language stages see of the `repository` service. Types are those of types.ts. */
+export const repositoryDeclaration = `/** The repository under migration: candidate revisions held in memory, the original checkout untouched. */
+/** Which implementation runs a pluggable policy point: 'crisp' or 'natural-language'. */
+export function implementation(point: 'exact' | 'settled'): 'crisp' | 'natural-language';
+/** Search every manifest file of a revision (default: the base) for an exact string. Hits carry path, 1-based line, offset and an excerpt. */
+export function search(query: string, revision?: string): SearchResult;
+/** The text of lines from..to (1-based, inclusive) of a file at a revision, exactly as stored. */
+export function lines(path: string, from: number, to: number, revision?: string): string;
+/** The whole text of a file at a revision. */
+export function read(path: string, revision?: string): string;
+/** How many times text occurs in a file at a revision (a patch's old text must occur once). */
+export function count(path: string, text: string, revision?: string): number;
+/** The files of a revision with digests and line counts. */
+export function snapshot(revision?: string): RepoSnapshot;
+/** Apply patches in order to a revision and return the new revision. Rejects with the path and reason when a path is not in the manifest, old is empty or equals new, or old occurs zero or several times. */
+export function apply(base: string, patches: Patch[]): RepoSnapshot;
+/** Materialize a revision in a temporary directory, run the declared checks there and remove the directory. */
+export function validate(revision: string): Promise<Validation>;
+/** The exact report for a validated revision: its status, the files changed against the base with digests, and the checks. */
+export function report(revision: string, validation: Validation): MigrationReport;`;
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const safe = (path: unknown) => typeof path === 'string' && path.length > 0 && !path.startsWith('/') &&
@@ -43,13 +69,15 @@ function runCheck(check: CheckCommand, directory: string): Promise<Check> {
 
 export class RepositoryMigration {
   base = '';
+  private readonly policy: Record<PolicyPoint, Implementation>;
   private readonly root: string;
   private readonly files: string[];
   private readonly checks: CheckCommand[];
   private readonly revisions = new Map<string, Record<string, string>>();
   private readonly events: Record<string, unknown>[] = [];
 
-  constructor(root: string, { files, checks = [] }: { files: string[], checks?: CheckCommand[] }) {
+  constructor(root: string, { files, checks = [], policy = {} }: { files: string[], checks?: CheckCommand[], policy?: Partial<Record<PolicyPoint, Implementation>> }) {
+    this.policy = { ...DEFAULT_POLICY, ...policy };
     this.root = resolve(root); this.files = [...files]; this.checks = checks;
     if (!this.files.length || this.files.some(path => !safe(path)) || new Set(this.files).size !== this.files.length)
       throw new Error('invalid file manifest');
@@ -80,6 +108,26 @@ export class RepositoryMigration {
     return contents;
   }
 
+  implementation(point: PolicyPoint): Implementation {
+    if (!Object.hasOwn(this.policy, point)) throw new Error(`unknown policy point: ${point}`);
+    return this.policy[point];
+  }
+
+  /** Lines from..to (1-based, inclusive) exactly as stored. */
+  lines(path: string, from: number, to: number, revision = this.base): string {
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 1 || to < from) throw new Error(`invalid line range: ${from}..${to}`);
+    return this.read(path, revision).split('\n').slice(from - 1, to).join('\n');
+  }
+
+  /** How many times text occurs in a file at a revision. */
+  count(path: string, text: string, revision = this.base): number {
+    if (typeof text !== 'string' || !text) throw new Error('empty text');
+    const contents = this.read(path, revision);
+    let found = 0;
+    for (let at = contents.indexOf(text); at >= 0; at = contents.indexOf(text, at + text.length)) found++;
+    return found;
+  }
+
   snapshot(revision = this.base): RepoSnapshot {
     return { revision, files: Object.entries(this.contents(revision)).map(([path, text]) => ({ path, sha256: hash(text), lines: text.split('\n').length })) };
   }
@@ -106,10 +154,13 @@ export class RepositoryMigration {
     if (!contents || !Array.isArray(patches) || !patches.length) throw new Error('unknown base or empty patches');
     const updated = { ...contents };
     for (const patch of patches) {
-      if (!Object.hasOwn(updated, patch.path) || typeof patch.old !== 'string' || !patch.old || typeof patch.new !== 'string' ||
-          patch.old === patch.new) throw new Error('invalid patch');
+      if (!Object.hasOwn(updated, patch.path)) throw new Error(`invalid patch: ${patch.path} is not a file of the manifest`);
+      if (typeof patch.old !== 'string' || !patch.old || typeof patch.new !== 'string' || patch.old === patch.new)
+        throw new Error(`invalid patch: ${patch.path} needs a non-empty old text and a new text that differs`);
       const text = updated[patch.path]!, at = text.indexOf(patch.old);
-      if (at < 0 || text.indexOf(patch.old, at + patch.old.length) >= 0) throw new Error(`patch context missing or ambiguous: ${patch.path}`);
+      if (at < 0) throw new Error(`patch context missing: ${patch.path} does not contain the old text ${JSON.stringify(patch.old.slice(0, 80))}`);
+      if (text.indexOf(patch.old, at + patch.old.length) >= 0)
+        throw new Error(`patch context ambiguous: ${patch.path} contains the old text ${JSON.stringify(patch.old.slice(0, 80))} more than once; extend it with neighboring text`);
       updated[patch.path] = text.slice(0, at) + patch.new + text.slice(at + patch.old.length);
     }
     const revision = this.identity(updated);
@@ -147,19 +198,17 @@ export class RepositoryMigration {
   drainEvents(): Record<string, unknown>[] { return this.events.splice(0); }
 }
 
+/** The options that give natural-language stages the repository as the `repository` service. */
+export function migrationServices(repository: RepositoryMigration) {
+  return { services: { repository }, serviceDeclarations: { repository: repositoryDeclaration } };
+}
+
 /**
- * Propose a candidate for the request, validate it, and repair it from check output until the checks
- * pass or `attempts` candidates have been tried. The original checkout is untouched.
+ * Migrate the repository as the request says with the natural-language stages: at most `attempts` repair rounds after
+ * the first candidate. seeds are extra search strings. The original checkout is untouched.
  */
-export async function migrate(repository: RepositoryMigration, request: string, query: string, { attempts = 3 } = {}): Promise<MigrationReport> {
-  type Candidate = { snapshot: RepoSnapshot, validation?: Validation };
-  const next = async ({ snapshot, validation }: Candidate): Promise<Candidate> => {
-    const patches = await propose(request, snapshot, repository.search(query, snapshot.revision), validation);
-    const candidate = repository.apply(snapshot.revision, patches);
-    return { snapshot: candidate, validation: await repository.validate(candidate.revision) };
-  };
-  const final = await iterateOn(next, { snapshot: repository.snapshot() } as Candidate)
-    .withLimit({ maxSteps: attempts }).until(candidate => candidate.validation?.status === 'passed')
-    .catch(error => { if (error instanceof IterationLimitError) return error.lastState as Candidate; throw error; });
-  return repository.report(final.snapshot.revision, final.validation!);
+export async function migrate(runtime: NatlangRuntime, repository: RepositoryMigration, request: string,
+  { attempts = 3, seeds = [] as string[], checks = [] as string[] } = {}): Promise<Migration> {
+  const snapshot = repository.snapshot();
+  return runtime.run(() => migrateFlow(request, snapshot, checks, seeds, attempts), migrationServices(repository));
 }

@@ -1,0 +1,10 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/migration",
+  "version": "0.1.0",
+  "description": "Repository migrations in natural language: intent, survey of sites, usage classification, planning, one exact patch per site, failure triage and repair in a loop with a natural-language stopping judgment. The repository service keeps revisions in memory and runs the declared checks in a temporary directory.",
+  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "services.d.ts", "types.ts", "migrate.nl", "migrate", "site", "loop", "tsconfig.json"],
+  "targets": { "migration": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands"], "commands": ["*"],
+    "description": "natlang run applications/migration -- MANIFEST.json [--attempts N] [--seed TEXT]... [--exact|--settled crisp|natural-language]" } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
