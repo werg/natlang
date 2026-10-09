@@ -13,7 +13,6 @@ the event just now.
 2. action is the one world action, chosen by these cases:
    - "give": the event asks for an item or the commitments call for it, and observation.inventory holds at least 1 of
      it. item is that item's name, target is the id of the recipient (usually event.from).
-   - "promise": the event asks for help later. target is the recipient and detail is a concrete, checkable statement of
-     what the NPC will do.
+   - "promise": the event asks for help later. target is the recipient and detail is what the NPC will do.
    - "none": otherwise.
 3. Return { say, action } with item and target for a give, or target and detail for a promise.

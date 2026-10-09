@@ -11,9 +11,9 @@ import type { CombatState, EconomyState, Fighter, GameEvent, Merchant, NpcEvent,
 export type * from './types.js';
 
 /** Every pluggable part in natural language. */
-export const defaultSettings: Settings = { validate: 'nl', settle: 'nl', resolve: 'nl', remember: 'nl', narrate: 'nl' };
+export const defaultSettings = { validate: 'nl', settle: 'nl', resolve: 'nl', remember: 'nl', narrate: 'nl' } as Settings;
 /** Every pluggable part crisp: only the actors' own choices (choose, tactic, respond) are left to a model. */
-export const crispSettings: Settings = { validate: 'crisp', settle: 'crisp', resolve: 'crisp', remember: 'crisp', narrate: 'crisp' };
+export const crispSettings = { validate: 'crisp', settle: 'crisp', resolve: 'crisp', remember: 'crisp', narrate: 'crisp' } as Settings;
 
 const copy = <T>(value: T): T => structuredClone(value);
 const valid = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]*$/.test(value);
@@ -30,12 +30,12 @@ export function createEconomy(merchants: Merchant[], { seed = 0 } = {}): Economy
 }
 
 /** An arena of `width` cells. */
-export function createArena(fighters: Omit<Fighter, 'cooldown'>[], { width = 8 } = {}): CombatState {
+export function createArena(fighters: { id: string, x: number, hp: number }[], { width = 8 } = {}): CombatState {
   if (!Number.isSafeInteger(width) || width < 2) throw new Error('invalid arena');
   if (!Array.isArray(fighters) || fighters.length < 2 || new Set(fighters.map(row => row.id)).size !== fighters.length ||
       fighters.some(row => !valid(row.id) || !Number.isSafeInteger(row.x) || row.x < 0 || row.x >= width ||
         !Number.isSafeInteger(row.hp) || row.hp <= 0)) throw new Error('invalid fighters');
-  return { kind: 'combat', round: 0, width, fighters: fighters.map(row => ({ ...copy(row), cooldown: 0 })) };
+  return { kind: 'combat', round: 0, width, fighters: fighters.map(row => ({ ...copy(row), cooldown: 0 })) as Fighter[] };
 }
 
 /** A village of NPCs with an inventory each and empty memories. */

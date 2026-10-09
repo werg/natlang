@@ -11,4 +11,4 @@ own cash and goods, and the public offers of the other merchants (seller, good, 
 2. Weigh each such offer by what the price buys against the merchant's likely future use of the good, and against
    the goods it already holds.
 3. When one offer is worth taking, return a buy: kind "buy", seller and good exactly as the offer names them, and a
-   positive whole number as quantity that cash covers. Otherwise return kind "pass".
+   quantity that cash covers. Otherwise return kind "pass".

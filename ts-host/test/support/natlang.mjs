@@ -6,6 +6,8 @@ import { TypeEnv } from '../../dist/native/types.js';
 import { buildPending } from '../../dist/native/values.js';
 import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.js';
 import YAML from 'yaml';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** A TypeScript module item (callable-folder `.ts` file). */
 export function ts(name, text, children = {}, types = {}) {
@@ -62,4 +64,31 @@ export function scriptedModel(respond) {
     return { text: 'done' };
   };
   return { driver, openings };
+}
+
+/**
+ * The crisp refinement checkers of a built application (`applications/dist/<app>/index.js` and the `refinements.js` beside
+ * it), loaded the way the launcher loads them, for the runtime option `refinements: { crisp }`.
+ */
+export async function appCrisp(app) {
+  const { loadProgramRefinements } = await import('../../dist/cli/program-refinements.js');
+  const dist = fileURLToPath(new URL('../../../applications/dist', import.meta.url));
+  return loadProgramRefinements(join(dist, app, 'index.js'), join(dist, app));
+}
+
+/**
+ * Gives a driver a scoring pass for the refinement judge: `truth(value, predicate)` says whether the value satisfies the
+ * predicate (default: yes). The values it was asked about are returned, as `[value, predicate]` pairs.
+ */
+export function withJudge(driver, truth = () => true) {
+  const judged = [];
+  driver.decide = async request => {
+    const prompt = String(request.messages.at(-1).content);
+    const value = /<<<value\n([^]*?)\nvalue>>>/.exec(prompt)?.[1] ?? '';
+    const predicate = /Property: the value is (.*)\n/.exec(prompt)?.[1] ?? '';
+    judged.push([value, predicate]);
+    const p = truth(value, predicate) ? 0.97 : 0.04;
+    return { log_probs: [Math.log(p), Math.log(1 - p)] };
+  };
+  return judged;
 }
