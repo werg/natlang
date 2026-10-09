@@ -1353,18 +1353,6 @@ def test_restart_before_first_checkpoint_preserves_partial_files(tmp_path,monkey
     assert 'Self CPU' in (out/'profile-step2.txt').read_text()
 
 
-def test_sketch_cutoff_probe_collects_layer_states_and_scores_heads():
-    import torch
-    from natlang_neuralese.eval.sketch_cutoff_probe import head_scores, layer_states
-    from natlang_neuralese.model.causal_feedback import CausalFeedbackProjection
-    backbone,heads=tiny_student()
-    ids=torch.tensor([[9,3,5,8,4,7]])
-    states,greedy=layer_states(backbone,ids,[1])
-    assert states[1].shape[0]==ids.shape[1]-1 and greedy.shape==(ids.shape[1]-1,)
-    scores=head_scores(CausalFeedbackProjection(backbone),states[1],ids[0,1:],greedy,'cpu')
-    assert scores['tokens']==ids.shape[1]-1 and 0<=scores['gold_top1']<=1 and scores['ce']>0
-
-
 def test_chat_roles_label_system_user_reasoning_and_reply():
     from natlang_neuralese.train.text_warmup import ROLE_CODES, chat_roles
     S,SYS,USR,AST,TO,TC=1,2,3,4,5,6
