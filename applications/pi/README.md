@@ -88,14 +88,16 @@ Measured on DGX (2026-10-08) with Qwen3.6-35B-A3B-NVFP4 on vLLM as both executor
 a training job (about 170 generated tokens/s across all requests, about 28 per stream).
 
 - Wiring tests: 25/25. pi-durable's own suite (crisp defaults): 967 tests.
-- Conformance (pi-durable's harness suites against the natural-language task kinds, 322 tests): run 3 in
-  progress; 113 of the first 121 pass. Every failure seen so far either passes alone on the current code or led
-  to a fix: a string ID in a checkpoint, a repeated provider request, an empty system entry, a non-JSON provider
-  message cleaned instead of faulting, an invented settlement status, the abort phase skipping its commit, a
-  generation turn not streaming, the reported error's shape. Most fixes are commit-time checks in `ops.ts` whose
-  errors say what to do, or general runtime changes (see below). Remaining variance comes from the executor under
-  load: a phase occasionally improvises (skips a step, retypes a value) and the second attempt, which is told why
-  the first failed (`facts.previousAttempt`), usually recovers.
+- Conformance (pi-durable's harness suites against the natural-language task kinds, 322 tests). A long run keeps the
+  code it loaded, so each run is stopped and restarted on the newest code when fixes land. Run 4: 118 of 128 pass.
+  Run 5: 155 of 166 pass. Apart from the parallel-round timing deviation below, every failure of both either passes
+  alone on the current code or led to a fix: a null head
+  handed to pi's planner (a spurious system entry), a final provider or tool failure that was retried or cleaned
+  instead of faulting, hooks and tool runs repeated within a phase (now once-effects), a registry missing pi's
+  built-in tasks accepted, an eval built-in that collided with a function of the folder (`transcript`, every eval in
+  compaction's summarize phase rejected), and functions that committed for their caller while answering `null` (now
+  `{ committed }`). Remaining variance comes from the executor under load: a phase occasionally improvises and the
+  second attempt, told why the first failed (`facts.previousAttempt`), usually recovers. Run 6 is in progress.
 - Results of an aborted parallel round are written in call order: an aborted tool waits (bounded) for the slots
   before it, as pi's synchronous tools finish in call order.
 - Live: `eval js-off-by-one` ran 7 generations and several tool rounds end to end (bash, read, edit), fixed the
