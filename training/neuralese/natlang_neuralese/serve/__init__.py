@@ -9,11 +9,10 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
                 dtype=None):
     """Load the backbone (optionally merging a LoRA), the port heads (untrained unless a trainer checkpoint is
     given) and an empty store."""
-    import math
     import torch
 
     from ..model.dialect import DIALECT
-    from ..model.heads import PortHeads
+    from ..model.heads import PortHeads, read_adapter_checkpoint_config
     from ..model.capacity import checkpoint_write_capacity, set_write_capacity
     from pathlib import Path
 
@@ -72,21 +71,9 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     heads = PortHeads(backbone, cutoff=cutoff, max_length=saved_length, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
     heads.set_content_transport(metadata.get("content_transport", heads.content.transport))
-    read_adapter_keys = {k for k in (state or {}).get("heads", {}) if k.startswith("read_adapter.")}
-    read_adapter = metadata.get("read_adapter")
-    expected_adapter_keys = {"read_adapter.norm.weight", "read_adapter.proj.weight", "read_adapter.proj.bias"}
-    if read_adapter not in (None, "full-residual-v1"):
-        raise ValueError(f"unsupported reader adapter {read_adapter!r}")
-    if read_adapter == "full-residual-v1":
-        eps = metadata.get("read_adapter_norm_eps")
-        if (not isinstance(eps, (int, float)) or isinstance(eps, bool) or
-                not math.isfinite(float(eps)) or float(eps) <= 0):
-            raise ValueError("full-residual-v1 checkpoint needs a finite positive read_adapter_norm_eps")
-        if read_adapter_keys != expected_adapter_keys:
-            raise ValueError("full-residual-v1 checkpoint has incomplete reader adapter state")
-        heads.add_read_adapter(eps=float(eps))
-    elif read_adapter_keys or metadata.get("read_adapter_norm_eps") is not None:
-        raise ValueError("checkpoint has reader adapter state without read_adapter metadata")
+    read_adapter, read_adapter_eps = read_adapter_checkpoint_config(metadata, (state or {}).get("heads", {}))
+    if read_adapter is not None:
+        heads.add_read_adapter(eps=read_adapter_eps)
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state

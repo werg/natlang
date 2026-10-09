@@ -4,6 +4,7 @@ distribution with temperature-gated sampling), interface norm."""
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import torch
@@ -54,6 +55,34 @@ class NeuraleseReadAdapter(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.proj(self.norm(x).to(self.proj.weight.dtype)).to(x.dtype)
+
+
+def read_adapter_checkpoint_config(metadata: Mapping, head_state: Mapping) -> tuple[str | None, float | None]:
+    """Validate a checkpoint's reader adapter declaration and return its variant and exact epsilon.
+
+    Early full-residual-v1 checkpoints predate epsilon serialization. That variant had a fixed 1e-5 epsilon, so an
+    absent field has one lossless interpretation. New checkpoints write the epsilon explicitly.
+    """
+    if not isinstance(metadata, Mapping) or not isinstance(head_state, Mapping):
+        raise ValueError("reader adapter checkpoint metadata and head state must be mappings")
+    prefix = "read_adapter."
+    keys = {key for key in head_state if isinstance(key, str) and key.startswith(prefix)}
+    expected = {"read_adapter.norm.weight", "read_adapter.proj.weight", "read_adapter.proj.bias"}
+    variant = metadata.get("read_adapter")
+    has_eps = "read_adapter_norm_eps" in metadata
+    if variant is None:
+        if "read_adapter" in metadata or has_eps or keys:
+            raise ValueError("checkpoint has reader adapter state without a supported read_adapter declaration")
+        return None, None
+    if variant != "full-residual-v1":
+        raise ValueError(f"unsupported reader adapter {variant!r}")
+    if keys != expected:
+        raise ValueError("full-residual-v1 checkpoint has incomplete reader adapter state")
+    eps = metadata["read_adapter_norm_eps"] if has_eps else 1e-5
+    if (not isinstance(eps, (int, float)) or isinstance(eps, bool) or
+            not math.isfinite(float(eps)) or float(eps) <= 0):
+        raise ValueError("full-residual-v1 checkpoint needs a finite positive read_adapter_norm_eps")
+    return variant, float(eps)
 
 
 class FeedbackProjection(nn.Module):

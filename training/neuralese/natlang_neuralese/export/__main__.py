@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import os
 import subprocess
 import sys
@@ -97,7 +96,7 @@ def main(argv=None):
     import torch
 
     from ..model.dialect import DIALECT
-    from ..model.heads import PortHeads
+    from ..model.heads import PortHeads, read_adapter_checkpoint_config
     from ..model.lfm2_port import (
         DEFAULT_BASE, DEFAULT_REVISION, ControlTokens, PortBackbone, load_backbone, resolve_base,
     )
@@ -115,22 +114,7 @@ def main(argv=None):
     profile = metadata.get('profile', 'legacy-rms-v1')
     if profile != 'legacy-rms-v1':
         raise ValueError(f'GGUF projector export supports legacy-rms-v1 only; {profile} needs its qualified PyTorch handoff')
-    adapter_type = metadata.get('read_adapter')
-    adapter_eps = metadata.get('read_adapter_norm_eps')
-    adapter_keys = {name for name in (state or {}).get('heads', {}) if name.startswith('read_adapter.')}
-    expected_adapter_keys = {'read_adapter.norm.weight', 'read_adapter.proj.weight', 'read_adapter.proj.bias'}
-    if adapter_type not in (None, 'full-residual-v1'):
-        raise ValueError(f'unsupported reader adapter {adapter_type!r}')
-    if adapter_type == 'full-residual-v1' and adapter_keys != expected_adapter_keys:
-        raise ValueError('full-residual-v1 checkpoint has an incomplete adapter state')
-    if adapter_type == 'full-residual-v1' and (
-            not isinstance(adapter_eps, (int, float)) or isinstance(adapter_eps, bool) or
-            not math.isfinite(float(adapter_eps)) or float(adapter_eps) <= 0):
-        raise ValueError('full-residual-v1 checkpoint needs a finite positive read_adapter_norm_eps')
-    if adapter_type is None and adapter_keys:
-        raise ValueError('checkpoint has reader adapter weights without read_adapter metadata')
-    if adapter_type is None and adapter_eps is not None:
-        raise ValueError('checkpoint has read_adapter_norm_eps without read_adapter metadata')
+    adapter_type, adapter_eps = read_adapter_checkpoint_config(metadata, (state or {}).get('heads', {}))
     cutoff = args.cutoff if args.cutoff is not None else metadata.get("cutoff")
     if state is not None and cutoff is None:
         raise ValueError("Legacy checkpoint has no cutoff metadata; supply its actual --cutoff")
