@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -18,7 +18,7 @@ const [program, collector, materializer, emulationModule, neuraleseModule, runti
   loadDist('runtime/context.js'), loadDist('native/trace.js'), loadDist('native/graph.js'),
 ]);
 const { definitionProject } = program;
-const { defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } = collector;
+const { collectBatch, defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } = collector;
 const { materializeNativeRows } = materializer;
 const { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_PROMPT_REVISION } = emulationModule;
@@ -165,6 +165,75 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       'each readout graph edge points to the actual handoff block');
     assert.equal(requests[0].messages[0].content.includes('Declared Neuralese text-channel emulation'), true);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('partial resume replays a typed child body across fresh task IDs without duplicating the writer', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-typed-child-resume-'));
+  const project = definitionProject('protocol', { returns: 'string', instructions: 'Pass a soft note to a reader child.' });
+  const record = { version: 'natlang.program/2', id: 'typed-child-resume', kind: 'lambda_source',
+    source: 'focused-test', split: 'test', source_ids: ['typed-child-resume'], source_groups: ['typed-child-resume'],
+    license: 'test', semantics: { root: project.root, files: project.files, inputs: {}, expected: NOTE, operation: 'exact' } };
+  let requests = 0;
+  const seen = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const parsed = JSON.parse(body);
+      seen.push(parsed);
+      requests++;
+      if (requests === 3 || requests === 4) {
+        request.socket.destroy();
+        return;
+      }
+      const reply = requests === 1 ? ['eval', { code:
+        'const seed: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})`Write the handoff note.`;\n' +
+        'const prior = await seed();\n' +
+        'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the supplied handoff note and repeat its content exactly.`;\n' +
+        'return await reader(prior);' }] : ['return_result', { status: 'success', value: NOTE }];
+      const message = { role: 'assistant', content: '', tool_calls: [{ id: `resume-${requests}`,
+        type: 'function', function: { name: reply[0], arguments: JSON.stringify(reply[1]) } }] };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 20, completion_tokens: 12 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const options = { jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'), workers: 1, modelId: 'mock-teacher',
+      rootSeed: 21, systemPrompt: 'Test system prompt.', contextTokens: 8192,
+      toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: `http://127.0.0.1:${server.address().port}`,
+      collectionRole: 'teacher', textNeuraleseEmulation: true, transportRetries: 0, requestRetries: 0 };
+    await mkdir(options.jobs, { recursive: true });
+    const item = { index: 0, record };
+    assert.deepEqual((await collectBatch([item], options, nativeJobRunner(options))).missing, [0]);
+    const partialName = (await readdir(options.jobs)).find(name => name.endsWith('.partial.json'));
+    assert.ok(partialName, 'the interrupted reader leaves its exact resumable partial');
+    const partial = JSON.parse(await readFile(join(options.jobs, partialName), 'utf8'));
+    assert.equal(partial.turns.length, 2, 'the root eval and typed seed writer reply are journaled before interruption');
+    assert.match(partial.execution_attempt_id, /^[0-9a-f-]{36}$/i);
+    const oldChildId = partial.turns.find(turn => turn.invocation_id?.startsWith('task-'))?.invocation_id;
+    assert.ok(oldChildId, 'the journal contains the original child runtime-call identity');
+    await unlink(join(options.jobs, '000000.error.json'));
+    assert.deepEqual((await collectBatch([item], options, nativeJobRunner(options))).missing, []);
+    assert.equal(requests, 6, 'restart replays the root and seed responses; it resends only the failed reader and root continuation');
+    const output = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    assert.equal(output.outcome.accepted, true);
+    assert.equal(output.outcome.value, NOTE);
+    assert.equal(output.execution_identity.execution_attempt_id, partial.execution_attempt_id);
+    assert.equal(output.execution_identity.execution_run_id,
+      `${output.execution_identity.logical_run_id}/execution-${partial.execution_attempt_id}`);
+    const seed = output.trajectory.find(turn => turn.phase === 'action' &&
+      turn.context?.some(message => String(message.content ?? '').includes('Write the handoff note.')));
+    assert.ok(seed, 'the seeded child request is present in the resumed trajectory');
+    assert.notEqual(seed.invocation_id, oldChildId, 'resume has a fresh runtime task UUID despite reusing the logical request journal');
+    const resumedReaderText = (seen[4].messages ?? []).map(message => String(message.content ?? '')).join('\n');
+    assert.ok(resumedReaderText.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
+      'the replayed typed value reaches the resumed child prompt with its exact readable body');
+    const writers = output.outcome.execution_graph.filter(node => node.kind === 'block_write' &&
+      node.source_kind === 'typed-text-result');
+    assert.equal(writers.length, 1, 'restarting the collector does not duplicate the typed seed writer');
+    assert.equal(writers[0].text_body_sha256, sha256(NOTE));
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
 test('text transport prompt explains typed text result promotion and literal markers', () => {
