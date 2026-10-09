@@ -230,7 +230,7 @@ test('native collector journals model replies and replays them after an interrup
     const port = server.address().port, item = { index: 0, record: record('resumable-turns') };
     const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${port}`,
       systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(),
-      transportRetries: 1, retryDelayMs: 0 };
+      transportRetries: 1, requestRetries: 0, retryDelayMs: 0 };
     const result = await collectBatch([item], options, nativeJobRunner(options));
     assert.equal(result.completed, 1);
     assert.equal(requests, 3, 'the first decoded response must be replayed locally after interruption');
@@ -469,7 +469,7 @@ test('terminal rows retain exact admitted sender starts and distinguish planner 
     assert.deepEqual(received, ['planner', 'planner', 'action', 'action']);
     const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
     const telemetry = row.request_telemetry;
-    assert.equal(telemetry.scope.includes('opaque provider SDK/server network retries'), true);
+    assert.equal(telemetry.scope.includes('physical network attempts and upstream model steps unknown'), true);
     assert.equal(telemetry.sampled_logical_turns, 1);
     assert.equal(telemetry.planned_action_turns, 1);
     assert.equal(telemetry.planner_fallback_turns, 0);
@@ -508,10 +508,209 @@ test('retry waits are durable, abortable, and removed without producing a traini
   assert.equal(await readFile(options.output, 'utf8'), '');
 });
 
+test('same-request provider retry preserves prior actions and retries byte-identical request without rerunning the case', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-'));
+  const received = [], executionRuns = [], server = createServer((request, response) => {
+    let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const payload = JSON.parse(body); received.push({ raw: body, payload });
+      if (received.length === 2) {
+        response.writeHead(503, { 'content-type': 'application/json', 'retry-after': '0' });
+        response.end(JSON.stringify({ error: { code: 'provider_retry', provider_retryable: true } })); return;
+      }
+      const code = received.length === 1 ? 'firstAction()' : 'secondAction()';
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{
+        id: `call-${received.length}`, type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] } }] }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('same-request-retry') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 3,
+      requestRetries: 1, retryDelayMs: 0, maxModelRequests: 3,
+      execution: { identity: 'request-retry-fixture/1', run: async (_record, driver) => {
+        executionRuns.push(1);
+        const request = code => ({ invocation_id: `invocation-${code}`, messages: [{ role: 'user', content: code }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+        const first = await driver(request('first'));
+        const second = await driver(request('second'));
+        return { outcome: { accepted: true }, trace: [...first.calls, ...second.calls] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(result.completed, 1);
+    assert.equal(executionRuns.length, 1, 'request retry must not rerun the authored case');
+    assert.deepEqual(received.map(value => value.payload.messages.at(-1).content), ['first', 'second', 'second']);
+    assert.equal(received[1].raw, received[2].raw, 'failed request is retried unchanged');
+    assert.equal(received[0].payload.messages.at(-1).content, 'first', 'earlier successful action was sent once');
+    const job = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    assert.equal(job.request_telemetry.starts.length, 3);
+    assert.deepEqual(job.request_telemetry.starts.map(entry => entry.request_ordinal), [1, 2, 3]);
+    assert.deepEqual(job.request_telemetry.starts.map(entry => entry.request_retry_index ?? 0), [0, 0, 1]);
+    assert.equal(job.request_telemetry.request_retry_limit, 1);
+    assert.equal(job.request_telemetry.request_retries.length, 1);
+    assert.equal(job.request_telemetry.request_retries[0].failed_request_ordinal, 2);
+    assert.equal(job.request_telemetry.request_retries[0].error.provider_code, 'provider_retry');
+    assert.equal(job.request_telemetry.request_retries[0].request_sha256.length, 64);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('exhausted same-request retries do not trigger configured whole-case replay', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-exhaust-'));
+  let calls = 0, runs = 0;
+  const server = createServer((request, response) => {
+    calls++; let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const payload = JSON.parse(body);
+      if (calls === 1) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'first', type: 'function',
+          function: { name: 'eval', arguments: JSON.stringify({ code: 'firstAction()' }) } }] } }] }));
+      } else {
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 'provider_retry' } }));
+      }
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('retry-exhaustion') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 3,
+      requestRetries: 1, retryDelayMs: 0, execution: { identity: 'request-retry-exhaust-fixture/1', run: async (_record, driver) => {
+        runs++;
+        const request = content => ({ messages: [{ role: 'user', content }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+        await driver(request('first'));
+        await driver(request('outage'));
+        return { outcome: { accepted: true }, trace: [] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(result.missing, [0]);
+    assert.equal(calls, 3, 'first success plus failed request and one resend');
+    assert.equal(runs, 1, 'exhaustion marker suppresses whole-case replay');
+    const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
+    assert.equal(failure.code, 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('request retry backoff honors cancellation and records it before sleeping', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-abort-'));
+  let calls = 0;
+  const server = createServer((_request, response) => {
+    calls++; response.writeHead(503, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: { code: 'provider_retry' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const controller = new AbortController();
+  try {
+    const item = { index: 0, record: record('retry-abort') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 0,
+      requestRetries: 1, retryDelayMs: 10000,
+      execution: { identity: 'request-retry-abort-fixture/1', run: async (_record, driver) => {
+        await driver({ messages: [{ role: 'user', content: 'abort after failure' }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+        return { outcome: { accepted: true }, trace: [] };
+      } } };
+    const collecting = collectBatch([item], options, nativeJobRunner(options), controller.signal);
+    const partialPath = join(options.jobs, `${jobKey(item)}.partial.json`);
+    let partial, evidence = [];
+    for (let i = 0; i < 300; i++) {
+      try {
+        partial = JSON.parse(await readFile(partialPath, 'utf8'));
+        const snapshot = partial.evidence_snapshots?.[0];
+        if (snapshot) {
+          const path = join(options.jobs, snapshot.path);
+          evidence = (await readFile(path, 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
+          if (evidence.some(row => row.payload?.kind === 'collector_provider_request_retry_scheduled')) break;
+        }
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.equal(evidence.some(row => row.payload?.kind === 'collector_provider_request_retry_scheduled'), true);
+    controller.abort(new Error('cancel retry backoff'));
+    assert.deepEqual((await collecting).missing, [0]);
+    assert.equal(calls, 1, 'abort prevents the resend');
+  } finally { controller.abort(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('request budget counts each provider resend', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-budget-'));
+  let calls = 0;
+  const server = createServer((_request, response) => {
+    calls++;
+    if (calls === 1) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'first', type: 'function',
+        function: { name: 'eval', arguments: JSON.stringify({ code: 'firstAction()' }) } }] } }] }));
+    } else {
+      response.writeHead(503, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { code: 'provider_retry' } }));
+    }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('retry-budget') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 0,
+      requestRetries: 1, retryDelayMs: 0, maxModelRequests: 2,
+      execution: { identity: 'request-retry-budget-fixture/1', run: async (_record, driver) => {
+        const request = content => ({ messages: [{ role: 'user', content }],
+          tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+        await driver(request('first')); await driver(request('budgeted retry'));
+        return { outcome: { accepted: true }, trace: [] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(result.missing, [0]);
+    assert.equal(calls, 2, 'the retry consumes a budget slot and is rejected before another send');
+    const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
+    assert.match(failure.error, /request budget exceeded/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('explicit provider non-retryability blocks both request and whole-case resend', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-reject-'));
+  const errors = [{ code: 'NON_BRIDGE_TOOL_USE' }, { code: 'provider_busy', provider_retryable: false }];
+  let calls = 0;
+  const server = createServer((_request, response) => {
+    const error = errors[calls++]; response.writeHead(error.code === 'NON_BRIDGE_TOOL_USE' ? 502 : 503,
+      { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    for (let i = 0; i < errors.length; i++) {
+      const item = { index: i, record: record(`provider-nonretry-${i}`) };
+      const options = { ...config(dir), jobs: join(dir, `jobs-${i}`), output: join(dir, `out-${i}.jsonl`), workers: 1,
+        endpoint: `http://127.0.0.1:${server.address().port}`, systemPrompt: defaultSystemPrompt,
+        toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 3, requestRetries: 1, retryDelayMs: 0,
+        execution: { identity: 'provider-nonretry-fixture/1', run: async (_record, driver) => {
+          await driver({ messages: [{ role: 'user', content: 'attempt once' }],
+            tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
+          return { outcome: { accepted: true }, trace: [] };
+        } } };
+      const result = await collectBatch([item], options, nativeJobRunner(options));
+      assert.deepEqual(result.missing, [i]);
+      assert.equal(calls, i + 1, 'non-retryable provider response does not resend');
+    }
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('retry limits and delays reject invalid collector configuration', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-retry-config-'));
+  const base = { ...config(dir), endpoint: 'http://127.0.0.1:1' };
+  assert.throws(() => nativeJobRunner({ ...base, requestRetries: -1 }), /requestRetries/);
+  assert.throws(() => nativeJobRunner({ ...base, transportRetries: 1.5 }), /transportRetries/);
+  for (const retryDelayMs of [Number.NaN, Number.POSITIVE_INFINITY, -1])
+    assert.throws(() => nativeJobRunner({ ...base, retryDelayMs }), /retryDelayMs/);
+});
+
 test('a provider finish_reason error gets one bounded retry and its exact reason survives exhaustion', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-provider-finish-error-'));
   const options = { ...config(dir), workers: 1, caseEventsFile: join(dir, 'case-events.jsonl'),
-    transportRetries: 1, retryDelayMs: 0 };
+    transportRetries: 1, requestRetries: 0, retryDelayMs: 0 };
   const item = { index: 0, record: record('provider-finish-error') };
   let calls = 0;
   const result = await collectBatch([item], options, async () => {

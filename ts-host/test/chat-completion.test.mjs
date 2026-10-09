@@ -25,6 +25,22 @@ test('HTTP endpoints accept server roots and API bases without duplicating v1', 
   } finally { await new Promise(resolve => instance.close(resolve)); }
 });
 
+test('HTTP provider failures retain stable retry metadata without parsing message text downstream', async () => {
+  const instance = createServer((_incoming, response) => {
+    response.writeHead(503, { 'content-type': 'application/json', 'retry-after': '3' });
+    response.end(JSON.stringify({ error: { code: 'provider_retry', provider_retryable: false, retry_after_ms: 4500 } }));
+  });
+  await new Promise(resolve => instance.listen(0, '127.0.0.1', resolve));
+  try {
+    await assert.rejects(chatCompletionModelTurn(httpChatTransport({ endpoint: `http://127.0.0.1:${instance.address().port}`,
+      model: 'm', stream: false }))(request()), error => {
+      assert.equal(error.status, 503); assert.equal(error.providerCode, 'provider_retry');
+      assert.equal(error.providerRetryable, false); assert.equal(error.retry_after_ms, 4500);
+      assert.equal(error.headers.get('retry-after'), '3'); return true;
+    });
+  } finally { await new Promise(resolve => instance.close(resolve)); }
+});
+
 test('a reply that is only the arguments of one offered tool, as JSON, is that call; prose and ambiguous JSON stay text', async () => {
   const tools = [
     { type: 'function', function: { name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] } } },

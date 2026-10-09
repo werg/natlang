@@ -44,7 +44,8 @@ async function main(): Promise<void> {
       'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
-      '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
+      '         --request-retries N (default 1) repeats the same request; --transport-retries N (default 0) retries the whole case\n' +
+      '         --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
       '         --chat-request-config FILE  JSON sampling/template controls retained in provenance\n' +
       '         --provider-request-config FILE  JSON transport controls retained in provenance\n' +
       '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
@@ -104,7 +105,8 @@ async function main(): Promise<void> {
     ...(flags.has('--provider-action-cycle-timeout-ms') ?
       { providerActionCycleTimeoutMs: integer(flags, '--provider-action-cycle-timeout-ms', 0) } : {}),
     ...(chatControls ? { chatRequestControls: chatControls } : {}),
-    transportRetries: integer(flags, '--transport-retries', 8),
+    transportRetries: integer(flags, '--transport-retries', 0),
+    requestRetries: integer(flags, '--request-retries', 1),
     ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),

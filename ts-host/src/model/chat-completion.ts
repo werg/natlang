@@ -368,7 +368,17 @@ export function httpChatTransport(options: HttpChatOptions): ChatTransport {
     }
     if (!response.ok) {
       const text = await response.text();
-      throw Object.assign(new Error(`model HTTP ${response.status}: ${text.slice(0, 2000)}`), { status: response.status });
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      const errorBody = body?.error && typeof body.error === 'object' ? body.error : body;
+      throw Object.assign(new Error(`model HTTP ${response.status}: ${text.slice(0, 2000)}`), {
+        status: response.status, headers: response.headers,
+        ...(typeof errorBody?.code === 'string' ? { providerCode: errorBody.code } : {}),
+        ...(typeof errorBody?.provider_retryable === 'boolean' ? { providerRetryable: errorBody.provider_retryable } :
+          typeof errorBody?.providerRetryable === 'boolean' ? { providerRetryable: errorBody.providerRetryable } : {}),
+        ...(Number.isFinite(errorBody?.retry_after_ms) ? { retry_after_ms: errorBody.retry_after_ms } : {}),
+        ...(Number.isFinite(errorBody?.retry_after) ? { retry_after: errorBody.retry_after } : {}),
+      });
     }
     // A server that ignores `stream` answers with one JSON body.
     if (stream && response.body && /text\/event-stream/.test(response.headers.get('content-type') ?? ''))
