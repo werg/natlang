@@ -5,6 +5,29 @@ New neuralese training lineages start with the declared recipe at
 must not bypass its foundation gates. Code moves through `origin/main`; data and
 checkpoints move through the corpus registry and immutable manifests.
 
+## Active text foundation and depth curriculum (2026-10-09)
+
+The current foundation uses the shared projection-first sequence schedule in
+`train.text_warmup`: both distinct projections receive raw next-token embedding
+supervision from the first update; after their held plateau the transformer
+adapts gently. Gold-seeded passes reuse the same shallow layers and projection,
+shifted into the next input position, with one-stage consumer credit. Saved step
+counts and a narrow autoregressive control do not grant channel qualification.
+
+Declared `max_sequence_passes` defaults to3. An explicit4/5-pass continuation
+uses this same schedule and full-state handoff. Its saved depth-ramp cursor
+preserves optimizer, adaptation phase and backbone trainability, then adds a
+pass after each fresh `pass_ramp_evals` interval. Extending an already capped
+4-pass schedule to5 likewise waits a fresh interval; it cannot jump depths
+because earlier evaluation counters are large. A depth change remeasures held
+alignment baseline and qualification streak. Every evaluated target depth must
+pass its gates; runtime/gradient replay still needs its separate qualification.
+
+Shared commits96a17e66, d60f0180 and a31f5838 fix deeper-depth qualification and
+recipe declaration/resume handling. Pop's currently running immutable4880-text
+continuation predates them and remains at three passes. Review its final held
+metrics before declaring the next depth curriculum and exact checkpoint pins.
+
 ## Required order
 
 1. **Token-aligned identity:** raw token embeddings, unchanged positions and a
@@ -97,7 +120,7 @@ resuming under changed inputs. The raw-port handoff consumes this API and create
 The runtime report qualifies fixed-length transport/replay only; autonomous stop
 selection and semantic compression require subsequent training and evaluation.
 
-## Current text warm-up input policy (2026-10-08)
+## Historical mapped text warm-up policy (2026-10-08)
 
 Maple and LFM share `recipes/gold-text-input-map-v1.json` and the same
 `train.text_warmup` implementation. Launch with `--neuralese-input map
