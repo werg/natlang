@@ -1,5 +1,6 @@
 """Golden tests for core training math: Lion/Muon/AdamW updates against hand-computed references, optimizer
 state round-trips and routing, and the QAT ramp w + mix*(Q(w)-w) with its straight-through gradient. Tiny CPU tensors."""
+import copy
 import math
 
 import pytest
@@ -60,7 +61,7 @@ def test_lion_state_dict_round_trip_gives_identical_next_step():
     with torch.no_grad():
         b.copy_(a)
     ob = LionSR([b], lr=0.02, weight_decay=0.1)
-    ob.load_state_dict(oa.state_dict())
+    ob.load_state_dict(copy.deepcopy(oa.state_dict()))
     g = torch.randn(5, 3)
     a.grad, b.grad = g.clone(), g.clone()
     oa.step()
@@ -185,7 +186,7 @@ def test_port_muon_adamw_state_round_trip_and_added_groups_are_adamw():
     with torch.no_grad():
         hb.copy_(ha)
         bb.copy_(ba)
-    ob.load_state_dict(oa.state_dict())
+    ob.load_state_dict(copy.deepcopy(oa.state_dict()))
     gh, gb = torch.randn(6, 4), torch.randn(4)
     for h, b in ((ha, ba), (hb, bb)):
         h.grad, b.grad = gh.clone(), gb.clone()
@@ -196,7 +197,7 @@ def test_port_muon_adamw_state_round_trip_and_added_groups_are_adamw():
     other = PortMuonAdamW([("h", nn.Parameter(torch.randn(6, 4))), ("c", nn.Parameter(torch.randn(4)))],
                           lr=0.01, vocab_size=1000)
     with pytest.raises(ValueError):
-        other.load_state_dict(oa.state_dict())
+        other.load_state_dict(copy.deepcopy(oa.state_dict()))
     lora = nn.Parameter(torch.randn(2, 4))
     oa.add_param_group({"params": [lora], "lr": 0.02})
     assert oa.schema[-1]["optimizer"] == "adamw"
@@ -288,3 +289,34 @@ def test_ramp_schedule_formula_endpoints_and_monotonicity():
     mixes = [min(1.0, at / ramp) for at in range(0, 1501, 50)]
     assert mixes[0] == 0.0 and mixes[20] == 1.0 and mixes[-1] == 1.0
     assert all(a <= b for a, b in zip(mixes, mixes[1:]))
+
+
+# ---------------------------------------------------------------- fused kernels (CUDA-only in use; math tested eagerly)
+
+def test_fused_ramp_math_matches_eager_rule_at_endpoints_and_between():
+    w = _weight().to(torch.bfloat16)
+    q = T.ternarize(w)
+    assert torch.equal(T._ramped_value(w, 1.0), q)
+    assert torch.equal(T._ramped_value(w, 0.0), w)
+    half = T._ramped_value(w, 0.5)
+    assert torch.allclose(half.float(), w.float() + 0.5 * (q.float() - w.float()), atol=2 ** -7 * 4)
+
+
+def test_fused_lion_chunk_matches_reference_within_one_bf16_ulp_and_momentum_exact():
+    from natlang_neuralese.train.optim import _lion_chunk
+
+    torch.manual_seed(0)
+    p = torch.randn(256).to(torch.bfloat16)
+    g, m = torch.randn(256).to(torch.bfloat16), torch.randn(256).to(torch.bfloat16)
+    new_p, new_m = _lion_chunk(p, g, m, 0.01, 0.9, 0.99, 0.1)
+    ref_p, ref_m = lion_reference(p.float(), g.float(), m.float(), 0.01, wd=0.1)
+    ulp = ref_p.abs().clamp_min(1e-3) * 2 ** -7
+    assert new_p.dtype == torch.bfloat16 and ((new_p.float() - ref_p).abs() <= ulp * 1.01).all()
+    assert torch.equal(new_m, ref_m.to(torch.bfloat16))
+
+
+def test_lion_bf16_stochastic_rounding_is_unbiased_in_expectation():
+    p = nn.Parameter(torch.full((20000,), 1.0, dtype=torch.bfloat16))
+    p.grad = torch.ones(20000, dtype=torch.bfloat16)
+    LionSR([p], lr=0.001).step()  # 0.001 is below the bf16 resolution at 1.0 (2**-7)
+    assert p.float().mean().item() == pytest.approx(0.999, abs=1e-3)
