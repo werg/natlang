@@ -1,6 +1,11 @@
-import pytest
+import sys
+from pathlib import Path
 
-from natlang_neuralese.common import paths
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training/neuralese"))
+
+
+import pytest  # noqa: E402
+from natlang_neuralese.common import paths # noqa: E402
 
 
 @pytest.fixture(autouse=True)

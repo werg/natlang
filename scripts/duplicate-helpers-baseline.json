@@ -1,0 +1,23 @@
+{
+  "files": {
+    "benchmarks/dgx-qwen36-throughput-20261002/benchmark_client.py": 2,
+    "scripts/acquire_visual_sources.py": 1,
+    "scripts/approve_dgx_v9_pool.py": 2,
+    "scripts/audit_lfm_test_runtime_packet.py": 1,
+    "scripts/audit_neuralese_value_visibility.py": 1,
+    "scripts/build_kernel_optimization_tasks.py": 1,
+    "scripts/build_neuralese_counterfactual_reader_proposal.py": 3,
+    "scripts/build_neuralese_gold_text_delta.py": 2,
+    "scripts/neuralese_source_world_builder.py": 1,
+    "scripts/periodic_heldout.py": 1,
+    "scripts/prepare_visual_source_tasks.py": 1,
+    "scripts/probe_opencode_model.py": 1,
+    "scripts/recover_reviewed_dgx_data_relocation.py": 1,
+    "scripts/run_bonsai_queue.py": 1,
+    "scripts/run_skill_authoring_queue.py": 1,
+    "scripts/sync_training_corpora.py": 1,
+    "training/neuralese/natlang_neuralese/data/fixtures.py": 1,
+    "training/neuralese/natlang_neuralese/train/recipe.py": 1,
+    "training/neuralese/natlang_neuralese/train/text_warmup.py": 1
+  }
+}
