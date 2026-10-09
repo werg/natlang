@@ -131,7 +131,7 @@ class AssemblerInvariantTests(unittest.TestCase):
                     "--base-receipt", str(base_receipt), "--delta-native", str(delta_native),
                     "--delta-recurrence", str(delta_recurrence), "--delta-pieces", str(delta_pieces),
                     "--base-native-pieces", str(native_pieces), "--base-recurrence-pieces", str(recurrence_pieces),
-                    "--approval", str(approval), "--out", str(out)]
+                    "--approval", str(approval), "--out", str(out), "--repo-root", str(root)]
             def fake_audit(command, **kwargs):
                 Path(command[-1]).write_text(json.dumps({"structurally_closed": True, "linked_edges": 0}))
             with patch.object(sys, "argv", argv), patch.object(builder.subprocess, "run", side_effect=fake_audit):
@@ -145,6 +145,7 @@ class AssemblerInvariantTests(unittest.TestCase):
             self.assertTrue(os.path.samefile(out / "recurrence-records.jsonl", recurrence))
             self.assertTrue(os.path.samefile(out / "recurrence-pieces.jsonl", recurrence_pieces))
             manifest = json.loads((out / "proposal-manifest.json").read_text())
+            self.assertEqual(manifest["repo_root"], str(root.resolve()))
             self.assertEqual(manifest["unchanged_artifact_transport"]["recurrence"]["method"], "hardlink")
             self.assertEqual(manifest["unchanged_artifact_transport"]["recurrence_pieces"]["method"], "hardlink")
             self.assertEqual(manifest["admitted_facets"],
