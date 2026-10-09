@@ -126,8 +126,11 @@ has50 reviewed native actions approved by the standard per-action receipt
 `root-selected-50-admission-v1.json` (SHA `87e30fd3a02f3acbb7b71564b3c186a0f088cfcbce8b6a8ed09bdc9dc17d03a9`).
 Root replayed the exact captured-request audit. Missing-score suspicions cleared
 through authenticated expanded provider inputs, not oracle metadata. Shared
-text conversion and final composition publication are pending;179 actions and
-four authored roots remain held. No recurrence/whole-trace/learned-vector credit.
+current isolated rematerialization and shared text conversion are root-adopted
+as50 native /46 text rows. Actor joins are verified on every included row.
+Full-current-union hash/collision/split checks and exact tokenizer/suffix decoding
+passed. Published corpus ID: `luna-v17-conjunctive-eligibility-50-native-46-actor-text-20261009-v1`.
+Four text omissions,179 other actions and four authored roots remain held. No recurrence/whole-trace/learned-vector credit.
 Shared diagnostic fix96f9c697 clarifies `nl.with` result/capture generics and
 `decide`'s callable contract; future snapshots include it, active frozen runs
 retain their recorded implementation.
@@ -148,7 +151,7 @@ retain their recorded implementation.
 
 ## Corpus inventory
 
-Current published admitted facets:5723 native (3688train/2035test),4916 text (3212/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets, including the50 approved actions awaiting composition above, are excluded from these published totals until explicit adoption.
+Current published admitted facets:5773 native (3738train/2035test),4962 text (3258/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. The live GPU run used the immutable4880 text input; publication does not mutate it. Fresh sampled actions remain held until explicit per-action review and composition adoption.
 
 - Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
 - Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.

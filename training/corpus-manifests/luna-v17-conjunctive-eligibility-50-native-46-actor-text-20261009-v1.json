@@ -1,0 +1,819 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-conjunctive-eligibility-50-native-46-actor-text-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/root-selected-50-admission-v1.json",
+      "bytes": 51775,
+      "sha256": "87e30fd3a02f3acbb7b71564b3c186a0f088cfcbce8b6a8ed09bdc9dc17d03a9"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/root-selected-50-review-v1.json",
+      "bytes": 4872,
+      "sha256": "5c8f86131a7cfc5ad84d1ae41e9dc86d27ebf9bd0c8d5d299f786522b52e5c29"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/actor-provenance-rebuild-review-v1.json",
+      "bytes": 11120,
+      "sha256": "c47bd2ce449ccc8414f5adcbc8270803fa00a28d721df34a418c02ddd8c09366"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/native-approved-overlay-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/native-approved-overlay-v1/delta-native-records.jsonl",
+      "bytes": 7243203,
+      "sha256": "679defdc3597bdb9d2bc4908b0af1b112bccfaf30bd9b76aab452ab7494904c0",
+      "lines": 50
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/native-approved-overlay-v1/proposal-manifest.json",
+      "bytes": 13291,
+      "sha256": "86d645940bfb59006eefd83890f66f99506dfec821c139be51abc6dd3e86c0e4"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/native-approved-overlay-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-50-native-46-text-composition-adoption-v1.json",
+      "bytes": 14505,
+      "sha256": "3cf3f4e61aafbb7ea214a8d569dd3b0a1c9a2ce92f72d5bfc491599b173d43f2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-compact-composition-adoption-v1.json",
+      "bytes": 748,
+      "sha256": "f6ca0fbad891625750d7b303a1b50cebec86acf787bf80b09e94eae0296cf933"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-compact-composition-review-v1.json",
+      "bytes": 2535,
+      "sha256": "80b0174aa537ea50c047dc1d567e9df813e53bd4a03cbeb974891ae56ac8cd80"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-full-union-audit-v1.json",
+      "bytes": 728,
+      "sha256": "dea5b6b1f80244607608ba81da7b2522b7474c33b4864853bd54ee28bf1410a5"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-rebuild-verification-v1.json",
+      "bytes": 780,
+      "sha256": "78a11b075d0ae96eef78d54a930e8e22810dfc1bb4c3d5b02fd06ce95a82d54d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/root-token-decode-verification-v1.json",
+      "bytes": 348,
+      "sha256": "9bb8c4570bb07f84c7c4247f96c938f0fd32d738d0c22db27e0310f557e6f6b5"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/runtime-current/dist/teacher/native-materializer.js",
+      "bytes": 118104,
+      "sha256": "bd8e99a05a5bde45a2725c70f0f4dffaebbf2f59518b52e469fc6bb0a976812c"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/runtime-current/frozen-runtime.json",
+      "bytes": 159266,
+      "sha256": "837480bda05a9723f09d746fe60ace847f7350bf340defa5c034abc93d997924"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/runtime-current/src/teacher/native-materializer.ts",
+      "bytes": 114600,
+      "sha256": "045bec8d8926135267037a46d76ae9cbfc7a183be60825bf06ec8187dac34ef0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/selected-50-current-held.jsonl",
+      "bytes": 7232753,
+      "sha256": "e6d4e5842747408297d2a4aceb967b805ade08e871fe6850370bfe55dc6294ea",
+      "lines": 50
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/selection-verification-v1.json",
+      "bytes": 2332,
+      "sha256": "89dd739be407dd7c3127c8798bd6c57a34d276813a97afecfb4e90604cd7f669"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/README.md",
+      "bytes": 1441,
+      "sha256": "54c022770898dbc8f64e9879f0ddfd15565b4c15bf16ed897c5e00f76cab961f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/delta-omissions.jsonl",
+      "bytes": 1036,
+      "sha256": "027c62164c5a238ae6a475736f7b7209f3920f1b52feb1ecf5c963e637b7a73a",
+      "lines": 4
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/delta-provenance.jsonl",
+      "bytes": 286986,
+      "sha256": "4a627d9dfafda33c2c803c1529f859ab6078ae0fc5559e088a80eef12758c8af",
+      "lines": 46
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/delta-text.jsonl",
+      "bytes": 3877099,
+      "sha256": "76438fe7a85ed462ce3e682af46855d6ea0129dce8e894819ccdbbe621af5634",
+      "lines": 46
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/output-manifest.json",
+      "bytes": 1444,
+      "sha256": "8962906b93fa4c48b9731888a0ae73d1845ea34643d7e3bca8333af5611ab067"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/packet-manifest.json",
+      "bytes": 2026,
+      "sha256": "1fe540728a75550a5f4f3408e8abc893c3d1a695325d02dc8e22ecaa44f72981"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/provider-context-bindings.jsonl",
+      "bytes": 111663,
+      "sha256": "62bd62f7ddd626bb71970cd87fd3cc1db7bfa064eb633fe127e794d53ff4d143",
+      "lines": 45
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/receipt.json",
+      "bytes": 6717,
+      "sha256": "2870ece9ccd2dd5e59d6dfc48a8465de3295e2f6486dbabdb3e20c7981251491"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/actor-provenance-rebuild-v1/text-current-builder-v1/source-coverage.jsonl",
+      "bytes": 21348,
+      "sha256": "89701cbde475ad486b1b7ac6f17e65b7ee0cc67511b26fac5c982e96cc1fc3ec",
+      "lines": 50
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/selected-50-held-native-actions.jsonl",
+      "bytes": 7193355,
+      "sha256": "84e3d7d8402716924be54155deac8aac3ec8fc0cc974484fd450f5de98e82707",
+      "lines": 50
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/build_neuralese_gold_text_delta.py",
+      "bytes": 73287,
+      "sha256": "9b91244c4a9a4805dfab5cb046b3c08c36ffb6a11490aa5b81f442e56262980a"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/context_refs.py",
+      "bytes": 1867,
+      "sha256": "654d29a39f3224b1eb7c240b21aeadbe7edd8062302d0f53b52634ef74ec7cc3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/data/text_corpus.py",
+      "bytes": 89782,
+      "sha256": "1525f3f6f00d567b99bd5cf6c5c4e142ff08ca99a98d45134d6b2c5807741281"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5672,
+      "sha256": "11c070e1b78ddd3235d4ee936726c918cf05aaa73115c1f8f1eecc892b6c314b"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/harness.py",
+      "bytes": 15707,
+      "sha256": "c0d3e742b9f4180aab03e0c2109b6de390f3c8b7e6224e8fd3e41a21a6718749"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/inference.py",
+      "bytes": 1339,
+      "sha256": "44ed81c9a861861c273695abbf1d7ec37240deaed7e81c1729b430553e0c597f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/projected_history.py",
+      "bytes": 25937,
+      "sha256": "84c8ae0644e9de04af4a299c23de5745c8fc991ce844902917ccc0c62bddd61e"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/recurrence_autoregressive_history.py",
+      "bytes": 31439,
+      "sha256": "dc57f1fb02318a8e5283ded261f206ec26a37d1ec8cf81940e13b357d68ede90"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/export/__main__.py",
+      "bytes": 11514,
+      "sha256": "550ee92deb8c5e6e29ccc9a0e52d64b1025c98bac800af991d584f03b2dca9b4"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/export/gguf.py",
+      "bytes": 10421,
+      "sha256": "3b24512db9513b1420af7f0617e61333ce708c953a023385b740eda94a3955f4"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/family.py",
+      "bytes": 4492,
+      "sha256": "2fd302ea00628e819f0a380e65d49598eae6439f1bad268b2737bae53ce23d86"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1531,
+      "sha256": "0c703d39ccf53124f36f8e8a97cfe72a068eaac2f7071c0406c39217f46160ca"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/model.py",
+      "bytes": 32545,
+      "sha256": "598d4ba99de4766ff2817f20c1d020e6eeadb8da1f0297a0d50648fd74fa7abc"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/qat_convert.py",
+      "bytes": 11652,
+      "sha256": "2558ba38321065846399ef9765c6f1257ea0e9d8a7cf98b607901e457ac86c93"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/maple/ternary.py",
+      "bytes": 19185,
+      "sha256": "f072b2b367e27d05f08937b3c9e985ca46991b874e903faaf99cd672cd88a1cd"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/heads.py",
+      "bytes": 22944,
+      "sha256": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/read.py",
+      "bytes": 4539,
+      "sha256": "45e3128aba58dc7eca8a26b7fe72397316df055bf508e0f168145a0971eb039f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/__init__.py",
+      "bytes": 7136,
+      "sha256": "7ab3d1048c33e4a1f6bb1c207c46b74bedba498089e2ab3f1030de9edc4e9794"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/chat.py",
+      "bytes": 23980,
+      "sha256": "d3b5911d81c136b0c12351f5fa7546136e7e6fc73c47027808c9197ceae0332e"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/grad.py",
+      "bytes": 58960,
+      "sha256": "d68877d79ccb07494f218f609fdaeaa4f652943a1b1000c4c5480ecee1ed9ed2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/adapters.py",
+      "bytes": 10031,
+      "sha256": "836e5056063d11d061d7c8e34a21817a68431788bd096ac3e39b9a8816d22a72"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/execution.py",
+      "bytes": 39530,
+      "sha256": "b25557a08567b640c73eec4734d4aa4686ea87887a992266b632fe91b371e62c"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 11219,
+      "sha256": "204dbf170830fb751f98adca659344f8a6ccb5650bd0e8c9e763bcead51dc507"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14584,
+      "sha256": "473f1eafcac454f31cf952e6ba5b58a66496cf00270f13f852f1f72dd110c930"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/optim.py",
+      "bytes": 8783,
+      "sha256": "be9b3e80598ef873aa23253d1fd5aace3fa2cc8a4c06b31723f6e4fefa213883"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/projection_anchor.py",
+      "bytes": 1951,
+      "sha256": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/recipe.py",
+      "bytes": 46573,
+      "sha256": "76584a20e0ce4ff71415455c7fdb8b6664986032e283ca8cdf11cd3f313f44e2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/staging.py",
+      "bytes": 8902,
+      "sha256": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/text_warmup.py",
+      "bytes": 134416,
+      "sha256": "909b00945f6762c91c2819344d94c332a174851512b180fa76b07987e472fc42"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/trajectories.py",
+      "bytes": 151460,
+      "sha256": "72419c9bb9ec449b4c9563c903ff31be3f98668a9a419a35f148f21b2d4533cc"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 22676,
+      "sha256": "b97f008dd8e066ddd1011f8545df7f6cd72e4d64baab0d81ea46263d7227169f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/renderer-package-root/renderer-package-manifest-v1.json",
+      "bytes": 20589,
+      "sha256": "63cd974fcccdc0f5335a822522d5b1d735797e7153cbd7ebcf4496aa079dbc3f"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/root_admission_scope.py",
+      "bytes": 550,
+      "sha256": "7d329665797582c36f898231830c8c9b48daf051d3e0daa5f8ca33a0118a0161"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/action-review-v1/selected-50-compact-proposal-v1/text-builder-source-snapshot-current-v1/snapshot-manifest.json",
+      "bytes": 1013,
+      "sha256": "d8f208f326b1a116dc19ddabbd8f89f31cd98e3950f0cb1da6380e4e2433b4ef"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/campaign-v1/slot-01/jobs/000000-49563d6686faa6bb.result.json",
+      "bytes": 3763743,
+      "sha256": "117e8aef90abb7a5ce9372dd7f5df0136f8028ad24873c573a73132727d62e2d"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/campaign-v1/slot-02/jobs/000001-750fe76abb5e98a0.result.json",
+      "bytes": 4367828,
+      "sha256": "57c57981f8c1b812bc877eaab74f5f0bfde0d4c20b7e4a577861adfe2866c5e5"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/campaign-v2/slot-01/jobs/000002-f9f7f58b8b00e17b.result.json",
+      "bytes": 3869598,
+      "sha256": "0808dac7a1f087359d34493cf6de7e25760e754dd4c714c9d110327cff607b9e"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/campaign-v2/slot-02/jobs/000003-27f9716a32a5d4bd.result.json",
+      "bytes": 5507022,
+      "sha256": "177b8742bc0c714e534af21db4a1cba5c72179afc42c45a31da284995a11c5b2"
+    },
+    {
+      "path": "luna-conjunctive-eligibility-derived-20261009-v1/source-v3.cases.jsonl",
+      "bytes": 189190,
+      "sha256": "37b72b3fbd876ec2bf0c30c400fb8fb1c246d2f56fedbb490bcc806d991cd39b",
+      "lines": 4
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/visibility-selection-v5.json",
+      "bytes": 91583,
+      "sha256": "0fdf0976edb7633045e4440a1fe9897e2d4709cb91a70ce6bffae5d5d63d6f76"
+    },
+    {
+      "path": "luna-six-successes-199-action-quality-review-20261009-v1/visibility-review-v5/visibility-supplement-v5.json",
+      "bytes": 74977,
+      "sha256": "5bb0e13e76c7dd1e085568856f7cafe5a5983fa3198ea6c0fadf7dcfc32301d6"
+    }
+  ],
+  "bytes": 45980172
+}
