@@ -9,7 +9,7 @@ half is mostly in the runtime package (`ts-host/src/calls/`: `study` at `special
 `specializer.ts:60`, `groupsOf` at `groups.ts:21`, `measure` at `groups.ts:42`, `renderGroup` at `groups.ts:69`,
 `assembleCases` at `groups.ts:114`, `verifyCases` at `specializer.ts:207`, `saveAccepted` at `specializer.ts:299`,
 `runJob` at `offline.ts:88`, `detectFindings` at `findings.ts:14`). These are exact analyses and verifiers and are
-correct crisp (they are reviewed with the calls package, not here). `main.ts` (292 lines) holds the orchestration and
+correct crisp (they are reviewed with the calls package, not here). `main.ts` (302 lines) holds the orchestration and
 four policies in TypeScript: which functions are worth looking at, when to wait, how many rounds, and what to say
 about a decline.
 
@@ -28,7 +28,7 @@ Decisions: **fn**, **inline**, **implicit**, **crisp**, **service**, **host**, *
   waits for it; it never stops or starts other processes. The heartbeat program (plans/HEARTBEAT_PROGRAM.md) is the
   place where unit-level decisions are advised.
 - **Interruptible and resumable.** Every step reads from and writes to the call store; `SIGTERM` finishes the
-  current step (`main.ts:259-260`). This stays.
+  current step (`main.ts:260-261`). This stays.
 - **State model.** One pass over a definition is decide-then-commit: study (snapshot), writers decide per group,
   verification (crisp) accepts, `saveAccepted` commits atomically. Derived values form a DAG: calls, groups,
   conditions, cases, checks, compilation. The rounds are a bounded repair loop over groups whose measure is "groups
@@ -38,33 +38,34 @@ Decisions: **fn**, **inline**, **implicit**, **crisp**, **service**, **host**, *
 
 | Part | Decision | Unit | Why |
 | --- | --- | --- | --- |
-| CLI options and defaults (rounds 3, jobs 50, interval 600 s, maxBusy 2, idleWait 1800 s) | host | `parse`, `main.ts:21-28` | CLI. Each default becomes a named setting with its reason beside it. |
-| Which definitions are worth a look: enough agent calls, tokens spent, no standing decline unless volume doubled, enough new calls since the last compilation | pluggable | `targets`, `main.ts:31-47` | A policy over counts. Crisp default is the current rule; natural language `worthLooking` weighs estimated savings against the specializing spend. |
-| `minCalls`, doubling rule (`2 * decline.calls_at_decline`) | data | `main.ts:37`, `41` | Parameters of the crisp default. |
-| Writer budget: 150 actions, 2 h stall bound, 2 writers at once | host | `WRITER_LIMITS`, `WRITERS`, `main.ts:53-55` | Resource limits with a stated reason (a shared executor can stall); they stay and are listed with their reasons. |
-| Did a writer stop on its budget | crisp | `exhausted`, `main.ts:64-68` | Error classification from a typed `outcome` first, message text second. |
-| Token meter around the model driver | crisp | `metered`, `main.ts:73-89` | Accounting plumbing. |
-| Judge and writer runtimes | host | `main.ts:92-94`, `126-130` | Mechanism. |
-| Wait for an idle executor: vLLM running plus waiting requests at most `maxBusy`, give up after `idleWait` | crisp | `waitForIdle`, `main.ts:101-123` | Reads a metric and compares; thresholds are settings. |
+| CLI options and defaults (rounds 3, jobs 50, interval 600 s, maxBusy 2, idleWait 1800 s) | host | `parse`, `main.ts:22-29` | CLI. Each default becomes a named setting with its reason beside it. |
+| Which definitions are worth a look: enough agent calls, tokens spent, no standing decline unless volume doubled, enough new calls since the last compilation | pluggable | `targets`, `main.ts:32-48` | A policy over counts. Crisp default is the current rule; natural language `worthLooking` weighs estimated savings against the specializing spend. |
+| `minCalls`, doubling rule (`2 * decline.calls_at_decline`) | data | `main.ts:38`, `42` | Parameters of the crisp default. |
+| Writer budget: 150 actions, 2 h stall bound, 2 writers at once | host | `WRITER_LIMITS`, `WRITERS`, `main.ts:54-56` | Resource limits with a stated reason (a shared executor can stall); they stay and are listed with their reasons. |
+| Did a writer stop on its budget | crisp | `exhausted`, `main.ts:65-69` | Error classification from a typed `outcome` first, message text second. |
+| Token meter around the model driver | crisp | `metered`, `main.ts:74-90` | Accounting plumbing. |
+| Judge and writer runtimes | host | `main.ts:93-95`, `127-131` | Mechanism. |
+| Wait for an idle executor: vLLM running plus waiting requests at most `maxBusy`, give up after `idleWait` | crisp | `waitForIdle`, `main.ts:102-124` | Reads a metric and compares; thresholds are settings. |
 | Study a definition's recorded calls | crisp | `study`, `specializer.ts:22` | Exact. |
-| Decline without a model when nothing repeats | crisp | `crispDecline`, `specializer.ts:60`; `main.ts:177-178` | Costs no call. |
-| Findings from recorded calls | crisp | `detectFindings`, `findings.ts:14`; `main.ts:179` | Exact. |
-| Group calls by what they did (at least 3 training calls, at most 8 groups) | crisp, with `sameApproach` | `groupsOf`, `groups.ts:21`; `main.ts:180` | Normalization and anti-unification are exact; sameness of differently written programs is a judgment. The 8-group cap is a named setting. |
+| Decline without a model when nothing repeats | crisp | `crispDecline`, `specializer.ts:60`; `main.ts:178-179` | Costs no call. |
+| Findings from recorded calls | crisp | `detectFindings`, `findings.ts:14`; `main.ts:180` | Exact. |
+| Group calls by what they did (at least 3 training calls, at most 8 groups) | crisp, with `sameApproach` | `groupsOf`, `groups.ts:21`; `main.ts:181` | Normalization and anti-unification are exact; sameness of differently written programs is a judgment. The 8-group cap is a named setting. |
 | Do two normalized programs do the same work | fn, decision | `writeCase/sameApproach` | A judgment. |
 | Write a case for one group, or skip with a reason | fn (directory reducer) | `writeCase` | Authoring. Today one call does condition search and body writing; see the split below. |
 | Choose a condition and measure it | fn | `writeCase/chooseCondition` (proposed) | Steps 1-3 of `writeCase.nl:22-24`. |
 | Is a condition structural or semantic | fn, decision | `writeCase/semanticCheck` | Its own question for small models. |
 | Write `case.ts` for a chosen condition | fn | `writeCase/writeBody` (proposed) | Step 4 of `writeCase.nl:25`. |
-| Assemble cases, check each loads | crisp | `assembleCases`, `groups.ts:114`; `main.ts:200-215` | Exact. |
-| Replay, compare with the agent, judge where they differ, accept within a bound | crisp with the runtime judge | `verifyCases`, `specializer.ts:207`; `main.ts:206` | Exact replay and equality; the judge is blinded to which side is the case. |
-| Rounds: a rejected case returns to its group with the report, up to `rounds` attempts | host | `main.ts:186-226` | Bounded repair loop. |
-| "Better" finding | crisp | `betterFinding`, `findings.ts:51`; `main.ts:220-221` | Exact. |
-| Final re-verification of accepted cases, then store as shadow | crisp | `main.ts:235-243`; `saveAccepted` | Exact durability. |
-| Decline reason: most frequent group reason | crisp | `main.ts:244-245` | Exact mode of a list. |
-| Decline summary text | pluggable | `summarizeDecline` (crisp default: the joined group lines, `main.ts:229`, `246`) | A reading for a person. |
-| Unstable-results findings | crisp | `main.ts:230-233` | Exact. |
-| Shadow replays and audits, up to `jobs` per cycle | host | `main.ts:268-287`, `runJob` | Mechanism over the store. |
-| Loop interval | host | `main.ts:288-289` | Scheduling. |
+| Assemble cases, check each loads | crisp | `assembleCases`, `groups.ts:114`; `main.ts:201-216` | Exact. |
+| Replay, compare with the agent, judge where they differ, accept within a bound | crisp with the runtime judge | `verifyCases`, `specializer.ts:207`; `main.ts:207` | Exact replay and equality; the judge is blinded to which side is the case. |
+| Rounds: a rejected case returns to its group with the report, up to `rounds` attempts | host | `main.ts:187-227` | Bounded repair loop. |
+| "Better" finding | crisp | `betterFinding`, `findings.ts:51`; `main.ts:221-222` | Exact. |
+| Final re-verification of accepted cases, then store as shadow | crisp | `main.ts:236-244`; `saveAccepted` | Exact durability. |
+| Decline reason: most frequent group reason | crisp | `main.ts:245-246` | Exact mode of a list. |
+| Decline summary text | pluggable | `summarizeDecline` (crisp default: the joined group lines, `main.ts:230`, `247`) | A reading for a person. |
+| Unstable-results findings | crisp | `main.ts:231-234` | Exact. |
+| Shadow replays and audits, up to `jobs` per cycle | host | `main.ts:269-288`, `runJob` | Mechanism over the store. |
+| Promote, keep or demote a case or a tier from its evidence | pluggable, already built | `promote.nl`, `reviewPromotions` (`main.ts:289-297`, `promote.nl`), setting `promotionPolicy` (`crisp`, `nl`, `shadow`) | The reference example of this pattern: a decision function with the numbers of the evidence as input, spelled steps and a rule given as data, applied off the hot path; the crisp rule in the store is the default and the bound. |
+| Loop interval | host | `main.ts:298-299` | Scheduling. |
 
 ## Natural-language functions, step by step
 
@@ -133,8 +134,8 @@ each is already one question with its criteria stated positively.
 
 | Point | Setting | Crisp default | Natural language | Verifier |
 | --- | --- | --- | --- | --- |
-| Targets | `worthLookingMode` | `targets` filter | `worthLooking` per candidate | boolean; the crisp bound `agent_calls >= minCalls` stays |
-| Decline text | `declineSummaryMode` | joined group lines | `summarizeDecline` | stored text only; no decision depends on it |
+| Targets | `targetPolicy` | `targets` filter | `worthLooking` per candidate | boolean; the crisp bound `agent_calls >= minCalls` stays |
+| Decline text | `declinePolicy` | joined group lines | `summarizeDecline` | stored text only; no decision depends on it |
 
 Neither is hot (`targets` once per cycle). Both are for shadow comparison and so the owner can change the rule in
 words. The settings use the shared vocabulary `crisp | nl | shadow`.
@@ -156,23 +157,28 @@ words. The settings use the shared vocabulary `crisp | nl | shadow`.
 ## Model-facing changes needing live measurement
 
 The directly measurable quantity is the verification acceptance rate per group (`verification.checks[].accepted`,
-`main.ts:222`), available from the call store.
+`main.ts:223`), available from the call store.
 
 1. **Split `writeCase`** into `chooseCondition` and `writeBody`. Compare accepted-case rate, rounds used and
    tokens per accepted case.
 2. **`writeCase.nl:16`**: "Your condition must not admit them" becomes "Your condition admits none of them."
    Measure with the split (same samples).
-3. **Report text** returned to a group (`main.ts:196`, `204`, `212`, `renderReport`): wording is model-facing; keep
+3. **Report text** returned to a group (`main.ts:197`, `205`, `213`, `renderReport`): wording is model-facing; keep
    byte-identical in the first move.
 4. **`Untrusted<string>`** for recorded inputs in examples (rendered into `examples/*.json`, `group.md`, `others.md`).
-5. **`worthLooking` and `summarizeDecline`** are new text; they do not reach the writer, so they need agreement
+5. **`promote.nl` guard sentences** (already on main, listed as unmeasured in `plans/MODEL_FACING_CHANGES.md`): "Do not
+   count guard_misses or infrastructure", "Do not promote before ...", "Do not demote on fewer than ..." become
+   positive steps ("Count handed_off, worse and audit_worse as failures"; "Promote when compared reaches
+   comparisons and live_compared reaches liveComparisons"). The numbers in the input already carry the facts. Measure
+   agreement with the crisp rule in `shadow` mode on the store's recorded evidence.
+6. **`worthLooking` and `summarizeDecline`** are new text; they do not reach the writer, so they need agreement
    measurement only (shadow mode), not writer-quality sampling.
 
 ## Questions for the owner
 
-1. The repair loop stops at `rounds` attempts per group (default 3, `main.ts:186-187`). Termination could be
+1. The repair loop stops at `rounds` attempts per group (default 3, `main.ts:187-188`). Termination could be
    structural instead: iterate while some group is not done and the last round improved a group's report (a
    progress predicate). Keep `rounds` as a named resource limit, or move to the progress rule?
-2. The 8-group cap and 3-call minimum (`main.ts:180`, `groups.ts:21`) bound spend. Keep as settings with reasons?
+2. The 8-group cap and 3-call minimum (`main.ts:181`, `groups.ts:21`) bound spend. Keep as settings with reasons?
 3. Should `semanticCheck` run as `shadow` between two prompt variants first, since it gates which conditions become
    code? The runtime judge audits cases later, so this is an efficiency question, not a safety one.
