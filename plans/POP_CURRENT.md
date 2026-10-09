@@ -7,7 +7,7 @@ Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navi
 - Pop owns execution here; DGX owns its execution. Canonical checkout on both: `/home/werg/natlang`. Do not launch from retired mirrors or change DGX jobs.
 - Run `python3 scripts/coord.py inbox --ack` at session start, before resource changes and each monitoring cycle. Use Git for code and the corpus registry/manifests plus `sync_training_corpora.py` for selected data artifacts.
 - The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
-- Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop map run is frozen and does not include later shared-runtime changes.
+- Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop AR run is frozen and does not include later shared-runtime changes.
 
 ## GPU: full-depth autoregressive foundation continuation
 
@@ -46,8 +46,18 @@ mapped-input trainer followed by its full-depth AR fixup. The shared
 `causal_gold_prefix_mask` supervises the first differing decision and excludes
 later gold targets from the generated history; gold control and held diagnostics
 retain complete spans. This is a common objective change, not a Pop experiment
-fork. DGX owns the broader text/trajectory objective and optimizer-handoff
-consolidation; that work remains outstanding until its code and tests land.
+fork. Shared named optimizer restoration landed through `e8c7523c`, is pulled on
+Pop, and removes silent fresh-state fallback from both text and trajectory
+trainers. The active frozen run already restored its unchanged four groups; do
+not patch its implementation in place. DGX owns the remaining objective/schedule
+and outer-loop consolidation (architecture C1–C3).
+
+The V29 FLD/RRD rejections exposed missing source predicates (verified alert /
+approved schedule), not established model mistakes. Hold those attempts and any
+negative pairs until source review. A read-only audit of the admitted union found
+no FLD-510 rows; its seven native and seven text RRD rows use the earlier V14
+source, whose positive satisfies all predicates and whose approved-schedule
+negative has a legal hold. No active input change or corpus exclusion is indicated.
 
 The superseded sketch-consumer repair is closed and is artifact evidence only;
 its best step3328 is not a qualified source. The preceding Pop job was the mapped-input continuation

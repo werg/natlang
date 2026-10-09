@@ -30,11 +30,18 @@ isolated tree and pin source, compiler and compiled-output hashes, rather than
 trusting the checkout's existing `dist`. Matched autoregressive diagnostics use
 the shared projected-history evaluator and exact hashed window selections.
 
+Shared named optimizer restoration landed in `train/optim_restore.py`
+(`e8c7523c`). Both text and trajectory trainers use it: matching parameter slots
+retain moments and step counts; only explicitly declared added parameters start
+fresh. An incompatible unnamed historical layout is refused rather than silently
+reset. An unchanged historical layout still restores positionally. An explicit
+fresh optimizer is a declared continuation decision, never an automatic fallback.
+Active frozen runs retain their recorded implementation and restore evidence.
+
 This consolidation is still incomplete: text and trajectory objective/schedule
-deduplication is owned by the DGX agent; optimizer handoffs must preserve matching
-parameter moments rather than silently resetting every group. The C++ raw-token
-read port also remains unqualified. These are shared work items, not separate
-experimental policies or completed claims.
+and outer-loop deduplication is owned by the DGX agent (architecture items C1–C3).
+The C++ raw-token read port also remains unqualified. These are shared work items,
+not separate experimental policies or completed claims.
 
 ## Active text foundation: mapped drift, then autoregressive feedback (2026-10-09 correction)
 
