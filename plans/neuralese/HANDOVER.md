@@ -1,5 +1,38 @@
 # Neuralese programme: handover, 2026-10-03
 
+## Pop shared-implementation correction — 2026-10-09 18:10 UTC
+
+The current navigation page is [POP_CURRENT.md](../POP_CURRENT.md); historical
+live-job paragraphs below are not current process state. Pop's source-sharing
+failure was real: a shared repository still allowed divergent recipes and stale
+sketch assumptions to reactivate superseded training. The sole active text path
+is mapped previous-token input adaptation, then full-depth AR feedback fixup in
+the same shared trainer, then exact-weight runtime qualification and recurrence.
+
+Commit `37cc0077` applies the common causal gold-prefix mask to AR CE and both
+projection losses, including the first wrong decision and excluding its later
+gold tail. Full gold-history control, full-span held gates and diagnostics remain.
+It fixes stale sketch/input-map update bookkeeping and records prefix coverage.
+All79 focused pinned-CPU tests pass, including optimizer-slot progression across
+mapped-to-AR continuation and async checkpoint failure safety. DGX was notified;
+its broader text/trajectory objective and named optimizer handoff consolidation
+remains outstanding. Existing catch-and-reset optimizer fallback is not fixed
+by this commit and must not be mistaken for full resumability after group changes.
+
+The closed step24960 AR state and matched diagnostic evidence are published as
+`neuralese-ar-final24960-diagnostic-artifacts-20261009-v2`, with158/158 files
+SHA-verified on Pop and DGX. Qualification and training admission remain false.
+Next Pop training starts from immutable mapped best23936, not regressed24960,
+and should include the current admitted text union rather than omit fresh data.
+Five fresh Luna cases completed with correct host-oracle outputs; individual
+actions remain held pending review. A new source queue is being prepared.
+
+An abandoned closed repair's checkpoint-space reserve was released after a
+privileged host-process check found no references (1,435,903,552 bytes); no model
+or optimizer checkpoint was removed. Receipt:
+`.coordination/closed-anchor-reserve-release-v1.json`. Recheck capacity before
+launching and use the shared recipe runner; never hotpatch an active frozen run.
+
 ## Pop generation refill — 2026-10-07 04:51 UTC
 
 V38 has five verified live Luna supervisor processes on six newly root-reviewed V14 worlds (two nested reducers, four 4/5-pass iterators;3train3held). Source SHA c10c2bc9848877bd991a62f1b053a1f0573469ab2eb999d25d6983bb3a96cdcb; approved plan SHA 3bc787a20eac6e3b210978b0818529312589e2f3b013a3dd778c517c32a3b81c. Final source/proof/attempt history registered and DGX SHA-verified. Actual thirty scripted child reads succeeded, exact source bytes and output files checked; no teacher training admission from scripted proof. Builder fixes were source path/matcher bugs, not a compiler defect. Prior overwritten v4 attempt evidence limits are explicit. Self-contained builder tests4passed. V15 warm-up active past5320; held5248 whole pass2 agreement0.9707/gap0.1825, tail256agreement0.7661/gap1.5852, still unqualified. Larger independent source batch and selective memory-budget handling are in preparation; no running runtime edited in place.
