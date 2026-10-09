@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
-import { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
+
+const dist = process.env.NATLANG_TEST_DIST ? resolve(process.env.NATLANG_TEST_DIST) : resolve('dist');
+const [decisionReview, materializer] = await Promise.all([
+  import(pathToFileURL(join(dist, 'native/decision-review.js'))),
+  import(pathToFileURL(join(dist, 'teacher/native-materializer.js'))),
+]);
+const { nativeDecisionTargetDigest } = decisionReview;
+const { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } = materializer;
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
 const opening = { role: 'user', content: '1 [ ] Compute the result. Current inputs: {"n": 3}' };
@@ -1029,6 +1037,42 @@ test('semantic review holds a wrong decision in an accepted run without deleting
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,source_row_sha256:'bad'}]}), /source hash mismatch/);
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,decision_index:99}]}), /invalid semantic/);
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[hold,hold]}), /duplicate semantic/);
+});
+
+test('explicit collection guidance holds oracle-approved actions until exact per-action approval', () => {
+  const ordinary = nativeRow('guided-sampled-actions');
+  ordinary.outcome.oracle = { accepted: true, kind: 'fixture-oracle' };
+  const baseline = materializeNativeRows([ordinary], { directAnswers: true });
+  assert.ok(baseline.turns.every(turn => turn.training_admission.approved),
+    'unmarked legacy runtime-oracle rows keep their current admission behavior');
+
+  const guided = structuredClone(ordinary);
+  guided.collection_guidance = { training_admission: false,
+    review_scope: 'sampled-actions-require-independent-semantic-review' };
+  const held = materializeNativeRows([guided], { directAnswers: true });
+  assert.equal(held.turns.length, baseline.turns.length);
+  assert.deepEqual(held.turns.map(turn => turn.target), baseline.turns.map(turn => turn.target),
+    'the review marker does not change source or action targets');
+  assert.ok(held.turns.every(turn => turn.training_admission.approved === false));
+  assert.ok(held.turns.every(turn => turn.outcome.accepted === true && turn.outcome.oracle.accepted === true),
+    'oracle outcome remains eligibility evidence');
+  assert.ok(held.turns.every(turn => turn.trace_admission.admitted === false),
+    'the campaign marker holds trace admission too');
+
+  const first = held.turns[0];
+  const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: guided.id,
+    source_row_sha256: nativeRowDigest(guided), decision_index: first.decision.index,
+    target_sha256: nativeDecisionTargetDigest(first.target), review_sha256: 'c'.repeat(64),
+    reason: 'reviewed one exact sampled action', evidence: ['exact source, visible context, target, and successful trace event reviewed'] };
+  const selectivelyApproved = materializeNativeRows([guided], { directAnswers: true, decisionApprovals: [approval] });
+  const approved = selectivelyApproved.turns.find(turn => turn.decision.index === first.decision.index);
+  const stillHeld = selectivelyApproved.turns.find(turn => turn.decision.index !== first.decision.index);
+  assert.equal(approved.training_admission.approved, true);
+  assert.equal(approved.training_admission.kind, 'reviewed-native-decision');
+  assert.equal(approved.trace_admission.admitted, false,
+    'per-action approval does not promote the whole trace');
+  assert.equal(stillHeld.training_admission.approved, false);
+  assert.deepEqual(approved.target, first.target);
 });
 
 

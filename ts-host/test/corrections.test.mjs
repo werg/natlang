@@ -1,11 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { programRow } from '../dist/teacher/collector.js';
-import { correctedVariant, reasoningFitsFix } from '../dist/teacher/corrections.js';
-import { replayReference } from '../dist/teacher/curriculum.js';
-import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
-import { TOOLS_PROMPT } from '../dist/native/prompt.js';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
+
+const dist = process.env.NATLANG_TEST_DIST ? resolve(process.env.NATLANG_TEST_DIST) : resolve('dist');
+const [collector, corrections, curriculum, materializer, prompt] = await Promise.all([
+  import(pathToFileURL(join(dist, 'teacher/collector.js'))),
+  import(pathToFileURL(join(dist, 'teacher/corrections.js'))),
+  import(pathToFileURL(join(dist, 'teacher/curriculum.js'))),
+  import(pathToFileURL(join(dist, 'teacher/native-materializer.js'))),
+  import(pathToFileURL(join(dist, 'native/prompt.js'))),
+]);
+const { programRow } = collector;
+const { correctedVariant, reasoningFitsFix } = corrections;
+const { replayReference } = curriculum;
+const { materializeNativeRows } = materializer;
+const { TOOLS_PROMPT } = prompt;
 
 const options = { systemPrompt: TOOLS_PROMPT, contextTokens: 16384, rootSeed: 909 };
 
@@ -47,4 +58,21 @@ test('reasoning that planned what failed is not given to the fix', async () => {
   const error = 'forbidden-loop: `while` loops are not allowed here. Use `for (const item of array)` or `step.iterateOn(initial).until(done)`.';
   assert.equal(reasoningFitsFix('Keep edges where until is null, for each item of the list.', error, 'while (x) {}', 'for (const e of edges) {}'), true);
   assert.equal(reasoningFitsFix('I page through with while.', error, 'while (x) {}', 'for (const e of edges) {}'), false);
+});
+
+test('programRow forwards explicit source collection guidance and preserves collector review precedence', () => {
+  const [record] = FAMILIES.relational_dynamic_snapshot.build(7, 0);
+  record.collection_guidance = { training_admission: false,
+    review_scope: 'sampled-actions-require-independent-semantic-review' };
+  const run = { outcome: { accepted: true, status: 'accepted', oracle: { accepted: true } }, trace: [] };
+  const ordinary = programRow(record, 'fixture-teacher', 'run-guided', {}, run, []);
+  assert.deepEqual(ordinary.collection_guidance, record.collection_guidance);
+
+  const authoredReview = { training_admission: false, root_action: { sampled: false },
+    child_actions: { source: 'provider', sampled: true } };
+  const reviewed = programRow(record, 'fixture-teacher', 'run-guided-authored', {}, run, [],
+    { collection_guidance: authoredReview });
+  assert.deepEqual(reviewed.collection_guidance, authoredReview,
+    'collector-supplied authored-root review details take precedence');
+  assert.equal(reviewed.outcome.oracle.accepted, true, 'guidance must not rewrite oracle eligibility evidence');
 });

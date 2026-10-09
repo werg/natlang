@@ -9,6 +9,10 @@ import { worlds } from '../scripts/inline-curriculum/semantic-iterate-worlds-v15
 
 test('generated guided soft scaffold compiles marker guidance as literal template text', () => {
   const record = makeGuidedSoftIterateCase(worlds[0], 0);
+  assert.deepEqual(record.collection_guidance, {
+    training_admission: false,
+    review_scope: 'sampled-actions-require-independent-semantic-review',
+  });
   const source = record.curriculum.reference.root.find(([kind]) => kind === 'eval')[1].code;
   const plans = [];
   const compiled = compileModule({ kind: 'module', id: record.id, name: 'guidedScaffold', source: record.source, revision: 'r1',

@@ -106,6 +106,11 @@ function summarizeObservedEvidence(path, text) {
 export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT_REVISION, shapeVersion = 'v15', savedWith = false } = {}) {
   const preparedWorld = clarifiedWorld(world);
   const record = makeSoftIterateCase(preparedWorld, index);
+  // Guided authored sources require independent action review. Keep the oracle
+  // outcome as evaluation evidence; the collector/materializer uses this
+  // explicit row-level marker to hold sampled actions pending per-action review.
+  record.collection_guidance = { training_admission: false,
+    review_scope: 'sampled-actions-require-independent-semantic-review' };
   const fields = Object.keys(world.fields);
   const task = JSON.parse(record.semantics.folder_files['task.json']);
   task.output_contract.evidence_files = 'The four pass-*.md files are read-only evidence inputs. Preserve their complete text exactly; do not rewrite, paraphrase, or replace them. Only decision.json is a writable output.';

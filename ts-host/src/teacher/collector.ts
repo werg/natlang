@@ -1269,10 +1269,13 @@ export function programRunId(index: number, expected: Record<string, unknown>): 
 /** The result row of one run of a program, whoever answered its turns. */
 export function programRow(record: ProgramRecord, modelId: string, runId: string, expected: Record<string, unknown>,
   run: ProgramRun, trajectory: Record<string, unknown>[], extra: Record<string, unknown> = {}): TeacherRow {
+  const sourceCollectionGuidance = record.collection_guidance && typeof record.collection_guidance === 'object' &&
+    !Array.isArray(record.collection_guidance) ? structuredClone(record.collection_guidance) : undefined;
   return { version: TEACHER_TRAJECTORY_VERSION,
     id: `teacher-program:${sha256(canonical([record.id, modelId, runId])).slice(0, 20)}`,
     task: { kind: 'whole_program', program_ir: record, source_program_ids: [record.id] } as TeacherRow['task'],
     provenance: { ...expected, trace_sha256: sha256(canonical(run.trace)) }, outcome: run.outcome, trajectory,
+    ...(sourceCollectionGuidance ? { collection_guidance: sourceCollectionGuidance } : {}),
     ...extra, capture_limits: [] };
 }
 
