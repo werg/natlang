@@ -18,10 +18,11 @@ import shutil
 import errno
 import os
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts'))
+CODE_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(CODE_ROOT / 'scripts'))
 from root_integration_adoption import root_integration_adoption_bindings
 from root_derived_writer_admission import admitted_root_derived_writer_rows
+from root_admission_scope import no_new_world_credit
 
 
 def sha(path: Path) -> str:
@@ -56,7 +57,7 @@ def target_digest(row):
     # the insertion order used by the source converter.
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
-def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
+def validate_root_per_action_approval(approval, delta_rows, *, root=CODE_ROOT):
     """Validate a mixed root review and return only its admitted native decisions."""
     if approval.get('schema') != 'natlang.root-per-action-training-admission/1':
         raise ValueError('unsupported root per-action admission schema')
@@ -111,7 +112,7 @@ def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
     if (approval.get('whole_trajectory_admission') is not False
             or approval.get('runtime_qualification') is not False
             or approval.get('active_gpu_inputs_changed') is not False
-            or approval.get('new_world_credit') is not False):
+            or not no_new_world_credit(approval.get('new_world_credit'))):
         raise ValueError('root per-action approval includes an unsupported admission facet')
     ids = [row.get('id') for row in delta_rows]
     if len(ids) != len(set(ids)) or set(ids) != set(admitted):
@@ -245,9 +246,17 @@ def main():
                    help='defaults to --delta-native when the approved records feed both streams')
     p.add_argument('--approval-id-field', default='approved_row_ids')
     p.add_argument('--admission-kind', default='exact-native-runtime-oracle')
+    p.add_argument('--repo-root', type=Path, default=CODE_ROOT,
+                   help='canonical data/receipt root; code may be loaded from a frozen snapshot')
+    p.add_argument('--audit-script', type=Path, default=CODE_ROOT / 'scripts/audit_neuralese_recurrence.py',
+                   help='pinned recurrence auditor executable')
     p.add_argument('--compact-only', action='store_true',
                    help='write only the admitted delta and compact audit; do not copy or assemble full base prefixes')
     args = p.parse_args()
+    repo_root = args.repo_root.resolve()
+    audit_script = args.audit_script.resolve()
+    if not audit_script.is_file():
+        raise ValueError(f'recurrence auditor is missing: {audit_script}')
     paths = {k: getattr(args, k.replace('-', '_')) for k in ('base-native','base-recurrence','base-receipt','delta-native',
         'delta-pieces','base-native-pieces','base-recurrence-pieces','out')}
     delta_r = args.delta_recurrence or args.delta_native
@@ -266,7 +275,7 @@ def main():
     base_receipt = json.loads(paths['base-receipt'].read_text())
     root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
     prefix_binding = base_receipt.get('schema') == 'natlang.corpus-prefix-binding/1'
-    adoption_bindings = root_integration_adoption_bindings(base_receipt, root=ROOT)
+    adoption_bindings = root_integration_adoption_bindings(base_receipt, root=repo_root)
     if prefix_binding:
         if base_receipt.get('status') != 'verified-exact-prefix' or base_receipt.get('training_admission') is not False:
             raise ValueError('base prefix binding must be verification-only, with no training admission')
@@ -357,11 +366,11 @@ def main():
                                 if row.get('decision') == 'admit-ordinary-native-action'
                                 and row.get('training_admission') is True}
             current_delta_rows = [row for row in all_delta_rows if row.get('id') in approval_row_ids]
-            current_by_id = validate_root_per_action_approval(approval, current_delta_rows)
+            current_by_id = validate_root_per_action_approval(approval, current_delta_rows, root=repo_root)
         elif this_root_derived:
             root_derived_writer_admission = True
             current_by_id = {row['native_id']: row for row in admitted_root_derived_writer_rows(
-                approval, approval_path, delta_records=list(rows(paths['delta-native'])), root=ROOT)}
+                approval, approval_path, delta_records=list(rows(paths['delta-native'])), root=repo_root)}
         else:
             current_ids = approval.get(args.approval_id_field)
             if not isinstance(current_ids, list) or not current_ids or any(not isinstance(x, str) for x in current_ids):
@@ -380,7 +389,7 @@ def main():
         # If the receipt provides an artifacts mapping, enforce hashes for every named input it binds.
         artifact_hashes = approval.get('artifact_hashes', {})
         for raw, expected in artifact_hashes.items():
-            bound = (ROOT / raw).resolve()
+            bound = (repo_root / raw).resolve()
             if not bound.is_file() or sha(bound) != expected:
                 raise ValueError(f'approval artifact missing/hash mismatch: {raw}')
     approved = list(approval_by_id)
@@ -486,8 +495,8 @@ def main():
             for row in delta_n: stream.write(line(row))
         shutil.copyfile(paths['delta-pieces'], out / names['delta_pieces'])
         audit_path = out / names['audit']
-        subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
-                        str(paths['base-recurrence']), '--out', str(audit_path)], cwd=ROOT, check=True)
+        subprocess.run([sys.executable, str(audit_script),
+                        str(paths['base-recurrence']), '--out', str(audit_path)], cwd=repo_root, check=True)
         recurrence_audit = json.loads(audit_path.read_text())
         if recurrence_audit.get('structurally_closed') is not True:
             raise ValueError('unchanged recurrence prefix is not structurally closed')
@@ -495,6 +504,7 @@ def main():
           'schema': 'natlang.approved-neuralese-compact-native-delta-proposal/1',
           'status': 'compact delta only; separate root integration review required',
           'compact_only': True,
+          'repo_root': str(repo_root),
           'approval': {**approval_summary,
                        'id_field': ('rows.native_id under receipt-specific strict decision/training_admission predicates'
                                     if root_action_admission or root_per_action_admission else args.approval_id_field)},
@@ -516,7 +526,8 @@ def main():
           'recurrence_audit': recurrence_audit,
           'outputs': {name: {'sha256': sha(out/name), 'bytes': (out/name).stat().st_size}
                       for name in names.values()},
-          'assembler': {'path': str(Path(__file__).relative_to(ROOT)), 'sha256': sha(Path(__file__))},
+          'assembler': {'path': str(Path(__file__).relative_to(CODE_ROOT)), 'sha256': sha(Path(__file__))},
+          'auditor': {'path': str(audit_script), 'sha256': sha(audit_script)},
           'limits': {'full_base_assembly_performed': False, 'task_or_trajectory_admission': False,
                      'model_qualification': False, 'publication': False, 'training_launch': False}}
         (out/'proposal-manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
@@ -550,8 +561,8 @@ def main():
         for row in delta_n: f.write(line(row))
     split_audit = audit_splits(out / names['native'])
     audit_path = out / names['audit']
-    subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
-                    str(out/names['recurrence']), '--out', str(audit_path)], cwd=ROOT, check=True)
+    subprocess.run([sys.executable, str(audit_script),
+                    str(out/names['recurrence']), '--out', str(audit_path)], cwd=repo_root, check=True)
     recurrence_audit = json.loads(audit_path.read_text())
     if recurrence_audit.get('structurally_closed') is not True:
         raise ValueError('combined recurrence records are not structurally closed')
@@ -563,6 +574,7 @@ def main():
                                 if root_action_admission or root_per_action_admission else args.approval_id_field)},
       'admitted_facets': {'native': True, 'recurrence': not native_only,
                           'native_only_receipt': native_only},
+      'repo_root': str(repo_root),
       'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
                  for k,v in {**paths, **approval_inputs, 'delta-recurrence': delta_r}.items() if k != 'out'},
       'prefixes_byte_exact': {
@@ -575,7 +587,8 @@ def main():
       'recurrence_audit': recurrence_audit,
       'outputs': {name: {'sha256': sha(out/name), 'bytes': (out/name).stat().st_size}
                   for name in names.values()},
-      'assembler': {'path': str(Path(__file__).relative_to(ROOT)), 'sha256': sha(Path(__file__))},
+      'assembler': {'path': str(Path(__file__).relative_to(CODE_ROOT)), 'sha256': sha(Path(__file__))},
+      'auditor': {'path': str(audit_script), 'sha256': sha(audit_script)},
       'limits': {'task_or_trajectory_admission': False, 'model_qualification': False,
                  'publication': False, 'training_launch': False}}
     (out/'proposal-manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
