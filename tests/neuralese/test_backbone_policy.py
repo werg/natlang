@@ -103,8 +103,10 @@ def test_recurrence_checkpoint_overrides_with_full_backbone_state(tmp_path,monke
     with torch.no_grad():
         for _,parameter in changed_named:
             parameter.add_(.125)
+    parent=tmp_path/'parent-heads.pt';torch.save({},parent)
+    from natlang_neuralese.common.hashing import sha256_file_hex
     state={'schema':'natlang.neuralese_recurrence_checkpoint/1',
-        'identity':{'options':{'heads':'unused','base':None}},'step':7,
+        'identity':{'options':{'heads':str(parent),'base':None},'files':{str(parent.resolve()):sha256_file_hex(parent)}},'step':7,
         'heads':heads.state_dict(),'port_config':{'max_length':8,'content_transport':'top-state'},
         'backbone_training':'full','backbone_trainables':backbone_trainable_state(changed_named),
         'lora':{},'control_rows':base.control_rows.detach().cpu()}

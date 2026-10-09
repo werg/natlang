@@ -144,6 +144,12 @@ time, behind a parity test: the same seed and the same 20 steps must give the sa
 `scripts/train_lora.py`'s shared helpers into the package, leaving the script a thin CLI or archiving it if the crisp
 student line is closed.
 
+*Status (2026-10-10):* `train/loop.py` landed with the text warm-up and trajectory trainers on it (step loop, stop
+signals, cadences, RNG capture, gradient accumulation, optimizer commit), plus the shared warm-up export, the role-bound
+artifact resolver and the checkpoint policy on the shared writer; see TRAINING_RECIPE.md "Shared training skeleton".
+Still to migrate behind golden runs: delta_e2e, projection_e2e, joint, causal_bootstrap, decision, maple/nested_train
+and the QAT conversion; `scripts/train_lora.py` helpers; ledger admission.
+
 **C2. One optimizer module.** `train/optim.py` absorbs `scripts/training_optimizers.py`. The golden tests from A5 hold
 the update rules fixed.
 

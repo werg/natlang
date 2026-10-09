@@ -711,6 +711,32 @@ their file-bytes hash. A resumed lineage whose recorded recipe content equals th
 hash. `python -m natlang_neuralese.train.recipe resolve <id>` prints the resolved recipe and hash. Experiment history of
 converted recipes lives in `training/neuralese/recipes/HISTORY.md`.
 
+## Shared training skeleton (C1, 2026-10-10)
+
+`text_warmup` and `trajectories` run on the same pieces; a new trainer uses them instead of copying idioms.
+
+- `train/loop.py`: `StopSignal` (SIGTERM/SIGINT set a flag, observed at the next step boundary), `TrainingLoop` (the step
+  iterator; ends `complete`, `signal` or a trainer's own reason), `Cadence` (every N steps and/or wall-clock minutes),
+  RNG capture/restore, `accumulate_gradients`, `commit_optimizer_step`. The other trainers (delta_e2e, projection_e2e,
+  joint, causal_bootstrap, decision, maple/nested_train, the QAT conversion) migrate one at a time behind a golden run.
+  Golden parity: `tests/neuralese/test_training_loop_golden.py` (a tiny text warm-up through a resume, bit-exact with
+  `NATLANG_GOLDEN_EXACT=1`) and `test_legacy_checkpoint_resume.py` (a checkpoint written by the pre-skeleton code resumes).
+- `train/warmup_export.py`: the one warm-up-to-serving export. `build_heads_export` (live model) and
+  `export_from_checkpoint` (exact weights of a saved full-state checkpoint plus a same-run template export) produce the
+  same `heads.pt`; every export carries `warmup.source` = checkpoint path, sha256, checkpoint step, heads step and
+  `heads_current`. A heads file whose step trails its checkpoint is lagging and is never called current.
+- `common/artifact_paths.py`: role-bound input paths. New checkpoints carry `artifact_refs` =
+  `{role: {logical, resolved, sha256}}`; `ArtifactResolver` binds a role by override, recorded path, or (legacy) the
+  unique `identity.files`/`identity.inputs` key matching the normalized option suffix, always digest-verified, otherwise
+  an error naming the role to override. Used by `load_recurrence_checkpoint`, `load_engine` and `export_trajectory`.
+  The working directory is never read or changed.
+- `train/checkpoint_policy.py`: one rolling full-state slot (the continuation parent, optimizer included), weights-only
+  best/final beside it, never in its place; the only complete checkpoint is never removed before a replacement is
+  durably written (`trajectory_state.atomic_checkpoint`, shared by the trainers); a short disk fails the save.
+  Dropping the optimizer slot stays an explicit `drop_resumable=True` after a successful final export.
+- The generated-history channel KL is `train/channel_objective.py` (Pop); `eval/self_feedback.py` and the text warm-up
+  both call it.
+
 ## Pop matched own-history review (2026-10-09; proposal, not adoption)
 
 Two shared `eval.self_feedback` runs use the same4962 held input,16 documents,
