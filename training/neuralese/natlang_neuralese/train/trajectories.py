@@ -1364,6 +1364,11 @@ def main(argv=None):
     backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
     from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
     family = family_members(engine.backbone)
+    codes = None
+    if args.backbone_training == 'qat':
+        # QAT code dynamics at each periodic evaluation (flips from the base, since the last one, oscillation).
+        from ..maple.ternary import CodeTracker
+        codes = CodeTracker(engine.backbone.hf)
     if args.member_weight and not family:
         raise ValueError('--member-weight needs a nested-family student')
     if args.member_weight:
@@ -2100,6 +2105,8 @@ def main(argv=None):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if codes is not None:
+                        evaluation['qat_codes'] = codes.update()
                     if family and args.member_eval:
                         evaluation['family'] = evaluate_members(backbone, member_eval_windows())
                     if args.crisp_weight:
