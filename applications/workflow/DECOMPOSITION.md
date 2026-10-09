@@ -47,31 +47,31 @@ The executors are small models, so instructions spell rules out as numbered step
 
 - **Stay close to JS; no unbounded loops.** The policy is a bounded chain of calls. Retries are counted from the
   history (`limits.transientRetries`), not looped. The one repeat is "validate, ask again once with the problem".
-- **Pluggable hot path: the next action.** It runs on every event of every order. `handle/next.ts` has two
-  implementations: `next/crisp.ts` and `next/choose.nl`. `ledger.implementation("policy")` selects. Both read the same
-  `Limits` and return the same `Decision`. The setting is `step(..., { policy })`. The mechanism validates either
-  one the same way.
+- **Pluggable hot path: the next action.** It runs on every event of every order. One interface, `(Snapshot, Limits)
+  → Decision`, with two implementations: `handle.crisp` (`handle/crisp.ts`, a table, no model call) and `handle.nl`
+  (the natural-language policy, which runs `handle/choose.nl`). The host setting `step(..., { policy })` selects. The
+  mechanism validates either one the same way when it applies the decision.
 
 ## Choosing the next action
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| Which situation the order is in: uncertain, cancelling, failed, forward, owed, settled | fn, decision | `handle/next/choose/situation` | A finite judgment, one scoring pass. It decides which branch runs. |
-| Forward progress: new reserves, reserved charges, charged ships, shipped is done | fn | `handle/next/choose/advance` | The happy path, spelled as a table over phases. |
-| Is the last failure worth another attempt: transient (a rate limit) or definite | fn, decision | `handle/next/choose/failure` | A judgment about the remote's refusal. |
+| Which situation the order is in: uncertain, cancelling, failed, forward, owed, settled | fn, decision | `handle/choose/situation` | A finite judgment, one scoring pass. It decides which branch runs. |
+| Forward progress: new reserves, reserved charges, charged ships, shipped is done | fn | `handle/choose/advance` | The happy path, spelled as a table over phases. |
+| Is the last failure worth another attempt: transient (a rate limit) or definite | fn, decision | `handle/choose/failure` | A judgment about the remote's refusal. |
 | Retry budget: attempts so far counted from the history | inline | `choose` | Counting failed entries for one key. `limits.transientRetries` bounds it. |
-| Compensation plan: which effects stand, in what order to undo them | fn | `handle/next/choose/compensate` | Its own derived value: `standing = done − undone`, refund before release. |
+| Compensation plan: which effects stand, in what order to undo them | fn | `handle/choose/compensate` | Its own derived value: `standing = done − undone`, refund before release. |
 | First step of the plan becomes the decision | inline | `choose` | One line. |
-| The whole choice: dispatch on the situation, return one `Decision` | fn | `handle/next/choose` | The natural-language implementation of `next`. |
-| The crisp implementation of the same choice | pluggable | `handle/next/crisp.ts` | The hot path's reference. |
-| Dispatch between the two | crisp | `handle/next.ts` | Reads the setting from `ledger`. |
-| Validate the decision, ask again once with the problem | fn | `handle` | A checked stage: `ledger.validate` is the check. |
+| The whole choice: dispatch on the situation, return one `Decision` | fn | `handle/choose` | The natural-language implementation of the next-action choice. |
+| The crisp implementation of the same choice | pluggable | `handle/crisp.ts` | The hot path's reference. |
+| Dispatch between the two | crisp | `index.ts` (`stepFull`) | A one-line choice on the setting. A callable-folder dispatcher would have made the crisp path run a model call to reach it: the entry `handle.nl` is a function, so it runs the model. |
+| Validate the decision, ask again once with the problem | fn | `handle` | A checked stage: `ledger.validate` is the check. The crisp implementation needs none. |
 
 ## Recovery of unknown outcomes
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| An operation with `pending` set: look at the receipt, count the looks (`checks`) | fn | `handle/next/choose/recover` | The central recovery judgment. |
+| An operation with `pending` set: look at the receipt, count the looks (`checks`) | fn | `handle/choose/recover` | The central recovery judgment. |
 | Receipt found: `reconcile` (the mechanism acknowledges it) | inline | `recover` | One rule. |
 | No receipt yet, fewer looks than `limits.checksBeforeRetry`: `reconcile` again later (`waitMs`) | inline | `recover` | The remote may be slow. |
 | No receipt after enough looks: `retry` the same key | inline | `recover` | Idempotent: the remote does the effect once per key. The mechanism allows `retry` only after one look found nothing. |
@@ -82,8 +82,8 @@ The executors are small models, so instructions spell rules out as numbered step
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| Which effects stand (reserved, charged, shipped), from the history | fn | `handle/next/choose/compensate` | Derived from `done` entries. |
-| Order: refund before release; a shipped parcel cannot be undone here | fn | `handle/next/choose/compensate` | Policy. A shipped order has nothing to compensate in this workflow. |
+| Which effects stand (reserved, charged, shipped), from the history | fn | `handle/choose/compensate` | Derived from `done` entries. |
+| Order: refund before release; a shipped parcel cannot be undone here | fn | `handle/choose/compensate` | Policy. A shipped order has nothing to compensate in this workflow. |
 | A compensation that failed is retried from the first incomplete step | inline | `choose` | The plan is recomputed from the history on every event, so no plan is stored. |
 | Which phase a compensation is valid in | crisp | `service.ts` | The transition table. |
 
@@ -141,4 +141,7 @@ and, where noted, a `ledger` check.
 
 ## Language and runtime limitations
 
-(filled in during implementation)
+- **A pluggable hot path cannot be dispatched inside the natural-language entry without a model call.** The entry of a
+  named function (`handle.nl`) is run by the model, so a crisp/natural-language dispatcher in its callable folder (the
+  way `applications/pi/harness/context.ts` does it) pays a model call to reach the crisp branch. Here the host selects
+  between `handle.crisp` and `handle`. The host imports `.nl` entries (and their typed children, e.g. `handle.crisp`), so the dispatch is host code.
