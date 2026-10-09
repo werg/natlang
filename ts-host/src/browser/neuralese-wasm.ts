@@ -6,7 +6,7 @@
  *
  * In a browser the module runs in a Web Worker (computation is synchronous; model files are mounted from Blobs with
  * WORKERFS, without copying them into memory twice): `startBrowserNeuralese`. In Node it runs in process with the
- * files' directories mounted (NODEFS): `startNodeNeuralese`. CPU (SIMD). The threaded build
+ * files' directories mounted (NODEFS): `startNodeNeuralese` in neuralese-wasm-node.ts, outside the browser bundle. CPU (SIMD). The threaded build
  * (`neuralese-wasm-mt.mjs`, `threads` > 1) needs cross-origin isolation in browsers (COOP/COEP headers). The WebGPU
  * build (`neuralese-wasm-gpu.mjs`, `gpuLayers` > 0; Chromium, JSPI) returns Promises from load, handle and unload,
  * which is why those are awaited here for every build.
@@ -73,7 +73,7 @@ async function requestBody(init: RequestInit): Promise<Uint8Array> {
 }
 
 /** Serve `endpoint` in process with `answer` (a service, or a worker bridge). */
-function serveLocally(endpoint: string, answer: (method: string, path: string, body: Uint8Array) => Promise<NeuraleseWasmResponse>): () => void {
+export function serveLocally(endpoint: string, answer: (method: string, path: string, body: Uint8Array) => Promise<NeuraleseWasmResponse>): () => void {
   const base = endpoint.replace(/\/$/, '');
   return registerLocalEndpoint(base, async (url, init) => {
     const path = new URL(url).pathname;
@@ -105,35 +105,6 @@ export async function chooseNeuraleseBuild(scope: { navigator?: any; crossOrigin
 export type NeuraleseDevice = { name: string; description: string; gpu: boolean };
 export type StartedNeuralese = { endpoint: string; dialect: string; cutoff: number; devices?: NeuraleseDevice[]; gpu_layers?: number;
   close(): Promise<void> };
-
-/** Node: load the module, mount the files' directories and serve `endpoint` (default `http://neuralese.local`). */
-export async function startNodeNeuralese(options: NeuraleseWasmOptions & { factory: NeuraleseWasmFactory; model: string; heads: string;
-  endpoint?: string }): Promise<StartedNeuralese & { service: NeuraleseWasmService }> {
-  const { dirname, basename } = await import('node:path');
-  // The threaded build (neuralese-wasm-mt) needs its worker pool sized up front.
-  const module = await options.factory({ pthreadPoolSize: options.threads ?? 1 });
-  const mounted = new Map<string, string>();
-  const mount = (file: string) => {
-    const dir = dirname(file);
-    if (!mounted.has(dir)) {
-      const target = `/mnt${mounted.size}`;
-      module.FS.mkdir(target);
-      module.FS.mount(module.NODEFS, { root: dir }, target);
-      mounted.set(dir, target);
-    }
-    return `${mounted.get(dir)}/${basename(file)}`;
-  };
-  const service = new NeuraleseWasmService(module);
-  const hello = await service.load(mount(options.model), mount(options.heads), options);
-  const endpoint = options.endpoint ?? 'http://neuralese.local';
-  let chain = Promise.resolve();  // one request at a time
-  const stop = serveLocally(endpoint, (method, path, body) => {
-    const run = chain.then(() => service.handle(method, path, body));
-    chain = run.then(() => undefined, () => undefined);
-    return run;
-  });
-  return { endpoint, ...hello, service, async close() { stop(); await service.unload(); } };
-}
 
 /** Browser: start the service in a Web Worker (`worker`, running `neuralese-worker`) and serve `endpoint`. */
 export async function startBrowserNeuralese(options: NeuraleseWasmOptions & { worker: Worker; moduleUrl: string; model: Blob; heads: Blob;

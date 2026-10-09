@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "stdlib-lfm25-350m-pilotv4-trained-20261009-v1",
+  "kind": "standard-library",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/stdlib-lfm25-350m-pilotv4-trained-20261009-v1",
+  "files": [
+    {
+      "path": "result.json",
+      "bytes": 2305,
+      "sha256": "8dac0c261ad6112ad85e85b92420262400d792015d3acaa02481e7614ca4b8ff"
+    },
+    {
+      "path": "stdlib.nz",
+      "bytes": 819520,
+      "sha256": "bd63e4a59c61ade6d106f1029f7244e383fb1245a2c1463ea37f595869216a5b",
+      "nz": {
+        "exports": [
+          "ap",
+          "combine",
+          "convert",
+          "gloss",
+          "map",
+          "read",
+          "split",
+          "splitList",
+          "zip"
+        ],
+        "blocks": 9,
+        "dialects": [
+          "nd:natlang@1"
+        ],
+        "widths": [
+          1024
+        ]
+      }
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 8397,
+      "sha256": "2d934de30b6ccfcf67e38fc253a72c6d947ea7eea5af60cc5dfdfbae16576a05"
+    }
+  ],
+  "bytes": 830222
+}

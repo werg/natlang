@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the natlang heartbeat every hour at minute 17
+[Timer]
+# Off the hour so it does not meet the other hourly jobs; natlang-development-cache-hygiene.timer runs every ten minutes.
+OnCalendar=*-*-* *:17:00
+Persistent=true
+AccuracySec=30s
+Unit=natlang-heartbeat.service
+[Install]
+WantedBy=timers.target

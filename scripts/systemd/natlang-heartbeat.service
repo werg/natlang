@@ -1,0 +1,8 @@
+[Unit]
+Description=Natlang hourly heartbeat: diagnose watched runs, triage the inbox, plan next actions (advisory by default)
+[Service]
+Type=oneshot
+# Goes through the memory ledger and takes a lock so cycles do not overlap; see scripts/heartbeat_cycle.sh.
+ExecStart=/bin/sh %h/natlang/scripts/heartbeat_cycle.sh
+Nice=10
+TimeoutStartSec=3h

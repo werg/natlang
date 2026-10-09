@@ -25,6 +25,23 @@ async def __natlang_run(source, namespace):
     return namespace.pop('__natlang_result__', None)
 `;
 
+/**
+ * Starts a timer outside the interpreter's thread that sets the interrupt flag (`buffer`, an Int32Array's) to 2 after
+ * `ms` (Pyodide then raises KeyboardInterrupt). The default uses a Web Worker; the Node wiring (runtime/node.ts)
+ * installs one on worker_threads.
+ */
+export type PythonWatchdog = (buffer: SharedArrayBuffer, ms: number) => { terminate(): Promise<unknown> | unknown } | undefined;
+export const WATCHDOG_SCRIPT = 'const flag = new Int32Array(buffer); setTimeout(() => Atomics.store(flag, 0, 2), ms)';
+let startWatchdog: PythonWatchdog = (buffer, ms) => {
+  if (typeof Worker === 'undefined') return undefined;
+  const workerUrl = URL.createObjectURL(new Blob([`onmessage = ({ data }) => { const { buffer, ms } = data; ${WATCHDOG_SCRIPT}; };`],
+    { type: 'text/javascript' }));
+  const worker = new Worker(workerUrl);
+  worker.postMessage({ buffer, ms });
+  return { terminate: () => { worker.terminate(); URL.revokeObjectURL(workerUrl); } };
+};
+export function setPythonWatchdog(start: PythonWatchdog): void { startWatchdog = start; }
+
 let singleton: Promise<any> | undefined;
 let currentHost: PythonHost | undefined;
 let currentRefresh: (() => void) | undefined;
@@ -107,18 +124,7 @@ export async function runFolderPython(folder: Folder, source: string, host: Pyth
     if (typeof SharedArrayBuffer !== 'undefined') {
       const buffer = new SharedArrayBuffer(4);
       py.setInterruptBuffer(new Int32Array(buffer));
-      const script = 'const flag = new Int32Array(buffer); setTimeout(() => Atomics.store(flag, 0, 2), ms)';
-      if (typeof process !== 'undefined' && process.versions?.node) {
-        const { Worker } = await import('node:worker_threads');
-        watchdog = new Worker(`const { workerData } = require('worker_threads'); const buffer = workerData.buffer, ms = workerData.ms; ${script}`,
-          { eval: true, workerData: { buffer, ms: timeoutMs } });
-      } else if (typeof Worker !== 'undefined') {
-        const workerUrl = URL.createObjectURL(new Blob([`onmessage = ({ data }) => { const { buffer, ms } = data; ${script}; };`],
-          { type: 'text/javascript' }));
-        const worker = new Worker(workerUrl);
-        worker.postMessage({ buffer, ms: timeoutMs });
-        watchdog = { terminate: () => { worker.terminate(); URL.revokeObjectURL(workerUrl); } };
-      }
+      watchdog = startWatchdog(buffer, timeoutMs);
     }
     let value: any;
     try {
