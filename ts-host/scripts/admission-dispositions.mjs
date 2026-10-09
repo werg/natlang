@@ -2,7 +2,7 @@
  * Stable, machine-readable interpretation of raw admission/compatibility reasons.
  * Keep `reason` intact: disposition is an index for review and routing, not a replacement label.
  */
-const RULES = [
+export const RULES = [
   { category: 'migration_or_replay_pending', action: 'review_migration_provenance_and_runtime_context_before_promotion', matches: r =>
     r === 'history_migration_review_pending' },
   { category: 'duplicate_or_superseded', action: 'retain_original_and_link_selected_replacement', matches: r =>
