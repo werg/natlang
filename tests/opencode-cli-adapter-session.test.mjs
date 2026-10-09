@@ -173,6 +173,8 @@ test('direct JSON content cannot satisfy required tool choice or malformed inten
   const raw = '{"candidateId":"ABD-1A","score":82}';
   assert.throws(() => buildAuditedCompletion({ responseText: raw, names: ['eval'], recordedActions: [],
     toolChoice: 'required' }), /exactly content and toolCalls/);
+  assert.throws(() => buildAuditedCompletion({ responseText: raw, names: ['eval'], recordedActions: [],
+    toolChoice: { type: 'function', function: { name: 'eval' } } }), /exactly content and toolCalls/);
   for (const responseText of [
     '{"content":"typed result"}',
     '{"toolCalls":[]}',

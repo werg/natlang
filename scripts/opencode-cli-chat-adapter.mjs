@@ -25,6 +25,9 @@ function isConfirmedTerminalAbort(error, sessionID, boundary) {
   return message === '' || message === 'Aborted';
 }
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const requiresToolCall = toolChoice => toolChoice === 'required' ||
+  (isObject(toolChoice) && toolChoice.type === 'function' && isObject(toolChoice.function) &&
+    typeof toolChoice.function.name === 'string' && toolChoice.function.name.length > 0);
 const jsonResponse = (res, status, value) => {
   if (res.destroyed || res.writableEnded) return;
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -197,7 +200,7 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
     // envelope. Preserve that body verbatim as assistant content. This is
     // content only: the normal Natlang compiler/effect checks still decide
     // whether it is a valid result, and required-tool turns cannot use it.
-    if (toolChoice !== 'required') {
+    if (!requiresToolCall(toolChoice)) {
       let direct;
       try { direct = JSON.parse(responseText); }
       catch { direct = undefined; }
