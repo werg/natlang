@@ -105,6 +105,12 @@ a training job (about 170 generated tokens/s across all requests, about 28 per s
   token estimate) has crisp twins behind the hot-path setting (`--planning`, default crisp), which cut prepare
   from 4–7 minutes to about 1.5.
 
+- Companion (`--companion`, COMPANION.md): first live comparison on `stale-build`, one run each side by side under
+  the same load (2026-10-09). With the companion: done and passing in 94 minutes, 5 agent turns, 6 tool calls, 3
+  briefings shown. Without: the build passed the check but the run had no answer when the 150-minute limit hit, after
+  7 turns and 10 tool calls (it first read the wrong `build/` directory). One sample is an anecdote, not a result;
+  repeated runs across the tasks are next.
+
 General runtime changes that came out of the port: service arguments arrive as host-realm data; `ONCE_EFFECTS`
 (the provider request and poll run once per phase); computed values keep fields their declared type does not
 list, in returns and locals (the cause of executors retyping provider messages); union type errors name the
