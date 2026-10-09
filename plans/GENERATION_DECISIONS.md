@@ -3320,3 +3320,20 @@ Both prior attempts are retained; provider overload is not a semantic negative.
 Groq's native runtime prompt exceeded its free8K TPM allowance even on a small
 source. Use complete short typed-decision tasks instead, through the shared
 decision-label pipeline, rather than truncate required interpreter context.
+
+## 2026-10-09 — Short decision work for Groq
+
+The existing decision labeler now has an OpenAI-compatible HTTP backend, using
+the same noul/probability envelope as local Clef/Decider labels. HTTP execution
+does not import CUDA/Strands, excludes gold targets from requests, validates
+probability bounds and distributions, pins source/adapter/request settings, and
+records usage/request hashes with bounded exponential retries and Retry-After.
+Explicit request spacing handles small free quotas. No credentials enter records.
+
+Pop launched16 short existing train noul tasks on Groq GPT-OSS120B, five seconds
+between request starts,256 output tokens and3 bounded retries. First responses
+returned valid answer.noul with241/253 input tokens and89/72 output tokens.
+This is held decision-label generation, not complete interpreter trajectories;
+conversion and admission remain explicit pending work. Kilo's first complete
+interpreter case was wrong (PROC-910. / none / no_action); completion alone does
+not establish quality. NVIDIA's corresponding case matched the exact oracle.

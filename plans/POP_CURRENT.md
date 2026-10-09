@@ -312,8 +312,11 @@ error during tool history; investigate the shared adapter before relaunch.
 Kilo is producing actual saved turns. Z.AI v3 retries transient429s at the
 request layer; v1/v2 are preserved. Gemini v2 uses the repaired runtime and is
 making actual calls. NVIDIA completed its first exact case and has a serial
-queue for source indices1–4. A shared HTTP decision-label backend for shorter
-Groq tasks is being implemented. These are held
+queue for source indices1–4. Groq is generating16 short train decision labels through the shared HTTP
+label backend, with five-second request spacing and bounded retries. First
+responses used about330 tokens and match answer.noul. These labels still need
+source/quality review and explicit current-IR conversion. Kilo completed its
+first case with a wrong decision; preserve it for child-level failure analysis. These are held
 teacher samples of existing source groups, not new worlds or admitted training
 data. Inspect actual requests and terminal accounting before reporting success.
 
