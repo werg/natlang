@@ -24,7 +24,7 @@ export default function commit(state: NpcState, effects: NpcEffects): Committed 
   const next: NpcState = structuredClone(state);
   const npc = next.actors.find(row => row.id === actor)!;
   npc.memory.push({ id, from: event.from, text: event.text });
-  for (const [k, note] of notes.entries()) npc.memory.push({ id: `${id}.note-${k + 1}`, from: actor, text: note.text, about: [...note.about] });
+  for (let k = 0; k < notes.length; k++) { const note = notes[k]!; npc.memory.push({ id: `${id}.note-${k + 1}`, from: actor, text: note.text, about: [...note.about] }); }
   if (plan.action === 'give') npc.inventory[plan.item!] = npc.inventory[plan.item!]! - 1;
   if (plan.action === 'promise') npc.commitments.push({ to: plan.target!, detail: plan.detail!, evidence_id: id });
   next.applied.push(id);
