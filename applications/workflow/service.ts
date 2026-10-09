@@ -9,9 +9,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import type { PluggableSetting } from '@natlang/node';
 import type { Action, Decision, Fault, MessageKind, Operation, Outgoing, OutboxEntry, Receipt, WorkflowEvent, WorkflowState } from './types.js';
 
-export type Implementation = 'crisp' | 'natural-language';
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+export type Implementation = Exclude<PluggableSetting, undefined>;
 
 async function readJson<T>(path: string, fallback: T): Promise<T> {
   try { return JSON.parse(await readFile(path, 'utf8')) as T; }

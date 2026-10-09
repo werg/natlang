@@ -19,9 +19,9 @@ export type { IterationStatisticsStore, SiteStatistics, ProgressJudgeFunction, S
 export { nl, iterateOn, refine, assume, untrusted } from './surface.js';
 export { builtin, builtinDefinition, builtinRecords } from './builtin.js';
 export { builtinNames } from '../builtin/index.js';
-export { pluggable } from './pluggable.js';
+export { pluggable, pluggableMode } from './pluggable.js';
 export { promotionPolicy, reviewPromotions, sanitizeDecision, type PolicyFunction, type ReviewedSubject } from './promotion.js';
-export type { PluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
+export type { PluggableMode, PluggableSetting, LegacyPluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
 export type { Is, Untrusted, NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
 /** Support functions targeted by compiled modules. Not an application API. */
 export const __natlang = lowered;

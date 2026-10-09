@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createNatlangRuntime, pluggable } from '../dist/runtime/node.js';
+import { createNatlangRuntime, pluggable, pluggableMode } from '../dist/runtime/node.js';
 
 const parts = (calls = []) => ({
   crisp: n => { calls.push('crisp'); return { total: n * 2 }; },
@@ -39,4 +39,17 @@ test('shadow mode records a failure of the side that is not served and fails whe
   assert.equal(event.agree, false); assert.match(event.crisp, /crisp broke/);
   await assert.rejects(() => runtime.run(() => pluggable({ crisp: () => 1, nl: () => { throw new Error('nl broke'); } }, 'shadow')()), /nl broke/);
   assert.equal(await pluggable({ crisp: () => 1, nl: () => 1 }, 'shadow')(), 1, 'outside a task it still compares and serves');
+});
+
+test('the older spellings of nl are accepted, an absent setting takes the default, and anything else is refused', async () => {
+  const calls = [];
+  for (const old of ['natlang', 'natural-language']) assert.deepEqual(await pluggable(parts(calls), old)(2), { total: 4 });
+  assert.deepEqual(calls, ['nl', 'nl']);
+  assert.deepEqual(await pluggable(parts(calls), undefined)(2), { total: 4 });
+  assert.deepEqual(await pluggable(parts(calls), undefined, { default: 'crisp' })(2), { total: 4 });
+  assert.deepEqual(calls, ['nl', 'nl', 'nl', 'crisp']);
+  assert.deepEqual(['crisp', 'nl', 'shadow', 'natlang', 'natural-language', undefined].map(mode => pluggableMode(mode)),
+    ['crisp', 'nl', 'shadow', 'nl', 'nl', 'nl']);
+  assert.equal(pluggableMode(undefined, 'crisp'), 'crisp');
+  assert.throws(() => pluggableMode('both'), /deprecated/);
 });

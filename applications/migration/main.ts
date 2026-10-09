@@ -23,8 +23,8 @@ export async function main(context: TargetContext): Promise<number> {
   for (const point of POINTS) {
     const choice = options(`--${point}`)[0];
     if (choice === undefined) continue;
-    if (choice !== 'crisp' && choice !== 'natural-language') { context.io.error.write(`--${point} takes crisp or natural-language\n`); return 2; }
-    policy[point] = choice;
+    if (!['crisp', 'nl', 'shadow', 'natural-language'].includes(choice)) { context.io.error.write(`--${point} takes crisp, nl or shadow (natural-language is the deprecated spelling of nl)\n`); return 2; }
+    policy[point] = choice as Implementation;
   }
   const repository = new RepositoryMigration(resolve(context.workspace, manifest.root ?? '.'),
     { files: manifest.files, checks: manifest.checks ?? [], policy });

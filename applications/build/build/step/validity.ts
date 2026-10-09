@@ -3,6 +3,7 @@
  * pluggable hot path of every round. The setting `build.implementation('validity')` selects the digest comparison
  * below (crisp) or `validity/judge.nl` (natural-language).
  */
+import { pluggable } from '@natlang/node';
 import { build } from 'natlang:services';
 import judge from './validity/judge.nl';
 import type { Evidence, Task, Validity } from '../../types.js';
@@ -25,6 +26,6 @@ export function crisp(_task: Task, evidence: Evidence): Validity {
 }
 
 export default async function validity(task: Task, evidence: Evidence): Promise<Validity> {
-  if (await build.implementation('validity') === 'natural-language') return judge(task, evidence);
-  return crisp(task, evidence);
+  return pluggable({ crisp: () => crisp(task, evidence), nl: () => judge(task, evidence) }, await build.implementation('validity'),
+    { name: 'build.validity', same: (exact, judged) => exact.valid === judged.valid })();
 }

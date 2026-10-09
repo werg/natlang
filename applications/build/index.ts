@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { ONCE_EFFECTS, type FolderHandle, type NatlangRuntime } from '@natlang/node';
+import { ONCE_EFFECTS, type FolderHandle, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
 import build from './build.nl';
 import type { BuildReport, Evidence, Task, TaskResult } from './types.js';
 
@@ -20,7 +20,8 @@ export type * from './types.js';
 
 /** The pluggable policy points, and the implementation each runs when the host does not choose. */
 export type PolicyPoint = 'ready' | 'choose' | 'validity';
-export type Implementation = 'crisp' | 'natural-language';
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+export type Implementation = Exclude<PluggableSetting, undefined>;
 export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { ready: 'crisp', choose: 'natural-language', validity: 'natural-language' };
 
 /** What the natural-language stages see of the `build` service. Types are those of types.ts. */

@@ -3,6 +3,7 @@
  * `repository.implementation('exact')` selects the counts below (crisp) or `exact/judge.nl` (natural-language), which
  * also judges that the patches change only what the site's usage calls for.
  */
+import { pluggable } from '@natlang/node';
 import { repository } from 'natlang:services';
 import judge from './exact/judge.nl';
 import type { Classified, Exactness, Patch } from '../../types.js';
@@ -20,6 +21,6 @@ export function crisp(patches: Patch[], classified: Classified, revision: string
 }
 
 export default async function exact(patches: Patch[], classified: Classified, revision: string): Promise<Exactness> {
-  if (await repository.implementation('exact') === 'natural-language') return judge(patches, classified, revision);
-  return crisp(patches, classified, revision);
+  return pluggable({ crisp: () => crisp(patches, classified, revision), nl: () => judge(patches, classified, revision) },
+    await repository.implementation('exact'), { name: 'migration.exact', same: (exact, judged) => exact.exact === judged.exact })();
 }

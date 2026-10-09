@@ -3,10 +3,12 @@
  * scheduler's stages may call it to check what they produce; they cannot change it. It is built from a `Problem`
  * snapshot, so a run decides on the facts it started with.
  */
+import type { PluggableSetting } from '@natlang/node';
 import type { Problem } from './workspace.js';
 import type { Hard, Offered, Placement, Verdict } from './types.js';
 
-export type Implementation = 'crisp' | 'natural-language';
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+export type Implementation = Exclude<PluggableSetting, undefined>;
 export type Implementations = { enumeration: Implementation };
 
 export type CalendarService = {
