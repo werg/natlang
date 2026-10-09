@@ -453,7 +453,9 @@ class GradSession:
                 t_prompt, t_rest = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(t_prompt, t_rest, {}, write_terms=False)["token_logits"]
             if student is None or teacher is None or student.shape != teacher.shape:
-                raise RequestError("neuralese-grad-term", "student and teacher targets do not align")
+                raise RequestError("neuralese-grad-term", "student and teacher targets do not align: student "
+                                   f"{None if student is None else tuple(student.shape)}, teacher "
+                                   f"{None if teacher is None else tuple(teacher.shape)}")
             t = torch.log_softmax(teacher.float(), -1)
             s = torch.log_softmax(student.float(), -1)
             return (t.exp() * (t - s)).sum(-1).mean()
@@ -520,7 +522,9 @@ class GradSession:
         if distill_weight:
             student = scored['token_logits']
             if student is None or teacher is None or student.shape != teacher.shape:
-                raise RequestError('neuralese-grad-term', 'student and teacher targets do not align')
+                raise RequestError('neuralese-grad-term', 'student and teacher targets do not align: student '
+                                   f'{None if student is None else tuple(student.shape)}, teacher '
+                                   f'{None if teacher is None else tuple(teacher.shape)}')
             t = torch.log_softmax(teacher.float(), -1)
             s = torch.log_softmax(student.float(), -1)
             loss = loss + distill_weight * (t.exp() * (t - s)).sum(-1).mean()
