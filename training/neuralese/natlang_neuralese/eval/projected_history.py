@@ -15,7 +15,8 @@ import torch
 
 from ..serve import load_engine
 from ..train.output_embedding_projection import sha
-from ..train.execution import causal_gold_prefix_mask, full_depth_projected_feedback_step
+from ..train.execution import (causal_gold_prefix_mask, causal_prefix_metrics,
+                               full_depth_projected_feedback_step)
 from ..train.text_warmup import (
     chunked_readout, document_windows, gold_completion, load_text_rows,
     select_held_document_windows,
@@ -196,22 +197,21 @@ def _gold_reference_survival(prediction, losses, span):
     """
     if prediction.shape != span.shape or losses.shape != span.shape or span.ndim != 2:
         raise ValueError('prediction, loss and gold target shapes must match')
-    matches = prediction.eq(span)
     survival = causal_gold_prefix_mask(prediction, span)
-    surviving_losses = losses[survival]
-    surviving_correct = matches[survival]
-    first_mismatch = []
-    for row in matches:
-        mismatch = torch.nonzero(~row, as_tuple=False)
-        first_mismatch.append(int(mismatch[0, 0]) if mismatch.numel() else None)
-    count = int(survival.sum())
+    stats = causal_prefix_metrics(
+        prediction, span, losses, survival,
+        reference_prediction=prediction, reference_token_losses=losses,
+        include_windows=True, producer_predictions=prediction)
+    first_mismatch = [row['first_divergence_index'] for row in stats['windows']]
+    matches = prediction.eq(span)
+    count = int(stats['context_valid_tokens'])
     return {
         'first_token_ce': float(losses[:, 0].mean()),
         'first_token_accuracy': float(matches[:, 0].float().mean()),
         'first_divergence_index_by_window': first_mismatch,
         'exact_prefix_survival_tokens': count,
-        'exact_prefix_survival_ce': float(surviving_losses.mean()) if count else None,
-        'exact_prefix_survival_accuracy': float(surviving_correct.float().mean()) if count else None,
+        'exact_prefix_survival_ce': float(stats['context_valid_ce']) if count else None,
+        'exact_prefix_survival_accuracy': float(stats['context_valid_accuracy']) if count else None,
         'gold_reference_scope': 'gold next-token targets are context-valid through the first mismatching prediction; later targets are scored on divergent histories',
     }
 

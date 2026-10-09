@@ -31,6 +31,18 @@ const report = await runtime.run(() => handle(ticket));
 
 Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), `loadVirtualNatlang(files, 'review.nl')`, or `defineNatlang(nlSourceText)` for functions authored at run time (notebook cells, generated tools). `loadCallables('natlang.d')` loads a callable folder as a record. Tests that run application code importing `.nl` files under Vite or Vitest add `plugins: [natlangVitePlugin()]` (from `@natlang/node`): each `.nl` import loads as `loadNatlang` would, with the nearest `package.json` above it as the package root.
 
+## Crisp and natural-language implementations of one part
+
+A hot part with a crisp and a natural-language implementation (validation, settlement, a scheduler's policy, an entry function the host selects) is one `pluggable` call behind a setting, not a hand-written `if`:
+
+```ts
+import { pluggable } from '@natlang/node';
+const settle = pluggable({ crisp: () => reference(state, ordered), nl: () => policy(state, ordered, problem) }, settings.settle, { name: 'economy.settle' });
+return settle();
+```
+
+`pluggable({ crisp, nl }, mode, { name, serve, same })` returns an async function of the shared arguments. Modes: `crisp` and `nl` run one side; `shadow` runs both concurrently on the same arguments, returns the `serve` side (default `nl`, the policy of record) and records a `pluggable_shadow` trace event (`name`, `served`, `crisp`, `nl`, `agree`), the way refinement shadow mode records `refinement_shadow`. Results agree when their canonical values are equal; pass `same(crisp, nl)` to compare only what matters (a verdict's `ok` and not its wording). A failure of the side that is not served is recorded as `agree: false` and does not fail the call; the served side's failure does. Read the events as bug reports for the crisp side and hard negatives for the natural-language one; switch the setting to `crisp` when the disagreement rate is acceptable. It is a host and application helper: model-facing instructions never name it. `applications/games` (`games/economy/settle.ts`, the validators) is the example; the `Settings` type there takes `'nl' | 'crisp' | 'shadow'`.
+
 ## Services
 
 ```ts

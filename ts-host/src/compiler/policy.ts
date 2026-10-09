@@ -164,7 +164,9 @@ export function finiteCounterComparison(condition: ts.Expression | undefined, co
   if (!ts.isBinaryExpression(root) || root.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return;
   const left = isCounterComparison(root.left);
   const right = isCounterComparison(root.right);
-  if (left === right) return;
+  if (!left && !right) return;
+  // Two comparisons of the counter: the first bounds the loop and the second is an extra exit (`i < n && i < m`).
+  if (left && right) return { comparison: unwrapped(root.left) as ts.BinaryExpression, guard: root.right };
   return left ? { comparison: unwrapped(root.left) as ts.BinaryExpression, guard: root.right } :
     { comparison: unwrapped(root.right) as ts.BinaryExpression, guard: root.left };
 }
@@ -181,7 +183,7 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   const condition = node.condition;
   const boundedCondition = finiteCounterComparison(condition, counter);
   if (!boundedCondition)
-    return 'compare the counter with a bound using <, <=, > or >=';
+    return 'compare the counter with one bound using <, <=, > or >=, optionally joined by && to an early-exit condition such as `i < n && !found`';
   const comparison = boundedCondition.comparison;
   const counterLeft = ts.isIdentifier(comparison.left) && comparison.left.text === counter;
   const bound = counterLeft ? comparison.right : comparison.left;
@@ -237,7 +239,7 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
   const displayPath = options.displayPath ?? (source => source.fileName);
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) =>
     diagnostics.push({ ...spanOf(node, displayPath), code, message, severity: 'error' });
-  const loopHint = ' Use `for (const item of array)` or `for (const [index, item] of array.entries())` (also `array.keys()` and `array.values()`) for bounded arrays, `for (const key in record)` for enumerable string keys, ' +
+  const loopHint = ' Use `for (const item of array)` or `for (const [index, item] of array.entries())` (also `keys()` and `values()` of an array, Map or Set, and `string.matchAll(regex)`) for bounded collections, `for (const key in record)` for enumerable string keys, ' +
     'a counter `for (let i = 0; i < n; i++)`, an array method, or `step.iterateOn(initial).until(done)` for open-ended iteration.';
   const visit = (node: ts.Node): void => {
     if (ts.isWhileStatement(node)) report(node, 'forbidden-loop', '`while` loops are not allowed here.' + loopHint);
@@ -268,21 +270,26 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
       report(node, 'forbidden-dynamic-code', 'Dynamic `import()` is not allowed here; use a static import.');
     else if (ts.isForOfStatement(node) && options.checker) {
       const type = options.checker.getTypeAtLocation(node.expression);
-      const arrayIteratorCall = (expression: ts.Expression): boolean => {
+      const collectionIteratorCall = (expression: ts.Expression): boolean => {
         while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) ||
             ts.isNonNullExpression(expression)) expression = expression.expression;
-        if (!ts.isCallExpression(expression) || expression.arguments.length !== 0 ||
-            !ts.isPropertyAccessExpression(expression.expression) ||
-            !['entries', 'keys', 'values'].includes(expression.expression.name.text)) return false;
+        if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) return false;
+        const method = expression.expression.name.text;
         const receiver = options.checker!.getTypeAtLocation(expression.expression.expression);
-        const arrayLike = (candidate: ts.Type): boolean => candidate.isUnion() ? candidate.types.every(arrayLike) :
-          options.checker!.isArrayType(candidate) || options.checker!.isTupleType(candidate);
-        return arrayLike(receiver);
+        const every = (candidate: ts.Type, test: (item: ts.Type) => boolean): boolean =>
+          candidate.isUnion() ? candidate.types.every(item => every(item, test)) : test(candidate);
+        // entries/keys/values of an array, tuple, Map or Set, and matchAll of a string: finite views of a fixed collection.
+        if (expression.arguments.length === 0 && ['entries', 'keys', 'values'].includes(method))
+          return every(receiver, candidate => options.checker!.isArrayType(candidate) || options.checker!.isTupleType(candidate) ||
+            ['Map', 'Set', 'ReadonlyMap', 'ReadonlySet'].includes(candidate.getSymbol()?.name ?? ''));
+        if (method === 'matchAll' && expression.arguments.length === 1)
+          return every(receiver, candidate => !!(candidate.flags & ts.TypeFlags.StringLike));
+        return false;
       };
       const acceptable = (candidate: ts.Type): boolean => candidate.isUnion() ? candidate.types.every(acceptable) :
         !!(candidate.flags & (ts.TypeFlags.Any | ts.TypeFlags.StringLike)) || options.checker!.isArrayType(candidate) ||
         options.checker!.isTupleType(candidate) || ['Map', 'Set', 'ReadonlyMap', 'ReadonlySet'].includes(candidate.getSymbol()?.name ?? '');
-      if (!acceptable(type) && !arrayIteratorCall(node.expression))
+      if (!acceptable(type) && !collectionIteratorCall(node.expression))
         report(node.expression, 'forbidden-loop', '`for ... of` here must iterate an array, string, Map or Set.' + loopHint);
     }
     ts.forEachChild(node, visit);

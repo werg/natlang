@@ -19,6 +19,21 @@ export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with',
 ]);
 
+/** The camelCase identifier a file or function name with separators stands for: `read-limits` is `readLimits`. */
+export const camelCaseName = (name: string): string => {
+  const words = name.split(/[^A-Za-z0-9_$]+/).filter(Boolean);
+  const joined = words.map((word, index) => index === 0 ? word : word[0]!.toUpperCase() + word.slice(1)).join('');
+  return /^[A-Za-z_$]/.test(joined) ? joined : `_${joined}`;
+};
+
+/** One sentence for a callable name that is not a JavaScript identifier, naming the identifier to use. */
+export const invalidNameMessage = (name: string): string =>
+  `${JSON.stringify(name)} is not a valid callable name; name it with letters, digits, _ and $, such as ${JSON.stringify(camelCaseName(name) || 'stage')}.`;
+
+/** One sentence for a callable name that is a function property, naming a rename. */
+export const reservedNameMessage = (name: string, what = 'callable name'): string =>
+  `${JSON.stringify(name)} is a property every function already has, so it cannot be a ${what}; rename it, for example to ${JSON.stringify(name + 'Step')}.`;
+
 /** Exact ambient declaration for the compiler-provided Neuralese type, also shown by read_code("Neuralese"). */
 export const NEURALESE_TYPE_DECLARATION = String.raw`
 /** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */

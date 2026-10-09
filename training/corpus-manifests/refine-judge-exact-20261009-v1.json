@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "refine-judge-exact-20261009-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/refine-judge-exact-20261009-v1",
+  "files": [
+    {
+      "path": "judge-rows.jsonl",
+      "bytes": 1389242,
+      "sha256": "b7f330731bfb34ef8a85b18736ff525ebd3babd0314a96aca5c636d46360d7be",
+      "lines": 1327
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1524,
+      "sha256": "17c06b424471479773e22b2e23ebfda3209ac9b54b88d530450223babb82f00a"
+    },
+    {
+      "path": "predicates.jsonl",
+      "bytes": 13177,
+      "sha256": "8cf618113dc3ac8f238818585e5c0509c51cbb99aa11250ff9e0240403899277",
+      "lines": 93
+    }
+  ],
+  "bytes": 1403943
+}

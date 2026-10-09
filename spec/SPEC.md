@@ -146,12 +146,17 @@ TypeScript outside callable folders is unrestricted.
 ## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
-counted `for` loops, and array methods. A counted loop reads its bound once,
+counted `for` loops (the condition may join the counter bound to an early exit with `&&`, as in `i < n && !found`), and array methods. A counted loop reads its bound once,
 when it starts; the bound must be a finite number and the counter must advance
 toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
 defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
 class extending `Iterator`) are rejected; `for...of` is guarded at run time
-against iterating a growing collection. `for await` consumes the async iterables
+against iterating a growing collection. `for...of` takes an array, string, Map or
+Set, and also `entries()`, `keys()` and `values()` of an array, Map or Set and
+`string.matchAll(regex)`: each is a finite view of a collection that is fixed for
+the loop (an array that grows during the loop throws; a Map or Set view iterates
+a snapshot; `matchAll` advances through a fixed string). `natlang check` reports a
+`for...of` source that would be refused by the same rules, with its location. `for await` consumes the async iterables
 the host provides (a `fetch` response body, a service's stream, a package's,
 an `iterateOn(...).streamUntil(...)` stream), and arrays of promises; it is paced
 by whatever produces them. `setInterval` is not available: repeated
@@ -168,7 +173,13 @@ stream of events):
   function returning `boolean`. It is checked on the initial state and after
   every step.
 - `withMeasure(state => n)` supplies a non-negative integer that must decrease at
-  every step; `withLimit({ maxSteps })` a hard step bound. A deadline alone is
+  every step that continues the loop. The step after which `until` is true ends
+  the loop and need not lower it, so a measure that counts the work still to do
+  needs no padding (`2*remaining + running`). A measure at 0 while `until` is
+  still false ends the loop with `IterationLimitError` coded
+  `iteration-measure-exhausted`, since a further step could not lower it; a
+  continuing step that does not lower it is `IterationDivergedError`, whose
+  trajectory ends at the last state that did. `withLimit({ maxSteps })` a hard step bound. A deadline alone is
   not a bound.
 - With a TypeScript predicate, a measure or a step limit is required
   (`iteration-unbounded`). With a natural-language predicate none is required:
@@ -384,7 +395,9 @@ when the caller sets them.
 ## Types
 
 Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
-records, arrays, `Record<string, T>`, literal unions, optional fields and
+records, arrays, `Record<string, T>` (also written `{ [key: string]: T }`),
+intersections of object types (`A & { extra: string }`, merged into one record),
+indexed access with a literal key (`State['status']`), literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be

@@ -13,7 +13,8 @@ from pathlib import Path
 import torch
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
-from .execution import causal_gold_prefix_mask, full_depth_projected_feedback_step, prefill_write_context
+from .execution import (causal_gold_prefix_mask, causal_prefix_metrics,
+                        full_depth_projected_feedback_step, prefill_write_context)
 from .output_embedding_projection import sha
 from .optim_restore import optimizer_param_names
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
@@ -54,6 +55,15 @@ _OBJECTIVE_METRIC_SCALARS = (
     'gold_accuracy', 'close_targets', 'close_probability', 'close_top1',
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
     'context_valid_gold_tokens', 'context_valid_gold_fraction',
+)
+
+_EVALUATION_CONTEXT_METRICS = (
+    'context_valid_gold_ce', 'context_valid_gold_accuracy',
+    'context_valid_text_argmax_agreement', 'context_valid_ce_delta',
+    'context_valid_last256_target_tokens', 'context_valid_last256_gold_tokens',
+    'context_valid_last256_gold_fraction', 'context_valid_last256_gold_ce',
+    'context_valid_last256_gold_accuracy', 'context_valid_last256_text_argmax_agreement',
+    'context_valid_last256_ce_delta',
 )
 
 
@@ -117,6 +127,13 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, s
     if pass_losses is not None and len(pass_metrics) != len(pass_losses):
         raise ValueError('one scalar loss is required for every training pass')
     metric_names = objective_metric_scalars(secondary_projection)
+    evaluation_context_presence = [
+        all(name in metric for name in _EVALUATION_CONTEXT_METRICS) for metric in pass_metrics]
+    has_evaluation_context = any(evaluation_context_presence)
+    if has_evaluation_context and not all(evaluation_context_presence):
+        raise ValueError('evaluation context metrics must be present in every pass or none')
+    if has_evaluation_context:
+        metric_names = (*metric_names, *_EVALUATION_CONTEXT_METRICS)
     packed = [metric[name].detach().reshape(())
               for metric in pass_metrics for name in metric_names]
     if pass_losses is not None:
@@ -146,6 +163,28 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, s
         for value in loss_values:
             total_loss += float(value) / passes
     return materialized, total_loss
+
+
+def _normalize_context_valid_strata(strata):
+    """Finalize prefix/tail statistics accumulated for whole and regional rows."""
+    for row in strata.values():
+        non_metrics={'tokens','context_valid_gold_tokens','context_valid_gold_fraction',
+                     'context_valid_last256_target_tokens','context_valid_last256_gold_tokens',
+                     'context_valid_windows'}
+        non_metrics.update(n for n in row if n.endswith('_weighted_sum'))
+        for n in row.keys()-non_metrics:row[n]/=row['tokens']
+        row['context_valid_gold_fraction']=row['context_valid_gold_tokens']/row['tokens']
+        row['context_valid_last256_gold_fraction']=(
+            row['context_valid_last256_gold_tokens']/row['context_valid_last256_target_tokens']
+            if row['context_valid_last256_target_tokens'] else 0.)
+        for n in ('context_valid_gold_ce','context_valid_gold_accuracy',
+                  'context_valid_text_argmax_agreement','context_valid_ce_delta'):
+            total=row.pop(n+'_weighted_sum',0.)
+            row[n]=total/row['context_valid_gold_tokens'] if row['context_valid_gold_tokens'] else None
+        for n in ('context_valid_last256_gold_ce','context_valid_last256_gold_accuracy',
+                  'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta'):
+            total=row.pop(n+'_weighted_sum',0.)
+            row[n]=total/row['context_valid_last256_gold_tokens'] if row['context_valid_last256_gold_tokens'] else None
 
 
 def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128,
@@ -1236,7 +1275,7 @@ def main(argv=None):
                 baseline.update(prediction=prediction,ce=ce.detach(),
                     embedding=relative_mse(heads.content.reference(top.detach()),target))
                 if evaluation:
-                    baseline.update(token_losses=token_losses,
+                    baseline.update(token_losses=token_losses.detach(),
                                     tail_reference=heads.content.reference(top[:,-256:].detach()))
         plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
@@ -1256,6 +1295,19 @@ def main(argv=None):
               'close_top1':(prediction[ending]==backbone.controls.close_id).float().mean().detach(),
               'premature_close_top1':(prediction[~ending]==backbone.controls.close_id).float().mean().detach()}
         secondary_name='input_map'
+        mask=out.get('gold_prefix_mask',torch.ones_like(span,dtype=torch.bool))
+        if evaluation:
+            prefix_stats=causal_prefix_metrics(
+                prediction.detach(),span,token_losses.detach(),mask,
+                reference_prediction=plain_prediction.detach(),
+                reference_token_losses=baseline['token_losses'],
+                tail_tokens=256,include_windows=True,
+                producer_predictions=out.get('producer_predictions'))
+        else:
+            # Training retains its existing coverage telemetry without doing
+            # evaluation-only CE/agreement reductions or host synchronization.
+            prefix_stats={'context_valid_tokens':mask.sum().detach(),
+                          'context_valid_fraction':mask.float().mean().detach()}
         metrics={'ce':ce.detach(),'text_ce':plain_ce.detach(),'ce_delta':(ce-plain_ce).detach(),
           'relative_mse':embedding.detach(),secondary_name+'_mse':secondary.detach(),
           'text_embedding_mse':plain_embedding.detach(),
@@ -1265,11 +1317,24 @@ def main(argv=None):
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics,
           'supervised_ce':training_ce.detach(),
           'supervised_embedding_mse':supervised_embedding.detach(),
-          'supervised_'+secondary_name+'_mse':supervised_secondary.detach()}
+          'supervised_'+secondary_name+'_mse':supervised_secondary.detach(),
+          'context_valid_gold_tokens':prefix_stats['context_valid_tokens'],
+          'context_valid_gold_fraction':prefix_stats['context_valid_fraction']}
+        if evaluation:
+            metrics.update({
+              'context_valid_gold_ce':prefix_stats['context_valid_ce'],
+              'context_valid_gold_accuracy':prefix_stats['context_valid_accuracy'],
+              'context_valid_text_argmax_agreement':prefix_stats['context_valid_text_argmax_agreement'],
+              'context_valid_ce_delta':prefix_stats['context_valid_ce_delta'],
+              'context_valid_last256_target_tokens':prefix_stats['tail_target_tokens'],
+              'context_valid_last256_gold_tokens':prefix_stats['tail_context_valid_tokens'],
+              'context_valid_last256_gold_fraction':prefix_stats['tail_context_valid_fraction'],
+              'context_valid_last256_gold_ce':prefix_stats['tail_context_valid_ce'],
+              'context_valid_last256_gold_accuracy':prefix_stats['tail_context_valid_accuracy'],
+              'context_valid_last256_text_argmax_agreement':prefix_stats['tail_context_valid_text_argmax_agreement'],
+              'context_valid_last256_ce_delta':prefix_stats['tail_context_valid_ce_delta']})
+            metrics['context_valid_windows']=prefix_stats['windows']
         metrics['pass_index']=out['pass_index']
-        mask=out.get('gold_prefix_mask',torch.ones_like(span,dtype=torch.bool))
-        metrics['context_valid_gold_tokens']=mask.sum().detach()
-        metrics['context_valid_gold_fraction']=mask.float().mean().detach()
         if evaluation and span.shape[1]>256:
             with torch.no_grad():
                 tail_top=top[:,-256:]
@@ -1467,11 +1532,52 @@ def main(argv=None):
                     for n in ('ce','text_ce','ce_delta','relative_mse',secondary_metric_name+'_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                         row[n]=row.get(n,0.)+m[n]*m['tokens']
                     row['tokens']+=m['tokens']
+                    valid_count=int(m['context_valid_gold_tokens'])
+                    row['context_valid_gold_tokens']=row.get('context_valid_gold_tokens',0)+valid_count
+                    row['context_valid_gold_fraction']=row.get('context_valid_gold_fraction',0)+valid_count
+                    for n in ('context_valid_gold_ce','context_valid_gold_accuracy',
+                              'context_valid_text_argmax_agreement','context_valid_ce_delta'):
+                        key_sum=n+'_weighted_sum'
+                        row[key_sum]=row.get(key_sum,0.)+m[n]*valid_count
+                    tail_targets=int(m['context_valid_last256_target_tokens'])
+                    tail_valid=int(m['context_valid_last256_gold_tokens'])
+                    row['context_valid_last256_target_tokens']=row.get('context_valid_last256_target_tokens',0)+tail_targets
+                    row['context_valid_last256_gold_tokens']=row.get('context_valid_last256_gold_tokens',0)+tail_valid
+                    for n in ('context_valid_last256_gold_ce','context_valid_last256_gold_accuracy',
+                              'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta'):
+                        key_sum=n+'_weighted_sum'
+                        row[key_sum]=row.get(key_sum,0.)+m[n]*tail_valid
+                    window_rows=row.setdefault('context_valid_windows',[])
+                    for window,detail in zip(batch,m.get('context_valid_windows',[])):
+                        window_rows.append({**detail,'document_sha256':window['document'],
+                            'source_groups':window['groups'],'offset':window['offset'],
+                            'prefix_tokens':window['prefix']})
                     for region,values in m.get('regions',{}).items():
                         regional=strata.setdefault(key+'-'+region,{'tokens':0})
                         for n,value in values.items():
                             if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
                         regional['tokens']+=values['tokens']
+                        if region == 'last256':
+                            # This row's target span is exactly the evaluated
+                            # right-aligned tail, so use the tail/prefix
+                            # intersection computed from that same window.
+                            tail_targets=int(m['context_valid_last256_target_tokens'])
+                            tail_valid=int(m['context_valid_last256_gold_tokens'])
+                            regional['context_valid_gold_tokens']=regional.get('context_valid_gold_tokens',0)+tail_valid
+                            regional['context_valid_gold_fraction']=regional.get('context_valid_gold_fraction',0)+tail_valid
+                            regional['context_valid_last256_target_tokens']=regional.get('context_valid_last256_target_tokens',0)+tail_targets
+                            regional['context_valid_last256_gold_tokens']=regional.get('context_valid_last256_gold_tokens',0)+tail_valid
+                            for source_name, target_name in (
+                                ('context_valid_last256_gold_ce','context_valid_gold_ce'),
+                                ('context_valid_last256_gold_accuracy','context_valid_gold_accuracy'),
+                                ('context_valid_last256_text_argmax_agreement','context_valid_text_argmax_agreement'),
+                                ('context_valid_last256_ce_delta','context_valid_ce_delta'),
+                                ('context_valid_last256_gold_ce','context_valid_last256_gold_ce'),
+                                ('context_valid_last256_gold_accuracy','context_valid_last256_gold_accuracy'),
+                                ('context_valid_last256_text_argmax_agreement','context_valid_last256_text_argmax_agreement'),
+                                ('context_valid_last256_ce_delta','context_valid_last256_ce_delta')):
+                                key_sum=target_name+'_weighted_sum'
+                                regional[key_sum]=regional.get(key_sum,0.)+m[source_name]*tail_valid
             autoregressive_controls=None
             if ar_batch is None:ar_batch=ar_fallback
             if a.ar_control_steps and ar_batch is not None:
@@ -1480,8 +1586,7 @@ def main(argv=None):
                 autoregressive_controls=autoregressive_history_metrics(backbone,heads,*ar_batch,steps=a.ar_control_steps)
                 autoregressive_controls['seconds']=time.perf_counter()-started_ar
                 autoregressive_controls['start']='first assistant token' if ar_batch is not ar_fallback else 'window start'
-        for row in strata.values():
-            for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
+        _normalize_context_valid_strata(strata)
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
@@ -2155,6 +2260,12 @@ def main(argv=None):
             # state because parameters or optimizer moments may have mutated.
             optimizer.zero_grad(set_to_none=True)
             if a.device.startswith('cuda'):torch.cuda.empty_cache()
+            # Complete only a snapshot submitted at an earlier committed
+            # boundary. Do not snapshot the possibly partially-mutated live
+            # state; keeping this drain here also makes main() safe for callers
+            # that catch the optimizer exception without exiting the process.
+            try:checkpoint_writer.drain()
+            except Exception:traceback.print_exc()
             raise
         try:
             completion=finish_committed_update(prepared,memory_plan,passes,controls)

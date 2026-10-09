@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/refine-data",
+  "version": "0.1.0",
+  "description": "Teacher-side stages that build refinement-judge training data: satisfying values, minimal near-miss edits and an independent verification pass.",
+  "include": ["README.md", "index.ts", "types.ts", "exemplify.nl", "nearMiss.nl", "verifyNearMiss.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
