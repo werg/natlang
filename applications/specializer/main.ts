@@ -44,8 +44,11 @@ export function targets(store: CallStore, options: Options, self: string | null)
 }
 
 /** The runtime the reducer runs in: the launcher's model, with the store as the `traces` service. */
-/** One reducer call's budget: a function whose evidence cannot be settled in this much work is declined for now. */
-const REDUCER_LIMITS = { maxActions: 400, timeoutMs: 90 * 60_000 };
+/**
+ * One reducer call's budget: a function whose evidence cannot be settled in this much work is declined for now. Actions
+ * bound the work; the time bound only catches a stalled call, since a shared executor can be slow for hours.
+ */
+const REDUCER_LIMITS = { maxActions: 400, timeoutMs: 4 * 60 * 60_000 };
 
 /** Whether a reducer call stopped on its budget (actions, episodes or time), not on a failure around it. */
 function exhausted(error: unknown): boolean {
