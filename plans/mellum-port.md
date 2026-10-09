@@ -120,3 +120,9 @@ enter the Neuralese stages before either backbone's long runs.
 - Speed: fused compiled ramp (24x eager) brings the forward to 1.3 s per 2048 tokens; backward is 63 s (next target).
 - Implication: conversion recovery data should be text the teacher models well (assistant turns, code, prose),
   not system-prompt-dominated windows.
+- Update-isolation probes (one gradient on one train window, held KL at λ=0, base 0.021): writing identical values
+  0.021; round-to-nearest lr 3e-4·α 0.48; stochastic rounding at lr 3e-5·α 0.43. Damage does not scale with step
+  size and is diffuse: per group, all attention 0.20, all experts 0.30, gate_up 0.21, o_proj 0.11, every layer
+  quarter 0.04–0.11. Some gate_up rows (layers 0, 2, 3, 27) have near-zero RMS, so a per-tensor α step changes
+  them by up to 3.6× their RMS. Next: per-row step scale, recovery windows from assistant/code/prose text instead
+  of the system prompt, and a check of KL sensitivity on README/Python text.
