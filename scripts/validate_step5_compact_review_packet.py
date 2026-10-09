@@ -46,7 +46,8 @@ def verify_compact_packet(packet: dict[str, Any]) -> dict[str, int]:
                   packet.get("native_delta", {}).get("inputs", []),
                   packet.get("native_delta", {}).get("outputs", []),
                   packet.get("text_delta", {}).get("inputs", []),
-                  packet.get("text_delta", {}).get("outputs", [])):
+                  packet.get("text_delta", {}).get("outputs", []),
+                  [packet.get("campaign", {}).get("launch_plan", {})]):
         for pin in group:
             path = pin.get("path")
             core = {key: pin.get(key) for key in ("path", "bytes", "sha256")}
@@ -172,6 +173,28 @@ def verify_compact_packet(packet: dict[str, Any]) -> dict[str, int]:
         raise ValueError("native assembler output directory differs from pinned outputs")
     if option(native_argv, "--approval") not in {approval["path"], "/repo/" + approval["path"]}:
         raise ValueError("native assembler approval path differs from packet source admission pin")
+
+    campaign_plan = packet.get("campaign", {}).get("launch_plan", {})
+    launch_plan_path = verify_pin(campaign_plan)
+    launch_plan = json.loads(launch_plan_path.read_text(encoding="utf-8"))
+    launch_source = launch_plan.get("source", {})
+    packet_source = packet.get("source", {})
+    packet_row = packet_source.get("row", {})
+    if launch_source.get("path") != packet_source.get("path") or \
+            launch_source.get("index") != packet_row.get("index") or \
+            launch_source.get("row_sha256_without_line_feed", launch_source.get("row_sha256")) != packet_row.get("row_sha256_without_line_feed") or \
+            launch_source.get("source_group") != packet_row.get("group") or \
+            launch_source.get("split") != packet_row.get("split"):
+        raise ValueError("packet source binding differs from its pinned launch plan")
+    source_path = (ROOT / packet_source["path"]).resolve()
+    if not source_path.is_relative_to(ROOT) or not source_path.is_file() or \
+            sha256(source_path) != launch_source.get("sha256"):
+        raise ValueError("source file bytes do not match the pinned launch plan")
+    source_lines = source_path.read_bytes().splitlines(keepends=True)
+    source_index = packet_row.get("index")
+    if not isinstance(source_index, int) or not 0 <= source_index < len(source_lines) or \
+            hashlib.sha256(source_lines[source_index].rstrip(b"\r\n")).hexdigest() != packet_row.get("row_sha256_without_line_feed"):
+        raise ValueError("source row bytes do not match the packet source binding")
     return {"pins_verified": len(all_pins), "renderer_files": len(file_map),
             "text_outputs": len(text_outputs)}
 
