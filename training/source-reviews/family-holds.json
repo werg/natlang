@@ -1,0 +1,23 @@
+{
+  "schema": "natlang.source-review-family-holds/1",
+  "holds": [
+    {
+      "dataset": "hotpotqa",
+      "family": "knowledge_evidence",
+      "primarySourceId": "9e84e5af371d9280c1b4935d10dc8e02c230618c2d168ee445999dc499f597b4",
+      "reason": "Anurag Basu also states the comedy genre of Jagga Jasoos. Supporting-facts annotations are not exhaustive; exact two-article move gold rejects a valid extra supporting article."
+    },
+    {
+      "dataset": "hotpotqa",
+      "family": "knowledge_evidence",
+      "primarySourceId": "c5b955678123f51525b7e3c83d317961b1c2093262aa317b9ceb60a3a26ccc42",
+      "reason": "The Fantastic Beasts film article identifies the same-named 2001 book. Exact annotated-support file moves omit this valid supporting article."
+    },
+    {
+      "dataset": "banking77",
+      "family": "cross_source_folders",
+      "primarySourceId": null,
+      "reason": "This family's broad \"unexpected extra charges\" predicate includes fee complaints that its banking category whitelist marks negative. Preserve original gold and hold the entire contract until a reviewed replacement establishes agreement between visible instructions and source labels."
+    }
+  ]
+}
