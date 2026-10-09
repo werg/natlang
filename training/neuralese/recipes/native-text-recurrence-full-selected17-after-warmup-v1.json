@@ -1,0 +1,198 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-text-recurrence-full-selected17-after-warmup-v1",
+  "description": "Requalify the exact completed native/text warmup heads, then train raw recurrence on the full adopted R4961 cohort with one ordered pass over every eligible train row. This is a separate stage lineage from v3; it does not inherit raw foundation/runtime qualification.",
+  "dataset_lineage": {
+    "corpus_id": "v18-v19-full-selected17-native-text-5467-4699-r4961-20261009-v1",
+    "full_assembly_proposal": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v1.json",
+      "sha256": "d26e446dc56956e91cd662c5f03d11770be496290c2dcfba912f4d3f46f8e449"
+    },
+    "root_integration_adoption": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v1.json",
+      "sha256": "2761c2c03f4430e6003bad845d7c0ac3d2e52b43b5c2712a4e2961d73d8a2a0a"
+    },
+    "root_integration_review": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v1.json",
+      "sha256": "c7d10142bd94f63435763433483e83941c4b2ca04528f79cb0c46e914f04ee8d"
+    },
+    "scope": "native action SFT plus ordinary text only; recurrence is the unchanged previously adopted 4961-row set; no new recurrence admission or qualification before its separate training/runtime gates."
+  },
+  "upstream_warmup_evidence": {
+    "recipe_plan": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/recipe-plan.json",
+      "sha256": "d645a79d835792fca5d044046e7cce5d9a22065acc528e52dd31804ad3162678"
+    },
+    "parent_stop_receipt": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/orchestrator-control-receipt-v1.json",
+      "sha256": "3729c41e6218527d88f66474ac768b27d35a500ee96bf0607182a69e1acd62ea"
+    },
+    "core_warmup_report": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/core_text_warmup/report.json",
+      "sha256": "69db4c142f8e9f9436ef60ddbf5ffcb8bd8ba780a188357a1ca3938cfccb7ae1",
+      "qualified": true,
+      "step": 32512
+    },
+    "core_warmup_heads": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/core_text_warmup/heads.pt",
+      "sha256": "991b2e00a2dc9d7108c604650621cdce936c9249edcb643587908a1f1e4292ff"
+    },
+    "full_state_checkpoint": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/core_text_warmup/checkpoint.pt",
+      "sha256": "4df477d79c4856b163af377750bd510bd6a3e73d03db68b28ae4b6c09bc71e49"
+    },
+    "scope": "completed warmup gate only; no adapted-runtime or raw-foundation certificate inherited"
+  },
+  "input_bindings": {
+    "heads.completed_core_warmup": {
+      "path": "runs/neuralese-v18-v19-selected17-continuation-20261009-v3/core_text_warmup/heads.pt",
+      "sha256": "991b2e00a2dc9d7108c604650621cdce936c9249edcb643587908a1f1e4292ff"
+    },
+    "cohort.native": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-records.jsonl",
+      "sha256": "badcefe122c2ddf8adb2298c185e2f226233e39d0e261f081280587631aaeda8"
+    },
+    "cohort.native_pieces": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-pieces.jsonl",
+      "sha256": "b3a30bae2767cbeb7fa5dd4ebd7b8bd062f5eb82449c48d13b9de6a6965592f0"
+    },
+    "cohort.recurrence": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3"
+    },
+    "cohort.recurrence_pieces": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6"
+    }
+  },
+  "scope": {
+    "recurrence_source_rows": 4961,
+    "train_rows_before_runtime_filters": 3072,
+    "held_out_rows_before_runtime_filters": 1889,
+    "train_cap": 3072,
+    "steps": 3072,
+    "batch": 1,
+    "coverage_claim": "one ordered pass across the eligible train array; confirm every selected reader_record_id against the source train IDs after completion. Runtime filters (long prompt, no target, native Neuralese prompt) remain explicit in trainer accounting.",
+    "admission": "unchanged root-adopted recurrence corpus; no additions or split changes"
+  },
+  "stages": [
+    {
+      "id": "token_identity",
+      "inputs": {
+        "records": "cohort.native"
+      },
+      "kind": "token_identity",
+      "parameters": {
+        "limit": 32,
+        "max_tokens": 512
+      },
+      "requires": []
+    },
+    {
+      "id": "embedding_distillation",
+      "inputs": {
+        "pieces": "cohort.native_pieces",
+        "records": "cohort.native"
+      },
+      "kind": "causal_embedding_distillation",
+      "parameters": {
+        "agreement_gate": 0.9,
+        "argmax_weight": 0.1,
+        "batch": 512,
+        "checkpoint_every": 128,
+        "context_tokens": 1024,
+        "contexts": 128,
+        "cutoff": "full",
+        "eval_every": 128,
+        "kl_gate": 0.25,
+        "lr": 0.0003,
+        "seed": 0,
+        "source_fraction": 0.25,
+        "steps": 8192,
+        "stop_on_gate": true,
+        "tokens": 1024
+      },
+      "requires": [
+        "token_identity"
+      ]
+    },
+    {
+      "id": "runtime_qualification",
+      "inputs": {
+        "records": "cohort.native"
+      },
+      "kind": "raw_runtime_qualification",
+      "parameters": {
+        "limit": 8,
+        "max_length": 512
+      },
+      "requires": [
+        "embedding_distillation"
+      ]
+    },
+    {
+      "id": "adapted_runtime",
+      "inputs": {
+        "records": "cohort.native",
+        "heads": "heads.completed_core_warmup"
+      },
+      "kind": "text_warmup_runtime",
+      "parameters": {},
+      "requires": [
+        "runtime_qualification"
+      ]
+    },
+    {
+      "id": "recurrence_training",
+      "inputs": {
+        "pieces": "cohort.recurrence_pieces",
+        "records": "cohort.recurrence",
+        "heads": "heads.completed_core_warmup"
+      },
+      "kind": "raw_recurrence_training",
+      "parameters": {
+        "backbone_lr": 3e-05,
+        "backbone_training": "auto",
+        "backward_policy": "auto",
+        "batch": 1,
+        "checkpoint_every": 25,
+        "checkpoint_layers": true,
+        "content_transport": "top-state",
+        "crisp_weight": 1,
+        "distill": 0.25,
+        "eval": 28,
+        "eval_every": 128,
+        "ffn_chunk_tokens": 1024,
+        "graph_headroom_gb": 0.25,
+        "handover": "written",
+        "heads_lr": 3e-05,
+        "local_stage_batch_size": 16,
+        "lora_lr": 2e-05,
+        "lr": 0.0001,
+        "max_tokens": 65536,
+        "max_write_vectors": 512,
+        "max_writes": 0,
+        "optimizer": "muon",
+        "rank": 16,
+        "seed": 0,
+        "sketch_gradient": "local_stage",
+        "sketch_target_backbone_scale": 0.05,
+        "sketch_target_weight": 0.1,
+        "steps": 3072,
+        "stop_supervision": "gold-native-boundary",
+        "tokens_per_vector": 1,
+        "train": 3072,
+        "train_control_rows": true,
+        "write_curriculum": "joint",
+        "write_depth": 5,
+        "writer_length_policy": "native-value",
+        "writer_supervision": "native-value",
+        "writer_text_weight": 1.0
+      },
+      "requires": [
+        "runtime_qualification",
+        "adapted_runtime"
+      ]
+    }
+  ]
+}
