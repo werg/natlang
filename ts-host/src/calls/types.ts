@@ -93,10 +93,17 @@ export type CallStoreSettings = {
   promotionLiveComparisons: number;
   /** Calls of one definition revision before the specializer looks at it. */
   minCalls: number;
+  /**
+   * Who decides promotion and demotion of cases and tiers from their evidence (calls/evidence.ts): `crisp` the fixed rule
+   * above, applied as evidence arrives; `nl` the natural-language policy, decided by the specializer loop, never per call;
+   * `shadow` the crisp rule serves and the loop also asks the natural-language policy and records whether they agree.
+   */
+  promotionPolicy: 'crisp' | 'nl' | 'shadow';
 };
 
 export const DEFAULT_SETTINGS: CallStoreSettings = { maxValueBytes: 1 << 20, maxStoreBytes: 50 * 2 ** 30, minFreeBytes: 20 * 2 ** 30, specialization: 'on',
-  auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, promotionLiveComparisons: 3, minCalls: 20 };
+  auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, promotionLiveComparisons: 3, minCalls: 20,
+  promotionPolicy: 'crisp' };
 
 export type CaseTier = 'shadow' | 'active' | 'demoted' | 'disabled';
 export type CaseRole = 'group' | 'training' | 'held-out' | 'counterexample' | 'shadow' | 'audit' | 'served' | 'handed-off';

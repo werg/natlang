@@ -6,6 +6,7 @@
  */
 import { hexDigest } from '../native/hash.js';
 import type { IterationStatisticsStore, SiteStatistics } from '../runtime/iterate.js';
+import { applyDecision, crispPolicy, ruleOf, RECENT, type EvidenceSummary, type PromotionDecision } from './evidence.js';
 import { DEFAULT_SETTINGS, type CallRecord, type CallStoreSettings, type CaseRole, type CaseStats, type CaseTier,
   type CompilationRow, type DeclineReason, type DeclineRow, type ValueRef, type Verdict } from './types.js';
 
@@ -499,21 +500,34 @@ export class CallStore {
     this.linkCase(caseHash, callId, role, verdict);
     this.reviewTier(caseHash);
   }
-  /**
-   * Promotion and demotion by evidence (§6.2): a shadow case becomes active after `promotionComparisons` comparisons
-   * with at most `acceptanceBound` of them worse; an active case is demoted when worse audits or hand-offs exceed it.
-   */
-  reviewTier(caseHash: string): CaseTier | undefined {
+  /** A case's evidence in the shape every promotion policy judges (calls/evidence.ts), with its latest comparisons for recency. */
+  caseSummary(caseHash: string): EvidenceSummary | undefined {
     const stats = this.caseStats(caseHash);
     if (!stats) return;
-    const { acceptanceBound: bound, promotionComparisons: needed, promotionLiveComparisons: live } = this.settings();
-    let tier = stats.tier;
-    if (tier === 'shadow' && stats.compared >= needed && stats.worse <= bound * stats.compared &&
-        (stats.live_compared ?? 0) >= (live ?? 0) && (stats.live_worse ?? 0) <= bound * (stats.live_compared ?? 0)) tier = 'active';
-    else if (tier === 'active' && ((stats.audited >= 5 && stats.audit_worse > bound * stats.audited) ||
-      (stats.served + stats.handed_off >= 10 && stats.handed_off > bound * (stats.served + stats.handed_off)) ||
-      (stats.compared >= needed && stats.worse > bound * stats.compared))) tier = 'demoted';
-    if (tier !== stats.tier) this.setTier(caseHash, tier, tier === 'demoted' ? 'demoted by evidence' : 'promoted by evidence');
+    const recent = this.db.prepare(`SELECT verdict FROM case_calls WHERE case_hash = ? AND verdict IS NOT NULL AND role IN ('held-out', 'shadow', 'audit')
+      ORDER BY created_at DESC LIMIT ?`).all(caseHash, RECENT) as { verdict: Verdict }[];
+    return { subject: 'case', id: caseHash, state: stats.tier, rule: ruleOf(this.settings()),
+      evidence: { served: stats.served, handed_off: stats.handed_off, guard_misses: 0, infrastructure: 0, compared: stats.compared, worse: stats.worse,
+        better: stats.better, live_compared: stats.live_compared ?? 0, live_worse: stats.live_worse ?? 0, audited: stats.audited,
+        audit_worse: stats.audit_worse, recent_compared: recent.length,
+        recent_worse: recent.filter(row => row.verdict === 'worse' || row.verdict === 'diverged').length } };
+  }
+  /**
+   * Promotion and demotion by evidence (§6.2), by the shared rule `crispPolicy` (calls/evidence.ts), applied as evidence
+   * arrives. Under `promotionPolicy: 'nl'` the natural-language policy decides instead, from the specializer loop
+   * (`reviewPromotions`, runtime/promotion.ts), so nothing happens here.
+   */
+  reviewTier(caseHash: string): CaseTier | undefined {
+    const summary = this.caseSummary(caseHash);
+    if (!summary) return;
+    if (this.settings().promotionPolicy === 'nl') return summary.state as CaseTier;
+    return this.decideTier(summary, crispPolicy(summary));
+  }
+  /** Apply a policy's decision about a case; `by` names the policy in the case's note. */
+  decideTier(summary: EvidenceSummary, verdict: PromotionDecision, by?: string): CaseTier {
+    const tier = applyDecision(summary.state, verdict.decision) as CaseTier;
+    if (tier !== summary.state)
+      this.setTier(summary.id, tier, `${tier === 'demoted' ? 'demoted' : 'promoted'} by ${by ? `${by} policy: ${verdict.reason}` : 'evidence'}`.slice(0, 300));
     return tier;
   }
   setTier(caseHash: string, tier: CaseTier, note?: string): void {

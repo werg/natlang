@@ -20,6 +20,7 @@ import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '.
 import { Deopt, admit, handoffNote, isDeopt } from '../calls/dispatch.js';
 import type { LoadedCase } from '../calls/compilations.js';
 import { runTiered, type TierAttempt } from '../calls/tiers.js';
+import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
@@ -324,7 +325,10 @@ function tieredCall(frame: Frame, definition: CallableDefinition, positional: un
   if (!settings) return;
   const args = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, positional[index]]).filter(([, value]) => value !== undefined));
   let recorded = 0;
-  return runTiered(engine, settings, { name: definition.name, args, store: task.runtime.callStore(),
+  const store = task.runtime.callStore();
+  return runTiered(engine, settings, { name: definition.name, args, store,
+    ...(store ? { specialized: () => specializerOutput(store, definitionKey({ ...definition, body: options.instructions ?? definition.body }),
+      interfaceHash(definition.codebase)) } : {}),
     hasModel: name => !!task.runtime.options.models?.[name],
     run: plan => runDefinition(frame, plan.model ? { ...definition, model: plan.model } : definition, positional, { ...options, tierAttempt: plan }),
     emit: events => {
@@ -536,7 +540,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
       [{ node: invocationNodeId(callId), port: 'caller' }])));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
-  const addendum = frame.systemAddendum;
+  const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const agent = model ? new NativeToolAgent(model.driver, {
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
     neuralese: task.runtime.options.neuralese,

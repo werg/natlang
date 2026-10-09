@@ -18,6 +18,7 @@ export { Iteration, IterationDivergedError, IterationStepError, IterationLimitEr
 export type { IterationStatisticsStore, SiteStatistics, ProgressJudgeFunction, StepRecord } from './iterate.js';
 export { nl, iterateOn, refine, assume, untrusted } from './surface.js';
 export { pluggable } from './pluggable.js';
+export { promotionPolicy, reviewPromotions, sanitizeDecision, type PolicyFunction, type ReviewedSubject } from './promotion.js';
 export type { PluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
 export type { Is, Untrusted, NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
 /** Support functions targeted by compiled modules. Not an application API. */

@@ -68,6 +68,18 @@ export function loadCases(id: string, text: string, codebase: Record<string, unk
   });
 }
 
+/**
+ * What the specializer stored for a definition revision, for the tier ladder (calls/tiers.ts): the number of compiled
+ * cases that are active, and the specialized guidance (`instructions.md`) if the compilation carries it. Nothing when the
+ * compilation was written for another context interface.
+ */
+export function specializerOutput(store: CallStoreLike, definitionKey: string, interfaceHash: string): { cases: number; guidance?: string } {
+  const row = store.currentCompilation(definitionKey);
+  if (!row || row.interface_hash !== interfaceHash) return { cases: 0 };
+  const guidance = row.files['instructions.md'];
+  return { cases: row.cases.filter(item => item.tier === 'active').length, ...(guidance ? { guidance } : {}) };
+}
+
 /** The process's view of stored compilations. */
 export class CompilationCache {
   private version = -1;
