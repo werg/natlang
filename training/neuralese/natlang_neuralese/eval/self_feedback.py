@@ -65,6 +65,84 @@ def _mean_and_count(values):
     return float(values.float().mean()), int(values.numel())
 
 
+def _position_metrics(kl, agreement, projection_ce, crisp_ce, start, stop):
+    """Summarize an existing aligned span; bounds are zero-based, stop-exclusive."""
+    stop = min(stop, kl.shape[1], agreement.shape[1], projection_ce.shape[1], crisp_ce.shape[1])
+    start = min(start, stop)
+    if stop == start:
+        return {'tokens': 0, 'kl_plain_to_projected_nats': None,
+                'argmax_agreement': None,
+                'projection_generated_plain_history_ce': None,
+                'crisp_generated_plain_history_ce': None, 'quality_ce_gap': None}
+    section_kl = kl[:, start:stop]
+    section_agreement = agreement[:, start:stop]
+    section_projection_ce = projection_ce[:, start:stop]
+    section_crisp_ce = crisp_ce[:, start:stop]
+    kl_mean, count = _mean_and_count(section_kl)
+    agreement_mean, _ = _mean_and_count(section_agreement)
+    projection_mean, _ = _mean_and_count(section_projection_ce)
+    crisp_mean, _ = _mean_and_count(section_crisp_ce)
+    return {'tokens': count, 'kl_plain_to_projected_nats': kl_mean,
+            'argmax_agreement': agreement_mean,
+            'projection_generated_plain_history_ce': projection_mean,
+            'crisp_generated_plain_history_ce': crisp_mean,
+            'quality_ce_gap': projection_mean - crisp_mean}
+
+
+def _close_position_metrics(kl, agreement, projection_ce, crisp_ce,
+                            projection_close, crisp_close):
+    """Report prefixes ending before/through the earliest close in either rollout.
+
+    Both generated sequences use the same positional cutoff. This avoids scoring
+    post-stop positions from one rollout merely because the other did not stop
+    there. The channel metric still describes projection-generated history.
+    """
+    span = kl.shape[1]
+    observed_closes = [value for value in (projection_close, crisp_close) if value is not None]
+    first_close = min(observed_closes) if observed_closes else None
+    close_sources = ([name for name, value in (('projection', projection_close), ('crisp', crisp_close))
+                      if value == first_close] if first_close is not None else [])
+    before = first_close if first_close is not None else span
+    through = first_close + 1 if first_close is not None else span
+
+    def channel(stop):
+        if stop == 0:
+            return {'tokens': 0, 'kl_plain_to_projected_nats': None,
+                    'argmax_agreement': None}
+        kl_mean, count = _mean_and_count(kl[:, :stop])
+        agreement_mean, _ = _mean_and_count(agreement[:, :stop])
+        return {'tokens': count, 'kl_plain_to_projected_nats': kl_mean,
+                'argmax_agreement': agreement_mean}
+
+    def output(values, stop):
+        if stop == 0:
+            return {'tokens': 0, 'ordinary_text_ce': None}
+        mean, count = _mean_and_count(values[:, :stop])
+        return {'tokens': count, 'ordinary_text_ce': mean}
+
+    def section(stop):
+        projection = output(projection_ce, stop)
+        crisp = output(crisp_ce, stop)
+        return {'projection_history_channel': channel(stop),
+                'projection_output': projection, 'crisp_output': crisp,
+                'quality_ce_gap': (projection['ordinary_text_ce'] - crisp['ordinary_text_ce']
+                                   if projection['ordinary_text_ce'] is not None and
+                                   crisp['ordinary_text_ce'] is not None else None)}
+
+    return {
+        'cutoff_convention': 'common positional prefix through the earliest zero-based generated-token close index in either rollout; before excludes that position; through includes it; if neither closes, both use the full observed span',
+        'first_close_index': first_close,
+        'first_close_sources': close_sources,
+        'projection_first_close_index': projection_close,
+        'crisp_first_close_index': crisp_close,
+        'close_observed': first_close is not None,
+        'before_tokens': before,
+        'through_tokens': through,
+        'before_first_close': section(before),
+        'through_first_close': section(through),
+    }
+
+
 @torch.no_grad()
 def self_feedback_window_metrics(backbone, heads, prefix, *, steps=256,
                                  logit_chunk_tokens=128, readout_chunk_tokens=128):
@@ -115,6 +193,11 @@ def self_feedback_window_metrics(backbone, heads, prefix, *, steps=256,
                              if token == backbone.controls.close_id), None)
     crisp_close = next((index for index, token in enumerate(crisp_ids)
                         if token == backbone.controls.close_id), None)
+    position_bands = {}
+    for name, start, stop in (('1-16', 0, 16), ('17-64', 16, 64),
+                              ('65-128', 64, 128), ('129-span', 128, steps)):
+        position_bands[name] = _position_metrics(
+            kl, agreement, projection_ce, crisp_ce, start, stop)
     return {
         'tokens': token_count,
         'kl_plain_to_projected_nats': projection_kl,
@@ -126,6 +209,10 @@ def self_feedback_window_metrics(backbone, heads, prefix, *, steps=256,
         'crisp_token_ids': crisp_ids,
         'projection_first_close_index': projection_close,
         'crisp_first_close_index': crisp_close,
+        'generated_position_bands_convention': '1-based inclusive generated-token positions; empty bands have tokens=0 and null metrics',
+        'generated_position_bands': position_bands,
+        'generated_close_metrics': _close_position_metrics(
+            kl, agreement, projection_ce, crisp_ce, projection_close, crisp_close),
         'fixed_span_includes_post_close_positions': any(
             close_index is not None and close_index < steps - 1
             for close_index in (projection_close, crisp_close)),
