@@ -89,8 +89,15 @@ def validate_input_bindings(recipe):
     for name, binding in catalog.items():
         if not isinstance(name, str) or not INPUT_BINDING_NAME.fullmatch(name) or not isinstance(binding, dict):
             raise ValueError('invalid named input binding')
+        if 'artifact' in binding:
+            # A registered Neuralese artifact (training/neuralese_artifacts.json): its immutable manifest pins the
+            # bytes, so the recipe names the id (and the file when the artifact has several).
+            if not set(binding) <= {'artifact', 'file'} or not isinstance(binding['artifact'], str) \
+                    or not isinstance(binding.get('file', ''), str):
+                raise ValueError('an artifact input binding has only artifact and optional file')
+            continue
         if set(binding) != {'path', 'sha256'} or not isinstance(binding['path'], str) or not binding['path']:
-            raise ValueError('each input binding requires only path and sha256')
+            raise ValueError('each input binding requires only path and sha256 (or artifact)')
         if not isinstance(binding['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', binding['sha256']):
             raise ValueError('input binding sha256 must be lowercase hex')
     referenced = set()
@@ -145,6 +152,16 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
     result = {}
     for role, name in selected.items():
         spec = catalog[name]
+        if 'artifact' in spec:
+            from ..artifacts import resolve as resolve_artifact
+
+            stored, expected = resolve_artifact(spec['artifact'], spec.get('file'))
+            path = Path(overrides.get(name, stored)).resolve()
+            actual_sha = sha(path)
+            if actual_sha != expected:
+                raise ValueError('input binding content hash mismatch: ' + name)
+            result[role] = {'binding': name, 'artifact': spec['artifact'], 'path': str(path), 'sha256': actual_sha}
+            continue
         path = Path(overrides.get(name, spec['path'])).resolve()
         actual_sha = sha(path)
         if actual_sha != spec['sha256']:

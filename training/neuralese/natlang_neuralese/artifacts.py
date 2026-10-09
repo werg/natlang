@@ -219,10 +219,11 @@ def verify(repo: Path, identity: str) -> dict:
     return manifest
 
 
-def resolve(identity: str, file: str | None = None, repo: Path = REPO, *, dialect: str | None = None,
+def resolve(identity: str, file: str | None = None, repo: Path | None = None, *, dialect: str | None = None,
             backbone_model: str | None = None) -> tuple[Path, str]:
     """(path, sha256) of a registered artifact's file after checking its bytes against the manifest. ``dialect`` and
     ``backbone_model``, when given, must match the entry: a value from another space is refused, not converted."""
+    repo = repo or REPO
     registry = load_registry(repo)
     item = entry(registry, identity)
     if dialect and item["dialect"] != dialect:
