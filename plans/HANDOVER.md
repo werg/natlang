@@ -9819,16 +9819,101 @@ Checkpoint-policy correction: sharedhelper now preserves the prior full slot unt
 First sharedGooglepool closed256/256 unique cases,233typed-valid; next1024 pool acquired soleprojectlock and is generating. V8receiptSHA `4f2d3c2996cedd4e2ae863e642652bdca551c3d130ded4043114310f2c825e00`:3.5Lite120/120 typed, Gemma26B109/131, Gemma31B4/5. All23typed failures are invalid probability sums (includingzero and2.0), not whitespace or fencing; do not normalize those. Nonpaired allocations prohibit model ranking from these scores. Registry `free-provider-google-pool-v1-closed-held-20261009-v1` includes frozen exact adapters and closedresults/review, allheld. Lunahelper is developing a NEW held staticcurrentIR adapter to convert only independentlygraded label-derived crisp decisions into runtime-composed inline-lambda collection controllers; no invented teacher reasoning, actual runtime proof needed, sourcequalityadmission remains explicit.
 
 
-Shared generated-history channel objective prepared for controlled next handoff (DGX approved22:15UTC): `train/channel_objective.py` now supplies exact chunked KL(ordinary||projected) to training and evaluation. Same preceding generated decisions are used in both histories, ordinary target is live/stop-gradient, mask includes first generated close and extends beyond gold divergence without adding unrelated gold targets. `channel_consistency_weight=1` is the effective complete-update coefficient (compensated for two-pass averaging), shared recipe declares it. ProducerKV freed before ordinarytarget/consumer; distinct geometry and new-log calibration avoid reusing no-KL peaks. Projectionbootstrap keeps its existing embedding-only targets. Manual independent Luna review found aligned histories/detachedtarget/closemask/chunking correct; AST/diff checks passed, no unit tests or GPU exercise of this new objective yet. Active frozen Pop run unchanged and still unqualified; do not hotpatch or claim gate success. DGX C1 owner plans to reuse this helper in its sharedloop refactor. Exactweight stopping/channel qualification remains required after deliberate continuation.
+### Pop shared objective and generation follow-up — 2026-10-09 22:55 UTC
 
-Pop storage rebalance2026-10-10: checkpoint volume fell to403MiB free; inactive original action45 exports (2,483,295,279bytes) were copied to gitignored `.local/retained-checkpoints/action45-original-exports-20261009-v1`, SHAverified, fsynced, and original storage-volume paths atomically replaced by symlinks. Receipt `runs/pop-checkpoint-volume-rebalance-20261010-v1/receipt.json`. About2.9GB checkpoint-volume/4.47GB root free after move. Active optimizer/checkpoint files unchanged; future containers following these original exports need canonical repo bind as well as `/srv/storage`. No checkpoint/data discarded.
+**Shared training objective.** The DGX owner approved reuse in C1 at 22:15 UTC.
+Commit `8af494d2` adds `train/channel_objective.py`: chunked exact
+KL(ordinary || projected) on the same preceding generated tokens, through the
+first generated close inclusive. The ordinary target is live and detached;
+only the projected path receives gradients. Unrelated gold tails remain masked.
+The declared `channel_consistency_weight=1` is the effective whole-update
+coefficient, compensating for two-pass averaging. Projection bootstrap retains
+its embedding targets. Producer KV is released before the ordinary target and
+consumer passes. A new memory geometry identity prevents reuse of old no-KL
+peak observations. Training and evaluation share the helper.
 
-Held static decision conversion is now executable: `ts-host/scripts/static-adapters/teacher-decision-labels.mjs` handles both current single-model and quota-pool manifests, pins actualrowmodel/sourceSHA, preserves sourcecriteria/groups/license, rejects unknown exposed fields, and hides gold. Runtime NLliteral includes each itemquestion with separate scopearguments. V4canonical snapshot `runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v4`:131eligible labels→36IRcases,125rejectionrecords,3balanced actualscripted replays accepted/capturevisible,24held native turns. Scaffold is authored code, not provider reasoning/trace; alladmissionfalse/no newworldcredit. Registryderivative explicitly linksrawpoolparent, retains original failures, source/staticqualityreviewpending. Frozenadapter/doc included; v3superseded retainedlocally.
+Independent Luna source review, AST parsing and diff checks passed. No unit tests
+or GPU exercise of the new objective were run. The frozen Pop trainer was not
+hotpatched: at 22:55 UTC it was at step 26540/28032, GPU 100%, 5.54 GB VRAM,
+still unqualified. Preserve its full optimizer/schedule/RNG continuation. The
+new objective requires a controlled handoff and exact-weight channel/stopping
+qualification; completed steps and old gold-tail diagnostics do not certify it.
 
-Staticlabeladapterv5/v2derivative supersedes precedingv4/v1: source binaryquestions mayaskforprobability, so runtime NLinstructions now explicitlyrequest crispBooleanatp>=.5 (choice/ordinal requestone source label), retainquestionverbatim and separatecaptures. Batch-size8 makes23IRcases fromsame131labels, notnewworlds. All23actualscripted replays accepted/allcapturesvisible,308heldnativeturns, zero provider calls,125labelrejections retained. Registry `free-provider-static-decision-inline-lambdas-held-20261010-v2`; priorv1superseded/held ratherthan lost. Source/staticqualityreview remainsrequired; these areauthoredscaffoldtraces not providerwritten reasoning.
+**Storage.** The checkpoint volume fell to 403 MiB free. Inactive original
+Action45 exports (2,483,295,279 bytes) were copied to the gitignored canonical
+repo path `.local/retained-checkpoints/action45-original-exports-20261009-v1`,
+verified by SHA-256, fsynced, and their original paths atomically replaced by
+symlinks. Receipt: `runs/pop-checkpoint-volume-rebalance-20261010-v1/receipt.json`.
+This restored about 2.9 GB on the checkpoint volume and left about 4.47 GB on
+root immediately after relocation. Active checkpoint files were untouched and
+nothing was discarded. Containers following these old export paths need both
+the canonical repo and `/srv/storage` bind mounts.
 
-ZAIclosedfirst3audit clarified DOC-954incompletion: pass3 child correctlyscoped onlyconditionsFileHandle; authoritystatusexistsinpass4futurefile. Actualscope/searchbehaviorcorrect, completecurrentfileinlinevisible.24repeatedemptyauthoritysearches reflectfuturefactover-anticipation, not missingmirror/provideroutage. Shared guidednote instruction now tells eachchild to finishcurrentpass, leave absentfactsunknown/pending andreturn; parent supplieslaterfiles. Builderrevision20; frozenexisting sources/runsunchanged, newderivative/proofpending. Preserveone-filepermissions, no semantic-stucknessclaim. Two earliercasesexactaccepted/sourceholdsremain.
+**Typed-label IR adapter.** The shared
+`ts-host/scripts/static-adapters/teacher-decision-labels.mjs` supports current
+single-model and quota-pool manifests, verifies each actual model/source hash,
+preserves criteria/groups/licenses, rejects unreviewed exposed fields, and hides
+source answers. Each runtime-composed NL literal includes the item's question
+and separately captures its ID, state, question, criteria, options and levels.
+Binary output instructions explicitly request a Boolean at p >= .5; choice and
+ordinal calls request one declared label. This resolves source questions that
+ask for probabilities while the IR call expects a crisp value.
 
-Current-pass derivative sourcev5 SHA9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a preserves5cases/4groups/allgolds/files/scopes;10promptstringoccurrences only. DOC-954scriptedreference exactaccepted/fourone-filechildreads; nonlearnedtext-markeremulation/held. OnefreshactualZAI4.5 recovery PID777319 in `runs/free-provider-generation-20261009-v1/provider-zai45-current-pass-boundary-recovery-v1`, samefrozenruntimev5/sourceindex3/seed, perworkerconcurrency1/exponentialrequestretries/resourcebudget1800s. Existingcase4continues; atmosttwoZAIworkers now. No admission ornewworldcredit; seal/review onceclosed.
+The current v5 snapshot is
+`runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v5`.
+The same 131 strict, source-consistent labels produce 23 cases at batch size 8;
+all 23 scripted references completed with visible captures, yielding 308 held
+native turns. The 125 rejected labels retain explicit reasons. Registry ID:
+`free-provider-static-decision-inline-lambdas-held-20261010-v2`. Its preceding
+v1 derivative (v4 snapshot, 36 cases at batch size 4, three sampled replays) is
+explicitly superseded and retained, not counted as additional worlds. Scaffold
+and references are authored, not provider-generated reasoning. Source/static
+quality admission remains pending; runtime replay is not admission.
 
-Googlequeuecontinuityv3 PID777461: further1024disjoint inheritedtrain cases19families, sourcee80fa6a36eb0697e40a78e57ab07bb9ecf55ef4a36587de8da26ffb3c39ccb59. Waitsbehind v2sameprojectlock/realpersistedcooldowns; no duplicateowner/APIoverlap. FrozenbothPythonadapters+10modelIDs/9groupsconfig. Plannedv2/v3 immutableinputs registry `free-provider-google-planned-pool-sources-held-20261010-v1`, activeoutputs excludeduntilclosedpublication. Inheritedworlds/no admission; actuallabelquality/currentIRconversionrequired.
+**ZAI native review and staged-file clarification.** The closed first three
+GLM-4.5-Flash cases include two exact accepted answers and one incomplete case
+at the 1800.7-second collection resource limit (61 saved replies, about 48k
+completion tokens). This incomplete attempt is not a semantic DPO negative.
+Its DOC-954 pass-3 child correctly had only the conditions file; the authority
+fact belongs to pass 4. The complete current file was visible, but the child
+repeated 24 empty authority searches. Keep file scopes unchanged.
+
+Commits `b2555b9e`/`2ed6940e` clarify that note children finish the current pass,
+leave absent findings pending, and return so the parent can supply later files.
+Shared guidance revision 20 is retained in derived generator metadata. The
+fresh prompt-only source is `source-v5-current-pass-boundary` beneath
+`runs/luna-v22-targeted-counterfactual-five-20261009-v1`; source SHA-256 is
+`9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a`.
+It preserves five cases, four groups, all golds, files and scopes; ten prompt
+occurrences changed. Its DOC-954 scripted text-emulation reference passed all
+six file checks with four scoped reads. Earlier failed wrapper diagnostics are
+retained and explicitly superseded. This is non-learned, authored proof only.
+
+Registry IDs `free-provider-zai45-first3-native-and-partial-held-20261010-v1`
+and `luna-v22-current-pass-pending-facts-source-held-20261010-v1` preserve these
+closed artifacts and source proof. All are held. A fresh actual recovery,
+PID 777319, runs from source v5 in
+`runs/free-provider-generation-20261009-v1/provider-zai45-current-pass-boundary-recovery-v1`.
+It uses the same frozen runtime, source index 3 and seed, one request at a time,
+bounded exponential retries, and a 1800-second collection resource budget.
+The existing case 4 continues unchanged; there are at most two ZAI workers.
+Seal and review both when closed; active outputs are excluded from publication.
+
+**Gemini continuity.** The sole active v2 pool, PID 771959, had 488 rows / 436
+typed-valid answers at 22:55 UTC. Further v3 input has 1024 disjoint inherited
+train cases across 19 families; PID 777461 waits behind the same project lock.
+Its selected source SHA is
+`e80fa6a36eb0697e40a78e57ab07bb9ecf55ef4a36587de8da26ffb3c39ccb59`.
+Both pools freeze the adapters and ten verified free IDs across nine
+conservative quota groups. Alias IDs do not add quota. Persisted cooldowns load
+only after ownership transfers. No paid fallback or text-distillation flag.
+Registry `free-provider-google-planned-pool-sources-held-20261010-v1` pins only
+immutable inputs/launch receipts; active labels, state and logs require separate
+closeout publication. All additions above were SSH-verified in canonical DGX;
+code through `e50a4980` was pushed. No copying/schema success grants admission,
+and these derivatives earn zero independent-world credit.
+
+**Next monitoring cycle:** inspect closed ZAI/recovery results, seal Gemini v2
+if complete, check trainer/gates/checkpoint headroom, and prepare the controlled
+shared-KL continuation when the current frozen training run ends. Continue the
+50-minute monitoring cadence and check the coordination inbox each cycle.
