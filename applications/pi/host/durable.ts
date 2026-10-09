@@ -88,6 +88,12 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
         result = applied.result;
         return applied.next;
       }, context);
+      // Say which state was committed, so a function that commits for its caller can report it in plain words.
+      const next = ops.find(op => op && (op as { op?: string }).op === 'next') as { state?: { status?: string;
+        checkpoint?: { phase?: string }; outcome?: { status?: string } } } | undefined;
+      if (next?.state) result = { ...result!, committed: next.state.status === 'terminal'
+        ? `terminal (${next.state.outcome?.status ?? 'ended'})`
+        : `${next.state.status}${next.state.checkpoint?.phase ? ` in phase ${next.state.checkpoint.phase}` : ''}` };
       return result!;
     },
     async submit(draft: SubmissionDraft): Promise<number> { return host.submit(conversationId, draft, context); },
@@ -168,7 +174,8 @@ export function submission(id: number): Promise<SubmissionRecord | null>;
 /**
  * Apply ops atomically, in order (see Op), after checking expect (see Expect). Rejects with "state changed: …" when a
  * guard fails (nothing is written: read again and decide again), and when this task was aborted or the invocation
- * ended (stop: someone else owns the state now).
+ * ended (stop: someone else owns the state now). The result's committed names the task's state the list committed,
+ * when it had a next.
  */
 export function commit(ops: Op[], expect?: Expect): Promise<CommitResult>;
 /** Admit a submission to this conversation and return its ID. A requestId seen before returns the earlier ID. */

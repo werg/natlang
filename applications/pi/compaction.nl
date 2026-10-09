@@ -23,11 +23,11 @@ not know, "Model <provider>/<modelId> is not available". Then commit [{ op: "com
 { op: "next", state: { status: "terminal", outcome: { status: "failed", error: { message, detail: { reason:
 "no_model" } } } } }] and return. A manual compaction runs even when automatic compaction is disabled.
 
-select: p = select(facts, info). p is null when select committed (nothing to compact, or the summarize checkpoint).
-Otherwise place p (below).
+select: p = select(facts, info). When p has committed, select already committed the task's next state (p.committed
+says which: done, or the summarize checkpoint): commit nothing more and return p.committed. Otherwise place p (below).
 
-summarize: p = summarize(facts, checkpoint). p is null when summarize committed (a retry or a failure). Otherwise
-place p.
+summarize: p = summarize(facts, checkpoint). When p has committed, summarize already committed the task's next
+state (a retry or a failure): commit nothing more and return p.committed. Otherwise place p.
 
 retry: durable.sleep(checkpoint.until). Then commit [{ op: "compactionStatus", attempt: checkpoint.attempt + 1,
 retry: null }, { op: "next", state: { status: "running", checkpoint } }] where the new checkpoint is the old one with

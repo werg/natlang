@@ -26,9 +26,10 @@ Then by checkpoint.phase:
 
 prepare: return prepare(facts, checkpoint, info).
 
-request: message = request(facts, checkpoint, info). Then decision = classify(facts, checkpoint, message, null). It returns "committed" when it already
-committed the next state. On "answer" call answer(facts, message); on "tools" call startToolRound(facts, checkpoint,
-message). Return their line.
+request: message = request(facts, checkpoint, info). Then decision = classify(facts, checkpoint, message, null). When
+decision has committed, classify already committed the task's next state (decision.committed says which): commit
+nothing more and return decision.committed. On "answer" call answer(facts, message); on "tools" call
+startToolRound(facts, checkpoint, message). Return their line.
 
 retry: durable.sleep(checkpoint.until). Then the next attempt goes back to prepare, so agent and settings changes
 made during the wait apply: commit [{ op: "liveGeneration", value: { attempt: checkpoint.attempt + 1 } },
