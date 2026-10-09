@@ -18,7 +18,7 @@ from ..train.output_embedding_projection import sha
 from ..train.execution import (causal_gold_prefix_mask, causal_prefix_metrics,
                                full_depth_projected_feedback_step)
 from ..train.text_warmup import (
-    chunked_readout, document_windows, gold_completion, load_text_rows,
+    chunked_readout, gold_completion, load_text_rows, prepare_text_windows,
     select_held_document_windows,
 )
 
@@ -144,6 +144,8 @@ def main(argv=None):
     parser.add_argument('--tokens', type=int, default=16384)
     parser.add_argument('--prefix-tokens', type=int, default=32)
     parser.add_argument('--held-documents', type=int, default=16)
+    parser.add_argument('--mask-system-prompt', action=argparse.BooleanOptionalAction, default=True,
+                        help='keep leading system prompt tokens in context while excluding them from scored targets')
     parser.add_argument('--device', default='cuda')
     args = parser.parse_args(argv)
     if args.out.exists():
@@ -153,17 +155,10 @@ def main(argv=None):
     engine = load_engine(heads_checkpoint=str(args.heads), device=args.device)
     engine.backbone.eval(); engine.heads.eval()
     rows, receipt = load_text_rows(args.records, args.pieces, args.text_data, tokenizer=engine.tokenizer)
-    windows = []
-    for row in rows:
-        if row['split'] != 'test':
-            continue
-        tokens = row['token_ids'] if 'token_ids' in row else engine._tokens(row['text'])
-        for window in document_windows(tokens, open_id=engine.backbone.controls.open_id,
-                close_id=engine.backbone.controls.close_id, tokens=args.tokens,
-                prefix_tokens=args.prefix_tokens):
-            windows.append({**window, 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
-                            'groups':row['source_groups']})
-    held, selection = select_held_document_windows(windows, args.held_documents)
+    split_windows, mask_receipt = prepare_text_windows(
+        engine, rows, tokens=args.tokens, prefix_tokens=args.prefix_tokens,
+        target_tokens=None, mask_system_prompt=args.mask_system_prompt)
+    held, selection = select_held_document_windows(split_windows['test'], args.held_documents)
     if not held:
         raise ValueError('no held diagnostic windows')
     result = []
@@ -175,8 +170,12 @@ def main(argv=None):
                        'offset':window['offset'], 'scores':scores})
     if sha(args.heads) != checkpoint_sha:
         raise ValueError('checkpoint changed during diagnostic')
-    report = {'schema':'natlang.projected-history-utility/1', 'checkpoint_sha256':checkpoint_sha,
-              'inputs':receipt, 'held_selection':selection, 'rows':result,
+    report = {'schema':'natlang.projected-history-utility/2', 'checkpoint_sha256':checkpoint_sha,
+              'inputs':receipt, 'window_preparation':{
+                  'helper':'natlang_neuralese.train.text_warmup.prepare_text_windows/1',
+                  'system_prompt_masking':mask_receipt,
+                  'historical_change':'v1 reports remain immutable; v2 defaults to keeping the leading system prompt in context while excluding it from scored targets'},
+              'held_selection':selection, 'rows':result,
               'production_read_interface':True, 'future_gold_inputs':False,
               'foundation_qualified':False, 'runtime_qualified':False, 'task_qualified':False,
               'scope':'Gold-history projected previous-token inputs; not autonomous writer generation or task success. Compare full_projection to live_greedy for the crisp prediction control; gold is a teacher-forced history control.'}

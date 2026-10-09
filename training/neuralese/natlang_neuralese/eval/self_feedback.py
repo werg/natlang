@@ -67,7 +67,7 @@ def _mean_and_count(values):
 
 @torch.no_grad()
 def self_feedback_window_metrics(backbone, heads, prefix, *, steps=256,
-                                 logit_chunk_tokens=4, readout_chunk_tokens=4):
+                                 logit_chunk_tokens=128, readout_chunk_tokens=128):
     """Return paired channel-fidelity and ordinary-text continuation metrics."""
     if prefix.ndim != 2 or prefix.shape[1] < 1:
         raise ValueError('prefix must be a nonempty rank-two token tensor')

@@ -1,5 +1,6 @@
 """Projection diagnostics consume next-token payloads at previous-token inputs."""
 from types import SimpleNamespace
+import json
 
 import pytest
 import torch
@@ -187,6 +188,50 @@ def test_first_divergence_details_bind_tokens_logits_and_payload_without_extra_f
     assert row['ar_greedy_control_first_divergence_index']==2
     assert row['ar_greedy_control_gold_prefix_valid_at_target'] is True
     assert 'through prior targets' in row['ar_greedy_control_comparability_scope']
+
+
+def test_projected_history_cli_uses_shared_system_masked_window_preparation(tmp_path,monkeypatch):
+    from natlang_neuralese.eval import projected_history as module
+    from natlang_neuralese.train.text_warmup import prepare_text_windows,select_held_document_windows
+
+    class Tokenizer:
+        unk_token_id=-1
+        special={'<|im_start|>':99,'system':10,'user':11,'assistant':12,
+                 'tool':13,'<think>':14,'</think>':15}
+        def convert_tokens_to_ids(self,value):return self.special.get(value,-1)
+    class Controls:
+        open_id=1
+        close_id=2
+    engine=SimpleNamespace(tokenizer=Tokenizer(),backbone=SimpleNamespace(
+        controls=Controls(),eval=lambda:None),heads=SimpleNamespace(eval=lambda:None),
+        _tokens=lambda _text: (_ for _ in ()).throw(AssertionError('native token IDs should be used')))
+    row={'text':'held synthetic chat','token_ids':[99,10,30,31,99,11,32,99,12,33,34,35,36],
+         'split':'test','source_groups':['held-group']}
+    loader_receipt={'fixture':'exact'}
+    monkeypatch.setattr(module,'load_engine',lambda **_kwargs:engine)
+    monkeypatch.setattr(module,'load_text_rows',lambda *_args,**_kwargs:([row],loader_receipt))
+    observed=[]
+    def projected(_backbone,_heads,prefix,span):
+        observed.append((prefix[0].tolist(),span[0].tolist()))
+        return {'fixture':True}
+    monkeypatch.setattr(module,'projected_history_metrics',projected)
+    heads_path=tmp_path/'heads.pt';heads_path.write_bytes(b'fixture checkpoint')
+    out=tmp_path/'projected-history'
+    module.main(['--heads',str(heads_path),'--records',str(tmp_path/'records.jsonl'),
+                 '--out',str(out),'--tokens','8','--prefix-tokens','3',
+                 '--held-documents','1','--device','cpu'])
+
+    shared,mask_receipt=prepare_text_windows(engine,[row],tokens=8,prefix_tokens=3,
+        target_tokens=None,mask_system_prompt=True)
+    expected,_=select_held_document_windows(shared['test'],1)
+    assert observed==[(list(w['ids'][:w['prefix']]),list(w['ids'][w['prefix']:])) for w in expected]
+    report=json.loads((out/'report.json').read_text())
+    assert report['schema']=='natlang.projected-history-utility/2'
+    assert report['inputs']==loader_receipt
+    assert report['window_preparation']['system_prompt_masking']==mask_receipt
+    assert mask_receipt['enabled'] is True and mask_receipt['role_start_id']==99
+    assert report['held_selection']['selected_documents'][0]['selected_window_offsets']==[
+        expected[0]['offset'],expected[-1]['offset']]
 
 
 def test_autoregressive_input_fingerprints_are_stable_and_bind_target_ids():
