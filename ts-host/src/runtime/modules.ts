@@ -64,7 +64,9 @@ function natlangDeclaration(record: ItemRecord): string {
   const params = Object.entries(record.args).map(([raw, type]) =>
     `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${typeScriptText(type, known)}`);
   if (record.subtype === 'directory-reducer') params.unshift('folder: Folder');
-  return `declare const fn: NatlangFunction<[${params.join(', ')}], ${typeScriptText(record.returns, known)}>;\nexport default fn;\n`;
+  const type = record.generic ? `NatlangGenericFunction<[${params.join(', ')}], ${typeScriptText(record.generic.constraint, known)}, ` +
+    `${typeScriptText(record.returns, known)}>` : `NatlangFunction<[${params.join(', ')}], ${typeScriptText(record.returns, known)}>`;
+  return `declare const fn: ${type};\nexport default fn;\n`;
 }
 
 /** Compile one module to CommonJS-style JavaScript for evaluation. */
@@ -82,10 +84,13 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let stringArguments = new Map<string, number>();
   let scalarConversions = new Map<string, { argument: number; conversion: 'Number' | 'Boolean'; conditional?: true }>();
   let stringReplaces = new Map<string, { conditional?: true }>();
+  let instantiations = new Map<string, { representation: import('../native/representation.js').Representation; site: string }>();
   let checker: ts.TypeChecker | undefined;
   const path = `${FOLDER}/${record.name}.ts`;
   const softTypes = JSON.stringify(record.types);
-  if (NL_TAG.test(record.text) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`)) {
+  // A sibling with a representation-generic result: its call sites need the checker to pick their instance.
+  const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic);
+  if (NL_TAG.test(record.text) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic) {
     const files: Record<string, string> = { [path]: record.text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -137,6 +142,8 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
         ...(item.conditional ? { conditional: true as const } : {}) }]));
     stringReplaces = new Map(analysis.readouts.filter(item => item.kind === 'string-replace')
       .map(item => [`${item.start}:${item.end}`, { ...(item.conditional ? { conditional: true as const } : {}) }]));
+    instantiations = new Map(analysis.instantiations.map(item => [`${item.start}:${item.end}`,
+      { representation: item.representation, site: `${record.source}:${item.line}` }]));
     analysis.plans.forEach(plan => { if (record.programId) plan.programId = record.programId; });
     inventory?.(analysis.plans);
     plans = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
@@ -144,7 +151,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   }
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
-    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, arrayMaps, concats, jsons,
+    transformers: { before: [natlangTransformer({ plans, checker, readouts, conditionalReadouts, joins, arrayStrings, arrayMaps, concats, jsons, instantiations,
       errors: errorReadouts, stringArguments, scalarConversions, stringReplaces, runtime: '__natlang', context: '__natlang_context',
       arrayMapCallbacks, constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
       modulePath: record.source, browser: moduleTarget === 'browser' })] } });
@@ -161,7 +168,8 @@ function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>): 
     programId: record.programId ?? null, text: record.text, types: record.types,
     siblings: Object.entries(level).map(([name, item]) => ({ name, kind: item.kind,
       text: item.kind === 'namespace' ? null : item.text,
-      ...(item.kind === 'natlang' ? { args: item.args, returns: item.returns, types: item.types, subtype: item.subtype } : {}) })) });
+      ...(item.kind === 'natlang' ? { args: item.args, returns: item.returns, types: item.types, subtype: item.subtype,
+        ...(item.generic ? { generic: item.generic.constraint } : {}) } : {}) })) });
   const cached = compiled.get(key);
   if (cached !== undefined) return cached;
   const code = compileModule(record, level);

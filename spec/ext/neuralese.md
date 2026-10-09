@@ -43,6 +43,31 @@ declarations in [neuralese.d.ts](../neuralese.d.ts).
   dialect.
   Dialects are version tags ([NEURALESE_DIALECTS.md](../NEURALESE_DIALECTS.md)).
 
+**Generic results.** A named function may declare a representation-generic
+result: a type parameter constrained to a crisp type `T` and its soft form,
+
+```yaml
+generic:
+  R: string | Neuralese<string>
+returns: R
+```
+
+Each call site instantiates `R` from the type its result is used as, as an
+inline `nl` takes its signature from context: a typed `const`, a parameter it
+is passed to, a return position. A call whose context names no type, or one
+that also admits `T`, gets `T`. The compiler records the chosen instance on the
+call; the runtime runs the one body at it: `T` as ordinary execution, and
+`Neuralese<T, D>` as a template write (`readout: template`: the first reply is
+`return_result`, its value written as a block). The generated declaration is a
+TypeScript generic, `NatlangGenericFunction<[args], T | Neuralese<T>, T>`. A
+function declared with a plain result keeps that one representation; where its
+crisp result is used as `Neuralese`, the compiler reports
+`neuralese-crisp-result`. The Neuralese instance needs a runtime with a reader
+dialect (`neuralese-unsupported-backend`, naming the call site) and writes in
+the dialect its constraint names (`DefaultDialect`: the reader's). Call records
+keep the definition and the representation it ran at; a host runs a call at a
+given representation with `invokeAt(fn, args, { kind: "crisp" | "neuralese" })`.
+
 **Literal.** At the model-token level a soft value is written
 `<|neuralese|>⟦z1⟧…⟦zL⟧<|/neuralese|>`: two control tokens around the vectors and
 nothing else. Its type comes from the contextual type (an annotation, a

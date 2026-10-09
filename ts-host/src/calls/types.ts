@@ -25,7 +25,14 @@ export type DefinitionIdentity = { id: string; name: string; source: string | nu
   site: SiteKind; template?: string; subtype: 'function' | 'directory-reducer'; params: { name: string; type: string; optional?: boolean }[];
   returns: string;
   /** The instructions as run, and the type aliases in scope: enough to rebuild the definition offline when its source cannot be loaded. */
-  instructions: ValueRef; types: Record<string, string>; readout?: string };
+  instructions: ValueRef; types: Record<string, string>; readout?: string;
+  /**
+   * A representation-generic result (`generic: { R: T | Neuralese<T> }`) and the instance this call ran: with the
+   * definition's id, enough to run the same call again at either representation (`invokeAt`). `returns` and `key` are
+   * the instance's.
+   */
+  generic?: { name: string; constraint: string };
+  representation?: import('../native/representation.js').Representation };
 
 export type CallCost = { model_requests: number; tokens_in: number; tokens_out: number; wall_ms: number; turns: number; evals: number };
 

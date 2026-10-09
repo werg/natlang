@@ -9,6 +9,7 @@
  */
 import ts from 'typescript';
 import type { NatlangDiagnostic, SourceSpan } from './inline.js';
+import type { Representation } from '../native/representation.js';
 
 /** Brand property of `NeuraleseValue`; no natlang code reads it. */
 export const NEURALESE_BRAND = '__natlangNeuralese';
@@ -86,6 +87,59 @@ export function neuraleseTypeText(checker: ts.TypeChecker, type: ts.Type, locati
   const element = checker.typeToString(parts.element, location, ts.TypeFormatFlags.NoTruncation |
     ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope);
   return `Neuralese<${element}${parts.dialect === DEFAULT_DIALECT ? '' : `, ${JSON.stringify(parts.dialect)}`}>`;
+}
+
+/** Phantom property of `NatlangGenericFunction`: the callee's result is representation-generic. */
+export const GENERIC_RESULT_BRAND = '__natlangGenericResult';
+/** A call of a function with a representation-generic result and the instance its expected type picks. */
+export type GenericInstantiation = { start: number; end: number; line: number; representation: Representation };
+
+/**
+ * Representation-generic results at their call sites (DECISIONS.md 2026-10-09). For each call of a natlang function
+ * whose result is generic, the instance the checker inferred from the expected type: a `Neuralese` instantiation runs
+ * the Neuralese instance, anything else (no expected type, or one that admits the crisp type) the crisp one. A call of
+ * a natlang function with a crisp result where a `Neuralese` value is expected is reported with how to make it generic.
+ */
+export function checkGenericResults(checker: ts.TypeChecker, file: ts.SourceFile, report: Report, instantiations: GenericInstantiation[]): void {
+  const awaited = (type: ts.Type): ts.Type =>
+    (checker as ts.TypeChecker & { getAwaitedType?(type: ts.Type): ts.Type | undefined }).getAwaitedType?.(type) ?? type;
+  const open = (type: ts.Type | undefined) => !type || !!(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter));
+  /** The value type the call's context expects: through `await`, or the promised type of a promise slot. */
+  const expected = (call: ts.CallExpression): ts.Type | undefined => {
+    let outer: ts.Expression = call;
+    while (ts.isParenthesizedExpression(outer.parent)) outer = outer.parent;
+    const type = ts.isAwaitExpression(outer.parent) ? checker.getContextualType(outer.parent) :
+      (() => { const slot = checker.getContextualType(outer); return slot && awaited(slot); })();
+    return open(type) ? undefined : checker.getNonNullableType(type!);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = checker.getTypeAtLocation(node.expression);
+      const generic = !!checker.getPropertyOfType(callee, GENERIC_RESULT_BRAND);
+      // Named natlang functions carry `iterateOn`; inline `nl` values (with `.with`) take their result from context.
+      const named = generic || (!!checker.getPropertyOfType(callee, 'iterateOn') && !checker.getPropertyOfType(callee, 'with') &&
+        callee.getCallSignatures().length > 0);
+      const signature = named ? checker.getResolvedSignature(node) : undefined;
+      const result = signature && awaited(checker.getReturnTypeOfSignature(signature));
+      if (generic && result) {
+        const soft = neuraleseParts(checker, result);
+        instantiations.push({ start: node.getStart(file), end: node.getEnd(),
+          line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1,
+          representation: soft ? { kind: 'neuralese', ...(soft.dialect === DEFAULT_DIALECT ? {} : { dialect: soft.dialect }) } : { kind: 'crisp' } });
+      } else if (named && result && !open(result) && !hasSoftAlternative(checker, result)) {
+        const wanted = expected(node);
+        if (wanted && neuraleseParts(checker, wanted) && !checker.isTypeAssignableTo(result, wanted)) {
+          const name = node.expression.getText(file), crisp = checker.typeToString(result, node, ts.TypeFormatFlags.NoTruncation);
+          report(node, 'neuralese-crisp-result', `${name} returns ${crisp}, and this call's result is used as ` +
+            `${neuraleseTypeText(checker, wanted, node)}. Declare ${name}'s result representation-generic ` +
+            `(\`generic: { R: ${crisp} | Neuralese<${crisp}> }\` with \`returns: R\`) so that this call writes its Neuralese form, or call ` +
+            'a function that returns the Neuralese value.');
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
 }
 
 /**

@@ -15,6 +15,7 @@ import { finiteValues } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
+import { genericResult, type GenericResult } from '../native/representation.js';
 
 export type SourceFiles = {
   join(...parts: string[]): string;
@@ -36,8 +37,15 @@ export type ExportRecord =
   | { kind: 'value'; type?: string };
 
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
-  description: string; args: Record<string, string>; returns: string; instructions: string;
+  description: string; args: Record<string, string>;
+  /** The result type; for a representation-generic result, its crisp instance (what a call with no expected type runs). */
+  returns: string; instructions: string;
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;
+  /**
+   * `generic: { R: T | Neuralese<T> }` with `returns: R` in the frontmatter: a representation-generic result, which each
+   * call site instantiates from the type its result is used as (native/representation.ts).
+   */
+  generic?: GenericResult;
   /** `readout: decision` in the frontmatter: answer by scoring the finite result values (native/decision.ts). */
   readout?: 'decision' | 'template';
   /** `model: NAME` in the frontmatter: the call runs on the runtime's model of that name (`models`), else the default. */
@@ -88,9 +96,9 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout', 'model', 'uses']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses']);
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
-const TYPE_KEYS = /^(args|types|returns):(.*)$/;
+const TYPE_KEYS = /^(args|types|generic|returns):(.*)$/;
 
 /** A type written as a YAML-quoted string is its contents, so `"string[]"` and `string[]` are the same type. */
 function unquoteType(text: string): string {
@@ -119,7 +127,7 @@ function typeLiteralMap(key: string, text: string): Record<string, string> {
 }
 
 /**
- * `.nl` frontmatter. `args`, `types` and `returns` hold TypeScript type text, read verbatim rather than as YAML, so types
+ * `.nl` frontmatter. `args`, `types`, `generic` and `returns` hold TypeScript type text, read verbatim rather than as YAML, so types
  * need no quoting: `names: string[]`, `rows: { title: string }[]`, `f: (x: string) => number`. A value wrapped entirely
  * in quotes is the quoted text, as in YAML. The other keys are YAML.
  */
@@ -191,7 +199,16 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   checkName(path, name);
   const types = { ...inherited, ...(meta.types as Record<string, string> ?? {}) };
   const args = (meta.args ?? {}) as Record<string, string>;
-  checkSignature(path, args, meta.returns, types);
+  let generic: GenericResult | undefined;
+  try { generic = genericResult(meta.generic as Record<string, string> | undefined, meta.returns); }
+  catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
+  if (generic && (Object.hasOwn(types, generic.name) || Object.values(args).some(type => new RegExp(`(?<![\\w$])${generic!.name}(?![\\w$])`).test(type))))
+    throw new NatlangSourceError(path, `${generic.name} is the generic result; name the parameter something no argument or type alias uses`);
+  if (generic && meta.readout === 'decision')
+    throw new NatlangSourceError(path, `readout: decision scores a finite crisp result; declare returns: ${generic.crisp} for it`);
+  const returns = generic?.crisp ?? meta.returns;
+  checkSignature(path, args, returns, types);
+  if (generic) checkSignature(path, {}, generic.neuralese, types);
   if (meta.readout !== undefined) {
     if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template');
   }
@@ -202,13 +219,13 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     throw new NatlangSourceError(path, 'uses must list package items by path from the package root, such as [harness/cut]');
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
-    if ((finiteValues(parseType(meta.returns), env)?.length ?? 0) < 2)
+    if ((finiteValues(parseType(returns), env)?.length ?? 0) < 2)
       throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"');
   }
   const source = files.relative?.(path) ?? path;
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
-    description: String(meta.description ?? ''), args, returns: meta.returns,
-    instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {},
+    description: String(meta.description ?? ''), args, returns,
+    instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {}, ...(generic ? { generic } : {}),
     ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
     ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}) };

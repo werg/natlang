@@ -67,7 +67,7 @@ export function builtinDefinition(name: string): CallableDefinition {
   return { id: identity.id, name: identity.name, ...(record.description ? { description: record.description } : {}),
     body: record.instructions.replace(/\n$/, ''),
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, ...(raw.endsWith('?') ? { optional: true } : {}) })),
-    returns: record.returns, types: record.types, codebase: {}, subtype: record.subtype };
+    returns: record.returns, ...(record.generic ? { generic: record.generic } : {}), types: record.types, codebase: {}, subtype: record.subtype };
 }
 
 /** The revision key a built-in's compilations and calls are stored under (what ran, as run); receipts of a built-in reviewer cite it. */

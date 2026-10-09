@@ -43,7 +43,8 @@ enforces, when it fires and the `ts-host/src` file that raises it. Each code was
 | `neuralese-block-integrity` | A `.nz` block does not hash to its ID | load time | `native/nz-file.ts` |
 | `neuralese-live-capture-save` | A Neuralese function with live captures cannot be saved to a file ([SPEC](SPEC.md#captures)) | save time | `native/nz-file.ts`, `runtime/contexts.ts` |
 | `neuralese-readout-unavailable` | Implicit string conversion with no configured read body | call time | `neuralese/combinators.ts` |
-| `neuralese-unsupported-backend` | A call needs Neuralese on a backend without support; there is no text fallback | call time | `native/neuralese.ts` |
+| `neuralese-unsupported-backend` | A call needs Neuralese on a backend without support; there is no text fallback; a generic result's Neuralese instance on a runtime without a reader dialect (the message names the call site) | call time | `native/neuralese.ts`, `runtime/kernel.ts` |
+| `neuralese-crisp-result` | A natlang function with a crisp result called where a `Neuralese` value is expected; the message shows the generic result that makes it write ([neuralese](ext/neuralese.md#generic-results)) | plan time | `compiler/neuralese.ts` |
 
 ## Error classes
 

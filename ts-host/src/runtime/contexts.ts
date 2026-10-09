@@ -106,9 +106,9 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
     returns: formatType(lambda.returns), types: spec.types ?? {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
     subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20),
     ...(spec.readout ? { readout: spec.readout } : {}) };
-  const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame) => invokeDefinition(frame, definition, args,
+  const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame, at) => invokeDefinition(frame, definition, args,
     { captures, manifest: { inline: true, soft: true, ...(spec.manifest ?? {}), ...(spec.adHoc === false ? { adHoc: false } : {}) },
-      ...(skillFiles ? { skillFiles } : {}) }) });
+      ...(skillFiles ? { skillFiles } : {}), ...(at ? { at } : {}) }) });
   attachChildren(fn, (spec.codebase ?? context.items) as Record<string, ItemRecord>);
   SOFT.set(fn, { type: softType, body: spec.body, captures: Object.fromEntries(Object.entries(spec.captures ?? {})
     .map(([name, value]) => [name, isLiveCapture(value) ? value : value])), live: hasLive });
@@ -127,7 +127,8 @@ function captureType(value: unknown): string {
 
 /** Signature of an executable node, compared when rebinding and when editing. */
 function signatureOf(record: ItemRecord): string {
-  if (record.kind === 'natlang') return canonicalJson({ kind: 'natlang', subtype: record.subtype, args: record.args, returns: record.returns });
+  if (record.kind === 'natlang') return canonicalJson({ kind: 'natlang', subtype: record.subtype, args: record.args, returns: record.returns,
+    ...(record.generic ? { generic: record.generic.constraint } : {}) });
   if (record.kind === 'module') return canonicalJson({ kind: 'module', exports: Object.fromEntries(Object.entries(record.exports)
     .map(([name, spec]) => [name, spec.kind === 'function' ? { args: spec.args, returns: spec.returns, async: spec.async } : { type: spec.type ?? null }])) });
   return canonicalJson({ kind: 'namespace', items: Object.fromEntries(Object.entries(record.codebase).map(([name, child]) => [name, signatureOf(child)])) });
@@ -465,8 +466,9 @@ export function rebind(fn: NatlangCallable, context: Context): NatlangCallable {
   const captures = { ...ownCaptures, ...dataCells(context, new Set(Object.keys(ownCaptures))) };
   const render = meta.instructions;
   const skillFiles = skillFilesOf(context.data);
-  const rebound = makeCallable({ ...meta, definition, captures, invoke: (args, frame) => invokeDefinition(frame, definition, args,
-    { ...(meta.options ?? {}), captures, ...(skillFiles ? { skillFiles } : {}), ...(render !== undefined ? { instructions: typeof render === 'function' ? render(frame) : render } : {}) }) });
+  const rebound = makeCallable({ ...meta, definition, captures, invoke: (args, frame, at) => invokeDefinition(frame, definition, args,
+    { ...(meta.options ?? {}), captures, ...(skillFiles ? { skillFiles } : {}), ...(render !== undefined ? { instructions: typeof render === 'function' ? render(frame) : render } : {}),
+      ...(at ? { at } : {}) }) });
   attachChildren(rebound, context.items, meta.bound);
   if (soft) SOFT.set(rebound, soft);
   CONTEXT_DATA.set(rebound, context.data as Record<string, unknown>);

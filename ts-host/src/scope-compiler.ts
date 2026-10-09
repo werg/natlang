@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import { createNatlangCompilerHost } from './compiler/host.js';
 import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './compiler/inline.js';
-import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
+import type { GenericInstantiation, NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, finiteCounterComparison, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
@@ -57,7 +57,7 @@ export type ScopeCompileOptions = {
   captureBindings?: readonly { name: string; mutable: boolean }[];
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
   analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[];
-    readouts?: NeuraleseReadout[]; rebinds?: InlineRebindSite[] };
+    readouts?: NeuraleseReadout[]; rebinds?: InlineRebindSite[]; instantiations?: GenericInstantiation[] };
   /** Reads of fields a value's declared type does not have (snippet-relative spans), checked in every snippet. */
   checkFields?: (source: string) => NatlangDiagnostic[];
   /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
@@ -271,6 +271,10 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
     }
     if (name === 'Is' && args.length === 2 && ts.isLiteralTypeNode(args[1]!) && ts.isStringLiteral(args[1]!.literal)) {
       const base = portableAnnotation(args[0]!, file); return base ? `Is<${base}, ${args[1]!.literal.getText(file)}>` : undefined;
+    }
+    if (name === 'Neuralese' && (args.length === 1 || (args.length === 2 && ts.isLiteralTypeNode(args[1]!) && ts.isStringLiteral(args[1]!.literal)))) {
+      const element = portableAnnotation(args[0]!, file);
+      return element ? `Neuralese<${element}${args.length === 2 ? `, ${args[1]!.getText(file)}` : ''}>` : undefined;
     }
     if (name === 'Untrusted' && args.length === 1) {
       const base = portableAnnotation(args[0]!, file); return base ? `Untrusted<${base}>` : undefined;
@@ -730,6 +734,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let literals: NeuraleseLiteral[] = [];
   let readouts: NeuraleseReadout[] = [];
   let rebinds: InlineRebindSite[] = [];
+  let instantiations: GenericInstantiation[] = [];
   if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, snippetSource.length), code: 'neuralese-untyped-literal',
     message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
   if (options.analyze && (options.neuralese || literalCalls ||
@@ -761,6 +766,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     literals = analysis.neuralese ?? [];
     readouts = analysis.readouts ?? [];
     rebinds = analysis.rebinds ?? [];
+    instantiations = analysis.instantiations ?? [];
     for (const item of analysis.diagnostics) diagnostics.push(toRaw(item));
   }
   if (options.checkFields) for (const item of options.checkFields(analysisSource)) diagnostics.push(toRaw(item));
@@ -775,6 +781,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     return [`${coordinate.start}:${coordinate.end}`, index];
   }));
   const rebindAt = new Map(rebinds.map(site => [`${site.start}:${site.end}`, site]));
+  const instantiationAt = new Map(instantiations.map(site => [`${site.start}:${site.end}`, site]));
   for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
     text: `(await __live.${readout.conditional ? 'readNeuraleseIfReference' : 'readNeuralese'}((${analysisSource.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
@@ -1019,6 +1026,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)} } })` });
         return;
       }
+    }
+    // A call of a function with a representation-generic result runs the instance its expected type picked.
+    const instance = ts.isCallExpression(node) ? instantiationAt.get(`${rel(node).start}:${rel(node).end}`) : undefined;
+    if (instance && ts.isCallExpression(node)) {
+      const callee = rel(node.expression);
+      primitive.push({ start: callee.start, end: callee.start, text: '__live.instantiate(' },
+        { start: callee.end, end: callee.end, text: `, ${JSON.stringify(instance.representation)}, ${JSON.stringify(`eval line ${instance.line}`)})` });
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'iterateOn' &&
         !ts.isTaggedTemplateExpression(node.expression.expression)) {

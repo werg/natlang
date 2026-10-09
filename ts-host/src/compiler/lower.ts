@@ -49,6 +49,11 @@ export type LowerOptions = {
   stringReplaces?: ReadonlyMap<string, { conditional?: true }>;
   /** Calls of named functions that are part of a possible hand-off, by `start:end` in the source, with their site IDs. */
   fusionSites?: ReadonlyMap<string, string>;
+  /**
+   * Calls of functions with a representation-generic result, by `start:end` span: the instance each runs and its site
+   * (`instantiate(fn, representation, site)(args)`).
+   */
+  instantiations?: ReadonlyMap<string, { representation: import('../native/representation.js').Representation; site: string }>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -109,6 +114,21 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      // A generic result runs the instance its call site's expected type picked (DECISIONS.md 2026-10-09).
+      const instance = ts.isCallExpression(node) && ts.isCallExpression(source) && source.pos >= 0 ?
+        options.instantiations?.get(`${source.getStart(file)}:${source.getEnd()}`) : undefined;
+      if (instance && ts.isCallExpression(node)) {
+        const visited = ts.visitEachChild(node, visit, context) as ts.CallExpression;
+        const callee = f.createCallExpression(runtime('instantiate'), undefined,
+          [visited.expression, literal(instance.representation), f.createStringLiteral(instance.site)]);
+        const fusion = !(source as ts.CallExpression).questionDotToken ? options.fusionSites?.get(`${source.getStart(file)}:${source.getEnd()}`) : undefined;
+        if (!fusion) return f.updateCallExpression(visited, callee, undefined, visited.arguments);
+        // Also a possible hand-off (below): the instantiated call runs under its site ID.
+        const rest = f.createUniqueName('__natlang_fuse_args');
+        return f.createCallExpression(runtime('fuseSite'), undefined, [f.createStringLiteral(fusion),
+          f.createArrowFunction(undefined, undefined, [f.createParameterDeclaration(undefined, f.createToken(ts.SyntaxKind.DotDotDotToken), rest)],
+            undefined, undefined, f.createCallExpression(callee, undefined, [f.createSpreadElement(rest)])), ...visited.arguments]);
+      }
       if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(node.expression) &&
           options.arrayMaps?.has(`${source.getStart(file)}:${source.getEnd()}`) && node.arguments[0]) {
         const receiver = f.createUniqueName('__natlang_map_receiver');

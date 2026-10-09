@@ -73,12 +73,14 @@ returns: Report
 Assess every observation with assess, then summarize the assessments.
 ```
 
-Frontmatter keys are `description`, `args`, `returns`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `model: NAME` runs every
+Frontmatter keys are `description`, `args`, `returns`, `generic`, `types`, `kind`
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `generic` declares a
+representation-generic result ([Neuralese](ext/neuralese.md#generic-results)): `generic: { R: string | Neuralese<string> }`
+with `returns: R`. `model: NAME` runs every
 call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
 when the runtime has none. `uses` lists package
 items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
-joins its context under its base name, with its own companion folder. `args`, `returns` and `types` hold
+joins its context under its base name, with its own companion folder. `args`, `returns`, `generic` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
 quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
 `returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented

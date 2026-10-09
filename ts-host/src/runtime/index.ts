@@ -12,7 +12,8 @@ export { RefinementError, RefinementChecker, MemoryVerdictCache, decisionJudge, 
 export type { RefinementSettings, RefinementJudge, VerdictCache, RefinementVerdict, RefinementCode } from '../native/refinement.js';
 export { refinements } from '../native/types.js';
 export type { CallableDefinition, CaptureCell } from './kernel.js';
-export { isNatlangCallable, namedCallable, callableTree, defineNatlang } from './callable.js';
+export { isNatlangCallable, namedCallable, callableTree, defineNatlang, invokeAt } from './callable.js';
+export type { Representation, GenericResult } from '../native/representation.js';
 export { Iteration, IterationDivergedError, IterationStepError, IterationLimitError, MemoryIterationStatistics,
   defaultProgressJudge } from './iterate.js';
 export type { IterationStatisticsStore, SiteStatistics, ProgressJudgeFunction, StepRecord } from './iterate.js';
@@ -23,7 +24,7 @@ export { pluggable, pluggableMode } from './pluggable.js';
 export { canonicalValue } from '../native/refinement.js';
 export { promotionPolicy, reviewPromotions, sanitizeDecision, type PolicyFunction, type ReviewedSubject } from './promotion.js';
 export type { PluggableMode, PluggableSetting, LegacyPluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
-export type { Is, Untrusted, NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
+export type { Is, Untrusted, NatlangFunction, NatlangGenericFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
 /** Support functions targeted by compiled modules. Not an application API. */
 export const __natlang = lowered;
 

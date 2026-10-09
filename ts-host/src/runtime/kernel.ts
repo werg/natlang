@@ -8,8 +8,9 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { TypeEnv, containsRefinement, parseType, type DialectBinding, type Type } from '../native/types.js';
-import { dialectBinding, readerDialect } from '../native/neuralese.js';
+import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseType, type DialectBinding, type Type } from '../native/types.js';
+import { NeuraleseDialectError, NeuraleseUnsupportedError, dialectBinding, readerDialect } from '../native/neuralese.js';
+import { CRISP, representationType, type GenericResult, type Representation } from '../native/representation.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
@@ -54,7 +55,14 @@ export type CallableDefinition = {
   source?: string;
   /** ID of the context the definition is bound to, when it was rebound (`fn.in(context)`) or defined in one. */
   contextId?: string;
+  /** A representation-generic result (`returns` is then its crisp instance until a call instantiates it). */
+  generic?: GenericResult;
+  /** The instance this definition runs, once a call has instantiated its generic result (`instantiateDefinition`). */
+  representation?: Representation;
 };
+
+/** The representation a call asks for: from the compiler's annotation of its call site, or a host's `invokeAt`. */
+export type Instantiation = { representation: Representation; /** The call site, for messages. */ site?: string };
 
 export type InvokeOptions = {
   captures?: Record<string, CaptureCell>;
@@ -70,7 +78,42 @@ export type InvokeOptions = {
   skillFiles?: Readonly<Record<string, string | Uint8Array>>;
   /** Set by the tiered engine (calls/tiers.ts): this call is one attempt at one tier. */
   tierAttempt?: TierAttempt;
+  /** The representation this call runs the definition's result at (a generic result's crisp instance by default). */
+  at?: Instantiation;
 };
+
+/**
+ * The definition a call runs at a representation (DECISIONS.md 2026-10-09). A generic result's crisp instance runs as
+ * written; its Neuralese instance returns the soft form, written by template readout (DECISIONS.md 44), and needs a
+ * runtime with a reader dialect. A definition without a generic result runs only at the representation it declares.
+ */
+export function instantiateDefinition(frame: Frame, definition: CallableDefinition, at: Instantiation): CallableDefinition {
+  const { representation, site } = at;
+  const where = site ? ` at ${site}` : '';
+  const generic = definition.generic;
+  if (!generic) {
+    let declared: Type | undefined;
+    try { declared = parseType(definition.returns); } catch { declared = undefined; }
+    if ((representation.kind === 'neuralese') === (declared?.kind === 'neuralese')) return definition;
+    throw new TypeError(`${definition.name} returns ${definition.returns}, so it cannot run for ` +
+      `${representationType(definition.returns, representation)}${where}. A function makes both forms when its result is ` +
+      'representation-generic: declare `generic: { R: string | Neuralese<string> }` with `returns: R` (its crisp type in ' +
+      'place of string), and each call runs the form its result is used as.');
+  }
+  if (representation.kind === 'crisp') return { ...definition, returns: generic.crisp, representation: CRISP };
+  const reader = readerDialect(frame.task.runtime.options.neuralese);
+  if (reader === null)
+    throw new NeuraleseUnsupportedError(`${definition.name} is called for its ${generic.neuralese} result${where}, but this runtime ` +
+      'has no Neuralese reader (configure `neuralese` with a port or a dialect), or use the result as ' + `${generic.crisp} there`);
+  const declared = generic.dialect === DEFAULT_DIALECT ? reader : generic.dialect;
+  const wanted = representation.dialect === undefined || representation.dialect === DEFAULT_DIALECT ? reader : representation.dialect;
+  if (wanted !== declared)
+    throw new NeuraleseDialectError(`${definition.name}${where} is asked for Neuralese in dialect ${JSON.stringify(wanted)}, but its ` +
+      `generic result writes ${JSON.stringify(declared)}; use the result in dialect ${JSON.stringify(declared)}, or ` +
+      `\`convert(value, ${JSON.stringify(wanted)})\` from natlang:neuralese`);
+  return { ...definition, returns: generic.neuralese, readout: 'template',
+    representation: { kind: 'neuralese', ...(representation.dialect !== undefined ? { dialect: representation.dialect } : {}) } };
+}
 
 type ScopedHandle = Folder | FolderHandle | FileHandle;
 const isScopedHandle = (value: unknown): value is ScopedHandle =>
@@ -312,6 +355,11 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   // preflight or setup error.
   const transactions = new Set<FolderTransaction>();
   if (options.folder) transactions.add(options.folder.transaction);
+  // A generic result runs at the representation its call site chose; a plain call runs the crisp instance.
+  if (!definition.representation && (definition.generic || options.at)) {
+    try { definition = instantiateDefinition(frame, definition, options.at ?? { representation: CRISP }); }
+    catch (error) { if (options.folder?.transaction.open) options.folder.transaction.abort(); throw error; }
+  }
   const tiered = tieredCall(frame, definition, positional, options);
   if (tiered) return tiered;
   try {
@@ -360,9 +408,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     const record = view.record({ kind: 'natlang', id: definition.id, source: definition.source!, name: definition.name,
       instructions: definition.body, text: '', revision: definition.revision ?? '', args: {}, returns: definition.returns,
       types: definition.types, subtype: definition.subtype, description: '', codebase: {} } as import('./loader.js').NatlangRecord);
+    // An instantiated generic result keeps the instance its call site chose.
     definition = { ...definition, body: record.instructions, revision: record.revision,
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
-      returns: record.returns, types: record.types, codebase: record.codebase };
+      returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.
@@ -569,6 +618,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     neuralese: task.runtime.options.neuralese,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
+      ...(definition.representation ? { representation: definition.representation } : {}),
       context_id: definition.contextId ?? FILE_CONTEXT,
       graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),
         revision: model.revision ?? null } : undefined, dialect: readerDialect(task.runtime.options.neuralese),
@@ -647,7 +697,9 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       key: definitionKey({ ...definition, body }), interface: interfaceHash(definition.codebase), site,
       ...(inlineSite?.template_segments ? { template: hexDigest(JSON.stringify(inlineSite.template_segments)).slice(0, 24) } : {}),
       subtype: definition.subtype, params: definition.params, returns: definition.returns,
-      instructions: { complete: false, reason: 'excluded' }, types: definition.types, ...(definition.readout ? { readout: definition.readout } : {}) };
+      instructions: { complete: false, reason: 'excluded' }, types: definition.types, ...(definition.readout ? { readout: definition.readout } : {}),
+      ...(definition.generic && definition.representation ? { generic: { name: definition.generic.name, constraint: definition.generic.constraint },
+        representation: definition.representation } : {}) };
     const parentTrace = traceFor(frame.parentCallId);
     const view = task.programView;
     const capture = new CallCapture(store, settings, { callId, parentCallId: frame.parentCallId ?? null,

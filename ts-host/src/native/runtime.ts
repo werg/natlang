@@ -6,7 +6,7 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { COMPACTED_RESULT } from './prompt.js';
-import { arrayToStringNeuralese, concatNeuralese, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
+import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
@@ -46,7 +46,8 @@ export type NativeRuntimeHooks = {
   guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
-    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[] };
+    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[];
+    instantiations?: import('../compiler/neuralese.js').GenericInstantiation[] };
   /** Reads of fields a value's declared type does not have, checked in every eval. */
   checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
 };
@@ -1787,7 +1788,10 @@ export class NativeSession {
   /** Whether this call's scope can hold soft values, so eval code is always checked for their opacity. */
   private holdsNeuralese(): boolean {
     const mentions = (text: string) => /\bNeuralese</.test(text);
-    return mentions(formatType(this.lam.type)) || Object.values(this.lam.typesSrc).some(mentions) ||
+    // A callable with a representation-generic result: each of its call sites is analyzed for the instance it runs.
+    const generic = (level: Record<string, unknown>): boolean => Object.values(level as Record<string, ItemRecord>).some(item =>
+      !!item && typeof item === 'object' && ((item.kind === 'natlang' && !!item.generic) || generic(item.codebase ?? {})));
+    return mentions(formatType(this.lam.type)) || Object.values(this.lam.typesSrc).some(mentions) || generic(this.lam.codebase) ||
       Object.values(this.lam.letTypes).some(type => mentions(formatType(type))) ||
       Object.values(this.lam.captures ?? {}).some(cell => mentions(cell.type));
   }
@@ -1899,6 +1903,7 @@ export class NativeSession {
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
       readNeuraleseIfReference,
+      instantiate,
       readCode: (input: unknown) => {
         let name: string | undefined;
         if (typeof input === 'string') name = input;
