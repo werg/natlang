@@ -12,8 +12,9 @@
  * - bash keeps the output the teacher's environment recorded (only that environment could produce it), in pi's
  *   format: the command's output, and pi's error diagnostic when it exited non-zero, bounded as pi bounds bash.
  *
- * Each step is checked against the recording: a read must show the text the teacher saw, and an edit or write must
- * succeed or fail as the teacher's did. The first disagreement means the checkout no longer matches the teacher's
+ * Each step is checked against the recording: a read must show the text the teacher saw, an edit or write must
+ * succeed or fail as the teacher's did, and a bash observation must not be OpenHands' notice that the command is still
+ * running (pi's bash waits for it, and the interaction that notice offers is OpenHands' own). The first disagreement means the checkout no longer matches the teacher's
  * workspace (a command changed files, or a tool's semantics differ), so replay stops there and reports the step; the
  * steps before it are verified.
  */
@@ -118,6 +119,20 @@ export function recordedBash(recorded: string): { output: string; exitCode: numb
   return { output, exitCode };
 }
 
+/**
+ * OpenHands' notice that a command is still running, appended to its bash observation: after its soft timeout
+ * (`has no new output after N seconds`) or the call's own timeout (`timed out after N seconds`). It offers interactions
+ * only OpenHands has (send keys or input to the running process, execute_bash's timeout parameter), so pi would never
+ * show it, and the teacher's next turns answer it.
+ */
+const OPENHANDS_TIMEOUT = /\[The command (has no new output|timed out) after \d+(?:\.\d+)? seconds\. You may wait longer to see additional output by sending empty command '', send other commands to interact with the current process, send keys \("C-c", "C-z", "C-d"\) to interrupt\/kill the previous command before sending your new command, or use the timeout parameter in execute_bash for future commands\.\]/;
+
+/** The reason a recorded bash observation is OpenHands' timeout notice, or null when it is not one. */
+export function openHandsTimeout(recorded: string): string | null {
+  const notice = OPENHANDS_TIMEOUT.exec(recorded);
+  return notice ? `bash ${notice[1] === 'timed out' ? 'timeout' : 'soft timeout'} (OpenHands-only interaction)` : null;
+}
+
 /** bash's result in pi for a recorded output: the output (bounded to its tail) and pi's diagnostic for a failure. */
 function bashResult(output: string, exitCode: number | null): ToolExecutionResult {
   const failed = exitCode !== null && exitCode !== 0;
@@ -191,6 +206,10 @@ export async function replay(prepared: Prepared, root: string): Promise<{ messag
       result = listing(String(LISTING.exec(String(call.arguments?.command))?.[1] ?? '.').replace(/^'|'$/g, ''));
       report.listings++;
     } else if (call.name === 'bash') {
+      // The command was still running when OpenHands returned: pi's bash waits for it, so the observation and the
+      // interaction after it are OpenHands' own. Replay stops before this step.
+      const timeout = openHandsTimeout(recorded);
+      if (timeout) { diverge(timeout); break; }
       const { output, exitCode } = recordedBash(recorded);
       result = bashResult(output, exitCode);
       report.recordedBash++;
