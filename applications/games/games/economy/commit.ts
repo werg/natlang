@@ -29,7 +29,8 @@ export default function commit(state: EconomyState, effects: EconomyEffects): Co
   if (!same(settlement.entries, settlement.outcomes.flatMap(entriesOf)))
     return refuse('the entries are the goods-then-cash pair of each traded outcome, in order');
   let balances = state.merchants;
-  for (const [i, outcome] of settlement.outcomes.entries()) {
+  for (let i = 0; i < settlement.outcomes.length; i++) {
+    const outcome = settlement.outcomes[i]!;
     const intent = submissions[i]!.intent;
     if (intent.kind === 'pass' ? outcome.status !== 'pass' : outcome.status === 'pass')
       return refuse(`${outcome.actor}: a pass settles as pass and a buy as traded or rejected`);

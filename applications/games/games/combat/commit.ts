@@ -27,7 +27,8 @@ export default function commit(state: CombatState, effects: CombatEffects): Comm
   for (const hit of resolution.hits) dealt[hit.target] = (dealt[hit.target] ?? 0) + hit.amount;
   if (!same(Object.entries(dealt).sort(), Object.entries(resolution.damage).sort())) return refuse('damage is the sum of the hits on each target');
   const struck = new Set<string>();
-  for (const [i, before] of state.fighters.entries()) {
+  for (let i = 0; i < state.fighters.length; i++) {
+    const before = state.fighters[i]!;
     const now = after[i]!;
     if (!whole(now.hp) || !whole(now.cooldown) || !Number.isSafeInteger(now.x)) return refuse(`${before.id}: x, hp and cooldown are whole numbers, hp and cooldown at least 0`);
     if (now.x < 0 || now.x >= state.width) return refuse(`${before.id}: x stays inside the arena`);
