@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.root-skill-diagnostic-authorization/1",
+  "manifest": {
+    "path": "training/student-skills/task-workflows-v6/collection-manifest-v1.json",
+    "sha256": "d53a8b4071f3ebd68b4c0debfdf97be5719d4da2e24850c3eb806f5f36e37c46"
+  },
+  "decision": "authorize scoped generation diagnostic with this exact collection; retain inactive global and training admission status",
+  "scope": "explicit criterion skill use on existing Bridge, River and Emergency train cases; preserve original facts, gold, source groups and splits, register prompt augmentation",
+  "required_evidence": [
+    "actual nested skill binding/body visibility",
+    "exact source/runtime/skill pins",
+    "scoped output/oracle and action review"
+  ],
+  "limits": {
+    "global_activation": false,
+    "training_admission": false,
+    "new_world_credit": 0,
+    "causal_improvement_claim": false
+  }
+}

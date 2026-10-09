@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.student_skill_collection_candidate/1",
+  "collection_id": "task-workflows-v6-candidate",
+  "status": "held-proposal-not-activated",
+  "based_on_collection": "training/student-skills/task-workflows-v5",
+  "based_on_manifest": {
+    "path": "training/student-skills/task-workflows-v5/collection-manifest-v1.json",
+    "sha256": "7c5435765db7342a7c62234ce11accc930434fa87ac2920eed99504ebc715a9a"
+  },
+  "scope": "Source-neutral clarification of positive conjunctive evidence evaluation and skill discoverability.",
+  "rationale": "The exact five-case action audit found three sampled eligibility judgments returning false although complete model initial states included affirmative evidence for every stated conjunct. This proposal makes the positive conjunction path as explicit as the collection’s existing failure-disjunction guidance. It is not a causal or quality claim.",
+  "files": [
+    {
+      "path": "skills/calculate-from-data/SKILL.md",
+      "sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f",
+      "bytes": 734,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/calculate-from-data/SKILL.md",
+      "base_sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f"
+    },
+    {
+      "path": "skills/complete-the-call/SKILL.md",
+      "sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f",
+      "bytes": 840,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/complete-the-call/SKILL.md",
+      "base_sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f"
+    },
+    {
+      "path": "skills/inspect-callable-apis/SKILL.md",
+      "sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795",
+      "bytes": 789,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/inspect-callable-apis/SKILL.md",
+      "base_sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795"
+    },
+    {
+      "path": "skills/judge-against-criteria/SKILL.md",
+      "sha256": "2a604d813c71a2e96fca431262e76a0485cd537d31254a1202b75f0348e8129f",
+      "bytes": 2795,
+      "status": "proposed-criteria-positive-conjunction-clarification",
+      "base_path": "training/student-skills/task-workflows-v5/skills/judge-against-criteria/SKILL.md",
+      "base_sha256": "29d2f2f52173edabcbd767c0ae5589a544c2ee4e2e7d72cd95e78d6044786d2a"
+    },
+    {
+      "path": "skills/move-and-verify-files/SKILL.md",
+      "sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267",
+      "bytes": 693,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/move-and-verify-files/SKILL.md",
+      "base_sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267"
+    },
+    {
+      "path": "skills/resume-after-partial-effects/SKILL.md",
+      "sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592",
+      "bytes": 705,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/resume-after-partial-effects/SKILL.md",
+      "base_sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592"
+    },
+    {
+      "path": "skills/carry-forward-evidence/SKILL.md",
+      "sha256": "876f1c52743793ba8e4a4fce8404d11fd732f21f773b838bf69664e8cabd6cc9",
+      "bytes": 2546,
+      "status": "unchanged-byte-identical-reuse-from-v5",
+      "base_path": "training/student-skills/task-workflows-v5/skills/carry-forward-evidence/SKILL.md",
+      "base_sha256": "876f1c52743793ba8e4a4fce8404d11fd732f21f773b838bf69664e8cabd6cc9"
+    }
+  ],
+  "activation": false,
+  "training_admission": false,
+  "external_diagnostic_authorized": false
+}
