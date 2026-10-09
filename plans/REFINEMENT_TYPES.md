@@ -221,6 +221,10 @@ Choices where this document was open:
 - `refine(value, predicate)` and `assume(value, predicate)` take the predicate as an argument. The type-argument-only
   form `refine<R>(value)` needs the compiler to lower the predicate from `R`.
 
+## Data (step 6)
+
+Generators, collector, registered held corpora and the teacher-window commands: [REFINEMENT_DATA.md](REFINEMENT_DATA.md).
+
 ## Follow-up status
 
 Done after the first push:
