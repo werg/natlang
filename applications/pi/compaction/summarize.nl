@@ -12,7 +12,7 @@ null.
 
 1. view = context(checkpoint.tail): the context as of the tail, which no longer changes, so this is the range select
    chose. k = the index in view.entries of the entry whose id is checkpoint.firstKept.
-2. messages = transcript.summaryMessages(view, k, facts.task.input.instructions ?? null, durable.now()): pi's
+2. messages = summaryRequest.summaryMessages(view, k, facts.task.input.instructions ?? null, durable.now()): pi's
    summarization system prompt and one user message with the serialized conversation.
 3. options = checkpoint.streamOptions without its deferred field, plus cacheRetention "none", maxTokens
    checkpoint.maxTokens, thinkingLevel checkpoint.thinkingLevel, sessionId facts.sessionId.

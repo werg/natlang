@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { serializeConversation as piSerialize, summarizedMessages as piSummarized } from '../vendor/durable/src/harness/compaction.ts';
-import { serializeConversation, summarizedMessages, summaryMessages, SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT } from '../compaction/summarize/transcript.ts';
+import { serializeConversation, summarizedMessages, summaryMessages, SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT } from '../compaction/summarize/summaryRequest.ts';
 import { summarizedMessages as selectSummarized } from '../compaction/select/messages.ts';
 import summaryEntry from '../compaction/summaryEntry.ts';
 

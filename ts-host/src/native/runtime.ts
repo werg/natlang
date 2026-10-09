@@ -1765,9 +1765,6 @@ export class NativeSession {
     const inputsBinding = !taken('read_inputs'), inputsObject = !taken('inputs');
     if (inputsBinding) opaqueNames.push('read_inputs');
     if (inputsObject) opaqueNames.push('inputs');
-    // transcript: this call's earlier tool calls and their outputs, read-only, unless the name is taken.
-    const transcriptBinding = !taken('transcript');
-    if (transcriptBinding) opaqueNames.push('transcript');
     // return_result also works as a function in eval: return_result(value) stages a result, and
     // return_result(value, status, reason) carries out the tool's request once the eval has succeeded.
     // A finisher name the snippet declares itself stays the snippet's own variable.
@@ -1789,6 +1786,11 @@ export class NativeSession {
     const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
       !Object.hasOwn(captureCells, 'decide');
     if (decideBinding) opaqueNames.push('decide');
+    // transcript: this call's earlier tool calls and their outputs, read-only, unless the name is taken (an input, a
+    // local, a function of the call's folder, a service or a capture: theirs wins, as for read_code and decide).
+    const transcriptBinding = !taken('transcript') && !callableNames.includes('transcript') && !serviceNames.includes('transcript') &&
+      !Object.hasOwn(captureCells, 'transcript');
+    if (transcriptBinding) opaqueNames.push('transcript');
     const savedHelpers = [...this.persistentScopeHelpers.values()].filter(helper =>
       hexDigest(helper.source) === helper.sourceHash && Number.isSafeInteger(helper.declarationSpan.start) &&
       helper.declarationSpan.start >= 0 && helper.declarationSpan.end - helper.declarationSpan.start === helper.source.length &&
