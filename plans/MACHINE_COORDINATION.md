@@ -34,7 +34,7 @@ How it works:
   Undelivered copies wait in `.coordination/outbox/`, and every later command
   retries them.
 - Every reader has its own cursor (`.coordination/cursors/`). A Claude session
-  reads as `<machine>-claude-<session>`, Codex as `<machine>-codex`; `--as`
+  reads as `<machine>-claude-<session>`, Codex as `<machine>-codex-<thread>` (from `CODEX_THREAD_ID`); `--as`
   overrides. Several sessions on one machine therefore never consume each
   other's messages. A new session starts where the machine's other readers are.
 - `request` messages stay open until someone `reply`s or `close`s them, and
