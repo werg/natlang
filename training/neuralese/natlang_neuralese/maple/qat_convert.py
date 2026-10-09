@@ -13,6 +13,7 @@ learning afterwards).
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import shutil
@@ -252,8 +253,17 @@ def run_train(a):
                                                  metric=row["held_ce"]):
             print(json.dumps({"best_weights": step, "held_ce": row["held_ce"]}), flush=True)
         if policy.due() or step == a.steps or (a.checkpoint_every and step % a.checkpoint_every == 0):
-            policy.save({"step": step, "latents": {n: q.detach() for n, q in latents},
-                         "optimizer": optimizer.state_dict()})
+            state = {"step": step, "latents": {n: q.detach() for n, q in latents}, "optimizer": optimizer.state_dict()}
+            try:
+                policy.save(state)
+            except OSError as error:
+                # DGX-owned disposal (plans/STORAGE_POLICY.md §2): with --drop-slot-when-full the single rolling
+                # slot (~47 GB) gives way when the disk cannot hold two; the best weights stay a separate file.
+                if error.errno != errno.ENOSPC or not a.drop_slot_when_full:
+                    raise
+                print(json.dumps({"dropped_rolling_slot_for_space": str(policy.slot), "step": step}), flush=True)
+                policy.slot.unlink(missing_ok=True)
+                policy.save(state)
             if policy.signaled:
                 print(json.dumps({"stopped_on_signal": step}), flush=True)
                 return
@@ -286,6 +296,8 @@ def main(argv=None):
     r.add_argument("--eval-every", type=int, default=100)
     r.add_argument("--checkpoint-every", type=int, default=0, help="also checkpoint every N updates (0: off)")
     r.add_argument("--checkpoint-minutes", type=float, default=45.0, help="rolling checkpoint cadence (wall clock)")
+    r.add_argument("--drop-slot-when-full", action=argparse.BooleanOptionalAction, default=True,
+                   help="when the disk cannot hold a second ~47 GB slot, drop the previous one first (DGX)")
     r.add_argument("--seed", type=int, default=0)
     r.add_argument("--checkpoint-layers", action=argparse.BooleanOptionalAction, default=True,
                    help="recompute each layer in backward (its ternary values included) instead of keeping them")
