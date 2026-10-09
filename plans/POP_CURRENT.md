@@ -9,10 +9,10 @@ Last reviewed: 2026-10-09, checkpoint handoff review. This page is a navigation 
 - The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
 - Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop map run is frozen and does not include later shared-runtime changes.
 
-## GPU: mapped-input foundation continuation
+## GPU: full-depth autoregressive foundation continuation
 
 The superseded sketch-consumer repair is closed and is artifact evidence only;
-its best step3328 is not a qualified source. The active Pop job is the mapped-input continuation
+its best step3328 is not a qualified source. The preceding Pop job was the mapped-input continuation
 `luna-map-refresh-step22272-v5` (container `98c449e7ef60`), launched from the
 shared runtime at commit `d915133f695ced59fde70d71100735cc9ccd2ca7` using the
 pinned image `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
@@ -38,15 +38,24 @@ and heads SHA `c73d46511451ded3e6d304bce489765e0c08be458c44fe47500e022bf6834f48`
 Its original strict .995 gate remains failed. Six saved evaluations pass a .99
 CPU advisory with the other original clauses; this is not qualification.
 
-The declared AR fixup v1 launch restored all four optimizer groups but failed
-before updates when the shared schedule rejected its predecessor configuration.
-It is stopped. Preserve its output and preflight evidence under
-`runs/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/`.
-Repair the shared handoff without discarding schedule/history/moments/RNG, then
-use a new pinned recipe and fresh output path. No transport or recurrence
-qualification has been issued. The intended AR binding has16K total context,
-256 generated target positions, unchanged gold targets,1024 additional updates,
-new .99/.05/.025 gates and two consecutive passes.
+The AR fixup v1 launch restored all four optimizer groups but failed before
+updates: the old mapped metric was named `shallow`, the shared handler names it
+`input_map`. Shared fix `cf582398` performs only that checked semantic rename;
+every other schedule setting must match. Eight focused tests and a CPU replay
+of the real source checkpoint preserve31 observations/history and RNG state.
+
+AR fixup v2 is running as `luna-ar-feedback-best23936-v2`, recipe
+`training/neuralese/recipes/luna-ar-feedback-fixup-4880-best23936-20261009-v2.json`
+(commit `6dcaac85`, SHA `e1a50f2941c121658ac5c0daf4fd57caaf193372426c594495860bec98b104bd`).
+It pins shared code `cf582398` and the same Docker image. Live logs confirm all
+four optimizer groups and31 schedule observations restored. The fresh AR
+baseline is computing; no new qualification or completed-update claim yet.
+Driver/launch receipts are under
+`/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v2/`.
+Failed v1 launch evidence remains preserved under its original path.
+This binding uses16K total context,256 generated target positions, unchanged
+gold targets,1024 additional updates, fresh .99/.05/.025 gates and two
+consecutive passes. No transport or recurrence qualification is inherited.
 
 The DGX owner direction is to phase the raw-token-embedding projection anchor
 out after warm-in using a declared decay, then adapt the read port to learned
