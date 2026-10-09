@@ -126,3 +126,11 @@ enter the Neuralese stages before either backbone's long runs.
   quarter 0.04–0.11. Some gate_up rows (layers 0, 2, 3, 27) have near-zero RMS, so a per-tensor α step changes
   them by up to 3.6× their RMS. Next: per-row step scale, recovery windows from assistant/code/prose text instead
   of the system prompt, and a check of KL sensitivity on README/Python text.
+- Resolution (2026-10-09 evening): the "damage" was CE learning, not broken weights — one update on
+  prompt-dominated windows memorises the shared system prompt (train CE 4.5 → 1.96), which the teacher does not
+  predict, so held KL rises. Writing identical values leaves KL at 0.021. Fixes (fabc8eda): recovery windows drop
+  each chat's system message and pack repo TS/Python files (teacher CE 1.63 train / 1.76 held, was 3.93 / 4.19);
+  Lion steps in units of each row's ternary scale. Backward fix (592c1819): dense experts ramp each tensor once
+  per layer and unbind, instead of per-expert indexing that zero-filled a full-size gradient 64x per tensor.
+- v2 trial (runs/mellum-qat-convert-20261009-v2.sh): teacher-v7-nosys-code, lr 3e-4·α_row, ramp 1000, constant KL,
+  CE 0.25, 2000 steps; queued for admission (queue script retries every 5 min).
