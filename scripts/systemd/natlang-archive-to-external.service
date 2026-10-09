@@ -1,0 +1,12 @@
+[Unit]
+Description=Move finished large files (checkpoints, dumps, exports) from the NVMe to the external disk
+[Service]
+Type=oneshot
+# Files untouched (neither modified nor read) for 24 h, not open, not excluded; copy, verify, symlink back.
+# Excludes: ~/.config/natlang/archive-exclude.txt, .keep-on-nvme markers, active ledger claims. See
+# plans/MACHINE_COORDINATION.md ("Storage").
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/archive_to_external.py --apply --budget-gb 50 --list-limit 0
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+MemoryMax=1G
