@@ -58,7 +58,7 @@ Assess every observation against the criterion with assess, then summarize the a
 - `types.ts` in a folder supplies aliases to the functions there and below; a named function also sees the `types.ts` of each enclosing directory up to its package root (`natlang.json` or `package.json`), nearer winning. Doc comments on fields stay with the alias and reach the model in the call's opening: describe a data format there (where files live, units, what null means) and pass the typed value as an argument, instead of asking the model to read a format document first.
 - Host TypeScript imports a named function directly: `import review from './review.nl'`. `natlang build` generates `review.d.nl.ts` so the import is typed, with its children as typed attributes.
 - `natlang.d/` follows the same rules and is the callable context for inline `nl` in application code below it (nearest wins, no merging).
-- Child names must be identifiers and must not collide with function properties (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `then`, `iterateOn`, and similar).
+- Child names must be identifiers and must not collide with function properties (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `then`, `iterateOn`, and similar). A file named `read-limits` becomes `readLimits`; a name such as `apply` takes a suffix (`applyStep`); each load error names the rename. In eval and instructions a child function keeps its name, so keep its result under another one (`const planResult = await plan(input)`); reusing the name is an `invalid-binding` error that says so, because `const plan = plan(...)` would read the variable before it exists in JavaScript too.
 
 ## The program's code, and what it only calls
 

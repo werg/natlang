@@ -4,7 +4,7 @@
  * expose their exports (a default function export makes the module itself callable); folders are records.
  * Every natlang function also has the standard `iterateOn` method.
  */
-import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
+import { RESERVED_CALLABLE_PROPERTIES, reservedNameMessage } from '../compiler/intrinsics.js';
 import { APPLY_TO_FOLDER, type FolderHandle } from '../native/scoped-fs.js';
 import { currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell } from './kernel.js';
@@ -75,7 +75,7 @@ export function callableMeta(value: unknown): CallableMeta | undefined {
 /** Define a read-only child attribute, rejecting names that collide with function internals. */
 export function defineChild(target: object, name: string, value: unknown): void {
   if (RESERVED_CALLABLE_PROPERTIES.has(name))
-    throw new TypeError(`${JSON.stringify(name)} cannot be the name of a natlang child item; rename the source file or export`);
+    throw new TypeError(reservedNameMessage(name, 'natlang child item'));
   Object.defineProperty(target, name, { value, enumerable: true, writable: false, configurable: false });
 }
 
@@ -182,7 +182,7 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
   for (const [name, spec] of Object.entries(record.exports)) {
     if (name === 'default') continue;
     if (RESERVED_CALLABLE_PROPERTIES.has(name))
-      throw new TypeError(`${JSON.stringify(name)} cannot be the name of a natlang child item; rename the export`);
+      throw new TypeError(reservedNameMessage(name, 'natlang child item'));
     Object.defineProperty(node, name, spec.kind === 'function' ?
       { value: (...args: unknown[]) => invoke(name, args), enumerable: true } :
       { get: () => instance()[name], enumerable: true });

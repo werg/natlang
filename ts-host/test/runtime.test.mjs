@@ -84,7 +84,11 @@ test('a named function exposes its callable folder as a typed hierarchy in host 
 
 test('a callable folder rejects reserved child names and open-ended loops at load time', () => {
   const reserved = tree({ 'f.nl': nlFile({}, 'string', 'Say hi.'), 'f/then.ts': 'export default function then(): string { return "x"; }\n' });
-  assert.throws(() => loadNatlang(join(reserved, 'f.nl')), /collides with a built-in function property/);
+  assert.throws(() => loadNatlang(join(reserved, 'f.nl')), /"then" is a property every function already has.*rename it, for example to "thenStep"/);
+  const applying = tree({ 'h.nl': nlFile({}, 'string', 'Say hi.'), 'h/apply.ts': 'export default function apply(): string { return "x"; }\n' });
+  assert.throws(() => loadNatlang(join(applying, 'h.nl')), /"apply" is a property every function already has/);
+  const hyphen = tree({ 'k.nl': nlFile({}, 'string', 'Say hi.'), 'k/read-limits.nl': nlFile({}, 'string', 'Say hi.') });
+  assert.throws(() => loadNatlang(join(hyphen, 'k.nl')), /"read-limits" is not a valid callable name; name it with letters, digits, _ and \$, such as "readLimits"/);
   const looping = tree({ 'g.nl': nlFile({}, 'string', 'Say hi.'), 'g/spin.ts': 'export default function spin(): string { while (true) {} }\n' });
   assert.throws(() => loadNatlang(join(looping, 'g.nl')), /`while` loops are not allowed/);
 });

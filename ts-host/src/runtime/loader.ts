@@ -12,7 +12,7 @@ import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import { parseType, TypeEnv } from '../native/types.js';
 import { finiteValues } from '../native/decision.js';
-import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
+import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
 
@@ -163,9 +163,8 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
 }
 
 function checkName(path: string, name: string): void {
-  if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is not a valid callable name`);
-  if (RESERVED_CALLABLE_PROPERTIES.has(name))
-    throw new NatlangSourceError(path, `${JSON.stringify(name)} collides with a built-in function property; rename it`);
+  if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, invalidNameMessage(name));
+  if (RESERVED_CALLABLE_PROPERTIES.has(name)) throw new NatlangSourceError(path, reservedNameMessage(name));
 }
 
 function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>): void {

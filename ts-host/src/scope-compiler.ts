@@ -701,9 +701,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     {
       const binding = bindings.find(item => item.name === name)!;
       // An input redeclared is usually test data about to replace the caller's real values; say whose they are.
+      const callable = helperNames.includes(name) || serviceNames.includes(name);
       const whose = options.inputBindings?.includes(name) ? `${name} is this call's input and already holds the caller's value` :
-        `${name} is already defined in this scope`;
-      diagnostics.push({ code: 'invalid-binding', message: `${whose}; use it directly instead of declaring it again.`,
+        callable ? `${name} is already a function in this scope` : `${name} is already defined in this scope`;
+      // A function's name stays the function's: its result goes in a variable of another name (`plan` -> `planResult`).
+      const fix = callable ? `call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result` :
+        'use it directly instead of declaring it again';
+      diagnostics.push({ code: 'invalid-binding', message: `${whose}; ${fix}.`,
         ...rawSpan(binding.start, binding.end) });
     }
 
