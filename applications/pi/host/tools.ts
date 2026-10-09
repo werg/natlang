@@ -14,7 +14,7 @@ import type { Agent, ToolDiagnostic, ToolExecutionApi, ToolExecutionResult, Tool
 import { OutputBuffer, PROGRESS_BYTES_PER_SECOND } from '../vendor/durable/src/harness/output.ts';
 import { publishProgress, type Reported } from '../vendor/durable/src/harness/tool.ts';
 import type { OutputLimits } from '../types.ts';
-import { plain } from './durable.ts';
+import { plain, type PhaseState } from './durable.ts';
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
 
@@ -34,7 +34,7 @@ export type Execution = {
   durationMs?: number;
 };
 
-export function toolsService(runtime: Runtime, context: Context, agent: Agent, callId: string) {
+export function toolsService(runtime: Runtime, context: Context, agent: Agent, callId: string, phase: PhaseState = {}) {
   const find = (name: string): ToolRegistration => {
     const tool = agent.tools.find(item => item.name === name);
     if (!tool) throw new Error(`the agent has no tool ${name}`);
@@ -120,6 +120,16 @@ export function toolsService(runtime: Runtime, context: Context, agent: Agent, c
       // Details waiting for a progress commit resolve now; the settling commit follows from tool/run.
       for (const waiter of await progress.stop()) waiter.resolve();
       const snapshot = reported.output.snapshot();
+      // pi stores the result as it is (strict JSON) and faults the tool task when it cannot: never clean it here.
+      if (result) {
+        try { result = copyJson(result as never, { omitUndefinedProperties: true }) as unknown as ToolExecutionResult; }
+        catch (thrown) {
+          phase.failed = `the tool ${name} returned a result that cannot be stored`;
+          throw new Error(`The tool ${name} returned a result that cannot be stored (${thrown instanceof Error ? thrown.message : String(thrown)}). ` +
+            'Do not work around it, rerun the tool, or build a result yourself: end this call with return_result status ' +
+            '"failed" and this reason. The harness faults the tool task.');
+        }
+      }
       return plain({ ...(result ? { result } : {}), ...(error !== undefined ? { error } : {}),
         retained: { text: snapshot.text, droppedBytes: snapshot.droppedBytes, droppedLines: snapshot.droppedLines },
         diagnostics: reported.diagnostics, ...(reported.details !== undefined ? { details: reported.details } : {}),
