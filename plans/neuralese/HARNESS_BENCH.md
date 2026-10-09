@@ -138,10 +138,10 @@ offline research has no latency limit.
 | Replay in pi's tools, with verification | done (`bench/replay.ts`) |
 | Companion output shaping as a pluggable hot path (crisp head and tail, or `shape.nl`), with `recall` | done |
 | Per-part view instructions and note in the trainer and the conversion format | done |
-| A Neuralese content part in pi messages: a block reference plus a text gist, read by a Neuralese-capable provider and shown as the gist elsewhere | next |
-| Tool-output view as a third shaping mode: view's Neuralese instance (the runtime's `neuralese.view`) with the call's intent as instructions | next (after the student serves) |
-| A purpose on tool calls (the agent's stated intent), which the view and shaping condition on | next |
-| A pi-ai provider for the Neuralese server (the student serving pi) | next |
+| A Neuralese content part in pi messages (`{ type: "neuralese", id }`), sent only to a model whose declared reader is its dialect | done (`types.ts` `NeuraleseContent`, `host/natlang-provider.ts`) |
+| Tool-output views as stored calls: a long output (over 2,000 characters, `VIEW_CHARS`) is a call of `view(output, intent)`; text readers read the companion's shape, a Neuralese reader the block of view's Neuralese instance plus the recall note, as the records render view parts; memoized per (call, dialect), pinned, collected, restored | done (`host/views.ts`, COMPANION.md §6); live use waits for a student that serves |
+| The agent's intent at a tool call (the call and the turn's reasoning and text), which the view conditions on, recorded live exactly as `records.py` `intent()` | done (companion `afterResponse` hook) |
+| A pi-ai provider for the Neuralese server (the student serving pi) | done (`--agent-transport natlang --agent-reader DIALECT`) |
 | One record format live and offline: live companion runs write the same records through the call store | next |
 | Snapshot-backed companion services for offline research | next (with §4) |
 

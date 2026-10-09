@@ -63,7 +63,8 @@ conversation without the extension is exactly today's harness.
 | --- | --- |
 | A section (`addSection`, re-rendered at each prepare; planSystem appends only the delta) | `<companion>`: the current briefing. It is short and replaced each turn. An unchanged briefing costs nothing, and a changed one costs a section patch. |
 | A tool | `recall(handle)` expands a compressed output or a knowledge-base entry; `ask(question)` queries the knowledge base synchronously (a natlang call with a small budget). |
-| `afterTool` hook | Shapes large results: the agent sees part of the output plus a `recall` handle, and the exact result is kept in the companion's store. Which part is a pluggable hot path (`shaping`, `--shaping`, modes `crisp`, `nl` and `shadow` through `pluggable()`). Crisp keeps the head and tail. Natural language (`shape.nl`) chooses the lines that matter for the next step and writes a gist of the rest; its choice is memoized for the call (`HookApi.memo`), and the host clamps it to the budget. If the natural-language call fails, the crisp shape stands in. |
+| `afterTool` hook | Stores each long result (over 2,000 characters) as a call of `view` (§6): the exact result is kept in the companion's store (its `recall` handle), and the result message holds its text form with a reference to the call. Past 6,000 characters the text form is shaped: the agent sees part of the output plus a `recall` handle. Which part is a pluggable hot path (`shaping`, `--shaping`, modes `crisp`, `nl` and `shadow` through `pluggable()`). Crisp keeps the head and tail. Natural language (`shape.nl`) chooses the lines that matter for the next step and writes a gist of the rest; its choice is memoized for the call (`HookApi.memo`), and the host clamps it to the budget. If the natural-language call fails, the crisp shape stands in. With a Neuralese reader the hook also starts the view's block at once (latency). |
+| `afterResponse` hook | With a Neuralese reader: records the intent of each tool call (the call and the turn's reasoning and text, as the harness bench's `intent()`), the view's instructions. |
 | `beforeRequest` hook | Last-moment additions: a finished background result the briefing has not shown yet. |
 | Owned tasks (`pi.companion`) | Background work: indexing, research, tests in a scratch copy, critique. |
 | Steering submission (inbox, `steer` mode) | Urgent findings only, such as a loop or a destructive command about to run. A policy decides, and the default is rare. |
@@ -126,10 +127,31 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
 - **How `shape.nl` relates to `view`.** `view`'s crisp instance returns a string written from the value; `shape.nl`
   returns an `OutputShape`: line ranges the host copies verbatim from the exact output, plus a one-sentence gist. That
   keeps every shown line exact and lets the host clamp the selection to the budget, which a free-text view cannot
-  promise, so `shape.nl` is not rewritten as `view`'s crisp instance; it stays the crisp shaping policy. The Neuralese
-  shaping mode (HARNESS_BENCH.md §5) is `view(output, intent)` at its Neuralese instance, shown with the `recall`
-  handle; the harness bench trains exactly that site (view parts with the agent's intent as instructions).
-- `recall` returns exact text when the agent asks for it. Neuralese is the dense default, text is the fallback.
+  promise, so `shape.nl` is not rewritten as `view`'s crisp instance; it stays the crisp shaping policy, and pi never
+  runs `view`'s crisp instance (the shape is the text form text readers read; a second text form would be read by
+  no one).
+- **Stored calls, forced per reader (built, `host/views.ts`).** A long output is not converted when it arrives, since
+  its readers are not known then. It is stored as a call of `view` with two inputs: the whole output (the `recall`
+  store, `pi.companion.output`) and the agent's intent when it made the call (`pi.view.intent`, recorded after the
+  response by the `afterResponse` hook while the reader is Neuralese; the same text as the harness bench's
+  `intent()`). The result message keeps the text form plus the reference (`{ type: "text", text, stored: { function:
+  "view", call } }`); pi messages stay plain JSON and reader-independent. Each consumer forces the call at its own
+  representation:
+  - the agent's requests (`ai.turn`, host/ai.ts): a Neuralese reader is sent the block of `view(output, intent)` in its
+    dialect, written by its own server (`POST /v1/neuralese/view`), followed by the note `// view of the output;
+    recall("ID") returns all of it` (the bench's `recall_note`). A text reader is sent the text form. The block is
+    started by the `afterTool` hook as soon as the result exists, and the request joins or finds it;
+  - compaction, the companion's transcript and `recall` read the text form or the raw output and force nothing.
+
+  Forcing is memoized durably per (call, dialect) in the conversation's `pi.view.forced` documents (block ID, length,
+  dialect), so turns, retries and restarts reuse the block. The block is archived in the runtime's Neuralese store,
+  pinned on the server under the conversation's owner (its provider session ID, also sent with each request), and a
+  generation's request collects the owner's blocks to the ones it references when the context's head moved (the
+  first request, after a compaction or a reset), unpinning views that left the context. A block the server lost is
+  restored from the archive. A view that cannot be written fails the turn, never falling back to text:
+  `neuralese-view-unavailable` (server unreachable, 429, 5xx) is retried by pi's retry policy,
+  `neuralese-view-failed` (no intent recorded, wrong dialect, a 4xx) is not.
+- `recall` returns exact text when the agent asks for it. For a Neuralese reader the block is the default; it never falls back to text when a block cannot be written.
 
 This depends on the runtime qualification gates of the Neuralese programme. Until a channel is qualified for those
 exact weights, the companion delivers text. The bench (HARNESS_BENCH.md) is where these encodings are learned.

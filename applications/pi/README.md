@@ -82,11 +82,20 @@ against the server's `/v1/neuralese/info` (a dialect the server does not speak i
 object carries it as `reader` (`{ kind: 'text' }` or `{ kind: 'neuralese', dialect }`), so code making a value for the
 agent can choose its representation (plans/neuralese/DECISIONS.md, 2026-10-09). A Neuralese block in a message
 (`{ type: 'neuralese', id }`, types.ts `NeuraleseContent`) reaches such a model unchanged; sent to any model that reads
-text, the request fails with `neuralese-unsupported-backend`. There is no text fallback.
+text, the request fails with `neuralese-unsupported-backend`. There is no text fallback. Each request names the
+conversation (its provider session ID) as the owner of its blocks (`x-natlang-owner`).
+
+With `--companion`, a tool output longer than 2,000 characters is stored as a call of `view` (host/views.ts): the
+result keeps its text form (the output, shaped past 6,000 characters by `--shaping`) with a reference to the call. A
+text reader reads that text. With `--agent-reader DIALECT` the agent model instead reads the view's block in that
+dialect, written by its server for the agent's intent at the call (and the note that `recall` returns the output),
+once per call: memoized in the session, pinned on the server, restored from the runtime's Neuralese store when the
+server lost it. The view is started right after the tool result; a view that cannot be written fails the turn
+(retried by pi's retry policy when the server was unreachable or overloaded).
 
 ## Verification
 
-- `npm test` in this directory: scripted wiring tests (25). The crisp helpers are compared with pi's own code on
+- `npm test` in this directory: scripted wiring tests (52). The crisp helpers are compared with pi's own code on
   thousands of random inputs (result bounding, truncation, transcript serialization, edit matching, image sniffing);
   the coding tools run through the runtime and are compared with pi's `CodingTools` (results, files, diagnostics);
   the policy path drives a real Harness through the scheduler and admission functions.
