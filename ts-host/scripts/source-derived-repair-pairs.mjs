@@ -332,7 +332,8 @@ async function loadCausalActionRepairCandidates({ base, proposal, proposalBytes 
     const syntax = checkEvalCodeAgainstCapturedScope(chosenArgs.code, request.captured_context);
     if (!syntax.ok) fail(`${id}: chosen eval code ${syntax.reason}`);
     loaded.push({ ...item, _causal_action_v5_validated: true,
-      _causal_action_v5_proposal_sha256: sha256(proposalBytes) });
+      _causal_action_v5_proposal_sha256: sha256(proposalBytes),
+      _causal_action_v5_code_validation: 'typescript syntax and names bound in the captured opening scope only' });
   }
   return { proposal, proposal_sha256: sha256(proposalBytes), audit_sha256: null,
     source_inventory_sha256: proposal.source_file.sha256, items: loaded, audit: null };
@@ -407,6 +408,7 @@ export function sourceDerivedRepairReviewPair(item) {
     return { status: 'held', training_admission: false, disposition: 'root_per_item_preference_admission_pending',
       synthetic_target: true, observed_rejected_target: true, runtime_or_hidden_state_equivalence: false,
       successful_task_completion_claimed: false,
+      chosen_code_validation: item._causal_action_v5_code_validation,
       provenance: { proposal_sha256: item._causal_action_v5_proposal_sha256,
         candidate_id: item.candidate_id, source_file: item.source, raw_result: item.raw_result,
         trace: item.trace, callstore: item.callstore, provider_request: {

@@ -107,6 +107,8 @@ test('loads reviewed causal-action v5 joins and keeps every candidate held', asy
     loaded.items.map(row => row.provider_request.terminal_tool_call_id));
   assert.ok(reviews.every(row => row.pair.evidence.synthetic_target === true &&
     row.pair.evidence.observed_rejected_target === true && row.pair.messages.length > 0));
+  assert.ok(reviews.every(row => row.chosen_code_validation ===
+    'typescript syntax and names bound in the captured opening scope only'));
   const repeated = loaded.items[0];
   const raw = JSON.parse(await readFile(path.join(root, repeated.raw_result.path), 'utf8'));
   const sameInvocation = raw.trajectory.filter(event => event.invocation_id === repeated.provider_request.invocation_id);
