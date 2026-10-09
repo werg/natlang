@@ -530,6 +530,20 @@ def alignment_selection_score(report, *, max_ce_delta=.1, max_relative_mse=.25, 
     return (0 if report.get('qualified') else 1,max(ratios,default=math.inf))
 
 
+def _alignment_qualification_pass_depth(*, input_map, schedule, rollout, update_controls):
+    """Return the only pass depth eligible for alignment streaks at this stage."""
+    if input_map:
+        return 2
+    if rollout is None:
+        return 3
+    if not schedule.plateau_reached:
+        return None
+    stage = update_controls.get('rollout')
+    if not stage or stage['phase'] != 'whole_stack':
+        return None
+    return stage['target_passes']
+
+
 def retain_best_checkpoint(out, report):
     """Keep complete optimizer/model state without another GPU serialization.
 
@@ -1943,7 +1957,10 @@ def main(argv=None):
         report=None
         if step%a.eval_every==0:
             report=evaluate()
-            streak=streak+1 if passes==(2 if input_map else 3) and report['alignment_gate_passed'] and all(updates.values()) else 0
+            qualification_depth=_alignment_qualification_pass_depth(
+                input_map=input_map,schedule=schedule,rollout=rollout,update_controls=controls)
+            streak=streak+1 if (qualification_depth is not None and passes==qualification_depth and
+                report['alignment_gate_passed'] and all(updates.values())) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
             score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,

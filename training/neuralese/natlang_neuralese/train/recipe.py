@@ -25,7 +25,7 @@ HANDLERS = {
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
-                          'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
+                          'input_map_kernel','input_map_rank','rollout_passes','rollout_start_passes'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -175,6 +175,11 @@ def load_recipe(path):
                 raise ValueError('invalid core text warm-up rollout_passes')
             if neuralese_input == 'map' and rollout_passes != 0:
                 raise ValueError('mapped core text warm-up requires rollout_passes=0')
+            if 'rollout_start_passes' in parameters:
+                start_passes = parameters['rollout_start_passes']
+                if (type(start_passes) is not int or start_passes < 2 or rollout_passes == 0 or
+                        start_passes > rollout_passes):
+                    raise ValueError('rollout_start_passes must be an integer from 2 through rollout_passes')
             for option_name in ('input_map_kernel', 'input_map_rank'):
                 value = parameters.get(option_name, 4 if option_name == 'input_map_kernel' else 64)
                 if type(value) is not int or value < 1:

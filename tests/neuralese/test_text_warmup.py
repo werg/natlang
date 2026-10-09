@@ -16,6 +16,7 @@ from natlang_neuralese.train.text_warmup import (
     text_supervision_policy,
     warmup_display_labels,
     display_update_flags,
+    _alignment_qualification_pass_depth,
 )
 from natlang_neuralese.train.checkpoint_safety import (
     CheckpointDiskReserve,
@@ -68,6 +69,29 @@ def test_linear_module_call_counter_counts_shapes_grad_mode_and_cleans_up_on_err
     ]
     assert all(not isinstance(value,torch.Tensor)
                for row in counter.rows() for value in row.values())
+
+
+@pytest.mark.parametrize('passes',(4,5))
+def test_alignment_qualification_uses_deeper_whole_stack_target(passes):
+    from types import SimpleNamespace
+    schedule=SimpleNamespace(plateau_reached=True)
+    rollout=SimpleNamespace(controls=lambda:{'target_passes':passes,'phase':'whole_stack'})
+    controls={'rollout':{'target_passes':passes,'phase':'whole_stack'}}
+    assert _alignment_qualification_pass_depth(
+        input_map=False,schedule=schedule,rollout=rollout,update_controls=controls)==passes
+    sketch_only={'rollout':{'target_passes':passes,'phase':'sketch_only'}}
+    assert _alignment_qualification_pass_depth(
+        input_map=False,schedule=schedule,rollout=rollout,update_controls=sketch_only) is None
+    assert _alignment_qualification_pass_depth(
+        input_map=False,schedule=SimpleNamespace(plateau_reached=False),
+        rollout=rollout,update_controls=controls) is None
+
+
+def test_alignment_qualification_default_depths_remain_declared():
+    assert _alignment_qualification_pass_depth(input_map=True,schedule=None,
+        rollout=None,update_controls={})==2
+    assert _alignment_qualification_pass_depth(input_map=False,schedule=None,
+        rollout=None,update_controls={})==3
 
 
 def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():

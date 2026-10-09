@@ -427,6 +427,33 @@ def test_core_text_recipe_keeps_explicit_sketch_reproduction_and_rejects_map_rol
         load_recipe(path)
 
 
+@pytest.mark.parametrize(('passes','start'), [(4,3),(5,3)])
+def test_core_text_recipe_declares_deeper_rollout_start(tmp_path, passes, start):
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    recipe=declared()
+    recipe['stages'].append({
+        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
+        'parameters':{'neuralese_input':'sketch','rollout_passes':passes,'rollout_start_passes':start},
+    })
+    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
+    loaded=load_recipe(path)
+    assert loaded['stages'][-1]['parameters']['rollout_start_passes']==3
+    assert stage_parameter_args(loaded['stages'][-1]['parameters'])==[
+        '--neuralese-input','sketch','--rollout-passes',str(passes),'--rollout-start-passes','3']
+
+
+@pytest.mark.parametrize(('passes','start'), [(0,3),(4,1),(4,5),(5,True)])
+def test_core_text_recipe_rejects_invalid_deeper_rollout_start(tmp_path, passes, start):
+    recipe=declared()
+    recipe['stages'].append({
+        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
+        'parameters':{'neuralese_input':'sketch','rollout_passes':passes,'rollout_start_passes':start},
+    })
+    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError,match='rollout_start_passes'):
+        load_recipe(path)
+
+
 def test_every_declared_shared_core_warmup_names_its_input_mode():
     recipes = Path(__file__).parents[2] / 'training/neuralese/recipes'
     declared_recipes = [json.loads(path.read_text()) for path in recipes.glob('*.json')]
