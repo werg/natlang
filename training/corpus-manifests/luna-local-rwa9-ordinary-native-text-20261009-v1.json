@@ -1,0 +1,988 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-local-rwa9-ordinary-native-text-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "emergency-row4-bound-v4-skill-20261009-v1/campaign-v1/slot-01/jobs/000000-bf790d654916f4e9.trace.jsonl",
+      "bytes": 939549,
+      "sha256": "abedd52e8d355b4e07a6a28a1a7ce3909be584c016a0ff0b066c5a1830f036ac",
+      "lines": 1035
+    },
+    {
+      "path": "emergency-row4-bound-v4-skill-20261009-v1/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 5218280,
+      "sha256": "de74503fd9d290e3af7df005225d5f3c288c0b24c00c2d5e62c50e8a7b71cc02",
+      "lines": 1
+    },
+    {
+      "path": "emergency-row4-bound-v4-skill-20261009-v1/evidence/emergency-row4-local-action-review-proposal-v1.json",
+      "bytes": 131867,
+      "sha256": "1dc1ea7994a5b3bbab76fa2c8c17dd9692be01a97c58923b490431cd9e388d98"
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/campaign-v1/slot-01/jobs/000000-ad493298b3a449d7.trace.jsonl",
+      "bytes": 717421,
+      "sha256": "2ef42ce0954a1b04ab5d6e482a3d9d62f73c69a45ebf1541ff7a43c7929e4821",
+      "lines": 469
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 3487689,
+      "sha256": "c808884647f5db7850d041d14bf535ae0bba67e617ef352db616f99a763433c3",
+      "lines": 1
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/evidence/clinic-v8-local-action-review-proposal-v3.json",
+      "bytes": 257283,
+      "sha256": "36b1890103ac9bbd486ed591e2c2eae7fc36878b115fec67294b8a3cbbee4745"
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/runtime/frozen-v2/dist/teacher/native-materializer.js",
+      "bytes": 105849,
+      "sha256": "c46701442c84633b331a801e0d6812bf3ba48438a3731df4c5b4ca7f4d95b3f5"
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/runtime/frozen-v2/frozen-runtime.json",
+      "bytes": 122680,
+      "sha256": "6fd284283310156ec3c7675a950dfd7df10a14bd5a71a16abacce31ebb357b30"
+    },
+    {
+      "path": "luna-clinic-stale-state-refresh-v8-20261009-v1/source/clinic-same-seed-v8-overlay-v1.jsonl",
+      "bytes": 42814,
+      "sha256": "718afc54760940c0e8c9073650c7a684c3e4a4f290761c32389c2bf155fd16cb",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-adoption-v1.json",
+      "bytes": 1761,
+      "sha256": "9a94cb39d0b452fbdff6346970cb8f0f4c6866a015ca09a0d892be12b3663226"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/eleven-readout-native-text-proposal-v1/root-independent-composition-review-v1/composition-proof.json",
+      "bytes": 15307,
+      "sha256": "6180e8222f7986ffb64f2a440b62e15f029cd0fcbf15545cdc70d06db17695a0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/eleven-readout-native-text-proposal-v1/root-independent-composition-review-v1/root-native-text-composition-adoption-v1.json",
+      "bytes": 3613,
+      "sha256": "ec0b16392499886fa04794bf02fdb922c1f533365346310b180f32dcdb8d77be"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-01/jobs/000000-f8f27c36da83f7bd.trace.jsonl",
+      "bytes": 637406,
+      "sha256": "5740ec3b94549b4d361a8e05552a60297725e47c4c017c35532c4ee0cdd986be",
+      "lines": 452
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 2615706,
+      "sha256": "217ee03e9d5f9cb6c937427c4b6763378c87a0bb396c7891907d85c2d4fe1e97",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-02/jobs/000001-cfbced625b6543bd.trace.jsonl",
+      "bytes": 772664,
+      "sha256": "cf5fccbcb8cddaaaa34d01b24a7caf5c6af9b1db50f97c6942e2cab6e8c838ed",
+      "lines": 421
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 2707417,
+      "sha256": "538df65f85ccf36ef4141f28da20078b3d51c52ef0edbdba8659854666f7bff0",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-03/jobs/000002-d84d96c60dda5c16.trace.jsonl",
+      "bytes": 588443,
+      "sha256": "f98dc2c0bcc72c44f48b9bfa9eec9c10aa7889a7bd91e785c012c3641f4065a4",
+      "lines": 398
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 2550497,
+      "sha256": "3ee7c274d8df41d00834641a19bf7c445e911c60d2fc0e99a37a6d75c4e2ffdd",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-04/jobs/000003-5b235e47ad0aa437.trace.jsonl",
+      "bytes": 870244,
+      "sha256": "c8e96e82e36beadeeb47c99ffe55230631238c4d3bf353b184fe182ab5b8cd22",
+      "lines": 598
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 3665431,
+      "sha256": "710303d27f393b98cbe139bfff2f11af802571055556c9c7b6b3d67832fabf0c",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-05/jobs/000004-539a32bd2bcb2a0d.trace.jsonl",
+      "bytes": 816970,
+      "sha256": "102fe24450c2817ffe561bc319bcaaa1100fc1693b68d095ea08e33e40a5bcfc",
+      "lines": 587
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 3763430,
+      "sha256": "cef863a1edff14d4cbbaa9929fd30267e023779faf6f7ca622cf6ccc58b333c1",
+      "lines": 1
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/evidence/next5-scenario3-local-action-review-proposal-v1.json",
+      "bytes": 263425,
+      "sha256": "baeb16b5715ce4517076d269fe6728cf9c93c85adc555bb0538cba7913cd9f02"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/evidence/rwa101-local-action-review-proposal-v3.json",
+      "bytes": 84439,
+      "sha256": "4a0f7660c3cb5304a1811cca1c8d6ae48534b3bdc62fc39acbe1027830e62d41"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-next5-train-20261009-v1/source/next5-v7-skill-v3.jsonl",
+      "bytes": 212464,
+      "sha256": "4e067b6218da7c3c1346b359009105c8f47aa2da23aa8e25310c2c1268530325",
+      "lines": 5
+    },
+    {
+      "path": "luna-fiveworld-bound-skill-propagation-20261009-v1/followup-emergency-row4-v1/source/emergency-row4-bound-v4-skill-v1.jsonl",
+      "bytes": 46182,
+      "sha256": "c600449106c194ba9810f3dc99d03282e7927b21ee6c43f755d50a720651b057",
+      "lines": 1
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/assemble_admitted_neuralese_cohort.py",
+      "bytes": 52284,
+      "sha256": "b71f61724ea0676dbd754d2ab700fcba5f3891245c3f1554221067dbbb21ec49"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/audit_neuralese_recurrence.py",
+      "bytes": 49169,
+      "sha256": "4b487d85b1444d0cd9c112fc7859f2e7da62362bca1dc740fdebd2649b80e1fa"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 66771,
+      "sha256": "4962311396a23731155f36fe7bd961ae556bc068425bbf68eaf59f635b914c4f"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/root_admission_scope.py",
+      "bytes": 550,
+      "sha256": "7d329665797582c36f898231830c8c9b48daf051d3e0daa5f8ca33a0118a0161"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v1/snapshot-manifest-v1.json",
+      "bytes": 2246,
+      "sha256": "112d7e6a9523b38dc6363c9d78ddf7b0ae6fbaab3f7be97eaea41b939407e849"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/assemble_admitted_neuralese_cohort.py",
+      "bytes": 52284,
+      "sha256": "b71f61724ea0676dbd754d2ab700fcba5f3891245c3f1554221067dbbb21ec49"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/audit_neuralese_recurrence.py",
+      "bytes": 49169,
+      "sha256": "4b487d85b1444d0cd9c112fc7859f2e7da62362bca1dc740fdebd2649b80e1fa"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/build_neuralese_gold_text_delta.py",
+      "bytes": 67017,
+      "sha256": "7a36414431f326a70b7d766b5822c241b044069ffa8a42a012e675bb09685c0f"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/root_admission_scope.py",
+      "bytes": 550,
+      "sha256": "7d329665797582c36f898231830c8c9b48daf051d3e0daa5f8ca33a0118a0161"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/code-snapshot-v2/snapshot-manifest-v2.json",
+      "bytes": 1287,
+      "sha256": "ca32cdcba93d0d41ca5da8d1ae68a9a7a24158a898b9acdee677fd35e4cb7165"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/inputs/delta-native-pieces-empty.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/inputs/delta-native-records.jsonl",
+      "bytes": 1324963,
+      "sha256": "3b57efaddab0f4f329647f136ef2ece1994a66b531459df351c2f1dce717360d",
+      "lines": 9
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/native-compact-proposal-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/native-compact-proposal-v1/delta-native-records.jsonl",
+      "bytes": 1327284,
+      "sha256": "b151c7086287e3bc1861b3ee636577a3063137086d8ae936ed1db3024f51d2f9",
+      "lines": 9
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/native-compact-proposal-v1/proposal-manifest.json",
+      "bytes": 10791,
+      "sha256": "dc5268884118edf3429cf9ded4da8084e93066344b9eb2b509d6fead59d3785b"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/native-compact-proposal-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/README.md",
+      "bytes": 1438,
+      "sha256": "e71e8ad4406f72fe174ee8c1ee50f1b63a0f8d24d40c31788f3e212f370e11b9"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/delta-provenance.jsonl",
+      "bytes": 17613,
+      "sha256": "5b8245f944c401122fef60d489f2785b755c7eec660bbd10a53ade194212b35d",
+      "lines": 9
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/delta-text.jsonl",
+      "bytes": 760810,
+      "sha256": "b94f091a695bafcc34bc68cd88d2976ec430a67c243c7645bcae6cc59415bb5e",
+      "lines": 9
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/output-manifest.json",
+      "bytes": 1437,
+      "sha256": "313f26e67833cc862031872db539c5e0772e147d492f463d957dae761b885b1c"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/packet-manifest.json",
+      "bytes": 1975,
+      "sha256": "555551bc9d64b6ee034235f2e97e38ea90e696621c2f243e15071d8476585a03"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/provider-context-bindings.jsonl",
+      "bytes": 11578,
+      "sha256": "3c472d20eaa24601b13c0af54795446c22a29bed2538ad495303deaf0f98541f",
+      "lines": 5
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/receipt.json",
+      "bytes": 5403,
+      "sha256": "61139722b395cee29bd7b432dd90755a490525bee4fb895e1a377df704384668"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/compact-nine-native-text-proposal-v1/text-compact-proposal-v2/source-coverage.jsonl",
+      "bytes": 3774,
+      "sha256": "27a9b9ccd6e10aa2733861bcb7d1feefee72653bb15c2e8c1acc66a090c41e3b",
+      "lines": 9
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/audit_current_compact_union.py",
+      "bytes": 6820,
+      "sha256": "04c34369d19e467d088f23a93b2c8f6242ef14c0f050dbb4925c95f0fa334ab8"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/current-union-audit-v1.json",
+      "bytes": 1852712,
+      "sha256": "e13cf7511f65ea54213c4c7e4cb53a892670d455f36ada9764296f8c0ed19ae8"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/current-union-nine-action-proposal-v1.json",
+      "bytes": 13179,
+      "sha256": "92160c635af2a3ac5a2abf3a5249bb8df9198ef0afdf112fc37341b720375757"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/native-replay.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/native-replay.stdout",
+      "bytes": 4880,
+      "sha256": "1e5de00c0f09d04810e8d4b9df38775429638eace28b8eeb63e8a624c2a0c5fe"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/root-actual-replay-command-argv-v2.json",
+      "bytes": 3796,
+      "sha256": "a3261b80c42d4bfd344c389e681f6b728dcbb9be5de24937a7acfd5fdecdbdef"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/root-nine-native-text-composition-adoption-v1.json",
+      "bytes": 9185,
+      "sha256": "6f5d22a7b8fd16429d5ec65cec93d38692d3038d4e61919b6b5a9a07be33e813"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/root-replay-command-argv-v1.json",
+      "bytes": 3480,
+      "sha256": "d79ca9ccefbf35614843d5cee8bc307932feeb8e81a5c34548011f1b6de198bd"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/text-replay.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/current-union-nine-action-proposal-v1/root-independent-composition-review-v1/text-replay.stdout",
+      "bytes": 284,
+      "sha256": "5a958b59139f3b04c9b9858bfedcfefe35dbd1c3aad9af47aa9ff8166786bc44"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/materialized-held-actions-v3.jsonl",
+      "bytes": 2205844,
+      "sha256": "c6286326703a395e4ec3d62bdceeb4fc8f86c0e8c1c33c8432ec356a7fb276e0",
+      "lines": 14
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/replay-config-v2.json",
+      "bytes": 410586,
+      "sha256": "38c4c5dcfa4096a2f841a6221862b5f900ebde719cccbe331b7bf316033a6791"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/replay-manifest-v3.json",
+      "bytes": 32892,
+      "sha256": "523366b41c5a233f7462b3e8221ba1b2c96194d4d025cdfa0678b18725abf8a7"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/root-nine-ordinary-action-admission-v1.json",
+      "bytes": 17387,
+      "sha256": "7aa636ae3d0f4d228675bf7f7a19b254c3c8819ee7571f1ebbd51b9f80e6fbda"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/root-per-action-training-admission-v1.json",
+      "bytes": 16312,
+      "sha256": "acf847d9e94b0619f5f7c8880319a5b9c31696604a954cfeebfec7fa168ada0d"
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/root-replay-held-actions-v1.jsonl",
+      "bytes": 2124138,
+      "sha256": "8b49a6b19d8c6db999364fee8039fd71f66d076ee90ca52249e71ce09399e52e",
+      "lines": 14
+    },
+    {
+      "path": "luna-local-action-source-review-20261009-v1/root-replay-manifest-v1.json",
+      "bytes": 32900,
+      "sha256": "b746a43a329d7e766fecacf3c989913b9edee7e6526fb42113347884c80b4070"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/data/text_corpus.py",
+      "bytes": 78570,
+      "sha256": "10cbefcb4e75c425372b18f700534f0ab20a1410844985b6e36a1be25a78895c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5674,
+      "sha256": "6ac96dfd345b594cdc51566298ee9a7b5d05cd13bc8521e2d6c5bd8771425778"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/harness.py",
+      "bytes": 15709,
+      "sha256": "26ec88adf35a828e15c1d947d2ab1c4a2548c4385ba5045299ddfa8f2084e08f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/projected_history.py",
+      "bytes": 18468,
+      "sha256": "1612455704fcb4e8722cfe838e3040e9c5306ab39d69b613f89d66cae3ee2167"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16753,
+      "sha256": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/__main__.py",
+      "bytes": 11210,
+      "sha256": "defd8322c6060553968dd163bfba2766fb99af70d0588cc16ccd2429a4bc7979"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/export/gguf.py",
+      "bytes": 8812,
+      "sha256": "06741e15a677cab05ca32bef71851f9ccdc84ce70396ae33de55b98f5130720a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/export_member.py",
+      "bytes": 8308,
+      "sha256": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/family.py",
+      "bytes": 4087,
+      "sha256": "dbeaadcff755e2d9837be2b9488556e99ce86432b4b472bd20ad0e455fddc6fb"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1423,
+      "sha256": "48dce690a4bbe4597d518f045e484893a8056db54ccf4a39c2e82b1bbf2ebc10"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/model.py",
+      "bytes": 31439,
+      "sha256": "e3736c0550f86cf8aa57ad7c911942056c8e80d89d4361c254606db06d124034"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17261,
+      "sha256": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/routing.py",
+      "bytes": 6466,
+      "sha256": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/student.py",
+      "bytes": 3207,
+      "sha256": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/maple/ternary.py",
+      "bytes": 18649,
+      "sha256": "4905afbb9e433acce9f192c27b1efff5c3e14b6f8f0933ec8be5f0dc03f661af"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/heads.py",
+      "bytes": 19008,
+      "sha256": "fc99b5d81de69fcfdf445b99fd706584b081a393b524141e7c5f041c093544b5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/read.py",
+      "bytes": 4541,
+      "sha256": "824ac21e6b483ec03a426bff806e24101af900170c37ca80eccdf91823c4933f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/__init__.py",
+      "bytes": 6908,
+      "sha256": "c1e74ab3b1b28fa85947e49508e0601879c823a2ba476ffcc0ef6ea2d9fa2ee0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/chat.py",
+      "bytes": 21603,
+      "sha256": "e263a479317a0830771f7b7c0a6503609ebe7eeea624e1723221b0e8d705dc05"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/grad.py",
+      "bytes": 53910,
+      "sha256": "d60da9f6c257caec0515c08030f1728a2349a97da83714bec292cadef405fd4f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/adapters.py",
+      "bytes": 8911,
+      "sha256": "fa91d792294aa7f606ab18e09ce24177d8042d389332fabfbeb4d6c8a71012d4"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/execution.py",
+      "bytes": 39568,
+      "sha256": "5eaaa59e4fffc1ab16c84f76477ea905aaf7c274a9fb3550cdf40946e41f3115"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 16943,
+      "sha256": "cf084c0ff16486cc28ed4061a2a532c4787b1ce895cde60979477216601ae6d5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14768,
+      "sha256": "11b289aae58b66001dcc63559882d7295408b1e89c0a51093e1c599e63430726"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/optim.py",
+      "bytes": 5890,
+      "sha256": "1c5e79afd444666e069d17833e673ce4d2833a568e8b024c3b7df8ec182cc90c"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8118,
+      "sha256": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/recipe.py",
+      "bytes": 26705,
+      "sha256": "679e5e1c3f4cd8d09ec42633522705d8df2d372431ffb92c156c9974dc016319"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/staging.py",
+      "bytes": 8533,
+      "sha256": "3b214918589207065175868d13d0eeed437d57a7651c2b9d220bddb96331287e"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/text_warmup.py",
+      "bytes": 129653,
+      "sha256": "a7c58dd1496ace9854a93e512ab5fa99cf8388fc9f52180ed8c4705b9c9dd6e2"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectories.py",
+      "bytes": 125432,
+      "sha256": "9a6003a4628b71c3e3c7ad9402a8648fa431c3c002d57695bb4105269568e4de"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 13116,
+      "sha256": "2d7dc3d1af891f8f29fbe47420bd36a2d3ee24a1b2f49c9fe79f923395c9c727"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    {
+      "path": "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/renderer-package-manifest-v1.json",
+      "bytes": 15773,
+      "sha256": "1e8c9e95b79f22ef3477f686bfdf5767fcae25a2602512ecf1ab2c97ee4d8dfd"
+    },
+    {
+      "path": "luna-river-v4-bound-skill-diagnostic-20261009-v1/runtime/frozen-v1/dist/teacher/native-materializer.js",
+      "bytes": 105849,
+      "sha256": "c46701442c84633b331a801e0d6812bf3ba48438a3731df4c5b4ca7f4d95b3f5"
+    },
+    {
+      "path": "luna-river-v4-bound-skill-diagnostic-20261009-v1/runtime/frozen-v1/frozen-runtime.json",
+      "bytes": 122589,
+      "sha256": "4af9a41fd7211017f705455e8fa8496db04fdc9c1317413d3f455bfa7def5af5"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+      "bytes": 220885,
+      "sha256": "b2c7c7659c3d355e0e7d0183873938ce3bc54341e2fabfca6e612fc50605076f",
+      "lines": 5
+    }
+  ],
+  "bytes": 43064958
+}
