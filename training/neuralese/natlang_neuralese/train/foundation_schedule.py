@@ -108,7 +108,12 @@ class ProjectionFirstSchedule:
                 self.head_state[h]["plateau"] is not None for h in self.config["heads"]):
             self.adaptation_started_eval = self.eval_count
 
-        return self.controls()
+        controls = self.controls()
+        if (self.config["max_sequence_passes"] > 3 and self.depth_ramp_origin_eval is None
+                and controls["adaptation_eval"] >= 1 + 2 * self.config["pass_ramp_evals"]):
+            self.depth_ramp_origin_eval = 1 + 2 * self.config["pass_ramp_evals"]
+            controls = self.controls()
+        return controls
 
     def controls(self):
         """Read current controls without counting an additional observation."""
@@ -122,9 +127,9 @@ class ProjectionFirstSchedule:
             base_passes = 1 + min(2, (adaptation_evals - 1) // self.config["pass_ramp_evals"])
             passes = base_passes
             if self.config["max_sequence_passes"] > 3 and base_passes >= 3:
-                if self.depth_ramp_origin_eval is None:
-                    self.depth_ramp_origin_eval = 1 + 2 * self.config["pass_ramp_evals"]
-                extension_evals = max(0, adaptation_evals - self.depth_ramp_origin_eval)
+                ramp_origin = (self.depth_ramp_origin_eval if self.depth_ramp_origin_eval is not None
+                               else 1 + 2 * self.config["pass_ramp_evals"])
+                extension_evals = max(0, adaptation_evals - ramp_origin)
                 passes = min(self.config["max_sequence_passes"],
                              3 + extension_evals // self.config["pass_ramp_evals"])
         return {
@@ -195,8 +200,13 @@ class ProjectionFirstSchedule:
                 adaptation_evals, 1 + 2 * self.config["pass_ramp_evals"]):
             raise ValueError("sequence-depth ramp cursor is ahead of restored schedule")
         if old_maximum < current_maximum:
+            ramp_evals = self.config["pass_ramp_evals"]
+            minimum_origin = 1 + 2 * ramp_evals
             if saved_origin is None:
-                saved_origin = max(adaptation_evals, 1 + 2 * self.config["pass_ramp_evals"])
+                saved_origin = max(adaptation_evals, minimum_origin)
+            old_actual_depth = min(old_maximum, 3 + max(0, adaptation_evals - saved_origin) // ramp_evals)
+            if adaptation_evals and old_actual_depth >= old_maximum:
+                saved_origin = adaptation_evals - (old_actual_depth - 3) * ramp_evals
         self.depth_ramp_origin_eval = saved_origin
 
 

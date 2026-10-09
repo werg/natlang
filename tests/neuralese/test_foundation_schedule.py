@@ -102,6 +102,42 @@ def test_extension_from_three_resumes_at_three_and_interrupt_resume_is_exact():
     assert resumed.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==5
 
 
+@pytest.mark.parametrize(('old_maximum','new_maximum','steps_to_hold','steps_to_advance'),[
+    (4,5,1,1),
+    (5,6,1,1),
+])
+def test_extending_a_capped_schedule_holds_old_depth_for_a_fresh_ramp_window(
+        old_maximum,new_maximum,steps_to_hold,steps_to_advance):
+    options=dict(min_evals=1,patience=1,pass_ramp_evals=2)
+    original=ProjectionFirstSchedule(**options,max_sequence_passes=old_maximum)
+    for _ in range(34):
+        original.observe({'shallow':1.,'full_depth':1.})
+    saved=original.state_dict()
+    assert original.controls()['sequence_passes']==old_maximum
+    extended=ProjectionFirstSchedule(**options,max_sequence_passes=new_maximum)
+    extended.load_state_dict(saved)
+    assert extended.controls()['sequence_passes']==old_maximum
+    for _ in range(steps_to_hold):
+        assert extended.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==old_maximum
+    for _ in range(steps_to_advance):
+        controls=extended.observe({'shallow':1.,'full_depth':1.})
+    assert controls['sequence_passes']==new_maximum
+
+
+def test_extending_before_old_cap_preserves_partial_depth_ramp():
+    options=dict(min_evals=1,patience=1,pass_ramp_evals=2)
+    original=ProjectionFirstSchedule(**options,max_sequence_passes=5)
+    for _ in range(8):
+        original.observe({'shallow':1.,'full_depth':1.})
+    assert original.controls()['adaptation_eval']==7
+    assert original.controls()['sequence_passes']==4
+    extended=ProjectionFirstSchedule(**options,max_sequence_passes=6)
+    extended.load_state_dict(original.state_dict())
+    assert extended.controls()['sequence_passes']==4
+    assert extended.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==4
+    assert extended.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==5
+
+
 @pytest.mark.parametrize('maximum',[2,True,3.5])
 def test_extended_projection_schedule_validates_maximum_depth(maximum):
     with pytest.raises(ValueError,match='max_sequence_passes'):
