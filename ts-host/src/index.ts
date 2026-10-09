@@ -72,3 +72,5 @@ export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-sto
 export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
 export { registerBuiltinModule } from './runtime/modules.js';
+export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';
+export type { ReplayRecordSink, ReplaySession } from './neuralese/replay-records.js';
