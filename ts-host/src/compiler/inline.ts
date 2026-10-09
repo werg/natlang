@@ -14,7 +14,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'neuralese-readout-sync' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field';
+    'neuralese-nested' | 'neuralese-readout-sync' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'untrusted-instruction';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -106,6 +106,33 @@ export function withCallOf(checker: ts.TypeChecker | undefined, tag: ts.Expressi
   if (!ts.isCallExpression(tag) || !ts.isPropertyAccessExpression(tag.expression) || tag.expression.name.text !== 'with') return;
   if (checker) return resolveIntrinsic(checker, tag.expression) === 'nl.with' ? tag : undefined;
   return ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' ? tag : undefined;
+}
+
+/** Whether `type` (or a member of a union) carries the \`Untrusted<T>\` brand. */
+export function isUntrustedType(checker: ts.TypeChecker, type: ts.Type): boolean {
+  if (type.isUnion()) return type.types.some(member => isUntrustedType(checker, member));
+  return checker.getPropertiesOfType(type).some(property => property.escapedName.toString().startsWith('__@natlangUntrusted'));
+}
+const isTextType = (type: ts.Type): boolean => type.isUnion() ? type.types.every(isTextType) :
+  !!(type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.TemplateLiteral)) || type.isIntersection() && type.types.some(isTextType);
+
+/**
+ * The untrusted part of an interpolated expression, if any. The expression itself being \`Untrusted<T>\` counts. So does a
+ * text-valued expression built from one (\`message.slice(0, 20)\`, \`\\\`[\${message}]\\\`\`): text derived from untrusted text is
+ * untrusted. A number or boolean computed from one (\`message.length\`) is not text and passes.
+ */
+function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression): ts.Expression | undefined {
+  const type = checker.getTypeAtLocation(expression);
+  if (isUntrustedType(checker, type)) return expression;
+  if (!isTextType(type)) return undefined;
+  let found: ts.Expression | undefined;
+  const visit = (node: ts.Node): void => {
+    if (found || ts.isFunctionLike(node)) return;
+    if (ts.isExpression(node) && node !== expression && isUntrustedType(checker, checker.getTypeAtLocation(node))) { found = node; return; }
+    ts.forEachChild(node, visit);
+  };
+  visit(expression);
+  return found;
 }
 
 /** The suffix capture call in `nl<Result>`instructions`.with({ capture })`. */
@@ -635,6 +662,12 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
           return { ...provenance, type: null, unsupported: error.message };
         }
       });
+    // Instruction text is the author's. An `Untrusted<T>` value reaches the model as an argument, shown as data.
+    if (!ts.isNoSubstitutionTemplateLiteral(template)) for (const span of template.templateSpans) {
+      const culprit = untrustedSplice(checker, span.expression);
+      if (culprit) report(culprit, 'untrusted-instruction', `\`${culprit.getText(file)}\` is untrusted data (Untrusted<T>) and cannot be interpolated into the ` +
+        'text of an `nl` call; pass it as an argument instead, as in nl`Summarize the message.`(message), so the model reads it as quoted data.');
+    }
     const explicit = new Set(parameters.map(parameter => parameter.name));
     const softBody = softBodyOf(template);
     if (withCall || softBody) {

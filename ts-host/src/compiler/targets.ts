@@ -163,7 +163,13 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
       }
       return parts.map(part => part.includes('=>') ? `(${part})` : part).join(' | ');
     }
-    if (candidate.isIntersection()) throw new TargetError('intersection types are not supported as portable targets');
+    if (candidate.isIntersection()) {
+      // `Untrusted<T>` is `T & brand`: the one intersection with a portable meaning.
+      const isBrand = (part: ts.Type) => part.getProperties().length === 1 && part.getProperties()[0]!.name.startsWith('__@natlangUntrusted');
+      const rest = candidate.types.filter(part => !isBrand(part));
+      if (rest.length === 1 && rest.length < candidate.types.length) return `Untrusted<${convert(rest[0]!, depth + 1)}>`;
+      throw new TargetError('intersection types are not supported as portable targets');
+    }
     if (checker.isArrayType(candidate) || checker.isTupleType(candidate)) {
       const elements = checker.isArrayType(candidate) ? [checker.getTypeArguments(candidate as ts.TypeReference)[0]!] :
         checker.getTypeArguments(candidate as ts.TypeReference);

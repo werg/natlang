@@ -16,10 +16,10 @@ export { isNatlangCallable, namedCallable, callableTree, defineNatlang } from '.
 export { Iteration, IterationDivergedError, IterationStepError, IterationLimitError, MemoryIterationStatistics,
   defaultProgressJudge } from './iterate.js';
 export type { IterationStatisticsStore, SiteStatistics, ProgressJudgeFunction, StepRecord } from './iterate.js';
-export { nl, iterateOn, refine, assume } from './surface.js';
+export { nl, iterateOn, refine, assume, untrusted } from './surface.js';
 export { pluggable } from './pluggable.js';
 export type { PluggableMode, PluggableImplementations, PluggableOptions } from './pluggable.js';
-export type { Is, NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
+export type { Is, Untrusted, NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
 /** Support functions targeted by compiled modules. Not an application API. */
 export const __natlang = lowered;
 

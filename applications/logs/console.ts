@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
-import { EventLoop, TerminalSessionStore, openFolder, renderTerminalView, runTerminalShell,
+import { EventLoop, TerminalSessionStore, openFolder, renderTerminalView, runTerminalShell, untrusted,
   type TargetContext, type TerminalView } from '@natlang/node';
 import { LogWorkspace, emptyIncidentState, step, type IncidentState, type LogEvent } from './index.js';
 
@@ -38,16 +38,16 @@ export async function main(context: TargetContext): Promise<number> {
       const parsed = JSON.parse(value) as Event;
       const cursor = parsed.cursor ?? nextCursor++;
       nextCursor = Math.max(nextCursor, Number(cursor) + 1);
-      return { ...parsed, id: parsed.id ?? id, cursor };
+      return { ...parsed, id: parsed.id ?? id, cursor, message: untrusted(String(parsed.message ?? ''), 'log input') };
     }
     return { kind: 'log', id, cursor: nextCursor++, occurred_at: Date.now(), arrived_at: Date.now(),
-      service: 'manual', code: 'NOTE', level: 'info', message: value };
+      service: 'manual', code: 'NOTE', level: 'info', message: untrusted(value, 'console input') };
   };
   const demo = () => {
     const now = Date.now(), batch = `demo-${now}`;
     return [0, 1, 2].map((index): Event => ({ kind: 'log', id: `${batch}-${index + 1}`, cursor: nextCursor++,
       occurred_at: now + index * 1000, arrived_at: now + index * 1000, service: 'checkout', code: 'PAYMENT_TIMEOUT',
-      level: 'error', message: `Payment request timed out for independent request ${index + 1}` }));
+      level: 'error', message: untrusted(`Payment request timed out for independent request ${index + 1}`, 'demo') }));
   };
   const output = context.io.output as NodeJS.WriteStream;
   const show = (value: TerminalView) => output.write(renderTerminalView(value, { color: context.io.color, width: output.columns }));

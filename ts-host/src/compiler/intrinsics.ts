@@ -70,6 +70,15 @@ declare const natlangRefinement: unique symbol;
  */
 type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
 
+/** Brand of a value that came from outside the program; see \`Untrusted\`. */
+declare const natlangUntrusted: unique symbol;
+/**
+ * A \`T\` from outside the program (a file, HTTP, user text, tool output). It is a \`T\` for crisp code; a model sees it only
+ * as a quoted data block labelled with its source, and it cannot be interpolated into the text of an \`nl\` call
+ * (untrusted-instruction): pass it as an argument. \`untrusted(value, source)\` from the runtime module marks one.
+ */
+type Untrusted<T> = T & { readonly [natlangUntrusted]: true };
+
 /** Marker for an unspecified \`nl\` type argument. */
 interface NlUnspecified { readonly __natlangUnspecified: true }
 interface NatlangStepError<M extends string> { readonly __natlangStepError: M }

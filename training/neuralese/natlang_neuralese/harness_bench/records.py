@@ -23,12 +23,12 @@ Admission is recorded per record by explicit criteria (`admission`); the builder
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import random
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..common.hashing import sha256_hex
 from ..digest import INSTRUCTIONS as DIGEST_INSTRUCTIONS
 from .openhands import DIALECT, Normalized, normalize, rows
 
@@ -39,15 +39,15 @@ PREVIEW_CHARS = 40_000
 SHAPE_HEAD, SHAPE_TAIL = 2500, 2000
 
 
-def sha(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+def text_digest(text: str) -> str:
+    return sha256_hex(text.encode())
 
 
 def recall_note(call_id: str) -> str:
     return f'  // digest of the output; recall("{call_id}") returns all of it'
 
 
-def shaped(text: str, call_id: str) -> str:
+def companion_shape(text: str, call_id: str) -> str:
     """The companion's crisp shape of a long output (applications/pi/extensions/companion shapeOutput)."""
     elided = len(text) - SHAPE_HEAD - SHAPE_TAIL
     return (f'{text[:SHAPE_HEAD]}\n[… {elided} characters elided by the companion; recall("{call_id}") returns the full output …]\n'
@@ -56,7 +56,7 @@ def shaped(text: str, call_id: str) -> str:
 
 def split_of(repo: str, test_percent: int) -> str:
     """Repositories, not trajectories, are split: the same code never sits on both sides."""
-    return 'test' if int(sha(f'harness-bench-split:{repo}')[:8], 16) % 100 < test_percent else 'train'
+    return 'test' if int(text_digest(f'harness-bench-split:{repo}')[:8], 16) % 100 < test_percent else 'train'
 
 
 def _arguments_text(arguments: Any) -> str:
@@ -106,8 +106,8 @@ def native_messages(transcript: Normalized, system_piece: str, digest_chars: int
             call_id = message['toolCallId']
             if len(text) > digest_chars and call_id in calls:
                 assistant, call = calls[call_id]
-                preview = text if len(text) <= preview_chars else shaped(text, call_id)
-                content: Any = [{'type': 'digest', 'name': f'digest:{sha(text)[:12]}', 'holder': f'recall("{call_id}")',
+                preview = text if len(text) <= preview_chars else companion_shape(text, call_id)
+                content: Any = [{'type': 'digest', 'name': f'digest:{text_digest(text)[:12]}', 'holder': f'recall("{call_id}")',
                                  'value_type': 'string', 'source': text, 'preview': preview,
                                  'instructions': intent(assistant, call), 'note': recall_note(call_id)}]
                 digests += 1
@@ -166,7 +166,7 @@ def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, to
     split = split_of(transcript.repo, test_percent)
     admitted = admission(transcript, replay)
     groups = [f'swe-rebench-repo:{transcript.repo}', f'swe-rebench-instance:{transcript.instance_id}']
-    row_sha = row_sha or sha(json.dumps((row or {}).get('trajectory'), sort_keys=True, default=str))
+    row_sha = row_sha or text_digest(json.dumps((row or {}).get('trajectory'), sort_keys=True, default=str))
     for index in choose_targets(messages, assistants, targets, per_trajectory, rng):
         prefix = messages[:index]
         yield {
@@ -209,10 +209,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args(argv)
     surface = json.loads(Path(args.surface).read_text())
-    system_piece = f'prompt:pi-agent#sha256:{sha(surface["system"])}'
+    system_piece = f'prompt:pi-agent#sha256:{text_digest(surface["system"])}'
     tools = [{'type': 'function', 'function': {'name': t['name'], 'description': t['description'], 'parameters': t['parameters']}}
              for t in surface['tools']]
-    surface_sha = sha(json.dumps(surface, sort_keys=True))
+    surface_sha = text_digest(json.dumps(surface, sort_keys=True))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     summary = {'builder': BUILDER, 'corpus': args.corpus, 'surface_sha256': surface_sha, 'trajectories': 0, 'records': 0,

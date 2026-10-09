@@ -133,6 +133,7 @@ export function collectObligations(value: unknown, type: Type, env: TypeEnv, pat
         for (const predicate of chain.predicates) out.push({ path: at, predicate, value: item });
         return;
       }
+      case 'untrusted': walk(item, resolved.base, at, depth + 1); return;
       case 'list':
         if (Array.isArray(item)) item.forEach((child, index) => walk(child, resolved.element, `${at}/${index}`, depth + 1));
         return;

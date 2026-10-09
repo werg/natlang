@@ -1,3 +1,5 @@
+import type { Untrusted } from '@natlang/node';
+
 /** Which implementation runs a hot-path policy. Both answer the same interface; the setting selects. */
 export type Policy = "crisp" | "natlang";
 
@@ -19,8 +21,9 @@ export type WikiBlock = { id: string, kind: "prose" | "cell", text: string,
 export type Conflict = { update_id: string, block_id: string, alternatives: string[] };
 export type WikiPage = { id: string, revision: string, blocks: WikiBlock[], unresolved?: Conflict[] };
 
-/** One author's proposal: the whole new text of one block, made against base_revision. */
-export type WikiUpdate = { id: string, block_id: string, base_revision: string, author: string, text: string };
+/** One author's proposal: the whole new text of one block, made against base_revision. The text comes from outside the
+ * program, so a model sees it as quoted data. */
+export type WikiUpdate = { id: string, block_id: string, base_revision: string, author: string, text: Untrusted<string> };
 export type PreparedMerge = { valid: boolean, detail: string, updates: WikiUpdate[], presentation: string };
 
 /** The merge pipeline's answer: the page's blocks (same IDs, same order), every update ID once, the conflicts left. */

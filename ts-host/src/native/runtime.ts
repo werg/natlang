@@ -20,6 +20,7 @@ import { fileDiffPreview } from './file-diff-preview.js';
 import type { PythonHost } from './folder-python.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
+import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } from './untrusted.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
@@ -86,7 +87,8 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 
 /** A one-line summary of a value for status lines; `holder` names where all of it is (see renderValue). */
-const oneLine = (value: unknown, holder?: string, liveIdentity?: (value: object) => number) => renderValue(value, { holder, budget: 80, liveIdentity });
+const oneLine = (value: unknown, holder?: string, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry) =>
+  renderValue(value, { holder, budget: 80, liveIdentity, untrusted });
 function diagnosticValue(value: Value, holder?: string, liveIdentity?: (value: object) => number): unknown {
   if (portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) && !containsLive(value)) return dump(value);
   return { $diagnostic_preview: oneLine(value, holder, liveIdentity), complete: false, holder };
@@ -356,11 +358,11 @@ function typedJsonSource(value: Value): string | undefined {
 }
 
 /** What the model is told when a value is staged as the call's result. */
-const stagedMessage = (value: Value, liveIdentity?: (value: object) => number) => `\nStaged ${stagedText(value, liveIdentity)} as the result. If this is the result of the task you were given and ` +
+const stagedMessage = (value: Value, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry) => `\nStaged ${stagedText(value, liveIdentity, untrusted)} as the result. If this is the result of the task you were given and ` +
   'you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
 /** A staged value, in full when it is small, so it can be checked (and never needs retyping); long ones are cut by structure. */
-function stagedText(value: Value, liveIdentity?: (value: object) => number): string {
-  return renderValue(value, { budget: 1500, liveIdentity });
+function stagedText(value: Value, liveIdentity?: (value: object) => number, untrusted?: UntrustedRegistry): string {
+  return renderValue(value, { budget: 1500, liveIdentity, untrusted });
 }
 /** A deep-frozen copy of portable data; live values and handles are kept by reference. */
 function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
@@ -521,6 +523,8 @@ export class NativeRuntime {
   readonly episodeBudget: { limit?: number; used: number };
   frame?: Frame;
   readonly displayLiveId: (value: object) => number;
+  /** Where untrusted text came from; shared by the calls of one task (native/untrusted.ts). */
+  readonly untrusted: UntrustedRegistry;
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
   readonly neuralese?: NeuraleseRuntimeOptions;
@@ -535,6 +539,7 @@ export class NativeRuntime {
 
   constructor(options: NativeRuntimeOptions) {
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
+    this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
     this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
@@ -1016,7 +1021,25 @@ export class NativeSession {
   /** Exact native tool schemas offered by NativeToolAgent for this call's current turn. */
   private readonly offeredToolDocs = new Map<string, { description: string; parameters: unknown }>();
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
-  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
+  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) { this.markUntrusted(); }
+
+  /**
+   * Records where the strings of this call's `Untrusted<...>` arguments and captured variables came from, so the renderer
+   * shows them as data (native/untrusted.ts). A text already known keeps the source that first named it (a service).
+   */
+  markUntrusted(): void {
+    const lam = this.lam, registry = this.runtime.untrusted;
+    if (lam.type.kind === 'lambda') for (const field of lam.type.params.fields) {
+      if (Object.hasOwn(lam.args, field.name)) registry.markTyped(lam.args[field.name], field.type, this.env,
+        `argument ${field.name}${lam.functionName ? ` of ${lam.functionName}` : ''}`);
+    }
+    for (const cell of Object.values(lam.captures ?? {})) {
+      try {
+        const type = parseType(cell.type);
+        if (containsUntrusted(type, this.env)) registry.markTyped(cell.get(), type, this.env, `variable ${cell.name}`);
+      } catch { /* an unreadable capture has nothing to mark */ }
+    }
+  }
 
   rememberOfferedTools(tools: readonly unknown[]): void {
     this.offeredToolDocs.clear();
@@ -1144,11 +1167,11 @@ export class NativeSession {
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
     const holder = `transcript.entry(${this.transcript.length}).output`;
-    const shown = renderValue(value, { root, holder, liveIdentity: this.runtime.displayLiveId });
+    const shown = renderValue(value, { root, holder, liveIdentity: this.runtime.displayLiveId, untrusted: this.runtime.untrusted });
     // Preserve the existing page route for modest portable values, proven small by a bounded
     // estimator. Large/cyclic values remain intact in eval state but are not fully serialized.
     if (!portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) || containsLive(value)) return shown;
-    const full = renderValue(value, { root, budget: Infinity, liveIdentity: this.runtime.displayLiveId });
+    const full = renderValue(value, { root, budget: Infinity, liveIdentity: this.runtime.displayLiveId, untrusted: this.runtime.untrusted });
     if (shown === full) return shown;
     const { id, count } = this.pages.add(full);
     const paged = shown + `\n<<full value: ${count} pages; read_page("${id}", 1) shows the first page>>`;
@@ -1482,7 +1505,7 @@ export class NativeSession {
       }
       this.lam.return = value;
       if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);
-      return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId)}.`, value };
+      return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId, this.runtime.untrusted)}.`, value };
     }
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
@@ -1910,7 +1933,7 @@ export class NativeSession {
       assume: (value: unknown, predicate: string) => {
         const text = typeof predicate === 'string' ? predicate.replace(/\s+/g, ' ').trim() : '';
         if (!text) throw new Error('refinement-predicate-invalid: assume(value, predicate) takes a nonempty string predicate, for example "one line of at most 60 characters".');
-        const shown = oneLine(value as Value, undefined, this.runtime.displayLiveId);
+        const shown = oneLine(value as Value, undefined, this.runtime.displayLiveId, this.runtime.untrusted);
         this.runtime.trace.emit('refinement_assumed', { call_id: this.runtime.currentCallId ?? null, predicate: text, value: shown.slice(0, 400) });
         return value;
       },
@@ -2084,8 +2107,8 @@ export class NativeSession {
       const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object, this.runtime.displayLiveId) :
         this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
-        stagedMessage(functionResult, this.runtime.displayLiveId) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId)}`);
+        stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}`);
       const storedStatus = (stored.length ? `\nStored ${stored.join('; ')}.` : '') +
         ((compiled.transientHelpers?.length ?? 0) ? `\n${compiled.transientHelpers!.map(helper =>
           `${helper.name} is available only in this eval because ${helper.reason}; use it here or move its dependencies into persistent scope.`).join('\n')}` : '');
@@ -2125,7 +2148,7 @@ export class NativeSession {
           const done=this.scopeTool('return_result',{status:'success',value:staged});
           return {...done,text:`${logStatus}${rendered}${storedStatus}${unsetStatus}\n${done.text}`};
         }
-        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged, this.runtime.displayLiveId)}`, value: staged };
+        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged, this.runtime.displayLiveId, this.runtime.untrusted)}`, value: staged };
       }
       if (requested) {
         const shown = logStatus + rendered + storedStatus + unsetStatus;

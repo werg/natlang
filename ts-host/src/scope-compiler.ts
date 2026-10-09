@@ -272,6 +272,9 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
     if (name === 'Is' && args.length === 2 && ts.isLiteralTypeNode(args[1]!) && ts.isStringLiteral(args[1]!.literal)) {
       const base = portableAnnotation(args[0]!, file); return base ? `Is<${base}, ${args[1]!.literal.getText(file)}>` : undefined;
     }
+    if (name === 'Untrusted' && args.length === 1) {
+      const base = portableAnnotation(args[0]!, file); return base ? `Untrusted<${base}>` : undefined;
+    }
     if (name === 'Record' && args.length === 2 && args[0]!.kind === ts.SyntaxKind.StringKeyword) {
       const value = portableAnnotation(args[1]!, file); return value ? `Record<string, ${value}>` : undefined;
     }

@@ -21,6 +21,7 @@ export function refinedPredicates(type: Type, env: TypeEnv, path: string, seen =
         for (const predicate of chain.predicates) out.push({ slot: at, predicate });
         return walk(chain.base, at, depth + 1);
       }
+      case 'untrusted': return walk(current.base, at, depth + 1);
       case 'list': return walk(current.element, `${at}[]`, depth + 1);
       case 'dict': return walk(current.element, `${at}{}`, depth + 1);
       case 'record': for (const field of current.fields) walk(field.type, `${at}.${field.name}`, depth + 1); return;

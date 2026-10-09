@@ -38,3 +38,12 @@ On a return the executing model gets the failure as a tool error naming the pred
 ## Trace
 
 Each check emits `refinement_check` (`phase`: `return`, `argument`, `service`, `refine`; `outcome`: `pass`, `fail`, `undecided`; `source`: `crisp`, `judge`, `cache`, `escalation`; predicate, value, probability, judge). `assume` emits `refinement_assumed`. A result an eval finishes (`finish: true`) skips the in-loop repair and is checked when the call completes, so its failure is final.
+
+## `Untrusted<T>`: provenance and the compile error
+
+`Untrusted<T>` marks text from outside the program; the runtime shows it to models as a fenced data block labelled `untrusted data from <source>` and the compiler rejects it in instruction text. See the [spec](../../../spec/SPEC.md) ("Untrusted<T>").
+
+- Where it enters: declare a service result in `natlang.json` `refinements.services` with the type text, for example `"index.search": "{ total: number, evidence: { id: string, message: Untrusted<string> }[] }"` (the label is `index.search`; named types from `types.ts` are not resolved there, so write the structure); type a parameter or `types.ts` field `Untrusted<string>` (the label is `argument <name> of <function>`); or call `untrusted(value, "label")` from `@natlang/node` in host code, which returns an `Untrusted<T>` and is the way to hand a plain string to an untrusted slot. In `types.ts`, import the type: `import type { Untrusted } from "@natlang/node"`.
+- Provenance is by content, in a per-task registry with a host-level one behind it; the first label for a text wins, and a derived string (a slice) is not tracked. Mark exact fields, not whole records, or common trusted values (`"api"`) turn into data blocks.
+- `untrusted-instruction` (compile error): an `nl` template interpolates an untrusted value or text built from one. Recovery: pass the value as an argument, ``nl`Summarize the message.`(message)``. A `.nl` body never splices values, so nothing there needs fixing.
+- A program that tests the rendered prompt (a scripted model matching on message text) sees the block, not `message: "..."`.
