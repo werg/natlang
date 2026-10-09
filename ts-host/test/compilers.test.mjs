@@ -44,8 +44,8 @@ const TREES = [node('FunctionDecl', 2, 'square', [node('ParmVarDecl', 2, 'x'), n
 const MIR = { square: '; fn square\n\tmul\t%w1, %w0, %w0\n\tmov\tw0, %w1\n\tret', main: '; fn main\n\tbl\tsquare\n\tret' };
 
 /** The interpreter of every stage, scripted: which stage is asked is read from its instructions. */
-function compilerModel(pipeline = null) {
-  const seen = [];
+function compilerModel(pipeline = null, { header = HEADER } = {}) {
+  const seen = [], retries = [];
   const model = scriptedModel(opening => {
     if (pipeline && opening.includes('Compile source, a program in language')) return pipeline;
     const fn = opening.includes('define i32 @main') || opening.includes('main:') ? 'main' : 'square';
@@ -61,11 +61,12 @@ function compilerModel(pipeline = null) {
       ['Emit the function name', 'emit'], ['Improve the AArch64 function', 'peephole'],
     ].find(([phrase]) => opening.includes(phrase))?.[1];
     const retry = opening.includes('instead of') || opening.includes('the verifier rejected');
+    if (retry) retries.push({ stage, fn, opening });
     seen.push(`${stage}:${['parse', 'analyze', 'declare', 'data'].includes(stage) ? '(module)' : fn}${retry ? ':retry' : ''}`);
     switch (stage) {
       case 'parse': return answer({ declarations: TREES, diagnostics: [] });
       case 'analyze': return 'return { declarations: syntax.declarations, diagnostics: [] };';
-      case 'declare': return `return { header: ${JSON.stringify(HEADER)}, diagnostics: [], functions: [
+      case 'declare': return `return { header: ${JSON.stringify(header)}, diagnostics: [], functions: [
         { name: 'square', signature: 'define i32 @square(i32 %x)', tree: checked.declarations[0] },
         { name: 'main', signature: 'define i32 @main()', tree: checked.declarations[1] }] };`;
       case 'lower': return byFunction('fn.name === "main"', { main: IR.main.lowered, square: IR.square.lowered });
@@ -86,7 +87,7 @@ function compilerModel(pipeline = null) {
     }
     return null;
   });
-  return { model, seen };
+  return { model, seen, retries };
 }
 
 test('module text keeps one declaration per symbol and none for defined functions', () => {
@@ -125,6 +126,104 @@ test('the pure pipeline reaches every stage and the toolchain through its callab
     'liveness:square', 'allocate:square', 'frame:square', 'emit:square'])
     assert.ok(stages.includes(stage), `${stage} in ${seen.join(' ')}`);
   assert.equal((await toolchain.runAssembly(result.assembly)).stdout, '42\n');
+});
+
+// The pass manager as compiler.nl words it, written the way an interpreter of it would: each answer is checked, a wrong
+// one is asked for again with the problem, and a second wrong one is dropped (middle end) or ends the compilation (front end).
+const CHECKED_MIDDLE = `const syntax = await c.parse(source);
+const checked = await c.analyze(syntax);
+const frame = await c.declare(checked);
+const others = i => frame.functions.filter((_, j) => j !== i).map(f => f.signature.replace(/^define/, 'declare').replace(/ %\\w+/g, ''));
+const lowered = await Promise.all(frame.functions.map((fn, i) => c.lower(fn, [frame.header, ...others(i)].join('\\n'))));
+const moduleOf = fns => [frame.header, ...fns].join('\\n');
+const reference = await toolchain.runIR(moduleOf(lowered), inputs[0]);
+const log = [];
+// The check of a middle-end function: the module with the new version verifies and gives the reference output.
+const problemWith = async fns => {
+  const verdict = await toolchain.verify(moduleOf(fns));
+  if (!verdict.ok) return 'the verifier rejected the module: ' + verdict.error;
+  const ran = await toolchain.runIR(moduleOf(fns), inputs[0]);
+  return ran.stdout === reference.stdout ? null : 'the program printed ' + JSON.stringify(ran.stdout) + ' instead of ' + JSON.stringify(reference.stdout);
+};
+const pass = async (index, name, ask) => {
+  const withText = text => lowered.map((fn, j) => j === index ? text : fn);
+  const first = await ask(undefined);
+  const problem = await problemWith(withText(first));
+  if (!problem) { log.push(name + ' accepted'); return first; }
+  const second = await ask(problem);
+  const again = await problemWith(withText(second));
+  if (!again) { log.push(name + ' accepted after retry: ' + problem); return second; }
+  log.push(name + ' kept the previous version: ' + again);
+  return lowered[index];
+};
+const squareContext = [frame.header, ...others(0)].join('\\n');
+const ssa = await pass(0, 'mem2reg square', problem => opt.mem2reg(lowered[0], squareContext, { blocks: [], loops: [] }));
+lowered[0] = ssa;
+const simplified = await pass(0, 'simplify square', problem => problem ? opt.simplify(lowered[0], squareContext, problem) : opt.simplify(lowered[0], squareContext));
+lowered[0] = simplified;
+const cleaned = await pass(0, 'dce square', problem => problem ? opt.dce(lowered[0], squareContext, problem) : opt.dce(lowered[0], squareContext));
+lowered[0] = cleaned;
+return { ir: moduleOf(lowered), assembly: '', diagnostics: [], log };`;
+
+test('a stage whose check fails once is asked again with the problem; one that fails twice keeps the previous version', { skip }, async () => {
+  const { model, seen, retries } = compilerModel(CHECKED_MIDDLE);
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
+  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const result = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: false });
+  assert.equal(result.ok, true, result.diagnostics.join('\n'));
+  assert.deepEqual(result.log.map(line => line.replace(/:.*/s, '')), ['mem2reg square accepted', 'simplify square accepted after retry', 'dce square kept the previous version']);
+  assert.match(result.log[1], /printed "18\\n" instead of "42\\n"/, 'the retry names how the output changed');
+  assert.match(result.log[2], /the verifier rejected the module/);
+  // The second ask carries the problem; the first does not.
+  const simplify = retries.filter(item => item.stage === 'simplify');
+  assert.equal(simplify.length, 1);
+  assert.match(simplify[0].opening, /problem: string \| undefined = .*printed .*18.* instead of .*42/, 'the retry carries the problem as the problem argument');
+  assert.equal(seen.filter(entry => entry === 'simplify:square').length, 1);
+  assert.deepEqual(retries.filter(item => item.stage === 'dce').length, 1, 'a stage that failed twice was asked exactly twice');
+  assert.equal(seen.filter(entry => entry.startsWith('dce:')).length, 2);
+  assert.match(result.ir, /define i32 @square\(i32 %x\) \{\nentry:\n  %mul = mul nsw i32 %x, %x/, 'square keeps the last accepted version');
+  assert.equal((await toolchain.runIR(result.ir)).stdout, '42\n');
+});
+
+const FRONT_END_PIPELINE = `const syntax = await c.parse(source);
+const checked = await c.analyze(syntax);
+const asked = [];
+let frame = await c.declare(checked);
+let verdict = await toolchain.verify(frame.header);
+if (!verdict.ok) {
+  asked.push(verdict.error);
+  frame = await c.declare(checked, 'the verifier rejected the header: ' + verdict.error);
+  verdict = await toolchain.verify(frame.header);
+  if (!verdict.ok) return { ir: '', assembly: '', diagnostics: ['declare failed twice: ' + verdict.error], log: asked };
+}
+return { ir: frame.header, assembly: '', diagnostics: [], log: asked };`;
+
+test('a front-end stage that fails twice stops the compilation with its diagnostics', { skip }, async () => {
+  const { model, seen, retries } = compilerModel(FRONT_END_PIPELINE, { header: 'this is not IR' });
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
+  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const result = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: false });
+  assert.equal(result.ok, false);
+  assert.match(result.diagnostics[0], /declare failed twice/);
+  assert.deepEqual(result.records.map(r => [r.stage, r.accepted]), [['compiler.nl', false]]);
+  assert.deepEqual(seen.filter(entry => entry.startsWith('declare')), ['declare:(module)', 'declare:(module):retry']);
+  assert.match(retries[0].opening, /the verifier rejected the header/, 'the retry carries the verifier message');
+  assert.equal(result.ir, undefined, 'nothing is returned past a failed front end');
+});
+
+test('the crisp verifier rejects a final program that misbehaves, whatever the stages accepted', { skip }, async () => {
+  // The scripted orchestrator skips every check and emits an assembly whose square doubles instead of squaring.
+  const wrongAssembly = ASM.square.replace('mul\tw0, w0, w0', 'add\tw0, w0, w0');
+  const pipeline = PIPELINE.replace("const assembly = [data, ...emitted].join('\\n');", `const assembly = [data, ${JSON.stringify(wrongAssembly)}, ${JSON.stringify(ASM.main)}].join('\\n');`);
+  assert.notEqual(pipeline, PIPELINE, 'the scripted pipeline was changed');
+  const { model } = compilerModel(pipeline);
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
+  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const result = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.records.at(-1).stage, 'run assembly');
+  assert.equal(result.records.at(-1).accepted, false);
+  assert.match(result.diagnostics[0], /the generated program misbehaves: .*printed "18\\n".*instead of "42\\n"/);
 });
 
 // Rust: the third front end, sharing the runtime stage with Python. The header declares the vector runtime, so the
