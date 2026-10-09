@@ -1216,8 +1216,7 @@ def main(argv=None):
     schedule=ProjectionFirstSchedule(heads=(projection_schedule_name,'full_depth'),
         min_evals=a.projection_min_evals,patience=a.projection_patience,
         min_relative_improvement=a.projection_min_improvement,
-        backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals,
-        max_sequence_passes=3)
+        backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
     last_schedule_step=None
     restored=resumed or continuation
     if restored:

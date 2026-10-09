@@ -28,27 +28,26 @@ class ProjectionFirstSchedule:
 
     def __init__(self, *, heads=("shallow", "full_depth"), min_evals=2,
                  patience=3, min_relative_improvement=0.01,
-                 backbone_ramp_evals=4, pass_ramp_evals=2, max_sequence_passes=3):
+                 backbone_ramp_evals=4, pass_ramp_evals=2):
         heads = tuple(heads)
         if not heads or len(set(heads)) != len(heads) or any(not isinstance(h, str) or not h for h in heads):
             raise ValueError("heads must be unique nonempty names")
         if min_evals < 1 or patience < 1 or backbone_ramp_evals < 1 or pass_ramp_evals < 1:
             raise ValueError("evaluation and ramp counts must be positive")
-        if type(max_sequence_passes) is not int or max_sequence_passes < 3:
-            raise ValueError("max_sequence_passes must be an integer of at least 3")
         if not math.isfinite(min_relative_improvement) or min_relative_improvement < 0:
             raise ValueError("minimum relative improvement must be finite and nonnegative")
         self.config = {
             "heads": list(heads), "min_evals": int(min_evals), "patience": int(patience),
             "min_relative_improvement": float(min_relative_improvement),
             "backbone_ramp_evals": int(backbone_ramp_evals), "pass_ramp_evals": int(pass_ramp_evals),
-            "max_sequence_passes": max_sequence_passes,
+            # Retained as fixed serialized state for the active mapped checkpoint;
+            # no depth-extension branch or constructor knob remains.
+            "max_sequence_passes": 3,
         }
         self.eval_count = 0
         self.head_state = {head: {"best": None, "last_significant_eval": 0,
                                   "history": [], "plateau": None} for head in heads}
         self.adaptation_started_eval = None
-        self.depth_ramp_origin_eval = None
 
     @property
     def plateau_reached(self):
@@ -108,12 +107,7 @@ class ProjectionFirstSchedule:
                 self.head_state[h]["plateau"] is not None for h in self.config["heads"]):
             self.adaptation_started_eval = self.eval_count
 
-        controls = self.controls()
-        if (self.config["max_sequence_passes"] > 3 and self.depth_ramp_origin_eval is None
-                and controls["adaptation_eval"] >= 1 + 2 * self.config["pass_ramp_evals"]):
-            self.depth_ramp_origin_eval = 1 + 2 * self.config["pass_ramp_evals"]
-            controls = self.controls()
-        return controls
+        return self.controls()
 
     def controls(self):
         """Read current controls without counting an additional observation."""
@@ -124,14 +118,7 @@ class ProjectionFirstSchedule:
                     if adapting else 0.0)
         passes = 1
         if adapting:
-            base_passes = 1 + min(2, (adaptation_evals - 1) // self.config["pass_ramp_evals"])
-            passes = base_passes
-            if self.config["max_sequence_passes"] > 3 and base_passes >= 3:
-                ramp_origin = (self.depth_ramp_origin_eval if self.depth_ramp_origin_eval is not None
-                               else 1 + 2 * self.config["pass_ramp_evals"])
-                extension_evals = max(0, adaptation_evals - ramp_origin)
-                passes = min(self.config["max_sequence_passes"],
-                             3 + extension_evals // self.config["pass_ramp_evals"])
+            passes = 1 + min(2, (adaptation_evals - 1) // self.config["pass_ramp_evals"])
         return {
             "eval": self.eval_count,
             "phase": "whole_transformer_adaptation" if adapting else "projection_only",
@@ -152,7 +139,6 @@ class ProjectionFirstSchedule:
             "eval_count": self.eval_count,
             "head_state": self.head_state,
             "adaptation_started_eval": self.adaptation_started_eval,
-            "depth_ramp_origin_eval": self.depth_ramp_origin_eval,
         })
 
     def load_state_dict(self, state):
@@ -161,11 +147,10 @@ class ProjectionFirstSchedule:
                 "natlang.projection-first-schedule/1", self.SCHEMA}:
             raise ValueError("invalid projection-first schedule state")
         saved_config = dict(state.get("config") or {})
-        old_maximum = saved_config.pop("max_sequence_passes", 3)
-        current_config = dict(self.config)
-        current_maximum = current_config.pop("max_sequence_passes")
-        if (saved_config != current_config or type(old_maximum) is not int or
-                old_maximum < 3 or current_maximum < old_maximum):
+        if saved_config.get("max_sequence_passes", 3) != 3:
+            raise ValueError("projection-first schedule configuration changed")
+        saved_config.setdefault("max_sequence_passes", 3)
+        if saved_config != self.config:
             raise ValueError("projection-first schedule configuration changed")
         if not isinstance(state.get("eval_count"), int) or state["eval_count"] < 0:
             raise ValueError("invalid projection-first evaluation count")
@@ -192,19 +177,3 @@ class ProjectionFirstSchedule:
         self.eval_count = count
         self.head_state = copy.deepcopy(state["head_state"])
         self.adaptation_started_eval = started
-        saved_origin = state.get("depth_ramp_origin_eval")
-        if saved_origin is not None and (type(saved_origin) is not int or saved_origin < 1):
-            raise ValueError("invalid sequence-depth ramp cursor")
-        adaptation_evals = (max(0, count - started + 1) if started is not None else 0)
-        if saved_origin is not None and saved_origin > max(
-                adaptation_evals, 1 + 2 * self.config["pass_ramp_evals"]):
-            raise ValueError("sequence-depth ramp cursor is ahead of restored schedule")
-        if old_maximum < current_maximum:
-            ramp_evals = self.config["pass_ramp_evals"]
-            minimum_origin = 1 + 2 * ramp_evals
-            if saved_origin is None:
-                saved_origin = max(adaptation_evals, minimum_origin)
-            old_actual_depth = min(old_maximum, 3 + max(0, adaptation_evals - saved_origin) // ramp_evals)
-            if adaptation_evals and old_actual_depth >= old_maximum:
-                saved_origin = adaptation_evals - (old_actual_depth - 3) * ramp_evals
-        self.depth_ramp_origin_eval = saved_origin
