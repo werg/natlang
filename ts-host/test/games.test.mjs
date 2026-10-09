@@ -194,13 +194,13 @@ const balance = (state, id) => state.merchants.find(row => row.id === id);
 
 // ---------------------------------------------------------------- economy
 
-test('the seeded order is the SHA-256 order of seed, tick and actor', () => {
+test('the seeded order is the SHA-256 order of seed, tick and actor', async () => {
   for (const text of ['', 'a', '33:0:alice', 'x'.repeat(55), 'x'.repeat(56), 'x'.repeat(64), 'é'.repeat(70)])
-    assert.equal(economyOrder.sha256(text), createHash('sha256').update(text).digest('hex'));
+    assert.equal(await economyOrder.sha256(text), createHash('sha256').update(text).digest('hex'));
   const actors = ['alice', 'bob', 'cara', 'dan', 'eve'];
   const expected = [...actors].sort((a, b) => createHash('sha256').update(`33:2:${a}`).digest('hex').localeCompare(createHash('sha256').update(`33:2:${b}`).digest('hex')));
-  assert.deepEqual(economyOrder.default(33, 2, actors), expected);
-  assert.notDeepEqual(economyOrder.default(33, 3, actors), expected);
+  assert.deepEqual(await economyOrder.default(33, 2, actors), expected);
+  assert.notDeepEqual(await economyOrder.default(33, 3, actors), expected);
 });
 
 test('an economy tick in natural language settles in seeded order and conserves money and goods', async () => {
@@ -239,7 +239,7 @@ test('a contested good goes to the merchant the seed puts first, and the loser i
   const choose = actor => actor === 'alice' || actor === 'dan' ? { kind: 'buy', seller: 'bob', good: 'apple', quantity: 2 } : { kind: 'pass' };
   const { report } = await play({ kind: 'economy', state }, crispSettings, { choose });
   const outcomes = report.events.at(-1).outcomes;
-  assert.deepEqual(outcomes.map(row => row.actor), economyOrder.default(5, 0, ['alice', 'bob', 'cara', 'dan']));
+  assert.deepEqual(outcomes.map(row => row.actor), await economyOrder.default(5, 0, ['alice', 'bob', 'cara', 'dan']));
   assert.equal(outcomes.filter(row => row.status === 'traded').length, 1);
   assert.equal(outcomes.find(row => row.status === 'rejected').reason, 'seller lacks the stock');
 });
@@ -267,31 +267,31 @@ test('a settlement the commit refuses is settled again with the problem; a secon
   assert.match(always.report.narration, /^The turn did not happen: /);
 });
 
-test('the economy commit checks conservation, order, prices and the tick', () => {
+test('the economy commit checks conservation, order, prices and the tick', async () => {
   const state = createEconomy(MERCHANTS, { seed: 33 });
   const submissions = (actors, intents = {}) => actors.map(actor => ({ actor, intent: intents[actor] ?? { kind: 'pass' } }));
-  const sequence = economyOrder.default(33, 0, ['alice', 'bob', 'cara']);
+  const sequence = await economyOrder.default(33, 0, ['alice', 'bob', 'cara']);
   const trade = { alice: { kind: 'buy', seller: 'bob', good: 'apple', quantity: 2 } };
   const traded = { actor: 'alice', status: 'traded', seller: 'bob', good: 'apple', quantity: 2, total: 6 };
   const settlementOf = outcome => ({ outcomes: sequence.map(actor => actor === 'alice' ? outcome : { actor, status: 'pass' }),
     entries: outcome.status === 'traded' ? [{ kind: 'good', from: 'bob', to: 'alice', good: 'apple', amount: outcome.quantity },
       { kind: 'cash', from: 'alice', to: 'bob', amount: outcome.total }] : [] });
   const effects = (outcome, over = {}) => ({ basis: 0, order: sequence, submissions: submissions(sequence, trade), settlement: settlementOf(outcome), ...over });
-  assert.equal(economyCommit(state, effects(traded)).ok, true);
-  assert.match(economyCommit(state, effects(traded, { basis: 1 })).problem, /tick 1/);
-  assert.match(economyCommit(state, effects(traded, { order: [...sequence].reverse() })).problem, /seeded order/);
-  assert.match(economyCommit(state, effects({ ...traded, total: 5 })).problem, /offered price/);
+  assert.equal((await economyCommit(state, effects(traded))).ok, true);
+  assert.match((await economyCommit(state, effects(traded, { basis: 1 }))).problem, /tick 1/);
+  assert.match((await economyCommit(state, effects(traded, { order: [...sequence].reverse() }))).problem, /seeded order/);
+  assert.match((await economyCommit(state, effects({ ...traded, total: 5 }))).problem, /offered price/);
   const three = { alice: { kind: 'buy', seller: 'bob', good: 'apple', quantity: 3 } };
-  assert.match(economyCommit(state, effects({ ...traded, quantity: 3, total: 9 }, { submissions: submissions(sequence, three) })).problem, /below zero/);
+  assert.match((await economyCommit(state, effects({ ...traded, quantity: 3, total: 9 }, { submissions: submissions(sequence, three) }))).problem, /below zero/);
   const minted = settlementOf(traded);
   minted.entries[1].amount = 7;
-  assert.match(economyCommit(state, effects(traded, { settlement: minted })).problem, /entries are the goods-then-cash pair/);
+  assert.match((await economyCommit(state, effects(traded, { settlement: minted }))).problem, /entries are the goods-then-cash pair/);
   const broke = createEconomy([{ ...MERCHANTS[0], cash: 1 }, ...MERCHANTS.slice(1)], { seed: 33 });
-  assert.match(economyCommit(broke, effects(traded, { order: economyOrder.default(33, 0, ['alice', 'bob', 'cara']) })).problem, /below zero/);
-  assert.match(economyCommit(state, effects(traded, { submissions: submissions(sequence, { alice: { kind: 'buy', seller: 'nobody', good: 'apple', quantity: 1 } }) })).problem, /seller/);
+  assert.match((await economyCommit(broke, effects(traded, { order: await economyOrder.default(33, 0, ['alice', 'bob', 'cara']) }))).problem, /below zero/);
+  assert.match((await economyCommit(state, effects(traded, { submissions: submissions(sequence, { alice: { kind: 'buy', seller: 'nobody', good: 'apple', quantity: 1 } }) }))).problem, /seller/);
   // Money out of thin air keeps the entries consistent but not the totals.
   const forged = { ...state, initial: { ...state.initial, cash: state.initial.cash + 1 } };
-  assert.match(economyCommit(forged, effects(traded)).problem, /initial totals/);
+  assert.match((await economyCommit(forged, effects(traded))).problem, /initial totals/);
 });
 
 test('the crisp settlement reference rejects with the reasons the natural-language stages give', () => {

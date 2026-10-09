@@ -82,7 +82,7 @@ export default async function prepare(goal: string): Promise<string[]> {
 ```
 
 - A default-exported function makes the module itself callable; named exports become callable attributes; exported values become typed values.
-- Imports are limited to sibling items (`./x.nl`, `./x.js`, `./folder/x.js`), declared npm packages, `natlang:services`, and `@natlang/node` / `@natlang/browser`. Local files outside the folder are rejected.
+- Imports are limited to sibling items (`./x.nl`, `./x.js`, `./folder/x.js`), declared npm packages, `natlang:services`, and `@natlang/node` / `@natlang/browser`. Local files outside the folder are rejected. Node modules such as `node:crypto` are not importable; standard globals are, so hash with WebCrypto (`await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))`), which makes the function async.
 - The finite-iteration policy applies, and a function may call itself only on a smaller argument. `eval` and `Function` are rejected.
 - Ordinary application TypeScript outside callable folders has none of these restrictions.
 
