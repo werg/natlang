@@ -183,8 +183,10 @@ Response fields beyond OpenAI's:
 delta; text `content` deltas until a tool call opens (call markup is held back); per
 written block, a delta `{"content": [{"type": "neuralese", "id"}]}` with
 `neuralese.block` set to the block's meta; parsed calls as one `tool_calls` delta; a
-final chunk with `finish_reason`, `usage`, `neuralese`, and `x_natlang_message`, the
-complete parsed message as a non-streaming response would return it. An error after
+final chunk with `finish_reason`, `usage`, `neuralese`, `x_natlang_guidance` (when guidance was on), and
+`x_natlang_message`, the complete parsed message as a non-streaming response would return it. Clients take the
+final message from `x_natlang_message`; the deltas before it are for showing output while it is produced (text
+streamed before a guidance rollback is not retracted). An error after
 the headers is sent as an `{"error": …}` event; `[DONE]` ends the stream.
 
 ### Block store
@@ -257,6 +259,7 @@ that a client loads first.
 | `grad_order` | Highest gradient order (2). | reference only |
 | `adapters` | Adapter kinds applied directly (`["xs", "tiny"]`, reference) or `"lora"` (fork: adapters need `PUT …/lora`). | both, different types |
 | `projections` | `{name: {"source", "target", "identity"}}`: projections that decode adapter codes. | reference only |
+| `stream` | `true`: chat completions honour `"stream": true` (Streaming, above). Clients stream only to a server that declares it; absent means not streaming. | reference only (the fork until it serves SSE) |
 | `store` | `{"owners": true, "persistent": bool}`: owner-scoped holds, pins and collection; whether blocks outlive a restart. | both |
 | `server` | `"llama.cpp"`. | fork only |
 
