@@ -55,6 +55,67 @@ def target_digest(row):
     # the insertion order used by the source converter.
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
+def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
+    """Validate a mixed root review and return only its admitted native decisions."""
+    if approval.get('schema') != 'natlang.root-per-action-training-admission/1':
+        raise ValueError('unsupported root per-action admission schema')
+    review_rel, review_hash = approval.get('review_path'), approval.get('review_sha256')
+    if not isinstance(review_rel, str) or Path(review_rel).is_absolute() or not isinstance(review_hash, str):
+        raise ValueError('root per-action approval lacks a repository-relative review pin')
+    review_path = (root / review_rel).resolve()
+    if not review_path.is_relative_to(root.resolve()) or not review_path.is_file() or sha(review_path) != review_hash:
+        raise ValueError('root per-action review is missing or mismatched')
+    pins = approval.get('input_pins')
+    if not isinstance(pins, dict) or not pins:
+        raise ValueError('root per-action approval lacks pinned review inputs')
+    for rel, pin in pins.items():
+        path = Path(rel)
+        if path.is_absolute() or not isinstance(pin, dict):
+            raise ValueError('root per-action input pin is malformed')
+        path = (root / path).resolve()
+        if (not path.is_relative_to(root.resolve()) or not path.is_file()
+                or sha(path) != pin.get('sha256') or path.stat().st_size != pin.get('bytes')):
+            raise ValueError(f'root per-action input is missing or mismatched: {rel}')
+    dispositions = {
+        'admit-ordinary-native-action': 'admitted_native_count',
+        'hold-source-required-neuralese-reader-contract': 'held_source_contract_final_count',
+        'hold-ambiguous-source-read-scope': 'held_ambiguous_source_read_scope_count',
+        'reject-action-failed': 'failed_count',
+        'exclude-already-admitted-case01-duplicate': 'already_adopted_count',
+    }
+    seen, counts, admitted = set(), collections.Counter(), {}
+    for row in approval.get('rows', []):
+        ident, decision = row.get('native_id'), row.get('decision')
+        if not isinstance(ident, str) or not ident or ident in seen:
+            raise ValueError(f'root per-action approval has missing/duplicate ID: {ident!r}')
+        seen.add(ident)
+        if decision not in dispositions:
+            raise ValueError(f'unknown root per-action disposition: {decision!r}')
+        is_admitted = decision == 'admit-ordinary-native-action'
+        if not isinstance(row.get('training_admission'), bool) or row['training_admission'] != is_admitted:
+            raise ValueError(f'root per-action flag conflicts with decision: {ident}')
+        counts[decision] += 1
+        if is_admitted:
+            if row.get('split') != 'train':
+                raise ValueError(f'root per-action admission is not train-only: {ident}')
+            admitted[ident] = row
+    if not seen:
+        raise ValueError('root per-action approval has no decision rows')
+    if approval.get('admitted_native_count') != len(admitted):
+        raise ValueError('root per-action admitted count conflicts with rows')
+    for decision, field in dispositions.items():
+        if approval.get(field) != counts[decision]:
+            raise ValueError(f'root per-action disposition count conflicts: {field}')
+    if (approval.get('whole_trajectory_admission') is not False
+            or approval.get('runtime_qualification') is not False
+            or approval.get('active_gpu_inputs_changed') is not False
+            or approval.get('new_world_credit') is not False):
+        raise ValueError('root per-action approval includes an unsupported admission facet')
+    ids = [row.get('id') for row in delta_rows]
+    if len(ids) != len(set(ids)) or set(ids) != set(admitted):
+        raise ValueError('delta native IDs do not equal root-admitted per-action IDs exactly')
+    return admitted
+
 def receipt_artifact(receipt, name):
     for entry in receipt.get('files', {}).values():
         if entry.get('path') and entry.get('sha256') and entry.get('path').endswith(name):
@@ -223,6 +284,7 @@ def main():
         if base_receipt.get('pieces_sha256') != sha(paths['base-native-pieces']):
             raise ValueError('base root receipt does not bind the native piece prefix hash')
     root_action_admission = approval.get('schema') == 'natlang.root-selected-action-admission/1'
+    root_per_action_admission = approval.get('schema') == 'natlang.root-per-action-training-admission/1'
     if root_action_admission:
         if args.approval_id_field != 'approved_row_ids':
             raise ValueError('root action admission uses its fixed rows schema')
@@ -251,6 +313,9 @@ def main():
                     approval.get('integration', {}).get('active_GPU_inputs_changed') is not False)):
             raise ValueError('root action receipt does not describe exact native SFT-only admission')
         approval_by_id = {entry['native_id']: entry for entry in approval_rows}
+    elif root_per_action_admission:
+        approval_by_id = validate_root_per_action_approval(approval, list(rows(paths['delta-native'])))
+        approved = list(approval_by_id)
     else:
         approved = approval.get(args.approval_id_field)
         approval_by_id = {}
@@ -262,13 +327,13 @@ def main():
     for raw, expected in artifact_hashes.items():
         bound = (ROOT / raw).resolve()
         if not bound.is_file() or sha(bound) != expected: raise ValueError(f'approval artifact missing/hash mismatch: {raw}')
+    native_only = root_action_admission or root_per_action_admission
     base_n = list(rows(paths['base-native'])); base_r = list(rows(paths['base-recurrence']))
     delta_n = list(rows(paths['delta-native']))
-    delta_recs = [] if root_action_admission and args.delta_recurrence is None else list(rows(delta_r))
+    delta_recs = [] if native_only and args.delta_recurrence is None else list(rows(delta_r))
     ids = [r['id'] for r in delta_n]
     if set(ids) != set(approved) or len(ids) != len(approved):
         raise ValueError('delta native IDs do not equal approved IDs exactly')
-    native_only = root_action_admission
     rids = [r['id'] for r in delta_recs]
     if native_only:
         if delta_recs:
@@ -280,19 +345,25 @@ def main():
     admitted_delta = []
     for row in delta_n:
         row = dict(row)
-        if root_action_admission:
+        if root_action_admission or root_per_action_admission:
             decision = approval_by_id[row['id']]
             if target_digest(row) != decision.get('target_sha256'):
                 raise ValueError(f'root admission target digest mismatch: {row["id"]}')
             decision_groups = decision.get('source_groups')
             if decision_groups is None and isinstance(decision.get('source_group'), str):
                 decision_groups = [decision['source_group']]
-            if (row.get('split') != decision.get('split') or not isinstance(decision_groups, list) or
-                    not decision_groups or decision_groups != (row.get('source_groups') or [])):
+            groups_match = (isinstance(decision_groups, list) and bool(decision_groups)
+                            and (decision_groups == (row.get('source_groups') or [])
+                                 if root_action_admission else
+                                 set(decision_groups).issubset(set(row.get('source_groups') or []))))
+            if row.get('split') != decision.get('split') or not groups_match:
                 raise ValueError(f'root admission source split/group mismatch: {row["id"]}')
             row['training_admission'] = {
-                'approved': True, 'kind': 'root-selected-native-action-sft-only',
-                'status': 'admitted-exact-selected-native-action',
+                'approved': True,
+                'kind': ('root-per-action-native-action-sft-only' if root_per_action_admission
+                         else 'root-selected-native-action-sft-only'),
+                'status': 'admitted-ordinary-native-action' if root_per_action_admission
+                          else 'admitted-exact-selected-native-action',
                 'root_admission_sha256': sha(paths['approval']),
                 'decision': decision['decision'], 'role': decision.get('role')}
             row['decision'] = {**(row.get('decision') or {}), 'training_approved': True,
@@ -339,7 +410,9 @@ def main():
           'status': 'compact delta only; separate root integration review required',
           'compact_only': True,
           'approval': {'path': str(paths['approval'].resolve()), 'sha256': sha(paths['approval']),
-                       'id_field': args.approval_id_field, 'approved_ids': approved},
+                       'id_field': ('rows.native_id where decision=admit-ordinary-native-action and training_admission=true'
+                                    if root_per_action_admission else args.approval_id_field),
+                       'approved_ids': approved},
           'admitted_facets': {'native': True, 'recurrence': False, 'native_only_receipt': native_only},
           'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
                      for k,v in {**paths, 'delta-recurrence': delta_r}.items() if k != 'out'},
@@ -401,7 +474,9 @@ def main():
       'schema': 'natlang.approved-neuralese-cohort-assembly-proposal/1',
       'status': 'proposal-only; separate root publication/admission review required',
       'approval': {'path': str(paths['approval'].resolve()), 'sha256': sha(paths['approval']),
-                   'id_field': args.approval_id_field, 'approved_ids': approved},
+                   'id_field': ('rows.native_id where decision=admit-ordinary-native-action and training_admission=true'
+                                if root_per_action_admission else args.approval_id_field),
+                   'approved_ids': approved},
       'admitted_facets': {'native': True, 'recurrence': not native_only,
                           'native_only_receipt': native_only},
       'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}

@@ -702,7 +702,8 @@ def main():
                     "source_text_prefix_bytes": args.base_text.stat().st_size,
                     "delta_source_run": str(args.delta_records.parent),
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
-                    "delta_root_action_admission_overlay_records": len(admission_rows) if root_action_admission else 0,
+                    "delta_root_action_admission_overlay_records": len(admission_rows)
+                    if (root_action_admission or root_per_action_admission) else 0,
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "delta_authenticated_provider_context_only_blocks": len(provider_context_bindings),
                     "provider_context_bindings_sha256": sha(context_binding_bytes),
