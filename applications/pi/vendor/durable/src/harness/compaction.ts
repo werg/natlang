@@ -252,7 +252,11 @@ export async function createCompaction(
  * that entry: an entry whose contribution starts with a user or assistant message, never a tool result, and never a
  * user entry that a result of the preceding assistant's calls still follows.
  */
-export function selectCut(view: ContextView, keepRecentTokens: number): number | undefined {
+export function selectCut(
+	view: ContextView,
+	keepRecentTokens: number,
+	estimate: MessageEstimator = estimateMessageTokens,
+): number | undefined {
 	const { contributions } = view;
 	const start = view.head === undefined ? 0 : 1;
 	const candidates: number[] = [];
@@ -262,7 +266,7 @@ export function selectCut(view: ContextView, keepRecentTokens: number): number |
 	let kept = 0;
 	let cut: number | undefined;
 	for (let index = contributions.length - 1; index >= start; index--) {
-		for (const message of contributions[index]!) kept += estimateMessageTokens(message);
+		for (const message of contributions[index]!) kept += estimate(message);
 		if (kept < keepRecentTokens) continue;
 		cut = candidates.find((candidate) => candidate >= index) ?? candidates.at(-1);
 		break;
@@ -299,12 +303,19 @@ export function summarizedMessages(view: ContextView, cut: number): Message[] {
 	return orderToolResults(view.contributions.slice(0, cut).flat());
 }
 
+/** One message's token estimate: pi-ai's `estimateMessageTokens` unless a host supplies its own. */
+export type MessageEstimator = (message: Message) => number;
+
 /**
  * Size of a request over `view` followed by `extra` (spec §8.3): the usage of the newest assistant appended after the
  * head marker, whose request included the marker, plus estimates of the messages after it; without one, estimates of
  * every message.
  */
-export function estimateContext(view: ContextView, extra: readonly Message[]): number {
+export function estimateContext(
+	view: ContextView,
+	extra: readonly Message[],
+	estimate: MessageEstimator = estimateMessageTokens,
+): number {
 	let measured: AssistantMessage | undefined;
 	const after = view.head?.id ?? Number.NEGATIVE_INFINITY;
 	for (let index = view.entries.length - 1; index >= 0 && measured === undefined; index--) {
@@ -316,8 +327,8 @@ export function estimateContext(view: ContextView, extra: readonly Message[]): n
 	}
 	const from = measured === undefined ? 0 : view.messages.lastIndexOf(measured) + 1;
 	let tokens = measured === undefined ? 0 : calculateContextTokens(measured.usage);
-	for (const message of view.messages.slice(from)) tokens += estimateMessageTokens(message);
-	for (const message of extra) tokens += estimateMessageTokens(message);
+	for (const message of view.messages.slice(from)) tokens += estimate(message);
+	for (const message of extra) tokens += estimate(message);
 	return tokens;
 }
 

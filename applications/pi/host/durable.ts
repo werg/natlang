@@ -51,8 +51,15 @@ const piView = (view: ContextView): never => ({ ...view, head: view.head ?? unde
 /** What one phase invocation shares between its services: a failure after which it may commit nothing more. */
 export type PhaseState = { failed?: string };
 
-export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent, phase: PhaseState = {}) {
+/**
+ * `estimateTokens`: the port's one estimate of messages' tokens (the ai service's `estimateTokens`, which counts a
+ * Neuralese block at its real length); pi-durable's estimate goes through it, one message at a time. Without it,
+ * pi-ai's `estimateMessageTokens`.
+ */
+export function durableService(runtime: Runtime, context: Context, host: DurableHost, agent: PiAgent, phase: PhaseState = {},
+    estimateTokens?: (messages: Message[]) => number[]) {
   const conversationId = runtime.conversationId;
+  const estimateMessage = estimateTokens && ((message: Message) => estimateTokens([message])[0]!);
   const scope: ApplyScope = { taskId: runtime.taskId, conversationId, now: () => runtime.now() };
   return {
     // A hook handler runs once per phase, as in pi: an executor that calls it again (a re-run eval) gets the earlier
@@ -68,8 +75,8 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
       const planned = planSystemEntries(piView(view), new Map(desired.map(section => [section.key, section.text])), tools as never, now);
       return plain(planned.map(draft => ({ message: draft.model![0], ...(draft.edits?.length ? { edits: draft.edits } : {}) })));
     },
-    /** pi-durable's estimateContext; the crisp side of harness/estimate. */
-    estimate(view: ContextView, extra: Message[]): number { return estimateContext(piView(view), extra as never); },
+    /** pi-durable's estimateContext over the port's per-message estimate; the crisp side of harness/estimate. */
+    estimate(view: ContextView, extra: Message[]): number { return estimateContext(piView(view), extra as never, estimateMessage); },
     implementation(point: 'context' | 'scheduler' | 'admission' | 'planning') { return host.implementation(point); },
     async entry(id: number): Promise<EntryRecord | null> { return plain(await runtime.entry(id as EntryId, context)) as EntryRecord ?? null; },
     async task(id: number): Promise<TaskRecord | null> { return plain(await runtime.getTask(id as TaskId, context)) as unknown as TaskRecord ?? null; },
@@ -156,7 +163,10 @@ export const DURABLE_DECLARATION = `/**
 export function view(at?: number): Promise<ContextView>;
 /** pi-durable's system-entry plan (what harness/planSystem computes when planning is crisp). */
 export function planSystem(view: ContextView, desired: { key: string, text: string }[], tools: AgentTool[], now: number): { message: SystemMessage, edits?: ContextEdit[] }[];
-/** pi-durable's context estimate (what harness/estimate computes when planning is crisp). */
+/**
+ * pi-durable's context estimate (what harness/estimate computes when planning is crisp), each message estimated as
+ * ai.estimateTokens does: it throws neuralese-unknown-block-length for a block whose length ai.blockMeta has not made known.
+ */
 export function estimate(view: ContextView, extra: Message[]): number;
 /** The raw active range through at: the newest head marker (null when none) and every entry from its head through at. */
 export function scan(at?: number): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;

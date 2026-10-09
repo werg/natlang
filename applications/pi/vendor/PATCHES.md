@@ -53,3 +53,9 @@ Changes, each kept minimal:
 4. `src/harness/events.ts` `messageChanges`: a content block that is neither text, thinking nor a tool call (pi's
    Neuralese block reference, streamed by the natlang provider) is reported as `{ type: "block" }` instead of being
    labelled `toolcall_start`.
+
+5. One estimate of a message's tokens for the port (Neuralese blocks at their real length): `harness/compaction.ts`
+   exports `MessageEstimator`, and `estimateContext` and `selectCut` take an optional per-message estimator (default
+   pi-ai's `estimateMessageTokens`, so pi-durable's own behavior is unchanged). The port's `durable.estimate`
+   (host/durable.ts) passes the ai service's `estimateTokens`, which counts a block as its length from the runtime's
+   Neuralese store instead of as an image or nothing.

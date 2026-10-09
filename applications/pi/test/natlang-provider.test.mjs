@@ -31,7 +31,7 @@ before(async () => {
   if (!result.ok) throw new Error(natlang.formatDiagnostics(result.diagnostics));
   const load = path => import(pathToFileURL(join(outDir, path)).href);
   m = { natlang, provider: await load('host/natlang-provider.js'), main: await load('main.js'), ai: await import('@earendil-works/pi-ai'),
-    aiHost: await load('host/ai.js'), chord: await import('@earendil-works/chord/context') };
+    aiHost: await load('host/ai.js'), durableHost: await load('host/durable.js'), chord: await import('@earendil-works/chord/context') };
   server = createServer((request, response) => {
     let data = '';
     request.on('data', chunk => { data += chunk; });
@@ -190,6 +190,28 @@ test('a token estimate counts each Neuralese block at its real length, from the 
   assert.equal(both - none, 20);
   // The part stays a pure reference: the length is never written into it.
   assert.deepEqual(blockMessage([short]).content[1], { type: 'neuralese', id: short });
+});
+
+test('the crisp context estimate (pi-durable\'s, through durable.estimate) counts blocks as ai.estimateTokens does', async () => {
+  const { models } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const [short, long] = [await storedBlock(store, 3), await storedBlock(store, 17, 2)];
+  const ai = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
+  const runtime = { conversationId: 1, taskId: 1, now: () => 0 };
+  const durable = m.durableHost.durableService(runtime, m.chord.BACKGROUND_CONTEXT, {}, {}, {}, ai.estimateTokens);
+  const piDurable = m.durableHost.durableService(runtime, m.chord.BACKGROUND_CONTEXT, {}, {}, {});
+  const view = messages => ({ head: null, entries: [], contributions: [], messages, sections: [], tools: [] });
+  const text = blockMessage([]);
+  // Crisp: the text estimate plus each block's real length, in the view and in extra alike.
+  assert.equal(durable.estimate(view([blockMessage([short, long])]), []), durable.estimate(view([text]), []) + 20);
+  assert.equal(durable.estimate(view([text]), [blockMessage([long])]), 2 * durable.estimate(view([text]), []) + 17);
+  assert.equal(durable.estimate(view([blockMessage([short])]), []), ai.estimateTokens([blockMessage([short])])[0]);
+  // An image part is pi-ai's estimate, unchanged.
+  const image = { role: 'user', content: [{ type: 'text', text: 'see' }, { type: 'image', data: 'AAAA', mimeType: 'image/png' }], timestamp: 1 };
+  assert.equal(durable.estimate(view([image]), []), piDurable.estimate(view([image]), []));
+  assert.ok(durable.estimate(view([image]), []) > 1000);
+  // A block the store does not know fails the estimate, naming it, instead of counting as an image.
+  assert.throws(() => durable.estimate(view([blockMessage([BLOCK])]), []), /^Error: neuralese-unknown-block-length: /);
 });
 
 test('metadata the store lacks is fetched once from the agent model\'s server and kept in the store', async () => {
