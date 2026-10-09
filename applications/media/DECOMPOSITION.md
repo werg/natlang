@@ -1,6 +1,6 @@
 # Media: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented 2026-10-09 on the owner's instruction to finish everything; review after the fact (plans/OWNER_REVIEW.md). "As built" at the end records where the build differs from or settles this draft.
 
 `transform` (`index.ts:171-196`) probes a clip, lets natural language choose one plan, renders it with FFmpeg,
 inspects the result, lets natural language assess intent, and derives the final status from exact checks. The
@@ -178,12 +178,33 @@ the technical failure (`index.ts:195`).
 6. **Drop `output_sha256` and file names from the model-visible inspection.** The assessment sees observed values
    only. Measure that assessments do not lose evidence.
 
-## Questions for the owner
+## Questions for the owner, as resolved in the build
 
-1. `Plan` has no codec or container field, and `render` always encodes with libx264 (`index.ts:129`). "Transcode
-   to WebM" has no representation. Add `container` and `video_codec` to the plan (a closed set the service
-   supports), or keep transcode as re-encode only?
-2. The 0.16 s duration tolerance (`index.ts:189`) is a measured encoder property. Keep it as a named setting
-   beside the FFmpeg preset?
-3. Should `VisionInspector` become a natural-language function once the runtime passes images? The call is already
-   recorded as an event (`index.ts:158`).
+1. **Codec and container: added.** `Plan` has `container` (`mp4`, `mkv`, `webm`, `mov`) and `video_codec` (`h264`,
+   `h265`, `vp9`, `av1`), the closed set `MEDIA_CONTAINERS` / `MEDIA_ENCODERS` in `index.ts` supports. Audio codec follows
+   the container (aac; libopus for webm). The service forces the muxer with `-f`, and `checkPlan` requires that the
+   container holds the codec and that the output name carries the container's extension. Plans of the other operations get
+   the container of the output name and its usual codec, so `trim` to `out.webm` encodes VP9 instead of failing. A plan given to
+   `render` without the two fields gets the same defaults (older callers keep working). The technical check also compares the
+   probed codec name with the planned encoder's.
+2. **Duration tolerance: a named setting.** `DURATION_TOLERANCE_SECONDS` (0.16) is the default of the `durationTolerance`
+   option of `MediaWorkspace`; the FFmpeg output cap is the `maxOutput` option (8192) beside `timeoutMs`.
+3. **`VisionInspector` stays a service callback** until the runtime passes images to a model.
+
+## As built
+
+- Files: `chooseOperation.nl`, `planTrim.nl`, `planCrop.nl`, `planScale.nl`, `planTranscode.nl`, `keepAudio.nl`,
+  `needsPicture.nl`, `assessIntent.nl`; `choose.nl` and `assess.nl` are gone. The note read is the runtime built-in
+  `readNote` (`ts-host/src/builtin/readNote.nl`, `builtin('readNote')` exported from `@natlang/node`), shared with the
+  other apps.
+- `transform` = probe, `planRequest` (stages, `assemblePlan`, `checkPlan`, one retry), `render`, `inspect`, then the
+  semantic stages only when the exact checks passed. A failed or unsupported render costs no assessment call.
+- The retry goes to the parameter function with `problem` (the text of `checkPlan`). Problems about the output name
+  (a non-transcode operation) do not return to a stage: no stage can change the name. Even width and height for crop and
+  scale (the yuv420p format) are part of `checkPlan`, so an odd size returns to the stage instead of failing in FFmpeg.
+- Stages read `SourceFacts`, `PlanFacts` and `Observed` (measurements and parameters), and the request text; file names and
+  hashes are not model-visible.
+- The `Is<...>` candidates for the plan are exact rules over the source clip, so they are `checkPlan` (with its problem
+  text as the teaching error) rather than value-only refinement types, which cannot see the source. `intent_met` false on a
+  failed inspection and the crop-review rule are crisp in `transform`. Only the sidecar note (file content) is
+  `Untrusted<string>`; the request text is the user's own instruction and stays a plain string.
