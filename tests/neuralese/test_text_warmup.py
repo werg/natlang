@@ -12,10 +12,12 @@ from natlang_neuralese.train.text_warmup import (
     projection_losses,
     alignment_region_metrics,
     objective_metric_scalars,
+    projection_errors,
     text_supervision_policy,
     warmup_display_labels,
     display_update_flags,
     _alignment_qualification_pass_depth,
+    mapped_completions,
 )
 from natlang_neuralese.train.checkpoint_safety import (
     CheckpointDiskReserve,
@@ -80,12 +82,7 @@ def test_alignment_qualification_uses_plateaued_two_pass_map_objective():
 def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     def packet(tokens, close_targets, *, close_probability, close_top1, premature):
         values={key:torch.tensor(float(index + 1),requires_grad=True)
-                for index,key in enumerate((
-                    'ce','text_ce','ce_delta','relative_mse','input_map_mse',
-                    'text_embedding_mse','embedding_mse_delta','text_argmax_agreement',
-                    'gold_accuracy','close_targets','close_probability','close_top1',
-                    'premature_close_top1','supervised_ce','supervised_embedding_mse',
-                    'supervised_input_map_mse'))}
+                for index,key in enumerate(objective_metric_scalars())}
         values.update(close_targets=torch.tensor(float(close_targets)),
                       close_probability=torch.tensor(close_probability),
                       close_top1=torch.tensor(close_top1),
@@ -107,7 +104,7 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     assert result[1]['close_top1']==0.
     assert result[1]['premature_close_top1']==0.
     assert result[0]['ce']==1.
-    assert result[1]['supervised_input_map_mse']==16.
+    assert result[1]['supervised_input_map_mse']==18.
     expected=0.
     for loss in losses:
         expected+=float(loss.detach())/2
@@ -289,8 +286,11 @@ def test_projection_bootstrap_trains_both_maps_with_frozen_transformer():
     from natlang_neuralese.model.input_map import NeuraleseInputMap
     heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
     first=next(mapped_completions(backbone,heads,prefix,span,passes=1))
-    full,shallow=projection_losses(heads,first['top'],first['sketches'],backbone.embed(span))
-    (full+shallow).backward()
+    # The secondary map learns the detached full-projection target produced at
+    # the same gold-history positions; the full projection remains gold-anchored.
+    full,shallow=projection_errors(heads,first['top'],first['sketches'],
+        backbone.embed(span).detach(),secondary_target=first['secondary_target'])
+    (full.mean()+shallow.mean()).backward()
     assert heads.input_map.up.weight.grad.abs().sum()>0
     assert heads.content.proj.weight.grad.abs().sum()>0
     assert all(p.grad is None for p in backbone.hf.parameters())
@@ -379,13 +379,13 @@ def test_main_scores_final_positions_with_full_history_without_training_regions(
         '--batch','1','--eval-batch','1','--held-documents','1','--eval-every','1',
         '--checkpoint-every','1','--optimizer','adamw','--backbone-training','full'])
     baseline=json.loads((out/'baseline.json').read_text())
-    for index in range(3):
+    for index in range(2):
         key=f'pass-{index}-length-long-start'
         assert baseline['strata'][key]['tokens']==301  # all text plus its real close marker
         assert baseline['strata'][key+'-last256']['tokens']==256
     assert baseline['boundary_supervision']['close_targets']==1
-    assert baseline['projection_held_errors']['shallow']==pytest.approx(
-        baseline['strata']['pass-0-length-long-start']['sketch_mse'])
+    assert baseline['projection_held_errors']['input_map']==pytest.approx(
+        baseline['strata']['pass-0-length-long-start']['input_map_mse'])
     trained=json.loads((out/'train.jsonl').read_text().splitlines()[0])
     assert all('regions' not in row for row in trained['pass_metrics'])
 
@@ -532,6 +532,32 @@ def test_balanced_suffix_weights_and_exact_weighted_readout_gradients():
     torch.testing.assert_close(model.weight.grad,other.weight.grad)
     torch.testing.assert_close(model.bias.grad,other.bias.grad)
 
+
+def test_ar_consumer_weights_keep_first_wrong_decision_and_zero_later_gradients():
+    from natlang_neuralese.train.text_warmup import consumer_position_weights
+    from natlang_neuralese.train.execution import causal_gold_prefix_mask
+    targets=torch.tensor([[1,2,3,4]])
+    generated=torch.tensor([[1,8,3,4]])
+    original=torch.tensor([[.5,.5,1.5,1.5]])
+    weights=consumer_position_weights(original,causal_gold_prefix_mask(generated,targets))
+    torch.testing.assert_close(weights,torch.tensor([[2.,2.,0.,0.]]))
+    model=TinyReadout(torch.randn(9,4),torch.randn(9))
+    states=torch.randn(1,4,4,requires_grad=True)
+    ce,weighted,*_=chunked_readout(model,states,targets,2,chunk_size=3,position_weights=weights)
+    full=torch.nn.functional.cross_entropy(model.logits(states).reshape(-1,9),targets.reshape(-1),reduction='none')
+    torch.testing.assert_close(ce,full.mean())
+    torch.testing.assert_close(weighted,full[:2].mean())
+    weighted.backward()
+    assert states.grad[:,:2].abs().sum()>0
+    assert states.grad[:,2:].count_nonzero()==0
+    assert consumer_position_weights(original) is original
+
+
+def test_ar_consumer_weights_reject_empty_supervision():
+    from natlang_neuralese.train.text_warmup import consumer_position_weights
+    with pytest.raises(ValueError,match='positive finite'):
+        consumer_position_weights(torch.ones(1,3),torch.zeros(1,3,dtype=torch.bool))
+
 def test_suffix_coordinates_survive_real_document_windowing():
     from natlang_neuralese.train.text_warmup import document_windows
     windows=document_windows(range(18),open_id=40,close_id=41,tokens=10,prefix_tokens=3,supervised_suffix_start=12)
@@ -661,9 +687,16 @@ def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_traina
     assert first['top'].shape==span.shape+(backbone.embedding_weight.shape[1],)
     assert first['producer_payloads'].shape==first['top'].shape
     assert not first['producer_payloads'].requires_grad
+    from natlang_neuralese.train.execution import causal_gold_prefix_mask
+    assert first['producer_predictions'].shape==span.shape
+    torch.testing.assert_close(first['gold_prefix_mask'],
+        causal_gold_prefix_mask(first['producer_predictions'],span))
+    assert first['gold_prefix_mask'][0,0]
+    assert 'gold_prefix_mask' not in controls[0]
     # Producer inputs are generated only from prefix and prior projected values;
     # changing gold targets cannot alter the self-fed history or its consumer.
     torch.testing.assert_close(first['producer_payloads'],second['producer_payloads'],atol=0,rtol=0)
+    torch.testing.assert_close(first['producer_predictions'],second['producer_predictions'],atol=0,rtol=0)
     torch.testing.assert_close(first['top'],second['top'],atol=0,rtol=0)
 
     _,ce,_,_,_=chunked_readout(backbone,first['top'],span,19,chunk_size=2)
@@ -758,14 +791,22 @@ def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkey
     import json
     from natlang_neuralese.train import text_warmup
     module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
-    atomic=module.atomic_checkpoint
+    from natlang_neuralese.train import trajectory_state
+    atomic=trajectory_state.atomic_checkpoint
     checkpoint_steps=[];export_steps=[]
     def record(path,state):
         name=pathlib.Path(path).name
+        result=atomic(path,state)
         if name=='checkpoint.pt':checkpoint_steps.append(state['step'])
         if name=='heads.pt':export_steps.append(state['warmup']['step'])
-        return atomic(path,state)
+        return result
     import pathlib
+    # Observe the immutable CPU snapshots at the shared persistence boundary;
+    # the writer may run asynchronously, so patching text_warmup's imported
+    # symbol does not observe checkpoint.pt writes.
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',record)
+    # Serving exports use text_warmup's direct atomic helper; checkpoint.pt
+    # writes use the shared writer's helper above.
     monkeypatch.setattr(module,'atomic_checkpoint',record)
     module.main(args)
     assert checkpoint_steps==[0,2,3]
@@ -829,6 +870,7 @@ def test_pre_optimizer_failure_checkpoints_last_commit_and_replays_attempt_rng(t
     import copy,hashlib,random
     from natlang_neuralese.train import text_warmup
     module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    args[args.index('--checkpoint-every')+1]='1'
     original_clip=module.clip_finite_gradients;clip_count=0
     def fail_third_clip(parameters):
         nonlocal clip_count
@@ -847,13 +889,15 @@ def test_pre_optimizer_failure_checkpoints_last_commit_and_replays_attempt_rng(t
         value=original_randrange(*values);sampled.append(value);return value
     monkeypatch.setattr(random,'randrange',capture_randrange)
 
-    atomic=module.atomic_checkpoint;committed_state={}
+    from natlang_neuralese.train import trajectory_state
+    atomic=trajectory_state.atomic_checkpoint;committed_state={}
     def capture_atomic(path,state):
+        result=atomic(path,state)
         if pathlib.Path(path).name=='checkpoint.pt' and state.get('step')==2 and 'step2' not in committed_state:
             committed_state['step2']=copy.deepcopy(state)
-        return atomic(path,state)
+        return result
     import pathlib
-    monkeypatch.setattr(module,'atomic_checkpoint',capture_atomic)
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',capture_atomic)
     with pytest.raises(RuntimeError,match='injected failure after backward'):
         module.main(args)
     assert 'step2' in committed_state
@@ -896,6 +940,7 @@ def test_optimizer_step_exception_never_writes_a_safe_emergency_checkpoint(tmp_p
     import torch.optim
     from natlang_neuralese.train import text_warmup
     module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    args[args.index('--checkpoint-every')+1]='1'
     original_adamw=torch.optim.AdamW
     class PartiallyFailingAdamW(original_adamw):
         calls=0
@@ -908,22 +953,26 @@ def test_optimizer_step_exception_never_writes_a_safe_emergency_checkpoint(tmp_p
             return super().step(closure)
     monkeypatch.setattr(torch.optim,'AdamW',PartiallyFailingAdamW)
     checkpoint=tmp_path/'run'/'checkpoint.pt'
-    pre_failure_hash=None
+    from natlang_neuralese.train import trajectory_state
+    committed_hashes=[]
+    atomic=trajectory_state.atomic_checkpoint
+    def capture_committed(path,state):
+        result=atomic(path,state)
+        if pathlib.Path(path).name=='checkpoint.pt':
+            committed_hashes.append((state['step'],hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()))
+        return result
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',capture_committed)
     original_step=PartiallyFailingAdamW.step
     # Capture the last valid disk checkpoint immediately before the mutating failure.
     def step(self,closure=None):
-        nonlocal pre_failure_hash
-        if type(self).calls==2:
-            # checkpoint-every=2 writes step two after its optimizer update.
-            pass
-        if type(self).calls==2 and checkpoint.exists():
-            pre_failure_hash=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        # A periodic async write may still be pending here. The test compares
+        # against the last completed atomic commit after the failure drains it.
         return original_step(self,closure)
     monkeypatch.setattr(PartiallyFailingAdamW,'step',step)
     with pytest.raises(RuntimeError,match='injected partial optimizer mutation'):
         module.main(args)
-    assert pre_failure_hash is not None
-    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest()==pre_failure_hash
+    assert committed_hashes[-1][0]==2
+    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest()==committed_hashes[-1][1]
     saved=torch.load(checkpoint,weights_only=False)
     assert saved['step']==2 and 'emergency_recovery' not in saved
     # Live memory may be partially mutated; the persisted older checkpoint is the only safe resume point.
@@ -1145,12 +1194,13 @@ def test_failed_postcommit_emergency_save_reports_unsafe_and_exits_nonzero(tmp_p
             raise OSError(errno.ENOSPC,'injected telemetry disk full')
         return original_open(path,*open_args,**kwargs)
     monkeypatch.setattr(Path,'open',fail_telemetry)
-    atomic=module.atomic_checkpoint
+    from natlang_neuralese.train import trajectory_state
+    atomic=trajectory_state.atomic_checkpoint
     def fail_emergency(path,state):
         if 'emergency_recovery' in state:
             raise OSError('injected emergency checkpoint failure')
         return atomic(path,state)
-    monkeypatch.setattr(module,'atomic_checkpoint',fail_emergency)
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',fail_emergency)
 
     with pytest.raises(RuntimeError,match='emergency checkpoint could not be saved'):
         module.main(args)
@@ -1385,7 +1435,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     assert 'shallow' not in evals[-1]['projection_held_errors']
     identity=json.loads((run/'plan.json').read_text())['identity']
     assert identity['supervision_policy']['objectives']==[
-        'full_projection','sketch_projection','next_token_ce']
+        'full_projection','input_map_self_consistency','next_token_ce']
     assert identity['display']['secondary_objective']=='neuralese_input_map_self_consistency'
     assert identity['display']['secondary_head']=='heads.input_map'
     assert all(r['updates'].get('input_map') for r in rows)
@@ -1410,10 +1460,13 @@ def test_input_map_reports_name_the_actual_secondary_projection():
     assert metrics[0]['supervised_input_map_mse']==1.
     assert 'sketch_mse' not in metrics[0]
     policy=text_supervision_policy()
-    assert policy['objectives']==['full_projection','sketch_projection','next_token_ce']
+    assert policy['objectives']==[
+        'full_projection','input_map_self_consistency','next_token_ce']
     assert warmup_display_labels()['secondary_head']=='heads.input_map'
     assert display_update_flags({'backbone': True, 'input_map': True}) == {
         'backbone': True, 'input_map': True}
+    with pytest.raises(ValueError,match='conflicting input-map update metadata'):
+        display_update_flags({'sketch':True,'input_map':False})
 
 
 def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_map():
@@ -1443,7 +1496,7 @@ def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_ma
     torch.testing.assert_close(matched['sketches'],expected,atol=0,rtol=0)
     assert not torch.equal(matched['sketches'],objective_completion['sketches'])
     policy=text_supervision_policy()
-    assert policy['objectives'][1]=='sketch_projection'
+    assert policy['objectives'][1]=='input_map_self_consistency'
     labels=warmup_display_labels()
     assert labels['secondary_objective']=='neuralese_input_map_self_consistency'
     assert labels['secondary_head']=='heads.input_map'
@@ -1466,7 +1519,7 @@ def test_input_map_self_consistency_does_not_replace_full_projection_gold_target
     assert all(p.grad is None for p in backbone.hf.parameters())
 
 
-def test_sketch_checkpoint_continues_into_input_map_with_frozen_head_preserved(tmp_path,monkeypatch):
+def test_mapped_checkpoint_continues_into_ar_feedback_with_full_state_preserved(tmp_path,monkeypatch,capsys):
     import json
     module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=4)
     args[args.index('--eval-every')+1]='1'
@@ -1474,20 +1527,55 @@ def test_sketch_checkpoint_continues_into_input_map_with_frozen_head_preserved(t
     module.main(args)
     parent_path=tmp_path/'run'/'checkpoint.pt'
     parent=torch.load(parent_path,weights_only=False)
-    assert any(n.startswith('heads.feedback.') for n in parent['student_parameters'])
+    assert any(n.startswith('heads.input_map.') for n in parent['student_parameters'])
+    assert any(n.startswith('input_map.') for n in parent['heads'])
     assert parent['schedule']['adaptation_started_eval'] is not None
     continued_args=list(args)
     continued_args[continued_args.index('--out')+1]=str(tmp_path/'mapped')
     continued_args[continued_args.index('--steps')+1]='5'
-    continued_args+=['--continue-from',str(parent_path),
-                     '--input-map-kernel','2','--input-map-rank','4']
+    continued_args+=['--continue-from',str(parent_path),'--ar-feedback-fixup']
     module.main(continued_args)
     child=torch.load(tmp_path/'mapped'/'checkpoint.pt',weights_only=False)
     assert child['step']==5
     first=json.loads((tmp_path/'mapped'/'train.jsonl').read_text().splitlines()[0])
-    assert first['phase']=='projection_only' and first['backbone_gradient_norm']==0
+    assert first['phase']=='whole_transformer_adaptation'
     assert child['identity']['text_history']!=parent['identity']['text_history']
-    for name,value in parent['heads'].items():
-        if name.startswith('feedback.'):
-            torch.testing.assert_close(child['heads'][name],value,atol=0,rtol=0)
+    output=capsys.readouterr().out
+    assert '"event": "optimizer_state_restored"' in output
+    assert '"event": "optimizer_state_fresh"' not in output
+    assert '"event": "foundation_schedule_restored"' in output
     assert any(n.startswith('heads.input_map.') for n in child['student_parameters'])
+    assert child['step']==5 and child['optimizer'] and parent['optimizer']
+    parent_optimizer=parent['optimizer'];child_optimizer=child['optimizer']
+    assert len(parent_optimizer['param_groups'])==len(child_optimizer['param_groups'])
+    for old_group,new_group in zip(parent_optimizer['param_groups'],child_optimizer['param_groups']):
+        assert old_group['params']==new_group['params']
+        assert {k:v for k,v in old_group.items() if k!='lr'}=={
+            k:v for k,v in new_group.items() if k!='lr'}
+    assert set(parent_optimizer['state']) <= set(child_optimizer['state'])
+    progressed=False
+    moment_changed=False
+    for parameter_id,parent_state in parent_optimizer['state'].items():
+        child_state=child_optimizer['state'][parameter_id]
+        old_step=parent_state['step']
+        new_step=child_state['step']
+        old_step=float(old_step.item() if torch.is_tensor(old_step) else old_step)
+        new_step=float(new_step.item() if torch.is_tensor(new_step) else new_step)
+        if new_step==old_step+1:
+            progressed=True
+            for name in ('exp_avg','exp_avg_sq'):
+                if name in parent_state and not torch.equal(parent_state[name],child_state[name]):
+                    moment_changed=True
+    assert progressed and moment_changed
+    assert child['schedule']['eval_count']==parent['schedule']['eval_count']+1
+    first_metrics=first['pass_metrics']
+    assert len(first_metrics)==2 and first_metrics[1]['pass_index']==1
+    ar_valid=first_metrics[1]['context_valid_gold_tokens']
+    ar_fraction=first_metrics[1]['context_valid_gold_fraction']
+    assert 1<=ar_valid<=first_metrics[1]['tokens']
+    assert ar_fraction==pytest.approx(ar_valid/first_metrics[1]['tokens'])
+    report=json.loads((tmp_path/'mapped'/'report.json').read_text())
+    controls=report['autoregressive_controls']
+    full_target_tokens=sum(row['target_token_count']
+                           for row in controls['input_token_id_fingerprints'])
+    assert controls['scores']['gold']['tokens']==full_target_tokens

@@ -1,6 +1,6 @@
 # Pop current work
 
-Last reviewed: 2026-10-09, checkpoint handoff review. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Last reviewed: 2026-10-09, shared AR supervision correction. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 
 ## Ownership and coordination
 
@@ -10,6 +10,26 @@ Last reviewed: 2026-10-09, checkpoint handoff review. This page is a navigation 
 - Current shared-work ownership: DGX is leading the shared objective/schedule and recipe-launcher consolidation; Pop owns the C++/WASM read-port transport for the reader adapter. Coordinate before editing shared renderer/window helpers. The current Pop map run is frozen and does not include later shared-runtime changes.
 
 ## GPU: full-depth autoregressive foundation continuation
+
+Current state: the AR continuation and paired GPU diagnostics below have
+completed. No GPU trainer is active while the next common-recipe continuation
+is being prepared. The shared causal-prefix supervision and checkpoint tests
+pass79 focused CPU tests. The next continuation
+must use the immutable mapped best23936 pair, not the regressed final24960.
+An abandoned closed repair's empty checkpoint-space reserve was released after
+a privileged host-process check found no FD or job references; receipt is
+`.coordination/closed-anchor-reserve-release-v1.json` (1,435,903,552 bytes).
+Recheck available storage and atomic-save reservation before launch.
+
+Course correction: sharing a repository did not prevent divergent recipes and
+stale sketch assumptions. Pop incorrectly resumed sketch training after the
+mapped-input decision. The sole active text implementation is now the shared
+mapped-input trainer followed by its full-depth AR fixup. The shared
+`causal_gold_prefix_mask` supervises the first differing decision and excludes
+later gold targets from the generated history; gold control and held diagnostics
+retain complete spans. This is a common objective change, not a Pop experiment
+fork. DGX owns the broader text/trajectory objective and optimizer-handoff
+consolidation; that work remains outstanding until its code and tests land.
 
 The superseded sketch-consumer repair is closed and is artifact evidence only;
 its best step3328 is not a qualified source. The preceding Pop job was the mapped-input continuation
@@ -64,7 +84,7 @@ consecutive passes. No transport or recurrence qualification is inherited.
 
 ### Matched AR evaluation
 
-The six-window held-test crisp-versus-projected diagnostic is running as
+The six-window held-test crisp-versus-projected diagnostic completed as
 `luna-ar-matched-source23936-v2`. Its source pair is the frozen step23936 checkpoint/heads; the optimizer
 checkpoint is hash-checked only, while inference loads the paired heads export.
 Selection and source pins are in

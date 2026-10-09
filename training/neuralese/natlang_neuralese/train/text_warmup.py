@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
-from .execution import full_depth_projected_feedback_step, prefill_write_context
+from .execution import causal_gold_prefix_mask, full_depth_projected_feedback_step, prefill_write_context
 from .output_embedding_projection import sha
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
@@ -52,6 +52,7 @@ _OBJECTIVE_METRIC_SCALARS = (
     'text_embedding_mse', 'embedding_mse_delta', 'text_argmax_agreement',
     'gold_accuracy', 'close_targets', 'close_probability', 'close_top1',
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
+    'context_valid_gold_tokens', 'context_valid_gold_fraction',
 )
 
 
@@ -279,7 +280,7 @@ TEXT_POSITION_WEIGHT_POLICY={
 
 def text_supervision_policy():
     return {**TEXT_POSITION_WEIGHT_POLICY,
-            'objectives':['full_projection', 'sketch_projection', 'next_token_ce']}
+            'objectives':['full_projection', 'input_map_self_consistency', 'next_token_ce']}
 
 
 def warmup_display_labels():
@@ -292,7 +293,15 @@ def warmup_display_labels():
 
 
 def display_update_flags(updates):
-    return dict(updates)
+    # Older mapped checkpoints used "sketch" for this same input-map flag.
+    # This is metadata normalization only; no parameter or optimizer state moves.
+    result = dict(updates)
+    if 'sketch' in result:
+        previous = result.pop('sketch')
+        if 'input_map' in result and result['input_map'] != previous:
+            raise ValueError('conflicting input-map update metadata')
+        result['input_map'] = previous
+    return result
 
 
 def balanced_position_weights(span, suffix_starts):
@@ -328,8 +337,9 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
     if chunk_size < 1 or states.shape[1] < 1:
         raise ValueError('positive chunk size and nonempty sequence required')
     if position_weights is None:position_weights=torch.ones_like(targets,dtype=torch.float32)
-    if position_weights.shape!=targets.shape or not torch.isfinite(position_weights).all() or (position_weights<=0).any():
-        raise ValueError("positive finite aligned position weights required")
+    if (position_weights.shape!=targets.shape or not torch.isfinite(position_weights).all()
+            or (position_weights<0).any() or position_weights.sum()<=0):
+        raise ValueError("finite nonnegative aligned position weights with nonzero total required")
     losses=[];weighted_losses=[];predictions=[];close_probabilities=[];token_losses=[]
     needs_grad=gradients and torch.is_grad_enabled() and (
         states.requires_grad or any(p.requires_grad for p in backbone.parameters()))
@@ -446,7 +456,9 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
 
     The producer rolls out ``heads.content`` one position at a time and reads
     each projected payload through every backbone layer. Gold IDs are not fed
-    into this history; they remain fixed targets for the parallel consumer.
+    into this history; they remain fixed targets through its first differing
+    decision. Later gold targets belong to another history and are masked from
+    consumer training, while full-span diagnostic metrics remain available.
     Detaching the producer bounds activation memory and makes this exposure
     objective distinct from full BPTT through the rollout.
     """
@@ -459,7 +471,9 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
         producer = prefill_write_context(backbone, heads, backbone.embed(prefix_ids))
         top, cache = producer.top, producer.cache
         payloads = []
+        predictions = []
         for index in range(span_ids.shape[1]):
+            predictions.append(backbone.logits(top).argmax(-1))
             if index + 1 < span_ids.shape[1]:
                 payload, top, cache = full_depth_projected_feedback_step(
                     backbone, heads, top, cache)
@@ -467,6 +481,7 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
                 payload = heads.content(torch.zeros_like(top), top)
             payloads.append(payload)
         producer_payloads = torch.stack(payloads, dim=1).detach()
+        producer_predictions = torch.stack(predictions, dim=1)
 
     # The final payload predicts the final target (including a real close
     # marker, where present) but is not consumed: no post-target state exists.
@@ -480,7 +495,27 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
             'sketches': heads.input_map(backbone.embed(span_ids)),
             'secondary_target': secondary_target,
             'producer_payloads': producer_payloads,
+            'producer_predictions': producer_predictions,
+            'gold_prefix_mask': causal_gold_prefix_mask(producer_predictions, span_ids),
             'pass_index': 1}
+
+
+def consumer_position_weights(weights, gold_prefix_mask=None):
+    """Preserve relative position weights inside the context-valid prefix.
+
+    The readout and projection objectives reduce by position count. Rescaling
+    retained weights to that count therefore normalizes by valid weighted mass,
+    without shrinking the update merely because a rollout diverged early.
+    """
+    if gold_prefix_mask is None:
+        return weights
+    if gold_prefix_mask.shape != weights.shape or gold_prefix_mask.dtype != torch.bool:
+        raise ValueError('aligned boolean gold prefix mask required')
+    retained = weights * gold_prefix_mask.to(weights.dtype)
+    mass = retained.sum()
+    if not torch.isfinite(mass) or mass <= 0:
+        raise ValueError('context-valid prefix needs positive finite weight mass')
+    return retained * (weights.numel() / mass)
 
 
 def text_history_completions(backbone, heads, prefix_ids, span_ids, *, passes,
@@ -949,7 +984,8 @@ def main(argv=None):
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':('gold-context control then detached sequential full-depth projected-payload history; '
-                              'parallel consumer retains unchanged gold targets' if a.ar_feedback_fixup else
+                              'consumer gold supervision ends after its first differing decision; '
+                              'full-span held metrics remain diagnostic' if a.ar_feedback_fixup else
                               'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'),
               'ar_feedback_handoff_optimizer':'restore when parameter groups match; otherwise record a fresh optimizer with its reason'
                   if a.ar_feedback_fixup else None,
@@ -1182,6 +1218,7 @@ def main(argv=None):
     def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
+        weights=consumer_position_weights(weights,out.get('gold_prefix_mask'))
         ce,training_ce,prediction,close_probability,token_losses=chunked_readout(
             backbone,top,span,backbone.controls.close_id,chunk_size=readout_chunk_tokens,
             gradients=not bootstrap,position_weights=weights)
@@ -1228,6 +1265,9 @@ def main(argv=None):
           'supervised_embedding_mse':supervised_embedding.detach(),
           'supervised_'+secondary_name+'_mse':supervised_secondary.detach()}
         metrics['pass_index']=out['pass_index']
+        mask=out.get('gold_prefix_mask',torch.ones_like(span,dtype=torch.bool))
+        metrics['context_valid_gold_tokens']=mask.sum().detach()
+        metrics['context_valid_gold_fraction']=mask.float().mean().detach()
         if evaluation and span.shape[1]>256:
             with torch.no_grad():
                 tail_top=top[:,-256:]
@@ -1299,7 +1339,7 @@ def main(argv=None):
             except ValueError as error:
                 # The trainable set grew (members' private parts joined): the optimizer starts fresh.
                 print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
-        step=restored['step'];updates=restored['updates']
+        step=restored['step'];updates=display_update_flags(restored['updates'])
         updates.setdefault('full_projection',False)
         if resumed:
             streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
@@ -1734,7 +1774,7 @@ def main(argv=None):
         secondary_norm=gradient_norm(q for n,q in named if n.startswith(secondary_prefix))
         clip_finite_gradients(parameters.values())
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
-                 for k,prefix in [('backbone','backbone.'),('sketch',secondary_prefix),
+                 for k,prefix in [('backbone','backbone.'),('input_map',secondary_prefix),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
