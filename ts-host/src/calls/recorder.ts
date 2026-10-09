@@ -26,6 +26,8 @@ export interface CallStoreLike {
   annotate?(callId: string, kind: string, value: unknown, source?: string, pin?: boolean): void;
   /** Iteration statistics kept with the machine's records, so iterateOn sites learn across processes. */
   iterationStatistics?(): import('../runtime/iterate.js').IterationStatisticsStore;
+  /** Refinement verdicts kept with the machine's records (native/refinement.ts `VerdictCache`). */
+  refinementVerdicts?(): import('../native/refinement.js').VerdictCache;
 }
 
 const reported = new WeakSet<object>();

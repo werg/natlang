@@ -352,7 +352,7 @@ export class NatlangRuntime {
   private refinements?: RefinementChecker;
   /** The checker for `Is<T, P>` slots, with this runtime's settings, crisp checkers and verdict cache. */
   refinementChecker(): RefinementChecker {
-    return this.refinements ??= new RefinementChecker({ settings: this.options.refinements, cache: this.options.refinements?.cache,
+    return this.refinements ??= new RefinementChecker({ settings: this.options.refinements, cache: this.options.refinements?.cache ?? this.callStore()?.refinementVerdicts?.(),
       crisp: this.options.refinements?.crisp });
   }
   /** Loaded compilations of this runtime's store. */

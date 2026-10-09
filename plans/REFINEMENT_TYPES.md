@@ -221,25 +221,28 @@ Choices where this document was open:
 - `refine(value, predicate)` and `assume(value, predicate)` take the predicate as an argument. The type-argument-only
   form `refine<R>(value)` needs the compiler to lower the predicate from `R`.
 
-## Pending integration
+## Follow-up status
 
-Changes that need files another session is editing, each the smallest that completes the design.
+Done after the first push:
 
-1. `native/runtime.ts`, `NativeSession.evaluate` (the `finish: true` path) and `NativeSession.finish`: a result an
-   eval completes skips the in-loop gate (`NativeToolAgent.refinementGate`), because `finish()` is synchronous and
-   commits folder transactions. Today such a result is checked when the call completes (`runtime/kernel.ts`) and a
-   failure is final. To repair it, `evaluate` should await `refinementGate`-style checking before it calls `finish()`
-   and answer a failure like a failed eval.
-2. `native/runtime.ts`, near the `decide` binding (about line 1885): bind `refine` and `assume` in the eval scope (from
-   `runtime/surface.ts`) so a model can call them. The ambient declarations already reach eval programs through
-   `compiler/intrinsics.ts`.
-3. Eval-write checks (section 2, site 3): where eval's returned or declared values are checked against their types
-   (`native/runtime.ts`, the structural check after an eval), call `collectObligations` for the binding's type and
-   report failures as the eval's error. Not done: it needs the async gate of item 1.
-4. `compiler/inline.ts` / `compiler/lower.ts`: lower `refine<R>(value)` and `assume<R>(value)` by reading the
-   predicates of `R`. Also `natlang check` should list the refined slots and their predicates (section 6).
-5. `runtime/hooks.ts`: none required. If the kernel hook interface is later used for argument checks, move
-   `refinedSignature`'s argument check there.
-6. Program `types.ts` crisp checkers: the loader would need to evaluate a `refinements` export.
-7. Call store: a keyed verdict table behind `VerdictCache` (the interface is `get(key)`/`set(key, verdict)`, async allowed),
-   so verdicts persist across processes.
+- Eval: a result an eval returns or finishes (`finish: true`), a result written with `return_result` in eval, and a
+  refined local are judged before they are kept (`NativeSession.refinementCheck`, set by the agent loop). A failure is
+  a rejected eval with the refinement code, counted against the same repair budget. `refine`/`assume` are bound in
+  the eval scope. `Is<...>` annotations on locals are portable (`scope-compiler.ts`).
+- `refine<R>(value)` and `assume<R>(value)` are lowered by `compiler/lower.ts` to `refine(value, "p")`, reading the
+  predicates of `R` from its brand (nested predicates are joined with "; and ").
+- `natlang check` / `buildProject` list refined slots (`BuildResult.refinedSlots`).
+- Judge fallback: a driver without `decide` judges through an ordinary `holds(value, predicate): boolean` call on the same
+  model (`callJudge`, internal call, fixed instructions), traced as `judge: "call"`. Scoring stays the preferred path.
+  The call judge runs on the runtime's default model unless `refinements.judge` names one.
+- Program crisp checkers: a `refinements.ts` beside the entry module (or above it, inside the package) exporting
+  `refinements: { [predicate]: (value) => boolean | undefined }`. The build compiles it as ordinary host code; the launcher
+  (`cli/program-refinements.ts`) imports the emitted module and passes it as `refinements.crisp`. Embedded runtimes pass
+  `crisp` themselves.
+- Call store: table `refinement_verdicts (key, probability, judge, created_at)` created on open like the other tables (the
+  store has no schema version number; `CREATE TABLE IF NOT EXISTS` is its migration), exposed as
+  `store.refinementVerdicts()` and used as the verdict cache of any runtime with a call store, unless `refinements.cache`
+  is given. The browser page-side store does not forward it yet; browser runtimes use the in-memory cache.
+
+Remaining: the browser call-store worker protocol does not carry verdicts; verdict-table eviction (rows are tiny and keyed
+by content, so none yet).

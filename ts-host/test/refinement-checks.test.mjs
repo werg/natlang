@@ -209,6 +209,24 @@ test('service results declared refined are checked like an nl return', async () 
   assert.deepEqual(judged.sort(), ['bad', 'good']);
 });
 
+test('with a call store, verdicts persist across runtimes', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { openCallStore } = await import('../dist/calls/store.js');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-verdicts-'));
+  const store = openCallStore(root);
+  try {
+    for (const expectedJudged of [1, 0]) {
+      const model = stubModel({ answers: ['Thank you.'], truth: () => true });
+      const t = run(model, { 'reply.nl': REPLY }, {}, fn => fn('a'), { runtime: { calls: store } });
+      assert.equal(await t.result(), 'Thank you.');
+      assert.equal(model.judged.length, expectedJudged);
+    }
+    assert.equal(store.refinementVerdicts().count(), 1);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('settings are validated; obligations are found in unions and aliases', () => {
   assert.deepEqual(parseRefinementSettings({ threshold: 0.6, band: { low: 0.4, high: 0.6 }, policy: 'escalate', escalate: 'teacher',
     predicates: { 'a   b': { mode: 'shadow' } } }).predicates, { 'a b': { mode: 'shadow' } });
