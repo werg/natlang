@@ -102,6 +102,27 @@ def install_maple_qat(backbone, rank: int = 8, alpha: int = 16) -> None:
             norm.weight.data = norm.weight.data.float()
 
 
+@torch.no_grad()
+def qat_latent_scales(backbone) -> dict[str, float]:
+    """Mean ternary scale α of each dense QAT latent's deployed weight (mean nonzero magnitude), keyed by the latent's
+    name in ``backbone.hf``. A code flips only after its latent moves about half of α (Maple's threshold is
+    0.7 × row absmean), so latent learning rates are set in units of α (2026-10-09: with one Muon rate for every
+    matrix, ~6e-6 per step against flip gaps of 0.013-0.09, codes practically never flipped: 3.6e-6 of them)."""
+    from torch.nn.utils import parametrize
+
+    scales = {}
+    for name, module in backbone.hf.named_modules():
+        if not parametrize.is_parametrized(module, "weight"):
+            continue
+        for index, adapter in enumerate(module.parametrizations.weight):
+            if getattr(adapter, "dense", None) is not None:
+                weight = module.weight.detach().float()
+                nonzero = weight != 0
+                scales[f"{name}.parametrizations.weight.{index}.dense"] = float(
+                    weight.abs().sum() / nonzero.sum().clamp_min(1))
+    return scales
+
+
 def maple_qat_parameters(backbone) -> list[tuple[str, torch.nn.Parameter]]:
     """Maple's full QAT trainables, named as in ``backbone.hf``: attention dense latents (Muon) and learned block
     scales, expert block scales, routers and layer norm gains (AdamW). LoRA latents stay frozen at their values (the

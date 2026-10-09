@@ -196,3 +196,28 @@ def test_resume_follows_new_code_but_not_new_inputs():
     assert validate_resume(state, dict(identity, code={'a.py': 'new', 'b.py': 'same'})) == ['a.py']
     with pytest.raises(ValueError, match='changed'):
         validate_resume(state, dict(identity, options={'batch': 2}))
+
+
+def test_missing_saved_option_counts_as_its_default():
+    state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+             'identity': {'options': {'batch': 1}, 'files': {'data': 'fixed'}}}
+    current = {'options': {'batch': 1, 'qat_latent_lr': 0.0}, 'files': {'data': 'fixed'}}
+    with pytest.raises(ValueError):
+        validate_resume(state, current)
+    assert validate_resume(state, current, defaults={'qat_latent_lr': 0.0}) == []
+    with pytest.raises(ValueError):
+        validate_resume(state, {**current, 'options': {'batch': 1, 'qat_latent_lr': 1e-3}}, defaults={'qat_latent_lr': 0.0})
+
+
+def test_qat_latents_get_their_own_adamw_groups():
+    if not hasattr(torch.optim, 'Muon'):
+        pytest.skip('no Muon')
+    params = {'prompt': torch.nn.Parameter(torch.randn(2, 8))}
+    dense = torch.nn.Parameter(torch.zeros(8, 8))
+    other = torch.nn.Parameter(torch.randn(8, 8))
+    optimizer = trajectory_optimizer('muon', params, [dense, other], [], vocab_size=13, lr=.01, lora_lr=3e-5,
+                                     heads_lr=.003, lora_names=['a.dense', 'b.weight'], latent_lrs={'a.dense': 5e-5})
+    groups = [g for g in optimizer.param_groups if any(q is dense for q in g['params'])]
+    assert len(groups) == 1 and groups[0]['lr'] == 5e-5 and len(groups[0]['params']) == 1
+    assert not any(q is dense for g in optimizer.muon.param_groups for q in g['params'])
+    assert any(q is other for g in optimizer.muon.param_groups for q in g['params'])

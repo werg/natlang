@@ -424,3 +424,33 @@ def test_family_term_and_member_evaluation_for_neuralese_stages(pair):
     report = evaluate_members(backbone, [(ids, labels)], chunk=4)
     assert set(report) == {"full", "4x5", "2x3"} and report["full"]["kl"] < 1e-5
     assert all(row["tokens"] == WINDOW and row["ce"] > 0 for row in report.values())
+
+
+def test_qat_latent_scales_name_every_dense_latent_with_its_ternary_scale(pair):
+    from natlang_neuralese.train.adapters import maple_qat_parameters, qat_latent_scales
+
+    _, ours = pair
+    port = MaplePortBackbone(ours, ControlTokens(open_id=94, close_id=95))
+    names = {n for n, _ in maple_qat_parameters(port) if n.endswith(".dense")}
+    scales = qat_latent_scales(port)
+    assert names and set(scales) == names and all(v > 0 for v in scales.values())
+
+
+def test_member_backward_full_anchor_reaches_shared_weights(pair):
+    from types import SimpleNamespace
+
+    from natlang_neuralese.maple.family import member_backward, window_labels
+    from natlang_neuralese.maple.nested_train import Member, setup
+
+    _, ours = pair
+    members = [Member.parse("2x3", 4)]
+    adapters, _, private = setup(ours, members, rank=2, private_rank=2, learn_scales=True, expert_scales=True)
+    for p in ours.parameters():
+        p.requires_grad_(False)
+    for p in private + adapters:
+        p.requires_grad_(True)
+    ids = torch.randint(0, 90, (1, 2 * WINDOW))
+    member_backward(SimpleNamespace(hf=ours), members[0], ids, window_labels(ids, WINDOW), weight=0.5, chunk=4,
+                    full_weight=1.0)
+    layer3 = [p for n, p in ours.named_parameters() if "layers.3." in n and "lora_" in n and ".private." not in n]
+    assert layer3 and any(p.grad is not None and p.grad.abs().sum() > 0 for p in layer3)  # only the full model reaches layer 3

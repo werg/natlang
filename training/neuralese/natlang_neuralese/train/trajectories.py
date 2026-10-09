@@ -617,6 +617,17 @@ def main(argv=None):
                              "this weight; members' private parts become trainable. 0 disables (members still evaluated)")
     parser.add_argument("--member-tokens", type=int, default=2048, help="members train and evaluate on the last N tokens")
     parser.add_argument("--member-eval", type=int, default=4, help="held records for the per-member evaluation")
+    parser.add_argument("--member-mask-system", action=argparse.BooleanOptionalAction, default=True,
+                        help="member term and member evaluation leave out the system prompt and tool definitions: they "
+                             "are identical across records, so members memorized them (2026-10-09: ~89%% of member "
+                             "windows were 16-grams of other records) and the evaluation could not tell")
+    parser.add_argument("--member-full-weight", type=float, default=0.0,
+                        help="with the member term, the full model's own crisp CE on the same window (the shared "
+                             "weights the member term moves stay anchored to the full model's crisp trajectory)")
+    parser.add_argument("--qat-latent-lr", type=float, default=0.0,
+                        help="Maple QAT dense latents get their own AdamW groups at this rate times each matrix's "
+                             "ternary scale (codes flip after moving ~0.5 of it); 0: Muon at the backbone rate, under "
+                             "which codes practically never flip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
     parser.add_argument("--stop-supervision", choices=["generated-length", "gold-native-boundary"], default="generated-length", help="teach stop on coherent gold value states with balanced terminal/continue loss")
@@ -713,6 +724,7 @@ def main(argv=None):
     apply_sketch_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
+    option_defaults = {action.dest: action.default for action in parser._actions if action.dest != 'help'}
     if args.inspect_training_config:
         print(json.dumps(vars(args), sort_keys=True, indent=2))
         return
@@ -804,13 +816,13 @@ def main(argv=None):
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     new_continuation = resumed is None and bool(args.continue_from)
     if resumed is not None:
-        changed_code = validate_resume(resumed, identity)
+        changed_code = validate_resume(resumed, identity, defaults=option_defaults)
         if changed_code:
             print(json.dumps({'event': 'resumed_on_new_code', 'changed_modules': len(changed_code),
                               'modules': [Path(m).name for m in changed_code][:20]}), flush=True)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
-        validate_continuation(resumed, identity, allowed_changes=args.curriculum_change)
+        validate_continuation(resumed, identity, allowed_changes=args.curriculum_change, defaults=option_defaults)
     if args.content_residual_initialization == 'fresh-zero':
         if not args.continue_from or args.content_transport != 'learned-residual':
             raise ValueError('fresh-zero residual requires an explicit learned-residual continuation')
@@ -1339,14 +1351,33 @@ def main(argv=None):
                 p.requires_grad_(True)
                 backbone_named.append((name, p))
 
+    def member_eval_windows():
+        """The held records of the member evaluation, pinned in the run directory at first use: a change of the held
+        selection code (as at Maple recurrence step ~223) must not swap the evaluated records mid-run."""
+        pinned = out / 'member-eval-ids.json'
+        held_by_id = {r['id']: r for r in held}
+        if pinned.exists():
+            ids = [i for i in json.loads(pinned.read_text())['ids'] if i in held_by_id]
+        else:
+            ids = [r['id'] for r in held[:args.member_eval]]
+            pinned.write_text(json.dumps({'ids': ids, 'mask_system': args.member_mask_system}, indent=1) + '\n')
+        return [member_window(held_by_id[i]) for i in ids]
+
     def member_window(record):
         """The crisp rendering of a record (prompt, tool output and target: whole trajectory), last --member-tokens."""
         notes = handover_notes(record)
         messages = crisp_messages(record["messages"], texts, notes) + render(
             [record["target"]], lambda name: {"type": "text", "text": texts[name]}, notes)
-        text = engine.tokenizer.apply_chat_template(messages, tools=record.get("tools") or None, tokenize=False)
-        ids = torch.tensor([engine._tokens(text)[-args.member_tokens:]], device=args.device)
-        return ids, window_labels(ids, 1)
+        tools = record.get("tools") or None
+        tokens = engine._tokens(engine.tokenizer.apply_chat_template(messages, tools=tools, tokenize=False))
+        context = 1
+        if args.member_mask_system and messages and messages[0].get("role") == "system":
+            # The system prompt and tool definitions stay context: identical across records, they taught members
+            # nothing but memorization (and dominated the member evaluation).
+            context = len(engine._tokens(engine.tokenizer.apply_chat_template(messages[:1], tools=tools, tokenize=False)))
+        start = max(0, len(tokens) - args.member_tokens)
+        ids = torch.tensor([tokens[start:]], device=args.device)
+        return ids, window_labels(ids, min(max(1, context - start), ids.shape[1] - 1))
     lora = [parameter for _,parameter in backbone_named]
     lora_names = ([name for name,_ in backbone_named]
                   if args.backbone_training in ('full','qat') else None)
@@ -1373,11 +1404,19 @@ def main(argv=None):
             head_params += [backbone.control_head_rows]
     for p in head_params:
         p.requires_grad_(True)
+    latent_lrs = {}
+    if args.qat_latent_lr and args.backbone_training == 'qat':
+        from .adapters import qat_latent_scales
+        latent_lrs = {name: args.qat_latent_lr * scale for name, scale in qat_latent_scales(engine.backbone).items()
+                      if name in set(lora_names or [])}
+        print(json.dumps({'event': 'qat_latent_groups', 'latents': len(latent_lrs),
+                          'lr_min': min(latent_lrs.values(), default=None),
+                          'lr_max': max(latent_lrs.values(), default=None)}), flush=True)
     optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
                                      lora_lr=backbone_lr, heads_lr=args.heads_lr,
                                      embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
-                                     lora_names=lora_names)
+                                     lora_names=lora_names, latent_lrs=latent_lrs)
     if resumed is not None:
         if set(params) != set(resumed['params']):
             raise ValueError('recurrence soft-parameter names changed')
@@ -1621,7 +1660,7 @@ def main(argv=None):
     leaves = {leaf_ids[name]: p for name, p in params.items()}
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
     if resumed is None and family and args.member_eval:
-        report["family-init"] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
+        report["family-init"] = evaluate_members(backbone, member_eval_windows())
     if resumed is None and (args.handover == "written" or args.digest == "written"):
         report["written-init"] = evaluate_written("written-init", leaves, paired_held, held_probe_accounting)
         report["written-init-train"] = evaluate_written("written-init-train", leaves, paired_train, train_probe_accounting)
@@ -1982,7 +2021,8 @@ def main(argv=None):
             if args.member_weight and step_record_ids:
                 # The family term (MAPLE_NESTED §4a): one member per update, in rotation, on this update's last record.
                 member = family[step % len(family)]
-                parts = member_backward(backbone, member, *member_window(record), weight=args.member_weight)
+                parts = member_backward(backbone, member, *member_window(record), weight=args.member_weight,
+                                        full_weight=args.member_full_weight)
                 family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
                                  'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
@@ -2030,7 +2070,7 @@ def main(argv=None):
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
                     if family and args.member_eval:
-                        evaluation['family'] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
+                        evaluation['family'] = evaluate_members(backbone, member_eval_windows())
                     if args.crisp_weight:
                         evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
                     if args.handover == 'written' or args.digest == 'written':
@@ -2061,7 +2101,7 @@ def main(argv=None):
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if family and args.member_eval:
-        report["family-trained"] = evaluate_members(backbone, [member_window(r) for r in held[:args.member_eval]])
+        report["family-trained"] = evaluate_members(backbone, member_eval_windows())
     if args.handover == "written" or args.digest == "written":
         report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
         report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
