@@ -1277,3 +1277,11 @@ degraded to another.
 - **Blocks outlive server restarts.** A durable session archives the bytes of each block it references
   (content-addressed export/import) and restores them on `neuralese-unknown-block`; sessions pin what they reference
   and never collect other sessions' blocks.
+
+## 2026-10-09 — Deleted the local Maple-Preview BF16 checkpoint (owner)
+
+- Owner approved deleting `/home/werg/data/models/maple-preview-bf16` (38 GB, DeepGrove Maple-Preview, Hugging Face
+  revision `ac1ddd79d2b5cb4406f5d2bebdf95406ce505a07`) after the student backbone moved to Mellum.
+- Re-download from Hugging Face at that revision if Maple work resumes. `maple/student.py` DEFAULT_MODEL and
+  `scripts/maple_mixed_data.py --model` still default to the path and now fail with a missing-file error.
+- Trained Maple checkpoints and the converted-weights cache are separate and were not deleted.
