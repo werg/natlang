@@ -174,7 +174,7 @@ def run_train(a):
     state_path = out / "checkpoint.pt"
     step = 0
     if state_path.exists():
-        state = torch.load(state_path, map_location="cpu")
+        state = torch.load(state_path, map_location="cpu", mmap=True)  # paged from the file, not a second copy
         with torch.no_grad():
             for name, latent in latents:
                 latent.copy_(state["latents"][name].to(latent))
@@ -242,7 +242,9 @@ def run_train(a):
         if step % 10 == 0 or "held_ce" in row:
             print(json.dumps(row), flush=True)
         if step % a.checkpoint_every == 0 or step == a.steps:
-            torch.save({"step": step, "latents": {n: q.detach().cpu() for n, q in latents},
+            # GPU tensors: torch.save copies one storage at a time to host; ``.cpu()`` first would hold a second
+            # copy of all latents in (unified) memory at once (guard stop at the v2 trial's first checkpoint).
+            torch.save({"step": step, "latents": {n: q.detach() for n, q in latents},
                         "optimizer": optimizer.state_dict()}, out / "checkpoint.pending")
             (out / "checkpoint.pending").replace(state_path)
 
