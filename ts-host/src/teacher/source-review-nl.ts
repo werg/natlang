@@ -12,9 +12,8 @@
  * (`crisp | nl | shadow`); the default `crisp` recommends nothing, which is today's behaviour.
  */
 import { createHash } from 'node:crypto';
-import { builtin, builtinDefinition } from '../runtime/builtin.js';
+import { builtin, builtinDefinitionKey } from '../runtime/builtin.js';
 import { builtinSource } from '../builtin/index.js';
-import { definitionKey } from '../calls/recorder.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { untrusted } from '../runtime/surface.js';
 import { SOURCE_REVIEWS } from './source-review.js';
@@ -74,9 +73,8 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function reviewerIdentity(name: 'reviewSourceItem' | 'reviewSourceRow', executor: string): ReviewerIdentity {
-  const definition = builtinDefinition(name);
   const definitionSourceSha256 = sha256(builtinSource(name));
-  return { kind: 'natlang', function: name, definition_key: definitionKey(definition), call_id: null,
+  return { kind: 'natlang', function: name, definition_key: builtinDefinitionKey(name), call_id: null,
     hash_inputs: { definition_source_sha256: definitionSourceSha256, compiler_version: SOURCE_REVIEW_COMPILER_VERSION, executor },
     reviewer_hash: reviewerHash(definitionSourceSha256, SOURCE_REVIEW_COMPILER_VERSION, executor) };
 }
