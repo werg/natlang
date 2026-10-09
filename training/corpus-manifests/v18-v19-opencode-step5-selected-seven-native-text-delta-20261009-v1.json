@@ -1,0 +1,509 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-opencode-step5-selected-seven-native-text-delta-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/provider-availability-case-00-v1/capture-snapshots/post-stop-v1/snapshot-manifest.json",
+      "bytes": 4699,
+      "sha256": "33c0c7e0c83a47239e1831cb2e63e7637d11bbb29960a28bab6ffc6d6fa2b6ff"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/campaigns/case-01-campaign-v2/jobs/000001-e48aa800f021a95e.result.json",
+      "bytes": 230629,
+      "sha256": "5ee2bff5aaca9e34647951a5c638fd91f45fffb7402ee18dced72bbbb92df935"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/campaigns/case-01-campaign-v2/jobs/000001-e48aa800f021a95e.trace.jsonl",
+      "bytes": 25534,
+      "sha256": "a54bc37f80f4663e2baa3eeb2ac2e4cae638b21fb3ea2d99e5ee00f06361c647",
+      "lines": 41
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/campaigns/case-01-campaign-v2/results.jsonl",
+      "bytes": 230629,
+      "sha256": "5ee2bff5aaca9e34647951a5c638fd91f45fffb7402ee18dced72bbbb92df935",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/campaigns/case-01-campaign-v2/results.jsonl.manifest.json",
+      "bytes": 1725,
+      "sha256": "aa5ae6ed8f587fd4fbb1ae45c02761ba5484f381c83bb0b603f1dfa8d55bdd53"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/capture-snapshots/case-01-post-stop-v1/snapshot-manifest.json",
+      "bytes": 5046,
+      "sha256": "119a31d33693732aaa9dde33b7a59f72f1ada38a78bf72e1d1fe3c3ebdd994ad"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/capture-snapshots/case-01-v1/snapshot-manifest.json",
+      "bytes": 4400,
+      "sha256": "d32bb6f177888c75233b710a864ca00ed4d33dcdfd227e22e38bd971c5aa214a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/case-01/collector-argv-v2.json",
+      "bytes": 1051,
+      "sha256": "459249cf50d8d142cba287734e057799e1cf5cb734d26fc5c7b94b715962823a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/case-01/fullcontext-action-review-v2/review-v2.json",
+      "bytes": 16995,
+      "sha256": "26bead9d2b0ed8464189b0edf9d98cc449c440d20e469ad35544b1d94fc63306"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/case-01/fullcontext-action-review-v2/root-selected-action-admission-v1.json",
+      "bytes": 9867,
+      "sha256": "4812f1fd05f6d507be39fcb4f653a392347d6a4551546512eeef943b70db18b5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/case-01/launch-plan-v2.json",
+      "bytes": 7341,
+      "sha256": "8c51489d62475bff9216e48d6b740f763ac6b45d825f4a6b55d9d77d02530893"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/case-01/launch-receipt-v2.json",
+      "bytes": 1794,
+      "sha256": "9e1ac912c8959140188db3af44a261ba04600f484ca15189785c3aafbbee2437"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/inputs-v2/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/inputs-v2/delta-native-records-held.jsonl",
+      "bytes": 677429,
+      "sha256": "8450b0d37c62d3c47c82dff70fdc445951686f81fa2ccc496ed85c728348ce26",
+      "lines": 7
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/inputs-v2/input-manifest.json",
+      "bytes": 3382,
+      "sha256": "565eea92f850f41bc8d686125e1f9d40fd1b91b919752dd5d55ff5acaf478971"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/native-admission-overlay-v1/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/native-admission-overlay-v1/delta-native-records.jsonl",
+      "bytes": 679325,
+      "sha256": "71734f1bd858add58fc19e7eb11021c1a661ea4a7b6908e27ee21a676abd009f",
+      "lines": 7
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/native-admission-overlay-v1/proposal-manifest.json",
+      "bytes": 11578,
+      "sha256": "c2db91b26b93f445d4180fd5e642c75f6fb7951848011d4f98dc4481af18372d"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/native-admission-overlay-v1/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "36c1c4e23a0c64d2351f595bb90358c7081b579936c8d6ca54b6a7b2388b9d26"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/review-packet-v1.json",
+      "bytes": 8899,
+      "sha256": "7c1d01c1f0cd7bf26a94e4c40d8743fe12e3f1c7c1d7d2c8284f38fe39bd4986"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/review-packet-v2.json",
+      "bytes": 10054,
+      "sha256": "dd0bcf3ac5991f78bf8f6bada14c82575371f28ecb3bc5d480191563bc7c6cae"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-native-text-composition-adoption-v1.json",
+      "bytes": 9308,
+      "sha256": "9e85bdee9137fafae5de3c2d49cf0c1f6a307d33edb394fd377b530d4650268c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-native-text-composition-review-v1.json",
+      "bytes": 4925,
+      "sha256": "eff6a6f27f8f7c93fbde5bdc2ab13fa0d30b25fe4cb0a04258391b91b5274703"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/README.md",
+      "bytes": 1438,
+      "sha256": "0cfd814e6d3e3dbe455ca50243567eb2e50276aa50a8e8117acd3b2c726e3f8b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/delta-provenance.jsonl",
+      "bytes": 2715,
+      "sha256": "37fc0764ccf559c93142d3092b92986b6f948eac3ecfab498bcbf10c4349685a",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/delta-text.jsonl",
+      "bytes": 248358,
+      "sha256": "d09663ed49fd526368307ceb4447d0c7393da5b59df0d93e70982496ca0b2d66",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/output-manifest.json",
+      "bytes": 1432,
+      "sha256": "e8eb339bc2b16f88d5fd37d049327e26beb65eb7ccfe9a772a9f53e5412463d8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/packet-manifest.json",
+      "bytes": 1970,
+      "sha256": "0fc4cf4b8eb3f53bb83a0c295bb5b3b2b3c94c90727633c3de2ecb830c956683"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/receipt.json",
+      "bytes": 5468,
+      "sha256": "bafc8043c9d4ecad5ac2f127698c2e8124d9bef7e35a45741a3aaf22dcb874f9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-case01-three-v1/source-coverage.jsonl",
+      "bytes": 1254,
+      "sha256": "403ed7e0bc140c092ad299a113fbb005585c13ed9632da36ee076660cbc6ad11",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/README.md",
+      "bytes": 1438,
+      "sha256": "90cd6a5bac24b8ebeef8502ba6c3db1e0c3dbf0fd23922e654412d47e74ebf20"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/delta-provenance.jsonl",
+      "bytes": 3576,
+      "sha256": "8242d4386c66f7585b65956a08068aceb25e7fd7c775d1f61778f53652e82c21",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/delta-text.jsonl",
+      "bytes": 331592,
+      "sha256": "cb09c4759d114c63efc34f31f1198f9d094f2c20dfdd087bdc68a7bf45a35da8",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/output-manifest.json",
+      "bytes": 1432,
+      "sha256": "3ec2177f769e0bad0c021e2b26505c186a207e47c77cff620df0f34cac9759b6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/packet-manifest.json",
+      "bytes": 1970,
+      "sha256": "33ee85c6de9120e360f810843496b9160d9927d6390b3681a12c4bd210fbe3b7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/receipt.json",
+      "bytes": 5467,
+      "sha256": "1510d0d24f89b0fd1289a4089210c8891b4c9f0be452bdace38bb03d55e68437"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/root-text-replay-simple-four-v1/source-coverage.jsonl",
+      "bytes": 1664,
+      "sha256": "f9c83012570cd661faab0ef8c84b2c847b9846600a3dc74ccd75ff108478d7c8",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/README.md",
+      "bytes": 1438,
+      "sha256": "0cfd814e6d3e3dbe455ca50243567eb2e50276aa50a8e8117acd3b2c726e3f8b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/delta-provenance.jsonl",
+      "bytes": 2715,
+      "sha256": "37fc0764ccf559c93142d3092b92986b6f948eac3ecfab498bcbf10c4349685a",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/delta-text.jsonl",
+      "bytes": 248358,
+      "sha256": "d09663ed49fd526368307ceb4447d0c7393da5b59df0d93e70982496ca0b2d66",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/output-manifest.json",
+      "bytes": 1432,
+      "sha256": "e8eb339bc2b16f88d5fd37d049327e26beb65eb7ccfe9a772a9f53e5412463d8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/packet-manifest.json",
+      "bytes": 1970,
+      "sha256": "0fc4cf4b8eb3f53bb83a0c295bb5b3b2b3c94c90727633c3de2ecb830c956683"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/receipt.json",
+      "bytes": 5468,
+      "sha256": "bafc8043c9d4ecad5ac2f127698c2e8124d9bef7e35a45741a3aaf22dcb874f9"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-case01-three-v1/source-coverage.jsonl",
+      "bytes": 1254,
+      "sha256": "403ed7e0bc140c092ad299a113fbb005585c13ed9632da36ee076660cbc6ad11",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/case01-three/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/case01-three/delta-native-records.jsonl",
+      "bytes": 293601,
+      "sha256": "99f0aad7b6d75b6911383f5084c62b464661df33fb3208e74782d04e0d52af21",
+      "lines": 3
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/case01-three/source-selection-manifest.json",
+      "bytes": 1705,
+      "sha256": "0b43189cc3aaef5c3b1348bd15b6a54f6b041de2a72d59a20dadc84af771cff8"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/simple-four/delta-native-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/simple-four/delta-native-records.jsonl",
+      "bytes": 383828,
+      "sha256": "914ca9544c970835fc8a6f51db2efbcbe8aa0fd255653b9a44eb6c8dd3d831ef",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-inputs-v1/simple-four/source-selection-manifest.json",
+      "bytes": 1748,
+      "sha256": "251389c52cda198533305bcb945564417a06a82a0786b9f64c379fa72be0f926"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/README.md",
+      "bytes": 1438,
+      "sha256": "90cd6a5bac24b8ebeef8502ba6c3db1e0c3dbf0fd23922e654412d47e74ebf20"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/delta-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/delta-provenance.jsonl",
+      "bytes": 3576,
+      "sha256": "8242d4386c66f7585b65956a08068aceb25e7fd7c775d1f61778f53652e82c21",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/delta-text.jsonl",
+      "bytes": 331592,
+      "sha256": "cb09c4759d114c63efc34f31f1198f9d094f2c20dfdd087bdc68a7bf45a35da8",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/output-manifest.json",
+      "bytes": 1432,
+      "sha256": "3ec2177f769e0bad0c021e2b26505c186a207e47c77cff620df0f34cac9759b6"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/packet-manifest.json",
+      "bytes": 1970,
+      "sha256": "33ee85c6de9120e360f810843496b9160d9927d6390b3681a12c4bd210fbe3b7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/provider-context-bindings.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/receipt.json",
+      "bytes": 5467,
+      "sha256": "1510d0d24f89b0fd1289a4089210c8891b4c9f0be452bdace38bb03d55e68437"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/provider-attempt-v4/compact-7-action-delta-v1/text-simple-four-v1/source-coverage.jsonl",
+      "bytes": 1664,
+      "sha256": "f9c83012570cd661faab0ef8c84b2c847b9846600a3dc74ccd75ff108478d7c8",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/root-source-launch-approval-v1.json",
+      "bytes": 1491,
+      "sha256": "ba8d1cd2e9e75153888a4d9ccdbe3b0f6b2a3342cee973268d2e2cf30dde9541"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-compiler-preflight-v1.json",
+      "bytes": 13726,
+      "sha256": "f9637d081a6fdb7743afb7f6a548ad707ac92121dbe60f352f704061bb6b6bf5"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/clarified-inline-nl-v5/source-v3.cases.jsonl",
+      "bytes": 50606,
+      "sha256": "64dad0c8678a792abd7a19380dce20421f3fa21f6506985398d34bb38ba0f03c",
+      "lines": 8
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/gold/ABD-1A.json",
+      "bytes": 36,
+      "sha256": "4a1465bbdc820fdc20507f5b04fc6b963fa42c3f98f00f92847dc13048d5f4bc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/expected-v5.json",
+      "bytes": 45,
+      "sha256": "c977328e6a7ec9c99446236214bba1247941f315e9aba8df361cb96364f94bba"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/launch-binding-v2/collector-argv-v1.json",
+      "bytes": 1000,
+      "sha256": "63a296bc6bb151ab4de73ef17a138e50e3dc0011eb5a605b521e69c68d6b6845"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/launch-binding-v2/launch-plan-v2.json",
+      "bytes": 7274,
+      "sha256": "033a364cef143c7e53a371196e96185b6e127d40a8b381fc3ba2c3a37f280937"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/launch-binding-v2/launch-receipt.json",
+      "bytes": 1743,
+      "sha256": "688d1fa39e183bc36732d87728c995132230dc8d610d2d990faa484db2c1577c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/attempt-closeout-v1.json",
+      "bytes": 10417,
+      "sha256": "a44c0fd1b0a1dc75e046afe018809242b56d26b3b88f7b121141cef9d599cfb7"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/campaign-v1/jobs/000000-c40a3e341b9f0c5e.result.json",
+      "bytes": 300677,
+      "sha256": "da670544a0b799ebc4ef8586fe7e1078780ea3052db9514220217448357c65b3"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/campaign-v1/jobs/000000-c40a3e341b9f0c5e.trace.jsonl",
+      "bytes": 29395,
+      "sha256": "6179b3b8ab72ee56493dbc31f870aea13be04999061c270a6583c07ffb2f601b",
+      "lines": 48
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/campaign-v1/results.jsonl",
+      "bytes": 300677,
+      "sha256": "da670544a0b799ebc4ef8586fe7e1078780ea3052db9514220217448357c65b3",
+      "lines": 1
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/campaign-v1/results.jsonl.manifest.json",
+      "bytes": 1720,
+      "sha256": "a5840c6e13a90bfc7a515d38ff91931d6fd25e5d31bfe38055b1d35ecd276b4b"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/fullcontext-action-review-v1/native-turns-raw-v1.jsonl",
+      "bytes": 383828,
+      "sha256": "914ca9544c970835fc8a6f51db2efbcbe8aa0fd255653b9a44eb6c8dd3d831ef",
+      "lines": 4
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/fullcontext-action-review-v1/review-v2.json",
+      "bytes": 16698,
+      "sha256": "683527b0e19abd5e9e34f20a056a7987ebff2dd7ec1e50397b13af5856cde0ba"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/provider-attempt-v2/fullcontext-action-review-v1/root-selected-action-admission-v2.json",
+      "bytes": 8901,
+      "sha256": "19b467f77e7a344f5eba9e17464f800d0a59f37ab4bfa04fd724be9ba085385c"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/source/priority-ABD-1A.json",
+      "bytes": 35,
+      "sha256": "cca07f2106155f23f3496c10aef9fa0c699120ce830f81045fdeb1dc1b08c58a"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/source/read_score_fact.nl",
+      "bytes": 907,
+      "sha256": "fec092d05055915432656abb1e6bc9299987703e4a682eb9ee2d91ea729331c2"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/source/task.json",
+      "bytes": 707,
+      "sha256": "2ddf3294bba39bb04a7105f6d9119f537c249c4f5b5466fa3159d665b989f318"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/source-manifest-v1.json",
+      "bytes": 2301,
+      "sha256": "9d05cdcaf4ef36951d0157fc29bf6fc2da05b663674f399875183199fac456bc"
+    },
+    {
+      "path": "opencode-step5-preview-free-20261008-v1/simple-scorefact-diagnostic-v1/typed-inline-source-v5/source-v5.cases.jsonl",
+      "bytes": 5416,
+      "sha256": "569f78b44534129c8613aa420c70e59ce826490040ae54503045a73d5ae8101e",
+      "lines": 1
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v2.json",
+      "bytes": 4839,
+      "sha256": "a321614bd15e58e5750d1dd1cdeed666c1bbe7d255e4ac8c795d7d1b430d1e82"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+      "bytes": 1941,
+      "sha256": "76ad042a1fb45c9b3a002a469be6c160645543a35750a426541cc012d0e3c136"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json",
+      "bytes": 6284,
+      "sha256": "db43586b406e5d4d6535e4e11bdd46a53120d1695eb7c4988e3d24b6993c8ee8"
+    }
+  ],
+  "bytes": 5002022
+}

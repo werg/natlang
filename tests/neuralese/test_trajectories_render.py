@@ -161,3 +161,31 @@ def test_nested_write_site_paths_are_unique_and_ambiguous_names_are_rejected():
         write_site(ambiguous)
     with pytest.raises(ValueError, match="multiple value paths"):
         write_value_path(ambiguous, "duplicate")
+
+
+def test_authenticated_read_parts_in_tool_arguments_preserve_writer_ports():
+    from natlang_neuralese.serve.chat import render_messages
+
+    name = "soft-state:argument-reader"
+    body = "prior pass facts"
+    message = {"role": "assistant", "tool_calls": [{"id": "read", "type": "function",
+        "function": {"name": "eval", "arguments": [
+            {"type": "text", "text": '{"code":"const prior = '},
+            {"type": "read", "name": name, "source": body},
+            {"type": "text", "text": ';"}'},
+        ]}}]}
+    record = {"messages": [message], "target": {"role": "assistant", "content": "ok"}}
+    assert reads(record) == {name}
+    assert handover_notes(record) == {name: body}
+
+    crisp = render([message], lambda _: None, handover_notes(record))[0]
+    assert crisp["tool_calls"][0]["function"]["arguments"] == '{"code":"const prior = prior pass facts;"}'
+
+    block = "nz1_" + "d" * 52
+    written = render([message], lambda _: None, handover_notes(record), {name: block})[0]
+    args = written["tool_calls"][0]["function"]["arguments"]
+    assert args[1] == {"type": "neuralese", "id": block}
+
+    prompt = render_messages([written], None,
+        lambda messages, tools: messages[0]["tool_calls"][0]["function"]["arguments"]["code"], [])
+    assert prompt.blocks == [block]

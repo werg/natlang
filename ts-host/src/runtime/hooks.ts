@@ -55,13 +55,21 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     }
   };
   collect(codebase);
+  const inputs = lam.type.kind === 'lambda' ?
+    lam.type.params.fields.map(field => ({ name: field.name, type: formatType(field.type) })) : [];
+  // A directory reducer's transaction injects a real Folder capability. Declaring
+  // it as opaque `any` erased folder.file()'s FileHandle type when inferring the
+  // parameters of an inline NL child. Use the intrinsic contract, just as for a
+  // declared Folder parameter; never infer capabilities from a value's shape.
+  if (lam.projectTransaction && !inputs.some(input => input.name === 'folder'))
+    inputs.push({ name: 'folder', type: 'Folder' });
   return { types, scopeIdentity: session.runtime.options.seedId ?? String(session.runtime.frame?.adHocDepth ?? 0),
-    inputs: lam.type.kind === 'lambda' ? lam.type.params.fields.map(field => ({ name: field.name, type: formatType(field.type) })) : [],
+    inputs,
     locals: Object.entries(lam.letTypes).filter(([name]) => Object.hasOwn(lam.let, name))
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),
     captures: Object.values(lam.captures ?? {}).map(cell => ({ name: cell.name, type: cell.type, mutable: cell.mutable })),
     imports: Object.entries(codebase).map(([name, record]) => importOf(name, record)),
     services: Object.keys(session.runtime.services),
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
-    opaque: lam.projectTransaction ? ['folder'] : [] };
+    opaque: [] };
 }

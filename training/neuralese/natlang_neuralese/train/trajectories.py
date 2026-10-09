@@ -115,21 +115,41 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             calls = []
             for call in message["tool_calls"]:
                 args = call["function"]["arguments"]
-                # Some captured provider requests store JSON arguments as ordered
-                # text parts with typed Neuralese blocks embedded between them.
-                # Gold text rendering resolves those blocks from authenticated
-                # provider receipts before reaching this renderer. Rejoin the
-                # resulting text parts exactly so the native chat template sees
-                # the original JSON argument string.
                 if isinstance(args, list):
-                    if any(not isinstance(part, dict) or part.get("type") != "text" or
-                           not isinstance(part.get("text"), str) for part in args):
-                        raise ValueError("tool-call arguments contain an unresolved non-text content part")
-                    args = "".join(part["text"] for part in args)
-                    call = {**call, "function": {**call["function"], "arguments": args}}
-                if not isinstance(args, str):
-                    raise ValueError("tool-call arguments are not a string or text-part sequence")
+                    rendered_args = []
+                    for part in args:
+                        if not isinstance(part, dict):
+                            raise ValueError("tool-call argument part is not an object")
+                        if part.get("type") == "text" and isinstance(part.get("text"), str):
+                            rendered_args.append(part)
+                        elif part.get("type") == "read":
+                            name, source = part.get("name"), part.get("source")
+                            if not isinstance(name, str) or not isinstance(source, str):
+                                raise ValueError("tool-call read part lacks authenticated name/source")
+                            if name in blocks:
+                                rendered_args.append({"type": "neuralese", "id": blocks[name]})
+                            else:
+                                rendered_args.append({"type": "text", "text": json.dumps(source, ensure_ascii=False)[1:-1]})
+                        elif part.get("type") == "neuralese":
+                            raise ValueError("unresolved Neuralese block in tool-call arguments")
+                        else:
+                            raise ValueError("unresolved non-text tool-call argument part")
+                    if all(part.get("type") == "text" for part in rendered_args):
+                        args = "".join(part["text"] for part in rendered_args)
+                        call = {**call, "function": {**call["function"], "arguments": args}}
+                    else:
+                        args = rendered_args
+                        call = {**call, "function": {**call["function"], "arguments": rendered_args}}
+                if not isinstance(args, (str, list)):
+                    raise ValueError("tool-call arguments are not a string or typed-part sequence")
+                if isinstance(args, list) and any(
+                        not isinstance(part, dict) or part.get("type") not in ("text", "neuralese")
+                        or (part.get("type") == "text" and not isinstance(part.get("text"), str))
+                        for part in args):
+                    raise ValueError("tool-call argument parts are not rendered text/Neuralese")
                 if 'neuralese_code' in call:
+                    if not isinstance(args, str):
+                        raise ValueError("inline instruction sidecar cannot be combined with typed argument parts")
                     from .inline_instructions import render_inline_instruction_arguments
                     rendered_args=render_inline_instruction_arguments(args,call['neuralese_code'],blocks)
                     if rendered_args is None:raise ValueError('invalid inline instruction code sidecar')
@@ -137,7 +157,7 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                     call={**call,'function':{**call['function'],'arguments':rendered_args}}
                     calls.append(call)
                     continue
-                if '"$write"' in args:
+                if isinstance(args, str) and '"$write"' in args:
                     def crisp_value(value):
                         """Expand write leaves recursively, retaining opaque blocks at their exact value path."""
                         if isinstance(value, dict) and "$write" in value:
@@ -165,8 +185,16 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
 
 
 def reads(record: dict) -> set[str]:
-    return {part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
-            for part in m["content"] if part["type"] == "read"}
+    names = set()
+    def visit(value):
+        if isinstance(value, dict):
+            if value.get("type") == "read" and isinstance(value.get("name"), str):
+                names.add(value["name"])
+            for child in value.values(): visit(child)
+        elif isinstance(value, list):
+            for child in value: visit(child)
+    visit(record.get("messages") or [])
+    return names
 
 
 def _write_markers(value, path=()):
@@ -346,10 +374,14 @@ def handover_notes(record: dict) -> dict[str, str]:
         if name in notes and notes[name]!=source:
             raise ValueError('one write name has conflicting source values')
         notes[name]=source
-    for message in record.get("messages",[]):
-        for part in message.get("content",[]) if isinstance(message.get("content"),list) else []:
-            if part.get("type")=="read" and "source" in part:
-                remember(part["name"],part["source"])
+    def remember_reads(value):
+        if isinstance(value, dict):
+            if value.get("type") == "read" and "source" in value:
+                remember(value["name"], value["source"])
+            for child in value.values(): remember_reads(child)
+        elif isinstance(value, list):
+            for child in value: remember_reads(child)
+    remember_reads(record.get("messages", []))
     for message in record["messages"] + ([record["target"]] if record.get("target") else []):
         for call in message.get("tool_calls") or []:
             if 'neuralese_code' in call:
@@ -361,6 +393,175 @@ def handover_notes(record: dict) -> dict[str, str]:
                 for _,write in _write_markers(json.loads(call["function"]["arguments"])):
                     remember(write['name'],write['source'])
     return notes
+
+
+def authenticated_recurrence_context_view(records, pieces):
+    """Resolve captured context parts against admitted writers or exact context receipts.
+
+    Writer-backed parts become `read` parts so the ordinary written-value path
+    retains their differentiable producer edge. Attested context-only bodies
+    become uniquely named reads without a producer. Unresolved rows are held
+    with source identity and a concrete reason.
+    """
+    import copy
+    from ..data.text_corpus import (
+        _attested_neuralese_message_bodies, _attested_provider_expanded_reads,
+        _canonical, _sha, _soft_writer_sources, authenticated_crisp_context_messages,
+    )
+    rows = list(records)
+    source_hashes = {r.get("id", ""): (r.get("_source_record_sha256") or
+                     _sha(_canonical(dict(r)).encode("utf-8"))) for r in rows}
+    writer_sources = _soft_writer_sources(rows, source_hashes)
+    producers = {}
+    for row in rows:
+        for name in target_writes(row):
+            if name in producers:
+                raise ValueError("duplicate recurrence writer: " + name)
+            producers[name] = row
+    prepared, excluded, decisions = [], [], []
+
+    def walk(value):
+        if isinstance(value, dict):
+            yield value
+            for child in value.values():
+                yield from walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from walk(child)
+
+    for source in rows:
+        record = copy.deepcopy(source)
+        parts = [p for p in walk(record.get("messages") or [])
+                 if p.get("type") in ("read", "neuralese")]
+        if not parts:
+            prepared.append(record)
+            continue
+        rid = source.get("id")
+        row_decisions = []
+        try:
+            split = source.get("split")
+            groups = sorted(set(g for g in (source.get("source_groups") or [])
+                                if isinstance(g, str) and g))
+            if split not in ("train", "test") or not groups:
+                raise ValueError("context row lacks eligible split/source groups")
+            # This shared renderer authenticates every neuralese body, provider
+            # read, capture augmentation, and nested tool-argument reference.
+            authenticated_crisp_context_messages(source, pieces, writer_sources)
+            provider_reads = _attested_provider_expanded_reads(
+                source, writer_sources, split=split, source_groups=groups)
+            bodies, body_attestations = _attested_neuralese_message_bodies(
+                source, writer_sources, split=split, source_groups=groups,
+                authenticated_context_bodies={a["block_id"]: a for a in provider_reads
+                                              if isinstance(a.get("body"), str)})
+            body_by_id = {a["block_id"]: a for a in body_attestations}
+            provider_by_name = {}
+            for item in provider_reads:
+                name = item.get("write_name")
+                if isinstance(name, str): provider_by_name.setdefault(name, []).append(item)
+                block_id = item.get("block_id")
+                if isinstance(block_id, str):
+                    provider_by_name.setdefault("soft-state:" + block_id, []).append(item)
+            inline_site = ((source.get("source_ref") or {}).get("inline_instruction_site") or {})
+            inline_site_data = inline_site.get("site") if isinstance(inline_site, dict) else None
+            inline_site_valid = (isinstance(inline_site_data, dict)
+                and (inline_site.get("validation") or {}).get("valid") is True
+                and not (inline_site.get("validation") or {}).get("reasons")
+                and isinstance(inline_site_data.get("template_segments"), list)
+                and all(isinstance(x, str) for x in inline_site_data["template_segments"]))
+            inline_site_text = ("".join(inline_site_data["template_segments"])
+                                if inline_site_valid else None)
+
+            def replace_parts(value):
+                if isinstance(value, dict):
+                    if value.get("type") == "neuralese":
+                        block_id = value.get("id")
+                        att = body_by_id.get(block_id)
+                        wrapped = bodies.get(block_id)
+                        if att is None or not isinstance(wrapped, str) or not wrapped.startswith("<|neuralese|>") or not wrapped.endswith("<|/neuralese|>"):
+                            row_decisions.append({"kind": "neuralese", "block_id": block_id,
+                                "status": "held", "body_sha256": None,
+                                "reason": "neuralese context lacks an exact body attestation"})
+                            raise ValueError("neuralese context lacks an exact body attestation")
+                        body = wrapped[len("<|neuralese|>"):-len("<|/neuralese|>")]
+                        writer_name = att.get("write_name")
+                        local_writer = att.get("source_kind") == "approved_writer_target_source" and writer_name in producers
+                        name = writer_name if local_writer else "context-only:" + block_id
+                        row_decisions.append({"kind": "neuralese", "block_id": block_id,
+                            "source_sha256": att.get("body_sha256"), "source_kind": att.get("source_kind"),
+                            "writer_record_id": att.get("writer_record_id"), "writer_name": writer_name,
+                            "gradient_edge": bool(local_writer)})
+                        return {"type": "read", "name": name, "source": body}
+                    if value.get("type") == "read":
+                        name, body = value.get("name"), value.get("source")
+                        source_name = name
+                        if not isinstance(name, str) or not isinstance(body, str):
+                            row_decisions.append({"kind": "read", "name": name if isinstance(name, str) else None,
+                                "status": "held", "body_sha256": None,
+                                "reason": "read context lacks exact name/source"})
+                            raise ValueError("read context lacks exact name/source")
+                        if name in producers:
+                            expected = handover_notes(producers[name]).get(name)
+                            if expected is None or expected != body:
+                                row_decisions.append({"kind": "read", "name": name, "status": "held",
+                                    "body_sha256": _sha(body.encode("utf-8")),
+                                    "reason": "read body differs from exact selected writer source"})
+                                raise ValueError("read body differs from exact selected writer source")
+                            evidence = {"source_kind": "exact-target-writer-source",
+                                        "writer_record_id": producers[name].get("id"),
+                                        "body_sha256": _sha(body.encode("utf-8"))}
+                            edge = True
+                        else:
+                            candidates = [a for a in provider_by_name.get(name, [])
+                                          if a.get("body") == body and a.get("body_sha256") == _sha(body.encode("utf-8"))]
+                            if (not candidates and name.startswith("inline-site:")
+                                    and inline_site_valid and inline_site_text == body):
+                                row_decisions.append({"kind": "read", "name": name,
+                                    "source_kind": "validated-inline-site-template-source",
+                                    "status": "resolved-context-only",
+                                    "body_sha256": _sha(body.encode("utf-8")),
+                                    "gradient_edge": False})
+                                return {**value, "name": "context-only:inline-site:" + name.partition(":")[2]}
+                            if not candidates:
+                                row_decisions.append({"kind": "read", "name": name, "status": "held",
+                                    "body_sha256": _sha(body.encode("utf-8")),
+                                    "reason": "read body has no exact writer or provider receipt"})
+                                raise ValueError("read body has no exact writer or provider receipt")
+                            evidence = {"source_kind": candidates[0].get("source_kind"),
+                                        "writer_record_id": candidates[0].get("writer_record_id"),
+                                        "body_sha256": candidates[0].get("body_sha256"),
+                                        "block_id": candidates[0].get("block_id")}
+                            edge = candidates[0].get("writer_target_selected") is True and name in producers
+                            name = name if edge else "context-only:" + (candidates[0].get("block_id") or _sha(name.encode())[:24])
+                        row_decisions.append({"kind": "read", "name": name, "source_name": source_name, **evidence,
+                                              "gradient_edge": bool(edge)})
+                        return {**value, "name": name}
+                    return {key: replace_parts(child) for key, child in value.items()}
+                if isinstance(value, list):
+                    return [replace_parts(child) for child in value]
+                return value
+            record["messages"] = replace_parts(record.get("messages") or [])
+            prepared.append(record)
+            decisions.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
+                              "split": split, "source_groups": groups, "status": "eligible",
+                              "references": row_decisions})
+        except (KeyError, TypeError, ValueError, IndexError) as exc:
+            excluded.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
+                             "split": source.get("split"),
+                             "source_groups": sorted(set(g for g in (source.get("source_groups") or [])
+                                                         if isinstance(g, str) and g)),
+                             "reason": str(exc)[:300], "references": row_decisions})
+            decisions.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
+                              "split": source.get("split"), "status": "held", "reason": str(exc)[:300],
+                              "references": row_decisions})
+    summary = {"schema": "natlang.recurrence-context-review/1",
+               "source_records": len(rows), "prepared_records": len(prepared),
+               "excluded_context_records": len(excluded),
+               "prepared_by_split": {split: sum(r.get("split") == split for r in prepared)
+                                     for split in ("train", "test")},
+               "excluded_by_split": {split: sum(r.get("split") == split for r in excluded)
+                                     for split in ("train", "test")},
+               "decisions": decisions, "excluded": excluded}
+    return prepared, summary
 
 
 def native_writer_prefix(record, apply_template, *, value_type=None):
@@ -652,19 +853,21 @@ def main(argv=None):
             piece = json.loads(line)
             texts[piece["name"]] = piece["text"]
             piece_kinds[piece["name"]] = piece.get("kind")
+    with open(args.records) as stream:
+        source_records = [json.loads(line) for line in stream]
+    records, context_review = authenticated_recurrence_context_view(source_records, texts)
+    context_review_path = out / "recurrence-context-review.json"
+    context_review_path.write_text(json.dumps(context_review, ensure_ascii=False, indent=2) + "\n")
     bank = load_bank(args.bank) if args.bank else None
     params, leaf_ids, from_bank = {}, {}, []
 
     producers = {}
     if args.handover == "written":
         # Every record whose target writes a note, by note name: the producer of that note's block.
-        with open(args.records) as stream:
-            for line in stream:
-                if "$write" in line:  # escaped inside the arguments string in the raw line
-                    record = json.loads(line)
-                    for name in target_writes(record):
-                        if name in producers:raise ValueError('duplicate producer for '+name)
-                        producers[name]={**record,'_active_write_name':name}
+        for record in records:
+            for name in target_writes(record):
+                if name in producers:raise ValueError('duplicate producer for '+name)
+                producers[name]={**record,'_active_write_name':name}
 
     backbone, heads = engine.backbone, engine.heads
     backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
@@ -1052,10 +1255,9 @@ def main(argv=None):
 
     # Records whose prompt already holds native Neuralese blocks have no attested crisp body to render here;
     # they are omitted (and counted), never silently expanded.
-    train, held_pool, skipped = [], [], {"long": 0, "no-target": 0, "native-neuralese-prompt": 0}
-    with open(args.records) as stream:
-        for line in stream:
-            record = json.loads(line)
+    train, held_pool, skipped = [], [], {"long": 0, "no-target": 0, "native-neuralese-prompt": 0,
+                                        "unresolved-authenticated-context": context_review["excluded_context_records"]}
+    for record in records:
             if not record.get("target"):
                 skipped["no-target"] += 1
                 continue
