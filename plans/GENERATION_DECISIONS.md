@@ -3281,3 +3281,18 @@ valid-prefix metrics and coverage. Qualification changes require a separate
 decision covering minimum coverage and matched sequential crisp/channel rollout
 parity; a short correct prefix alone does not qualify anything. Active frozen
 jobs retain their exact implementation until a deliberate checkpoint handoff.
+
+## 2026-10-09 — Use all configured free providers, preserve provenance
+
+The user clarified that the expansion includes all configured providers, not
+just Gemini and NVIDIA. Mistral remains unconfigured. Reuse the shared collector
+and queue with explicit model IDs and endpoints; anonymous Kilo needs no fake key.
+Keep keys in private process environments, and do not introduce a paid fallback
+or a text-distillation request flag. Initial cases retain their existing train
+groups and remain held for trajectory review.
+
+NVIDIA's initial short model ID failed catalog preparation before a provider
+request; preserve that attempt and relaunch independently with the full ID.
+Gemini's tool-history rejection is an integration failure requiring thought
+signature preservation, not a model quality negative. Diagnose the common
+adapter instead of excluding Google's requirement or labeling this as bad data.

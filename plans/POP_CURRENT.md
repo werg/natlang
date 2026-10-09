@@ -295,3 +295,24 @@ Additional setup sources: https://aistudio.google.com/apikey ;
 https://ai.google.dev/gemini-api/docs/rate-limits ;
 https://build.nvidia.com ;
 https://docs.nvidia.com/nemo/retriever/26.5.0/extraction/api-keys/ .
+
+## Free-provider expansion — 2026-10-09
+
+User configured Groq, Z.AI, Gemini and NVIDIA keys; Mistral is excluded.
+Private environment files remain outside Git. Shared external HTTP target and
+credential-environment support landed in `248d7c94`; native Pi handles Google,
+NVIDIA and Groq. Ordinary Z.AI and anonymous Kilo use the shared HTTP transport.
+
+Current-runtime reference replay passed all five V22 cases without provider
+calls. Launch evidence lives in `runs/free-provider-generation-20261009-v1/`.
+Initial NVIDIA v1 failed before an SDK call because its proposed model ID omitted
+the namespace; independent v2 uses `nvidia/nemotron-3-super-120b-a12b` and has
+completed real tool calls. Gemini v1 failed with Google's missing thought-signature
+error during tool history; investigate the shared adapter before relaunch.
+Kilo, ordinary Z.AI and a smaller Groq task are being prepared. These are held
+teacher samples of existing source groups, not new worlds or admitted training
+data. Inspect actual requests and terminal accounting before reporting success.
+
+Shared evaluator `b189b0e1` adds generated-position bands and common first-close
+prefix metrics without extra rollouts or changes to the existing fixed-span gate.
+No active frozen GPU runtime is hot-patched.
