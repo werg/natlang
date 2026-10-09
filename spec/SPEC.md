@@ -389,7 +389,9 @@ when the caller sets them.
 ## Types
 
 Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
-records, arrays, `Record<string, T>`, literal unions, optional fields and
+records, arrays, `Record<string, T>` (also written `{ [key: string]: T }`),
+intersections of object types (`A & { extra: string }`, merged into one record),
+indexed access with a literal key (`State['status']`), literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be
