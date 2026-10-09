@@ -136,3 +136,33 @@ def test_stochastic_rounding_is_unbiased_and_lion_moves_by_lr():
     p.grad = torch.ones(1000)
     LionSR([p], lr=0.01).step()
     assert torch.allclose(p.detach(), torch.full((1000,), -0.01))
+
+
+def test_full_latent_qat_ternarizes_attention_and_experts_and_trains_latents(tmp_path):
+    from natlang_neuralese.maple.qat_convert import install_full_latent_qat, ternary_scale, topk_kl
+    from natlang_neuralese.maple.ternary import ternarize
+
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    reference = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    latents = install_full_latent_qat(model)
+    assert len(latents) == LAYERS * 6 and all(ternary_scale(q) > 0 for _, q in latents)
+    with torch.no_grad():
+        for layer in reference.model.layers:
+            for proj in ("q_proj", "k_proj", "v_proj", "o_proj"):
+                module = getattr(layer.self_attn, proj)
+                module.weight.copy_(ternarize(module.weight))
+            for e in range(EXPERTS):
+                layer.mlp.experts.gate_up[e] = ternarize(layer.mlp.experts.gate_up[e])
+                layer.mlp.experts.down[e] = ternarize(layer.mlp.experts.down[e])
+    ids = torch.randint(0, 128, (1, 12))
+    logits = model(ids).logits
+    with torch.no_grad():
+        assert torch.allclose(logits, reference(ids).logits, atol=1e-5)
+    logits.float().square().mean().backward()
+    attention = dict(latents)["model.layers.0.self_attn.q_proj.weight"]
+    assert attention.grad is not None and attention.grad.abs().sum() > 0
+    assert not any(p.requires_grad for n, p in model.named_parameters() if "embed" in n or "norm" in n)
+    full = torch.log_softmax(torch.randn(5, 128), -1)
+    values, index = full.topk(128, -1)
+    assert float(topk_kl(full, index, values)) < 1e-6
