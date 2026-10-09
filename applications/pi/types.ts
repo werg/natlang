@@ -473,8 +473,17 @@ export type Op =
  */
 export type Expect = { run?: number | null; inbox?: number[]; tail?: number };
 
-/** What a commit created, by `as` name, and the user IDs a `place` operation placed. */
-export type CommitResult = { ids: Record<string, number>; placed: number[] };
+/**
+ * What a commit created, by `as` name, and the user IDs a `place` operation placed. committed is set when the list had
+ * a next operation: the task's state it committed, for example "running in phase summarize" or "terminal (completed)".
+ */
+export type CommitResult = { ids: Record<string, number>; placed: number[]; committed?: string };
+
+/**
+ * A function's answer when it committed the task's next state itself: committed says which (a CommitResult's
+ * committed). Its caller commits nothing more for this phase and returns that text.
+ */
+export type Committed = { committed: string };
 
 // ---------------------------------------------------------------------------------------------------------------
 // Compaction (appended by the compaction port)

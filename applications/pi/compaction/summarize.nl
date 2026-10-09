@@ -3,12 +3,13 @@ description: Ask the conversation's model for the summary with the pinned reques
 args:
   facts: PhaseFacts
   checkpoint: CompactionPhase
-returns: SummaryToPlace | null
+returns: SummaryToPlace | Committed
 uses: [harness/context]
 ---
 checkpoint is the summarize checkpoint: the pinned request (attempt, model, thinkingLevel, streamOptions,
-maxTokens, tail, firstKept). Return the summary for the caller to place, or commit a retry or a failure and return
-null.
+maxTokens, tail, firstKept). Return the summary for the caller to place, or commit a retry or a failure yourself and
+return { committed: r.committed }, where r is that commit's result: the caller then knows you committed, and which
+state.
 
 1. view = context(checkpoint.tail): the context as of the tail, which no longer changes, so this is the range select
    chose. k = the index in view.entries of the entry whose id is checkpoint.firstKept.
@@ -27,7 +28,7 @@ null.
    [{ op: "usage", bucket: "models", key: usageKey, usage: message.usage },
     { op: "compactionStatus", retry: { at: until, error: message.errorMessage ?? "" } },
     { op: "next", state: { status: "running", checkpoint: { ...checkpoint, phase: "retry", until } } }]
-   and return null.
+   and return { committed }.
 8. Otherwise it failed. The message, first match:
    - stopReason "error" or "aborted": "Summarization failed: <message.errorMessage, else the stopReason>";
    - "length": "Summarization hit the token limit; the summary is incomplete";
@@ -37,4 +38,4 @@ null.
     { op: "compactionStatus", remove: true },
     { op: "next", state: { status: "terminal", outcome: { status: "failed", error: { message: text, detail:
       { reason: "model_error" } } } } }]
-   and return null.
+   and return { committed }.

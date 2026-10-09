@@ -6,19 +6,19 @@ args:
   message: AssistantMessage
   pollAt: number | null
 uses: [harness/context, harness/cut]
-returns: '"answer" | "tools" | "committed"'
+returns: '"answer" | "tools" | Committed'
 ---
 Decide what message means. checkpoint is the request or poll checkpoint it answers ({ attempt, compacted?, model,
 cutoff, … }); pollAt is set when message came from polling a deferred response, null after a request. Apply the
 first rule that matches. Return "answer" or "tools" without committing for those two; every other rule commits the
-next state and returns "committed". keep = { compacted: checkpoint.compacted } when checkpoint has compacted, else {}.
+next state and returns { committed: r.committed }, where r is that commit's result. keep = { compacted: checkpoint.compacted } when checkpoint has compacted, else {}.
 
 1. Deferred. message.stopReason is "deferred" and message.deferred is set: handle = message.deferred. next =
    durable.now() + (handle.pollAfterMs ?? 5000); when pollAt is not null, next = max(next, pollAt + 1). Commit
    [{ op: "liveGeneration", value: { attempt: checkpoint.attempt, deferred: { pollAt: next } } },
     { op: "next", state: { status: "running", checkpoint: { phase: "poll", attempt: checkpoint.attempt, ...keep,
       model: checkpoint.model, cutoff: checkpoint.cutoff, handle, pollAt: next } } }]
-   and return "committed". No hook runs: the message is not terminal.
+   and return { committed }. No hook runs: the message is not terminal.
 2. Observers. names = await durable.hooks("afterResponse"); for each index i: await durable.hook("afterResponse", i,
    [message]). Their results do not matter.
 3. Tool calls. message.stopReason is "toolUse" and message.content has at least one item of type "toolCall": return
@@ -31,7 +31,7 @@ next state and returns "committed". keep = { compacted: checkpoint.compacted } w
     { op: "createCompaction", reason: "overflow", owner: "self", as: "c" },
     { op: "next", state: { status: "waiting", on: ["$c"], policy: "allSettled", checkpoint: { phase: "prepare",
       attempt: checkpoint.attempt, compacted: "$c", overflow: message.errorMessage ?? "Context overflow" } } }]
-   and return "committed".
+   and return { committed }.
 6. Retry or fail. policy = facts.settings.retry. retry = message.stopReason is "error" and not f.overflow and
    f.retryable and policy.enabled and checkpoint.attempt <= policy.maxRetries.
    - retry: until = durable.now() + ai.retryDelayMs(policy, checkpoint.attempt). Commit
@@ -44,4 +44,4 @@ next state and returns "committed". keep = { compacted: checkpoint.compacted } w
       { op: "endRun", settlement: { status: "unanswered", reason: "model_error", detail: text } },
       { op: "next", state: { status: "terminal", outcome: { status: "failed", error: { message: text, detail: { reason: "model_error" } } } } }].
      This covers every other error, a second overflow, "aborted" without an abort, and "deferred" without a handle.
-   Return "committed".
+   Return { committed }.

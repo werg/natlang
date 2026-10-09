@@ -24,6 +24,10 @@ What a large model infers, a small interpreter needs said. These held across tho
 - **Keep the outcome words for outcomes.** "If the store lacks a fact the reasoning needs" reads as the `blocked` status, and models then report blocked instead of the answer. When "not found" or "unsupported" is a legitimate result, say so: "when no selection supports it, that is the answer: return supported false".
 - **Say what may be batched.** For an environment driven by commands, say that one eval can carry out several in a row, stopping at the first unexpected observation; otherwise a model spends a turn per command.
 - **Give each criterion one reading.** A distractor is good only if the instruction settles it ("archive a ticket once the customer confirmed the fix" does not cover a declined request the customer accepted); if careful readers could disagree, the program is ambiguous, not the model wrong.
+- **A function that acts for its caller says so in its result.** When a callee may itself perform the caller's last
+  step (commit the next state, send the reply), return a value that names what it did, `{ committed: "running in
+  phase summarize" }`, not `null` or a bare sentinel. A small interpreter reads `null` as "nothing happened" and does
+  the step again over the callee's work (pi's compaction did, until its select and summarize returned `{ committed }`).
 - **Make the named helper the natural route.** Prefer a helper the model can already call over asking it to invent one, and when a specialist should do the work, give the specialist the access (a scoped service) rather than instructions to please delegate.
 
 ## Monitored iteration
