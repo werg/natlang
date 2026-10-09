@@ -18,8 +18,9 @@ true.
    aborted; its error ends this call, which is right.)
 2. messages = (await context(checkpoint.cutoff)).messages: the committed context through the cutoff.
 3. The beforeRequest chain. names = await durable.hooks("beforeRequest"). For each index i of names, in order:
-   r = await durable.hook("beforeRequest", i, [{ messages }]); when r.value has a messages list, it replaces messages
-   for the next handler and for this request only. An error result changes nothing.
+   r = await durable.hook("beforeRequest", i, [{ messages }]); when r.value has a messages list, messages =
+   r.value.messages (a new binding: never empty or modify the list in place) for the next handler and for this request
+   only. An error result changes nothing. With no handlers, messages stays the context's list.
 4. message = await ai.turn(checkpoint.model, messages, { ...checkpoint.streamOptions, thinkingLevel:
    checkpoint.thinkingLevel, sessionId: facts.sessionId }, { attempt: checkpoint.attempt }). The host streams the
    partial answer into pi.live while it runs.

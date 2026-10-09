@@ -59,6 +59,10 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
         maxTokens: model.maxTokens ?? 0, reasoning: Boolean(model.reasoning) };
     },
     turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
+      // A generation always has the user's input in its context: an empty list is a slip in the eval, not a request.
+      if (!Array.isArray(messages) || messages.length === 0) return Promise.reject(new Error('ai.turn got no messages. ' +
+        'The context through the cutoff is never empty: check whether the eval cleared the list it was building from ' +
+        '(for example messages.length = 0 on the same array it then copies back), and pass the context\'s messages.'));
       const resolved = resolve(model);
       const attempt = live?.attempt ?? streamAttempt?.();
       return (attempt !== undefined ? streamResponse(runtime as never, resolved, messages, options(turn), attempt, context) :
