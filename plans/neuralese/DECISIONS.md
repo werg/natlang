@@ -1226,3 +1226,29 @@ both external hardlink names replaced by verified aliases; receipt lives in
 31 reproducible installed-package downloads (1,599,702,512 bytes) were removed
 from the apt download cache. Installed packages and active training data/weights
 were not removed. The in-use uv cache was left intact.
+
+## 2026-10-09 — Self-feedback gate: channel faithfulness, not agreement with gold text (owner)
+
+The text-foundation autoregressive (self-feedback) stage gates whether its weights may proceed to runtime
+qualification and function execution. Its full-span gates compare the model's own continuation with gold text, and
+keep scoring after the generated history departs from gold. After that point the gold continuation no longer follows
+from the context, so a valid different decision scores like a broken channel. Pop's control (step 24064) showed crisp
+and projected histories both first departing at token 190 with prefix accuracy 0.995, while full-span projected CE
+was 3.05.
+
+The owner decided that qualification measures channel faithfulness on the model's own history:
+
+1. **Gate, channel equivalence:** the model generates a continuation. At every position the same generated history is
+   fed once as ordinary token embeddings and once as its projected payloads, and the next-token distributions are
+   compared (KL and argmax agreement, per stratum, over all positions). A declared threshold on that difference is
+   the qualification criterion.
+2. **Gate, generation quality:** text generated with projected self-feedback is scored by the plain word-fed model
+   (perplexity of its own output) and compared with text generated with word self-feedback from the same prefixes. A
+   declared tolerance on the gap is the second criterion.
+3. **Diagnostics, not gates:** full-span gold CE/agreement and valid-prefix metrics (coverage, first departure) stay
+   reported and preserved.
+
+Thresholds are declared in the recipe before evaluation and are not tuned on held results. Earlier failed full-span
+gates stay recorded as evidence and are not reinterpreted. Pop owns the shared evaluator and reporting
+(eval.strata, built on the shared rollout and `causal_gold_prefix_mask`). Running frozen jobs keep their pinned code;
+the new gate applies to evaluations of their checkpoints through the common evaluator.
