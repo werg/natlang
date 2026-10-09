@@ -878,6 +878,60 @@ def _hydrate_tool_argument_blocks(messages, bodies):
     return hydrated, sorted(set(used))
 
 
+def authenticated_crisp_context_messages(record, piece_map, writer_sources):
+    """Render one native context using the same authenticated hydration as ordinary gold text."""
+    from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
+                                      handover_notes, write_sites)
+
+    split = record.get("split")
+    groups = sorted(set(g for g in (record.get("source_groups") or []) if isinstance(g, str) and g))
+    if split not in ("train", "test") or not groups:
+        raise ValueError("context record lacks an eligible split or factual source groups")
+    notes = handover_notes(record)
+    provider_attestations = _attested_provider_expanded_reads(
+        record, writer_sources, split=split, source_groups=groups)
+    provider_bodies = {item["block_id"]: item for item in provider_attestations
+                       if isinstance(item.get("body"), str)}
+    neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
+        record, writer_sources, split=split, source_groups=groups,
+        authenticated_context_bodies=provider_bodies)
+    provider_ids = {item.get("block_id") for item in provider_attestations}
+    context_attestations = [item for item in context_attestations
+                            if not (item.get("source_kind") == "provider_expanded_context_only_input"
+                                    and item.get("block_id") in provider_ids)]
+    for item in provider_attestations:
+        item.pop("body", None)
+    context_attestations.extend(provider_attestations)
+    message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
+    messages = crisp_messages(message_inputs, piece_map, notes, neuralese_bodies=neuralese_bodies)
+
+    by_digest = {}
+    for _, _, _, writer_name in write_sites(record):
+        augmentation, digest = authenticated_capture_context_augmentation(record, writer_name)
+        if augmentation is None:
+            continue
+        if not isinstance(digest, str):
+            raise ValueError("capture context augmentation lacks its digest")
+        content = augmentation.get("content")
+        if not isinstance(content, str):
+            raise ValueError("capture context augmentation digest mismatch")
+        prefix, separator, trailer = content.rpartition("\ncontext_augmentation_sha256=")
+        if not separator or trailer != digest or _sha(prefix.encode("utf-8")) != digest:
+            raise ValueError("capture context augmentation digest mismatch")
+        item = by_digest.setdefault(digest, {
+            "message": augmentation, "writer_names": [],
+            "message_sha256": _sha(_canonical(augmentation).encode("utf-8")),
+        })
+        if writer_name not in item["writer_names"]:
+            item["writer_names"].append(writer_name)
+    messages.extend(item["message"] for item in by_digest.values())
+    augmentation_attestations = [
+        {"writer_names": item["writer_names"], "augmentation_sha256": digest,
+         "message_sha256": item["message_sha256"]}
+        for digest, item in by_digest.items()]
+    return messages, context_attestations, augmentation_attestations
+
+
 def native_gold_document(tokenizer, messages, target, tools):
     return _native_gold_render(tokenizer,[*messages,target],tools)
 
@@ -922,8 +976,7 @@ def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping
 
 
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
-    from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
-                                      handover_notes, write_sites)
+    from ..train.trajectories import crisp_messages, handover_notes
 
     fingerprint = tokenizer_fingerprint(tokenizer)
     record_rows = list(records)
@@ -963,48 +1016,9 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
             omitted.append({"id": rid, "reason": "missing_factual_source_groups"})
             continue
         try:
+            messages, context_attestations, capture_augmentation_attestations = (
+                authenticated_crisp_context_messages(record, piece_map, writer_sources))
             notes = handover_notes(record)
-            provider_context_attestations = _attested_provider_expanded_reads(
-                record, writer_sources, split=split, source_groups=groups)
-            provider_context_bodies = {item["block_id"]: item for item in provider_context_attestations
-                                       if isinstance(item.get("body"), str)}
-            neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
-                record, writer_sources, split=split, source_groups=groups,
-                authenticated_context_bodies=provider_context_bodies)
-            provider_context_ids = {item.get("block_id") for item in provider_context_attestations}
-            context_attestations = [item for item in context_attestations
-                                    if not (item.get("source_kind") == "provider_expanded_context_only_input"
-                                            and item.get("block_id") in provider_context_ids)]
-            for item in provider_context_attestations:
-                item.pop("body", None)
-            context_attestations.extend(provider_context_attestations)
-            message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
-            messages = crisp_messages(message_inputs, piece_map, notes,
-                                      neuralese_bodies=neuralese_bodies)
-            capture_augmentations_by_digest = {}
-            for _, _, _, writer_name in write_sites(record):
-                augmentation, digest = authenticated_capture_context_augmentation(record, writer_name)
-                if augmentation is None:
-                    continue
-                if not isinstance(digest, str):
-                    raise ValueError("capture context augmentation lacks its digest")
-                content = augmentation.get("content")
-                if not isinstance(content, str):
-                    raise ValueError("capture context augmentation digest mismatch")
-                prefix, separator, trailer = content.rpartition("\ncontext_augmentation_sha256=")
-                if not separator or trailer != digest or _sha(prefix.encode("utf-8")) != digest:
-                    raise ValueError("capture context augmentation digest mismatch")
-                item = capture_augmentations_by_digest.setdefault(digest, {
-                    "message": augmentation, "writer_names": [],
-                    "message_sha256": _sha(_canonical(augmentation).encode("utf-8")),
-                })
-                if writer_name not in item["writer_names"]:
-                    item["writer_names"].append(writer_name)
-            messages.extend(item["message"] for item in capture_augmentations_by_digest.values())
-            capture_augmentation_attestations = [
-                {"writer_names": item["writer_names"], "augmentation_sha256": digest,
-                 "message_sha256": item["message_sha256"]}
-                for digest, item in capture_augmentations_by_digest.items()]
             target = crisp_messages([record["target"]], piece_map, notes)[0]
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
