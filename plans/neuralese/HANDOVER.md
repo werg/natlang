@@ -1672,3 +1672,16 @@ runtime commit `d915133f695ced59fde70d71100735cc9ccd2ca7`, container
 `98c449e7ef60`. At latest verified monitoring, training had reached step22296 after24 updates;
 early values are diagnostic and no new qualification is claimed. Do not append
 the87 already included target-bound documents again.
+
+### llama.cpp reader-adapter port status (2026-10-09)
+
+The Pop fork now exports and restores a `full-residual-v1` adapter for the
+legacy `legacy-rms-v1` projector, and `nz_read` applies it to Neuralese block
+vectors only. The nonzero-adapter LFM2.5 CPU parity passed. WASM was not run
+because Emscripten is unavailable. This is a narrow legacy-profile transport
+check, not qualification of the new foundation or another backbone.
+
+The current fork pin and receipt are in `training/neuralese/llama-cpp-fork.json`
+and `runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json`.
+Raw-token and latent-sketch GGUF export remain unsupported. The profile-specific
+implementation plan is in `plans/neuralese/READ_ADAPTER_PORT_HANDOFF.md`.

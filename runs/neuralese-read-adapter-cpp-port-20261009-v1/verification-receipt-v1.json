@@ -1,0 +1,81 @@
+{
+  "schema": "natlang.neuralese.read-adapter-cpp-port-verification/1",
+  "created_at_utc": "2026-10-09T14:32:05Z",
+  "scope": {
+    "port_profile": "legacy-rms-v1",
+    "reader_adapter": "full-residual-v1",
+    "cpp_entrypoint": "nz_read",
+    "raw_token_export": "unsupported",
+    "latent_sketch_v1_export": "unsupported",
+    "latent_sketch_v2_export": "unsupported",
+    "new_foundation_runtime_qualified": false,
+    "wasm_build_or_parity": "not run: emcc and emcmake unavailable"
+  },
+  "source": {
+    "natlang_repository": "/home/werg/natlang",
+    "natlang_commit": "d8e505a98838ab74f69cf8e9ca8a8ab861e7af2d",
+    "fork_repository": "/home/werg/llama.cpp-neuralese",
+    "fork_branch": "neuralese",
+    "fork_commit": "8155cff42face11c178d7e3c72988581f75da4d9",
+    "image": "sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de",
+    "model_snapshot": "/home/werg/natlang/models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "binary_sha256": {
+      "llama-neuralese-parity": "49b5fc366869fcd47cd859f7ecbb5d8e8637e3cbb02bfc106ad77813c08cfff7",
+      "llama-neuralese-server": "923f08846a4e4655dc3da2d4e4b89f84f3d91fbaf740fdab068b5f70001067e9"
+    },
+    "modified_source_sha256": {
+      "training/neuralese/natlang_neuralese/export/gguf.py": "3b24512db9513b1420af7f0617e61333ce708c953a023385b740eda94a3955f4",
+      "training/neuralese/natlang_neuralese/export/__main__.py": "1868cecfb73c8891e6c5ba0e16991e9feb57a842426a51b863d23d4c4db346ff",
+      "training/neuralese/natlang_neuralese/model/heads.py": "a05185033ba43b2b0dcbb54577ef095fa26df066738ca3e24c10b593eccba75b",
+      "training/neuralese/natlang_neuralese/serve/__init__.py": "53f45fc4b52dbd38e30ef1cbeb2d2760bea6c14811b8d1b79b5f7d117baf487b",
+      "tests/neuralese/test_llamacpp_parity.py": "79ddbb69df0b2f796a8d3ceb9902332babcd9dcb5768f2e476c705bc0d8ed72a",
+      "tests/neuralese/test_read_adapter.py": "61092ac80e0905f6a6385518d7d2b36b3e16f8e8c03ef948cc8adf1c6dbdc1b2",
+      "tools/neuralese/neuralese.cpp": "951d764414936bc0baaebd7f7f567f0ce8a57341e2fa57930886339aa67681b5",
+      "tools/neuralese/neuralese.h": "5533bb48fd3546cd9bf85b41da65737f3d6d7562c8dadc21cf80b7c3e79c6ea0"
+    }
+  },
+  "build": {
+    "commands": [
+      "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release",
+      "cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2"
+    ],
+    "result": "passed",
+    "cache_configuration": {
+      "generator": "Ninja",
+      "build_type": "Release",
+      "GGML_CUDA": false,
+      "GGML_OPENMP": false
+    },
+    "outputs": [
+      "build-cpu/bin/llama-neuralese-parity",
+      "build-cpu/bin/llama-neuralese-server"
+    ]
+  },
+  "checks": [
+    {
+      "command": "docker run --rm --network none -v /home/werg/natlang:/home/werg/natlang -v /home/werg/llama.cpp-neuralese:/home/werg/llama.cpp-neuralese -w /home/werg/natlang -e PYTHONPATH=/home/werg/natlang/training/neuralese -e HF_HUB_OFFLINE=1 -e HF_HUB_CACHE=/home/werg/natlang/models/hf/hub sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de pytest -q tests/neuralese/test_llamacpp_parity.py -k 'read_port_with_full_residual_adapter_matches_reference[cpu]' tests/neuralese/test_read_adapter.py -s",
+      "result": "1 passed, 10 deselected in 163.77s",
+      "adapter_fixture": {
+        "projection_weight_and_bias": "nonzero normal samples, std 0.01, seed 19",
+        "adapter_norm_epsilon": 1e-5,
+        "logit_max_absolute_difference": 0.00899,
+        "logit_tolerance": 0.02,
+        "greedy_tokens": "exact match"
+      }
+    },
+    {
+      "command": "docker run --rm --network none -v /home/werg/natlang:/home/werg/natlang -w /home/werg/natlang -e PYTHONPATH=/home/werg/natlang/training/neuralese sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de pytest -q tests/neuralese/test_read_adapter.py -k 'eps_is_restorable'",
+      "result": "1 passed, 2 deselected in 0.32s"
+    },
+    {
+      "command": "docker run --rm --network none -v /home/werg/natlang:/home/werg/natlang -w /home/werg/natlang -e PYTHONPATH=/home/werg/natlang/training/neuralese -e HF_HUB_OFFLINE=1 -e HF_HUB_CACHE=/home/werg/natlang/models/hf/hub sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de pytest -q tests/neuralese/test_read_adapter.py -k 'starts_as_identity'",
+      "result": "1 passed, 2 deselected in 4.22s"
+    }
+  ],
+  "limitations": [
+    "Raw-token-v1 and latent-sketch-v1/v2 projector export remain rejected by the exporter. The C++ loader and write graph still require the legacy projector tensors and semantics.",
+    "The native check used the CPU build only. CUDA and WASM parity were not run.",
+    "The adapter test establishes parity for a trained-like nonzero adapter on the legacy profile. It does not qualify the new foundation, raw or latent profiles, Mellum serving, gradients, or semantic task quality.",
+    "Full pytest stdout and temporary GGUF files were not retained. This receipt retains exact commands, source/binary pins, and the observed result summary; test containers were auto-removed."
+  ]
+}

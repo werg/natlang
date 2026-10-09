@@ -198,3 +198,18 @@ Resolved by the owner on 2026-10-03:
 1. **Upstreaming.** The llama.cpp and vLLM changes are developed in forks, designed for upstreaming: general APIs (mixed token/embedding batches, a block-write procedure, model-declared heads and adapters), small patches, upstream conventions.
 2. **Tool-call serialization.** Literals stay inside the eval code string of the native Pythonic tool call, with the control tokens inside the quoted string. Tool-call parsers recognise the control tokens there; no dedicated argument form.
 3. **Browser store.** Browser runtimes store blocks and `.nz` files in the Origin Private File System (OPFS), keyed by ID.
+
+## Current raw/latent GGUF support boundary (2026-10-09)
+
+The fork now transports the optional `full-residual-v1` read adapter on the
+legacy `legacy-rms-v1` projector. The adapter runs inside `nz_read` after the
+legacy interface norm; ordinary text encoding does not use it. CPU parity used
+a nonzero adapter. This does not qualify the new foundation runtime.
+
+The exporter still refuses `raw-token-v1` and `latent-sketch-v1/v2`. Their
+projector tensors and write/stop semantics differ from the legacy RMS/vocabulary
+mixture graph, so removing the refusal would not be a valid port. The required
+profile work, LFM2/Mellum coverage limits and acceptance sequence are in
+[`READ_ADAPTER_PORT_HANDOFF.md`](READ_ADAPTER_PORT_HANDOFF.md). The exact build,
+source pins and CPU parity summary are in
+[`runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json`](../../runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json).

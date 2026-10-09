@@ -1,14 +1,14 @@
 {
-  "description": "llama.cpp fork with the Neuralese ports (S4 \u00a76). A separate git checkout, not vendored: core patch = layer-range execution (src/llama-ext.h llama_set_layer_range, LFM2 graph); library + tools in tools/neuralese.",
+  "description": "llama.cpp fork with the Neuralese ports (S4 §6). A separate git checkout, not vendored: core patch = layer-range execution (src/llama-ext.h llama_set_layer_range, LFM2 graph); library + tools in tools/neuralese.",
   "path": "../llama.cpp-neuralese",
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "5d999c0c5",
-  "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
+  "working_commit": "8155cff42face11c178d7e3c72988581f75da4d9",
+  "working_status": "Legacy-rms-v1 GGUF projector supports optional full-residual-v1 reader adapter in nz_read; CPU parity verified with a nonzero adapter. Raw-token and latent-sketch projectors remain unsupported, and this does not qualify the new foundation C++ runtime.",
   "upstream_base": "1537a0a8b",
-  "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j",
-  "commit": "5d999c0c5",
+  "build_cpu": "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2",
+  "commit": "8155cff42face11c178d7e3c72988581f75da4d9",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -75,5 +75,16 @@
     "commit": "16de45539",
     "status": "reference GPU verified; C++ patch pushed but native build/conformance still required",
     "issue": "Forced value= text prefix split merged =[ token; force common token prefix across JSON starters instead."
+  },
+  "read_adapter_cpu_verification": {
+    "receipt": "runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json",
+    "natlang_commit": "d8e505a98838ab74f69cf8e9ca8a8ab861e7af2d",
+    "fork_commit": "8155cff42face11c178d7e3c72988581f75da4d9",
+    "scope": "legacy-rms-v1 sidecar with full-residual-v1 reader adapter; nz_read only",
+    "wasm": "not run; emcc and emcmake were unavailable on Pop",
+    "qualification": false,
+    "receipt_sha256": "0e5a26bf40abc0c08b5c25261f291b31503bc58317225012fe2e56d7dedb7f2b",
+    "remaining_profile_plan": "runs/neuralese-read-adapter-cpp-port-20261009-v1/remaining-raw-latent-port-plan-v1.md",
+    "remaining_profile_plan_sha256": "71f5af8fece7a387faaab36006e76ccda3ebde52c6ee97e7028c44cf67325d1b"
   }
 }
