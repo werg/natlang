@@ -10,7 +10,8 @@ export function substituteTasks(registry: RegistryReader, tasks: readonly AnyTas
     tools: () => snapshot.tools(),
     sections: () => snapshot.sections(),
     tasks: () => snapshot.tasks().map(task => byName.get(task.definition.name) ?? task),
-    task: name => byName.get(name) ?? snapshot.task(name),
+    // Only a task the registry has is substituted: a registry without a built-in task stays without it.
+    task: name => { const own = snapshot.task(name); return own && (byName.get(name) ?? own); },
   });
   let source: RegistrySnapshot | undefined, wrapped: RegistrySnapshot | undefined;
   return {
