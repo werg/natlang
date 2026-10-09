@@ -1236,7 +1236,12 @@ def main(argv=None):
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
             heads.load_state_dict(restored['heads'])
-            try:optimizer.load_state_dict(restored['optimizer'])
+            try:
+                optimizer.load_state_dict(restored['optimizer'])
+                if continuation:
+                    print(json.dumps({'event':'optimizer_state_restored',
+                                      'source_step':continuation['step'],
+                                      'parameter_groups':len(optimizer.param_groups)}),flush=True)
             except ValueError as error:
                 # The trainable set grew (members' private parts joined): the optimizer starts fresh.
                 print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
@@ -1252,10 +1257,17 @@ def main(argv=None):
                 # An unchanged objective may continue its plateau/ramp phase.
                 schedule.load_state_dict(continuation['schedule'])
                 last_schedule_step=continuation['last_schedule_step']
+                print(json.dumps({'event':'foundation_schedule_restored',
+                                  'source_step':continuation['step'],
+                                  'last_schedule_step':last_schedule_step,
+                                  'schedule':schedule.controls()}),flush=True)
             else:
                 # A changed depth/supervision objective starts a new plateau
                 # and must earn its own update and qualification evidence.
                 updates={'backbone':False,'sketch':False,'full_projection':False}
+                print(json.dumps({'event':'foundation_schedule_reinitialized',
+                                  'source_step':continuation['step'],
+                                  'same_foundation_context':same_foundation}),flush=True)
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
             else:

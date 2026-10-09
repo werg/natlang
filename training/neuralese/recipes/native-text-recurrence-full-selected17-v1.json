@@ -1,0 +1,244 @@
+{
+  "dataset_lineage": {
+    "corpus_id": "v18-v19-full-selected17-native-text-5467-4699-r4961-20261009-v1",
+    "full_assembly_proposal": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/full-assembly-proposal-v1.json",
+      "sha256": "d26e446dc56956e91cd662c5f03d11770be496290c2dcfba912f4d3f46f8e449"
+    },
+    "root_integration_adoption": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v1.json",
+      "sha256": "2761c2c03f4430e6003bad845d7c0ac3d2e52b43b5c2712a4e2961d73d8a2a0a"
+    },
+    "root_integration_review": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v1.json",
+      "sha256": "c7d10142bd94f63435763433483e83941c4b2ca04528f79cb0c46e914f04ee8d"
+    },
+    "scope": "native action SFT plus ordinary text only; recurrence is the unchanged previously adopted 4961-row set; no new recurrence admission or qualification before its separate training/runtime gates."
+  },
+  "description": "Continue the exact action45 step32256 full-state map/sketch warmup checkpoint over root-adopted native/text union 5467/4699, qualify the new corpus on held consecutive gates, then train the unchanged adopted recurrence cohort 4961. Raw foundation reference remains separate.",
+  "id": "native-text-recurrence-full-selected17-v1",
+  "input_bindings": {
+    "checkpoint.best_full_state": {
+      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1/train-continuation/best-checkpoint.pt",
+      "sha256": "742ea647b335fb0aab20f596307623cc6a18a77ed5fc1e4d1b680576bee946fd"
+    },
+    "checkpoint.best_latent_sketch_runtime": {
+      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1/postrun-qualification-plan-v1/best-postrun-v1/runtime/report.json",
+      "sha256": "9780a7a50fab022137d5ed4ab2c6065a46dacec7a72a55cf8c0e9426f14be452"
+    },
+    "checkpoint.best_manifest": {
+      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1/train-continuation/best-checkpoint.json",
+      "sha256": "7bab833e4abf4e76d14a0aa9f88787c01fcc09170792c282a9e12f2b134ae20f"
+    },
+    "checkpoint.best_serving_heads": {
+      "path": "runs/neuralese-native-text-input-map-lfm-action45-refinement-20261008-v1/train-continuation/best-heads.pt",
+      "sha256": "d6281b54021e514a341d24a99f8632300640a7d694e36f2371e08505e348f3c0"
+    },
+    "cohort.native": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-records.jsonl",
+      "sha256": "badcefe122c2ddf8adb2298c185e2f226233e39d0e261f081280587631aaeda8"
+    },
+    "cohort.native_pieces": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-pieces.jsonl",
+      "sha256": "b3a30bae2767cbeb7fa5dd4ebd7b8bd062f5eb82449c48d13b9de6a6965592f0"
+    },
+    "cohort.recurrence": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-records.jsonl",
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3"
+    },
+    "cohort.recurrence_pieces": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/recurrence-pieces.jsonl",
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6"
+    },
+    "cohort.text": {
+      "path": "runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/text.jsonl",
+      "sha256": "6d042616fca66c2b5064bb147f8c274381c9d21f1c04ddbf0b72026d251cb145"
+    }
+  },
+  "schema": "natlang.neuralese-training-recipe/1",
+  "stages": [
+    {
+      "id": "token_identity",
+      "inputs": {
+        "records": "cohort.native"
+      },
+      "kind": "token_identity",
+      "parameters": {
+        "limit": 32,
+        "max_tokens": 512
+      },
+      "requires": []
+    },
+    {
+      "id": "embedding_distillation",
+      "inputs": {
+        "pieces": "cohort.native_pieces",
+        "records": "cohort.native"
+      },
+      "kind": "causal_embedding_distillation",
+      "parameters": {
+        "agreement_gate": 0.9,
+        "argmax_weight": 0.1,
+        "batch": 512,
+        "checkpoint_every": 128,
+        "context_tokens": 1024,
+        "contexts": 128,
+        "cutoff": "full",
+        "eval_every": 128,
+        "kl_gate": 0.25,
+        "lr": 0.0003,
+        "seed": 0,
+        "source_fraction": 0.25,
+        "steps": 8192,
+        "stop_on_gate": true,
+        "tokens": 1024
+      },
+      "requires": [
+        "token_identity"
+      ]
+    },
+    {
+      "id": "runtime_qualification",
+      "inputs": {
+        "records": "cohort.native"
+      },
+      "kind": "raw_runtime_qualification",
+      "parameters": {
+        "limit": 8,
+        "max_length": 512
+      },
+      "requires": [
+        "embedding_distillation"
+      ]
+    },
+    {
+      "id": "verified_heads_handoff",
+      "inputs": {
+        "warmup_checkpoint": "checkpoint.best_full_state",
+        "warmup_heads": "checkpoint.best_serving_heads",
+        "warmup_manifest": "checkpoint.best_manifest",
+        "warmup_runtime_report": "checkpoint.best_latent_sketch_runtime"
+      },
+      "kind": "verified_heads_handoff",
+      "parameters": {
+        "max_ce_delta": 0.05,
+        "max_relative_mse": 0.025,
+        "min_agreement": 0.995
+      },
+      "requires": [
+        "runtime_qualification"
+      ]
+    },
+    {
+      "id": "core_text_warmup",
+      "inputs": {
+        "continue_from": "checkpoint.best_full_state",
+        "heads": "checkpoint.best_serving_heads",
+        "pieces": "cohort.native_pieces",
+        "records": "cohort.native",
+        "text_data": "cohort.text"
+      },
+      "kind": "core_text_warmup",
+      "parameters": {
+        "backbone_ramp_evals": 4,
+        "backbone_training": "full",
+        "batch": 1,
+        "checkpoint_every": 128,
+        "checkpoint_layers": true,
+        "consecutive_gates": 2,
+        "cutoff": 8,
+        "embedding_weight": 1.0,
+        "eval_every": 128,
+        "group_size": 16,
+        "held_documents": 16,
+        "input_map_kernel": 4,
+        "input_map_rank": 64,
+        "lr": 3e-05,
+        "max_ce_delta": 0.05,
+        "max_relative_mse": 0.025,
+        "min_agreement": 0.995,
+        "neuralese_input": "map",
+        "optimizer": "muon",
+        "pass_ramp_evals": 2,
+        "prefix_tokens": 32,
+        "projection_min_evals": 2,
+        "projection_min_improvement": 0.01,
+        "projection_patience": 3,
+        "rank": 16,
+        "rollout_passes": 0,
+        "seed": 0,
+        "sketch_lr": 0.0003,
+        "sketch_weight": 1.0,
+        "steps": 33280,
+        "text_weight": 0.25,
+        "tokens": 16384
+      },
+      "requires": [
+        "runtime_qualification",
+        "verified_heads_handoff"
+      ]
+    },
+    {
+      "id": "adapted_runtime",
+      "inputs": {
+        "records": "cohort.native"
+      },
+      "kind": "text_warmup_runtime",
+      "parameters": {},
+      "requires": [
+        "core_text_warmup"
+      ]
+    },
+    {
+      "id": "recurrence_training",
+      "inputs": {
+        "pieces": "cohort.recurrence_pieces",
+        "records": "cohort.recurrence"
+      },
+      "kind": "raw_recurrence_training",
+      "parameters": {
+        "backbone_lr": 3e-05,
+        "backbone_training": "auto",
+        "backward_policy": "auto",
+        "batch": 1,
+        "checkpoint_every": 25,
+        "checkpoint_layers": true,
+        "content_transport": "top-state",
+        "crisp_weight": 1,
+        "distill": 0.25,
+        "eval": 28,
+        "eval_every": 128,
+        "ffn_chunk_tokens": 1024,
+        "graph_headroom_gb": 0.25,
+        "handover": "written",
+        "heads_lr": 3e-05,
+        "local_stage_batch_size": 16,
+        "lora_lr": 2e-05,
+        "lr": 0.0001,
+        "max_tokens": 65536,
+        "max_write_vectors": 512,
+        "max_writes": 0,
+        "optimizer": "muon",
+        "rank": 16,
+        "seed": 0,
+        "sketch_gradient": "local_stage",
+        "sketch_target_backbone_scale": 0.05,
+        "sketch_target_weight": 0.1,
+        "steps": 2048,
+        "stop_supervision": "gold-native-boundary",
+        "tokens_per_vector": 1,
+        "train": 2000,
+        "train_control_rows": true,
+        "write_curriculum": "joint",
+        "write_depth": 5,
+        "writer_length_policy": "native-value",
+        "writer_supervision": "native-value",
+        "writer_text_weight": 1.0
+      },
+      "requires": [
+        "core_text_warmup",
+        "adapted_runtime"
+      ]
+    }
+  ]
+}
