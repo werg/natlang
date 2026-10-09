@@ -153,6 +153,7 @@ export function collapseHistory(messages: Record<string, unknown>[], keptStart: 
 function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
   if (depth > 5) return {};
   const resolved = env.resolve(type);
+  if (resolved.kind === 'refined') return schemaOf(resolved.base, env, depth);
   if (resolved.kind === 'prim' && resolved.name === 'unknown') return {};
   if (resolved.kind === 'prim') return { type: { string: 'string', Blob: 'string', number: 'number',
     boolean: 'boolean', null: 'null', Folder: 'object', FileHandle: 'object' }[resolved.name as Exclude<typeof resolved.name, 'unknown'>],
