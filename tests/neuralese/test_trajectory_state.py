@@ -147,6 +147,18 @@ def test_curriculum_change_is_named_and_cannot_change_data_or_optimizer():
     with pytest.raises(ValueError):
         validate_continuation(old, current)
     validate_continuation(old, current, allowed_changes=['tokens_per_vector', 'writer_text_weight'])
+
+
+def test_legacy_continuation_can_enable_projection_anchor_as_one_named_change():
+    from natlang_neuralese.train.trajectory_state import validate_continuation
+    old = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+           'identity': {'options': {'lr': .01}, 'files': {'data': 'same'}}}
+    current = {'options': {'lr': .01, 'projection_anchor_weight': 1.0,
+                           'projection_anchor_backbone_scale': .05},
+               'files': {'data': 'same'}}
+    with pytest.raises(ValueError, match='training controls'):
+        validate_continuation(old, current)
+    validate_continuation(old, current, allowed_changes=['projection_anchor_weight'])
     with pytest.raises(ValueError):
         validate_continuation(old, current, allowed_changes=['lr'])
     with pytest.raises(ValueError):

@@ -26,13 +26,7 @@ from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
 from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
                                 persist_postcommit_recovery,
                                 warmup_checkpoint_size_upper_bound)
-
-
-def relative_mse_positions(predicted, target):
-    target = target.detach().float()
-    return ((predicted.float()-target).square().mean(-1) /
-            target.square().mean(-1).clamp_min(1e-6))
-
+from .projection_anchor import relative_mse_positions, gold_aligned_projection_errors
 
 def relative_mse(predicted, target):
     return relative_mse_positions(predicted,target).mean()
@@ -381,8 +375,10 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
 
 def projection_errors(heads, top, secondary_projection, target, *, secondary_target=None):
     """Full projection stays anchored to gold; an input map may have a separate detached target."""
-    return (relative_mse_positions(heads.content(torch.zeros_like(top),top),target),
-            relative_mse_positions(secondary_projection,target if secondary_target is None else secondary_target))
+    full_projection = heads.content(torch.zeros_like(top), top)
+    secondary_target = target if secondary_target is None else secondary_target
+    return gold_aligned_projection_errors(full_projection, secondary_projection, target,
+                                          shallow_target_embeddings=secondary_target)
 
 
 def projection_losses(heads, top, secondary_projection, target):

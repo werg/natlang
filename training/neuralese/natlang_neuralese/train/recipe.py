@@ -18,7 +18,7 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
-    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads'},
+    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','cutoff','group_size',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
@@ -38,6 +38,7 @@ HANDLERS = {
                                                'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
                                                'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
                                                'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
+                                               'projection_anchor_weight', 'projection_anchor_backbone_scale',
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
@@ -134,7 +135,7 @@ def stage_input_args(resolved, kind):
     """Serialize already-validated file roles to the shared handler CLIs."""
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
-    for role in ('records', 'pieces', 'text_data', 'continue_from', 'warmup_checkpoint',
+    for role in ('records', 'pieces', 'text_data', 'continue_from', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]

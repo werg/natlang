@@ -629,6 +629,10 @@ def main(argv=None):
                              "ternary scale (codes flip after moving ~0.5 of it); 0: Muon at the backbone rate, under "
                              "which codes practically never flip")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
+    parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
+                        help="gold-aligned auxiliary relative-MSE anchor for full content and shallow feedback projections against detached raw next-token embeddings; set 0 only for an explicit diagnostic ablation")
+    parser.add_argument("--projection-anchor-backbone-scale", type=float, default=0.05,
+                        help="gradient multiplier from the projection anchor into backbone states; projection parameters receive full gradient")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
     parser.add_argument("--stop-supervision", choices=["generated-length", "gold-native-boundary"], default="generated-length", help="teach stop on coherent gold value states with balanced terminal/continue loss")
     parser.add_argument("--writer-supervision", choices=["full-reply", "native-value"], default="native-value", help="teacher-force the gold body under the exact forced writer prefix; full-reply reproduces earlier supervision")
@@ -636,7 +640,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient", "member_weight", "member_tokens", "member_eval", "projection_anchor_weight", "projection_anchor_backbone_scale"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -767,6 +771,10 @@ def main(argv=None):
         raise ValueError('invalid producer text supervision weight')
     if not math.isfinite(args.crisp_weight) or args.crisp_weight < 0:
         raise ValueError('invalid crisp SFT weight')
+    if not math.isfinite(args.projection_anchor_weight) or args.projection_anchor_weight < 0:
+        raise ValueError('invalid projection anchor weight')
+    if not math.isfinite(args.projection_anchor_backbone_scale) or not 0.0 <= args.projection_anchor_backbone_scale <= 1.0:
+        raise ValueError('projection anchor backbone scale must be finite and between zero and one')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
         raise ValueError('invalid graph memory budget')
     if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written'):
@@ -1019,6 +1027,7 @@ def main(argv=None):
         return written.payload[0, :n]
 
     lengths: list[int] = []
+    projection_anchor_values: list[float] = []
     write_context_lengths: list[int] = []
     writer_batches: list[int] = []
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
@@ -1069,14 +1078,27 @@ def main(argv=None):
             if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
                 raise ValueError('producer gold supervision requires admitted training split')
             if args.writer_supervision == 'native-value':
-                return session.supervised_continuation_loss(
+                loss = session.supervised_continuation_loss(
                     messages, producer.get('tools'), site_prefix(producer), producer_source(name, producer),
                     resolve_values({**leaves, **payloads}), text_weight=args.writer_text_weight,
-                    stop_weight=args.stop_weight if args.stop_supervision == 'gold-native-boundary' else 0.)
+                    stop_weight=args.stop_weight if args.stop_supervision == 'gold-native-boundary' else 0.,
+                    projection_anchor_weight=args.projection_anchor_weight,
+                    projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
+                if args.projection_anchor_weight:
+                    projection_anchor_values.append(float(session.last_projection_anchor_loss))
+                return loss
             target = producer_text_target(producer, texts, names)
-            return args.writer_text_weight * session.supervised_text_loss(
+            loss = session.supervised_text_loss(
                 {'messages': messages, 'tools': producer.get('tools'), 'target': target},
-                resolve_values({**leaves, **payloads}))
+                resolve_values({**leaves, **payloads}),
+                # Keep the anchor's configured scale independent of the
+                # writer CE multiplier applied to the combined return below.
+                projection_anchor_weight=(args.projection_anchor_weight / args.writer_text_weight
+                                          if args.writer_text_weight else 0.),
+                projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
+            if args.projection_anchor_weight:
+                projection_anchor_values.append(float(session.last_projection_anchor_loss))
+            return args.writer_text_weight * loss
         auxiliary = gold_replay if (args.writer_text_weight or (args.stop_supervision == 'gold-native-boundary' and args.stop_weight)) and torch.is_grad_enabled() else None
         return producer, messages, payloads, replay, auxiliary
 
@@ -1544,7 +1566,11 @@ def main(argv=None):
             {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
             distill_weight=distill, context_weight=args.context_weight if training_objective else 0.,
-            feedback_weight=args.feedback_weight)
+            feedback_weight=args.feedback_weight,
+            projection_anchor_weight=args.projection_anchor_weight if training_objective else 0.,
+            projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
+        if training_objective and args.projection_anchor_weight:
+            projection_anchor_values.append(float(session.last_projection_anchor_loss))
         if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
             plan = reader_geometry[0]
             memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
@@ -1846,6 +1872,7 @@ def main(argv=None):
             optimizer.zero_grad(set_to_none=True)
             losses = []
             crisp_losses = []
+            projection_anchor_values.clear()
             released_graph_bytes = 0
             offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
@@ -1878,7 +1905,8 @@ def main(argv=None):
                     time.perf_counter() - geometry_phase_started)
                 rng_before = (random.getstate(), write_choice.getstate(), stop_generator.get_state(),
                               torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
-                              dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches))
+                              dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches),
+                              len(projection_anchor_values))
                 def attempt_joint():
                     # autograd.grad avoids partial parameter .grad mutations on
                     # an aborted attempt, including accumulated earlier chains.
@@ -1917,6 +1945,7 @@ def main(argv=None):
                             discarded_writer_batches += len(writer_batches) - rng_before[8]
                             discarded_writer_rows += sum(writer_batches[rng_before[8]:])
                             del writer_batches[rng_before[8]:]
+                            del projection_anchor_values[rng_before[9]:]
                             boundary_terms.clear()
                             stop_terms.clear()
                             collect_graph_cycles()
@@ -2051,6 +2080,8 @@ def main(argv=None):
                      "discarded_writer_batches_this_update": discarded_writer_batches,
                      "discarded_writer_rows_this_update": discarded_writer_rows,
                      "phase_wall_seconds": dict(phase_wall_seconds),
+                     **({"projection_anchor_loss": sum(projection_anchor_values) / len(projection_anchor_values)}
+                        if projection_anchor_values else {}),
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length, **({"family": family_record} if family_record else {})}
             if args.device.startswith("cuda"):

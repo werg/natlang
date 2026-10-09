@@ -57,6 +57,50 @@ def test_grad_and_adam_tune_a_soft_argument(engine):
     assert state["step"] == 4 and len(state["m"]) == 1
 
 
+def test_projection_anchor_aligns_full_and_shallow_ports_to_gold_target_tokens(engine):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.serve.engine import Engine
+    from natlang_neuralese.serve.grad import GradSession
+
+    heads = PortHeads(engine.backbone, cutoff=6, max_length=8, profile="latent-sketch-v2")
+    anchored_engine = Engine(engine.backbone, heads, engine.tokenizer, TensorStore(), DIALECT,
+                             max_block=4, device="cpu")
+    session = GradSession(anchored_engine)
+    term_ = {"messages": [{"role": "user", "content": "Reply with one city name."}],
+             "target": {"role": "assistant", "content": "Paris"}}
+
+    loss = session.supervised_text_loss(term_, {}, projection_anchor_weight=0.5,
+                                        projection_anchor_backbone_scale=0.05)
+    assert torch.isfinite(loss)
+    assert torch.isfinite(session.last_projection_anchor_loss)
+    assert session.last_projection_anchor_loss > 0
+    loss.backward()
+    assert heads.content.proj.weight.grad is not None
+    assert heads.feedback.correction.weight.grad is not None
+
+
+def test_projection_anchor_applies_to_native_value_producer_replay(engine):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.serve.engine import Engine
+    from natlang_neuralese.serve.grad import GradSession
+
+    heads = PortHeads(engine.backbone, cutoff=6, max_length=8, profile="latent-sketch-v2")
+    anchored_engine = Engine(engine.backbone, heads, engine.tokenizer, TensorStore(), DIALECT,
+                             max_block=4, device="cpu")
+    session = GradSession(anchored_engine)
+
+    loss = session.supervised_continuation_loss(
+        [{"role": "user", "content": "Return one city name."}], None,
+        "", "Paris", {}, text_weight=1., projection_anchor_weight=1.,
+        projection_anchor_backbone_scale=0.05)
+    assert torch.isfinite(loss)
+    assert torch.isfinite(session.last_projection_anchor_loss)
+    assert session.last_projection_anchor_loss > 0
+    loss.backward()
+    assert heads.content.proj.weight.grad is not None
+    assert heads.feedback.correction.weight.grad is not None
+
+
 def test_log_likelihood_self_distill_and_kl_terms(engine):
     from natlang_neuralese.serve.engine import GenerationRequest
     from natlang_neuralese.serve.grad import GradSession, embed_text

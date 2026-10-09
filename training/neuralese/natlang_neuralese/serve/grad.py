@@ -224,10 +224,16 @@ class GradSession:
         return torch.cat(out), torch.tensor([weights[j] for j in index], device=device, dtype=torch.float32)
 
     def _score(self, prompt, target, leaves, write_terms: bool, collect_token_states: bool = False,
-               context_weights: list[float] | None = None) -> dict:
+               context_weights: list[float] | None = None, projection_anchor_weight: float = 0.0,
+               projection_anchor_backbone_scale: float = 0.05) -> dict:
         """Teacher-forced pass over prompt + target. Returns per-position text log-probs (and logits) for the
         target's text tokens, plus write terms for written blocks; with per-prompt-item `context_weights`, also
         `context_logp` and `context_weight` for the prompt's positively weighted text tokens."""
+        if (not torch.isfinite(torch.tensor(float(projection_anchor_weight))).item() or
+                projection_anchor_weight < 0 or
+                not torch.isfinite(torch.tensor(float(projection_anchor_backbone_scale))).item() or
+                not 0.0 <= projection_anchor_backbone_scale <= 1.0):
+            raise RequestError('neuralese-grad-term', 'invalid projection anchor weights')
         backbone, heads = self.backbone, self.heads
         starts = [] if context_weights is not None else None
         embeds = self._embed_items(prompt, leaves, starts)
@@ -239,6 +245,8 @@ class GradSession:
         cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
         top_state = out['h_final'][:, -1] if not heads.read_markers else None
         token_logp, token_logits, write_logp, stop_states = [], [], [], []
+        projection_anchor_sum = None
+        projection_anchor_count = 0
         index = 0
         while index < len(target):
             kind, value = target[index]
@@ -252,6 +260,25 @@ class GradSession:
                 logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
                 if collect_token_states:
                     stop_states.append(heads.stop_states(step['h_cut'], step['h_final']))
+                if projection_anchor_weight:
+                    if heads.read_markers or top_state is None or cut_state is None:
+                        raise RequestError('neuralese-grad-term',
+                                           'gold projection anchoring requires raw-token causal top and cutoff states')
+                    from ..train.projection_anchor import (gold_aligned_projection_errors,
+                                                           scale_gradient)
+                    aligned_top = torch.cat([top_state[:, None], step['h_final'][:, :-1]], dim=1)
+                    aligned_shallow = torch.cat([cut_state[:, None], step['h_cut'][:, :-1]], dim=1)
+                    full_projection = heads.content(
+                        torch.zeros_like(aligned_top),
+                        scale_gradient(aligned_top, projection_anchor_backbone_scale))
+                    shallow_projection = heads.feedback(
+                        scale_gradient(aligned_shallow, projection_anchor_backbone_scale))
+                    full_error, shallow_error = gold_aligned_projection_errors(
+                        full_projection, shallow_projection, backbone.embed(ids).detach())
+                    per_position = (full_error + shallow_error) * 0.5
+                    subtotal = per_position.sum()
+                    projection_anchor_sum = subtotal if projection_anchor_sum is None else projection_anchor_sum + subtotal
+                    projection_anchor_count += ids.numel()
                 token_logits.append(logits)
                 token_logp.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None])[:, 0])
                 cache, last = step["cache"], step["logits"][:, -1]
@@ -278,10 +305,13 @@ class GradSession:
             if not heads.read_markers:
                 cut_state, top_state = back['h_cut'][:, -1], back['h_final'][:, -1]
             index += 1
+        anchor_loss = (projection_anchor_sum / max(1, projection_anchor_count)
+                       if projection_anchor_sum is not None else torch.zeros((), device=self.engine.device))
         return {"token_logp": torch.cat(token_logp) if token_logp else torch.zeros(0),
                 "token_logits": torch.cat(token_logits) if token_logits else None,
                 "write_logp": torch.stack(write_logp).sum() if write_logp else torch.zeros(()),
                 "token_stop_states": torch.cat(stop_states, 1) if stop_states else None,
+                "projection_anchor_loss": anchor_loss,
                 "context_logp": context_logp, "context_weight": context_weight}
 
     def _replay_write(self, block: Block, block_start: PortCache, state: torch.Tensor,
@@ -462,7 +492,8 @@ class GradSession:
             return (t.exp() * (t - s)).sum(-1).mean()
         raise RequestError("neuralese-grad-term", f"unknown term kind {kind!r}")
 
-    def supervised_continuation_loss(self, messages, tools, prefix, continuation, leaves, *, text_weight=1., stop_weight=0.):
+    def supervised_continuation_loss(self, messages, tools, prefix, continuation, leaves, *, text_weight=1., stop_weight=0.,
+                                     projection_anchor_weight=0., projection_anchor_backbone_scale=0.05):
         """Score only continuation tokens under the exact forced generation prefix.
 
         Tokenize prefix and value separately, as the writer does. Whole native
@@ -477,8 +508,16 @@ class GradSession:
             raise RequestError('neuralese-grad-term', 'forced continuation supervision needs target tokens')
         if stop_weight and self.heads.read_markers:
             raise RequestError('neuralese-grad-term', 'gold native stop supervision requires raw-token transport')
-        scored = self._score(before, target, leaves, write_terms=False, collect_token_states=bool(stop_weight))
+        if projection_anchor_weight and (self.heads.read_markers or not self.heads.autoregressive):
+            raise RequestError('neuralese-grad-term', 'gold projection anchoring requires autoregressive raw-token heads')
+        scored = self._score(before, target, leaves, write_terms=False,
+                             collect_token_states=bool(stop_weight),
+                             projection_anchor_weight=projection_anchor_weight,
+                             projection_anchor_backbone_scale=projection_anchor_backbone_scale)
         loss = -text_weight * scored['token_logp'].mean()
+        if projection_anchor_weight:
+            loss = loss + projection_anchor_weight * scored['projection_anchor_loss']
+            self.last_projection_anchor_loss = scored['projection_anchor_loss'].detach()
         if stop_weight:
             states = scored['token_stop_states']
             counts = torch.arange(1, len(target) + 1, device=states.device)[None].expand(states.shape[0], -1)
@@ -493,7 +532,8 @@ class GradSession:
         return loss
 
     def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0, context_weight=0.0,
-                             feedback_weight=1.0):
+                             feedback_weight=1.0, projection_anchor_weight=0.0,
+                             projection_anchor_backbone_scale=0.05):
         """CE and optional KL from one reader forward, with the same existing objectives.
 
         `context_weight` adds the CE of the prompt's new text (instructions and inputs, plus tool results and other
@@ -503,6 +543,16 @@ class GradSession:
         Trajectory training used to replay the entire student reader once for CE
         and again for self-distillation, retaining both recurrence graphs.
         """
+        if (not isinstance(projection_anchor_weight, (int, float)) or
+                not torch.isfinite(torch.tensor(float(projection_anchor_weight))).item() or
+                projection_anchor_weight < 0):
+            raise RequestError('neuralese-grad-term', 'projection anchor weight must be finite and nonnegative')
+        if projection_anchor_weight and (self.heads.read_markers or not self.heads.autoregressive):
+            raise RequestError('neuralese-grad-term', 'gold projection anchoring requires autoregressive raw-token heads')
+        if (not isinstance(projection_anchor_backbone_scale, (int, float)) or
+                not torch.isfinite(torch.tensor(float(projection_anchor_backbone_scale))).item() or
+                not 0.0 <= projection_anchor_backbone_scale <= 1.0):
+            raise RequestError('neuralese-grad-term', 'projection anchor backbone scale must be finite and in [0, 1]')
         messages, tools, target = term.get('messages') or [], term.get('tools'), term.get('target')
         teacher = None
         if distill_weight:
@@ -512,12 +562,20 @@ class GradSession:
                 tp, tr = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(tp, tr, {}, write_terms=False)['token_logits']
         prompt, rest = self._target_items(messages, tools, target)
+        score_options = ({'projection_anchor_weight': projection_anchor_weight}
+                         if projection_anchor_weight else {})
+        if projection_anchor_weight:
+            score_options['projection_anchor_backbone_scale'] = projection_anchor_backbone_scale
         if context_weight:
             scored = self._score(prompt, rest, leaves, write_terms=False,
-                                 context_weights=self._context_weights(prompt, feedback_weight))
+                                 context_weights=self._context_weights(prompt, feedback_weight), **score_options)
         else:
-            scored = self._score(prompt, rest, leaves, write_terms=False)
+            scored = self._score(prompt, rest, leaves, write_terms=False, **score_options)
         loss = -scored['token_logp'].mean()
+        if projection_anchor_weight:
+            anchor = scored['projection_anchor_loss']
+            loss = loss + projection_anchor_weight * anchor
+            self.last_projection_anchor_loss = anchor.detach()
         if context_weight and scored['context_logp'].numel():
             loss = loss - context_weight * (scored['context_weight'] * scored['context_logp']).mean()
         if distill_weight:

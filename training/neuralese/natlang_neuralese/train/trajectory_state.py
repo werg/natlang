@@ -173,11 +173,19 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('unsupported recurrence continuation checkpoint')
     keys = set((identity.get('options') or {}))
+    original_options = dict((state.get('identity', {}).get('options') or {}))
     old = _with_defaults(state.get('identity', {}), {k: v for k, v in (defaults or {}).items() if k in keys})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'qat_latent_lr'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval', 'member_mask_system', 'member_full_weight', 'qat_latent_lr', 'projection_anchor_weight', 'projection_anchor_backbone_scale'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
+    # Checkpoints predating the shared gold-projection anchor trained no such term.
+    if 'projection_anchor_weight' in keys and 'projection_anchor_weight' not in original_options:
+        previous['projection_anchor_weight'] = 0.0
+        if 'projection_anchor_backbone_scale' in current:
+            # A pre-anchor checkpoint had no backbone-scale control; adopting
+            # the declared default scale is part of enabling the named anchor.
+            previous['projection_anchor_backbone_scale'] = current['projection_anchor_backbone_scale']
     previous.setdefault('stop_supervision', 'generated-length')
     current.setdefault('stop_supervision', 'generated-length')
     previous.setdefault('writer_supervision', 'full-reply')
