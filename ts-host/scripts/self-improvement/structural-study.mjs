@@ -38,7 +38,7 @@ try{await readFile(join(frozenRuntime,'runtime-identity.json'));}catch(error){
 try{await readFile(resolve(output,'prelude.js'));}catch(error){if(error.code!=='ENOENT')throw error;await cp(new URL('../../prelude.js',import.meta.url),resolve(output,'prelude.js'));}
 const runtimeImport=path=>import(pathToFileURL(join(frozenRuntime,path)).href);
 const {Folder,SourceEvaluator,OperationJournal,improveProgram,openAICompatibleModelTurn,createNatlangRuntime}=await runtimeImport('index.js');
-const {loadVirtualNatlang,compileVirtualProject}=await runtimeImport('runtime/virtual-project.js');
+const {loadVirtualCallables,compileVirtualProject}=await runtimeImport('runtime/virtual-project.js');
 const {AUTHORED_IMPROVER}=await runtimeImport('improvement/authored-source.js');
 const {TOOLS_PROMPT}=await runtimeImport('native/prompt.js');
 const {UsageGateway}=await runtimeImport('evaluation/usage.js');
@@ -94,7 +94,7 @@ if(command==='probe'||command==='flat-probe'){
    const helpers=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts'],'transformations.ts':AUTHORED_IMPROVER['improveStep/transformations.ts']}},await runtimeImport('runtime/node.js'),{constrained:true,target:'node'});
    if(!helpers.ok)throw Error(JSON.stringify(helpers.diagnostics));
    const bookkeeping=helpers.require('main.ts');
-   const authored=loadVirtualNatlang(AUTHORED_IMPROVER,'improveStep.nl');
+   const authored=loadVirtualCallables(AUTHORED_IMPROVER).improveStep;
    const sourceFiles=Object.entries(protocol.files).map(([path,text])=>({path,text})),evidence=protocol.observedTraining;
    const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
    const opportunity={kind:evidence.some(row=>!row.passed)?'quality':'efficiency',reason:'Pinned prior development observations.'};
@@ -110,7 +110,7 @@ if(command==='probe'||command==='flat-probe'){
    const {folder,evaluator,...portable}=improved;result={...portable,source:folder.digest};
   }else{
    const train=await evaluator.evaluate(baseline.snapshot(),{split:'train'}),validation=await evaluator.evaluate(baseline.snapshot(),{split:'validation'});
-   const editor=loadVirtualNatlang(protocol.improverSource??AUTHORED_IMPROVER,'improveStep.nl')[protocol.policy.mode==='structural'?'editSourceStructural':'editSource'];
+   const editor=loadVirtualCallables(protocol.improverSource??AUTHORED_IMPROVER).improveStep[protocol.policy.mode==='structural'?'editSourceStructural':'editSource'];
    const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,seed:{mode:'derived',root:0},onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
    const proposal=await task.run(()=>baseline.propose(editor,{brief:'Source: '+JSON.stringify(protocol.files)+'; actual training: '+JSON.stringify(evaluator.page(train.evidence)),objective:protocol.policy.objective??'quality',goal:protocol.policy.goal,mode:protocol.policy.mode,hypothesis:{kind:'structure',statement:'Make the strongest coherent structural simplification supported by these actual student executions.',files:protocol.policy.allowedFiles,predictedChange:'fewer model requests at equal quality'},diagnosis:{observations:[],pattern:'Read the traces in the brief and diagnose them.'},sourceFiles:baseline.snapshot().filePaths().map(path=>({path,text:new TextDecoder().decode(baseline.snapshot().readBytesSync(path))})),allowedFiles:protocol.policy.allowedFiles}));
    const checked=await evaluator.check(proposal.folder);const candidate=checked.valid?await evaluator.evaluate(proposal.folder,{split:'validation'}):null;

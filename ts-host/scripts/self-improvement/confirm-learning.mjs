@@ -59,7 +59,7 @@ const metaConfirmation=await journal.run('meta-confirmation',async()=>{
  try{
   const gateway=new UsageGateway({maxModelCalls:200,maxRollouts:120,maxProposals:12,maxElapsedMs:1200000});
   const executeCase=improverExecution(meta.protocol.targets,{improver:backend.turn.bind(backend),executor:()=>{throw Error('exact targets');},improverId:meta.protocol.provider+'/'+meta.protocol.model,executorId:'exact-source'});
-  const evaluator=new SourceEvaluator({entry:'improveStep.nl',exportName:'default',programId:'frozen-improver-final'},meta.protocol.cases,backend.turn.bind(backend),gateway,{executorId:meta.protocol.provider+'/'+meta.protocol.model,evaluationLevel:2,executeCase,journal:new OperationJournal(join(directory,'meta-journal'))});
+  const evaluator=new SourceEvaluator({entry:'improveStep/diagnose.nl',exportName:'default',programId:'frozen-improver-final'},meta.protocol.cases,backend.turn.bind(backend),gateway,{executorId:meta.protocol.provider+'/'+meta.protocol.model,evaluationLevel:2,executeCase,journal:new OperationJournal(join(directory,'meta-journal'))});
   return await evaluator.confirmPair(Folder.fromFiles(meta.sourceManifest.baseFiles).snapshot(),Folder.fromFiles(meta.sourceManifest.files).snapshot(),hash(freeze)+':meta');
  }finally{backend.close();}
 });

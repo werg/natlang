@@ -6,7 +6,8 @@ import type {ExperimentOutcome,ImprovementPolicy,IncumbentChoice,Objective,Oppor
  * pluggable, and the verifiers that bound a natural-language choice. Pure functions; no model is called here.
  * policies.ts wires each default and its natural-language function into one pluggable policy.
  */
-const must=(ok:boolean,message:string):void=>{if(!ok)throw Error(message);};
+/** A choice outside its bound fails the search, not the infrastructure: the host classifies the error by this name. */
+const must=(ok:boolean,message:string):void=>{if(!ok)throw Object.assign(Error(message),{name:'PolicyBoundError'});};
 
 /** The selection math reads members by id; a population member is identified by its source digest. */
 export function members(population:PopulationMember[]):Member[] {

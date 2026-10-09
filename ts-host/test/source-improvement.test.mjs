@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Folder, SourceEvaluator, improveProgram } from '../dist/index.js';
 import { UsageGateway } from '../dist/evaluation/index.js';
 import { scriptedModel } from './support/natlang.mjs';
-import { stagedImprover } from './support/improver.mjs';
+import { stagedImprover, improverWithStep, finishing } from './support/improver.mjs';
 const contract = { entry: 'main.ts', exportName: 'solve', programId: 'repair-fixture', signature: 'solve(value: number): number' };
 const cases = ['train', 'validation', 'test'].flatMap(split => [1, 2].map(value => ({id: `${split}-${value}`, group: `${split}-${value}`, split, args: [value], expected: value + 1})));
 const baseline = () => Folder.fromFiles({ 'main.ts': 'export function solve(value: number): number { return value; }' });
@@ -12,8 +12,8 @@ const budget = { maxRollouts: 30, maxModelCalls: 20, maxProposals: 5 };
 test('the native optimizer cannot resample by changing the pinned evaluation seed',async()=>{
  const seeds=[];
  const executeCase=Object.assign(async(_folder,row,seed)=>{seeds.push(seed);return {value:row.expected,modelCalls:0};},{identity:'pinned-seed',evaluationLevel:1});
- const model=scriptedModel(()=> 'let reason="";try{await evaluator.evaluate(folder.snapshot(),{split:"train",seed:10});}catch(error){reason=String(error);}const source=folder.snapshot();const report=await evaluator.evaluate(source,{split:"validation",seed:9});return {...state,iteration:1,done:true,quality:report.quality,population:[{source:source.digest,quality:report.quality,parent:""}],stopReason:reason};');
- const result=await improveProgram({folder:baseline(),contract,cases,seed:9,executeCase,policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:model.driver,executor:()=>{throw Error('unexpected inference');},executorId:'pinned',budget});
+ const improverSource=await improverWithStep('let reason="";try{await evaluator.evaluate(folder.snapshot(),{split:"train",seed:10});}catch(error){reason=String(error);}const source=folder.snapshot();const report=await evaluator.evaluate(source,{split:"validation",seed:9});return {...state,iteration:1,done:true,quality:report.quality,population:[{source:source.digest,quality:report.quality,parent:""}],stopReason:reason};');
+ const result=await improveProgram({folder:baseline(),contract,cases,seed:9,executeCase,improverSource,policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:()=>{throw Error('no model: the step is crisp');},executor:()=>{throw Error('unexpected inference');},executorId:'pinned',budget});
  assert.match(result.state.stopReason,/seed is pinned.*9/);assert.equal(result.validation.quality,1);assert.deepEqual(seeds,[9,9]);
 });
 
@@ -23,8 +23,8 @@ test('invalid joint checkpoints roll back before durable publication and on resu
   for(const failure of ['identity','quality','iteration','compile']){
     const directory=mkdtempSync(join(tmpdir(),'natlang-invalid-checkpoint-'));
     const code='await folder.file("main.ts").writeText("export function solve(value: number): number {'+(failure==='compile'?'while(true){}':'return value+1;')+'}"); const current=folder.snapshot(); return {iteration:'+(failure==='iteration'?2:1)+',done:true,incumbent:'+(failure==='identity'?'state.incumbent':'current.digest')+',quality:'+(failure==='quality'||failure==='compile'?0:1)+',population:[],history:[],stopReason:"claimed success"};';
-    const model=scriptedModel(()=>code);
-    const options={folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:model.driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget,directory};
+    const improverSource=await improverWithStep(code);
+    const options={folder:baseline(),contract,cases,improverSource,policy:{maxExperiments:3,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:()=>{throw Error('no model: the step is crisp');},executor:()=>{throw Error('no inference');},executorId:'exact',budget,directory};
     const result=await improveProgram(options);
     assert.equal(result.disposition,'incomplete-search');assert.equal(result.folder.digest,options.folder.snapshot().digest);assert.equal(result.state.iteration,0);
     assert.equal(new OperationJournal(directory).checkpoint(),undefined);
@@ -54,9 +54,9 @@ test('evaluation executes source bytes in fresh workers and seals validation and
 test('installed authored reducer performs an actual propose-check-evaluate-accept-select loop', async () => {
   const source = baseline(), traces = [];
   const model = scriptedModel(stagedImprover({edit:
-    'await folder.file("main.ts").writeText("export function solve(value: number): number { return value + 1; }"); return {summary:"fix increment",preserves:["number contract"]};',step:
-    'const base = folder.snapshot(); const before = await evaluator.evaluate(base,{split:"train"}); const parent = base.branch(); const candidate = await parent.propose(editSource,{goal:policy.goal,mode:policy.mode,hypothesis:{kind:"instruction",statement:"increment",files:[],predictedChange:"quality rises"},diagnosis:{observations:[],pattern:"p"},brief:"exact increment repair",sourceFiles:[],allowedFiles:policy.allowedFiles}); const checked = await evaluator.check(candidate.folder); if (!checked.valid) throw Error(checked.diagnostics.join("\\n")); const measured = await evaluator.evaluate(candidate.folder,{split:"validation"}); await parent.accept(candidate); const selected = (parent.snapshot()).digest; await folder.select(folder.at(selected)); return {iteration:state.iteration+1,done:true,incumbent:selected,quality:measured.quality,population:[{source:selected,quality:measured.quality,parent:base.digest}],history:[{source:selected,parent:base.digest,accepted:true,selected:true,reason:"improved"}],stopReason:"completed"}'}));
-  const result = await improveProgram({folder:source,contract,cases,policy:{maxExperiments:2,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']}, improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;}, executor:()=>{throw Error('no model');},executorId:'exact',budget,trace:trace=>traces.push(trace)});
+    'await folder.file("main.ts").writeText("export function solve(value: number): number { return value + 1; }"); return {summary:"fix increment",preserves:["number contract"]};'}));
+  const improverSource = await improverWithStep('const base = folder.snapshot(); const before = await evaluator.evaluate(base,{split:"train"}); const parent = base.branch(); const candidate = await parent.propose(editSource,{goal:policy.goal,mode:policy.mode,hypothesis:{kind:"instruction",statement:"increment",files:[],predictedChange:"quality rises"},diagnosis:{observations:[],pattern:"p"},brief:"exact increment repair",sourceFiles:[],allowedFiles:policy.allowedFiles}); const checked = await evaluator.check(candidate.folder); if (!checked.valid) throw Error(checked.diagnostics.join("\\n")); const measured = await evaluator.evaluate(candidate.folder,{split:"validation"}); await parent.accept(candidate); const selected = (parent.snapshot()).digest; await folder.select(folder.at(selected)); return {iteration:state.iteration+1,done:true,incumbent:selected,quality:measured.quality,population:[{source:selected,quality:measured.quality,parent:base.digest}],history:[{source:selected,parent:base.digest,accepted:true,selected:true,reason:"improved"}],stopReason:"completed"}');
+  const result = await improveProgram({folder:source,contract,cases,improverSource,policy:{maxExperiments:2,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']}, improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;}, executor:()=>{throw Error('no model');},executorId:'exact',budget,trace:trace=>traces.push(trace)});
   assert.equal(result.state.quality, 1,result.error); assert.equal(result.state.incumbent, result.folder.digest);
   assert.match(await result.folder.readText('main.ts'), /value \+ 1/);
   assert.equal(await source.readText('main.ts'), 'export function solve(value: number): number { return value; }');
@@ -93,14 +93,11 @@ test('a signature in a comment cannot conceal an edited external function contra
 });
 
 test('selected frozen improver source is executed and pinned in resume identity',async()=>{
- const {AUTHORED_IMPROVER}=await import('../dist/improvement/authored-source.js');
  const {mkdtempSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
- const authored=Folder.fromFiles(AUTHORED_IMPROVER);authored.writeText('improveStep.nl',(await authored.readText('improveStep.nl'))+'\nSelected experimental improver revision.\n');
- const improverSource=authored.snapshot();
- const model=scriptedModel(opening=>{assert.ok(opening.includes('Selected experimental improver revision'));return 'const snapshot=folder.snapshot(); const quality=await evaluator.evaluate(snapshot,{split:"validation"}); const identity=(snapshot).digest; return {iteration:1,done:true,incumbent:identity,quality:quality.quality,population:[],history:[],stopReason:"no justified change"};';});
- const options={folder:baseline(),contract,cases,policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:model.driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget,directory:mkdtempSync(join(tmpdir(),'natlang-meta-source-')),improverSource};
- const result=await improveProgram(options);assert.match(result.authored.files['improveStep.nl'],/Selected experimental/);
- const next=improverSource.branch();next.writeText('improveStep.nl',(await next.readText('improveStep.nl'))+'Different revision.');
+ const improverSource=await improverWithStep('// Selected experimental improver revision.\n const snapshot=folder.snapshot(); const quality=await evaluator.evaluate(snapshot,{split:"validation"}); const identity=(snapshot).digest; return {iteration:1,done:true,incumbent:identity,quality:quality.quality,population:[],history:[],stopReason:"no justified change"};');
+ const options={folder:baseline(),contract,cases,policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:()=>{throw Error('no model: the step is crisp');},executor:()=>{throw Error('no inference');},executorId:'exact',budget,directory:mkdtempSync(join(tmpdir(),'natlang-meta-source-')),improverSource};
+ const result=await improveProgram(options);assert.match(result.authored.files['improveStep/lifecycle.ts'],/Selected experimental/);assert.equal(result.state.stopReason,'no justified change');
+ const next=improverSource.branch();next.writeText('improveStep/lifecycle.ts',(await next.readText('improveStep/lifecycle.ts'))+'// Different revision.\n');
  await assert.rejects(()=>improveProgram({...options,improverSource:next.snapshot()}),/same frozen source/);
 });
 
@@ -136,18 +133,15 @@ test('meta-evaluation executes the edited frozen improver and shares its parent 
  const {AUTHORED_IMPROVER}=await import('../dist/improvement/authored-source.js');
  const {improverExecution}=await import('../dist/index.js');
  const original=Folder.fromFiles(AUTHORED_IMPROVER);
- const bad=original.snapshot().branch();bad.writeText('improveStep.nl',(await bad.readText('improveStep.nl')).replace(/Improve this source[\s\S]*/,'Frozen baseline-only improver: retain the input source and report its validation.'));
- assert.match(await bad.readText('improveStep.nl'),/Frozen baseline-only/);
- const driver=scriptedModel(stagedImprover({other:opening=>opening.includes('Frozen baseline-only')?
-  'const snapshot=folder.snapshot(); const measured=await evaluator.evaluate(snapshot,{split:"validation"}); const source=(snapshot).digest; return {iteration:1,done:true,incumbent:source,quality:measured.quality,population:[{source,quality:measured.quality,parent:""}],history:[],stopReason:"baseline-only"};':null,
-  edit:'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}"); return {summary:"increment",preserves:["numeric contract"]};',
-  step:'const base=folder.snapshot(); const parent=base.branch(); const proposal=await parent.propose(editSource,{goal:policy.goal,mode:policy.mode,hypothesis:{kind:"instruction",statement:"increment",files:[],predictedChange:"quality rises"},diagnosis:{observations:[],pattern:"p"},brief:"exact increment repair",sourceFiles:[],allowedFiles:policy.allowedFiles}); const measured=await evaluator.evaluate(proposal.folder,{split:"validation"}); await parent.accept(proposal); const source=(parent.snapshot()).digest; await folder.select(folder.at(source)); return {iteration:1,done:true,incumbent:source,quality:measured.quality,population:[{source,quality:measured.quality,parent:base.digest}],history:[{source,parent:base.digest,accepted:true,selected:true,reason:"measured improvement"}],stopReason:"completed"};'}));
+ const bad=original.snapshot().branch();bad.writeText('improveStep/lifecycle.ts',"export async function step(folder: any, evaluator: any, plans: any, state: any, policy: any): Promise<any> {\n // Frozen baseline-only improver: retain the input source and report its validation.\n const snapshot=folder.snapshot(); const measured=await evaluator.evaluate(snapshot,{split:'validation'}); const source=snapshot.digest; return {iteration:1,done:true,incumbent:source,quality:measured.quality,population:[{source,quality:measured.quality,parent:''}],history:[],stopReason:'baseline-only'};\n}\n");
+ assert.match(await bad.readText('improveStep/lifecycle.ts'),/Frozen baseline-only/);
+ const driver=scriptedModel(stagedImprover({edit:'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}"); return {summary:"increment",preserves:["numeric contract"]};'}));
  const metaCases=[{id:'meta-train',group:'meta-train',split:'train',args:[],expected:null}];
  const executeCase=improverExecution([{id:'meta-train',files:{'main.ts':'export function solve(value: number): number {return value;}'},contract,cases,
-  policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']}}],{improver:driver.driver,executor:()=>{throw Error('no inference');},improverId:'scripted-editor',executorId:'exact'});
+  policy:{maxExperiments:1,maxPopulation:2,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']}}],{improver:finishing(driver),executor:()=>{throw Error('no inference');},improverId:'scripted-editor',executorId:'exact'});
  const gateway=new UsageGateway({maxRollouts:100,maxModelCalls:200,maxProposals:12});
- assert.throws(()=>new SourceEvaluator({entry:'improveStep.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase}),/evaluation level/);
- const evaluator=new SourceEvaluator({entry:'improveStep.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase,evaluationLevel:2});
+ assert.throws(()=>new SourceEvaluator({entry:'improveStep/diagnose.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase}),/evaluation level/);
+ const evaluator=new SourceEvaluator({entry:'improveStep/diagnose.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase,evaluationLevel:2});
  assert.equal((await evaluator.evaluate(bad.snapshot(),{split:'train'})).quality,0);
  const report=await evaluator.evaluate(original.snapshot(),{split:'train'});
  assert.equal(report.quality,1,JSON.stringify(evaluator.page(report.evidence)).slice(0,3000));assert.ok(report.modelCalls>0);
@@ -300,17 +294,26 @@ test('a failed computation prevents finishing an older staged result in the same
  test('native lifecycle combines diagnosis and editing with ordinary capabilities',async()=>{
  const model=scriptedModel(stagedImprover({edit:'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}");return {summary:"increment",preserves:["number contract"]};'}));
  const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(result.state.iteration,1);assert.equal(result.state.history[0].accepted,true);assert.equal(result.state.history[0].selected,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,4);
+ assert.equal(result.disposition,'improved',result.error);assert.equal(result.state.iteration,1);assert.equal(result.state.history[0].accepted,true);assert.equal(result.state.history[0].selected,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,3);
  });
 
 test('declared allocation permits more than 24 requests across finite native experiments',async()=>{
  const {modelTurnsSoFar}=await import('../dist/native/agent.js');
+ const {STAGES,DIAGNOSE,HYPOTHESIZE}=await import('./support/improver.mjs');
+ // Each stage inspects for two turns before it finishes, so one experiment is nine requests and three are twenty-seven.
+ const answers={[STAGES.diagnose]:DIAGNOSE,[STAGES.hypothesize]:HYPOTHESIZE};
+ let edits=0;
  const driver=async({messages})=>{
+  const opening=String(messages[1].content);
+  const stage=[STAGES.diagnose,STAGES.hypothesize,STAGES.edit].find(phrase=>opening.includes(phrase));
   const turn=modelTurnsSoFar(messages);
-  return {calls:[['eval',{code:turn<9?'state.iteration':'const report=await evaluator.evaluate(folder.snapshot(),{split:"validation"});return {...state,iteration:state.iteration+1,done:state.iteration===2,quality:report.quality,population:[],stopReason:"finite experiment allowance completed"};',finish:turn>=9}]],completion_tokens:1,prompt_tokens:1};
+  if(turn<2)return {calls:[['eval',{code:'1+1',finish:false}]],completion_tokens:1,prompt_tokens:1};
+  const code=stage===STAGES.edit?'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+'+(edits++ +2)+';}");return {summary:"delta",preserves:["number contract"]};':answers[stage];
+  return {calls:[['eval',{code,finish:true}]],completion_tokens:1,prompt_tokens:1};
  };
- const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:40}});
- assert.equal(result.state.iteration,3,result.error);assert.equal(result.ledger.roles.reflection.modelCalls,30);assert.equal(result.state.done,true);
+ const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:driver,executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
+ assert.equal(result.state.iteration,3,result.error);assert.equal(result.state.done,true);assert.equal(result.state.stopReason,'Declared experiments completed.');
+ assert.equal(result.ledger.roles.reflection.modelCalls,27);assert.ok(result.ledger.roles.reflection.modelCalls>24);
 });
 
 test('the next experiment sees the rejected source and training trace without validation answers',async()=>{
@@ -319,7 +322,7 @@ test('the next experiment sees the rejected source and training trace without va
   diagnose:'if(request.lastExperiment){const previous=JSON.parse(JSON.stringify(request.lastExperiment));if(!previous.sourceFiles[0].text.includes("value+2")||previous.training[0].passed!==false)throw Error("rejected evidence lost");if("expected" in previous.validation)throw Error("validation answer leaked");if(!request.brief.includes("Previous candidate main.ts"))throw Error("card lost the candidate");}return {observations:[],pattern:"scripted diagnosis"};',
   edit:()=>{edits++;return 'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+'+(edits===1?2:1)+';}");return {summary:"test delta",preserves:["number contract"]};';}}));
  const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(edits,2);assert.deepEqual(result.state.history.map(row=>row.accepted),[false,true]);assert.deepEqual(result.state.history.map(row=>row.disposition),['rejected','accepted']);assert.equal(result.ledger.roles.reflection.modelCalls,8);assert.equal(result.state.lastExperiment.validation.quality,1);
+ assert.equal(result.disposition,'improved',result.error);assert.equal(edits,2);assert.deepEqual(result.state.history.map(row=>row.accepted),[false,true]);assert.deepEqual(result.state.history.map(row=>row.disposition),['rejected','accepted']);assert.equal(result.ledger.roles.reflection.modelCalls,6);assert.equal(result.state.lastExperiment.validation.quality,1);
 });
 
 test('cost search continues after a gain and the editor stops when no opportunity remains',async()=>{

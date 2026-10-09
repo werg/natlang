@@ -127,5 +127,5 @@ test('the application reaches the module as natlang:gepa and holds no second cop
     assert.doesNotMatch(text, /function\s+(frontierParent|prune|best)\b/, `${name} holds no selection function of its own`);
   }
   const users = typescript.filter(([, text]) => /from\s+'natlang:gepa'/.test(text)).map(([name]) => name).sort();
-  assert.deepEqual(users, ['improveStep/crisp.ts', 'improveStep/experiment.ts', 'improveStep/population.ts']);
+  assert.deepEqual(users, ['componentSearchStep/rewriteComponents.ts', 'improveStep/crisp.ts', 'improveStep/experiment.ts', 'improveStep/population.ts']);
 });

@@ -264,9 +264,17 @@ const STRING_NEURALESE_CONCAT = `interface String {
 }\n`;
 export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${STRING_NEURALESE_CONCAT}`;
 
+/** Host and application helper `pluggable` (runtime/pluggable.ts): for imports of the package, not for what an eval is shown. */
+const PLUGGABLE_MODULE_DTS = `
+export type PluggableMode = 'crisp' | 'nl' | 'shadow';
+export type PluggableImplementations<A extends unknown[], R> = { crisp: (...args: A) => R | Promise<R>; nl: (...args: A) => R | Promise<R> };
+export type PluggableOptions<R> = { default?: PluggableMode; name?: string; serve?: 'crisp' | 'nl'; same?: (crisp: R, nl: R) => boolean };
+export declare function pluggable<A extends unknown[], R>(implementations: PluggableImplementations<A, R>, setting: PluggableMode | 'natlang' | 'natural-language' | undefined, options?: PluggableOptions<R>): (...args: A) => Promise<R>;
+`;
+
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +
-  FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ');
+  FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ') + PLUGGABLE_MODULE_DTS;
 
 export const INTRINSICS_FILE = '/__natlang__/intrinsics.d.ts';
 /** Module form, resolved for `@natlang/*` imports in virtual programs. */
