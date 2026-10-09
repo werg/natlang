@@ -449,6 +449,8 @@ def main():
                         "--base-text must carry the identical document ID/split/source-group/source-record sequence")
     p.add_argument("--renderer-package-root", type=Path,
                    help="Path containing natlang_neuralese/; use the reviewed renderer snapshot")
+    p.add_argument("--repo-root", type=Path,
+                   help="Repository root for hash-bound receipts and artifacts; defaults to the builder's checkout")
     p.add_argument("--base-text-delta", type=Path, action="append", default=[],
                    help="previously adopted compact text additions to include in virtual prefix collision checks")
     p.add_argument("--base-text-delta-adoption", type=Path,
@@ -460,15 +462,16 @@ def main():
     args = p.parse_args()
     if args.out.exists() and any(args.out.iterdir()): raise ValueError(f"output is not empty: {args.out}")
     args.out.mkdir(parents=True, exist_ok=True)
-    package = (args.renderer_package_root or (ROOT / "training/neuralese")).resolve()
+    repo_root = (args.repo_root or ROOT).resolve()
+    package = (args.renderer_package_root or (repo_root / "training/neuralese")).resolve()
     sys.path.insert(0, str(package))
     from natlang_neuralese.data.text_corpus import gold_text_rows
     base_records = read_records(args.base_records)
     delta_records = read_records(args.delta_records)
     base_approval = json.loads(args.base_root_receipt.read_text())
-    adoption_bindings = root_integration_adoption_bindings(base_approval)
+    adoption_bindings = root_integration_adoption_bindings(base_approval, root=repo_root)
     base_receipt_path = args.base_text.parent / "receipt.json"
-    base_prefix_receipt = resolve_base_text_prefix_metadata(adoption_bindings, base_receipt_path)
+    base_prefix_receipt = resolve_base_text_prefix_metadata(adoption_bindings, base_receipt_path, root=repo_root)
     if (not isinstance(base_prefix_receipt.get("train_documents"), int)
             or not isinstance(base_prefix_receipt.get("test_documents"), int)
             or base_prefix_receipt["train_documents"] < 1
@@ -513,8 +516,8 @@ def main():
             raise ValueError("prior compact text additions lack the expected root composition adoption")
         review_rel = prior_text_delta_adoption.get("composition_review")
         review_sha = prior_text_delta_adoption.get("composition_review_sha256")
-        review_path = (ROOT / review_rel).resolve() if isinstance(review_rel, str) else None
-        if (not review_path or not review_path.is_relative_to(ROOT) or not review_path.is_file()
+        review_path = (repo_root / review_rel).resolve() if isinstance(review_rel, str) else None
+        if (not review_path or not review_path.is_relative_to(repo_root) or not review_path.is_file()
                 or sha_file(review_path) != review_sha):
             raise ValueError("prior text delta adoption does not bind its composition review")
         composition_review = json.loads(review_path.read_text())
@@ -524,7 +527,7 @@ def main():
             raise ValueError("--base-text-delta requires its registered immutable corpus manifest")
         prior_manifest = json.loads(args.base_text_delta_manifest.read_text())
         prior_manifest_paths = {item.get("path"): item.get("sha256") for item in prior_manifest.get("files", [])}
-        manifest_root = (ROOT / prior_manifest.get("path", "")).resolve()
+        manifest_root = (repo_root / prior_manifest.get("path", "")).resolve()
         adoption_rel = str(args.base_text_delta_adoption.resolve().relative_to(manifest_root))
         if prior_manifest_paths.get(adoption_rel) != sha_file(args.base_text_delta_adoption):
             raise ValueError("registered corpus manifest does not pin the prior root composition adoption")
@@ -566,10 +569,11 @@ def main():
             raise ValueError("root action receipt includes unsupported non-native admission facets")
     elif root_per_action_admission:
         admission_rows = admitted_root_per_action_rows(
-            source_approval, delta_ids={row.get("id") for row in delta_records})
+            source_approval, delta_ids={row.get("id") for row in delta_records}, root=repo_root)
         approved_ids = [item["native_id"] for item in admission_rows]
     elif root_derived_writer_admission:
-        admission_rows = admitted_root_derived_writer_row(source_approval, delta_records=delta_records)
+        admission_rows = admitted_root_derived_writer_row(source_approval, delta_records=delta_records,
+                                                           root=repo_root)
         approved_ids = [item["native_id"] for item in admission_rows]
     else:
         approved_ids = source_approval.get("approved_row_ids")
@@ -607,7 +611,7 @@ def main():
                 "receipt_sha256": sha_file(args.source_approval),
             }
     for rel, expected in source_approval.get("artifact_hashes", {}).items():
-        bound = (ROOT / rel).resolve()
+        bound = (repo_root / rel).resolve()
         if not bound.is_file() or sha_file(bound) != expected:
             raise ValueError(f"source approval artifact missing/hash mismatch: {rel}")
     provider_context_bindings = bind_exact_provider_contexts(delta_records)
