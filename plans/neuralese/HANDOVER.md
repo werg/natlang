@@ -1691,4 +1691,4 @@ that variant used a fixed `1e-5` constructor default. Shared exporter and servin
 restore now resolve only that known historical case to `1e-5`; new saves record
 the epsilon explicitly. Unknown variants, malformed explicit epsilons and
 incomplete adapter tensor sets still fail. The focused restore test receipt is
-`runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v1.json`.
+`runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v2.json (v1 is retained with its original commit locator)`.

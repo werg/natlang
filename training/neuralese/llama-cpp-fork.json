@@ -86,8 +86,10 @@
     "receipt_sha256": "0e5a26bf40abc0c08b5c25261f291b31503bc58317225012fe2e56d7dedb7f2b",
     "remaining_profile_plan": "runs/neuralese-read-adapter-cpp-port-20261009-v1/remaining-raw-latent-port-plan-v1.md",
     "remaining_profile_plan_sha256": "71f5af8fece7a387faaab36006e76ccda3ebde52c6ee97e7028c44cf67325d1b",
-    "checkpoint_epsilon_restore_receipt": "runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v1.json",
-    "checkpoint_epsilon_restore_receipt_sha256": "d99cd27c5f8f3a526aa8283099e877e937860f6023d577900c39f7551d801847",
-    "historical_missing_epsilon": "full-residual-v1 fixed 1e-5 default, resolved by the shared checkpoint config helper; new saves serialize it explicitly"
+    "checkpoint_epsilon_restore_receipt": "runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v2.json",
+    "checkpoint_epsilon_restore_receipt_sha256": "49432d84f0a9ee8cdf3860a1ca0c1b70bcaf0565e8cf89dbb7f85297197fce1a",
+    "historical_missing_epsilon": "full-residual-v1 fixed 1e-5 default, resolved by the shared checkpoint config helper; new saves serialize it explicitly",
+    "superseded_receipt_v1": "runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v1.json",
+    "superseded_receipt_v1_sha256": "d99cd27c5f8f3a526aa8283099e877e937860f6023d577900c39f7551d801847"
   }
 }
