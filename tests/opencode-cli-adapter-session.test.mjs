@@ -178,6 +178,12 @@ test('one whole-response fenced JSON envelope is normalized then strictly valida
   assert.equal(plain.responseNormalization, 'whole_response_unlabeled_fence');
   assert.equal(plain.finalTextStatus, 'json_envelope_no_actions_whole_response_unlabeled_fence');
   assert.equal(plain.content, 'plain result');
+
+  const payload = { content: `${fence}ts\nexample\n${fence}`,
+    toolCalls: [{ name: 'eval', arguments: { code: `return "${fence}literal${fence}";` } }] };
+  const withLiteralFences = parseOpenCodeEnvelope(`${fence}json\n${JSON.stringify(payload)}\n${fence}`, ['eval']);
+  assert.equal(withLiteralFences.content, payload.content);
+  assert.deepEqual(withLiteralFences.calls, payload.toolCalls);
 });
 
 test('fenced envelope normalization rejects prose, multiple or nested fences, malformed JSON, and undeclared tools', () => {
@@ -187,7 +193,7 @@ test('fenced envelope normalization rejects prose, multiple or nested fences, ma
     `prefix\n${fence}json\n${valid}\n${fence}`,
     `${fence}json\n${valid}\n${fence}\nsuffix`,
     `${fence}json\n${valid}\n${fence}\n\n${fence}json\n${valid}\n${fence}`,
-    `${fence}json\n{"content":"","toolCalls":[{"name":"eval","arguments":{"code":"return ${fence}nested${fence}"}}]}\n${fence}`,
+    `${fence}json\n${fence}json\n${valid}\n${fence}\n${fence}`,
     `${fence}json\n{bad json}\n${fence}`,
   ]) assert.throws(() => parseOpenCodeEnvelope(responseText, ['eval']));
   assert.throws(() => parseOpenCodeEnvelope(`${fence}json\n${valid}\n${fence}`, ['read_file']), /declared Natlang tool/);

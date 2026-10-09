@@ -147,7 +147,8 @@ export function parseOpenCodeEnvelope(text, names) {
     // do not trim prose, repair JSON, or touch any tool arguments.
     const fenced = /^```(json)?[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*(?:\r?\n)?$/.exec(text);
     if (fenced) {
-      if (fenced[2].includes('```')) throw new Error('OpenCode CLI returned invalid JSON text');
+      // Backticks inside JSON strings are payload, including Markdown or code.
+      // JSON.parse rejects any additional fence outside a string value.
       try {
         value = JSON.parse(fenced[2]);
         normalization = fenced[1] === 'json' ? 'whole_response_json_fence' : 'whole_response_unlabeled_fence';
