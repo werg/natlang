@@ -54,12 +54,12 @@ class StagedWrites:
                  collect_local=None):
         self.observe, self.measure = observe, measure
         self.observe_batch = observe_batch
-        # Local producer/replay tapes are released one at a time. The training
-        # caller may collect only the young generation at these boundaries and
-        # do a full collection after the reader/replay phase. Keep the historic
-        # full-collection fallback for other callers and isolated uses.
+        # Local producer/replay tapes are released one at a time. Collect only
+        # the young generation at these boundaries, then do a full collection
+        # after the reader/replay phase. The caller can instrument this local
+        # collector; full collection is reserved for phase boundaries.
         self.collect = collect or gc.collect
-        self.collect_local = collect_local or self.collect
+        self.collect_local = collect_local or (lambda: gc.collect(0))
         self.nodes = []
         self.replay_max_abs_error = 0.0
 
