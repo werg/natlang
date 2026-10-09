@@ -4,6 +4,11 @@
  */
 import { Iteration, iterateOn as iterate, type IterationEvent, type IterationTrajectory, type ProgressVerdict } from './iterate.js';
 import { inline, uncompiled } from './lowered.js';
+import { resolveFrame } from './runtime.js';
+import { traceFor } from '../native/graph.js';
+import { RefinementError, canonicalValue, failureError } from '../native/refinement.js';
+import { hexDigest } from '../native/hash.js';
+import { normalizePredicate } from '../native/types.js';
 export { Deopt } from '../calls/dispatch.js';
 
 export type { IterationEvent, IterationTrajectory, ProgressVerdict };
@@ -73,4 +78,47 @@ Object.defineProperty(nl, '__inline', { value: inline });
  */
 export function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T> {
   return iterate(step as never, initial, ...args);
+}
+
+declare const natlangRefinement: unique symbol;
+/**
+ * A `T` whose value satisfies the natural-language predicate `P` (plans/REFINEMENT_TYPES.md). It is a `T` everywhere;
+ * crisp code obtains one from a refined natlang result, from `refine(value, predicate)` or from `assume(value, predicate)`.
+ */
+export type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
+
+const checkedPredicate = (predicate: unknown): string => {
+  const text = typeof predicate === 'string' ? normalizePredicate(predicate) : '';
+  if (!text) throw new RefinementError('refinement-predicate-invalid',
+    'Is<T, P> takes a nonempty string literal as P, for example refine(subject, "one line of at most 60 characters").');
+  return text;
+};
+const emitRefinement = (frame: ReturnType<typeof resolveFrame>, kind: string, data: Record<string, unknown>) => {
+  const trace = traceFor(frame.parentCallId);
+  if (trace) trace.emit(kind, data); else frame.task.refinementEvents.push({ kind, data });
+};
+
+/**
+ * Check `value` against `predicate` with the judge and return it as an `Is<T, P>`; throws `refinement-unsatisfied` (or
+ * `refinement-undecided` inside the uncertainty band). Must run inside a natlang task.
+ */
+export async function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>> {
+  const text = checkedPredicate(predicate);
+  const frame = resolveFrame();
+  const task = frame.task;
+  const failures = await task.refinementChecker().check([{ path: 'value', predicate: text, value }],
+    { phase: 'refine', ...task.refinementJudges(task.model()), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
+      emit: (kind, data) => emitRefinement(frame, kind, data) });
+  if (failures.length) throw failureError(failures[0]!);
+  return value as Is<T, P>;
+}
+
+/** Declare that `value` satisfies `predicate` without checking it. The assumption is recorded in the trace. */
+export function assume<T, P extends string>(value: T, predicate: P): Is<T, P> {
+  const text = checkedPredicate(predicate);
+  const frame = resolveFrame();
+  const shown = canonicalValue(value);
+  emitRefinement(frame, 'refinement_assumed', { call_id: frame.parentCallId ?? null, predicate: text,
+    value: shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown, value_sha256: hexDigest(shown) });
+  return value as Is<T, P>;
 }

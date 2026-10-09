@@ -47,6 +47,14 @@ export const NEURALESE_TYPE_DOCUMENTATION =
   'materialized through the configured writer; this does not convert nested fields or other payload types. This declaration grants no call or service capability.';
 
 const DECLARATIONS = String.raw`
+/** Brand of a value that satisfies a natural-language predicate; see \`Is\`. */
+declare const natlangRefinement: unique symbol;
+/**
+ * A \`T\` whose value satisfies the natural-language predicate \`P\`, checked where the value enters the slot. It is a \`T\`
+ * everywhere; crisp code gets one from a refined natlang result, \`refine(value, predicate)\` or \`assume(value, predicate)\`.
+ */
+type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
+
 /** Marker for an unspecified \`nl\` type argument. */
 interface NlUnspecified { readonly __natlangUnspecified: true }
 interface NatlangStepError<M extends string> { readonly __natlangStepError: M }
@@ -204,6 +212,13 @@ function live<T>(binding: T): T;
  * @natlangIntrinsic iterateOn
  */
 function iterateOn${ITERATE_ON_SIGNATURE};
+/**
+ * Check value against a natural-language predicate and return it as an Is<T, P>; throws refinement-unsatisfied (or
+ * refinement-undecided inside the uncertainty band).
+ */
+function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>>;
+/** Declare, without checking, that value satisfies predicate. The assumption is recorded in the trace. */
+function assume<T, P extends string>(value: T, predicate: P): Is<T, P>;
 `;
 
 /** The free readout is an eval/project global, not a runtime package export. */

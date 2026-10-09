@@ -1,7 +1,7 @@
 import { programGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
-import { MISSING, isLive, liveId, liveLabel, problems } from './values.js';
+import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import { undeclaredServiceType } from './introspection.js';
@@ -19,6 +19,8 @@ import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, Neu
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
+import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
+import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import { activeSystemPrompts, softenMessages } from './system-prompts.js';
@@ -393,6 +395,11 @@ export class NativeToolAgent {
       guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
+      /**
+       * Checks `Is<T, P>` slots of the call's result before it is accepted (native/refinement.ts). A failure goes back
+       * to the model as a tool error within the repair budget; past it the call fails with the refinement's code.
+       */
+      refinement?: { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge };
       /** Tensor store and write port for soft values (S0 §3). */
       neuralese?: NeuraleseRuntimeOptions;
       /**
@@ -808,6 +815,32 @@ export class NativeToolAgent {
 
 
   /**
+   * Judge the refined slots of the result the model proposes, before the call accepts it. `args` is a return_result
+   * call; without it the staged result is checked. Undefined when nothing is refined or everything holds; otherwise
+   * the failures, already traced.
+   */
+  private async refinementGate(session: NativeSession, args?: Record<string, unknown>): Promise<RefinementFailure[] | undefined> {
+    const options = this.options.refinement, lam = session.lam;
+    if (!options || lam.type.kind !== 'lambda' || !containsRefinement(lam.type.returns, session.env)) return;
+    let value: Value | typeof MISSING = MISSING;
+    if (args && Object.hasOwn(args, 'value')) {
+      // The structural check belongs to the tool; a value that does not fit is not judged here.
+      const attempt = (raw: unknown): Value | typeof MISSING => {
+        try { return coerce(raw, lam.type.kind === 'lambda' ? lam.type.returns : lam.type, session.env, 'return'); }
+        catch (error) { if (error instanceof Reject) return MISSING; throw error; }
+      };
+      value = attempt(args.value);
+      if (value === MISSING && typeof args.value === 'string') { try { value = attempt(JSON.parse(args.value)); } catch { /* not JSON */ } }
+    } else value = lam.return;
+    if (value === MISSING) return;
+    const callId = session.runtime.currentCallId ?? null;
+    const failures = await options.checker.checkValue(value, lam.type.returns, session.env,
+      { phase: 'return', judge: options.judge, escalation: options.escalation, callId, signal: session.runtime.signal,
+        emit: (kind, data) => { session.runtime.trace.emit(kind, data); } });
+    return failures.length ? failures : undefined;
+  }
+
+  /**
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
@@ -916,7 +949,7 @@ export class NativeToolAgent {
     let overflowRetries = 0;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
-    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
+    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -1060,6 +1093,18 @@ export class NativeToolAgent {
         // call with nothing staged, the reply's text is the result.
         if (!response.truncated) session.acceptTextResult(response.text ?? '');
         const missing = this.missing(session);
+        if (!response.truncated && !missing && this.options.refinement) {
+          const failures = await this.refinementGate(session);
+          if (failures) {
+            // The staged result does not satisfy its refinement: unstage it and tell the model, within the repair budget.
+            session.lam.return = MISSING;
+            if (++refinementRepairs > this.options.refinement.checker.repairBudget(this.options.maxFailureRepairs))
+              return `${failures[0]!.code}: ${failures[0]!.message}`;
+            messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) },
+              { role: 'user', content: failureFeedback(failures).replace(/^rejected\n/, '') });
+            continue;
+          }
+        }
         if (!response.truncated && !missing && session.finish()) { session.lam.note = response.text ?? ''; return; }
         // Code written into a reply has not run; saying so is what a model that wrote its eval out as text needs.
         const unrun = /```(?:ts|typescript|js|javascript)?\s*\n/.test(response.text ?? '') ?
@@ -1128,6 +1173,7 @@ export class NativeToolAgent {
           { id: `call_${turns}_${i}`, type: 'function', function: { name, arguments: JSON.stringify(args) } };
       });
       const results: NativeResult[] = [];
+      let refinementFailures: RefinementFailure[] | undefined;
       session.turn = turns;
       session.turnReasoning = response.reasoning;
       const previousFailureSerial = session.failureSerial;
@@ -1148,6 +1194,14 @@ export class NativeToolAgent {
             appliedArgs = { ...args, value: normalized.value };
             session.runtime.trace.emit('neuralese_preview_resolution', { schema: 'natlang.neuralese-preview-resolution/1',
               call_id: session.runtime.options.runId, resolutions: normalized.resolutions });
+          }
+        }
+        if (name === 'return_result' && this.options.refinement && (appliedArgs.status ?? 'success') === 'success') {
+          const failures = await this.refinementGate(session, appliedArgs);
+          if (failures) {
+            refinementFailures = failures;
+            results.push({ kind: 'rejected', text: failureFeedback(failures), codes: failures.map(failure => failure.code) });
+            break;
           }
         }
         const result: NativeResult = await session.applyAsync(name, appliedArgs,
@@ -1182,6 +1236,11 @@ export class NativeToolAgent {
       }
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;
+      if (refinementFailures) {
+        if (++refinementRepairs > this.options.refinement!.checker.repairBudget(repairLimit))
+          return `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}`;
+        continue;
+      }
       if (session.failureSerial > previousFailureSerial) {
         if (++failureRepairs > (repairLimit ?? Infinity))
           return `eval repair limit reached: ${session.failureDebug?.message ?? 'failure'}`;
