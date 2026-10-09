@@ -100,9 +100,13 @@ const emitRefinement = (frame: ReturnType<typeof resolveFrame>, kind: string, da
 
 /**
  * Check `value` against `predicate` with the judge and return it as an `Is<T, P>`; throws `refinement-unsatisfied` (or
- * `refinement-undecided` inside the uncertainty band). Must run inside a natlang task.
+ * `refinement-undecided` inside the uncertainty band). Must run inside a natlang task. `refine<Is<T, "p">>(value)` is
+ * lowered by the compiler to `refine(value, "p")`.
+ * @natlangIntrinsic refine
  */
-export async function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>> {
+export async function refine<T, P extends string>(value: T, predicate: P): Promise<Is<T, P>>;
+export async function refine<R extends Is<unknown, string>>(value: unknown): Promise<R>;
+export async function refine(value: unknown, predicate?: string): Promise<unknown> {
   const text = checkedPredicate(predicate);
   const frame = resolveFrame();
   const task = frame.task;
@@ -110,15 +114,20 @@ export async function refine<T, P extends string>(value: T, predicate: P): Promi
     { phase: 'refine', ...task.refinementJudges(task.model(), frame), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
       emit: (kind, data) => emitRefinement(frame, kind, data) });
   if (failures.length) throw failureError(failures[0]!);
-  return value as Is<T, P>;
+  return value;
 }
 
-/** Declare that `value` satisfies `predicate` without checking it. The assumption is recorded in the trace. */
-export function assume<T, P extends string>(value: T, predicate: P): Is<T, P> {
+/**
+ * Declare that `value` satisfies `predicate` without checking it. The assumption is recorded in the trace.
+ * @natlangIntrinsic assume
+ */
+export function assume<T, P extends string>(value: T, predicate: P): Is<T, P>;
+export function assume<R extends Is<unknown, string>>(value: unknown): R;
+export function assume(value: unknown, predicate?: string): unknown {
   const text = checkedPredicate(predicate);
   const frame = resolveFrame();
   const shown = canonicalValue(value);
   emitRefinement(frame, 'refinement_assumed', { call_id: frame.parentCallId ?? null, predicate: text,
     value: shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown, value_sha256: hexDigest(shown) });
-  return value as Is<T, P>;
+  return value;
 }

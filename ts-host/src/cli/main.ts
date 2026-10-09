@@ -735,8 +735,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const result = buildProject({ project: words[0] ?? '.', emit: command === 'build', outDir: option(parsed, '--out'),
       runtimeTypes: { specifiers: RUNTIME_MODULE.specifiers, types: RUNTIME_MODULE.types },
       ...(target ? { target: target as 'node' | 'browser' } : {}) });
-    if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest }, true);
+    if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest,
+      ...(result.refinedSlots ? { refinedSlots: result.refinedSlots } : {}) }, true);
     else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` +
+      (result.refinedSlots?.length ? `\nrefined slots (checked at run time):\n${result.refinedSlots.map(slot =>
+        `  ${slot.function} ${slot.slot}: ${JSON.stringify(slot.predicate)}`).join('\n')}` : '') +
       (result.diagnostics.length ? `\n${formatDiagnostics(result.diagnostics)}` : '') :
       formatDiagnostics(result.diagnostics), false);
     return result.ok ? 0 : 1;
