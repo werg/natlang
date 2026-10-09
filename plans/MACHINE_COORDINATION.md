@@ -18,37 +18,73 @@ its main features are already in current main. Do not blindly reapply it.
 Historical source/data references continue to resolve via aliases. Root-owned
 model-download folders moved with their enclosing directory, requiring no sudo.
 
-## Inbox
+## Messages
 
-Each checkout has its own **gitignored** `.coordination/inbox.md`. It is a
-scratchpad for coordination, never a data-admission authority or secret store.
-Initialize/read on the receiving machine:
+`scripts/coord.py` carries all agent-to-agent coordination: Claude and Codex
+sessions on Pop and DGX. Messages are never a data-admission authority or a
+secret store. Durable decisions belong in Git (DECISIONS, plans, handovers); a
+message points at the commit.
+
+How it works:
+
+- One JSON file per message under the gitignored `.coordination/mail/`. The
+  sender keeps a copy and writes one to each addressed machine over SSH (`dgx`
+  from Pop, `pop-os` from DGX; override in `.coordination/peers.json`). That is
+  a plain file write, so delivery does not depend on the peer's checkout.
+  Undelivered copies wait in `.coordination/outbox/`, and every later command
+  retries them.
+- Every reader has its own cursor (`.coordination/cursors/`). A Claude session
+  reads as `<machine>-claude-<session>`, Codex as `<machine>-codex`; `--as`
+  overrides. Several sessions on one machine therefore never consume each
+  other's messages. A new session starts where the machine's other readers are.
+- `request` messages stay open until someone `reply`s or `close`s them, and
+  every reader on the addressed machine sees them until then.
+- Each machine has one overwritten status page (`status --set`), so the other
+  side can see what is running without reading a log of monitoring updates.
+- Claude sessions get a one-line notice from the project hooks
+  (`.claude/settings.json`) at session start and on each prompt when something is
+  unread. Codex sessions run `inbox` themselves.
 
 ```sh
-python3 scripts/coordination_inbox.py init
-python3 scripts/coordination_inbox.py check --ack
+python3 scripts/coord.py inbox --ack            # unread for me + open requests to my machine
+python3 scripts/coord.py send --to dgx --kind request --subject 'Adopt shared AR mask' < note.md
+python3 scripts/coord.py send --to all --kind decision --subject 'Backbone is Mellum' -m 'See DECISIONS 41 (abc1234).'
+python3 scripts/coord.py reply 2026-10-09T18:30 -m 'Done in def5678.'   # id prefix; resolves a request
+python3 scripts/coord.py close 2026-10-09T18:30 -m 'Superseded by ...'
+python3 scripts/coord.py open                   # open requests on this machine's copy
+python3 scripts/coord.py show <id>              # a message with its thread
+python3 scripts/coord.py log -n 30 --grep sketch [--legacy]
+python3 scripts/coord.py status [--set < status.md]
 ```
 
-Append a note from Pop to DGX using stdin (no interpolation of the note in shell
-commands):
+Kinds:
 
-```sh
-ssh dgx 'python3 /home/werg/natlang/scripts/coordination_inbox.py post --sender pop-agent' < note.txt
-```
+- `note` is information.
+- `request` needs an answer from the addressed machine.
+- `decision` records something agreed. Commit it to Git as well.
 
-The DGX agent uses the same command with the owner's supplied Pop SSH alias and
-`--sender dgx-agent`. The user will supply access; do not invent credentials.
-Posting is locked to prevent lost concurrent appends. Reading with `--ack`
-records a local byte offset; notes stay in the file. Check at session start,
-before resource changes, and every monitoring cycle (at least every 50 minutes
-while supervising work). Inbox files are independent: never rsync one over the
-other. A timer checking a file would not wake a model session; the agents must
-perform the read as part of their actual work cycle.
+Use `--urgent` only when something blocks the receiver or risks running jobs or
+data.
 
-Useful notes: current job/unit + output path + source commit; planned resource
-changes; published corpus IDs; admissions/holds; data that needs transformation;
-conflicts or decisions the other owner should handle. Reply with what was acted
-on and what remains. Durable decisions belong in Git/handover, not just inboxes.
+Writing messages:
+
+- Write a subject line that can be read on its own, and complete sentences.
+  Lead with what the receiver must do or know. Give commits, run IDs and paths.
+- One topic per message. Answer with `reply`, so threads stay connected.
+- Running state goes on the status page, not into messages. A message is for
+  something the receiver should act on or know.
+- Claude sessions on the same machine can also be messaged directly (Claude
+  Code's `SendMessage`) when they need to act immediately. Use `coord.py` as well
+  when the content matters beyond that moment.
+
+Check at session start, before resource changes and at every monitoring cycle,
+at least every 50 minutes while supervising work. A message cannot wake a
+session that is not running.
+
+The single-file `.coordination/inbox.md` and `scripts/coordination_inbox.py`
+were retired on 2026-10-09. The first `coord.py` run on each machine imports the
+old inbox as read history (`log --legacy`) and keeps the original file under
+`.coordination/archive/`.
 
 ## Code and pipeline additions
 
@@ -127,8 +163,8 @@ on and what remains. Durable decisions belong in Git/handover, not just inboxes.
    names differ; duplicate host names alone do not.
    Restore the selected paths with the command in the receipt. This is storage
    management only; it changes no corpus admission or training qualification.
-6. Announce snapshot IDs, source coverage, counts and admission state in the
-   receiving inbox. Update the dataset coverage/handover. Train only after the
+6. Announce snapshot IDs, source coverage, counts and admission state to the
+   receiving machine (`coord.py send`). Update the dataset coverage/handover. Train only after the
    normal source-policy, split/protected, native replay and quality gates.
 
 ### Long-lived local dispatchers

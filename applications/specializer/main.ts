@@ -74,12 +74,17 @@ function metered(model: ModelOption, meter: Meter): ModelOption {
   if (!model) return model;
   const config = typeof model === 'function' ? { driver: model } : { ...model };
   const inner = config.driver;
-  const driver = Object.assign(async (...args: Parameters<typeof inner>) => {
+  const driver = async (...args: Parameters<typeof inner>) => {
     const turn = await inner(...args);
     meter.tokens += (turn.prompt_tokens ?? 0) + (turn.completion_tokens ?? 0);
     return turn;
-  }, { model: (inner as { model?: unknown }).model });
-  Object.defineProperty(driver, 'name', { value: inner.name });
+  };
+  // Everything the driver tells the runtime stays: its model, its context window (compaction depends on it), its name.
+  for (const name of new Set([...Object.getOwnPropertyNames(inner), ...Object.getOwnPropertyNames(Object.getPrototypeOf(inner) ?? {})])) {
+    if (['length', 'prototype', 'arguments', 'caller', 'constructor', 'apply', 'call', 'bind', 'toString'].includes(name)) continue;
+    const value = (inner as unknown as Record<string, unknown>)[name];
+    Object.defineProperty(driver, name, { value: typeof value === 'function' ? value.bind(inner) : value, configurable: true });
+  }
   return { ...config, driver: driver as typeof inner };
 }
 
