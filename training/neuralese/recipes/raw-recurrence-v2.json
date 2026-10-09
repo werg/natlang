@@ -2,7 +2,7 @@
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "raw-recurrence-v2",
   "extends": "raw-recurrence-v1",
-  "description": "raw-recurrence-v1 with the owner's 2026-10-09 decisions for every line: reader-side drift adaptation and a projection anchor that phases out after the warm-up. History: recipes/HISTORY.md.",
+  "description": "raw-recurrence-v1 with the owner's 2026-10-09 decisions for every line: reader-side drift adaptation in the text warm-up and the recurrence and a projection anchor that phases out after the warm-up. History: recipes/HISTORY.md.",
   "overrides": {
     "stages": {
       "recurrence_warmup": {
@@ -11,6 +11,11 @@
           "projection_anchor_weight": 1.0,
           "projection_anchor_decay_steps": 256
         }
+      }
+    },
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "read_adapter": true
       }
     }
   }

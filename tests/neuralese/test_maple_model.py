@@ -454,3 +454,13 @@ def test_member_backward_full_anchor_reaches_shared_weights(pair):
                     full_weight=1.0)
     layer3 = [p for n, p in ours.named_parameters() if "layers.3." in n and "lora_" in n and ".private." not in n]
     assert layer3 and any(p.grad is not None and p.grad.abs().sum() > 0 for p in layer3)  # only the full model reaches layer 3
+
+
+def test_leading_system_tokens_cover_the_system_message_through_its_end_marker():
+    from natlang_neuralese.maple.family import leading_system_tokens
+
+    start, end, bos = [5, 6], 9, 1
+    assert leading_system_tokens([5, 6, 7, 7, 9, 3, 4], start, end) == 5
+    assert leading_system_tokens([1, 5, 6, 7, 9, 3], start, end, bos=bos) == 5
+    assert leading_system_tokens([5, 7, 6, 9, 3], start, end) == 0  # no leading system message
+    assert leading_system_tokens([5, 6, 7, 7], start, end) == 4  # window inside the system message
