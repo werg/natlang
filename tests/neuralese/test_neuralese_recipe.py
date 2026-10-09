@@ -63,6 +63,20 @@ def test_runtime_stage_requires_the_embedding_gate(tmp_path):
         require_gate({}, 'raw_runtime_qualification')
 
 
+def test_ar_feedback_fixup_is_a_declared_map_continuation_mode(tmp_path):
+    recipe=declared()
+    recipe['stages'].append({
+        'id':'ar_feedback_fixup','kind':'core_text_warmup',
+        'requires':['runtime_qualification'],
+        'parameters':{'neuralese_input':'map','ar_feedback_fixup':True},
+    })
+    path=tmp_path/'recipe.json'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError,match='continuation checkpoint'):
+        load_recipe(path)
+    assert stage_parameter_args({'ar_feedback_fixup':True})==['--ar-feedback-fixup']
+
+
 def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp_path):
     from natlang_neuralese.train.recipe import resolve_stage_inputs, stage_input_args
     from natlang_neuralese.train.output_embedding_projection import sha

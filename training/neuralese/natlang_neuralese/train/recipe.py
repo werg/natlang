@@ -26,7 +26,7 @@ HANDLERS = {
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
                           'input_map_kernel','input_map_rank','rollout_passes','rollout_start_passes',
-                          'max_sequence_passes'},'result':'heads.pt'},
+                          'max_sequence_passes','ar_feedback_fixup'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -181,6 +181,19 @@ def load_recipe(path):
                 raise ValueError('mapped core text warm-up requires rollout_passes=0')
             if neuralese_input == 'map' and max_sequence_passes != 3:
                 raise ValueError('max_sequence_passes applies only to the sketch sequence schedule')
+            ar_feedback_fixup = parameters.get('ar_feedback_fixup', False)
+            if type(ar_feedback_fixup) is not bool:
+                raise ValueError('ar_feedback_fixup must be boolean')
+            if ar_feedback_fixup and (neuralese_input != 'map' or
+                    not isinstance(stage.get('inputs'), dict) or
+                    'continue_from' not in stage['inputs']):
+                raise ValueError('AR feedback fixup requires map input and a declared continuation checkpoint')
+            if ar_feedback_fixup and not any(
+                    prior['id'] in required and prior['kind']=='core_text_warmup' and
+                    prior.get('parameters',{}).get('neuralese_input')=='map' and
+                    not prior.get('parameters',{}).get('ar_feedback_fixup',False)
+                    for prior in recipe['stages']):
+                raise ValueError('AR feedback fixup requires a preceding mapped-input warm-up stage')
             if rollout_passes and max_sequence_passes != 3:
                 raise ValueError('choose either rollout_passes or max_sequence_passes above 3')
             if 'rollout_start_passes' in parameters:

@@ -798,6 +798,104 @@ def test_autoregressive_sketch_rollout_matches_parallel_passes_on_early_position
     assert torch.allclose(passes[-1]['sketches'][:,:3].float(),sequential[:,:3].float(),atol=1e-4)
 
 
+def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_trainable():
+    from natlang_neuralese.train.text_warmup import (
+        autoregressive_feedback_completion, text_history_completions)
+
+    backbone,heads=tiny_feedback_fixture()
+    prefix=torch.tensor([[1,4,7]])
+    # The final target is the real close marker; only these IDs are loss targets.
+    span=torch.tensor([[9,3,5,19]])
+    changed=torch.tensor([[9,12,18,19]])
+    first=autoregressive_feedback_completion(backbone,heads,prefix,span)
+    second=autoregressive_feedback_completion(backbone,heads,prefix,changed)
+    controls=list(text_history_completions(backbone,heads,prefix,span,passes=2,
+        input_map=True,ar_feedback_fixup=True))
+    assert [row['pass_index'] for row in controls]==[0,1]
+    gold_ids=torch.cat((prefix,span[:,:-1]),dim=1)
+    gold_states=backbone.forward_embeds(backbone.embed(gold_ids),cutoff=heads.cutoff)['h_final']
+    torch.testing.assert_close(controls[0]['top'],gold_states[:,prefix.shape[1]-1:],atol=0,rtol=0)
+    assert first['top'].shape==span.shape+(backbone.embedding_weight.shape[1],)
+    assert first['producer_payloads'].shape==first['top'].shape
+    assert not first['producer_payloads'].requires_grad
+    # Producer inputs are generated only from prefix and prior projected values;
+    # changing gold targets cannot alter the self-fed history or its consumer.
+    torch.testing.assert_close(first['producer_payloads'],second['producer_payloads'],atol=0,rtol=0)
+    torch.testing.assert_close(first['top'],second['top'],atol=0,rtol=0)
+
+    _,ce,_,_,_=chunked_readout(backbone,first['top'],span,19,chunk_size=2)
+    projection=heads.content(torch.zeros_like(first['top']),first['top'])
+    loss=ce+relative_mse(projection,backbone.embed(span))
+    loss.backward()
+    assert heads.content.proj.weight.grad is not None
+    assert heads.content.proj.weight.grad.abs().sum()>0
+    assert backbone.transform.weight.grad is not None
+    assert backbone.transform.weight.grad.abs().sum()>0
+
+
+def test_full_depth_feedback_transition_matches_projection_evaluator():
+    from natlang_neuralese.eval.projected_history import autoregressive_payloads
+    backbone,heads=tiny_feedback_fixture()
+    prefix=torch.tensor([[1,4,7]])
+    with torch.no_grad():
+        payloads=autoregressive_payloads(backbone,heads,prefix,4,kinds=('ar_projection',))['ar_projection']
+        from natlang_neuralese.train.execution import prefill_write_context
+        state=prefill_write_context(backbone,heads,backbone.embed(prefix))
+        projected=[];top=state.top;cache=state.cache
+        from natlang_neuralese.train.execution import full_depth_projected_feedback_step
+        for index in range(4):
+            if index<3:
+                value,top,cache=full_depth_projected_feedback_step(backbone,heads,top,cache)
+            else:
+                value=heads.content(torch.zeros_like(top),top)
+            projected.append(value)
+        torch.testing.assert_close(torch.stack(projected,1),payloads,atol=0,rtol=0)
+
+
+def tiny_feedback_fixture():
+    from types import SimpleNamespace
+    import torch.nn.functional as F
+
+    class Backbone(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding_weight=torch.nn.Parameter(torch.randn(24,4),requires_grad=False)
+            self.transform=torch.nn.Linear(4,4,bias=False)
+            self.readout=torch.nn.Parameter(torch.randn(24,4))
+            self.controls=SimpleNamespace(close_id=19)
+            self.num_layers=1
+        def embed(self,ids):return F.embedding(ids,self.embedding_weight)
+        def forward_ids(self,ids,*,cutoff=None,logits=False):
+            return self.forward_embeds(self.embed(ids),cutoff=cutoff,logits=logits)
+        def _advance(self,values,cache=None):
+            running=(values.new_zeros(values.shape[0],values.shape[-1]) if cache is None else cache)
+            states=[]
+            for index in range(values.shape[1]):
+                running=running+values[:,index]
+                states.append(self.transform(running))
+            return torch.stack(states,1),running
+        def forward_embeds(self,values,*,cache=None,cutoff=None,logits=False):
+            states,cache=self._advance(values,cache)
+            return {'h_final':states,'h_cut':states,'cache':cache}
+        def run_layers(self,values,layers,cache):return self._advance(values,cache)
+        def logits(self,states):return F.linear(states,self.readout)
+
+    class Content(torch.nn.Module):
+        def __init__(self):
+            super().__init__();self.proj=torch.nn.Linear(4,4)
+        def forward(self,sketch,top):return self.proj(top)
+
+    class Heads(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.read_markers=False;self.cutoff=1
+            self.content=Content();self.input_map=torch.nn.Linear(4,4)
+        def read_embeddings(self,backbone,payload):return payload
+
+    torch.manual_seed(201)
+    return Backbone(),Heads()
+
+
 def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkeypatch):
     import json
     from natlang_neuralese.train import text_warmup
@@ -1383,7 +1481,7 @@ def test_sketch_rollout_trains_only_the_sketch_at_depth_then_evaluates_every_pas
     args=[x for x in args]
     args[args.index('--eval-every')+1]='1'
     # Every improvement is insignificant, so both plateaus (projection, then sketch rollout) arrive early.
-    args+=['--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
+    args+=['--neuralese-input','sketch','--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
            '--rollout-passes','4','--rollout-start-passes','3']
     module.main(args)
     run=tmp_path/'run'

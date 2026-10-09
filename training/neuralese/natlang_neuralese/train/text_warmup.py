@@ -12,7 +12,8 @@ from pathlib import Path
 import torch
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
-from .execution import prefill_write_context, replay_sequence_inputs
+from .execution import (full_depth_projected_feedback_step, prefill_write_context,
+                        replay_sequence_inputs)
 from .output_embedding_projection import sha
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
@@ -495,6 +496,64 @@ def mapped_completions(backbone, heads, prefix_ids, span_ids, *, passes=2):
            'pass_index':1}
 
 
+def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
+    """Train a consumer on a detached, genuinely self-fed full-depth history.
+
+    The producer rolls out ``heads.content`` one position at a time and reads
+    each projected payload through every backbone layer. Gold IDs are not fed
+    into this history; they remain fixed targets for the parallel consumer.
+    Detaching the producer bounds activation memory and makes this exposure
+    objective distinct from full BPTT through the rollout.
+    """
+    if (prefix_ids.ndim != 2 or span_ids.ndim != 2 or prefix_ids.shape[0] != span_ids.shape[0]
+            or prefix_ids.shape[1] < 1 or span_ids.shape[1] < 1):
+        raise ValueError('nonempty batched prefix and aligned target tokens required')
+    if heads.read_markers:
+        raise ValueError('autoregressive text feedback requires the raw read profile')
+    with torch.no_grad():
+        producer = prefill_write_context(backbone, heads, backbone.embed(prefix_ids))
+        top, cache = producer.top, producer.cache
+        payloads = []
+        for index in range(span_ids.shape[1]):
+            if index + 1 < span_ids.shape[1]:
+                payload, top, cache = full_depth_projected_feedback_step(
+                    backbone, heads, top, cache)
+            else:
+                payload = heads.content(torch.zeros_like(top), top)
+            payloads.append(payload)
+        producer_payloads = torch.stack(payloads, dim=1).detach()
+
+    # The final payload predicts the final target (including a real close
+    # marker, where present) but is not consumed: no post-target state exists.
+    history = heads.read_embeddings(backbone, producer_payloads[:, :-1])
+    consumer_input = torch.cat((backbone.embed(prefix_ids), history), dim=1)
+    consumer = backbone.forward_embeds(consumer_input, cutoff=heads.cutoff, logits=False)
+    top = consumer['h_final'][:, prefix_ids.shape[1] - 1:]
+    with torch.no_grad():
+        secondary_target = heads.content(torch.zeros_like(top), top)
+    return {'top': top,
+            'sketches': heads.input_map(backbone.embed(span_ids)),
+            'secondary_target': secondary_target,
+            'producer_payloads': producer_payloads,
+            'pass_index': 1}
+
+
+def text_history_completions(backbone, heads, prefix_ids, span_ids, *, passes,
+                             input_map, ar_feedback_fixup=False, group_size=16):
+    """Select the declared history objective while preserving pass indices."""
+    if ar_feedback_fixup:
+        if passes != 2:
+            raise ValueError('AR feedback fixup has exactly one gold control and one self-fed consumer pass')
+        yield next(mapped_completions(backbone, heads, prefix_ids, span_ids, passes=1))
+        yield autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids)
+        return
+    if input_map:
+        yield from mapped_completions(backbone, heads, prefix_ids, span_ids, passes=min(passes, 2))
+    else:
+        yield from sequence_completions(backbone, heads, prefix_ids, span_ids,
+                                        passes=passes, group_size=group_size)
+
+
 def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_completion, *, input_map):
     """Use the serving shallow feedback projection for matched-history diagnostics.
 
@@ -895,6 +954,9 @@ def main(argv=None):
                    help='how Neuralese positions are filled in training: sketch = repeated shallow sketch passes; '
                         'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
                         'self-consistent with the model\'s own projection)')
+    p.add_argument('--ar-feedback-fixup',action='store_true',
+                   help='after a mapped-input continuation, train on a no-grad full-depth projected-payload rollout '
+                        'and a parallel consumer pass; gold targets stay fixed and the producer rollout is detached')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
@@ -909,6 +971,8 @@ def main(argv=None):
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
+    if a.ar_feedback_fixup and (a.neuralese_input!='map' or not a.continue_from):
+        p.error('--ar-feedback-fixup requires --neuralese-input map and a mapped --continue-from checkpoint')
     if a.neuralese_input=='map' and a.rollout_passes:p.error('--neuralese-input map replaces the sketch rollout (--rollout-passes 0)')
     if a.rollout_passes and a.rollout_passes<2:raise ValueError('--rollout-passes needs at least 2 (or 0 to keep the schedule)')
     if a.max_sequence_passes<3:raise ValueError('--max-sequence-passes must be at least 3')
@@ -929,9 +993,13 @@ def main(argv=None):
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
-              'text_history':('gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
+              'text_history':('gold-context control then detached sequential full-depth projected-payload history; '
+                              'parallel consumer retains unchanged gold targets' if a.ar_feedback_fixup else
+                              'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
                               if a.neuralese_input=='map' else
                               'gold seed; repeated shared shallow sequence passes with aligned predictions'),
+              'ar_feedback_handoff_optimizer':'fresh optimizer at objective handoff; full optimizer state is saved/resumed thereafter'
+                  if a.ar_feedback_fixup else None,
               'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
               'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
               'supervision_policy':text_supervision_policy(a.neuralese_input),
@@ -979,6 +1047,8 @@ def main(argv=None):
         old=continuation['identity']['options']
         if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
             raise ValueError('continuation optimizer/parameter policy differs')
+        if a.ar_feedback_fixup and (old.get('neuralese_input')!='map' or old.get('ar_feedback_fixup',False)):
+            raise ValueError('AR feedback fixup must continue a mapped-input checkpoint, not another fixup')
     a.out.mkdir(parents=True,exist_ok=True)
     if a.cuda_reserved_cap_gb and a.device.startswith('cuda'):
         index=torch.device(a.device).index
@@ -1231,8 +1301,8 @@ def main(argv=None):
         rows=[w] if isinstance(w,dict) else w
         roles=(torch.tensor([r['roles'][r['prefix']:] for r in rows],device=span.device)
                if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
-        completions=(mapped_completions(backbone,heads,prefix,span,passes=min(passes,2)) if input_map
-                     else sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size))
+        completions=text_history_completions(backbone,heads,prefix,span,passes=passes,
+            input_map=input_map,ar_feedback_fixup=a.ar_feedback_fixup,group_size=a.group_size)
         for out in completions:
             yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
@@ -1273,15 +1343,22 @@ def main(argv=None):
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
             heads.load_state_dict(restored['heads'])
-            try:
-                optimizer.load_state_dict(restored['optimizer'])
-                if continuation:
-                    print(json.dumps({'event':'optimizer_state_restored',
-                                      'source_step':continuation['step'],
-                                      'parameter_groups':len(optimizer.param_groups)}),flush=True)
-            except ValueError as error:
-                # The trainable set grew (members' private parts joined): the optimizer starts fresh.
-                print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
+            if continuation and a.ar_feedback_fixup:
+                # This is a declared objective handoff: preserve model weights,
+                # start fresh moments/schedule for the changed history distribution.
+                print(json.dumps({'event':'optimizer_state_fresh',
+                                  'reason':'declared full-depth AR-feedback objective handoff',
+                                  'source_step':continuation['step']}),flush=True)
+            else:
+                try:
+                    optimizer.load_state_dict(restored['optimizer'])
+                    if continuation:
+                        print(json.dumps({'event':'optimizer_state_restored',
+                                          'source_step':continuation['step'],
+                                          'parameter_groups':len(optimizer.param_groups)}),flush=True)
+                except ValueError as error:
+                    # The trainable set grew (members' private parts joined): the optimizer starts fresh.
+                    print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
         step=restored['step'];updates=restored['updates']
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1289,7 +1366,8 @@ def main(argv=None):
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
         elif continuation:
-            same_foundation=same_foundation_context(continuation['identity'],identity)
+            same_foundation=(not a.ar_feedback_fixup and
+                             same_foundation_context(continuation['identity'],identity))
             if same_foundation and continuation.get('schedule'):
                 # An unchanged objective may continue its plateau/ramp phase.
                 schedule.load_state_dict(continuation['schedule'])
@@ -1922,6 +2000,7 @@ def main(argv=None):
         nonlocal step,streak,best
         step+=1
         m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
+        memory_passes=int(memory_plan.get('sequence_passes',passes))
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
         memory_record=None
         if a.device.startswith('cuda'):
@@ -1935,7 +2014,7 @@ def main(argv=None):
                 # Only a successful unoffloaded update measures the predictor's
                 # target quantity. An offloaded peak is censored telemetry.
                 memory_estimator.observe(_warmup_memory_kind(
-                    a.batch,passes,int(memory_plan['readout_chunk_tokens']),
+                    a.batch,memory_passes,int(memory_plan['readout_chunk_tokens']),
                     int(memory_plan['ffn_chunk_tokens'])),
                     memory_plan['context_tokens'],memory_plan['target_tokens'],
                     memory_plan['predictor_raw_bytes'],actual_increment)
@@ -1947,6 +2026,7 @@ def main(argv=None):
                 'offloaded_peak_is_censored':was_offloaded,
                 'readout_chunk_tokens':int(memory_plan['readout_chunk_tokens']),
                 'ffn_chunk_tokens':int(memory_plan['ffn_chunk_tokens']),
+                'objective_passes':passes,'memory_geometry_passes':memory_passes,
                 'preflight':prepared['memory_plan'],
                 'offload':{**offload,'wrapped_forward_backward_seconds':
                            prepared['wrapped_forward_backward_seconds']}}
@@ -2039,7 +2119,11 @@ def main(argv=None):
             # before refusing, which would cost a full reload.
             for wait in range(11):
                 try:
-                    memory_plan=prepare_update_memory(batch,passes,bootstrap);break
+                    # The no-grad sequential producer adds a live full-depth KV
+                    # cache alongside the two objective passes; reserve one extra
+                    # pass worth of geometry rather than underestimating it.
+                    memory_passes=passes+int(a.ar_feedback_fixup)
+                    memory_plan=prepare_update_memory(batch,memory_passes,bootstrap);break
                 except RuntimeError as error:
                     if 'preflight refused' not in str(error) or wait==10 or stop[0]:raise
                     if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)

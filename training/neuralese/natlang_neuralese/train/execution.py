@@ -98,6 +98,27 @@ def prefill_write_context(backbone: PortBackbone, heads: PortHeads, context: tor
     return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None, out['h_final'][:, -1])
 
 
+def full_depth_projected_feedback_step(backbone: PortBackbone, heads: PortHeads,
+                                       top: torch.Tensor, cache: PortCache):
+    """Project the current top state and consume that payload at the next full-depth position.
+
+    This is the shared transition used by autoregressive evaluation and the
+    detached producer pass of text-warmup feedback exposure. The returned
+    payload predicts the next gold token; the returned state is the next
+    position's full-depth state after reading that payload. Callers choose the
+    gradient context explicitly: evaluation/producer rollouts use no-grad,
+    while training retains gradients for the consumer path as required.
+    """
+    if top.ndim not in (2, 3) or (top.ndim == 3 and top.shape[1] != 1):
+        raise ValueError('full-depth feedback expects a [batch,width] or [batch,1,width] top state')
+    if heads.read_markers:
+        raise ValueError('token-aligned full-depth feedback requires the raw read profile')
+    payload = heads.content(torch.zeros_like(top), top)
+    history = heads.read_embeddings(backbone, payload[:, None] if payload.ndim == 2 else payload)
+    states, updated_cache = backbone.run_layers(history, range(backbone.num_layers), cache)
+    return payload, states[:, 0], updated_cache
+
+
 def prefill_write_contexts(backbone: PortBackbone, heads: PortHeads,
                            contexts: list[torch.Tensor]) -> Prefilled:
     """Tensor-batched write boundaries with gradients through every scope row.

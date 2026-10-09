@@ -15,6 +15,7 @@ import torch
 
 from ..serve import load_engine
 from ..train.output_embedding_projection import sha
+from ..train.execution import full_depth_projected_feedback_step
 from ..train.text_warmup import (
     chunked_readout, document_windows, gold_completion, load_text_rows,
     select_held_document_windows,
@@ -320,6 +321,7 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
         cache, values = context.cache, [];tokens=[];diagnostics=[]
         state, top = context.state[:, None], context.top[:, None]
         for position in range(steps):
+            next_top = None
             # The decoded token of each rollout: the sketch head's own argmax (its straight-through choice), the
             # crisp greedy token, and for the projection the full model's greedy reading of the emitting state.
             if kind == 'ar_sketch':
@@ -332,7 +334,11 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
                 token = scores.argmax(-1)
                 value = backbone.embed(token)
             else:
-                value = heads.content(torch.zeros_like(top), top)
+                if position < steps - 1:
+                    value, next_top, next_cache = full_depth_projected_feedback_step(
+                        backbone, heads, top, cache)
+                else:
+                    value = heads.content(torch.zeros_like(top), top)
                 scores = backbone.logits(top) if return_generated_tokens else None
                 token = scores.argmax(-1) if scores is not None else None
             if token is not None:
@@ -345,6 +351,9 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
             values.append(value)
             if position == steps - 1:
                 break
+            if kind == 'ar_projection':
+                top, cache = next_top[:, None], next_cache
+                continue  # the shared full-depth transition above already advanced the cache
             history = heads.read_embeddings(backbone, value)
             if kind == 'ar_sketch':
                 state, cache = backbone.run_layers(history, range(0, heads.cutoff), cache)
