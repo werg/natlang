@@ -138,6 +138,23 @@ def test_stochastic_rounding_is_unbiased_and_lion_moves_by_lr():
     assert torch.allclose(p.detach(), torch.full((1000,), -0.01))
 
 
+def test_lion_step_in_backward_matches_a_separate_step_and_frees_gradients():
+    from natlang_neuralese.train.optim import LionSR
+
+    torch.manual_seed(0)
+    x, w0 = torch.randn(8, 16), torch.randn(16, 4)
+    a, b = torch.nn.Parameter(w0.clone()), torch.nn.Parameter(w0.clone())
+    separate, inside = LionSR([a], lr=0.01), LionSR([b], lr=0.01)
+    inside.step_in_backward()
+    for _ in range(3):
+        (x @ a).square().sum().backward()
+        separate.step()
+        separate.zero_grad(set_to_none=True)
+        (x @ b).square().sum().backward()
+        assert b.grad is None
+    assert torch.allclose(a.detach(), b.detach())
+
+
 def test_full_latent_qat_ternarizes_attention_and_experts_and_trains_latents(tmp_path):
     from natlang_neuralese.maple.qat_convert import install_full_latent_qat, ternary_scale, topk_kl
     from natlang_neuralese.maple.ternary import ternarize

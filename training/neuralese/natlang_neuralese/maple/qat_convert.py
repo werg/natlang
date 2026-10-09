@@ -126,9 +126,11 @@ def run_train(a):
     train, held = torch.load(teacher_dir / "train.pt"), torch.load(teacher_dir / "test.pt")
     model = load_maple(a.model, device="cuda", dtype=torch.bfloat16, ternary_attention=False)
     latents = install_full_latent_qat(model)
+    model.model.checkpoint_layers = a.checkpoint_layers
     scales = {name: ternary_scale(latent) for name, latent in latents}
     groups = [{"params": [latent], "lr": a.lr * scales[name], "name": name} for name, latent in latents]
     optimizer = LionSR(groups, lr=a.lr)
+    optimizer.step_in_backward()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     state_path = out / "checkpoint.pt"
@@ -191,9 +193,7 @@ def run_train(a):
         loss = a.ce_weight * ce + kl_weight * kl
         if not torch.isfinite(loss):
             raise RuntimeError("nonfinite conversion loss")
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
+        loss.backward()  # the optimizer steps each latent inside backward
         step += 1
         row = {"step": step, "ce": float(ce), "kl": float(kl), "mix": QUANT_MIX["value"], "kl_weight": kl_weight, "seconds": time.perf_counter() - started,
                "peak_gb": torch.cuda.max_memory_allocated() / 2**30}
@@ -233,6 +233,8 @@ def main(argv=None):
     r.add_argument("--eval-every", type=int, default=100)
     r.add_argument("--checkpoint-every", type=int, default=100)
     r.add_argument("--seed", type=int, default=0)
+    r.add_argument("--checkpoint-layers", action=argparse.BooleanOptionalAction, default=True,
+                   help="recompute each layer in backward (its ternary values included) instead of keeping them")
     a = p.parse_args(argv)
     (run_teacher if a.phase == "teacher" else run_train)(a)
 

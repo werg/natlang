@@ -129,27 +129,38 @@ class LionSR(torch.optim.Optimizer):
         if closure is not None:
             raise ValueError("LionSR does not support closures")
         for group in self.param_groups:
-            beta1, beta2 = group["betas"]
             for p in group["params"]:
-                if p.grad is None:
-                    continue
-                state = self.state[p]
-                if "momentum" not in state:
-                    state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
-                flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
-                for start in range(0, flat_p.numel(), self.chunk):
-                    end = start + self.chunk
-                    g = flat_g[start:end].float()
-                    m = flat_m[start:end].float()
-                    update = (beta1 * m + (1 - beta1) * g).sign_()
-                    value = flat_p[start:end].float()
-                    if group["weight_decay"]:
-                        value.mul_(1 - group["lr"] * group["weight_decay"])
-                        value.add_(update, alpha=-group["lr"])
-                    else:
-                        value.add_(update, alpha=-group["lr"])
-                    if flat_p.dtype == torch.bfloat16:
-                        stochastic_round_(flat_p[start:end], value)
-                    else:
-                        flat_p[start:end].copy_(value)
-                    flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))
+                if p.grad is not None:
+                    self._update(p, group)
+
+    def step_in_backward(self):
+        """Update each parameter as soon as its gradient is complete and free that gradient (each parameter must
+        be used once per backward): the full-latent conversion then never holds a gradient copy of the model."""
+        for group in self.param_groups:
+            for p in group["params"]:
+                def hook(param, group=group):
+                    self._update(param, group)
+                    param.grad = None
+                p.register_post_accumulate_grad_hook(hook)
+
+    @torch.no_grad()
+    def _update(self, p, group):
+        beta1, beta2 = group["betas"]
+        state = self.state[p]
+        if "momentum" not in state:
+            state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+        flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
+        for start in range(0, flat_p.numel(), self.chunk):
+            end = start + self.chunk
+            g = flat_g[start:end].float()
+            m = flat_m[start:end].float()
+            update = (beta1 * m + (1 - beta1) * g).sign_()
+            value = flat_p[start:end].float()
+            if group["weight_decay"]:
+                value.mul_(1 - group["lr"] * group["weight_decay"])
+            value.add_(update, alpha=-group["lr"])
+            if flat_p.dtype == torch.bfloat16:
+                stochastic_round_(flat_p[start:end], value)
+            else:
+                flat_p[start:end].copy_(value)
+            flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))

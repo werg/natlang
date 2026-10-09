@@ -27,4 +27,6 @@ class MaplePortBackbone(QwenPortBackbone):
         """A marker-free runner over a bare ``MapleModel`` (used by its own forward)."""
         hf = SimpleNamespace(model=maple_model, config=SimpleNamespace(**maple_model.config.__dict__),
                              get_output_embeddings=lambda: maple_model.embed_tokens)
-        return MaplePortBackbone(hf, markers=False)
+        runner = MaplePortBackbone(hf, markers=False)
+        runner.checkpoint_layers = getattr(maple_model, "checkpoint_layers", False)
+        return runner
