@@ -22,6 +22,7 @@ from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
 from .foundation_schedule import ProjectionFirstSchedule
+from . import warmup_export
 from .loop import (Cadence, StopSignal, TrainingLoop, capture_training_rng_state,
                    commit_optimizer_step, restore_training_rng_state)
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
@@ -1801,48 +1802,16 @@ def main(argv=None):
                                   checkpoint_step=None,heads_step=None):
         checkpoint_step=step if checkpoint_step is None else int(checkpoint_step)
         heads_step=serving_heads_step if heads_step is None else int(heads_step)
-        status={'schema':'natlang.neuralese-text-warmup-heads-export/1',
-            'checkpoint_step':checkpoint_step,'heads_step':heads_step,
-            'heads_step_known':heads_step>=0,'heads_current':heads_step==checkpoint_step,
-            'checkpoint_authoritative_for_resume':True,
-            'emergency_export_attempted':bool(emergency)}
-        if export_error is not None:
-            status['export_error']={'type':type(export_error).__name__,'message':str(export_error)[:1000]}
-        pending=a.out/'heads-export-status.json.pending'
-        try:
-            pending.write_text(json.dumps(status,indent=2)+'\n')
-            pending.replace(a.out/'heads-export-status.json')
-            return True
-        except OSError:
-            try:pending.unlink(missing_ok=True)
-            except OSError:pass
-            return False
+        return warmup_export.write_heads_export_status(a.out,warmup_export.heads_export_status(
+            checkpoint_step=checkpoint_step,heads_step=heads_step,
+            export_error=export_error,emergency=emergency))
 
     def build_heads_export(report=None, *, export_step=None, snapshot=False):
-        export_step=step if export_step is None else int(export_step)
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
-        from .adapters import lora_state,adapter_layers
-        initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
-        serving=heads.state_dict()
-        trained_map={k.removeprefix('input_map.'):v for k,v in serving.items() if k.startswith('input_map.')}
-        serving={k:v for k,v in serving.items() if not k.startswith('input_map.')}
-        control_rows=backbone.control_rows.detach()
-        if not snapshot:control_rows=control_rows.cpu()
-        exported={**initial,'heads':serving,**({'neuralese_input_map':trained_map} if trained_map else {}),'control_rows':control_rows,
-          'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
-          'backbone_trainables':{n:(q.detach() if snapshot else q.detach().cpu())
-                                 for n,q in backbone.hf.named_parameters() if n in backbone_names},
-          'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
-          'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
-          **({'maple_qat':True} if a.backbone_training=='qat' else {}),
-          'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
-          'warmup':{'step':export_step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
-                    'report_path':str((a.out/'report.json').resolve()),
-                    'report_sha256':sha(a.out/'report.json') if (a.out/'report.json').is_file() else None}}
-        # Parent adapters may have a different rank than the fresh-policy default.
-        ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
-        if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
-        return immutable_cpu_snapshot(exported) if snapshot else exported
+        return warmup_export.build_heads_export(
+            initial_heads_path=a.heads,heads=heads,backbone=backbone,backbone_names=backbone_names,
+            backbone_training=a.backbone_training,rank=a.rank,identity=identity,out=a.out,
+            report=report,export_step=step if export_step is None else int(export_step),snapshot=snapshot)
 
     def export_heads(report=None):
         nonlocal serving_heads_step
