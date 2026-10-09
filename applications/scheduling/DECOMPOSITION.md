@@ -105,27 +105,38 @@ The executors are small models, so instructions spell algorithms out as numbered
 
 ## Refinements
 
-Proposed `Is<T, P>` types, by slot (not implemented: `plans/REFINEMENT_TYPES.md`). Today each is stated as a type
-doc comment, enforced by `calendar.check` or by a reader's instructions.
+Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). Decisions: (a) adopted with a crisp checker in
+`refinements.ts` (no model call), (b) a natural-language judge (proposed only: awaiting live evaluation, not wired),
+(c) left to the check that already enforces it exactly (`calendar.check`, the order stage, the commit), (d) not adopted:
+the value alone does not show the property. The refined result types are `Checked*` aliases in `types.ts`, named in
+the `returns` of the stage that produces the value; the host and the crisp code keep the plain types. `index.ts`
+exports the table as `refinements`, for a host that runs the planner in its own runtime (`refinements: { crisp }`).
 
-| Slot | Proposed type |
-|---|---|
-| `TaskView.id` | `Is<string, "an identifier that starts with a letter and has only letters, digits, underscores and hyphens">` |
-| `TaskView.minutes` | `Is<number, "a whole number of minutes, at least 1">` |
-| `Span`, `Placement`, `Block` | `Is<Span, "start is a whole number of minutes before end">` |
-| `Placement.start` | `Is<number, "a multiple of the slot length after the origin">` |
-| `TaskView.after` | `Is<string[], "ids of other tasks, forming no cycle">` |
-| `TaskReading.tasks` (output of `readTasks`) | `Is<TaskView[], "tasks the request introduces, none of them already in the day">` |
-| `LimitReading.limits` | `Is<Limit[], "each limit narrows one task and restates a requirement of the request">` |
-| `Preference.text` | `Is<string, "the user's wish, restated without times the request does not state">` |
-| `Preference.weight` | `Is<number, "1, 2 or 3: 3 for a wish stated as important">` |
-| `Preference.tasks` | `Is<string[], "ids of tasks in the day, or empty for the whole plan">` |
-| `Domain.spans` | `Is<Span[], "free of fixed commitments, inside the task's earliest and latest, each long enough for the task, ascending and disjoint">` |
-| `Offered.options[].placements` | `Is<Placement[], "one placement per task, none overlapping, each after its dependencies">` (the verifier's job) |
-| `Proposal.placements` | `Is<Placement[], "a complete schedule that calendar.check accepts">` |
-| `Explanation.text` | `Is<string, "plain words for the user, naming each wish that is met and each that is given up, without minute offsets">` |
-| `Diagnosis.conflict` | `Is<string, "names the tasks or commitments that cannot all hold, with their clock times">` |
-| `Proposal.questions` | `Is<string[], "each a single question the user can answer in a few words">` |
+| Slot | Proposed type | Decision |
+|---|---|---|
+| `TaskView.id` | `Is<string, "an identifier that starts with a letter and has only letters, digits, underscores and hyphens">` | (a) `CheckedTaskReading`, with no id used twice among the tasks read. |
+| `TaskView.minutes` | `Is<number, "a whole number of minutes, at least 1">` | (a) `CheckedTaskReading`. |
+| `Span`, `Placement`, `Block` | `Is<Span, "start is a whole number of minutes before end">` | (a) `CheckedLimitReading` (blocks), `CheckedPlacements` (repair), `CheckedDomains` (spans). |
+| `Placement.start` | `Is<number, "a multiple of the slot length after the origin">` | (c) The slot is not in the placement; `calendar.check` reports `grid`. |
+| `TaskView.after` | `Is<string[], "ids of other tasks, forming no cycle">` | (c) `order` reports the cycle as the ordering's problem; the graph spans several tasks and the day. |
+| `TaskReading.tasks` | `Is<TaskView[], "tasks the request introduces, none of them already in the day">` | (d) The day is not in the value. |
+| `LimitReading.limits` | `Is<Limit[], "each limit narrows one task and restates a requirement of the request">` | (a) Weakened (`CheckedLimitReading`): each limit names a task, gives a reason and sets notBefore, endBy or after. That it restates the request is (d). |
+| `Preference.text` | `Is<string, "the user's wish, restated without times the request does not state">` | (d) The request is not in the value. |
+| `Preference.weight` | `Is<number, "1, 2 or 3: 3 for a wish stated as important">` | (a) `CheckedPreferenceReading`: weight 1, 2 or 3, ids numbered p1, p2 in order. Whether 3 was stated as important is (d). |
+| `Preference.tasks` | `Is<string[], "ids of tasks in the day, or empty for the whole plan">` | (d) The day is not in the value; the list of ids is shape-checked in `CheckedPreferenceReading`. |
+| `Domain.spans` | `Is<Span[], "free of fixed commitments, inside the task's earliest and latest, each long enough for the task, ascending and disjoint">` | (a) Weakened (`CheckedDomains`): ascending, disjoint, valid spans, each at least the task's minutes. Free of commitments and inside the bounds needs the day; `calendar.check` rejects a schedule that breaks them (c). |
+| `Offered.options[].placements` | `Is<Placement[], "one placement per task, none overlapping, each after its dependencies">` | (c) The verifier's job, as the row says. |
+| `Proposal.placements` | `Is<Placement[], "a complete schedule that calendar.check accepts">` | (c) `calendar.check` before the commit, and the commit again. |
+| `Explanation.text` | `Is<string, "plain words for the user, naming each wish that is met and each that is given up, without minute offsets">` | (b) Proposed, awaiting live evaluation (not wired): one judge call per plan. |
+| `Diagnosis.conflict` | `Is<string, "names the tasks or commitments that cannot all hold, with their clock times">` | (b) Proposed, awaiting live evaluation (not wired): one judge call per infeasible request. |
+| `Proposal.questions` | `Is<string[], "each a single question the user can answer in a few words">` | (b) Proposed, awaiting live evaluation (not wired). |
+| `Proposal` (added) | `Is<Proposal, "...">` | (a) `CheckedProposal`, not in the original table: chosen carries placements and no questions, unclear carries questions and no placements, infeasible neither. The host reads `status`, `placements` and `questions` separately. |
+
+Counts for the 16 candidates: (a) 6, (b) 3, (c) 4, (d) 3. One further (a) row was added (`Proposal`).
+
+The model-facing text added to signatures is the `Is<...>` predicate of `CheckedTaskReading`, `CheckedLimitReading`,
+`CheckedPreferenceReading`, `CheckedDomains`, `CheckedPlacements` and `CheckedProposal`. No instruction sentence was
+changed.
 
 ## Limitations met
 

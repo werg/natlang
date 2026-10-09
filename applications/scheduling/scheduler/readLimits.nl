@@ -4,7 +4,7 @@ args:
   request: string
   view: DayView
   tasks: TaskView[]
-returns: LimitReading
+returns: CheckedLimitReading
 ---
 Read request, the user's words about their day, and list what it fixes: statements that every acceptable plan must
 satisfy. tasks are all the tasks of the day, the existing ones and the ones the request adds. view.clock lists the

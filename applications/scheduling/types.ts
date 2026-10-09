@@ -1,3 +1,5 @@
+import type { Is } from '@natlang/node';
+
 // The scheduler's stages pass these values to each other. Every time is a whole number of minutes after
 // DayView.origin, so no stage handles an epoch number, a date library or a time zone.
 
@@ -156,3 +158,26 @@ export type Proposal = {
   /** True when more schedules existed than were compared. */
   truncated: boolean,
 };
+
+// ---------------------------------------------------------------- refined results
+// What a stage returns carries the property its value shows by itself. The verifier (`calendar.check`) keeps everything
+// that needs the day: the grid, the windows, the fixed commitments, overlaps, dependencies. Crisp code keeps the plain
+// types. Each predicate has a crisp checker in refinements.ts.
+
+/** The tasks a request introduces: ids that are names, durations of whole minutes, no id twice. */
+export type CheckedTaskReading = Is<TaskReading, "a reading whose tasks each have an id that starts with a letter and has only letters, digits, underscores and hyphens, a duration that is a whole number of minutes of at least 1, and an id no other task has">;
+
+/** The hard limits and commitments a request states: each limit narrows a task, each block is a real span. */
+export type CheckedLimitReading = Is<LimitReading, "a reading whose limits each name a task, give a reason and set at least one of notBefore, endBy or after, and whose blocks each start a whole number of minutes before they end">;
+
+/** The wishes a request states: numbered in order, each weighted 1, 2 or 3. */
+export type CheckedPreferenceReading = Is<PreferenceReading, "a reading whose preferences are numbered p1, p2 and so on in order, and each have a weight of 1, 2 or 3 and a list of task ids">;
+
+/** Where each task can go: spans ascending and disjoint, each long enough for the task. */
+export type CheckedDomains = Is<Domain[], "domains whose spans are ascending and disjoint, each start a whole number of minutes before its end and each at least as long as the task's minutes">;
+
+/** A schedule repaired: each placement is a real span and no task appears twice. */
+export type CheckedPlacements = Is<Placement[], "placements that each start a whole number of minutes before they end, with no task placed twice">;
+
+/** The planner's answer: the status says which of placements and questions it carries. */
+export type CheckedProposal = Is<Proposal, "a proposal that carries placements and no questions when it is chosen, questions and no placements when it is unclear, and neither when it is infeasible">;

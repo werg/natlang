@@ -3,7 +3,7 @@ description: Read the soft preferences a scheduling request states.
 args:
   request: string
   tasks: TaskView[]
-returns: PreferenceReading
+returns: CheckedPreferenceReading
 ---
 Read request, the user's words about their day, and list the wishes it states: things the user would like, which a
 good plan satisfies when it can. tasks are all the tasks of the day.
