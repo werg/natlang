@@ -1203,3 +1203,26 @@ corrections apply through an explicit checkpoint handoff.
 
 The recurrence projection anchor is already shared in commit `582e6b02`
 (`projection_anchor_weight=1.0`, `projection_anchor_backbone_scale=0.05`).
+
+## 2026-10-09 — AR exposure from the preserved mapped best
+
+The mapped continuation's strict 0.995 agreement gates remain failed. Best
+step23936 has negligible CE drift but rare argmax differences; a CPU advisory
+with agreement 0.99 passes six saved evaluations. That advisory is not a new
+certificate. Further mapped updates regressed embedding alignment.
+
+Proceed with additional foundation training from an immutable step23936
+checkpoint/heads pair, using the shared full-depth AR feedback handler. Declare
+fresh agreement 0.99, CE delta 0.05, embedding delta 0.025 and two consecutive
+passes, with a fresh AR baseline and no inherited runtime/recurrence status.
+Use real prefix context within 16K and a 256-token generated training span;
+this span is not a 256-token context limit. Bind up to1024 additional updates,
+complete optimizer/schedule/RNG restoration, and exact source/code/image hashes.
+Do not reinterpret the old strict failures or silently change their thresholds.
+
+Closed sketch checkpoint bytes were preserved under the canonical repo, with
+both external hardlink names replaced by verified aliases; receipt lives in
+`runs/neuralese-foundation-text-4880-continuation-20261009-v1/relocated-source-checkpoints-v2/relocation-receipt-v1.json`.
+31 reproducible installed-package downloads (1,599,702,512 bytes) were removed
+from the apt download cache. Installed packages and active training data/weights
+were not removed. The in-use uv cache was left intact.

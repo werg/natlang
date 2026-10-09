@@ -1,8 +1,11 @@
 # Shared neuralese training recipe
 
-New neuralese training lineages start with the declared recipe at
-`training/neuralese/recipes/foundation-v1.json`. Machine-specific experiment scripts
-must not bypass its foundation gates. Code moves through `origin/main`; data and
+New neuralese training lineages use the shared complete stage graph at
+`training/neuralese/recipes/raw-recurrence-v1.json`. The smaller
+`foundation-v1.json` declares only the initial identity/distillation/transport
+controls; it is not the complete text-adaptation and recurrence curriculum.
+Machine-specific experiments bind the shared handlers and exact predecessor
+artifacts. Code moves through `origin/main`; data and
 checkpoints move through the corpus registry and immutable manifests.
 
 ## Active text foundation: mapped drift, then autoregressive feedback (2026-10-09 correction)
@@ -62,17 +65,21 @@ replace the active map training path.
    is a separate inference experiment, not the foundation input generator.
    Raw embeddings are not RMS
    normalized. Training completion is not qualification.
-3. **Runtime qualification:** validate the actual production encode/read/write
+3. **Text adaptation and autoregressive fixup:** adapt mapped previous-token
+   inputs, then expose the consumer to its own full-depth generated payloads.
+   These use the shared text trainer and retain unchanged gold targets. A new
+   history objective earns fresh gates; prior qualification is not inherited.
+4. **Runtime qualification:** validate the actual production encode/read/write
    path, token boundaries, gradient replay and typed task execution. The foundation
    certificate has `runtime_qualified: false`; the separate raw-port checkpoint
    records its passed runtime scope. Neither qualifies the old marker/RMS channel.
-4. **Function execution and recurrence:** consume the exact qualified weights for
+5. **Function execution and recurrence:** consume the exact qualified weights for
    soft instructions/arguments, child results and skill use. Keep text replay and
    requalify the channel when backbone deltas change its states. Compression is an
    explicit task/operator (for example a digest or a summarizing natlang lambda),
    not a mandatory global curriculum or fixed ratio for ordinary calls.
 
-The shared runner implements stages 1–3, including certified raw-port checkpoint
+The shared runner implements these stages, including certified raw-port checkpoint
 construction and actual serving encode/read/write and gradient replay controls.
 The raw trajectory trainer rejects unqualified handoffs. A declared recurrence handler is available (see below); stopping and broader soft-function qualification remain subsequent gates. Explicit
 compression operators require their own task qualification when introduced. This is an explicit foundation, not a claim that the entire pipeline
@@ -83,8 +90,9 @@ entry points and their old checkpoints are not automatically qualified.
 
 ```sh
 PYTHONPATH=training/neuralese python -m natlang_neuralese.train.recipe \
-  --recipe training/neuralese/recipes/foundation-v1.json \
+  --recipe training/neuralese/recipes/raw-recurrence-v1.json \
   --heads HEADS.pt --records RECORDS.jsonl --pieces PIECES.jsonl \
+  --text-data TEXT.jsonl \
   --out runs/NEW-RECIPE-LINEAGE --device cuda
 ```
 
