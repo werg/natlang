@@ -27,11 +27,22 @@ test('session text fallback uses the official SDK path parameter shape', async (
 
 test('native permission rejection uses the installed official SDK route and confirms rejection', async () => {
   let options;
-  const result = await rejectOpenCodePermission({ postSessionIdPermissionsPermissionId: async value => {
-    options = value; return { data: true };
-  } }, { v2: false, sessionID: 'ses_native', requestID: 'per_native' }, '/isolated/scratch');
+  const client = { _client: { post: async value => { options = value; return { data: true }; } },
+    async postSessionIdPermissionsPermissionId(value) { return this._client.post(value); } };
+  const result = await rejectOpenCodePermission(client, { v2: false, sessionID: 'ses_native', requestID: 'per_native' }, '/isolated/scratch');
   assert.deepEqual(options, { path: { id: 'ses_native', permissionID: 'per_native' },
     query: { directory: '/isolated/scratch' }, body: { response: 'reject' } });
+  assert.deepEqual(result, { ok: true, status: 'rejected' });
+});
+
+test('native v2 permission reply also preserves the nested SDK receiver', async () => {
+  let options;
+  const permission = { _client: { reply: async value => { options = value; return { data: true }; } },
+    async reply(value) { return this._client.reply(value); } };
+  const result = await rejectOpenCodePermission({ session: { permission } },
+    { v2: true, sessionID: 'ses_v2', requestID: 'per_v2' }, '/isolated/scratch');
+  assert.deepEqual(options, { path: { sessionID: 'ses_v2', requestID: 'per_v2' },
+    body: { reply: 'reject', message: 'Natlang CLI bridge rejects native OpenCode tool permissions.' } });
   assert.deepEqual(result, { ok: true, status: 'rejected' });
 });
 

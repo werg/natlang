@@ -14,13 +14,26 @@ export function providerFinishReason(error: unknown): 'error' | 'network_error' 
   const match = text(error).trim().match(/^provider finish_reason: (error|network_error)$/);
   return match?.[1] as 'error' | 'network_error' | undefined;
 }
-export function transportFailure(error: unknown): boolean {
+export function transportFailure(error: unknown, scope: 'case' | 'request' = 'case'): boolean {
   const value = details(error);
+  const code = String(value.providerCode ?? value.provider_code ?? value.code ?? '').toUpperCase();
+  const neverRetryCodes = new Set(['NON_BRIDGE_TOOL_USE', 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED',
+    'NATLANG_PROVIDER_REQUEST_TIMEOUT', 'NATLANG_PROVIDER_ACTION_CYCLE_TIMEOUT', 'INVALID_REQUEST',
+    'INVALID_REQUEST_ERROR', 'INVALID_API_KEY', 'UNAUTHORIZED', 'AUTHENTICATION_ERROR', 'CONTENT_FILTER',
+    'CONTENT_POLICY_VIOLATION', 'CONTEXT_LENGTH_EXCEEDED', 'SCHEMA_VALIDATION_ERROR', 'INVALID_SCHEMA']);
+  if (neverRetryCodes.has(code) || value.name === 'AbortError' ||
+      value.providerRetryable === false || value.provider_retryable === false ||
+      (scope === 'request' && /context (?:size|window)|context_length|context length|maximum context|schema.{0,20}(?:invalid|error|violat)|(?:invalid|error|violat).{0,20}schema|content filter|content policy|invalid api key|unauthori[sz]ed|authentication error/i.test(text(error))))
+    return false;
   return rateLimited(error) || [408, 500, 502, 503, 504].includes(Number(value.status ?? value.statusCode)) ||
     providerFinishReason(error) !== undefined ||
     text(error).trim() === 'provider returned an empty response' ||
     /^connection error\.?$/.test(text(error).trim()) ||
     /connection refused|connection reset|fetch failed|socket|timed out|timeout|econnreset|econnrefused|remote end closed|\b(?:http|status|server error)\D*(?:408|500|502|503|504)\b|context size has been exceeded/.test(text(error));
+}
+/** Same-request retries are stricter than whole-case retries: explicit provider non-retryability wins. */
+export function providerRequestRetryable(error: unknown): boolean {
+  return transportFailure(error, 'request');
 }
 /** Headers may be unavailable after a provider SDK flattens its error. Use only supplied delays. */
 export function retryAfterMs(error: unknown, now = Date.now()): number {

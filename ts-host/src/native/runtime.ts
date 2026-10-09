@@ -516,7 +516,7 @@ export class NativeRuntime {
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
   readonly episodeBudget: { limit?: number; used: number };
-  readonly frame?: Frame;
+  frame?: Frame;
   readonly displayLiveId: (value: object) => number;
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
@@ -688,6 +688,13 @@ export class NativeRuntime {
   async run(node: LambdaNode): Promise<{ outcome: NativeOutcome; value: Value }> {
     this.checkInterruption();
     this.root = node;
+    // The prepared root node owns the skills selected by its program/file context. Inline `nl` functions
+    // are authored inside this call, so make only those bound skill documents available on its frame.
+    // Named file-backed calls still load their own companion-folder skills in invokeDefinition.
+    if (this.frame && !this.frame.skillFiles && node.skills?.files) {
+      const skillFiles = node.skills.files;
+      if (Object.keys(skillFiles).length) this.frame = { ...this.frame, skillFiles };
+    }
     const before = this.stateSummary(node);
     this.trace.emit('state', { phase: 'initial', value: before });
     this.captureExactInputs(node);

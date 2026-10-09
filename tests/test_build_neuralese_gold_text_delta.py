@@ -52,6 +52,14 @@ def _integration_adoption_fixture(tmp_path):
         path = tmp_path / name
         path.write_text(name + "\n")
         artifacts[key] = {"path": str(path.relative_to(tmp_path)), "sha256": _sha(path)}
+    text_path = tmp_path / "text.jsonl"
+    manifest = tmp_path / "assembly-manifest.json"
+    manifest.write_text(json.dumps({
+        "outputs": {"text.jsonl": {"sha256": _sha(text_path), "bytes": text_path.stat().st_size}},
+        "composition": {"text": {"rows": 4612, "train": 2908, "test": 1704,
+                                  "tokenizer_sha256": "e" * 64}},
+    }))
+    artifacts["assembly_manifest"] = {"path": manifest.name, "sha256": _sha(manifest)}
     integration = tmp_path / "integration-review.json"
     integration.write_text(json.dumps({
         "schema": "natlang.v18-action45-admitted84-native-text-integration-review/1",
@@ -99,6 +107,171 @@ def test_root_integration_adoption_normalizes_exact_prefix_pins(tmp_path):
     assert normalized["artifacts"]["text"]["sha256"] == artifacts["cumulative_text"]["sha256"]
     assert normalized["artifacts"]["provenance"]["sha256"] == artifacts["cumulative_text_provenance"]["sha256"]
     assert normalized["artifacts"]["recurrence"]["sha256"] == artifacts["assembled_recurrence_records"]["sha256"]
+
+
+def test_adopted_text_prefix_metadata_uses_reviewed_manifest_hash_count_and_tokenizer(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    metadata = MODULE.adopted_text_prefix_metadata(binding, root=tmp_path)
+    assert metadata["documents"] == 4612
+    assert metadata["train_documents"] == 2908
+    assert metadata["test_documents"] == 1704
+    assert metadata["tokenizer_sha256"] == "e" * 64
+
+
+def test_adopted_text_prefix_metadata_rejects_manifest_hash_mismatch(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    manifest = tmp_path / "assembly-manifest.json"
+    manifest.write_text(manifest.read_text() + " ")
+    try:
+        MODULE.adopted_text_prefix_metadata(binding, root=tmp_path)
+    except ValueError as exc:
+        assert "manifest" in str(exc)
+    else:
+        raise AssertionError("an unpinned assembly manifest must be rejected")
+
+
+def test_adopted_text_prefix_metadata_rejects_manifest_count_and_tokenizer_mismatch(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    manifest = tmp_path / "assembly-manifest.json"
+    data = json.loads(manifest.read_text())
+    data["composition"]["text"]["rows"] = 1
+    data["composition"]["text"].pop("tokenizer_sha256")
+    manifest.write_text(json.dumps(data))
+    review = tmp_path / adoption["integration_receipt"]
+    receipt = json.loads(review.read_text())
+    receipt["artifacts"]["assembly_manifest"]["sha256"] = _sha(manifest)
+    review.write_text(json.dumps(receipt))
+    adoption["integration_receipt_sha256"] = _sha(review)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    try:
+        MODULE.adopted_text_prefix_metadata(binding, root=tmp_path)
+    except ValueError as exc:
+        assert "tokenizer, or counts" in str(exc)
+    else:
+        raise AssertionError("manifest text counts and tokenizer must agree with the root adoption review")
+
+
+def test_root_adoption_checks_legacy_sibling_receipt_metadata(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({"documents": 4612, "train_documents": 2908,
+                                   "test_documents": 1704, "tokenizer_sha256": "e" * 64,
+                                   "renderer_code": {"old": "pin"}}))
+    metadata = MODULE.resolve_base_text_prefix_metadata(binding, receipt, root=tmp_path)
+    assert metadata["source_assembly_manifest"]["sha256"] == _sha(tmp_path / "assembly-manifest.json")
+    assert metadata["legacy_sibling_receipt_metadata"]["renderer_code"] == {"old": "pin"}
+    assert metadata["omitted_records"] is None
+
+
+def test_root_adoption_rejects_legacy_sibling_metadata_override(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({"documents": 4612, "train_documents": 2908,
+                                   "test_documents": 1704, "tokenizer_sha256": "0" * 64}))
+    try:
+        MODULE.resolve_base_text_prefix_metadata(binding, receipt, root=tmp_path)
+    except ValueError as exc:
+        assert "conflicts with root-adopted" in str(exc)
+    else:
+        raise AssertionError("a mutable sibling receipt cannot override root-adopted tokenizer facts")
+
+
+def test_legacy_root_adoption_without_assembly_manifest_keeps_receipt_path(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    integration_path = tmp_path / adoption["integration_receipt"]
+    integration = json.loads(integration_path.read_text())
+    integration["artifacts"].pop("assembly_manifest")
+    integration_path.write_text(json.dumps(integration))
+    adoption["integration_receipt_sha256"] = _sha(integration_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    receipt_path = tmp_path / "receipt.json"
+    receipt = {"documents": 4612, "train_documents": 2908, "test_documents": 1704,
+               "tokenizer_sha256": "e" * 64, "omitted_records": 7,
+               "unresolved_omissions": [{"id": "old-omission"}]}
+    receipt_path.write_text(json.dumps(receipt))
+    metadata = MODULE.resolve_base_text_prefix_metadata(binding, receipt_path, root=tmp_path)
+    assert metadata == receipt
+
+
+def test_unknown_assembled_base_omission_inventory_stays_unknown_when_composed():
+    assert MODULE.accumulate_known(None, 2) is None
+    assert MODULE.extend_known(None, [{"id": "delta-omission"}]) is None
+    assert MODULE.accumulate_known(5, 2) == 7
+    assert MODULE.extend_known([{"id": "base-omission"}], [{"id": "delta-omission"}]) == [
+        {"id": "base-omission"}, {"id": "delta-omission"}]
+
+
+def test_root_adopted_assembly_does_not_claim_unreviewed_prefix_dedup_or_exclusion_counts(tmp_path):
+    adoption, _ = _integration_adoption_fixture(tmp_path)
+    binding = MODULE.root_integration_adoption_bindings(adoption, root=tmp_path)
+    metadata = MODULE.adopted_text_prefix_metadata(binding, root=tmp_path)
+    assert metadata["omitted_records"] is None
+    assert metadata["duplicate_same_split_documents_deduplicated"] is None
+    assert metadata["excluded_train_exact_held_complete_documents"] is None
+
+
+def test_tokenizers_backend_snapshot_fallback_preserves_serialized_fast_tokenizer(tmp_path):
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    backend = Tokenizer(models.WordLevel({"[UNK]": 0, "hello": 1}, unk_token="[UNK]"))
+    backend.pre_tokenizer = pre_tokenizers.Whitespace()
+    original = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]",
+                                       bos_token="[BOS]", eos_token="[EOS]", pad_token="[PAD]",
+                                       chat_template="{{ messages[0]['content'] }}")
+    original.save_pretrained(tmp_path)
+    config_path = tmp_path / "tokenizer_config.json"
+    config = json.loads(config_path.read_text())
+    config["tokenizer_class"] = "TokenizersBackend"
+    config["clean_up_tokenization_spaces"] = False
+    config["padding_side"] = "left"
+    config["truncation_side"] = "left"
+    config["model_max_length"] = 12345
+    config_path.write_text(json.dumps(config))
+
+    loaded = MODULE.load_pinned_tokenizer(tmp_path)
+    assert loaded.get_vocab() == original.get_vocab()
+    assert loaded.all_special_tokens == original.all_special_tokens
+    assert loaded.chat_template == original.chat_template
+    assert loaded.encode("hello") == original.encode("hello")
+    assert loaded.clean_up_tokenization_spaces is False
+    assert loaded.padding_side == "left"
+    assert loaded.truncation_side == "left"
+    assert loaded.model_max_length == 12345
+
+
+def test_tokenizers_backend_fallback_requires_exact_class_and_serialized_backend(tmp_path):
+    from tokenizers import Tokenizer, models
+    from transformers import PreTrainedTokenizerFast
+
+    backend = Tokenizer(models.WordLevel({"[UNK]": 0, "hello": 1}, unk_token="[UNK]"))
+    original = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]")
+    original.save_pretrained(tmp_path)
+    config_path = tmp_path / "tokenizer_config.json"
+    config = json.loads(config_path.read_text())
+    config["tokenizer_class"] = "OtherBackend"
+    config_path.write_text(json.dumps(config))
+    try:
+        MODULE.load_pinned_tokenizer(tmp_path)
+    except ValueError as exc:
+        assert "OtherBackend" in str(exc)
+    else:
+        raise AssertionError("unknown tokenizer classes must not enter the compatibility fallback")
+
+    config["tokenizer_class"] = "TokenizersBackend"
+    config_path.write_text(json.dumps(config))
+    (tmp_path / "tokenizer.json").unlink()
+    try:
+        MODULE.load_pinned_tokenizer(tmp_path)
+    except ValueError as exc:
+        assert "TokenizersBackend" in str(exc)
+    else:
+        raise AssertionError("missing serialized backend must fail instead of falling back loosely")
 
 
 def test_root_integration_adoption_rejects_mismatched_artifact(tmp_path):

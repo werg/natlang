@@ -216,6 +216,8 @@ async function bindContextSkills(node: LambdaNode, files: Readonly<Record<string
     if (document?.kind === 'text') documents[target] = document.text;
   }
   node.skills = { listing: renderSkillListing(set, [...loaded.diagnostics, ...resolved.diagnostics]), documents,
+    files: Object.fromEntries(Object.entries(files).map(([path, content]) =>
+      [path, typeof content === 'string' ? content : Uint8Array.from(content)])),
     declarations: renderScopeDeclarations(bindings), inventory: set.list().map(skill => ({ name: skill.name, revision: skill.revision })) };
   if (bindings.length) node.captures = { ...node.captures, ...Object.fromEntries(bindings.map(binding => [binding.name,
     { name: binding.name, type: binding.typeText, mutable: false, get: () => binding.value, skill: binding.skill }])) };
@@ -397,8 +399,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
   const callId = task.nextCallId();
+  // A file-backed call owns the files from its own companion folder. Inline calls inherit their
+  // caller's bound skill set unless one is explicitly supplied for that inline definition.
+  const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
     signal: frame.signal, abort: frame.abort,
+    ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model(definition.model);

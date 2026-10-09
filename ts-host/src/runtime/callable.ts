@@ -222,5 +222,6 @@ export function inlineCallable(definition: CallableDefinition, instructions: str
     ...(rebindInline ? { rebindInline } : {}),
     options: { classes, manifest },
     invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
+      ...(frame.skillFiles ? { skillFiles: frame.skillFiles } : {}),
       manifest }) });
 }

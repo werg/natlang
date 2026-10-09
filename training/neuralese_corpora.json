@@ -13491,6 +13491,88 @@
         "v17-river_water_allocation-scenario-1"
       ],
       "notes": "Immutable held package for the River retry evidence, exact selected CallStore descendants/blobs, semantic review, proposed generic student-skill refinement, shared-evaluator versioned source, and local fake-provider compatibility/matrix proofs. Source group is train split; diagnostic fixtures are diagnostic split. The provider result remains semantically rejected because eligible RWA-1C was omitted. Fake provider outputs prove runner integration only. No training rows, activation, model-quality claim, or training admission."
+    },
+    {
+      "id": "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v1/root-selected-child-action-admission-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/root-authored-synthetic-action-admission-v1.json",
+        "v18-v19-native-soft-edge-review-20261008-v2/action45-root-admitted84-integration-v1/root-integration-adoption-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/assembly-manifest-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-reconstruction-results-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/context-normalization-roundtrip-supplement-v3.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/independent-verification-supplement-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-pieces.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/native-records.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-pieces.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-records.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/recurrence-structural-audit-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-adoption-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-review-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-review-proposal-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-provenance.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text-target-bindings.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/text.jsonl",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v1.py",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/verify_context_normalization_roundtrip_v2.py"
+      ],
+      "admission": "root-approved-full-consolidation-of-previously-admitted-native-and-text-sources; no new recurrence admission or qualification; not an active training input change",
+      "derived_from": [
+        "v18-v19-action45-base-selected84-native-text-20261008-v1",
+        "v18-v19-action45-plus-adopted37-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1",
+        "v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-fiveworld38-native-text-delta-20261008-v1"
+      ],
+      "notes": "Exact root-approved cumulative assembly: 5450 native rows (3415 train/2035 test), 4682 faithful ordinary-text documents (2978 train/1704 test), and unchanged 4961 recurrence rows. Includes all seven immutable data outputs, assembly manifest, root integration review v2 and adoption receipt, context reverse-normalization supplements/verifiers/results, plus source/admission/conversion evidence not already carried by derived corpus manifests. Earlier v1/v2 normalization proof artifacts are retained with the v3 corrected proof explicitly documenting their audit gap. Consolidation only: source admissions unchanged, no active-input change, no Step 3 training launch, no writer/runtime/trajectory/DPO qualification."
+    },
+    {
+      "id": "v18-v19-step5-case01-scorefact-selected3-native-text-delta-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/source-v2.cases.jsonl",
+        "opencode-step5-preview-free-20261008-v1/scorefact-batch-8-source-derived-v1/root-source-approval-v1.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/collector-argv.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/launch-plan-v2.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/launch-receipt-v2.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/results.jsonl",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/results.jsonl.manifest.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/jobs/000001-1fd2c06b78a949da.result.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/jobs/000001-1fd2c06b78a949da.trace.jsonl",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/native-turns.jsonl",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/wrapper-bijection-v2.jsonl",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/materialization-receipt-v2.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/action-selection-review-v2.json",
+        "opencode-step5-preview-free-20261008-v1/campaign-scorefact-batch-8-approved-v1/case-01/native-held-v1/root-selected-action-admission-v1.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/selected-native-records.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/README.md",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/anchor-selection.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/delta-omissions.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/delta-provenance.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/delta-text.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/output-manifest.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/packet-manifest.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/receipt.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/source-coverage.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/provider-context-bindings.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/decoded-supervised-suffixes-v2.jsonl",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/cpu-decode-review-v2.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/conversion-review-packet-v2.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/root-independent-conversion-review-v1.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/root-composition-review-v1.json",
+        "opencode-step5-preview-free-20261008-v1/case-01-selected-three-delta-v1/compact-delta-v4/root-composition-adoption-v1.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v1/root-integration-adoption-v1.json"
+      ],
+      "admission": "root-adopted exact three sampled native action SFT records and their ordinary-text derivation only; not active training input",
+      "derived_from": [
+        "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1"
+      ],
+      "notes": "Compact selected delta only: three independently reviewed train actions from one existing clinic source group, plus three faithful ordinary-text documents. Root adopted exact native/text union on the full 5450-native/4682-text base (virtual totals 5453/4685; recurrence remains 4961). No duplicated prior cohort, no recurrence/trajectory/DPO/runtime/learned-writer qualification, no new-world credit, and no active GPU input change. The generation provenance is pinned to OpenCode Zen opencode/step-5-preview-free, low, with main and small aliases equal; CLI physical/upstream request count is unknown. Root-selected-action admission explicitly excludes two other native rows."
     }
   ],
   "coverage_backlog": [

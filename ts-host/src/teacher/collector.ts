@@ -1,7 +1,7 @@
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason } from './retry.js';
+import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason, providerRequestRetryable } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,7 +96,11 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   /** Optional low-sensitivity live state for diagnosing an idle, unresolved collection. */
   collectionState?: (snapshot: CollectionLivenessSnapshot) => void;
-  transportRetries?: number; retryDelayMs?: number;
+  /** Legacy whole-case retry count. New runs default to zero because this re-runs the authored row/effects. */
+  transportRetries?: number;
+  /** Retry an individual unchanged provider request before unwinding the authored invocation. */
+  requestRetries?: number;
+  retryDelayMs?: number;
   modelConcurrency?: number; maxModelRequests?: number;
   /** Optional append-only per-case lease/terminal journal used by reviewed pool supervisors. */
   caseEventsFile?: string;
@@ -450,7 +454,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
           break;
         }
         const limited = rateLimited(error);
-        if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
+        if (!transportFailure(error) || attempt >= (config.transportRetries ?? 0) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id,
               ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
@@ -637,9 +641,18 @@ type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?
 type CollectorRequestStart = { attempt_id: string; case_sequence: number; request_ordinal: number;
   role: 'teacher' | 'judge'; purpose: 'planner' | 'action' | 'judge'; logical_turn: number | null;
   planner_attempt: number | null; plan_status: 'planned' | 'fallback' | 'not_configured' | null;
+  request_retry_index?: number; retry_of_request_ordinal?: number; request_retry_wait_ms?: number;
   chat_transport_starts: number; chat_transport_retry_starts: number; provider_sdk_turn_starts: number;
   upstream_model_steps_unknown: number;
   status: 'started' | 'completed' | 'failed' };
+class ProviderRequestRetriesExhaustedError extends Error {
+  readonly code = 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED';
+  constructor(readonly retries: number, cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`provider request retry exhausted after ${retries} retry attempt${retries === 1 ? '' : 's'}: ${message}`, { cause });
+    this.name = 'ProviderRequestRetriesExhaustedError';
+  }
+}
 type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
   status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
 type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[];
@@ -741,6 +754,8 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
         // An outage or rate limit fails the job, which resumes from its journal: skipping the plan would leave a
         // training turn without reasoning.
         if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError ||
+            (error && typeof error === 'object' && 'code' in error &&
+             (error as { code?: unknown }).code === 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED') ||
             transportFailure(error)) throw error;
         // Required tool selection is not universal. Otherwise planning is best-effort: the ordinary action still runs.
         break;
@@ -783,6 +798,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.judgeModel?.modelId === config.modelId) throw new Error('teacher and judge must use distinct model IDs');
   for (const [name, value] of Object.entries({ modelConcurrency: config.modelConcurrency, maxModelRequests: config.maxModelRequests }))
     if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be positive`);
+  if (config.requestRetries !== undefined && (!Number.isSafeInteger(config.requestRetries) || config.requestRetries < 0))
+    throw new RangeError('requestRetries must be a non-negative integer');
+  if (config.transportRetries !== undefined && (!Number.isSafeInteger(config.transportRetries) || config.transportRetries < 0))
+    throw new RangeError('transportRetries must be a non-negative integer');
+  if (config.retryDelayMs !== undefined && (!Number.isFinite(config.retryDelayMs) || config.retryDelayMs < 0))
+    throw new RangeError('retryDelayMs must be a finite non-negative number');
   if (config.providerRequestTimeoutMs !== undefined &&
       (!Number.isSafeInteger(config.providerRequestTimeoutMs) || config.providerRequestTimeoutMs < 1 ||
        config.providerRequestTimeoutMs > MAX_PROVIDER_TIMEOUT_MS))
@@ -819,8 +840,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // model steps behind an HTTP adapter, or physical network retries hidden by an SDK/server.
     const requestTelemetry = {
       schema: 'natlang.collector_request_telemetry/1',
-      scope: 'admitted sender(request) invocations plus ChatTransport calls; opaque HTTP-adapter upstream model steps are explicitly unknown',
-      attempt_ids: [] as string[], starts: [] as CollectorRequestStart[], authored_synthetic_root_actions: 0,
+      scope: 'admitted sender invocations; instrumented ChatTransport starts; physical network attempts and upstream model steps unknown',
+      request_retry_limit: config.requestRetries ?? 1,
+      request_retry_delay_base_ms: config.retryDelayMs ?? 5_000,
+      attempt_ids: [] as string[], starts: [] as CollectorRequestStart[], request_retries: [] as Array<Record<string, unknown>>,
+      authored_synthetic_root_actions: 0,
     };
     type SendContext = { purpose: 'planner' | 'action' | 'judge'; logicalTurn: number | null;
       plannerAttempt: number | null; planStatus: 'planned' | 'fallback' | 'not_configured' | null };
@@ -905,40 +929,70 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         try {
           throwIfCollectionFatal();
           if (actionSignal?.aborted) throw interrupted(actionSignal);
-          // Waiting work has not sent a request. Count only after both capacity gates admit it.
-          if (config.maxModelRequests && sent >= config.maxModelRequests) {
-            throw requestBudgetExceeded();
-          }
-          sent++;
-          const requestOrdinal = sent;
-          const entry: CollectorRequestStart = { attempt_id: evidenceAttemptId,
-            case_sequence: requestTelemetry.starts.length + 1, request_ordinal: requestOrdinal, role,
-            purpose: sendContext?.purpose ?? (role === 'judge' ? 'judge' as const : 'action' as const),
-            logical_turn: sendContext?.logicalTurn ?? null, planner_attempt: sendContext?.plannerAttempt ?? null,
-            plan_status: sendContext?.planStatus ?? null,
-            chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
-            upstream_model_steps_unknown: 0,
-            status: 'started' };
-          requestTelemetry.starts.push(entry);
-          await persistRequestStart(entry);
-          activeSendEntries.set(request, entry);
-          if (request.invocation_id) activeInvocationEntries.set(request.invocation_id, entry);
-          let response: ModelTurn;
-          try { response = await sender(request); }
-          catch (error) {
+          const retryLimit = config.requestRetries ?? 1;
+          let retryIndex = 0, previousOrdinal: number | undefined;
+          while (true) {
+            throwIfCollectionFatal();
+            if (actionSignal?.aborted) throw interrupted(actionSignal);
+            // Every admitted resend consumes budget and gets its own immutable ordinal/evidence row.
+            if (config.maxModelRequests && sent >= config.maxModelRequests) {
+              throw requestBudgetExceeded();
+            }
+            sent++;
+            const requestOrdinal = sent;
+            const entry: CollectorRequestStart = { attempt_id: evidenceAttemptId,
+              case_sequence: requestTelemetry.starts.length + 1, request_ordinal: requestOrdinal, role,
+              purpose: sendContext?.purpose ?? (role === 'judge' ? 'judge' as const : 'action' as const),
+              logical_turn: sendContext?.logicalTurn ?? null, planner_attempt: sendContext?.plannerAttempt ?? null,
+              plan_status: sendContext?.planStatus ?? null,
+              ...(retryIndex ? { request_retry_index: retryIndex, retry_of_request_ordinal: previousOrdinal } : {}),
+              chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+              upstream_model_steps_unknown: 0, status: 'started' };
+            requestTelemetry.starts.push(entry);
+            await persistRequestStart(entry);
+            activeSendEntries.set(request, entry);
+            if (request.invocation_id) activeInvocationEntries.set(request.invocation_id, entry);
+            let response: ModelTurn;
+            try { response = await sender(request); }
+            catch (error) {
+              activeSendEntries.delete(request);
+              if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
+                activeInvocationEntries.delete(request.invocation_id);
+              entry.status = 'failed';
+              await persistProviderExchange(request, undefined, role, requestOrdinal, error);
+              const remembered = rememberProviderDeadline(error);
+              if (remembered !== error || actionSignal?.aborted || !providerRequestRetryable(error)) throw remembered;
+              if (retryIndex >= retryLimit) {
+                if (retryLimit > 0) throw new ProviderRequestRetriesExhaustedError(retryIndex, error);
+                throw remembered;
+              }
+              const wait = Math.max(config.retryDelayMs ?? 5_000,
+                retryWaitMs(error, retryIndex, config.retryDelayMs ?? 5_000));
+              entry.request_retry_wait_ms = wait;
+              const retryEvent = { failed_request_ordinal: requestOrdinal, next_request_retry_index: retryIndex + 1,
+                wait_ms: wait, request_sha256: sha256(canonical(Object.fromEntries(
+                  Object.entries(request).filter(([key]) => key !== 'invocation_id')))),
+                error: { name: error instanceof Error ? error.name : 'Error',
+                  message: error instanceof Error ? error.message : String(error),
+                  ...('status' in Object(error) ? { status: (error as { status?: unknown }).status } : {}),
+                  ...('providerCode' in Object(error) ? { provider_code: (error as { providerCode?: unknown }).providerCode } : {}),
+                  ...('providerRetryable' in Object(error) ? { provider_retryable: (error as { providerRetryable?: unknown }).providerRetryable } : {}),
+                  ...('retry_after_ms' in Object(error) ? { retry_after_ms: (error as { retry_after_ms?: unknown }).retry_after_ms } : {}) } };
+              requestTelemetry.request_retries.push(retryEvent);
+              await appendEvidence([{ kind: 'collector_provider_request_retry_scheduled', attempt_id: evidenceAttemptId,
+                ...retryEvent }]);
+              previousOrdinal = requestOrdinal; retryIndex++;
+              try { await sleep(wait, undefined, { signal: actionSignal }); }
+              catch (abortError) { throw actionSignal?.aborted ? interrupted(actionSignal) : abortError; }
+              continue;
+            }
             activeSendEntries.delete(request);
             if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
               activeInvocationEntries.delete(request.invocation_id);
-            entry.status = 'failed';
-            await persistProviderExchange(request, undefined, role, requestOrdinal, error);
-            throw rememberProviderDeadline(error);
+            entry.status = 'completed';
+            await persistProviderExchange(request, response, role, requestOrdinal);
+            return response;
           }
-          activeSendEntries.delete(request);
-          if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
-            activeInvocationEntries.delete(request.invocation_id);
-          entry.status = 'completed';
-          await persistProviderExchange(request, response, role, requestOrdinal);
-          return response;
         } finally { if (kv) kv.release(need); }
       } finally { if (slots && !ownsSlot) slots.release(1); }
     };
@@ -1075,7 +1129,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       invocation_id: request.invocation_id ?? null, request: structuredClone(request),
       ...(response ? { response: structuredClone(response) } : {}),
       ...(error ? { error: error instanceof Error ? { name: error.name, message: error.message,
-        ...('code' in error ? { code: (error as { code?: unknown }).code } : {}) } : { message: String(error) } } : {}),
+        ...('code' in error ? { code: (error as { code?: unknown }).code } : {}),
+        ...('status' in error ? { status: (error as { status?: unknown }).status } : {}),
+        ...('providerCode' in error ? { provider_code: (error as { providerCode?: unknown }).providerCode } : {}),
+        ...('providerRetryable' in error ? { provider_retryable: (error as { providerRetryable?: unknown }).providerRetryable } : {}),
+        ...('retry_after_ms' in error ? { retry_after_ms: (error as { retry_after_ms?: unknown }).retry_after_ms } : {}),
+      } : { message: String(error) } } : {}),
     }]);
     const runId = programRunId(item.index, expected);
     const authoredRoot = authoredRootEval(item.record);

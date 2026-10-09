@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason } from '../dist/teacher/retry.js';
+import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason, providerRequestRetryable } from '../dist/teacher/retry.js';
 
 test('transient provider failures are retried, model and authentication errors are not', () => {
   for (const error of [new Error('HTTP 503'), { status: 500 }, new Error('fetch failed'), new Error('usage_limit_reached'), new Error('Connection error.'), new Error('Connection error')])
@@ -8,6 +8,21 @@ test('transient provider failures are retried, model and authentication errors a
   for (const error of [new Error('incorrect answer'), { status: 401 }, new Error('invalid API key'), new Error('invalid connection error handling in model code')])
     assert.equal(transportFailure(error), false);
   assert.equal(rateLimited({ status: 429 }), true);
+});
+test('same-request retries respect explicit provider non-retryability and non-bridge tool failures', () => {
+  assert.equal(providerRequestRetryable(Object.assign(new Error('model HTTP 502'), { status: 502, providerCode: 'NON_BRIDGE_TOOL_USE' })), false);
+  assert.equal(providerRequestRetryable(Object.assign(new Error('model HTTP 503'), { status: 503, providerRetryable: false })), false);
+  assert.equal(providerRequestRetryable(Object.assign(new Error('model HTTP 503'), { status: 503 })), true);
+  for (const error of [
+    Object.assign(new Error('context size has been exceeded'), { status: 503 }),
+    Object.assign(new Error('model HTTP 503'), { status: 503, providerCode: 'context_length_exceeded' }),
+    Object.assign(new Error('model HTTP 503'), { status: 503, providerCode: 'schema_validation_error' }),
+    Object.assign(new Error('model HTTP 503'), { status: 503, providerCode: 'authentication_error' }),
+    Object.assign(new Error('model HTTP 503'), { status: 503, providerCode: 'content_filter' }),
+    Object.assign(new Error('teacher provider turn exceeded deadline'), { status: 503, code: 'NATLANG_PROVIDER_REQUEST_TIMEOUT' }),
+  ]) assert.equal(providerRequestRetryable(error), false, error.providerCode ?? error.message);
+  assert.equal(transportFailure(Object.assign(new Error('model HTTP 503'), { status: 503,
+    code: 'NATLANG_PROVIDER_REQUEST_RETRIES_EXHAUSTED' })), false);
 });
 test('only explicit provider error/network finish reasons join bounded transport retries', () => {
   assert.equal(providerFinishReason(new Error('Provider finish_reason: error')), 'error');
