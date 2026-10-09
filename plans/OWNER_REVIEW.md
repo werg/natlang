@@ -16,6 +16,7 @@ acting on the owner's recorded answer, moves an entry to "Done" with the date an
 | 2026-10-09 | applications/migration/DECOMPOSITION.md | The same | The same |
 | 2026-10-09 | Crisp share of the rebuilt apps | Crisp lines exceed natural-language lines in games, scheduling, workflow, build and logs. Audit pending: which crisp files are services, commit or verifiers (allowed) and which hold policy | Audit queued |
 | 2026-10-09 | Pop's proposed self-feedback gate thresholds (.99 argmax, .02 KL, .05 own-output CE gap) | Thresholds before they bind | Reported only |
+| 2026-10-09 | plans/NATLANG_NATIVE_REVIEW.md | Ranking and order of the natlang-native work (enablers N1–N5 proceed now; P1–P11 wait for their decompositions to be reviewed) | Enablers started |
 | 2026-10-09 | plans/TIERED_ENGINE.md, plans/FUSED_PIPELINES.md | Tier numbering, natural-language promotion policy, natural-language fusion planner | In progress |
 
 ## Done
