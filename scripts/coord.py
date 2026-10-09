@@ -153,7 +153,9 @@ class Store:
         imported, baseline = stamp(), ''
         for index, head in enumerate(heads):
             end = heads[index + 1].start() if index + 1 < len(heads) else len(text)
-            sent = datetime.datetime.fromisoformat(head.group(1))
+            # Python 3.10's ISO parser does not accept the UTC Z suffix used by
+            # the old inbox. Normalize it explicitly on both machines.
+            sent = datetime.datetime.fromisoformat(head.group(1).replace('Z', '+00:00'))
             # Notes past the old reader's offset were never acknowledged: they arrive unread.
             unread = len(text[:head.start()].encode('utf-8')) >= offset
             message = {'id': f"{stamp(sent)}-legacy-{index:04d}", 'from': head.group(2), 'to': [self.machine],
