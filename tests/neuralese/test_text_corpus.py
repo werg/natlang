@@ -17,8 +17,28 @@ class _Tokenizer:
     def get_vocab(self):
         return {"x": 0}
 
-    def apply_chat_template(self, messages, **_kwargs):
-        return json.dumps(messages, ensure_ascii=False)
+    def apply_chat_template(self, messages, *, add_generation_prompt=False, **_kwargs):
+        """Small continuation-safe chat template for serving-boundary tests.
+
+        A generation prompt ends with the same assistant header that begins a
+        completed assistant message.  Serializing the whole messages array
+        (the old stub) made appending a target change the closing JSON syntax,
+        unlike the serving templates these tests exercise.
+        """
+        rendered = []
+        for message in messages:
+            role = message["role"]
+            rendered.append(f"<|{role}|>")
+            content = message.get("content")
+            if content is not None:
+                rendered.append(content if isinstance(content, str)
+                                else json.dumps(content, ensure_ascii=False))
+            if message.get("tool_calls"):
+                rendered.append(json.dumps(message["tool_calls"], ensure_ascii=False))
+            rendered.append("<|end|>")
+        if add_generation_prompt:
+            rendered.append("<|assistant|>")
+        return "".join(rendered)
 
     def __call__(self, text, **_kwargs):
         return {"input_ids": [ord(char) for char in text]}
