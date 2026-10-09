@@ -18,7 +18,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Neuralese chapter, types, `.nz`, dialect tags, graph record | used | `spec/SPEC.md`, `spec/NEURALESE_*.md`, `ts-host/src/native/nz-file.ts`, `natlang_neuralese/nz.py` |
 | Port records, ledger, splits | used | `scripts/neuralese_port_records.py`, `training/neuralese_data_ledger.json` |
 | Corpus registry with SHA-256 manifests | used | `training/neuralese_corpora.json`, `training/corpus-manifests/`, `scripts/sync_training_corpora.py` |
-| v13 soft conversion (system prompts, handovers, pinned notes as soft parts) | not wired | `ts-host/scripts/neuralese-convert-trajectories.mjs`; output `/home/werg/data/neuralese-converted/v13-20261004/` is consumed by no trainer |
+| v13 soft conversion (system prompts, handovers, pinned notes as soft parts) | used | `ts-host/scripts/neuralese-convert-trajectories.mjs`; the converted `records`/`pieces` format is what `train/trajectories.py` trains on (soft parts become leaves, `--bank` initialises prompt pieces). Correction: the first version of this audit said "consumed by no trainer"; that note in HANDOVER predates e10363b5 |
 | BGKit/Schnitzeljagd → NatLang program families (#41) | not started | — |
 
 ## S2 skill authoring
@@ -39,7 +39,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Mellum foundation warm-up → runtime → recurrence (#45) | not started | No Mellum recipe in `training/neuralese/recipes/` |
 | Compression stage (tokens_per_vector > 1) | partial | Options exist in `trajectories.py`; no recipe or gate |
 | Neuralese autoregressive block layout switch (#42) | not started | — |
-| Dialect tag for the Mellum space | not started | Tags exist for LFM/Maple only |
+| Dialect tag for the Mellum space | not started | Defect: raw-token heads report `nd:natlang-raw-token@1` for every backbone (`model/heads.py:409`), so LFM (width 1024), Maple and Mellum (2304) spaces share one tag although a tag names the width (spec/NEURALESE_DIALECTS.md). The artifact registry pins the backbone as a guard; the tag itself needs an owner decision (it changes frozen runs' identity) |
 
 ## S4 runtime and servers
 
@@ -74,7 +74,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Deliverable | Class | Evidence |
 | --- | --- | --- |
 | Soft-skill format, `.nz` skills, text-init arms | used (LFM) | `skills/registry.ts`, `soft-skill-decision.mjs` |
-| System-prompt bank: text-init plus trained | not wired | `bank-text-init-v1.nz` (LFM); `train/decision.py --soft-prompts`; no Mellum bank |
+| System-prompt bank: text-init plus trained | partial | LFM text-init banks registered (`system-prompt-bank-lfm2.5-350m-text-init-20261004-v1/v2`); `train.decision --soft-prompts` and `trajectories --bank` train and save `system-prompts.nz`; no Maple/Mellum bank yet (trajectory runs on Maple ran without `--bank`, so no bank was saved) |
 | M0 records/arms, M2 deltas, M4 adapters, M5 P/D projections | used (LFM) | `step-record.ts`, `deltas.ts`, `model/tiny_adapters.py`, `model/projections.py` |
 | M3 memetic optimiser (#15) | partial | `memetic-decision.mjs` |
 | Learned updater, gradient digests, query-trained updater, self-revision | not started | — |
@@ -92,19 +92,19 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Deliverable | Class | Evidence |
 | --- | --- | --- |
 | Target choice | used | Mellum decision (DECISIONS.md, 2026-10-09) |
-| Artifact library: registry, metadata, dialect pinning, publication | not started | No registry before this audit |
+| Artifact library: registry, metadata, dialect pinning, publication | partial | 2026-10-09: `training/neuralese_artifacts.json` + `training/artifact-manifests/` (`natlang_neuralese/artifacts.py`, `scripts/neuralese_artifacts.py`: register, register-run, verify, resolve, push/pull); recipe binding `{"artifact": ID}`; `train.decision --register-artifact`; 4 LFM artifacts registered. Not done: HF publication, Maple/Mellum artifacts |
 | GGUF builds, model cards, upstreaming | not started (for the target) | — |
 
 ## Counts
 
-Out of 44 audited deliverables:
+Out of 44 audited deliverables (updated 2026-10-09 after the artifact work and an audit correction):
 
 | Class | Count |
 | --- | --- |
-| used | 15 |
-| not wired | 2 |
-| partial | 12 |
-| not started | 15 |
+| used | 16 |
+| not wired | 0 |
+| partial | 14 |
+| not started | 14 |
 
 ## Priorities: what blocks a complete Mellum Neuralese system first
 
@@ -112,9 +112,9 @@ Out of 44 audited deliverables:
 | --- | --- | --- |
 | 1 | Mellum QAT conversion qualifies at λ=1 | Mellum session (running) |
 | 2 | Mellum foundation warm-up, runtime check, recurrence via shared recipes (#45), with nested members (#44) | Mellum session; recipes via the C3 recipe consolidation by dgx-claude-7351f337 |
-| 3 | Artifact registry plus a standard recipe/trainer include path, so every trained `.nz` is tracked, hash-pinned, dialect- and backbone-tagged and publishable | this backlog agent (started 2026-10-09) |
-| 4 | Mellum dialect tag, plus Mellum text-initialised artifacts: standard library (`buildStandardLibrary` against a Mellum server) and system-prompt bank | backlog agent |
-| 5 | S5 replay trainer consuming converted v13 soft parts (system prompts, handovers, notes) as leaves | backlog agent, in new modules (not the text_warmup/trajectories core loops) |
+| 3 | Artifact registry plus a standard recipe/trainer include path (done 2026-10-09 except publication); next: backbone-specific dialect tags (decision), Mellum runs pass `--bank` and register their banks | backlog agent; dialect: owner |
+| 4 | Mellum text-initialised artifacts: standard library (`buildStandardLibrary` against a Mellum server) and system-prompt bank (from a Mellum trajectory run with `--bank`, or the TS builder against a Mellum server) | backlog agent once a Mellum server runs |
+| 5 | S5 multi-call graph replay (credit across chains of calls and closures); per-call replay over converted records exists in `trajectories.py` | backlog agent, in new modules |
 | 6 | Operator/combinator training samples and operator training (S5 items 6–7) with law terms | backlog agent |
 | 7 | Reference server serving Mellum students (QAT-converted latents, read adapter) | Mellum session |
 | 8 | llama.cpp/wasm for Mellum (MoE + ternary) and refreshing the browser build to the fork pin | batched-scoring/fork agent |

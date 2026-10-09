@@ -102,3 +102,24 @@ def test_trainer_outputs_register_with_their_parent_found_by_content(tmp_path):
     assert artifacts.backbone_identity(str(snapshot)) == {"model": str(snapshot), "revision": "0123abcd"}
     with pytest.raises(artifacts.ArtifactError, match="cannot pin"):
         artifacts.backbone_identity(str(tmp_path / "unpinned-model"))
+
+
+def test_a_finished_run_registers_its_bank_with_parent_and_corpora(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    source = nz(tmp_path / "src.nz")
+    artifacts.register(repo, item(), {"bank.nz": source})
+    records = tmp_path / "records.jsonl"
+    records.write_text('{"r": 1}\n')
+    manifests = repo / "training/corpus-manifests"
+    manifests.mkdir(parents=True)
+    (manifests / "corpus-a.json").write_text(json.dumps({"id": "corpus-a", "files": [
+        {"path": "records.jsonl", "sha256": artifacts.digest(records)}]}))
+    run = tmp_path / "run"
+    run.mkdir()
+    nz(run / "system-prompts.nz", width=5)
+    (run / "summary.json").write_text(json.dumps({"options": {"records": str(records), "bank": str(source),
+                                                              "base": str(tmp_path / "hub/snapshots/feed01")}}))
+    artifacts.register_run(run, "bank-run-v1", commit="c0ffee", repo=repo)
+    entry = artifacts.entry(artifacts.load_registry(repo), "bank-run-v1")
+    assert entry["init"]["parent"] == "bank-test-v1" and entry["training"]["corpora"] == ["corpus-a"]
+    assert entry["backbone"]["revision"] == "feed01" and entry["qualification"]["status"] == "unqualified"
