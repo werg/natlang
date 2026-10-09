@@ -1,7 +1,7 @@
 # Source review as data plus a natlang reviewer (review items P2 and P10)
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is built until the owner has reviewed it. No code
-changes accompany this document.
+Status: implemented on main; the owner reviews after the fact (plans/OWNER_REVIEW.md). Section 10 records what was built
+and the decisions taken where this draft left a choice.
 
 Source: plans/NATLANG_NATIVE_REVIEW.md, rows P2 and P10.
 
@@ -350,3 +350,46 @@ No existing model-facing text changes: the registry move is not seen by any mode
    so a release is as traceable as a hold? The matching rules stay the same.
 5. The second reviewer's executor: a second model (needs another endpoint) or the same model with a different prompt
    variant?
+
+## 10. Implementation notes (2026-10-09)
+
+What was built, in the order of section 8 (steps 1, 2 and the function definitions of 3 and 4; the live measurements of
+sections 7 and 8 wait for a teacher window):
+
+1. **Migration (one revertable commit).** `training/source-reviews/{holds.jsonl,family-holds.json,datasets.json}` and
+   `training/corpus-manifests/source-reviews-20261009-v1.json`; `source-review.ts` loads and validates them. The pinned
+   fingerprints of section 3.3 were recomputed from the compiled pre-migration module and are correct: 184 records,
+   255 identity strings, records sha256 `0069412...f4e2`, identities sha256 `0d1cd22a...af31`, source file sha256
+   `abb6f559...a9a74`. `ts-host/test/source-review-migration.test.mjs` asserts them, deep equality with a frozen export
+   of the old module, and a differential test against a frozen copy of the old functions (over 5,000 record shapes plus
+   odd inputs). The banking77 family hold is the third row of `family-holds.json` (`primarySourceId: null`); its reason
+   text is new (the old code had a comment, not a reason string) and does not affect matching.
+   The manifest is a registry manifest (`natlang.source-review-registry-manifest/1`), not a training corpus: it is not
+   listed in `training/neuralese_corpora.json` and grants no admission.
+2. **Receipts and decisions.** `scripts/source_review.py` (`receipt`, `decide`, `manifest`, `show`). A receipt carries
+   the reviewer as `natlang@<16 hex>` over the sha256 of the definition source, the compiler version and the executor
+   identity (recomputed on receipt), the canonical hash of the reviewed input, the recommendation, `decision: null` and
+   `training_admission: false`. `decide` needs `owner` or `agent:<session>`; only a `hold` on an item receipt appends a
+   pending record to `holds.jsonl` and writes the next manifest; `clear` and `defer` never touch the registry; a decided
+   receipt cannot be decided again.
+3. **Reviewers.** `reviewSourceItem` and `reviewSourceRow` are built-ins (`ts-host/src/builtin/*.nl`) wrapped by
+   `ts-host/src/teacher/source-review-nl.ts`: exact prechecks, precedent choice by word overlap, the crisp checks of the
+   typed contract (quotes occur in the text, `proposed_entry` exactly for a hold, `equivalent` on an exact match),
+   `pluggable` modes `crisp | nl | shadow` with default `crisp` (recommends nothing), and an optional second executor.
+   An exact match is `equivalent` from a crisp reviewer without a model call.
+4. **Packet scripts.** `build_step5_native_action_review_packet.py --row-reviews` reads the decided row receipts where
+   `--annotations` was read (the decision hold or clear becomes the disposition hold or candidate; a row with no explicit
+   decision is refused; the assessment records the v7 category). `bind_held_action_review_receipts.py --row-reviews`
+   requires an explicit receipt per selected item over the item's exact gold and actual values and records it in the
+   binding. Both keep the old path when the option is not given.
+
+Decisions on the open questions of section 9:
+
+1. **Generation pause.** Today's behaviour is kept: a `hold` recommendation without a decision does not pause
+   generation; only a recorded `hold` decision creates a pending entry that holds.
+2. **Registry location.** `training/source-reviews/`, as proposed. `NATLANG_SOURCE_REVIEWS` overrides the folder.
+3. **Who signs.** `decide` accepts `owner` or any `agent:<session>`; the receipt records the signer.
+4. **`resolved` entries.** Unchanged (no `resolution` object yet); the loader accepts the status and the matching rules
+   are the same.
+5. **Second reviewer.** `ReviewOptions.second` takes any executor identity and call function; which model it is remains
+   a deployment choice.
