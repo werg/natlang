@@ -110,6 +110,16 @@ def _pi_call(name: str, args: dict[str, Any], cwd: str) -> tuple[str, dict[str, 
     return name, args, f'{name} (no pi tool)'
 
 
+def resolved(value: Any) -> bool:
+    """The dataset's resolved flag, which it stores as text ('1', '0', '1.0')."""
+    if isinstance(value, str):
+        try:
+            return float(value) >= 1
+        except ValueError:
+            return value.strip().lower() == 'true'
+    return bool(value)
+
+
 def _text(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -184,7 +194,7 @@ def normalize(row: dict[str, Any], mapping: str = 'pi') -> Normalized:
                              'content': [{'type': 'text', 'text': text}],
                              'isError': text.startswith('ERROR:') or text.startswith('Error')})
     return Normalized(id=str(row.get('trajectory_id') or row.get('instance_id')), instance_id=str(row.get('instance_id', '')),
-                      repo=str(row.get('repo', '')), resolved=bool(row.get('resolved')), mapping=mapping, goal=goal,
+                      repo=str(row.get('repo', '')), resolved=resolved(row.get('resolved')), mapping=mapping, goal=goal,
                       cwd=cwd, messages=messages, lossy=lossy, patch=str(row.get('model_patch') or ''))
 
 
@@ -210,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     with open(args.out, 'w', encoding='utf-8') as out:
         for row in rows(args.parquet, ['trajectory_id', 'instance_id', 'repo', 'trajectory', 'model_patch', 'resolved']):
             seen += 1
-            if args.resolved_only and not row.get('resolved'):
+            if args.resolved_only and not resolved(row.get('resolved')):
                 continue
             item = normalize(row, args.mapping)
             if args.exact_only and item.lossy:

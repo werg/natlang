@@ -1,0 +1,6 @@
+{
+  "compilerOptions": { "target": "ES2023", "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true,
+    "skipLibCheck": true, "allowImportingTsExtensions": true, "rewriteRelativeImportExtensions": true, "rootDir": ".", "outDir": "dist", "types": ["node"] },
+  "include": ["**/*.ts"],
+  "exclude": ["dist", "**/*.d.nl.ts"]
+}

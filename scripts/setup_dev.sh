@@ -76,6 +76,13 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
 
   echo "==> Installing TypeScript host dependencies"
   npm --prefix "$ROOT" ci
+  # Applications with their own dependencies (a package.json and lockfile beside their sources, such as pi's vendored
+  # pi-durable) install them from that lockfile.
+  for lock in "$ROOT"/applications/*/package-lock.json; do
+    [[ -f "$lock" ]] || continue
+    echo "==> Installing $(basename "$(dirname "$lock")") application dependencies"
+    npm --prefix "$(dirname "$lock")" ci
+  done
 
   echo "==> Building the TypeScript host, Node package, browser bundle, and applications"
   npm --prefix "$ROOT" run build

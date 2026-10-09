@@ -196,3 +196,50 @@ no worse on violations at acceptable cost.
 7. Live evaluation (§5) in the teacher window, then adoption across the rebuilt applications.
 
 Steps 1–4 are host and compiler work with stub-model tests. Steps 6–7 need the teacher window and the ledger.
+
+## Implementation status (steps 1-4)
+
+Done and tested with stub models and scorers: the `refined` kind (`native/types.ts`), the ambient `Is`/`refine`/`assume`
+(`compiler/intrinsics.ts`, `runtime/surface.ts`) and the `.d.nl.ts` import of `Is`, the checker, judge and verdict cache
+(`native/refinement.ts`), the return path in the agent loop (`native/agent.ts`, repair within `maxFailureRepairs`,
+else `refinements.repairs`, default 3), a safety-net check of every refined result when a call completes, argument
+checks and service-result checks (`runtime/kernel.ts`), the codes and messages, the `refinements` settings in
+`natlang.json` and the runtime options, crisp checkers and shadow mode, and the skills and spec text.
+
+Choices where this document was open:
+
+- The verdict cache is an injected `VerdictCache` with an in-memory default, not the call store: the store has no
+  keyed value table yet, and a verdict is not a call.
+- A model whose driver cannot score replies cannot judge. The check is `refinement-undecided` unless a crisp checker
+  decides, rather than falling back to an ordinary `holds` call.
+- Crisp checkers are registered in the runtime option `refinements.crisp` or the `refinements` table exported from
+  `native/types.ts`. A program's own `types.ts` is read for aliases only and is never executed.
+- A rejected return is a tool error (kind `rejected`) and is not written into the call's transcript; its detail is
+  in the `refinement_check` trace events.
+- Band policies are `accept`, `reject` (fails as `refinement-undecided`) and `escalate` (to the model named by
+  `escalate`, then `threshold`).
+- `refine(value, predicate)` and `assume(value, predicate)` take the predicate as an argument. The type-argument-only
+  form `refine<R>(value)` needs the compiler to lower the predicate from `R`.
+
+## Pending integration
+
+Changes that need files another session is editing, each the smallest that completes the design.
+
+1. `native/runtime.ts`, `NativeSession.evaluate` (the `finish: true` path) and `NativeSession.finish`: a result an
+   eval completes skips the in-loop gate (`NativeToolAgent.refinementGate`), because `finish()` is synchronous and
+   commits folder transactions. Today such a result is checked when the call completes (`runtime/kernel.ts`) and a
+   failure is final. To repair it, `evaluate` should await `refinementGate`-style checking before it calls `finish()`
+   and answer a failure like a failed eval.
+2. `native/runtime.ts`, near the `decide` binding (about line 1885): bind `refine` and `assume` in the eval scope (from
+   `runtime/surface.ts`) so a model can call them. The ambient declarations already reach eval programs through
+   `compiler/intrinsics.ts`.
+3. Eval-write checks (section 2, site 3): where eval's returned or declared values are checked against their types
+   (`native/runtime.ts`, the structural check after an eval), call `collectObligations` for the binding's type and
+   report failures as the eval's error. Not done: it needs the async gate of item 1.
+4. `compiler/inline.ts` / `compiler/lower.ts`: lower `refine<R>(value)` and `assume<R>(value)` by reading the
+   predicates of `R`. Also `natlang check` should list the refined slots and their predicates (section 6).
+5. `runtime/hooks.ts`: none required. If the kernel hook interface is later used for argument checks, move
+   `refinedSignature`'s argument check there.
+6. Program `types.ts` crisp checkers: the loader would need to evaluate a `refinements` export.
+7. Call store: a keyed verdict table behind `VerdictCache` (the interface is `get(key)`/`set(key, verdict)`, async allowed),
+   so verdicts persist across processes.

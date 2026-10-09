@@ -11,6 +11,8 @@ import { NatlangContextError, currentFrame, runInFrame, type DecisionReadout, ty
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
+import { decisionScorer } from '../native/decision.js';
+import { RefinementChecker, decisionJudge, type RefinementJudge, type RefinementSettings, type VerdictCache } from '../native/refinement.js';
 
 /** How far stored compilations may serve calls: not at all, compared in the background only, or served. */
 export type SpecializationMode = 'off' | 'shadow' | 'on';
@@ -109,6 +111,12 @@ export type NatlangRuntimeOptions = {
   recording?: { exclude?: string[] };
   /** How far compilations may serve this runtime's calls; the machine setting bounds it (default: the machine setting). */
   specialization?: SpecializationMode;
+  /**
+   * Refinement checking for `Is<T, "predicate">` types (natlang.json `refinements`, plans/REFINEMENT_TYPES.md): the
+   * threshold, uncertainty band and policy; `cache` holds verdicts by content (in memory by default) and `crisp`
+   * maps a predicate to a checker that decides it (`undefined` defers to the judge).
+   */
+  refinements?: RefinementSettings & { cache?: VerdictCache; crisp?: Record<string, (value: unknown) => boolean | undefined> };
 };
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
@@ -271,6 +279,24 @@ export class NatlangTask {
     if (!defaultEnvironment) throw new Error('no natlang evaluator is installed for this platform');
     return defaultEnvironment(this.runtime.options);
   }
+  /** Refinement events with no call to carry them (`refine`/`assume` in host code outside any natlang call). */
+  readonly refinementEvents: { kind: string; data: Record<string, unknown> }[] = [];
+  /** The refinement checker of this task's runtime: shared settings and verdict cache. */
+  refinementChecker(): RefinementChecker { return this.runtime.refinementChecker(); }
+  /**
+   * The judge and the escalation judge for a call running on `model`: the configured `refinements.judge` model when
+   * there is one, else the call's own. Undefined when the driver cannot score replies.
+   */
+  refinementJudges(model: ModelConfig | undefined): { judge?: RefinementJudge; escalation?: RefinementJudge } {
+    const settings = this.runtime.options.refinements;
+    const judgeOf = (config: ModelConfig | undefined): RefinementJudge | undefined => {
+      const scorer = config ? decisionScorer(config.driver) : undefined;
+      return config && scorer ? decisionJudge(scorer, { id: config.id ?? (config.driver as { model?: string }).model ?? (config.driver.name || 'model') }) : undefined;
+    };
+    const judge = judgeOf(settings?.judge ? this.model(settings.judge) : model);
+    const escalation = settings?.escalate ? judgeOf(this.model(settings.escalate)) : undefined;
+    return { ...(judge ? { judge } : {}), ...(escalation ? { escalation } : {}) };
+  }
   model(name?: string): ModelConfig | undefined {
     const model = (name && this.runtime.options.models?.[name]) || this.runtime.options.model;
     return typeof model === 'function' ? { driver: model } : model;
@@ -312,6 +338,12 @@ export class NatlangRuntime {
       }
     }
     return this.store ?? undefined;
+  }
+  private refinements?: RefinementChecker;
+  /** The checker for `Is<T, P>` slots, with this runtime's settings, crisp checkers and verdict cache. */
+  refinementChecker(): RefinementChecker {
+    return this.refinements ??= new RefinementChecker({ settings: this.options.refinements, cache: this.options.refinements?.cache,
+      crisp: this.options.refinements?.crisp });
   }
   /** Loaded compilations of this runtime's store. */
   compilations(): CompilationCache | undefined {

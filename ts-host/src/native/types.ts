@@ -11,7 +11,10 @@ export type Type =
   /** A live host object checked by contract rather than copied as data. `name` is its TypeScript text. */
   | { kind: 'host'; name: string; contract: HostCheck }
   /** A soft value of `element` in a Neuralese dialect: an opaque reference to a stored block of vectors. */
-  | { kind: 'neuralese'; element: Type; dialect: string };
+  | { kind: 'neuralese'; element: Type; dialect: string }
+  /** `Is<T, "predicate">`: values of `base` that a reader can judge to satisfy the natural-language `predicate`
+   * (plans/REFINEMENT_TYPES.md). Structurally it is `base`; the predicate is checked where a value enters the slot. */
+  | { kind: 'refined'; base: Type; predicate: string };
 
 /** The dialect a `Neuralese<T>` without a second argument names; a program's configuration binds it. */
 export const DEFAULT_DIALECT = 'DefaultDialect';
@@ -49,6 +52,12 @@ export function checkHost(value: unknown, contract: HostCheck, classes?: Readonl
 }
 
 export class TypeSyntaxError extends Error {}
+
+/** A predicate with its whitespace collapsed: two predicates are the same when their normalized texts are equal. */
+export const normalizePredicate = (predicate: string): string => predicate.replace(/\s+/g, ' ').trim();
+const refinementInvalid = (got: string) => `refinement-predicate-invalid: Is<T, P> takes a nonempty string literal as P, ` +
+  `for example Is<string, "one line of at most 60 characters">; it got ${got}.`;
+
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
 // Whitespace and comments (field doc comments in types.ts aliases) separate tokens.
 const TOKEN = /(?:\s|\/\*[^]*?\*\/|\/\/[^\n]*)*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(-?\d+(?:\.\d+)?)|([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
@@ -182,6 +191,20 @@ class Parser {
       if (element.kind === 'neuralese') throw new TypeSyntaxError('neuralese-nested: Neuralese<Neuralese<T>> is not a type');
       return { kind: 'neuralese', element, dialect };
     }
+    if (token.value === 'Is' && this.peek()?.value === '<') {
+      // Is<T, "predicate">: one nonempty string literal; nesting means both predicates.
+      this.eat('<');
+      const base = this.union();
+      if (this.peek()?.value !== ',') throw new TypeSyntaxError(refinementInvalid('a second type argument'));
+      this.eat(',');
+      const item = this.peek();
+      if (item?.kind !== 'str') throw new TypeSyntaxError(refinementInvalid(item ? `${JSON.stringify(item.value)}, which is not a string literal` : 'nothing'));
+      this.eat();
+      const predicate = normalizePredicate(item.value);
+      if (!predicate) throw new TypeSyntaxError(refinementInvalid('an empty string'));
+      this.eat('>');
+      return { kind: 'refined', base, predicate };
+    }
     if (token.value === 'Live' && this.peek()?.value === '<') {
       // Live<"TypeScript text", "tag" | "class" | "shape" | "function" | "any", "detail">
       this.eat('<');
@@ -234,6 +257,7 @@ export function formatType(type: Type): string {
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'host': return type.name;
+    case 'refined': return `Is<${formatType(type.base)}, ${JSON.stringify(type.predicate)}>`;
     case 'neuralese': return isAdapterType(type) ? 'Adapter' : `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
       `, ${JSON.stringify(type.dialect)}`}>`;
   }
@@ -244,6 +268,7 @@ function children(type: Type): Type[] {
   switch (type.kind) {
     case 'record': return type.fields.map(field => field.type);
     case 'list': case 'dict': case 'neuralese': return [type.element];
+    case 'refined': return [type.base];
     case 'union': return type.members;
     case 'lambda': return [type.params, type.returns];
     default: return [];
@@ -296,6 +321,7 @@ export class TypeEnv {
     if (type.kind === 'name') { if (!this.lookup(type.name)) throw new TypeSyntaxError(`unknown type name ${type.name}`); return; }
     if (type.kind === 'record') for (const field of type.fields) this.checkNames(field.type);
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
+    if (type.kind === 'refined') this.checkNames(type.base);
     if (type.kind === 'union') for (const member of type.members) this.checkNames(member);
     if (type.kind === 'lambda') { this.checkNames(type.params); this.checkNames(type.returns); }
     if (type.kind === 'neuralese') {
@@ -319,6 +345,13 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   const a = env.resolve(source), b = env.resolve(target);
   if (JSON.stringify(a) === JSON.stringify(b)) return true;
   if (a.kind === 'union') return a.members.every(member => fitsType(member, b, env, seen));
+  // A refinement is forgotten going out; going in, the value must fit the base (the predicate is an obligation,
+  // see fitObligations) and an already-refined value must carry every predicate of the target.
+  if (b.kind === 'refined') {
+    const wanted = refinementChain(b, env), have = a.kind === 'refined' ? refinementChain(a, env) : { base: a, predicates: [] };
+    return fitsType(have.base, wanted.base, env, seen) && (!have.predicates.length || wanted.predicates.every(p => have.predicates.includes(p)));
+  }
+  if (a.kind === 'refined') return fitsType(a.base, b, env, seen);
   if (b.kind === 'union') return b.members.some(member => fitsType(a, member, env, seen));
   if (a.kind === 'lit' && b.kind === 'prim') return b.name === (typeof a.value === 'string' ? 'string' : 'number');
   if ((a.kind === 'list' || a.kind === 'dict') && a.kind === b.kind) return fitsType(a.element, b.element, env, seen);
@@ -339,3 +372,53 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
     return fitsType(a.returns, b.returns, env, seen) && fitsType(b.params, a.params, env, seen);
   return false;
 }
+
+/** The predicates of a (possibly nested) refinement, outermost last, and the unrefined type beneath them. */
+export function refinementChain(type: Type, env: TypeEnv): { base: Type; predicates: string[] } {
+  const predicates: string[] = [];
+  let current = env.resolve(type);
+  while (current.kind === 'refined') {
+    predicates.unshift(current.predicate);
+    current = env.resolve(current.base);
+  }
+  return { base: current, predicates: [...new Set(predicates)] };
+}
+
+/** Whether `type` mentions a refinement anywhere (named types followed once each). */
+export function containsRefinement(type: Type, env: TypeEnv, seen = new Set<string>()): boolean {
+  if (type.kind === 'refined') return true;
+  if (type.kind === 'name') {
+    if (seen.has(type.name)) return false;
+    seen.add(type.name);
+    const found = env.lookup(type.name);
+    return !!found && containsRefinement(found, env, seen);
+  }
+  if (type.kind === 'neuralese' || type.kind === 'host') return false;
+  return children(type).some(child => containsRefinement(child, env, seen));
+}
+
+/**
+ * The check obligations of putting a value of `source` into `target`: the predicates of refined target positions that
+ * the source does not already carry, by path. null when `source` does not fit `target` at all.
+ */
+export function fitObligations(source: Type, target: Type, env = new TypeEnv(), path = 'value'): { path: string; predicate: string }[] | null {
+  if (!fitsType(source, target, env)) return null;
+  const a = env.resolve(source), b = env.resolve(target);
+  if (b.kind === 'refined') {
+    const wanted = refinementChain(b, env), have = refinementChain(a, env);
+    return wanted.predicates.filter(p => !have.predicates.includes(p)).map(predicate => ({ path, predicate }));
+  }
+  const out: { path: string; predicate: string }[] = [];
+  const sub = (x: Type, y: Type, at: string) => { out.push(...fitObligations(x, y, env, at) ?? []); };
+  if ((a.kind === 'list' && b.kind === 'list') || (a.kind === 'dict' && b.kind === 'dict')) sub(a.element, b.element, `${path}/*`);
+  else if (a.kind === 'record' && b.kind === 'record')
+    for (const field of b.fields) { const got = a.fields.find(f => f.name === field.name); if (got) sub(got.type, field.type, `${path}/${field.name}`); }
+  return out;
+}
+
+/**
+ * Crisp checkers for refinement predicates, by normalized predicate text. A checker that returns a boolean decides;
+ * `undefined` defers to the judge (plans/REFINEMENT_TYPES.md section 3). Register more with `refinements[predicate] = fn`;
+ * a runtime's `refinements.crisp` setting is consulted before this table.
+ */
+export const refinements: Record<string, (value: unknown) => boolean | undefined> = Object.create(null);

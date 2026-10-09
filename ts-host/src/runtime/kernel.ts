@@ -8,7 +8,8 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { TypeEnv } from '../native/types.js';
+import { TypeEnv, containsRefinement, parseType, type Type } from '../native/types.js';
+import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
@@ -167,6 +168,50 @@ export class NatlangCallError extends Error {
     super(`${definition}: ${outcome}: ${detail}`);
     this.name = 'NatlangCallError';
   }
+}
+
+/** A call that ended because its result did not satisfy a refined type (`Is<T, P>`): the code is the one in `detail`. */
+export class RefinementCallError extends NatlangCallError {
+  constructor(readonly code: Exclude<RefinementCode, 'refinement-predicate-invalid'>, definition: string, outcome: string, detail: string,
+    callId: string, trace: Record<string, unknown>[]) {
+    super(definition, outcome, detail, callId, trace);
+    this.name = 'RefinementCallError';
+  }
+}
+
+/**
+ * The parameter and result types of a definition when any of them is (or names) a refinement; undefined otherwise, which
+ * is nearly always, so ordinary calls pay one regular-expression test. Unparseable types are left to the usual errors.
+ */
+function refinedSignature(definition: CallableDefinition): { env: TypeEnv; params: Type[]; returns: Type; refinedReturns: boolean } | undefined {
+  const texts = [definition.returns, ...definition.params.map(parameter => parameter.type), ...Object.values(definition.types)];
+  if (!texts.some(text => /\bIs\s*</.test(text))) return undefined;
+  try {
+    const env = new TypeEnv(Object.fromEntries(Object.entries(definition.types).map(([name, text]) => [name, parseType(text)])));
+    const params = definition.params.map(parameter => parseType(parameter.type)), returns = parseType(definition.returns);
+    if (![...params, returns].some(type => containsRefinement(type, env))) return undefined;
+    return { env, params, returns, refinedReturns: containsRefinement(returns, env) };
+  } catch { return undefined; }
+}
+
+/**
+ * The task's services with the declared refined results (`refinements.services`) checked: a service result is judged like
+ * an nl return, and a failure throws to whoever called the service.
+ */
+function checkedServices(task: Frame['task'], services: Readonly<Record<string, object>>, model: ReturnType<Frame['task']['model']>, callId: string,
+  emit: (kind: string, data: Record<string, unknown>) => void, signal?: AbortSignal): Readonly<Record<string, object>> {
+  const declared = task.runtime.options.refinements?.services;
+  if (!declared || !Object.keys(declared).length) return services;
+  const env = new TypeEnv();
+  const types: Record<string, Type> = {};
+  for (const [name, text] of Object.entries(declared)) {
+    try { types[name] = parseType(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
+  }
+  const checker = task.refinementChecker(), judges = task.refinementJudges(model);
+  return checkServiceResults(services as Record<string, unknown>, types, async (value, type, label) => {
+    const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit }, label);
+    if (failures.length) throw failureError(failures[0]!);
+  }) as Readonly<Record<string, object>>;
 }
 
 /** Convert an interpreter value into an ordinary JavaScript value for host code. */
@@ -398,6 +443,23 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
+  const signature = refinedSignature(definition);
+  // An argument into a refined parameter is checked at the caller; a failure leaves the callee unstarted.
+  if (signature?.params.some(type => containsRefinement(type, signature.env))) {
+    try {
+      const checker = task.refinementChecker();
+      const judges = task.refinementJudges(task.model(definition.model));
+      const failures = (await Promise.all(signature.params.map((type, index) => inputs[index] === undefined ? [] :
+        checker.checkValue(inputs[index], type, signature.env, { phase: 'argument', ...judges, callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
+          emit: (kind, data) => traceFor(frame.parentCallId)?.emit(kind, { ...data, callee: definition.name }) },
+          definition.params[index]!.name)))).flat();
+      if (failures.length) throw failureError(failures[0]!);
+    } catch (error) {
+      if (folder?.transaction.open) folder.transaction.abort();
+      for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
+      throw error;
+    }
+  }
   const callId = task.nextCallId();
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
@@ -430,7 +492,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(task.services, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
+  const services = recordingServices(checkedServices(task, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
       [{ node: invocationNodeId(callId), port: 'caller' }])));
@@ -444,6 +506,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,
     guidance: model.guidance,
+    ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model) } } : {}),
     decisionSystemPrompt: () => DECISION_SYSTEM_PROMPT + (addendum ? `\n\n${addendum}` : '') }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
@@ -478,7 +541,22 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     outcome = result.outcome.kind; detail = result.outcome.detail;
     const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
     if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[] });
-    if (outcome !== 'done') throw new NatlangCallError(definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
+    if (outcome !== 'done') {
+      const code = refinementCodeOf(detail);
+      if (code) throw new RefinementCallError(code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
+      throw new NatlangCallError(definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
+    }
+    // Whatever path produced the value (an eval that finished it, a scripted agent), a refined result is judged here.
+    // The agent's own check has cached its verdicts, so this costs no further scoring pass.
+    if (signature?.refinedReturns) {
+      const failures = await task.refinementChecker().checkValue(result.value, signature.returns, signature.env,
+        { phase: 'return', ...task.refinementJudges(model), callId, signal: frame.signal ?? task.signal,
+          emit: (kind, data) => { runtime!.trace.emit(kind, data); } });
+      if (failures.length) {
+        outcome = 'failed'; detail = `${failures[0]!.code}: ${failures[0]!.message}`;
+        throw new RefinementCallError(failures[0]!.code, definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
+      }
+    }
     hostValue = toHost(result.value); hasValue = true;
     return hostValue;
   } catch (error) {
@@ -586,7 +664,15 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     if (node.type.kind !== 'lambda') throw new Error('not a function');
     const env = new TypeEnv(node.types);
     env.classes = options.classes;
-    const value = toHost(coerce(raw as Value, node.type.returns, env, 'return'));
+    const structural = coerce(raw as Value, node.type.returns, env, 'return');
+    // A compiled case's result must satisfy refinements too; if not, the case fails and the agent takes the call.
+    if (containsRefinement(node.type.returns, env)) {
+      const failures = await task.refinementChecker().checkValue(structural, node.type.returns, env,
+        { phase: 'return', ...task.refinementJudges(task.model(definition.model)), callId, signal: input.frame.signal ?? task.signal,
+          emit: (kind, data) => { traceFor(callId)?.emit(kind, data); } });
+      if (failures.length) throw failureError(failures[0]!);
+    }
+    const value = toHost(structural);
     if (folder?.transaction.open) {
       const changes = folder.transaction.folder.diffSync().changes;
       if (folder.mode === 'apply') {

@@ -18451,6 +18451,26 @@
       "admission": "root-adopted-text-composition-training-input-no-new-example-admission",
       "status": "published-derived-text-input",
       "notes": "4962 exact ordered previously root-adopted text rows (3258train/1704test). First4880 bytes reproduce prior adopted input;82 unique train rows added, no held changes. Source snapshot pins seven streams and original root admission receipt. Current shared loader and independent root exact-byte concatenation verified. No new action admission or alignment/runtime qualification. Native/recurrence unions referenced, not counted as extra text. text-data.jsonl is a file-leaf alias to external immutable body; sync materializes exact bytes."
+    },
+    {
+      "id": "nebius-swe-rebench-tasks-20261009-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/nebius-swe-rebench-tasks-20261009-v1",
+      "include": [
+        "README.md",
+        "data/filtered-00000-of-00001.parquet",
+        "data/test-00000-of-00002.parquet",
+        "data/test-00001-of-00002.parquet"
+      ],
+      "split": "source",
+      "source_class": "public-task-metadata-for-teacher-agent-trajectories",
+      "admission": "held-source-harness-bench-evidence-only",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [],
+      "license": "CC-BY-4.0 (dataset card); repositories' own licences per instance (license_name)",
+      "source_url": "https://huggingface.co/datasets/nebius/SWE-rebench",
+      "notes": "SWE-rebench task records (instance_id, repo, base_commit, environment_setup_commit, problem statement, gold and test patches, FAIL_TO_PASS/PASS_TO_PASS, docker image names), downloaded 2026-10-09. The harness bench joins them to nebius-swe-rebench-openhands-trajectories-20261009-v1 by instance_id to rebuild each step's workspace statically from the base commit and the teacher's recorded edits (plans/neuralese/HARNESS_BENCH.md). Gold and test patches are hindsight-only: never shown to a companion or written into a record's prefix."
     }
   ],
   "coverage_backlog": [

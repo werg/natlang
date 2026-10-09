@@ -236,3 +236,29 @@ def test_fused_ramp_and_lion_match_the_eager_rules():
     p.grad = torch.ones_like(p)
     LionSR([p], lr=1e-3, fused=True, chunk=1 << 18).step()
     assert abs(float(p.float().mean()) + 1e-3) < 2e-5  # stochastic rounding keeps sub-ulp steps in expectation
+
+
+def test_conversion_windows_drop_system_prompts_and_pack_extras(tmp_path):
+    from natlang_neuralese.maple.qat_convert import windows_from
+
+    class Chars:
+        def __call__(self, text, add_special_tokens=False):
+            return type("E", (), {"input_ids": [ord(c) for c in text]})()
+
+    data = tmp_path / "t.jsonl"
+    data.write_text(json.dumps({"text": "<|im_start|>system\nSYSTEM<|im_end|>\n<|im_start|>user\nhi<|im_end|>",
+                                "split": "train"}) + "\n")
+    extra = tmp_path / "x.py"
+    extra.write_text("print(1)" * 4)
+    rows = windows_from(str(data), Chars(), 8, 10, "train", skip_system=True, extra_files=(str(extra),))
+    text = "".join(chr(t) for r in rows for t in r)
+    assert "SYSTEM" not in text and "<|im_start|>user" in text and "print(1)" in text
+
+
+def test_row_scaled_lion_moves_each_row_by_its_scale():
+    from natlang_neuralese.train.optim import LionSR
+
+    p = torch.nn.Parameter(torch.zeros(2, 4))
+    p.grad = torch.ones(2, 4)
+    LionSR([{"params": [p], "row_scale": torch.tensor([[1.0], [0.01]])}], lr=0.1).step()
+    assert torch.allclose(p.detach(), torch.tensor([[-0.1] * 4, [-0.001] * 4]))

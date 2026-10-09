@@ -7,7 +7,9 @@
  * Executor: PI_EXECUTOR_ENDPOINT (default http://127.0.0.1:8083), PI_EXECUTOR_MODEL, PI_EXECUTOR_CONCURRENCY;
  * PI_TRACE_DIR keeps the natlang traces; PI_PHASE_LOG prints each phase.
  */
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { expect } from 'vitest';
 import * as durable from '../../vendor/durable/src/index.ts';
 import type { HarnessOptions, Storage } from '../../vendor/durable/src/index.ts';
 import type { Context } from '@earendil-works/chord';
@@ -27,7 +29,9 @@ const natlang = createNatlangRuntime({
   codeEdits: 'deny',
   // Calls are recorded in the machine's call store under the port's directory, where offline work reloads them.
   programRoot: root.replace(/\/$/, ''),
-  ...(process.env.PI_TRACE_DIR ? { trace: fileTraceSink(process.env.PI_TRACE_DIR) } : {}),
+  // Each test's traces go to a folder named after it, so a failure's calls can be found among a whole run's.
+  ...(process.env.PI_TRACE_DIR ? { trace: (trace: unknown) => fileTraceSink(join(process.env.PI_TRACE_DIR!,
+    (expect.getState().currentTestName ?? 'outside-tests').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 180)))(trace) } : {}),
 });
 // Live functions: a long run uses edited instructions from each phase's next call on (owner rule: newest code always).
 const entry = (name: string) => loadNatlang(`${root}${name}.nl`, root, { live: true }) as unknown as Entry;

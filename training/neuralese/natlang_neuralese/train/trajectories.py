@@ -28,7 +28,9 @@ listing preview a digest replaces): ceil(tokens / R) vectors, no stop decision, 
 boundary (`--stop-weight`). This is the simple training regime; sizes are never required at inference, where the stop
 head decides unless a caller passes a length hint. Otherwise stop decisions are sampled and trained by a policy gradient with reward −(reader loss + λ·length)
 against a running baseline (`--stop-pg λ`); without it they are detached and the length is the stop head's choice. With the crisp modes, notes are rendered as the crisp note and
-digests as the listing's preview. Records that read written values add a self-distillation term (weight `--distill`)
+digests as the listing's preview. A digest part may carry its own `instructions` (what it is written for, for example an
+agent's intent at the tool call whose output it digests) and `note` (how the reader gets the whole value); otherwise the
+receiving call's instructions and the variable note apply. Records that read written values add a self-distillation term (weight `--distill`)
 from the same model given the crisp note and preview.
 
 Evaluation on held-out records (split `test`): mean target cross-entropy with the system prompt as crisp text, with the
@@ -94,7 +96,7 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                     # Written digests (decision 43) show as the runtime lists them; otherwise the crisp cut-off preview.
                     if part["name"] in digests:
                         parts.append({"type": "neuralese", "id": digests[part["name"]]})
-                        parts.append({"type": "text", "text": digest_note(part["holder"])})
+                        parts.append({"type": "text", "text": part.get("note") or digest_note(part["holder"])})
                     else:
                         parts.append({"type": "text", "text": part["preview"]})
                 elif part["type"] == "read":
@@ -1244,8 +1246,11 @@ def main(argv=None):
             written[block] = payload
             return block
 
+        # A digest part may carry the instructions it is written for (an agent's intent at the tool call whose output
+        # it digests, HARNESS_BENCH.md); otherwise they are the receiving call's instructions in the opening.
+        instructions = part.get("instructions") or (found.group(1) if found else "")
         block, _ = write_digest(site_write, system, part["holder"], part["value_type"], part["source"],
-                                found.group(1) if found else "", engine.tokenizer, args.digest_window)
+                                instructions, engine.tokenizer, args.digest_window)
         return written[block]
 
     def written_values(record, leaves, depth=0, visiting=(), memo=None, reader_only=False):

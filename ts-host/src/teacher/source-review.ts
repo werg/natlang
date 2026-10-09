@@ -1,5 +1,5 @@
-import { isReviewedTatqaLakhVariant, TATQA_LAKH_SOURCE_ID } from './tatqa-unit-contract.js';
-import { isReviewedOklahomaAnnualEventVariant, OKLAHOMA_EVENT_SOURCE_ID } from './musique-oklahoma-event-contract.js';
+import '../benchmarks/builtin.js';
+import { sourceContractsFor } from '../benchmarks/registry.js';
 
 /** Source annotation disputes stay out of generation and training until adjudicated. */
 export type SourceReview = {
@@ -492,10 +492,8 @@ export function sourceReviewReason(record: Record<string, unknown>):
   const ids = [record.dataset_records, record.source_ids, ['folio', 'entailmentbank'].includes(dataset) ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);
   if (['folio', 'kqapro', 'entailmentbank'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
-  const reviewedLakhVariant = dataset === 'tatqa' && isReviewedTatqaLakhVariant(record);
-  const reviewedOklahomaEventVariant = dataset === 'musique' && isReviewedOklahomaAnnualEventVariant(record);
-  return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id, record) &&
-    !(reviewedLakhVariant && id === TATQA_LAKH_SOURCE_ID) &&
-    !(reviewedOklahomaEventVariant && id === OKLAHOMA_EVENT_SOURCE_ID)) ?
+  const reviewedIds = new Set(sourceContractsFor(dataset ?? '').filter(contract => contract.isReviewedVariant(record))
+    .map(contract => contract.sourceId));
+  return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id, record) && !reviewedIds.has(id)) ?
     'source_review_pending' : undefined;
 }

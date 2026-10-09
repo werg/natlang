@@ -2,7 +2,9 @@ import { hasExistingTreeValueContract } from './tree-contract.js';
 /** Shared collection/admission policy for exercises whose premise no longer exists in the runtime. */
 import type { ProgramRecord } from './program.js';
 import { sourceReviewReason } from './source-review.js';
-import { markdownTerminalNewlineEqual, tatqaAnswerRecordCanonical, tatqaAnswerRecordsEqual } from '../evaluation/oracles.js';
+import { markdownTerminalNewlineEqual } from '../evaluation/oracles.js';
+import '../benchmarks/builtin.js';
+import { runtimeFailureRulesFor } from '../benchmarks/registry.js';
 
 // Untyped nl results now run open, so inline_type_repair no longer triggers its required compiler refusal.
 export const RETIRED_FAMILIES: ReadonlySet<string> = new Set(['inline_type_repair']);
@@ -90,21 +92,11 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
   if (legacyMarkdownTerminalNewlineFailure(row)) return 'legacy_markdown_terminal_newline_oracle';
   if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
       record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
-  if (record.source === 'tatqa' && (typeof record.semantics.oracle !== 'object' ||
-      !['json-string-record', 'tatqa-answer-record', 'tatqa-answer-record-exact'].includes(record.semantics.oracle.normalization ?? ''))) return 'obsolete_json_format_oracle';
-  if (record.source === 'tatqa' && typeof record.semantics.oracle === 'object' &&
-      record.semantics.oracle.normalization === 'json-string-record' &&
-      JSON.parse(tatqaAnswerRecordCanonical(record.semantics.expected) ?? '{}').answer?.numeric === true &&
-      tatqaAnswerRecordsEqual(row.outcome?.value, record.semantics.expected) &&
-      tatqaAnswerRecordsEqual((row.outcome?.files as Record<string, string> | undefined)?.['answer.json'], row.outcome?.value))
-    return 'legacy_tatqa_numeric_display_oracle';
-  // Older snapshots omit the reviewed numeric/unit display instructions. A
-  // mismatch there is not reliable evidence for a preference-training negative.
-  if (record.source === 'tatqa' && typeof record.semantics.oracle === 'object' &&
-      record.semantics.oracle.normalization === 'json-string-record' &&
-      JSON.parse(tatqaAnswerRecordCanonical(record.semantics.expected) ?? '{}').answer?.numeric === true &&
-      (record.generation as Record<string, unknown> | undefined)?.numeric_answer_contract_revision !== 'tatqa-numeric-answer-v1')
-    return 'legacy_tatqa_numeric_contract';
+  // Dataset-specific rules (e.g. benchmarks/tatqa) register by source name; sources are disjoint, so order is moot.
+  for (const rule of runtimeFailureRulesFor(String(record.source))) {
+    const reason = rule(row as Parameters<typeof rule>[0], record as unknown as Record<string, any>);
+    if (reason) return reason;
+  }
   // Extractive annotations do not enumerate every semantically equivalent span boundary.
   // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
   if ((record.source === 'qasper' || record.source === 'musique') &&
