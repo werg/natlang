@@ -6,7 +6,29 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+# Pins mirror .venv-neuralese (Python 3.12). Only packages imported by natlang_neuralese/ and scripts/ are listed;
+# gguf (from the llama.cpp checkout), vllm, bitsandbytes and wandb are not in that venv and so are not declared.
+# torch is pinned without its +cu130 local tag; install the CUDA build from the matching PyTorch index.
+train = [
+    "torch==2.11.0",
+    "transformers==5.18.0",
+    "tokenizers==0.23.2",
+    "safetensors==0.8.0",
+    "peft==0.21.2",
+    "numpy==2.5.3",
+    "pyarrow==25.0.1",
+    "huggingface_hub==1.33.0",
+    "pyyaml==6.0.3",
+    "triton==3.6.0; sys_platform == 'linux'",
+]
+serve = [
+    "torch==2.11.0",
+    "transformers==5.18.0",
+    "safetensors==0.8.0",
+    "tree-sitter==0.26.0",
+    "tree-sitter-typescript==0.23.2",
+]
+dev = ["pytest==9.1.1"]
 
 [tool.setuptools]
 # Training commands are checkout scripts, not importable distribution packages.
