@@ -358,7 +358,10 @@ def validate_continuation(state, identity, *, allowed_changes=(), defaults=None)
         current.setdefault(key, default)
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
     if not changed <= allowed or old.get('files') != identity.get('files'):
-        raise ValueError('recurrence continuation requires identical inputs and training controls except declared curriculum changes')
+        files = sorted(k for k in (old.get('files') or {}).keys() | (identity.get('files') or {}).keys()
+                       if (old.get('files') or {}).get(k) != (identity.get('files') or {}).get(k))
+        raise ValueError('recurrence continuation requires identical inputs and training controls except declared '
+                         f'curriculum changes: undeclared {sorted(changed - allowed)}, changed inputs {files}')
 
 
 def paired_probe_complete(report):
