@@ -24,7 +24,7 @@ def _identity():
         "projection_min_improvement": 0.01, "backbone_ramp_evals": 4,
         "pass_ramp_evals": 2,
         "mask_system_prompt": True, "held_documents": 16,
-        "rollout_passes": 0, "rollout_start_passes": 4,
+        "rollout_passes": 0, "rollout_start_passes": 4, "max_sequence_passes": 3,
         "records": "records.jsonl", "pieces": "pieces.jsonl", "text_data": "text.jsonl",
     }
     return {

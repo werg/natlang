@@ -454,6 +454,35 @@ def test_core_text_recipe_rejects_invalid_deeper_rollout_start(tmp_path, passes,
         load_recipe(path)
 
 
+@pytest.mark.parametrize('maximum',[4,5])
+def test_core_text_recipe_declares_projection_first_depth_extension(tmp_path,maximum):
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    recipe=declared()
+    recipe['stages'].append({
+        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
+        'parameters':{'neuralese_input':'sketch','max_sequence_passes':maximum},
+    })
+    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
+    loaded=load_recipe(path)
+    assert loaded['stages'][-1]['parameters']['max_sequence_passes']==maximum
+    assert stage_parameter_args(loaded['stages'][-1]['parameters'])==[
+        '--neuralese-input','sketch','--max-sequence-passes',str(maximum)]
+
+
+@pytest.mark.parametrize(('mode','maximum','rollout'),[
+    ('sketch',2,0),('map',4,0),('sketch',4,4),('sketch',4.0,0),('sketch',True,0),
+])
+def test_core_text_recipe_rejects_invalid_projection_first_depth_extension(tmp_path,mode,maximum,rollout):
+    recipe=declared()
+    recipe['stages'].append({
+        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
+        'parameters':{'neuralese_input':mode,'max_sequence_passes':maximum,'rollout_passes':rollout},
+    })
+    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError,match='max_sequence_passes|choose either'):
+        load_recipe(path)
+
+
 def test_every_declared_shared_core_warmup_names_its_input_mode():
     recipes = Path(__file__).parents[2] / 'training/neuralese/recipes'
     declared_recipes = [json.loads(path.read_text()) for path in recipes.glob('*.json')]

@@ -24,27 +24,31 @@ class ProjectionFirstSchedule:
     keeps improving, the caller remains in projection-only bootstrap.
     """
 
-    SCHEMA = "natlang.projection-first-schedule/1"
+    SCHEMA = "natlang.projection-first-schedule/2"
 
     def __init__(self, *, heads=("shallow", "full_depth"), min_evals=2,
                  patience=3, min_relative_improvement=0.01,
-                 backbone_ramp_evals=4, pass_ramp_evals=2):
+                 backbone_ramp_evals=4, pass_ramp_evals=2, max_sequence_passes=3):
         heads = tuple(heads)
         if not heads or len(set(heads)) != len(heads) or any(not isinstance(h, str) or not h for h in heads):
             raise ValueError("heads must be unique nonempty names")
         if min_evals < 1 or patience < 1 or backbone_ramp_evals < 1 or pass_ramp_evals < 1:
             raise ValueError("evaluation and ramp counts must be positive")
+        if type(max_sequence_passes) is not int or max_sequence_passes < 3:
+            raise ValueError("max_sequence_passes must be an integer of at least 3")
         if not math.isfinite(min_relative_improvement) or min_relative_improvement < 0:
             raise ValueError("minimum relative improvement must be finite and nonnegative")
         self.config = {
             "heads": list(heads), "min_evals": int(min_evals), "patience": int(patience),
             "min_relative_improvement": float(min_relative_improvement),
             "backbone_ramp_evals": int(backbone_ramp_evals), "pass_ramp_evals": int(pass_ramp_evals),
+            "max_sequence_passes": max_sequence_passes,
         }
         self.eval_count = 0
         self.head_state = {head: {"best": None, "last_significant_eval": 0,
                                   "history": [], "plateau": None} for head in heads}
         self.adaptation_started_eval = None
+        self.depth_ramp_origin_eval = None
 
     @property
     def plateau_reached(self):
@@ -113,8 +117,16 @@ class ProjectionFirstSchedule:
                             if adapting else 0)
         lr_scale = (min(1.0, adaptation_evals / self.config["backbone_ramp_evals"])
                     if adapting else 0.0)
-        passes = (1 + min(2, (adaptation_evals - 1) // self.config["pass_ramp_evals"])
-                  if adapting else 1)
+        passes = 1
+        if adapting:
+            base_passes = 1 + min(2, (adaptation_evals - 1) // self.config["pass_ramp_evals"])
+            passes = base_passes
+            if self.config["max_sequence_passes"] > 3 and base_passes >= 3:
+                if self.depth_ramp_origin_eval is None:
+                    self.depth_ramp_origin_eval = 1 + 2 * self.config["pass_ramp_evals"]
+                extension_evals = max(0, adaptation_evals - self.depth_ramp_origin_eval)
+                passes = min(self.config["max_sequence_passes"],
+                             3 + extension_evals // self.config["pass_ramp_evals"])
         return {
             "eval": self.eval_count,
             "phase": "whole_transformer_adaptation" if adapting else "projection_only",
@@ -123,6 +135,7 @@ class ProjectionFirstSchedule:
             "backbone_lr_scale": lr_scale,
             "projection_lr_scale": 1.0,
             "sequence_passes": passes,
+            "target_sequence_passes": self.config["max_sequence_passes"],
             "adaptation_eval": adaptation_evals,
         }
 
@@ -134,13 +147,20 @@ class ProjectionFirstSchedule:
             "eval_count": self.eval_count,
             "head_state": self.head_state,
             "adaptation_started_eval": self.adaptation_started_eval,
+            "depth_ramp_origin_eval": self.depth_ramp_origin_eval,
         })
 
     def load_state_dict(self, state):
         """Restore schedule counters after constructing with the same config."""
-        if not isinstance(state, dict) or state.get("schema") != self.SCHEMA:
+        if not isinstance(state, dict) or state.get("schema") not in {
+                "natlang.projection-first-schedule/1", self.SCHEMA}:
             raise ValueError("invalid projection-first schedule state")
-        if state.get("config") != self.config:
+        saved_config = dict(state.get("config") or {})
+        old_maximum = saved_config.pop("max_sequence_passes", 3)
+        current_config = dict(self.config)
+        current_maximum = current_config.pop("max_sequence_passes")
+        if (saved_config != current_config or type(old_maximum) is not int or
+                old_maximum < 3 or current_maximum < old_maximum):
             raise ValueError("projection-first schedule configuration changed")
         if not isinstance(state.get("eval_count"), int) or state["eval_count"] < 0:
             raise ValueError("invalid projection-first evaluation count")
@@ -167,6 +187,17 @@ class ProjectionFirstSchedule:
         self.eval_count = count
         self.head_state = copy.deepcopy(state["head_state"])
         self.adaptation_started_eval = started
+        saved_origin = state.get("depth_ramp_origin_eval")
+        if saved_origin is not None and (type(saved_origin) is not int or saved_origin < 1):
+            raise ValueError("invalid sequence-depth ramp cursor")
+        adaptation_evals = (max(0, count - started + 1) if started is not None else 0)
+        if saved_origin is not None and saved_origin > max(
+                adaptation_evals, 1 + 2 * self.config["pass_ramp_evals"]):
+            raise ValueError("sequence-depth ramp cursor is ahead of restored schedule")
+        if old_maximum < current_maximum:
+            if saved_origin is None:
+                saved_origin = max(adaptation_evals, 1 + 2 * self.config["pass_ramp_evals"])
+        self.depth_ramp_origin_eval = saved_origin
 
 
 class RolloutStage:

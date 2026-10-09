@@ -90,8 +90,12 @@ def test_alignment_qualification_uses_deeper_whole_stack_target(passes):
 def test_alignment_qualification_default_depths_remain_declared():
     assert _alignment_qualification_pass_depth(input_map=True,schedule=None,
         rollout=None,update_controls={})==2
-    assert _alignment_qualification_pass_depth(input_map=False,schedule=None,
+    from types import SimpleNamespace
+    schedule=SimpleNamespace(plateau_reached=True)
+    assert _alignment_qualification_pass_depth(input_map=False,schedule=schedule,
         rollout=None,update_controls={})==3
+    assert _alignment_qualification_pass_depth(input_map=False,schedule=schedule,
+        rollout=None,update_controls={'target_sequence_passes':5})==5
 
 
 def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():

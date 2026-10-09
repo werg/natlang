@@ -535,7 +535,9 @@ def _alignment_qualification_pass_depth(*, input_map, schedule, rollout, update_
     if input_map:
         return 2
     if rollout is None:
-        return 3
+        if not schedule.plateau_reached:
+            return None
+        return update_controls.get('target_sequence_passes', 3)
     if not schedule.plateau_reached:
         return None
     stage = update_controls.get('rollout')
@@ -738,7 +740,7 @@ def same_alignment_data(previous, current):
     # intentionally unequal: the old diagnostic's evaluation policy is not
     # authenticated well enough to reuse its value.
     fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens',
-              'rollout_passes', 'rollout_start_passes')
+              'rollout_passes', 'rollout_start_passes', 'max_sequence_passes')
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     if any(key not in old_options or key not in new_options for key in fields):
         return False
@@ -859,6 +861,8 @@ def main(argv=None):
     p.add_argument('--projection-min-improvement',type=float,default=.01)
     p.add_argument('--backbone-ramp-evals',type=int,default=4)
     p.add_argument('--pass-ramp-evals',type=int,default=2)
+    p.add_argument('--max-sequence-passes',type=int,default=3,
+                   help='maximum depth of the shared projection-first sequence-pass schedule (default3)')
     p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
     p.add_argument('--checkpoint-minutes',type=float,default=10.,
                    help='also save full resumable state when this much wall time passed since the last save')
@@ -907,6 +911,11 @@ def main(argv=None):
     a=p.parse_args(argv)
     if a.neuralese_input=='map' and a.rollout_passes:p.error('--neuralese-input map replaces the sketch rollout (--rollout-passes 0)')
     if a.rollout_passes and a.rollout_passes<2:raise ValueError('--rollout-passes needs at least 2 (or 0 to keep the schedule)')
+    if a.max_sequence_passes<3:raise ValueError('--max-sequence-passes must be at least 3')
+    if a.neuralese_input=='map' and a.max_sequence_passes!=3:
+        raise ValueError('--max-sequence-passes applies only to the sketch sequence schedule')
+    if a.rollout_passes and a.max_sequence_passes!=3:
+        raise ValueError('choose either rollout_passes or max_sequence_passes above 3')
     if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
@@ -1233,7 +1242,8 @@ def main(argv=None):
     schedule=ProjectionFirstSchedule(heads=(projection_schedule_name,'full_depth'),
         min_evals=a.projection_min_evals,patience=a.projection_patience,
         min_relative_improvement=a.projection_min_improvement,
-        backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
+        backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals,
+        max_sequence_passes=a.max_sequence_passes)
     last_schedule_step=None
     from .foundation_schedule import RolloutStage
     rollout=(RolloutStage(passes=a.rollout_passes,start_passes=a.rollout_start_passes,
@@ -1342,7 +1352,7 @@ def main(argv=None):
     last_report=None
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
-        evaluation_passes=2 if input_map else max(3,a.rollout_passes)
+        evaluation_passes=2 if input_map else max(3,a.rollout_passes,a.max_sequence_passes)
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
         with torch.no_grad():
@@ -1410,7 +1420,14 @@ def main(argv=None):
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
         # The plateau metric covers the sequence-history passes being trained
         # (1 .. depth-1); deeper evaluated passes would swamp it while untrained.
-        trained_depth=rollout.controls()['passes'] if rollout is not None and schedule.plateau_reached else 3
+        if rollout is not None and schedule.plateau_reached:
+            trained_depth=rollout.controls()['passes']
+        elif input_map:
+            trained_depth=2
+        elif a.max_sequence_passes>3:
+            trained_depth=schedule.controls()['sequence_passes']
+        else:
+            trained_depth=3
         rollout_rows=[r for k,r in strata.items() if 1<=int(k.split('-')[1])<trained_depth and not k.endswith('-last256')]
         rollout_tokens=sum(r['tokens'] for r in rollout_rows)
         rollout_ce_delta=sum(r['ce_delta']*r['tokens'] for r in rollout_rows)/rollout_tokens if rollout_tokens else None

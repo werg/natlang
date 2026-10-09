@@ -62,6 +62,52 @@ def test_adaptation_ramps_backbone_lr_and_sequence_pass_count():
     assert last['backbone_lr_scale'] == 1.
 
 
+@pytest.mark.parametrize(('maximum','expected'), [
+    (4,[1,1,2,2,3,3,4,4,4]),
+    (5,[1,1,2,2,3,3,4,4,5]),
+])
+def test_extended_projection_first_schedule_ramps_beyond_three(maximum, expected):
+    schedule=ProjectionFirstSchedule(min_evals=1,patience=1,pass_ramp_evals=2,
+                                     max_sequence_passes=maximum)
+    values=[]
+    for _ in range(2+len(expected)-1):
+        controls=schedule.observe({'shallow':1.,'full_depth':1.})
+        if controls['plateau_reached']:
+            values.append(controls['sequence_passes'])
+    assert values==expected
+    assert controls['target_sequence_passes']==maximum
+
+
+def test_extension_from_three_resumes_at_three_and_interrupt_resume_is_exact():
+    options=dict(min_evals=1,patience=1,pass_ramp_evals=2)
+    original=ProjectionFirstSchedule(**options,max_sequence_passes=3)
+    for _ in range(8):
+        original.observe({'shallow':1.,'full_depth':1.})
+    assert original.controls()['adaptation_eval']==7
+    legacy=original.state_dict()
+    legacy['schema']='natlang.projection-first-schedule/1'
+    legacy['config'].pop('max_sequence_passes')
+    legacy.pop('depth_ramp_origin_eval')
+
+    extended=ProjectionFirstSchedule(**options,max_sequence_passes=5)
+    extended.load_state_dict(legacy)
+    assert extended.controls()['sequence_passes']==3
+    assert extended.controls()['adaptation_eval']==7
+    assert extended.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==3
+    assert extended.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==4
+    interrupted=extended.state_dict()
+    resumed=ProjectionFirstSchedule(**options,max_sequence_passes=5)
+    resumed.load_state_dict(interrupted)
+    assert resumed.observe({'shallow':1.,'full_depth':1.})==extended.observe({'shallow':1.,'full_depth':1.})
+    assert resumed.observe({'shallow':1.,'full_depth':1.})['sequence_passes']==5
+
+
+@pytest.mark.parametrize('maximum',[2,True,3.5])
+def test_extended_projection_schedule_validates_maximum_depth(maximum):
+    with pytest.raises(ValueError,match='max_sequence_passes'):
+        ProjectionFirstSchedule(max_sequence_passes=maximum)
+
+
 def test_state_dict_resume_reproduces_next_schedule_decision():
     options = dict(min_evals=2, patience=2, backbone_ramp_evals=3, pass_ramp_evals=2)
     original = ProjectionFirstSchedule(**options)
