@@ -1674,6 +1674,42 @@ def main(argv=None):
                           'selection_signature': selection_signature}), flush=True)
     host_gc_seconds = 0.0
     host_gc_calls = 0
+    phase_wall_seconds = {}
+    pending_cuda_phase_events = []
+
+    def start_phase(name, step):
+        started = time.perf_counter()
+        event = None
+        if args.device.startswith('cuda'):
+            event = torch.cuda.Event(enable_timing=True)
+            event.record()
+        return {'name': name, 'step': step, 'started': started, 'cuda_start': event}
+
+    def stop_phase(phase):
+        phase_wall_seconds[phase['name']] = phase_wall_seconds.get(phase['name'], 0.0) + (
+            time.perf_counter() - phase['started'])
+        if phase['cuda_start'] is not None:
+            end = torch.cuda.Event(enable_timing=True)
+            end.record()
+            pending_cuda_phase_events.append((phase['step'], phase['name'], phase['cuda_start'], end))
+
+    def flush_cuda_phase_events():
+        if not pending_cuda_phase_events:
+            return
+        by_step = {}
+        for step_index, name, start, end in pending_cuda_phase_events:
+            phases = by_step.setdefault(step_index, {})
+            phases[name] = phases.get(name, 0.0) + start.elapsed_time(end)
+        with (out / 'cuda-phase-timings.jsonl').open('a') as timing_log:
+            for step_index in sorted(by_step):
+                timing_log.write(json.dumps({
+                    'schema': 'natlang.neuralese-recurrence-cuda-phase-timings/1',
+                    'step': step_index,
+                    'milliseconds': by_step[step_index],
+                    'measurement': 'CUDA events on the current stream; resolved after checkpoint state copies complete; no per-phase synchronization',
+                    'overlap': 'record_model_and_autograd contains staged_producer_replay when staging is selected'
+                }) + '\n')
+        pending_cuda_phase_events.clear()
 
     def collect_graph_cycles():
         # Host wall time only: do not synchronize CUDA or change collection cadence.
@@ -1688,7 +1724,7 @@ def main(argv=None):
     def save_training_state(step, destination=None):
         started_save = time.perf_counter()
         destination = destination or checkpoint_path
-        atomic_checkpoint(destination, {
+        state_snapshot = {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
@@ -1713,13 +1749,23 @@ def main(argv=None):
             'probe_selection_sha256': probe_selection_hash,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
             'stop_rng': stop_generator.get_state(), 'torch_rng': torch.get_rng_state(),
-            'cuda_rng': torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else []})
-        # Includes state construction, device copies, serialization and durable I/O.
-        # This is a blocking phase measurement, not CPU-exclusive or CUDA kernel time.
+            'cuda_rng': torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else []}
+        snapshot_ready = time.perf_counter()
+        atomic_checkpoint(destination, state_snapshot)
+        checkpoint_committed = time.perf_counter()
+        # Snapshot construction includes device-to-host copies; atomic commit
+        # includes serialization and durable I/O. Both are blocking wall times.
         phase = {'event': 'checkpoint_saved', 'completed_updates': step,
-                 'path': str(destination), 'blocking_seconds': time.perf_counter() - started_save}
+                 'path': str(destination),
+                 'blocking_seconds': checkpoint_committed - started_save,
+                 'snapshot_and_device_copy_wall_seconds': snapshot_ready - started_save,
+                 'serialization_and_durable_io_wall_seconds': checkpoint_committed - snapshot_ready,
+                 'measurement': 'monotonic wall clock; snapshot construction includes host/device copies'}
         with (out / 'host-phases.jsonl').open('a') as phase_log:
             phase_log.write(json.dumps(phase) + '\n')
+        # The checkpoint snapshot's device-to-host copies have completed the
+        # queued current-stream events. Resolve events here, never at each phase.
+        flush_cuda_phase_events()
     save_training_state(start_step)
     # The model, fixed corpus, optimizer and imported libraries live until this
     # dedicated trainer process exits. Collect completed setup/probe cycles first,
@@ -1734,7 +1780,8 @@ def main(argv=None):
                       'scope': 'process-lifetime setup only; future graph collection unchanged'}), flush=True)
     with torch.enable_grad():
         for step in range(start_step, args.steps):
-            step_started = time.time()
+            step_started = time.perf_counter()
+            phase_wall_seconds = {}
             step_gc_seconds, step_gc_calls = host_gc_seconds, host_gc_calls
             step_lengths_start = len(lengths)
             step_batches_start = len(writer_batches)
@@ -1757,6 +1804,7 @@ def main(argv=None):
                 record = train[cursor % len(train)]
                 step_record_ids.append(record['id'])
                 cursor += 1
+                geometry_phase_started = time.perf_counter()
                 mode = args.backward_policy
                 plan = geometry_plan(record) if args.backward_policy == 'auto' else None
                 reader_geometry[0] = plan
@@ -1771,6 +1819,9 @@ def main(argv=None):
                             'write_sites': len(plan['writers']), 'writer_geometry': plan['writers'],
                             'sketch_gradient': args.sketch_gradient, 'local_stage_batch_size': args.local_stage_batch_size,
                             'branch_kv_workspace_gib': plan['branch_kv_workspace_bytes'] / 2**30}) + '\n')
+                phase_wall_seconds['geometry_and_router_wall'] = (
+                    phase_wall_seconds.get('geometry_and_router_wall', 0.0) +
+                    time.perf_counter() - geometry_phase_started)
                 rng_before = (random.getstate(), write_choice.getstate(), stop_generator.get_state(),
                               torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
                               dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches))
@@ -1786,6 +1837,7 @@ def main(argv=None):
                     except (GraphBudgetExceeded, torch.OutOfMemoryError) as failure:
                         peak = torch.cuda.max_memory_allocated() if args.device.startswith("cuda") else 0
                         return None, None, type(failure).__name__, peak
+                record_phase = start_phase('record_model_and_autograd', step)
                 try:
                     if args.backward_policy == 'auto' and mode == 'joint':
                         value, gradients, failure, joint_peak = attempt_joint()
@@ -1840,7 +1892,11 @@ def main(argv=None):
                             del loss
                             collect_graph_cycles()
                             if active_staging[0] is not None:
-                                active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
+                                replay_phase = start_phase('staged_producer_replay', step)
+                                try:
+                                    active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
+                                finally:
+                                    stop_phase(replay_phase)
                                 staged_nodes += len(active_staging[0].nodes)
                                 replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
                                 active_staging[0].clear()
@@ -1868,6 +1924,7 @@ def main(argv=None):
                                 'mode': mode, 'observed_peak_gib': case_peak / 2**30,
                                 'estimated_gib': predicted / 2**30}) + '\n')
                 except RequestError as error:
+                    stop_phase(record_phase)
                     if active_staging[0] is not None:
                         active_staging[0].clear()
                         active_staging[0] = None
@@ -1877,6 +1934,7 @@ def main(argv=None):
                                       'error': str(error)[:500]}), flush=True)
                     continue
                 except (RuntimeError, AssertionError, ValueError) as error:
+                    stop_phase(record_phase)
                     failure = {'status': 'training_out_of_memory' if isinstance(error, torch.OutOfMemoryError) else 'training_pre_update_failure',
                                'error_type': type(error).__name__, 'error': str(error),
                                'step': step, 'record_id': record['id'],
@@ -1897,6 +1955,7 @@ def main(argv=None):
                     (out / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
                     print(json.dumps(failure), flush=True)
                     raise
+                stop_phase(record_phase)
                 used.update(part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
                             for part in m["content"] if part["type"] == "soft")
             reader_geometry[0] = None
@@ -1908,14 +1967,16 @@ def main(argv=None):
                 family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
                                  'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
+            optimizer_phase = start_phase('gradient_clip_and_optimizer', step)
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
             optimizer.step()
+            stop_phase(optimizer_phase)
             entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
                      "host_gc_seconds": round(host_gc_seconds - step_gc_seconds, 6),
                      "host_gc_calls": host_gc_calls - step_gc_calls,
-                     "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
+                     "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.perf_counter() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                      **({"write_lengths": lengths[step_lengths_start:][-8:]} if len(lengths) > step_lengths_start else {}),
                      "writes_this_update": len(lengths) - step_lengths_start,
                      "writer_batch_calls_this_update": len(writer_batches) - step_batches_start,
@@ -1923,6 +1984,7 @@ def main(argv=None):
                      "max_writer_batch_rows_this_update": max(writer_batches[step_batches_start:], default=1),
                      "discarded_writer_batches_this_update": discarded_writer_batches,
                      "discarded_writer_rows_this_update": discarded_writer_rows,
+                     "phase_wall_seconds": dict(phase_wall_seconds),
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length, **({"family": family_record} if family_record else {})}
             if args.device.startswith("cuda"):
