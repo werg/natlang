@@ -43,6 +43,26 @@ export function retryAfterMs(error: unknown, now = Date.now()): number {
     const seconds = Number(header), milliseconds = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(String(header)) - now;
     if (Number.isFinite(milliseconds) && milliseconds >= 0) return milliseconds;
   }
+  // Google SDK errors can flatten RetryInfo into one or more JSON-encoded message strings.
+  // Preserve the explicitly supplied protobuf duration rather than retrying a daily quota every minute.
+  const suppliedDelays: number[] = [];
+  const inspect = (node: unknown, depth = 0): void => {
+    if (depth > 8 || node == null) return;
+    if (typeof node === 'string') {
+      if (node.length <= 65536 && node.trim().startsWith('{')) {
+        try { inspect(JSON.parse(node), depth + 1); } catch { /* not encoded provider metadata */ }
+      }
+      return;
+    }
+    if (Array.isArray(node)) { for (const item of node) inspect(item, depth + 1); return; }
+    if (typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    const duration = typeof record.retryDelay === 'string' ? /^(\d+(?:\.\d+)?)s$/.exec(record.retryDelay) : null;
+    if (duration && Number.isFinite(Number(duration[1]))) suppliedDelays.push(Number(duration[1]) * 1000);
+    for (const key of ['error', 'message', 'details']) inspect(record[key], depth + 1);
+  };
+  inspect(value); inspect(error instanceof Error ? error.message : error);
+  if (suppliedDelays.length) return Math.max(...suppliedDelays);
   const message = text(error);
   const milliseconds = value.retry_after_ms ?? message.match(/"retry_after_ms"\s*:\s*(\d+(?:\.\d+)?)/)?.[1];
   const seconds = value.retry_after ?? message.match(/"(?:retry_after|resets_in_seconds)"\s*:\s*(\d+(?:\.\d+)?)/)?.[1] ??
