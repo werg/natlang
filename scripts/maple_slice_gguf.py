@@ -18,7 +18,10 @@ import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(Path("/home/werg/llama.cpp-neuralese/gguf-py")))
+sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
+
+sys.path.insert(0, str(resolve("llama_cpp", "gguf-py")))
 import gguf  # noqa: E402
 
 EXPERT_TENSORS = ("ffn_gate_exps", "ffn_up_exps", "ffn_down_exps")

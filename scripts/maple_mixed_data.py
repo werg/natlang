@@ -12,11 +12,16 @@ measured and kept, not only the natlang task.
 """
 
 import argparse
+import sys
+from pathlib import Path
 import json
 import random
 
 import pyarrow.parquet as pq
 from transformers import AutoTokenizer
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
 
 def main():
@@ -25,7 +30,7 @@ def main():
     ap.add_argument("--text", required=True)
     ap.add_argument("--rows", type=int, default=4000, help="rows of each kind")
     ap.add_argument("--max-chars", type=int, default=12000)
-    ap.add_argument("--model", default="/home/werg/data/models/maple-preview-bf16")
+    ap.add_argument("--model", default=resolve_str("models", "maple-preview-bf16"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()

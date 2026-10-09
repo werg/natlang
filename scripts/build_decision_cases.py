@@ -28,8 +28,10 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from episode_lib import digest, group_commitment, run_gate  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'training', 'neuralese'))
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
-ROOT = '/mnt/external/natlang-development-data/data/decision-sources'
+ROOT = resolve_str('data_hdd', 'natlang-development-data', 'data', 'decision-sources')
 
 
 

@@ -20,8 +20,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from episode_lib import balance_choice_positions, case_record, digest, group_commitment, held_split, nl_target, run_gate, write_packet  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'training', 'neuralese'))
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
-RAW = '/mnt/external/sdkb-archive/raw'
+RAW = resolve_str('archive', 'raw')
 
 
 target = nl_target
