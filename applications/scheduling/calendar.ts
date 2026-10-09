@@ -3,11 +3,11 @@
  * scheduler's stages may call it to check what they produce; they cannot change it. It is built from a `Problem`
  * snapshot, so a run decides on the facts it started with.
  */
-import type { PluggableSetting } from '@natlang/node';
+import { pluggableMode, type PluggableMode, type PluggableSetting } from '@natlang/node';
 import type { Problem } from './workspace.js';
 import type { Hard, Offered, Placement, Verdict } from './types.js';
 
-/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natlang' and 'natural-language' are deprecated spellings of 'nl', accepted and normalized. */
 export type Implementation = Exclude<PluggableSetting, undefined>;
 export type Implementations = { enumeration: Implementation };
 
@@ -15,7 +15,7 @@ export type CalendarService = {
   check(placements: Placement[], hard?: Hard): Verdict;
   exact(hard: Hard, limit: number): Offered;
   describe(placements: Placement[]): string[];
-  implementation(name: 'enumeration'): Implementation;
+  implementation(name: 'enumeration'): PluggableMode;
 };
 
 export function calendarService(problem: Problem, implementations: Implementations): CalendarService {
@@ -23,7 +23,7 @@ export function calendarService(problem: Problem, implementations: Implementatio
     check: (placements, hard) => problem.check(placements, hard),
     exact: (hard, limit) => problem.enumerate(hard, limit),
     describe: placements => problem.describe(placements),
-    implementation: name => implementations[name],
+    implementation: name => pluggableMode(implementations[name]),
   };
 }
 
@@ -45,5 +45,5 @@ export const calendar: {
   /** The placements as lines of clock times, earliest first, e.g. "draft 09:00-09:30". */
   describe(placements: { id: string, start: number, end: number }[]): string[];
   /** Which implementation of a pluggable part is selected. */
-  implementation(name: 'enumeration'): 'crisp' | 'natural-language';
+  implementation(name: 'enumeration'): 'crisp' | 'nl' | 'shadow';
 };`;

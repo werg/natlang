@@ -140,6 +140,11 @@ export function predicatePrompt(completedSteps: number, unchangedSteps: number):
       unchangedSteps > 0 ? ` The state has not changed over the last ${unchangedSteps} step${unchangedSteps === 1 ? '' : 's'}.` :
         ' The last step changed the state.');
   // The fixed text is the built-in program builtin/stoppingCondition.nl; {progress} stands for the sentence above.
+  // {progress} stays a placeholder rather than a typed argument of the built-in: this text is not a call. It is the
+  // system addendum of the *user's* stopping predicate (`systemAddendum` below), so the sentence has to sit inside the
+  // note's own bytes, between its first and second paragraph. A typed argument is rendered in the arguments block of a
+  // call's prompt, never inline in the instructions, so the addendum (pinned byte for byte by
+  // test/fixtures/builtin-prompts.json) would change and the predicate would see the progress somewhere else.
   return builtinBody('stoppingCondition').replace('{progress}', () => progress);
 }
 

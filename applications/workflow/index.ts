@@ -9,6 +9,7 @@
 import { KeyedEventLoop, pluggable, pluggableMode } from '@natlang/node';
 import handle from './handle.nl';
 import inform from './inform.nl';
+import when from './when.nl';
 import { ledgerDeclaration, ledgerService } from './ledger.js';
 import { WorkflowService, type Implementation } from './service.js';
 import type { Decision, Limits, OutboxEntry, Snapshot, WorkflowEvent, WorkflowState } from './types.js';
@@ -22,7 +23,37 @@ export type RunServices = { services: Record<string, unknown>, serviceDeclaratio
 /** Runs natural-language work in a task with these services (e.g. `(fn, options) => runtime.run(fn, options)`). */
 export type Run = <T>(fn: () => Promise<T>, options: RunServices) => Promise<T>;
 
+/** The crisp defaults of the policy's numbers. `step` and the desk use them unless the host passes `limits`. */
 export const DEFAULT_LIMITS: Limits = { transientRetries: 2, checksBeforeRetry: 2, recheckMs: 30_000 };
+/** Milliseconds between reviews of an order whose outcome is unknown, unless the host passes `reconcileAfterMs`. */
+export const DEFAULT_REVIEW_MS = 30_000;
+
+/**
+ * When the order is looked at again, in milliseconds from now, or null for never: the crisp rule. An order with a pending
+ * operation is reviewed after the decision's waitMs, else after `delay`; an order with nothing pending only when the
+ * decision names a wait.
+ */
+export function crispReview(after: WorkflowState, decision: Decision, delay: number): number | null {
+  return after.pending ? decision.waitMs ?? delay : decision.waitMs ? decision.waitMs : null;
+}
+
+/** The exact bound on any review time: a positive whole number of milliseconds, and never null while an operation is pending. */
+export function allowedReview(value: unknown, after: WorkflowState): value is number | null {
+  return value === null ? !after.pending : typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The review time as a pluggable part: `crisp` (default) applies crispReview, `nl` asks when.nl, `shadow` runs both and serves
+ * the crisp answer. A natural-language answer the bound refuses is replaced by the crisp rule.
+ */
+export async function reviewAfter(after: WorkflowState, decision: Decision, options: { run: Run, delay?: number, timing?: Implementation }): Promise<number | null> {
+  const delay = options.delay ?? DEFAULT_REVIEW_MS;
+  const mode = pluggableMode(options.timing, 'crisp');
+  const chosen = await pluggable({ crisp: () => crispReview(after, decision, delay),
+    nl: () => options.run(() => when(after, decision, delay), { services: {}, serviceDeclarations: {} }) }, mode,
+    { name: 'workflow.review', serve: 'crisp', same: (exact, judged) => exact === judged })();
+  return allowedReview(chosen, after) ? chosen : crispReview(after, decision, delay);
+}
 
 export type StepOptions = {
   run: Run,
@@ -81,10 +112,12 @@ export class WorkflowDesk {
   readonly loops: KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>;
 
   constructor(readonly service: WorkflowService, options: { run: Run; signal?: never; policy?: Implementation; limits?: Partial<Limits>;
-    reconcileAfterMs?: number; onFailure?: (orderId: string, error: unknown) => void;
+    reconcileAfterMs?: number;
+    /** Which implementation chooses when an order is looked at again: crisp (default), nl or shadow. */
+    timing?: Implementation; onFailure?: (orderId: string, error: unknown) => void;
     /** Runs one event's step with the loop's abort signal (e.g. to cancel natural-language work). */
     guard?: <T>(fn: () => Promise<T>, signal: AbortSignal) => Promise<T> }) {
-    const delay = options.reconcileAfterMs ?? 30_000;
+    const delay = options.reconcileAfterMs ?? DEFAULT_REVIEW_MS;
     this.loops = new KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>({
       key: event => event.order_id!,
       initialState: () => ({ order: null, reconcileAt: null }),
@@ -99,8 +132,8 @@ export class WorkflowDesk {
         const work = () => stepFull(service, orderId, { kind, ...(event.fault ? { fault: event.fault } : {}) },
           { run: options.run, ...options.policy ? { policy: options.policy } : {}, ...options.limits ? { limits: options.limits } : {} });
         const stepped = await (options.guard ? options.guard(work, context.signal) : work());
-        const wait = stepped.decision.waitMs;
-        return { order: stepped.state, reconcileAt: stepped.state.pending ? context.now + (wait ?? delay) : wait ? context.now + wait : null };
+        const review = await reviewAfter(stepped.state, stepped.decision, { run: options.run, delay, ...options.timing ? { timing: options.timing } : {} });
+        return { order: stepped.state, reconcileAt: review === null ? null : context.now + review };
       },
       view: state => state.order,
       wakeAt: state => state.reconcileAt,

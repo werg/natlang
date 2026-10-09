@@ -11,25 +11,35 @@ Compile source, a program in language, the way an optimizing compiler does, with
 is a function you call, and toolchain checks what the stages produce. inputs are the program's test inputs: run the
 program once with each as standard input.
 
+Checking a stage. A stage's answer is accepted when it passes the check named for it below. When it does not, call the
+same stage once more with problem saying what went wrong (the verifier's message, or how the output changed). If the
+second answer is also wrong, the stage has failed: in the middle end keep the previous version, and in the front end
+stop and return the diagnostics. A call that raises an error counts as a wrong answer, with the error as the problem.
+The check for a function of the middle end is that the module with the new version of the function passes
+toolchain.verify, defines the same name, and gives the reference output on every input.
+
 Front end, with the stages of the program's language (c, python or rust):
 1. parse(source) builds the syntax tree. analyze(syntax) resolves names, infers types and checks the program. If either
    reports diagnostics, stop and return them, with empty ir and assembly.
 2. declare(checked) lays out the module: the header (types, globals, constants, declarations) and each function's
-   signature and tree. The header must pass toolchain.verify. When it declares runtime functions (`@rt_…`), runtime
-   writes them, and they join the program's own functions.
-3. lower(fn, context) generates each function's IR, all at once. A function's context is the header plus a `declare`
+   signature and tree. The header must pass toolchain.verify (checked and retried like every stage). When it declares runtime functions (`@rt_…`), runtime
+   writes them, and they join the program's own functions; with the header they must pass toolchain.verify.
+3. lower(fn, context) generates each function's IR, all at once; each must define fn's name and pass toolchain.verify
+   with its context. A function's context is the header plus a `declare`
    line for every other function of the module.
 The module is the header followed by every function. It must pass toolchain.verify. Its outputs under
 toolchain.runIR on each input are the reference behaviour.
 
 Middle end, per function, with the stages in opt:
-1. opt.plan chooses the passes for level.
+1. opt.plan chooses the passes for level. When plan fails, use mem2reg, simplify, dce.
 2. Run them in that order. mem2reg, gvn, licm and loops take the function's flow: compute it with opt.flow on the
    function as it is, and again only after a pass has changed it. inline also takes the definitions of the functions
    it calls, as callees.
 3. After each pass, the module with the new version of the function must verify and give the reference output on every
-   input. If it does not, call the same pass once more with problem saying what went wrong. If it is still wrong, keep
-   the previous version.
+   input (the check above); a wrong answer is retried once and then dropped, keeping the previous version.
+4. When every function has had all of its passes, the whole module must verify and give the reference output. Passes
+   were checked one at a time, so when the whole module is wrong, go back through the functions in source order,
+   restoring each one's lowered version, until the module is right.
 Functions are independent within a pass: work on them concurrently.
 
 Back end, with the stages in aarch64:

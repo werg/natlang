@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime } from '../dist/index.js';
 import { ScheduleWorkspace, plan } from '../../applications/dist/scheduling/index.js';
+import order, { topologicalOrder } from '../../applications/dist/scheduling/scheduler/order.js';
 import { readFileSync } from 'node:fs';
 import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
 
@@ -366,4 +367,21 @@ test('domains with overlapping spans are repaired before the construction stages
   const domains = await refined(model.driver).run(() => planner.domains(view, hard));
   assert.deepEqual(domains[0].spans, [{ start: 0, end: 90 }]);
   assert.match(model.feedback[0], /ascending and disjoint/);
+});
+
+test('one dependency order: the stages and the verifier enumerate tasks in the same order', () => {
+  const stamp = '2026-09-21T09:00:00+02:00';
+  const task = (id, after) => ({ id, minutes: 30, earliest: stamp, latest: '2026-09-21T12:00:00+02:00', after });
+  // a depends on c; b is free. Depth first from each task in order puts c before a, then b.
+  const tasks = [task('a', ['c']), task('b', []), task('c', [])];
+  const workspace = new ScheduleWorkspace({ ...day, tasks });
+  const verifier = workspace.problem().order();
+  const domains = tasks.map(row => ({ task: row.id, minutes: row.minutes, after: row.after, spans: [] }));
+  assert.deepEqual(verifier, ['c', 'a', 'b']);
+  assert.deepEqual(order(domains), { order: verifier, problem: '' }, 'the model-visible callable gives the verifier order');
+  assert.deepEqual(topologicalOrder(domains).order, verifier);
+  assert.match(order([{ task: 'a', after: ['x'], minutes: 1, spans: [] }]).problem, /a depends on x, which is not a task of the day/);
+  const cycle = order([{ task: 'a', after: ['b'], minutes: 1, spans: [] }, { task: 'b', after: ['a'], minutes: 1, spans: [] }, { task: 'z', after: [], minutes: 1, spans: [] }]);
+  assert.deepEqual(cycle, { order: [], problem: 'a, b depend on each other in a cycle' });
+  assert.throws(() => new ScheduleWorkspace({ ...day, tasks: [task('a', ['b']), task('b', ['a'])] }), /task dependency cycle: a, b depend on each other/);
 });

@@ -20,8 +20,8 @@ Simplify fn as LLVM's SCCP, InstCombine and SimplifyCFG do, without changing wha
    `x ^ 0` and `x` shifted by 0 are x; `x * 0` and `x & 0` are 0; `x - x` and `x ^ x` are 0. Turn `x * 2^k` into `shl`,
    and unsigned or exact division and remainder by a power of two into shifts and masks. Reassociate constants
    (`(x + 1) + 2` is `x + 3`). Fold a comparison of a value with itself, a `zext` of a comparison compared with 0, and
-   double negation. Keep `nsw`, `nuw` and `inbounds` only where they still hold, and never add assumptions the source
-   language does not make.
+   double negation. Keep `nsw`, `nuw` and `inbounds` only where they still hold, and add only assumptions the source
+   language makes.
 3. SimplifyCFG. Merge a block into its only predecessor when that predecessor has no other successor. Thread a branch
    to a block that only branches on. Turn a small diamond (an if-then-else whose arms only compute one value each,
    without side effects) into a `select`. Delete blocks no path reaches.
@@ -31,4 +31,4 @@ context holds the module's types, globals and function declarations. Check the r
 only (same signature and behavior); if nothing applies, answer fn unchanged.
 
 problem, when given, says why an earlier answer was rejected (the verifier's message, or how the program's output
-changed); make sure your answer does not have it.
+changed); make your answer free of it.

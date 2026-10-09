@@ -20,6 +20,11 @@ the stages).
   retired by `commit`. Derived values form a DAG: significance, then clustering, then hypotheses, queries, evidence,
   weighed supports, escalation, summary. There are no loops that run until a condition holds; every repetition is
   per element (events, incidents, hypotheses) and bounded.
+- **Pluggable retention and status.** Which open incidents leave a full list is `retire`: pluggable, crisp by default
+  (`evictOldest`, the least recently seen), `retire.nl` otherwise, and `boundedEviction` keeps any answer within the
+  open incidents and `max_open`. The stage returns the event's status (`Decision.status`); `statusAfter` accepts it only
+  when the sink's receipts allow it (delivered is alerted, unknown is delivery-unknown) and falls back to the exact
+  ladder. Caps are settings (`max_open`, `max_closed`, default 20), not constants.
 - **Pluggable hot path.** Significance runs on every line, so it has one interface and two implementations selected by
   `LogSettings.significance`: `significance/exact.ts` (level rule) and `significance/judge.nl` (a scored decision).
 

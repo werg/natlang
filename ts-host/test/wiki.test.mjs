@@ -369,3 +369,12 @@ test('a natlang cell that finishes after the page changed is stale and not shown
   assert.equal((await running).status, 'stale');
   assert.equal(wiki.output('answer'), null);
 });
+
+test('wiki settings are crisp, nl or shadow; the older spelling natlang means nl', () => {
+  const page = { id: 'page', blocks: [{ id: 'intro', kind: 'prose', text: 'Hello.' }] };
+  const profile = { model: 'm', source: 's', seed: 1 };
+  const wiki = settings => new WikiWorkspace(page, { profile, runtime: createNatlangRuntime({ model: scriptedModel(() => null).driver }), ...settings ? { settings } : {} }).settings;
+  assert.deepEqual(wiki(), { changes: 'nl', staleness: 'nl' });
+  assert.deepEqual(wiki({ changes: 'natlang', staleness: 'shadow' }), { changes: 'nl', staleness: 'shadow' });
+  assert.deepEqual(wiki({ changes: 'crisp' }), { changes: 'crisp', staleness: 'nl' });
+});

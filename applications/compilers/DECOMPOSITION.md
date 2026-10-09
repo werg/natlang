@@ -125,8 +125,12 @@ today" for the full list of new units. Update this section as each unit lands.
 
 ## Drivers
 
-`compiler.nl` sequences the stages in natural language (the pass manager), and `index.ts` is the checked driver. Both
-call the crisp helpers through the callable folder (once they exist; see Status), and both check with the `toolchain` service.
+`compiler.nl` sequences the stages in natural language (the pass manager). It owns the policy: the order of stages, the
+check after each, the retry once with the problem, keeping the previous version, the fallback pipeline when `plan` fails,
+and stepping back to the lowered functions when the combination misbehaves. `index.ts` holds none of that. It is a
+verifier and service runner: it runs `compiler.nl`, then verifies the module (`toolchain.verify`) and runs the IR and the
+assembly on every input against the expected output with the `toolchain` service. `main.ts` calls it for every
+compilation (`--checked` is accepted and does nothing).
 
 ## Changes from today
 

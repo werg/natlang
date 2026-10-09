@@ -19,7 +19,7 @@ uncertainty: "", hypothesis_id: "", cited: [] }.
 A log line, in these steps:
 
 1. Significance. s = significance(item, observation, settings). When s is "ignore" return a Decision with that
-   significance, incident null, folded [], escalation ignore, effects [] and gap null.
+   significance, incident null, folded [], escalation ignore, effects [], gap null and status "observing".
 2. Open incidents: those of incidents whose closes_at is at least item.occurred_at.
 3. Clustering. a = cluster(item, the open incidents). Build the incident record `inc`:
    - "open": { id: item.id, opened_at: item.occurred_at, last_seen: item.occurred_at, closes_at: item.occurred_at +
@@ -31,8 +31,8 @@ A log line, in these steps:
    - folding: for each ID in a.fold, take that incident's members (added to inc.members, keeping the newest
      settings.max_members), count (added to inc.count), services, codes and hypotheses (added without repeats),
      its opened_at if smaller, and its alert_key if inc has none. `folded` is a.fold.
-4. Gate. When inc.count is below settings.threshold and s is not "urgent", return the Decision with incident inc and
-   escalation ignore.
+4. Gate. When inc.count is below settings.threshold and s is not "urgent", return the Decision with incident inc,
+   escalation ignore and status "observing".
 5. Runbook. note = runbook(item, files) when files is given, otherwise "".
 6. Hypotheses. When inc.hypotheses is empty, or item.service or item.code was new to the incident in step 3,
    inc.hypotheses = hypothesize(inc, item, note).
@@ -43,4 +43,5 @@ A log line, in these steps:
 9. Summary. When e.action is "escalate", inc.summary = summarize(inc, inc.hypotheses, supports, e).
 10. Effects. When e.action is "escalate": inc.alert_key = inc.id, and effects = [{ kind: "alert", key: inc.id, service:
     item.service, code: item.code, claim: e.claim, evidence_ids: e.cited }]. Otherwise effects = [].
-11. Return { significance: s, incident: inc, folded, escalation: e, effects, gap: null }.
+11. Status. status = "alerted" when e.action is "escalate", otherwise "investigating".
+12. Return { significance: s, incident: inc, folded, escalation: e, effects, gap: null, status }.

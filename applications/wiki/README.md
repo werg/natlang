@@ -9,7 +9,7 @@ A local collaborative wiki whose logic is natural language. See `DECOMPOSITION.m
 - `index.ts` (`WikiWorkspace`): the mechanism. Transport identity, coverage, block shape, atomic publish, the VM for
   JavaScript cells, natlang cells, stale-on-change.
 
-Two hot paths are pluggable through `WikiSettings`: `changes` and `staleness`, each `"crisp"` or `"natlang"`.
+Two hot paths are pluggable through `WikiSettings`: `changes` and `staleness`, each `"crisp"`, `"nl"` (default) or `"shadow"` (`"natlang"` is accepted for `"nl"`).
 
 ```ts
 const wiki = new WikiWorkspace(page, { profile, runtime, settings: { changes: 'crisp' } });

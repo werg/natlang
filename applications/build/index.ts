@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { ONCE_EFFECTS, type FolderHandle, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
+import { ONCE_EFFECTS, pluggableMode, type FolderHandle, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
 import build from './build.nl';
 import type { BuildReport, Evidence, Task, TaskResult } from './types.js';
 
@@ -20,14 +20,14 @@ export type * from './types.js';
 
 /** The pluggable policy points, and the implementation each runs when the host does not choose. */
 export type PolicyPoint = 'ready' | 'choose' | 'validity';
-/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natlang' and 'natural-language' are deprecated spellings of 'nl', accepted and normalized. */
 export type Implementation = Exclude<PluggableSetting, undefined>;
-export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { ready: 'crisp', choose: 'natural-language', validity: 'natural-language' };
+export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { ready: 'crisp', choose: 'nl', validity: 'nl' };
 
 /** What the natural-language stages see of the `build` service. Types are those of types.ts. */
 export const buildDeclaration = `/** The build workspace: the outside world of the build stages. */
-/** Which implementation runs a pluggable policy point: 'crisp' or 'natural-language'. */
-export function implementation(point: 'ready' | 'choose' | 'validity'): 'crisp' | 'natural-language';
+/** Which implementation runs a pluggable policy point: 'crisp', 'nl' or 'shadow'. */
+export function implementation(point: 'ready' | 'choose' | 'validity'): 'crisp' | 'nl' | 'shadow';
 /**
  * What the workspace sees and recorded for a task: its declaration digest, its inputs' and outputs' current digests
  * (sha256 is null for a missing file) and the ledger entry of its last successful run (recorded is null when none).
@@ -95,9 +95,9 @@ export class BuildWorkspace {
     return this;
   }
 
-  implementation(point: PolicyPoint): Implementation {
+  implementation(point: PolicyPoint): PluggableMode {
     if (!Object.hasOwn(this.policy, point)) throw new Error(`unknown policy point: ${point}`);
-    return this.policy[point];
+    return pluggableMode(this.policy[point]);
   }
 
   private reserved(lexical: string): boolean {

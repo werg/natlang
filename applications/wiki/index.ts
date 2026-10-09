@@ -8,7 +8,7 @@
  */
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-import { defineNatlang, untrusted, type FolderHandle, type InvocationTrace, type NatlangRuntime } from '@natlang/node';
+import { defineNatlang, pluggableMode, untrusted, type FolderHandle, type InvocationTrace, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
 import mergePages from './merge.nl';
 import maintainPage from './maintain.nl';
 import planCells from './cells.nl';
@@ -21,7 +21,7 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]*$/.test(value);
 const sourceRevision = (block: WikiBlock) => hash([block.language, block.returns, block.text]).slice(0, 16);
 const CELL_TIMEOUT_MS = 1000;
-export const defaultSettings: WikiSettings = { changes: 'natlang', staleness: 'natlang' };
+export const defaultSettings: WikiSettings = { changes: 'nl', staleness: 'nl' };
 
 export type WikiOptions = {
   profile: MergeProfile;
@@ -30,7 +30,7 @@ export type WikiOptions = {
   /** Project files given to natlang cells, read fresh for each run. */
   files?: () => FolderHandle;
   /** Which implementation each hot-path policy uses. */
-  settings?: Partial<WikiSettings>;
+  settings?: { [K in keyof WikiSettings]?: PluggableSetting };
 };
 
 type Output = CellResult & { trace: InvocationTrace[] };
@@ -52,7 +52,9 @@ export class WikiWorkspace {
     if (!validId(page.id) || !Array.isArray(page.blocks) || !profile?.model || !profile?.source || !Number.isSafeInteger(profile?.seed))
       throw new Error('invalid page or merge profile');
     this.profile = structuredClone(profile);
-    this.settings = { ...defaultSettings, ...options.settings };
+    // Modes are crisp, nl or shadow; the older spelling "natlang" is accepted and means nl.
+    const chosen = options.settings ?? {};
+    this.settings = { changes: pluggableMode(chosen.changes, defaultSettings.changes), staleness: pluggableMode(chosen.staleness, defaultSettings.staleness) };
     this.runtime = options.runtime;
     this.files = options.files;
     checkBlocks(page.blocks);

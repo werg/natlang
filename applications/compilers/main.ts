@@ -1,13 +1,13 @@
 /**
  * `natlang run applications/compilers -- compile PROGRAM.c|.py|.rs [-O1|-O2|-O3] [--input FILE]... [--out DIR]
- *   [--checked [--no-backend]]`: compile with the natural-language compiler, checking every stage on the inputs.
- * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--checked]`: the benchmarks in bench/, with
+ *   [--no-backend]`: compile with the natural-language compiler.
+ * `natlang run applications/compilers -- bench [NAME...] [--out DIR]`: the benchmarks in bench/, with
  *   timings against gcc -O0/-O2 (C), CPython (Python) or rustc -O (Rust).
  * `--concurrency N`: model requests in flight at once (default 4); `--programs N`: benchmark programs compiled at once
  *   (default 2), in the order named.
- * By default the compiler is compiler.nl, whose pass manager is natural language too, and the host only checks its
- * final program against gcc, CPython or rustc. With --checked the host driver (index.ts) runs the same stages and
- * checks each one.
+ * The compiler is compiler.nl, whose pass manager is natural language (the order of stages, the checks and retries).
+ * The host (index.ts) only verifies its module and program, against gcc, CPython or rustc's output. `--checked` is
+ * accepted and does nothing: compiler.nl's checks are the only ones.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -35,8 +35,6 @@ export async function main(context: TargetContext): Promise<number> {
   const [command, ...args] = context.args;
   if (!toolchainAvailable()) { context.io.error.write('the toolchain needs llvmlite: set NATLANG_LLVM_PYTHON\n'); return 2; }
   const level = (args.find(arg => /^-O[123]$/.test(arg))?.slice(1) ?? 'O2') as Level;
-  const run = <T>(fn: () => Promise<T>) => context.runtime.run(fn, { services: { toolchain },
-    serviceDeclarations: { toolchain: toolchainDeclaration } });
   // The pure pipeline's stages are its callable folder; it runs them and may not rewrite them. It decides itself
   // which calls run at once, so the model requests in flight are limited at the driver.
   const configured = context.runtime.options.model;
@@ -46,18 +44,12 @@ export async function main(context: TargetContext): Promise<number> {
   const limited: ModelDriver = Object.assign((request: Parameters<ModelDriver>[0], signal?: AbortSignal) => inFlight(async () => driver(request, signal)), driver);
   const fixed = new NatlangRuntime({ ...context.runtime.options, codeEdits: 'deny',
     model: typeof configured === 'object' && configured ? { ...configured, driver: limited } : limited });
-  /** compiler.nl end to end; its program is then checked against the reference outputs here. */
-  const pure = async (source: string, language: Language, inputs: string[], expected: string[]): Promise<Compilation> => {
-    const started = performance.now();
-    const result = await fixed.run(() => compiler(source, language, level, inputs), { services: { toolchain },
-      serviceDeclarations: { toolchain: toolchainDeclaration } });
-    const runs = result.assembly ? await Promise.all(inputs.map(input => toolchain.runAssembly(result.assembly, input, 120_000))) : [];
-    const wrong = runs.findIndex((run, i) => !run.ok || run.stdout !== expected[i]);
-    const problem = !result.assembly ? 'no assembly' : wrong >= 0 ? `input ${wrong}: ${runs[wrong]!.error ?? `printed ${JSON.stringify(runs[wrong]!.stdout.slice(0, 200))}`}` : undefined;
-    for (const line of result.log) context.io.error.write(`     ${line}\n`);
-    return { ok: !result.diagnostics.length && !problem, diagnostics: [...result.diagnostics, ...problem ? [problem] : []],
-      records: [{ function: '*', stage: 'compiler.nl', accepted: !problem, attempts: 1, ms: performance.now() - started, problem }],
-      ir: result.ir, assembly: result.assembly || undefined, log: result.log };
+  /** compiler.nl end to end (its pass manager is natural language); index.ts then verifies its module and program. */
+  const runFixed = <T>(fn: () => Promise<T>) => fixed.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const pure = async (source: string, language: Language, inputs: string[], expected: string[], backend = true): Promise<Compilation> => {
+    const result = await compile(source, { language, level, inputs, expected, run: runFixed, backend, onRecord: log });
+    for (const line of result.log ?? []) context.io.error.write(`     ${line}\n`);
+    return result;
   };
   const reference = async (source: string, language: Language, input: string, file?: string) => language === 'c'
     ? (await gccReference(source, '-O0', input)).stdout
@@ -83,9 +75,8 @@ export async function main(context: TargetContext): Promise<number> {
     const language: Language = LANGUAGES[extname(path)]!;
     const runInputs = inputs.length ? inputs : [''];
     // A failed compilation is still reported (and saved), whichever driver ran it.
-    const result: Compilation = await (!args.includes('--checked')
-      ? Promise.all(runInputs.map(input => reference(source, language, input))).then(expected => pure(source, language, runInputs, expected))
-      : compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log }))
+    const result: Compilation = await Promise.all(runInputs.map(input => reference(source, language, input)))
+      .then(expected => pure(source, language, runInputs, expected, !args.includes('--no-backend')))
       .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
     save(basename(path, extname(path)), result);
     context.io.output.write(`${result.ok ? 'compiled' : 'failed'}: ${result.diagnostics.join('; ') || 'all stages checked'} (${out})\n`);
@@ -98,7 +89,6 @@ export async function main(context: TargetContext): Promise<number> {
       .filter(file => /\.(c|py|rs)$/.test(file) && (!names.length || names.includes(basename(file, extname(file)))))
       .map(file => ({ language: language as Language, file: join(benchDirectory, language, file) })))
       .sort((a, b) => names.length ? names.indexOf(basename(a.file, extname(a.file))) - names.indexOf(basename(b.file, extname(b.file))) : 0);
-    const limit = limiter(concurrency);
     // Programs start in order, a few at a time, and each finished one is written at once: a run cut short (a
     // model-server window closing) keeps every program it finished.
     const programLimit = limiter(Number(option(args, '--programs')[0] ?? 2));
@@ -108,8 +98,7 @@ export async function main(context: TargetContext): Promise<number> {
       const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py|rs)$/, '.in'), 'utf8');
       const expected = await reference(source, language, input, file);
       // One program's failure is its row, never the end of the run.
-      const result: Compilation = await (!args.includes('--checked') ? pure(source, language, [input], [expected])
-        : compile(source, { language, level, inputs: [input], expected: [expected], run, limit, backend: true, onRecord: log }))
+      const result: Compilation = await pure(source, language, [input], [expected])
         .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
       save(name, result);
       const natlang = result.ok ? await best(3, () => toolchain.runAssembly(result.assembly!, input, 120_000)) : null;
@@ -127,6 +116,6 @@ export async function main(context: TargetContext): Promise<number> {
     return rows.every(row => row.ok) ? 0 : 1;
   }
 
-  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--checked [--no-backend]] | bench [NAME...] [--out DIR] [--checked]\n');
+  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--no-backend] | bench [NAME...] [--out DIR]\n');
   return 2;
 }
