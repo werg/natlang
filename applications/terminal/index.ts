@@ -9,8 +9,7 @@
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { untrusted, type FolderHandle } from '@natlang/node';
-import readNote from './interpret/readNote.nl';
+import { builtin, untrusted, type FolderHandle, type Untrusted } from '@natlang/node';
 import chooseRecipe from './interpret/chooseRecipe.nl';
 import explain from './explain/explain.nl';
 import { loadMessages, loadRecipeData, renderMessage, type CommandRecipe, type MessageTable, type RecipeData, type RecipeLimits } from './data.js';
@@ -128,7 +127,7 @@ export async function step(terminal: RecipeTerminal, session: Session, item: Ter
       if (session.status === 'running' || session.status === 'cancel-requested')
         return say('request-busy', { request: item.id, active: session.active_request });
       const catalog = terminal.catalog();
-      const note = files ? await readNote(item.text, files) : untrusted('', 'workspace file');
+      const note = files ? await builtin('readNote')(item.text, files) as Untrusted<string> : untrusted('', 'workspace file');
       const recipe = await chooseRecipe(item.text, catalog, note);
       if (!catalog.some(row => row.id === recipe))
         return say('no-recipe', { text: item.text }, { revision: session.revision + 1, status: 'unsupported' });

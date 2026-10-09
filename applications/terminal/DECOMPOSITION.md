@@ -130,9 +130,9 @@ returns: Is<string, "states the status, the detail and what is unknown">
 
 - Files: `recipes.json` (the five recipes and the four limits, each limit with the reason it exists), `messages.json`
   (ten message templates with `{value}` slots, wording byte-identical to the former strings), `data.ts` (loaders that check
-  shape; `renderMessage` names the missing message or value in its error), `interpret/readNote.nl`,
-  `interpret/chooseRecipe.nl`, `explain/explain.nl`. `interpret.nl` and `explain.nl` are gone; `step` calls
-  `readNote` (when a workspace folder is given) and then `chooseRecipe`.
+  shape; `renderMessage` names the missing message or value in its error), `interpret/chooseRecipe.nl`,
+  `explain/explain.nl`. `interpret.nl` and `explain.nl` are gone; `step` calls the built-in `readNote`
+  (`builtin('readNote')`, shared with media; only when a workspace folder is given) and then `chooseRecipe`.
 - `TerminalEvent.cancel_requested` is a boolean field set by `RecipeTerminal.complete`; `detail` is now the actual result
   only (the "Cancellation was requested. Actual result:" prefix is gone) and `confirm` compares the field too. The history
   row keeps it.
@@ -151,7 +151,7 @@ returns: Is<string, "states the status, the detail and what is unknown">
 Decided on 2026-10-09 when the owner delegated the review (answers kept as built):
 1. A request during a running job is still declined; queueing is not built.
 2. `timeoutMs` stays per recipe, in `recipes.json`.
-3. `readNote` stays an app copy until a built-in reader exists.
+3. `readNote` is the shared built-in (it landed with N1), so the app keeps no copy.
 
 First-draft questions, for the record:
 

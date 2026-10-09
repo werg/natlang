@@ -132,13 +132,13 @@ test('a request that names a file is read first and the choice sees the note', a
   const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-note-'));
   writeFileSync(join(folder, 'README.md'), 'Run the status recipe.');
   const terminal = freshTerminal();
-  const model = scriptedModel(opening => opening.includes('Read the file that the request') ? 'return "NOTE-FROM-README"'
+  const model = scriptedModel(opening => opening.includes('Find the supporting file that request names') ? 'return "NOTE-FROM-README"'
     : opening.includes('Choose the one recipe in catalog') ? 'return "repository-status"' : 'return ""');
   const runtime = createNatlangRuntime({ model: model.driver });
   try {
     const session = await runtime.run(() => step(terminal, emptyTerminalSession(), request('r1', 'Do what README.md says.'), openFolder(folder).root()));
     assert.equal(session.messages.at(-1), 'Started repository-status for r1.');
-    const read = model.openings.findIndex(opening => opening.includes('Read the file that the request'));
+    const read = model.openings.findIndex(opening => opening.includes('Find the supporting file that request names'));
     const choose = model.openings.findIndex(opening => opening.includes('Choose the one recipe in catalog'));
     assert.ok(read >= 0 && choose > read, 'readNote runs before chooseRecipe');
     assert.match(model.openings[choose], /untrusted data[^\n]*\n[^]*NOTE-FROM-README/, 'the note reaches the choice as quoted data');
