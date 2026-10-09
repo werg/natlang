@@ -457,6 +457,18 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       }
       // Finite iteration in constrained code.
       if (options.constrained && ts.isForOfStatement(node)) {
+        let iterated = node.expression;
+        while (ts.isParenthesizedExpression(iterated) || ts.isAsExpression(iterated) || ts.isTypeAssertionExpression(iterated) ||
+            ts.isNonNullExpression(iterated)) iterated = iterated.expression;
+        // `for (x of a.entries()/keys()/values())` iterates a snapshot-bounded view of the collection.
+        if (!node.awaitModifier && ts.isCallExpression(iterated) && iterated.arguments.length === 0 &&
+            ts.isPropertyAccessExpression(iterated.expression) && ['entries', 'keys', 'values'].includes(iterated.expression.name.text)) {
+          const receiver = ts.visitNode(iterated.expression.expression, visit) as ts.Expression;
+          return f.updateForOfStatement(node, node.awaitModifier, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
+            f.createCallExpression(runtime('finiteArrayIterator'), undefined,
+              [receiver, f.createStringLiteral(iterated.expression.name.text), f.createStringLiteral(loopLabel(node.expression))]),
+            ts.visitNode(node.statement, visit) as ts.Statement);
+        }
         const expression = ts.visitNode(node.expression, visit) as ts.Expression;
         return f.updateForOfStatement(node, node.awaitModifier, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
           f.createCallExpression(runtime(node.awaitModifier ? 'finiteAsync' : 'finite'), undefined,

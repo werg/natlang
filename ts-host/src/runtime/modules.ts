@@ -8,6 +8,7 @@ import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
 import { natlangTransformer } from '../compiler/lower.js';
+import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
 import { NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
 import * as lowered from './lowered.js';
@@ -40,6 +41,8 @@ function moduleRealm(): EvalEnvironment {
   return realm ??= defaultRealm();
 }
 
+// A loop over a value whose type decides whether it is a bounded collection needs the checker.
+const FOR_OF = /\bfor\s*(?:await\s*)?\([^;)]*\bof\b/;
 const NL_TAG = /\bnl\s*(?:<[^`]*>)?\s*`/;
 const FOLDER = '/__natlang__/folder';
 
@@ -70,7 +73,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   let checker: ts.TypeChecker | undefined;
   const path = `${FOLDER}/${record.name}.ts`;
   const softTypes = JSON.stringify(record.types);
-  if (NL_TAG.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`)) {
+  if (NL_TAG.test(record.text) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`)) {
     const files: Record<string, string> = { [path]: record.text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -100,6 +103,9 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     const file = program.getSourceFile(path)!;
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
       sourceRevision: record.revision, authored: true });
+    // Iteration sources are classified by type, so a loop the run would refuse is refused when the project is checked.
+    const iteration = checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: () => record.source });
+    if (iteration.length) throw new NatlangSourceError(record.source, iteration.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
     const errors = analysis.diagnostics.filter(item => item.severity === 'error');
     if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
     readouts = new Set(analysis.readouts.filter(item => !item.kind).map(item => `${item.start}:${item.end}`));
