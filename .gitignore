@@ -20,6 +20,8 @@ vendor/
 !applications/pi/vendor/
 data/
 !ts-host/studio/programs/data/
+# pi's eval task repositories are fixtures: their data/ directories are part of the task.
+!applications/pi/tasks/*/repo/data/
 *.tgz
 .natlang/
 *.d.nl.ts
