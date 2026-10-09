@@ -26,6 +26,19 @@ def read_source(path: Path):
     return rows
 
 
+def token_counts(rows):
+    """Token totals per split: whole documents and the supervised assistant suffix (from supervised_suffix_start)."""
+    out = {}
+    for row in rows:
+        split = out.setdefault(row["split"], {"documents": 0, "tokens": 0, "suffix_tokens": 0, "max_document_tokens": 0})
+        n = len(row["token_ids"])
+        split["documents"] += 1
+        split["tokens"] += n
+        split["suffix_tokens"] += n - row["supervised_suffix_start"]
+        split["max_document_tokens"] = max(split["max_document_tokens"], n)
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--records", required=True, type=Path)
@@ -36,8 +49,13 @@ def main():
     if args.out.exists():
         parser.error(f"refusing to overwrite existing output directory: {args.out}")
     records, pieces = read_source(args.records), [json.loads(line) for line in args.pieces.read_text(encoding="utf-8").splitlines() if line]
-    from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    # The pinned-provenance loader: exact tokenizer class and, for TokenizersBackend snapshots, the exact serialized
+    # backend (the same guard the delta builder uses); gold_text_rows then binds the renderer fingerprint.
+    from build_neuralese_gold_text_delta import load_pinned_tokenizer
+    tokenizer_path = Path(args.tokenizer)
+    if not (tokenizer_path / "tokenizer.json").is_file():
+        parser.error("--tokenizer must be a local tokenizer snapshot directory (pinned provenance)")
+    tokenizer = load_pinned_tokenizer(tokenizer_path)
     rows, receipt, omissions, provenance = gold_text_rows(records, pieces, tokenizer=tokenizer)
     args.out.mkdir(parents=True)
     data = "".join(canonical(row) + "\n" for row in rows).encode("utf-8")
@@ -54,11 +72,16 @@ def main():
         "source_files": {args.records.name: sha(args.records.read_bytes()),
                          args.pieces.name: sha(args.pieces.read_bytes())},
         "text_jsonl_sha256": sha(data),
+        "tokenizer": {"path": str(tokenizer_path.resolve()), "class": type(tokenizer).__name__,
+                      "files": {name: sha((tokenizer_path / name).read_bytes()) for name in (
+                          "tokenizer.json", "tokenizer_config.json", "chat_template.jinja",
+                          "special_tokens_map.json") if (tokenizer_path / name).is_file()}},
+        "tokens": token_counts(rows),
     })
     (args.out / "receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({key: receipt[key] for key in (
         "documents", "train_documents", "test_documents", "omitted_records",
-        "excluded_train_exact_held_complete_documents", "text_jsonl_sha256")}, indent=2))
+        "excluded_train_exact_held_complete_documents", "text_jsonl_sha256", "tokens")}, indent=2))
 
 
 if __name__ == "__main__":

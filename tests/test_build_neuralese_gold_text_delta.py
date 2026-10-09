@@ -631,6 +631,32 @@ def test_pinned_tokenizer_class_and_backend_are_checked_after_auto_load_success(
         raise AssertionError("matching wrapper class must not bypass a changed serialized backend")
 
 
+def test_pretrained_fast_alias_is_held_to_the_exact_serialized_backend(tmp_path, monkeypatch):
+    """Transformers 5.x aliases PreTrainedTokenizerFast to TokenizersBackend (Mellum's snapshot declares the former)."""
+    from tokenizers import Tokenizer, models
+    from transformers import AutoTokenizer, PreTrainedTokenizerFast
+
+    backend = Tokenizer(models.WordLevel({"[UNK]": 0, "hello": 1}, unk_token="[UNK]"))
+    loaded = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]")
+    loaded.save_pretrained(tmp_path)
+    config_path = tmp_path / "tokenizer_config.json"
+    config = json.loads(config_path.read_text())
+    config["tokenizer_class"] = "PreTrainedTokenizerFast"
+    config_path.write_text(json.dumps(config))
+    assert MODULE.load_pinned_tokenizer(tmp_path)("hello", add_special_tokens=False)["input_ids"] == [1]
+
+    if PreTrainedTokenizerFast.__name__ == "TokenizersBackend":
+        monkeypatch.setattr(AutoTokenizer, "from_pretrained", staticmethod(lambda *_args, **_kwargs: loaded))
+        other_backend = Tokenizer(models.WordLevel({"[UNK]": 0, "different": 1}, unk_token="[UNK]"))
+        other_backend.save(str(tmp_path / "tokenizer.json"))
+        try:
+            MODULE.load_pinned_tokenizer(tmp_path)
+        except ValueError as exc:
+            assert "differs from pinned tokenizer.json" in str(exc)
+        else:
+            raise AssertionError("the alias must not bypass a changed serialized backend")
+
+
 def test_root_integration_adoption_rejects_mismatched_artifact(tmp_path):
     adoption, artifacts = _integration_adoption_fixture(tmp_path)
     artifacts["cumulative_text"]["sha256"] = "0" * 64

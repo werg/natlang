@@ -51,6 +51,18 @@ def load_pinned_tokenizer(tokenizer_path):
     config = json.loads(config_path.read_text()) if config_path.is_file() else {}
     expected_class = config.get("tokenizer_class")
 
+    def verify_backend(tokenizer, name):
+        backend = getattr(tokenizer, "backend_tokenizer", None)
+        if backend is None or not callable(getattr(backend, "to_str", None)) or not backend_path.is_file():
+            raise ValueError(f"{name} requires its exact serialized tokenizer.json backend")
+        try:
+            loaded_backend = json.loads(backend.to_str())
+            pinned_backend = json.loads(backend_path.read_text())
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"{name} serialized backend is invalid") from exc
+        if loaded_backend != pinned_backend:
+            raise ValueError("loaded tokenizer backend differs from pinned tokenizer.json")
+
     def verify(tokenizer):
         actual_class = type(tokenizer).__name__
         if expected_class == "TokenizersBackend":
@@ -59,16 +71,13 @@ def load_pinned_tokenizer(tokenizer_path):
             # In both cases the loaded backend must be exactly the pinned JSON.
             if actual_class not in {"TokenizersBackend", "PreTrainedTokenizerFast"}:
                 raise ValueError(f"tokenizer class mismatch: expected TokenizersBackend, got {actual_class}")
-            backend = getattr(tokenizer, "backend_tokenizer", None)
-            if backend is None or not callable(getattr(backend, "to_str", None)) or not backend_path.is_file():
-                raise ValueError("TokenizersBackend requires its exact serialized tokenizer.json backend")
-            try:
-                loaded_backend = json.loads(backend.to_str())
-                pinned_backend = json.loads(backend_path.read_text())
-            except (TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise ValueError("TokenizersBackend serialized backend is invalid") from exc
-            if loaded_backend != pinned_backend:
-                raise ValueError("loaded tokenizer backend differs from pinned tokenizer.json")
+            verify_backend(tokenizer, "TokenizersBackend")
+        elif (expected_class == "PreTrainedTokenizerFast" and actual_class == "TokenizersBackend"
+              and PreTrainedTokenizerFast.__name__ == "TokenizersBackend"):
+            # Transformers 5.x defines PreTrainedTokenizerFast as an alias of
+            # TokenizersBackend, so the loaded class carries the alias target's
+            # name. The same class, held to the exact pinned serialized backend.
+            verify_backend(tokenizer, "PreTrainedTokenizerFast")
         elif expected_class and actual_class != expected_class:
             raise ValueError(f"tokenizer class mismatch: config declares {expected_class}, loader returned {actual_class}")
         return tokenizer
