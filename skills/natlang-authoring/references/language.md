@@ -88,7 +88,7 @@ export default async function prepare(goal: string): Promise<string[]> {
 
 ## Types
 
-Use ordinary TypeScript types in signatures: `string`, `number`, `boolean`, `null`, records, arrays, `Record<string, T>`, literal unions, optional fields and parameters (`?`), aliases, and `Folder`. Values are checked structurally at call boundaries and at completion; a partial record can be built incrementally but completion requires the declared type. A well-typed result can still be semantically wrong.
+Use ordinary TypeScript types in signatures: `string`, `number`, `boolean`, `null`, records, arrays, `Record<string, T>`, literal unions, optional fields and parameters (`?`), aliases, and `Folder`. Values are checked structurally at call boundaries and at completion; a partial record can be built incrementally but completion requires the declared type. In eval, reading a field that a declared type does not have is rejected before the eval runs (`undeclared-field`), with the type's fields named, rather than reading as `undefined`. This applies to call inputs, service results and the eval's own declared types. Optional fields and a field one member of a union declares (`if (r.error)`) read as usual. A precise service declaration therefore catches the executor's wrong guesses about result shapes. A well-typed result can still be semantically wrong.
 
 Live values (functions, class instances, DOM nodes, native handles) are passed by reference and shown to the model as live bindings; a host contract can name them with `Live<"T", "tag" | "class" | "shape" | "function" | "any", "detail">`.
 

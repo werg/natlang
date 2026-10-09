@@ -58,6 +58,8 @@ export type ScopeCompileOptions = {
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
   analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[];
     readouts?: NeuraleseReadout[]; rebinds?: InlineRebindSite[] };
+  /** Reads of fields a value's declared type does not have (snippet-relative spans), checked in every snippet. */
+  checkFields?: (source: string) => NatlangDiagnostic[];
   /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
   neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
@@ -754,6 +756,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     rebinds = analysis.rebinds ?? [];
     for (const item of analysis.diagnostics) diagnostics.push(toRaw(item));
   }
+  if (options.checkFields) for (const item of options.checkFields(analysisSource)) diagnostics.push(toRaw(item));
 
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
   type Edit = { start: number; end: number; text: string; composed?: boolean };

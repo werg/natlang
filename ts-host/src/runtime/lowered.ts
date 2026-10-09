@@ -450,6 +450,9 @@ export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
       } };
     } };
   }
+  // str.matchAll(re): the string is fixed and each match advances past the last, so the iterator is finite. It is a
+  // native iterator that restricted code cannot construct or extend.
+  if (tag === '[object RegExp String Iterator]') return source as unknown as Iterable<T>;
   throw new TypeError(notIterable(source, label));
 }
 
@@ -465,7 +468,12 @@ export function finiteArrayIterator<T>(source: unknown, method: 'entries' | 'key
   // Match the source expression's ordinary property lookup and call behavior, including getter effects and native
   // TypeErrors for a non-callable property. In particular, do not inspect the method twice.
   const iterator = Reflect.apply(callable as (...args: unknown[]) => unknown, source, []) as Iterator<T>;
-  if (!Array.isArray(source)) return finite(iterator as unknown as Iterable<T>, label);
+  if (!Array.isArray(source)) {
+    // A Map or Set can grow while its live iterator runs; the loop takes a snapshot of its entries, keys or values.
+    const tag = Object.prototype.toString.call(source);
+    if (tag === '[object Map]' || tag === '[object Set]') return Array.from(iterator as unknown as Iterable<T>);
+    return finite(iterator as unknown as Iterable<T>, label);
+  }
 
   // Eval scopes can create arrays in another realm, so compare against that array's own prototype method instead
   // of this module's Array.prototype. A standard intrinsic method is still required; instance/subclass overrides

@@ -151,7 +151,12 @@ when it starts; the bound must be a finite number and the counter must advance
 toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
 defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
 class extending `Iterator`) are rejected; `for...of` is guarded at run time
-against iterating a growing collection. `for await` consumes the async iterables
+against iterating a growing collection. `for...of` takes an array, string, Map or
+Set, and also `entries()`, `keys()` and `values()` of an array, Map or Set and
+`string.matchAll(regex)`: each is a finite view of a collection that is fixed for
+the loop (an array that grows during the loop throws; a Map or Set view iterates
+a snapshot; `matchAll` advances through a fixed string). `natlang check` reports a
+`for...of` source that would be refused by the same rules, with its location. `for await` consumes the async iterables
 the host provides (a `fetch` response body, a service's stream, a package's,
 an `iterateOn(...).streamUntil(...)` stream), and arrays of promises; it is paced
 by whatever produces them. `setInterval` is not available: repeated

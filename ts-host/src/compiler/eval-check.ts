@@ -7,7 +7,7 @@ import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
 import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
-import { ITERATE_ON_SIGNATURE } from './intrinsics.js';
+import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES } from './intrinsics.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -22,6 +22,8 @@ export type EvalScopeDeclarations = {
   captures: { name: string; type: string; mutable: boolean }[];
   imports: EvalImport[];
   services?: string[];
+  /** Declarations of host services by name (TypeScript module text), so their methods and results are typed. */
+  serviceDeclarations?: Record<string, string>;
   /** The call's return type: the type of the snippet's top-level return. */
   returns?: string;
   opaque?: string[];
@@ -61,9 +63,12 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   for (const local of scope.locals) lines.push(`declare ${local.mutable ? 'let' : 'const'} ${local.name}: ${typeScriptText(local.type, known)};`);
   for (const capture of scope.captures) lines.push(`declare ${capture.mutable ? 'let' : 'const'} ${capture.name}: ${typeScriptText(capture.type, known)};`);
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
-  for (const name of scope.services ?? []) lines.push(name === 'neuralese' ?
-    'declare const neuralese: Readonly<{ read<T>(value: Neuralese<T>): Promise<T> }>;':
-    `declare const ${name}: any;`);
+  for (const name of scope.services ?? []) {
+    const declaration = scope.serviceDeclarations?.[name];
+    if (name === 'neuralese') lines.push('declare const neuralese: Readonly<{ read<T>(value: Neuralese<T>): Promise<T> }>;');
+    else if (declaration !== undefined) lines.push(serviceNamespace(name, declaration));
+    else lines.push(`declare const ${name}: any;`);
+  }
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
@@ -75,6 +80,17 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   // ...and a model-written soft function body, the whole template of `nl.with({ … })`...``, as this one.
   lines.push(`declare namespace ${NEURALESE_LITERAL_INTRINSIC} { function body(id: string): NeuraleseBody; }`);
   return lines.join('\n') + '\n';
+}
+
+/**
+ * A service's declaration as the runtime holds it (`declare namespace name { … }` or `declare const name: …`), or
+ * module text, wrapped as an ambient namespace. Imports are dropped: what they name resolves in the scope file or stays
+ * unresolved, which the checker treats as unknown.
+ */
+function serviceNamespace(name: string, declaration: string): string {
+  const body = declaration.split('\n').filter(line => !/^\s*import\s/.test(line)).join('\n');
+  if (/^\s*declare (?:namespace|const) /.test(body)) return body.trim();
+  return `declare namespace ${name} {\n${body.replace(/^(\s*export\s+)declare\s+/gm, '$1')}\n}`;
 }
 
 /** Cheap test for whether a snippet needs the checked pass. */
@@ -150,6 +166,72 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
       ...(item.callback ? { callback: { start: item.callback.start - offset, end: item.callback.end - offset } } : {}) })),
     rebinds: rebinds.map(site => ({ ...site, start: site.start - offset, end: site.end - offset,
       templateStart: site.templateStart - offset, templateEnd: site.templateEnd - offset })) };
+}
+
+/**
+ * Reads of a field the value's declared type does not have (`entry.content` where `EntryRecord` has no `content`).
+ * Such a read is `undefined` at run time, which code then takes for "none" and acts on. Only declared types count: a
+ * named type of the program, a service or the eval, or the declared type of a call input or service. A local whose
+ * type the runtime inferred from its value may lack optional fields its source had, so its anonymous type is not
+ * held against a read, nor is a field one member of a union declares. Writes are not checked.
+ */
+export function checkEvalFields(source: string, scope: EvalScopeDeclarations): NatlangDiagnostic[] {
+  const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
+  const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` }, EVAL_COMPILER_OPTIONS);
+  const snippet = program.getSourceFile(SNIPPET_FILE)!, scopeFile = program.getSourceFile(SCOPE_FILE)!;
+  const checker = program.getTypeChecker();
+  const inferred = new Set([...scope.locals, ...scope.captures].map(item => item.name));
+  const declared = (declaration: ts.Declaration): boolean => {
+    const file = declaration.getSourceFile();
+    if (file === snippet) return ts.isTypeAliasDeclaration(declaration) || ts.isInterfaceDeclaration(declaration) ||
+      !!ts.findAncestor(declaration, node => ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node));
+    if (file !== scopeFile) return false;
+    const variable = ts.findAncestor(declaration, ts.isVariableDeclaration);
+    return !(variable && ts.isIdentifier(variable.name) && inferred.has(variable.name.text));
+  };
+  const declaredType = (type: ts.Type): boolean => {
+    const symbol = type.aliasSymbol ?? type.getSymbol();
+    return !!symbol?.declarations?.length && symbol.declarations.every(declared);
+  };
+  const found: NatlangDiagnostic[] = [];
+  for (const diagnostic of program.getSemanticDiagnostics(snippet)) {
+    if ((diagnostic.code !== 2339 && diagnostic.code !== 2551) || diagnostic.start === undefined) continue;
+    const name = findNode(snippet, diagnostic.start);
+    const access = name?.parent;
+    if (!name || !access || !ts.isPropertyAccessExpression(access) || access.name !== name) continue;
+    if (ts.isBinaryExpression(access.parent) && access.parent.left === access &&
+        access.parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && access.parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment) continue;
+    const receiver = checker.getNonNullableType(checker.getTypeAtLocation(access.expression));
+    // A callable has the runtime's intrinsic members (iterateOn, in, with) whatever its declared type lists.
+    if (RESERVED_CALLABLE_PROPERTIES.has(name.text) && receiver.getCallSignatures().length) continue;
+    const members = receiver.isUnion() ? receiver.types : [receiver];
+    if (!members.length || !members.every(declaredType)) continue;
+    // A field one member of a union declares is how code tells the members apart (`if (result.error)`): reading it is
+    // the test, as at run time, where the guard lets it through.
+    if (members.some(member => checker.getPropertyOfType(member, name.text))) continue;
+    const fields = members.map(member => {
+      const names = checker.getPropertiesOfType(member).map(property => property.name);
+      return `${checker.typeToString(member)} has ${names.length ? names.join(', ') : 'no fields'}`;
+    }).join('; ');
+    const start = access.name.getStart(snippet), end = access.name.getEnd();
+    const location = snippet.getLineAndCharacterOfPosition(start);
+    found.push({ code: 'undeclared-field', severity: 'error', file: 'eval', start: start - prefix.length, end: end - prefix.length,
+      line: Math.max(1, location.line), column: location.character + 1,
+      message: `${access.expression.getText(snippet)} has no field ${name.text}: ${fields}. Read the field that holds what you need.` });
+  }
+  return found;
+}
+
+/** The innermost identifier at `position`. */
+function findNode(file: ts.SourceFile, position: number): ts.Identifier | undefined {
+  let found: ts.Identifier | undefined;
+  const visit = (node: ts.Node): void => {
+    if (position < node.getStart(file) || position >= node.getEnd()) return;
+    if (ts.isIdentifier(node)) found = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
 }
 
 function isSnippetTopLevel(declaration: ts.Declaration): boolean {

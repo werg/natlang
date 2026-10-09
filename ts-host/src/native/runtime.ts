@@ -46,6 +46,8 @@ export type NativeRuntimeHooks = {
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
     neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[] };
+  /** Reads of fields a value's declared type does not have, checked in every eval. */
+  checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -1698,8 +1700,15 @@ export class NativeSession {
     const directCall = /^(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
     const directReturns = directCall ? returnTypeOf(this.lam.codebase, directCall[1]!) : undefined;
     if (directReturns) return parseType(directReturns);
-    const mappedCall = /^await\s+Promise\.all\([\s\S]*\.map\([\s\S]*?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
-    const mappedReturns = mappedCall ? returnTypeOf(this.lam.codebase, mappedCall[1]!) : undefined;
+    // Only a map callback that is the call itself (`x => f(x)`, optionally async/await) gives the list the callee's
+    // return type; a callback that wraps the call in an object or expression has a type this cannot see.
+    const mappedCall = /^await\s+Promise\.all\(\s*[\s\S]*?\.map\(\s*(?:async\s+)?(?:\([\w$,\s]*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
+    let mappedReturns: string | undefined;
+    if (mappedCall) {
+      let depth = 1, at = mappedCall[0].length;
+      for (; at < source.length && depth > 0; at++) depth += source[at] === '(' ? 1 : source[at] === ')' ? -1 : 0;
+      if (depth === 0 && /^\s*\)\s*\)\s*$/.test(source.slice(at))) mappedReturns = returnTypeOf(this.lam.codebase, mappedCall[1]!);
+    }
     if (mappedReturns) return parseType(`(${mappedReturns})[]`);
     const lastCollectionMethod = [...source.matchAll(/\.(find|filter|slice|map|flatMap)\s*\(/g)].at(-1)?.[1];
     const collection = ['find', 'filter', 'slice'].includes(lastCollectionMethod ?? '') ?
@@ -1817,6 +1826,7 @@ export class NativeSession {
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
+      ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source) } : {}),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
     // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
     if (compiled.ok) {

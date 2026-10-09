@@ -1,7 +1,7 @@
 /** What the invocation kernel gives each interpreter run: callables, inline lambdas, iteration, guards, analysis. */
 import type { NativeRuntimeHooks, NativeSession } from '../native/runtime.js';
 import { formatType } from '../native/types.js';
-import { analyzeEvalSnippet, type EvalImport, type EvalScopeDeclarations } from '../compiler/eval-check.js';
+import { analyzeEvalSnippet, checkEvalFields, type EvalImport, type EvalScopeDeclarations } from '../compiler/eval-check.js';
 import { guard } from './context.js';
 import { callableTree } from './callable.js';
 import { finite, finiteArrayIterator, finiteAsync, inline, type CaptureAccessors } from './lowered.js';
@@ -21,6 +21,7 @@ export const kernelHooks: NativeRuntimeHooks = {
   finiteAsync: (source, label) => finiteAsync(source, label),
   guard: (id, fn, args) => guard(id, fn, args),
   analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),
+  checkFields: (session, source) => checkEvalFields(source, evalDeclarations(session)),
 };
 
 function importOf(name: string, record: ItemRecord): EvalImport {
@@ -48,13 +49,20 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
   const lam = session.lam;
   const codebase = lam.codebase as Record<string, ItemRecord>;
   const types: Record<string, string> = { ...lam.typesSrc, ...session.analysisTypeAliases() };
+  // Items of the folder may each define a type of the same name differently (two modules' own `Member`). The checker
+  // has one namespace, so such a name cannot stand for either definition: it is declared as `any`.
+  const own = new Set(Object.keys(types)), conflicting = new Set<string>();
   const collect = (level: Record<string, ItemRecord>) => {
     for (const record of Object.values(level)) {
-      if ('types' in record) for (const [name, text] of Object.entries(record.types)) types[name] ??= text;
+      if ('types' in record) for (const [name, text] of Object.entries(record.types)) {
+        if (!Object.hasOwn(types, name)) types[name] = text;
+        else if (!own.has(name) && types[name] !== text) conflicting.add(name);
+      }
       collect(record.codebase);
     }
   };
   collect(codebase);
+  for (const name of conflicting) types[name] = 'any';
   const inputs = lam.type.kind === 'lambda' ?
     lam.type.params.fields.map(field => ({ name: field.name, type: formatType(field.type) })) : [];
   // A directory reducer's transaction injects a real Folder capability. Declaring
@@ -70,6 +78,7 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     captures: Object.values(lam.captures ?? {}).map(cell => ({ name: cell.name, type: cell.type, mutable: cell.mutable })),
     imports: Object.entries(codebase).map(([name, record]) => importOf(name, record)),
     services: Object.keys(session.runtime.services),
+    serviceDeclarations: session.runtime.declarations,
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
     opaque: [] };
 }
