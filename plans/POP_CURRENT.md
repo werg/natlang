@@ -44,16 +44,17 @@ updates: the old mapped metric was named `shallow`, the shared handler names it
 every other schedule setting must match. Eight focused tests and a CPU replay
 of the real source checkpoint preserve31 observations/history and RNG state.
 
-AR fixup v2 is running as `luna-ar-feedback-best23936-v2`, recipe
+AR fixup v2 completed normally at step24960 as `luna-ar-feedback-best23936-v2`, recipe
 `training/neuralese/recipes/luna-ar-feedback-fixup-4880-best23936-20261009-v2.json`
 (commit `6dcaac85`, SHA `e1a50f2941c121658ac5c0daf4fd57caaf193372426c594495860bec98b104bd`).
-It pins shared code `cf582398` and the same Docker image. Live logs confirm all
-four optimizer groups and31 schedule observations restored. The latest reviewed
-evaluation is step24320; its alignment gate remains false. Short/medium/long
-consumer agreement is .894/.549/.278. The single projected AR control first
-diverges at target144 (crisp control remains exact for256 tokens), after being
-exact at24192. This fluctuating control is not broad qualification. Training
-has progressed beyond24320; inspect live logs for the current step.
+It pins shared code `cf582398` and the same Docker image. Logs confirm all
+four optimizer groups and31 schedule observations restored. Final alignment
+qualification is false; short/medium/long consumer agreement is
+.783/.410/.307. The fixed projected AR control first diverges at target4
+(crisp control remains exact for256 tokens). Final checkpoint and heads both
+report step24960 with `heads_current: true`. Do not extend the failed run blindly:
+use the matched diagnostics and investigate targets after generated-history
+divergence before the next shared objective decision.
 Driver/launch receipts are under
 `/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v2/`.
 Failed v1 launch evidence remains preserved under its original path.
@@ -61,14 +62,14 @@ This binding uses16K total context,256 generated target positions, unchanged
 gold targets,1024 additional updates, fresh .99/.05/.025 gates and two
 consecutive passes. No transport or recurrence qualification is inherited.
 
-### Deferred matched AR evaluation
+### Matched AR evaluation
 
-The six-window held-test crisp-versus-projected diagnostic is prepared but not
-run. Its source pair is the frozen step23936 checkpoint/heads; the optimizer
+The six-window held-test crisp-versus-projected diagnostic is running as
+`luna-ar-matched-source23936-v2`. Its source pair is the frozen step23936 checkpoint/heads; the optimizer
 checkpoint is hash-checked only, while inference loads the paired heads export.
 Selection and source pins are in
-`runs/neuralese-ar-matched-multistratum-23936-20261009-v1/window-selection-v4.json`
-(SHA `cdf3f550e7fcb6172ac57085bb17d77f8366767376aeb826c7c23e19bc908cb7`)
+`runs/neuralese-ar-matched-multistratum-23936-20261009-v1/window-selection-v5.json`
+(SHA `9b186dbf99d326890cb1c9e694144a8b077425b3567fb6f96d4745fd6586642e`)
 and the frozen-code-bound `source-recipe-v5.json` (SHA
 `a3735ddfa6b825b0e85e886a30f7973e48b66d7e9bedff8b73247d1762f3b6ad`). The
 118-file Python package snapshot is under
@@ -78,11 +79,12 @@ and matches the reviewed source-recipe inventory exactly. Use this frozen
 package through `PYTHONPATH`, not mutable checkout code. The pinned image is
 `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
 
-Do not launch while AR training is active. The prior CPU attempt remains a
-preserved failure with no result; CPU inference uses fp32 and its estimated
-model-plus-heads peak exceeds the preferred 2.5 GiB limit. After the GPU owner
-confirms training has ended, recheck host/GPU headroom, run the prepared CUDA
-command in a fresh external output directory, and keep the report diagnostic
+The first GPU launch failed before model load because the window manifest still
+pinned source recipe v4 after its code-root relocation to v5. The new v5 window
+manifest changes only the recipe pin and ID; its six windows remain identical.
+Both launch receipts and failure logs are preserved. The prior CPU attempt also
+remains a preserved failure with no result; inference now runs on the GPU using
+the heads-only loader and never deserializes optimizer state. Keep the report diagnostic
 only. It grants no foundation, runtime, or task qualification.
 
 The DGX owner direction is to phase the raw-token-embedding projection anchor
