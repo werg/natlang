@@ -261,7 +261,7 @@ def run(args):
         time.sleep(30)
     host_max = args.host_max_gb or args.budget_gb
     command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
-               '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}',
+               '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}', '-p', f'OOMPolicy={args.oom_policy}',
                '--working-directory', os.path.abspath(args.workdir),
                '-E', f'NATLANG_CUDA_MEMORY_GB={args.budget_gb}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     for env in args.env:
@@ -384,6 +384,9 @@ def main():
     r.add_argument('--unit', required=True)
     r.add_argument('--budget-gb', type=float, required=True, help='host plus CUDA memory the job may use')
     r.add_argument('--host-max-gb', type=float, default=None, help='MemoryMax for host memory (default: the budget)')
+    r.add_argument('--oom-policy', choices=['stop', 'continue', 'kill'], default='stop',
+                   help='when the kernel kills a process of the unit for memory: stop the unit (default), or continue '
+                        '(a runner of many child processes, such as a test runner, records the kill and goes on)')
     r.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
