@@ -11,6 +11,7 @@ const repository = resolve(scriptDir, '..');
 const workspaceRuns = resolve(repository, 'runs');
 const bootstrap = resolve(scriptDir, 'opencode-cli-loopback-bootstrap.mjs');
 const credentialFile = '/home/werg/.config/natlang/opencode.env';
+let launchPhase = 'argument-validation';
 
 async function readConfiguredApiKey() {
   const metadata = await stat(credentialFile).catch(() => null);
@@ -84,16 +85,41 @@ export function buildBubblewrapArgs({ sdkModule, clientBin, output, nodeModules,
 async function main() {
   const options = parse(process.argv.slice(2));
   const sdkModule = resolve(options['--sdk-module']), clientBin = resolve(options['--client-bin']), output = resolve(options['--out']);
+  launchPhase = 'output-path-validation';
   if (!isWithin(workspaceRuns, output) || output === workspaceRuns) throw new Error('--out must be a dedicated directory under runs/');
+  launchPhase = 'official-client-validation';
   await access(sdkModule, fsConstants.R_OK); await access(clientBin, fsConstants.R_OK | fsConstants.X_OK);
   if (!(await stat(sdkModule)).isFile() || !(await stat(clientBin)).isFile()) throw new Error('SDK module and official CLI must be files');
   const nodeModules = await findNodeModulesRoot(await realpath(sdkModule));
   if (nodeModules !== await findNodeModulesRoot(await realpath(clientBin))) throw new Error('SDK and CLI must use the same pinned node_modules tree');
+  launchPhase = 'output-parent-validation';
+  const runsReal = await realpath(workspaceRuns);
+  let existingParent = dirname(output);
+  for (;;) {
+    try { await access(existingParent); break; }
+    catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      const parent = dirname(existingParent);
+      if (parent === existingParent) throw error;
+      existingParent = parent;
+    }
+  }
+  if (!isWithin(runsReal, await realpath(existingParent)))
+    throw new Error('--out parent resolves outside runs/');
+  launchPhase = 'output-parent-creation';
+  await mkdir(dirname(output), { recursive: true, mode: 0o700 });
+  if (!isWithin(runsReal, await realpath(dirname(output))))
+    throw new Error('--out parent resolves outside runs/');
+  launchPhase = 'fresh-output-leaf-creation';
   await mkdir(output, { recursive: false, mode: 0o700 });
+  launchPhase = 'credential-validation';
+  const apiKey = await readConfiguredApiKey();
   const forwarded = Object.fromEntries(['--model', '--variant', '--max-request-ms', '--tool-surface'].filter(key => key in options).map(key => [key, options[key]]));
+  launchPhase = 'bubblewrap-argument-build';
   const args = buildBubblewrapArgs({ sdkModule, clientBin, output, nodeModules, forwardedOptions: forwarded });
+  launchPhase = 'bubblewrap-spawn';
   const child = spawn('/usr/bin/bwrap', args, { env: { PATH: '/usr/bin:/bin', HOME: output, TMPDIR: '/tmp',
-    LANG: 'C.UTF-8', OPENCODE_API_KEY: await readConfiguredApiKey() }, stdio: 'inherit' });
+    LANG: 'C.UTF-8', OPENCODE_API_KEY: apiKey }, stdio: 'inherit' });
   let shutdownRequested = false;
   const forward = signal => {
     if (shutdownRequested || child.exitCode !== null) return;
@@ -111,4 +137,8 @@ async function main() {
   child.once('exit', (code, signal) => { process.removeListener('SIGINT', forward); process.removeListener('SIGTERM', forward); process.exitCode = code ?? (signal ? 1 : 0); });
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
-  main().catch(error => { process.stderr.write(`CLI bwrap launch refused (${error?.name ?? 'Error'}).\n`); process.exitCode = 1; });
+  main().catch(error => {
+    const code = typeof error?.code === 'string' ? `/${error.code}` : '';
+    process.stderr.write(`CLI bwrap launch refused at ${launchPhase} (${error?.name ?? 'Error'}${code}).\n`);
+    process.exitCode = 1;
+  });
