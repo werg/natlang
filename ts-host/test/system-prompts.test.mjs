@@ -77,37 +77,40 @@ test('withSystemPrompts scopes soft pieces over the runtime bank, nested scopes 
   assert.deepEqual(ids(), [base.id], 'the scope ends with its function');
 });
 
-test('a large argument is listed as its digest; the variable keeps the value; small arguments stay literals', async () => {
+test('a large argument is listed as its view; the variable keeps the value; small arguments stay literals', async () => {
   const { store, port } = standIn();
-  const digestBlock = await port.write('a digest');
+  const viewBlock = await port.write('a view');
   const sites = [];
-  const digest = async site => { sites.push(site); return neuraleseRef('Neuralese<Digest>', digestBlock.id); };
+  const view = async site => { sites.push(site); return neuraleseRef('Neuralese<string>', viewBlock.id); };
   const judge = defineNatlang('---\nargs: { packet: unknown, note: string }\nreturns: boolean\n---\nIs line 2 an add-on fee?\n');
   const packet = { lines: Array.from({ length: 200 }, (_, i) => ({ id: `L${i}`, text: 'x'.repeat(40) })) };
   const seen = [];
   const driver = neuraleseDriver(({ messages }) => { seen.push(messages); return { calls: [['return_result', { status: 'success', value: true }]] }; });
-  const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port, digest } });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port, view } });
   assert.equal(await runtime.run(() => judge(packet, 'short')), true);
-  assert.equal(sites.length, 1, 'only the large argument is digested');
-  assert.equal(sites[0].name, 'packet');
-  assert.equal(JSON.parse(sites[0].value).lines.length, 200, 'the digest is written from the full value');
-  assert.match(sites[0].instructions, /add-on fee/, 'the receiving call\'s instructions condition the write site');
+  assert.equal(sites.length, 1, 'only the large argument is viewed');
+  assert.equal(JSON.parse(sites[0].value).lines.length, 200, 'the view is written from the full value');
+  const { listingViewInstructions } = await import('../dist/native/prompt.js');
+  assert.equal(sites[0].instructions, listingViewInstructions('packet', 'unknown', 'Is line 2 an add-on fee?'),
+    'the view is written for the receiving call');
   const listing = seen[0].find(message => message.role === 'tool');
   const listed = parts(listing.content);
-  assert.ok(listed.some(part => part.type === 'neuralese' && part.id === digestBlock.id), 'the listing shows the digest block');
+  assert.ok(listed.some(part => part.type === 'neuralese' && part.id === viewBlock.id), 'the listing shows the view block');
   const text = listed.filter(part => part.type === 'text').map(part => part.text).join('');
-  assert.match(text, /packet holds all of it/);
+  assert.match(text, /view of the value; packet holds all of it/);
   assert.match(text, /note: string = "short"/);
   assert.doesNotMatch(text, /cut off/);
 });
 
-test('the digest instructions and listing note match the fixture the server is pinned to', async () => {
+test('view\'s body, the listing instructions and the listing note match the fixture the servers are pinned to', async () => {
   const { readFileSync } = await import('node:fs');
-  const { digestNote } = await import('../dist/native/prompt.js');
-  const { DIGEST_PROMPT } = await import('../dist/builtin/index.js');
-  const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/digest-site.json', import.meta.url), 'utf8'));
-  assert.equal(DIGEST_PROMPT, fixture.messages[0].content);
-  assert.equal(digestNote('state'), fixture.note);
+  const { listingViewInstructions, viewNote } = await import('../dist/native/prompt.js');
+  const { VIEW_PROMPT } = await import('../dist/builtin/index.js');
+  const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/view-site.json', import.meta.url), 'utf8'));
+  assert.equal(VIEW_PROMPT, fixture.messages[0].content);
+  const { name, type, instructions } = fixture.listing;
+  assert.equal(listingViewInstructions(name, type, instructions), fixture.site.instructions);
+  assert.equal(viewNote('state'), fixture.note);
 });
 
 test('iteration guidance identifies the updated step argument as the revision source', () => {

@@ -15,7 +15,7 @@ test('what the model sees for the built-in natlang functions is byte-identical t
   assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
   // Prompt-piece ids and texts, which soft-prompt substitution and the training-data converter match textually.
   assert.deepEqual(after.promptPieces.map(piece => piece.id), before.promptPieces.map(piece => piece.id));
-  for (const id of ['progress-judge', 'digest'])
+  for (const id of ['progress-judge', 'view'])
     assert.equal(after.promptPieces.find(piece => piece.id === id).text, before.promptPieces.find(piece => piece.id === id).text);
 });
 

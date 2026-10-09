@@ -1,8 +1,9 @@
 /**
  * `natlang:neuralese`, the combinator library (spec/SPEC.md, Neuralese chapter; S0 §4): `map`, `zip`, `ap`, `combine`,
- * `empty`, `split`, `splitList`, `read`, `convert`, `gloss`.
+ * `empty`, `split`, `splitList`, `read`, `convert`, `gloss`, and the query operator `ask(block, question)`, defined as
+ * `read(map(block, question))` (DECISIONS.md 2026-10-09, "one summarizer family"; its law in S0 §4.2).
  *
- * Each combinator except `empty` is a system natural-language function whose instructions are a soft body: a block
+ * Each combinator except `empty` and `ask` is a system natural-language function whose instructions are a soft body: a block
  * initialised from a text description (encoded in one pass through the port, or token embeddings on a server without
  * `encode`) and trained later like any other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
  * `loadStandardLibrary` reads its bytes). Every combinator call and readout is recorded as an execution-graph node.
@@ -148,7 +149,7 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
     return (fn(name) as unknown as (...a: unknown[]) => Promise<unknown>)(...args);
   };
   const elementType = (ref: NeuraleseRef) => /^Neuralese<(.*)>$/.exec(ref.$neuralese.type)?.[1] ?? 'unknown';
-  return {
+  const lib = {
     map: (v: NeuraleseRef, f: unknown) => call('map', [v, f]),
     zip: (a: NeuraleseRef, b: NeuraleseRef) => call('zip', [a, b]),
     ap: (f: NeuraleseRef, a: unknown) => call('ap', [f, a]),
@@ -168,7 +169,23 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
     },
     convert: (v: NeuraleseRef, dialect: string) => call('convert', [v, dialect]),
     gloss: (v: NeuraleseRef) => call('gloss', [v]) as Promise<string>,
+    /**
+     * The query operator: the answer to `question` from what `v` holds, by its definition `read(map(v, question))`:
+     * `map` writes the answer as a `Neuralese<string>` and `read` reads it out. Its law (S0 §4.2) is its target:
+     * answering from the block matches answering from the full text.
+     */
+    async ask(v: NeuraleseRef, question: string): Promise<string> {
+      if (!isNeuraleseRef(v)) throw new TypeError('ask needs a Neuralese value and a question');
+      if (typeof question !== 'string' || !question.trim()) throw new TypeError('ask needs a question (a non-empty string)');
+      record('combinator', { combinator: 'map', call_id: currentFrame()?.parentCallId ?? null }, [v, question]);
+      const map = softFunction({ type: `(v: ${v.$neuralese.type}, f: string) => Neuralese<string>`, body: library.bodies.map,
+        name: 'natlang.map', readout: 'template', adHoc: false });
+      const answer = await (map as unknown as (value: unknown, f: string) => Promise<unknown>)(v, question);
+      if (!isNeuraleseRef(answer)) throw new TypeError('ask: map did not write its answer as a Neuralese value');
+      return await lib.read(answer) as string;
+    },
   };
+  return lib;
 }
 
 /** Raised when source-level text conversion has no typed readout available in this task. */

@@ -1,6 +1,6 @@
 /**
  * What the model sees for each built-in natlang function (the progress judge, the stopping-condition note, the
- * behavior-comparison judge, the digest prompt and the game policy), captured through public entry points with a
+ * behavior-comparison judge, view's body and the game policy), captured through public entry points with a
  * recording driver. `test/fixtures/builtin-prompts.json` was generated from this file at the commit where these
  * functions were still string literals in TypeScript; builtin-programs.test.mjs asserts the bytes are unchanged.
  */
@@ -58,7 +58,7 @@ export async function renderBuiltinPrompts() {
         reference: behavior(3, [{ service: 'log', method: 'write', args: ['x'] }]), candidate: behavior(4), seed });
     out.compareBehaviors = requests;
   }
-  out.digest = promptPieces().find(piece => piece.id === 'digest').text;
+  out.view = promptPieces().find(piece => piece.id === 'view').text;
   out.gamePolicySource = GAME_POLICY_SOURCE;
   // The game policy as a model call.
   {

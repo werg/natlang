@@ -64,6 +64,8 @@ declare module 'natlang:neuralese' {
     v: Neuralese<T, D1>, to: D2): Promise<Neuralese<T, D2>>;
   /** Diagnostic text for people. Not a value form; never shown to a model as the value. */
   export function gloss(v: SoftValue<unknown, Dialect>): Promise<string>;
+  /** The query operator, defined as `read(map(v, question))`: the answer to `question` from what `v` holds. */
+  export function ask<T, D extends Dialect = DefaultDialect>(v: Neuralese<T, D>, question: string): Promise<string>;
 
   /** Marks a `let` capture of a Neuralese function literal as live (read per call, written back). */
   export function live<T>(binding: T): T;

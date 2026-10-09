@@ -148,10 +148,11 @@ export type NeuraleseRuntimeOptions = {
    */
   systemPrompts?: ReadonlyMap<string, { readonly text: string; readonly value: NeuraleseRef }>;
   /**
-   * The digest operator (neuralese/digest.ts `serverDigester`): writes a short digest of each argument whose listing
-   * would be cut off, shown in its place (DECISIONS.md 43).
+   * The Neuralese instance of the builtin `view(value, instructions?)` (neuralese/view.ts `serverViewer`): the opening
+   * listing shows a view of each argument it would cut off, written for the receiving call's instructions
+   * (prompt.ts `listingViewInstructions`), while the variable keeps the whole value.
    */
-  digest?: (site: { name: string; type: string; value: string; instructions: string }) => Promise<NeuraleseRef | undefined>;
+  view?: (site: { value: string; instructions?: string }) => Promise<NeuraleseRef | undefined>;
 };
 
 /**

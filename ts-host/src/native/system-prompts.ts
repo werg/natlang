@@ -16,7 +16,7 @@ import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neurales
 import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
   GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
   TOOLS_PROMPT } from './prompt.js';
-import { DIGEST_PROMPT } from '../builtin/index.js';
+import { VIEW_PROMPT } from '../builtin/index.js';
 import { DEFAULT_JUDGE_INSTRUCTIONS, predicatePrompt } from '../runtime/iterate.js';
 
 export const SYSTEM_PROMPT_TYPE = 'Neuralese<SystemPrompt>';
@@ -51,7 +51,7 @@ export function promptPieces(): PromptPiece[] {
     { id: 'last-turn-notice', text: LAST_TURN_NOTICE },
     { id: 'compacted-result', text: COMPACTED_RESULT },
     { id: 'progress-judge', text: DEFAULT_JUDGE_INSTRUCTIONS },
-    { id: 'digest', text: DIGEST_PROMPT },
+    { id: 'view', text: VIEW_PROMPT },
   ];
   const seen = new Set<string>();
   return pieces.filter(piece => piece.text.trim() && !seen.has(piece.text) && seen.add(piece.text));

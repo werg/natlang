@@ -155,5 +155,14 @@ export const LAST_TURN_NOTICE = '\n\n[This is your last turn in this call: call 
   'status "blocked" with what is missing, or status "failed" with why.]';
 /** The compact_history tool's result. */
 export const COMPACTED_RESULT = 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.';
-/** The listing's note after a digest: the variable holds the value itself. */
-export const digestNote = (holder: string) => `  // digest of the value; ${holder} holds all of it`;
+/** The listing's note after a view of a cut-off value: the variable holds the value itself. */
+export const viewNote = (holder: string) => `  // view of the value; ${holder} holds all of it`;
+/**
+ * The instructions of the view a call's opening listing shows for a value it would cut off: the purpose is the
+ * receiving call, which reads the variable itself for exact details (training/neuralese view.py
+ * `listing_instructions`; pinned by tests/fixtures/view-site.json).
+ */
+export const listingViewInstructions = (name: string, type: string, instructions: string) =>
+  `The view is shown in the opening listing of a call that receives the value as ${name} (${type}). The call reads ` +
+  `${name} itself for exact details, so keep the view short: what the value is, how it is organised, and what in it ` +
+  `bears on the call's instructions, so that the call knows what to look up. The call's instructions:\n${instructions}`;

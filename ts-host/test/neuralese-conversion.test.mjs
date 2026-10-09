@@ -298,7 +298,7 @@ test('instructions used by several calls become one shared soft parameter; unreg
   assert.equal(single.neuralese_conversion.sites['instructions-coverage'].converted, 1, 'a share of single-use instructions converts for coverage');
 });
 
-test('a cut-off value in the root call\'s opening listing becomes a digest site of the full value', () => {
+test('a cut-off value in the root call\'s opening listing becomes a view site of the full value', () => {
   const full = { task: 'Review the packet.', lines: Array.from({ length: 50 }, (_, i) => ({ id: `L${i}`, amount: i * 10 })) };
   const input = { id: 'r3', task: { program_ir: { semantics: { root: 'judge.nl', inputs: { state: full } } } }, messages: [
     { role: 'system', content: TOOLS_PROMPT },
@@ -308,13 +308,15 @@ test('a cut-off value in the root call\'s opening listing becomes a digest site 
   ], target: { role: 'assistant', content: 'true' } };
   const { record: out } = convertTrajectory(input);
   const parts = out.messages[3].content;
-  const digest = parts.find(p => p.type === 'digest');
-  assert.deepEqual(JSON.parse(digest.source), full);
-  assert.match(digest.preview, /cut off/);
+  const view = parts.find(p => p.type === 'view');
+  assert.deepEqual(JSON.parse(view.source), full);
+  assert.match(view.preview, /cut off/);
+  assert.match(view.name, /^view:[0-9a-f]{12}$/);
   assert.equal(parts[0].text, 'state: unknown = ');
-  assert.equal(out.neuralese_conversion.sites.digest.converted, 1);
+  assert.equal(out.neuralese_conversion.sites.view.converted, 1);
+  assert.ok(!parts.some(p => p.type === 'digest'));
   const nested = convertTrajectory({ ...input, task: undefined }).record;
-  assert.equal(nested.neuralese_conversion.sites.digest.exact['full-value-unavailable'], 1);
+  assert.equal(nested.neuralese_conversion.sites.view.exact['full-value-unavailable'], 1);
 });
 
 test('a child call\'s returned value that its caller prints becomes a write in the child and a read in the caller', () => {

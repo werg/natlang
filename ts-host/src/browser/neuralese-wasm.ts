@@ -2,7 +2,7 @@
  * The Neuralese service as WebAssembly: the llama.cpp fork's server engine (tools/neuralese/neuralese-service.cpp,
  * built by tools/neuralese/wasm/build.sh) running in the browser or in Node, answering the same protocol as the
  * reference and fork servers. The runtime reaches it through an in-process endpoint, so `neuraleseServerModelTurn`,
- * `HttpNeuraleseStore`, decision readout, encode, write and digest work unchanged.
+ * `HttpNeuraleseStore`, decision readout, encode, write and view work unchanged.
  *
  * In a browser the module runs in a Web Worker (computation is synchronous; model files are mounted from Blobs with
  * WORKERFS, without copying them into memory twice): `startBrowserNeuralese`. In Node it runs in process with the

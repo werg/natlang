@@ -5,7 +5,7 @@ import { build } from 'esbuild';
 import { browserNodeImports } from '../scripts/browser-node-imports.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const NEURALESE_NAMES = ['neuraleseServerInfo', 'checkNeuraleseReader', 'serverDigester', 'DIGEST_TYPE', 'createNeuraleseLibrary',
+const NEURALESE_NAMES = ['neuraleseServerInfo', 'checkNeuraleseReader', 'serverViewer', 'VIEW_TYPE', 'createNeuraleseLibrary',
   'loadStandardLibrary', 'buildStandardLibrary', 'COMBINATORS', 'encodeBlockBody', 'decodeBlockBody', 'supportsNeuralese',
   'textToParts', 'registerBuiltinModule', 'ModuleUnavailableError', 'startBrowserNeuralese', 'neuraleseServerModelTurn'];
 const bundle = (entry, options = {}) => build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'esm',

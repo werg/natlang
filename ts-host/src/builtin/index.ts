@@ -24,5 +24,9 @@ export function builtinBody(name: string): string {
   return match[1]!.replace(/^\n+|\n+$/g, '');
 }
 
-/** The digest operator's instructions (DECISIONS.md 43): its write site writes a short Neuralese digest of a large value. The prompt piece `digest`. */
-export const DIGEST_PROMPT = builtinBody('digest');
+/**
+ * The body of the builtin `view(value, instructions?)` (DECISIONS.md 2026-10-09, "one summarizer family"): faithful
+ * compression without instructions, what their purpose needs with them. The prompt piece `view`: the system text of
+ * view's write site, where its Neuralese instance is a template write of this body.
+ */
+export const VIEW_PROMPT = builtinBody('view');

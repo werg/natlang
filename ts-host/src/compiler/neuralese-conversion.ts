@@ -3,7 +3,7 @@
  *
  * What becomes Neuralese, and why (decision 42): a value is worth a soft form when it is reused (one encoding serves
  * many reads), when one agent produces it and another consumes it (the model writes it and the next reads it, with no
- * text in between), or when it is large and a short digest saves context. A value read once by the call that produced
+ * text in between), or when it is large and a short view saves context. A value read once by the call that produced
  * it stays text: turning it into Neuralese costs a pass and saves nothing. Every site is counted, converted or kept
  * exact with its reason.
  *
@@ -20,10 +20,12 @@
  *   `{ $write: { name, type: 'Neuralese<HandoverNote>', source } }` in the call's arguments, and the pinned note
  *   message reads the same block (`{ type: 'read', name, source }` between the soft handover frames). `source` is the
  *   crisp note: the teacher's view; the read carries it too, since the producing call may lie outside the record.
- * - **Digest sites** (large values in the opening listing). A value the listing cuts off becomes
- *   `{ type: 'digest', name, source, preview }` when the record has the full value (the root call's inputs): a short
- *   block the digest operator writes from the full value, shown in place of the cut-off preview while the value itself
- *   stays in scope for exact access. Without the full value the preview stays (`full-value-unavailable`).
+ * - **View sites** (large values in the opening listing). A value the listing cuts off becomes
+ *   `{ type: 'view', name, source, preview }` when the record has the full value (the root call's inputs): a block the
+ *   builtin `view`'s Neuralese instance writes from the full value for the receiving call (its template write; the
+ *   trainer writes it at view's write site), shown in place of the cut-off preview while the value itself stays in
+ *   scope for exact access. Without the full value the preview stays (`full-value-unavailable`). Version 15 renamed
+ *   the part type from `digest`; the trainer rejects `digest` parts and names their conversion.
  *
  * - **Child results** (one call produces a value, its caller reads it: the recurrence of calling a function, retrieving
  *   its value and splicing it into the caller's trajectory). A child `nl` call's `return_result` value that the
@@ -51,9 +53,9 @@ import { canonical } from '../adaptation/identity.js';
 import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
-import { DIGEST_PROMPT } from '../builtin/index.js';
+import { VIEW_PROMPT } from '../builtin/index.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/14';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/15';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type PureLiteralEvalReturn = {
@@ -109,8 +111,8 @@ export function pureLiteralEvalReturn(code: unknown): PureLiteralEvalReturn | un
 }
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
-  { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string;
-    /** What the digest is written for, when not the receiving call's instructions (an agent's intent at a tool call). */
+  { type: 'view'; name: string; holder: string; value_type: string; source: string; preview: string;
+    /** What the view is written for, when not the receiving call (an agent's intent at a tool call). */
     instructions?: string;
     /** How the reader gets the whole value, when not the holder variable (a recall handle). */
     note?: string };
@@ -919,26 +921,26 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (at < text.length) out.push({ type: 'text', text: text.slice(at) });
     return out;
   };
-  // The root call's full inputs, when this record is the root call: the sources of its listing digests.
+  // The root call's full inputs, when this record is the root call: the sources of its listing views.
   const semantics = ((record as Record<string, unknown>).task as { program_ir?: { semantics?: { root?: string; inputs?: Record<string, unknown> } } } | undefined)
     ?.program_ir?.semantics;
   const opening = record.messages.find(message => message.role === 'user')?.content;
   const callName = typeof opening === 'string' ? OPENING_CALL.exec(opening)?.[1] : undefined;
   const inputs = semantics?.inputs && callName && semantics.root?.split('/').pop() === `${callName}.nl` ? semantics.inputs : undefined;
-  /** The opening listing with each cut-off value whose full value is known as a digest site. */
+  /** The opening listing with each cut-off value whose full value is known as a view site. */
   const listingParts = (text: string): ConvertedPart[] => {
     const parts: ConvertedPart[] = [];
     let last = 0;
     for (const match of text.matchAll(LISTING_LINE)) {
       const [line, name, valueType, preview] = match;
-      if (!inputs || !(name! in inputs)) { count('digest', 'full-value-unavailable'); continue; }
+      if (!inputs || !(name! in inputs)) { count('view', 'full-value-unavailable'); continue; }
       const source = JSON.stringify(inputs[name!]);
       const at = match.index! + line!.length - preview!.length;
       parts.push({ type: 'text', text: text.slice(last, at) },
-        { type: 'digest', name: `digest:${sha12(source)}`, holder: name!, value_type: valueType!, source, preview: preview! });
-      // The digest operator's instructions are a prompt piece: soft and trained with the rest.
-      soft('prompt:digest', 'system-prompt', DIGEST_PROMPT);
-      count('digest');
+        { type: 'view', name: `view:${sha12(source)}`, holder: name!, value_type: valueType!, source, preview: preview! });
+      // View's body is a prompt piece (the system text of its write site): soft and trained with the rest.
+      soft('prompt:view', 'system-prompt', VIEW_PROMPT);
+      count('view');
       last = at + preview!.length;
     }
     if (last < text.length) parts.push({ type: 'text', text: text.slice(last) });

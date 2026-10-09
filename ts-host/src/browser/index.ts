@@ -66,7 +66,7 @@ export { encodeBlockBody, decodeBlockBody } from '../model/neuralese-server.js';
 export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from '../native/neuralese.js';
-export { serverDigester, DIGEST_TYPE, type Digester, type DigestSite } from '../neuralese/digest.js';
+export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite } from '../neuralese/view.js';
 // The standard library from and to bytes (Node's variants also take a path).
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from '../neuralese/combinators.js';
 export type { StandardLibrary, CombinatorName } from '../neuralese/combinators.js';

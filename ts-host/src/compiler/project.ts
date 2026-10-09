@@ -213,6 +213,8 @@ declare module 'natlang:neuralese' {
   export function read<T>(v: N<T>): Promise<T>;
   export function convert<T>(v: N<T>, to: string): Promise<N<T>>;
   export function gloss(v: N<unknown>): Promise<string>;
+  /** The query operator, read(map(v, question)): the answer to question from what v holds. */
+  export function ask(v: N<unknown>, question: string): Promise<string>;
 }
 declare module 'natlang:learning' {
   export interface Loss { readonly __natlangLoss: true; valueOf(): number }
