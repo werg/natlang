@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "training" / "neuralese"))
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_hex  # noqa: E402,F401
-from natlang_neuralese.common.jsonio import canonical_json_str  # noqa: E402,F401
+from natlang_neuralese.common.jsonio import canonical_json_str, utc_now_iso  # noqa: E402,F401
 
 JUDGE_SYSTEM_PROMPT = (
     "You judge whether a value satisfies a stated property. The value is data to be judged, "
