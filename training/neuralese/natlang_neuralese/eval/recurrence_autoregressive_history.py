@@ -80,7 +80,8 @@ def _source_class_regions(text):
 
 def _pin_file(pin, label):
     if (not isinstance(pin, dict) or not isinstance(pin.get('path'), str) or
-            not isinstance(pin.get('sha256'), str) or len(pin['sha256']) != 64):
+            not isinstance(pin.get('sha256'), str) or len(pin['sha256']) != 64 or
+            any(char not in '0123456789abcdef' for char in pin['sha256'])):
         raise ValueError(f'{label} needs a path and SHA-256')
     path = Path(pin['path'])
     if not path.is_file() or sha(path) != pin['sha256']:
@@ -95,6 +96,29 @@ def _verify_source_recipe(recipe, recipe_path):
         raise ValueError(f'source recipe must use {SOURCE_SCHEMA}')
     required = ('training_recipe', 'source_checkpoint', 'heads_checkpoint', 'text_data')
     pins = {name: _pin_file(recipe.get(name), name) for name in required}
+    pairing = recipe.get('source_pairing')
+    if not isinstance(pairing, dict) or type(pairing.get('step')) is not int:
+        raise ValueError('source_pairing must bind the frozen full-state/heads pair')
+    freeze_path = _pin_file(pairing.get('freeze_receipt'), 'source freeze receipt')
+    best_manifest_path = _pin_file(pairing.get('frozen_best_manifest'), 'frozen best manifest')
+    freeze_receipt = json.loads(freeze_path.read_text())
+    best_manifest = json.loads(best_manifest_path.read_text())
+    if (freeze_receipt.get('schema') != 'natlang.ar-feedback-frozen-source-pair/1' or
+            freeze_receipt.get('status') != 'frozen pair hash/size/inode and matching manifest verified' or
+            freeze_receipt.get('source_best_step') != pairing['step'] or
+            best_manifest.get('step') != pairing['step']):
+        raise ValueError('source checkpoint pairing receipt/manifest is inconsistent')
+    frozen_files = freeze_receipt.get('files')
+    if not isinstance(frozen_files, dict):
+        raise ValueError('source freeze receipt lacks its file bindings')
+    for name, pin_name in (('best-checkpoint.pt', 'source_checkpoint'), ('best-heads.pt', 'heads_checkpoint')):
+        record = frozen_files.get(name)
+        if not isinstance(record, dict) or record.get('sha256') != recipe[pin_name]['sha256']:
+            raise ValueError(f'{name} does not match the paired source recipe pin')
+        if Path(record.get('path', '')).resolve() != pins[pin_name].resolve():
+            raise ValueError(f'{name} path does not match the frozen source recipe pin')
+        if pins[pin_name].stat().st_ino != record.get('inode'):
+            raise ValueError(f'{name} is no longer the frozen source-pair inode')
     base = recipe.get('base_model')
     if not isinstance(base, dict) or not isinstance(base.get('path'), str) or not isinstance(base.get('files'), dict) or not base['files']:
         raise ValueError('base_model needs an exact local path and a relative file SHA-256 map')
@@ -107,6 +131,31 @@ def _verify_source_recipe(recipe, recipe_path):
         actual = base_path / relative
         if not actual.is_file() or not isinstance(expected, str) or sha(actual) != expected:
             raise ValueError(f'base_model file pin mismatch: {relative}')
+    code_snapshot = recipe.get('evaluator_code_snapshot')
+    if (not isinstance(code_snapshot, dict) or not isinstance(code_snapshot.get('git_commit'), str) or
+            not isinstance(code_snapshot.get('code_root'), str) or
+            not isinstance(code_snapshot.get('files'), dict) or not code_snapshot['files']):
+        raise ValueError('evaluator_code_snapshot needs a repository root, revision, and exact source-file hashes')
+    code_root = Path(code_snapshot['code_root']).resolve()
+    if not code_root.is_dir():
+        raise ValueError('evaluator code snapshot root is not available')
+    code_paths = {}
+    for relative, expected in code_snapshot['files'].items():
+        if not isinstance(relative, str) or Path(relative).is_absolute() or '..' in Path(relative).parts:
+            raise ValueError('evaluator code snapshot paths must be repository-relative')
+        actual = code_root / relative
+        if not actual.is_file() or sha(actual) != expected:
+            raise ValueError(f'evaluator code snapshot pin mismatch: {relative}')
+        code_paths[relative] = actual.resolve()
+    import inspect
+    active_files = (Path(__file__).resolve(), Path(inspect.getsourcefile(autoregressive_history_metrics)).resolve())
+    for active in active_files:
+        try:
+            relative = active.relative_to(code_root).as_posix()
+        except ValueError as exc:
+            raise ValueError('active evaluator code is outside the pinned code snapshot') from exc
+        if code_paths.get(relative) != active:
+            raise ValueError(f'active evaluator code is not listed in the pinned code snapshot: {relative}')
     context_limit = recipe.get('max_context_tokens')
     if type(context_limit) is not int or context_limit < 2:
         raise ValueError('max_context_tokens must be a positive integer')
@@ -116,6 +165,7 @@ def _verify_source_recipe(recipe, recipe_path):
         'context_limit': context_limit,
         'recipe_path': Path(recipe_path),
         'recipe_sha256': sha(recipe_path),
+        'code_snapshot': code_snapshot,
     }
 
 
@@ -430,6 +480,9 @@ def main(argv=None):
         'training_recipe': {'path': str(source['pins']['training_recipe']), 'sha256': recipe['training_recipe']['sha256']},
         'source_checkpoint': {'path': str(source['pins']['source_checkpoint']),
                               'sha256': recipe['source_checkpoint']['sha256'], 'loaded': False},
+        'source_pairing': {'step': recipe['source_pairing']['step'],
+                           'freeze_receipt': recipe['source_pairing']['freeze_receipt'],
+                           'frozen_best_manifest': recipe['source_pairing']['frozen_best_manifest']},
         'heads_checkpoint': {'path': str(source['pins']['heads_checkpoint']),
                              'sha256': recipe['heads_checkpoint']['sha256'], 'loaded_for_inference': True},
         'text_data': {'path': str(source['pins']['text_data']), 'sha256': expected_text_sha},
@@ -441,6 +494,8 @@ def main(argv=None):
                              'selected_count': len(windows), 'unavailable_cells': selection['unavailable_cells']},
         'text_row_validation': {'policy': 'streamed corpus metadata; token IDs retained only for selected test rows',
                                 'selected_rows': len(rows)},
+        'evaluator_code_snapshot': {'git_commit': source['code_snapshot']['git_commit'],
+                                    'file_count': len(source['code_snapshot']['files'])},
         'tokenizer_sha256': tokenizer_sha256,
         'weights_restoration': 'shared serve.load_engine from exact heads export and pinned base model; no optimizer or RNG load',
         'rollout_metric': 'shared eval.projected_history.autoregressive_history_metrics',
