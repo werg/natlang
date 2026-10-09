@@ -292,10 +292,29 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const replyDiagnostic = piReplyDiagnostic(reply, text, reasoning, calls);
       const raw_calls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
         arguments: JSON.stringify(call.arguments) } }));
+      // Delta events describe the streamed path; the completed AssistantMessage is authoritative
+      // for what the collector saved. Keep payload-free measurements of both so revised argument
+      // deltas are not mistaken for an equally large final tool call.
+      const piStreamObservation = {
+        version: 'pi-stream-final-comparison/1',
+        streamed_delta_events: counts.deltaEvents,
+        streamed_delta_utf8_bytes: counts.deltaBytes,
+        streamed_tool_call_delta_events: counts.toolCallDeltaEvents,
+        streamed_tool_call_delta_utf8_bytes: counts.toolCallDeltaBytes,
+        streamed_text_delta_utf8_bytes: counts.textDeltaBytes,
+        streamed_thinking_delta_utf8_bytes: counts.thinkingDeltaBytes,
+        final_call_count: raw_calls.length,
+        final_raw_calls_json_utf8_bytes: Buffer.byteLength(JSON.stringify(raw_calls), 'utf8'),
+        final_calls: raw_calls.map((call, index) => ({ index, name: call.function.name,
+          arguments_utf8_bytes: Buffer.byteLength(call.function.arguments, 'utf8'),
+          arguments_sha256: sha256Text(call.function.arguments) })),
+        comparison_scope: 'stream delta byte totals vs final parsed sdk call arguments; no delta-to-call identity asserted'
+      };
       return { calls: calls.map(call => [call.name, call.arguments as Record<string, unknown>]), raw_calls, text,
         ...(reasoning ? { reasoning } : {}), prompt_tokens: reply.usage.input,
         completion_tokens: reply.usage.output, ...(reply.stopReason === 'length' ? { truncated: true } : {}),
         raw_response: { provider, model: modelId, stop_reason: reply.stopReason, usage: reply.usage,
+          pi_stream_observation: piStreamObservation,
           ...(replyDiagnostic ? { pi_reply_diagnostic: replyDiagnostic } : {}) } };
     },
     close() { if (typeof requestOverride.sessionId === 'string') cleanupSessionResources(requestOverride.sessionId); },

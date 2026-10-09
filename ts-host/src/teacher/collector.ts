@@ -171,11 +171,11 @@ export function jobKey({ index, record }: IndexedRecord): string {
   return `${String(index).padStart(6, '0')}-${recordDigest(record).slice(0, 16)}`;
 }
 
-function logProviderStreamProgress(role: 'teacher' | 'judge', provider: string, requestOrdinal: number,
-  progress: ModelStreamProgress): void {
+function logProviderStreamProgress(role: 'teacher' | 'judge', provider: string, model: string,
+  requestOrdinal: number, requestSha256: string, progress: ModelStreamProgress): void {
   try {
     process.stderr.write(`${JSON.stringify({ event: 'provider_stream_progress', role, provider,
-      request_ordinal: requestOrdinal, ...progress })}\n`);
+      model, request_ordinal: requestOrdinal, request_sha256: requestSha256, ...progress })}\n`);
   } catch { /* progress logging must not affect collection */ }
 }
 
@@ -196,7 +196,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
-      stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
+      stream_observation: { version: 'pi-stream-observation/2', detail: 'request-bound-delta-counts-and-final-call-comparison', watchdog_refresh: false },
       ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
         version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
         retry: 'no-case-retry' } }),
@@ -218,7 +218,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
         pi_options: options.judgeModel.piOptions ?? {},
-        stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
+        stream_observation: { version: 'pi-stream-observation/2', detail: 'request-bound-delta-counts-and-final-call-comparison', watchdog_refresh: false },
         ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
           version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
           retry: 'no-case-retry' } }),
@@ -556,6 +556,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
     request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
+      ...(raw?.pi_stream_observation && typeof raw.pi_stream_observation === 'object' ?
+        { pi_stream_observation: structuredClone(raw.pi_stream_observation) } : {}),
       ...(raw?.pi_reply_diagnostic && typeof raw.pi_reply_diagnostic === 'object' ?
         { provider_reply_diagnostic: structuredClone(raw.pi_reply_diagnostic) } : {}),
       ...(planned ? { execution_plan: response.execution_plan } : {}),
@@ -911,7 +913,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const entry = entryForRequest(request);
           if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
           return session.turn(request, requestSignal,
-            progress => logProviderStreamProgress('teacher', config.provider!, requestOrdinal, progress));
+            progress => logProviderStreamProgress('teacher', config.provider!, config.modelId, requestOrdinal,
+              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress));
         } });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request, onRequestStart: recordHttpTransportStart });
@@ -1056,7 +1059,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const entry = entryForRequest(request);
           if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
           return judgeSession.turn(request, requestSignal,
-            progress => logProviderStreamProgress('judge', judgeConfig.provider!, requestOrdinal, progress));
+            progress => logProviderStreamProgress('judge', judgeConfig.provider!, judgeConfig.modelId, requestOrdinal,
+              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress));
         } });
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId,
       onRequestStart: recordHttpTransportStart }) : undefined;
