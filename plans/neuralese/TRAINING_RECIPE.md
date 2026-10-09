@@ -113,7 +113,7 @@ its pinned content identity. Existing recipes without stage `inputs` retain the
 shared `--records`/`--pieces` fallback; the resolved stage roles and hashes are
 recorded in the recipe plan.
 
-For same-architecture continuation from a trained map or sketch, declare a
+For same-architecture continuation from a trained map, declare a
 `verified_heads_handoff` stage after raw runtime qualification. Bind its full
 warm-up checkpoint, best-checkpoint manifest, matching serving-head export and
 trained-channel runtime report by hash. It checks the held text thresholds and
@@ -181,7 +181,7 @@ The temporary inverse experiment `h_final[i] -> E(token_i)` is not this causal
 distillation stage and has failed its reconstruction diagnostic.
 
 
-## Full reference and optional shallow optimization
+## Foundation reference and historical shallow probe
 
 The default recipe uses `cutoff: "full"` and stops immediately if the exact
 initialized projection meets all gates. On Pop this qualified 132,883 held
@@ -260,9 +260,11 @@ compression pressure. It was safely stopped at step2851 after the sketch
 architecture correction below; it is not the target shallow-sketch lineage.
 
 
-## Autoregressive shallow latent sketch — owner correction 2026-10-06
+## Serving initializer and recurrence consumer (introduced 2026-10-06)
 
-Use `latent-sketch-v2` for fresh lineages. Retain the certified full-depth causal
+The serving/recurrence consumer uses `latent-sketch-v2`. This is separate from
+the mapped-input text adaptation and full-depth AR feedback fixup above; it does
+not reinstate sketch text warm-up. Retain the certified full-depth causal
 reference and its parent LoRA; initialize a small vocabulary-free shallow sketch
 and a zero input-space output residual. There is no global compression objective
 or independent shallow next-token fidelity gate.
