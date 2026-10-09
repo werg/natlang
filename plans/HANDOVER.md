@@ -1,3 +1,10 @@
+## Typed response ergonomics and actual rejection evidence — 2026-10-09 21:31 UTC
+
+- New output-retaining diagnostic calls exposed Gemma structured-mode answers with a trailing closing Markdown fence; after that formatting issue, several bodies also genuinely have zero total probability or mass1.2/1.4. Groq score distributions can sum1.05/1.045. Do not call those exact normalized probability distributions or silently admit them.
+- Shared typed answer decoder now accepts a single JSON value optionally enclosed in a Markdown JSON fence, or followed solely by the closing fence. It rejects other suffix prose/multiple JSON values and retains exact original output/hash plus response_wrapper_removed. The exact typed/numeric/distribution validator remains unchanged; no normalization, numeric target injection or admission relaxation.
+- Fresh Gemma errors-only v2 uses the existing same6cases, schema included explicitly in task with --response-format text, reasoning omitted, PID766632 (launch receipt is authoritative). No gold supplied. This exercises generation ergonomics without overwriting prior failures; each fresh call is distinct evidence, not historical repair.
+- NVIDIA GLM5.3Flash initial probe used documented default max reasoning. Fresh low-reasoning typed screen is underway PID766344; first valid label took55s, so latency remains high so far. Official NIM docs specify low/high/max and clear_thinking for chat histories; avoid claiming32-token max-default probe established decode throughput.
+
 ## Broader provider diagnostics — 2026-10-09 21:25 UTC
 
 - Luna helper v2 quality receipt SHAe5e18a960ea1f3c2658821da91990185cbd6d46fe90d6bc41371cdbc14bbf071 independently verified4/4,2/4,4/4,4/4 valid counts for Gemma26/Gemma31/Ling/Lightning. Gemma31 failuresHTTP500. Post-hoc labels/usage are review evidence only; no admission or representative ranking. Receipt registered separately and immutable; original screen manifest untouched.

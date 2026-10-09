@@ -104,6 +104,29 @@ def _retry_after_seconds(value):
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
+def _decode_http_answer(content):
+    """Accept one JSON value with an optional Markdown wrapper, never arbitrary suffix prose."""
+    if not isinstance(content, str):
+        raise ValueError('response content must be text')
+    text = content.strip()
+    wrapper = None
+    if text.startswith('```'):
+        first, separator, remainder = text.partition('\n')
+        if not separator or first.lower() not in {'```', '```json'}:
+            raise ValueError('unsupported JSON fence')
+        if not remainder.rstrip().endswith('```'):
+            raise ValueError('unterminated JSON fence')
+        text = remainder.rstrip()[:-3].strip()
+        wrapper = 'markdown_json_fence'
+    parsed, end = json.JSONDecoder().raw_decode(text)
+    suffix = text[end:].strip()
+    if suffix == '```' and wrapper is None:
+        wrapper = 'trailing_markdown_fence'
+    elif suffix:
+        raise ValueError('extra content after JSON answer')
+    return parsed, wrapper
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Do not forward a bearer credential to a redirected endpoint."""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -178,7 +201,7 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         time.sleep(delay)
 
     answer, error, validation_detail = None, None, None
-    response_content, finish_reason = None, None
+    response_content, finish_reason, response_wrapper = None, None, None
     if response_status != 200:
         error = f'http_{response_status}' if response_status else 'network_error'
     else:
@@ -186,7 +209,7 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
             choice = response_body['choices'][0]
             finish_reason = choice.get('finish_reason')
             response_content = choice['message']['content']
-            parsed = json.loads(response_content)
+            parsed, response_wrapper = _decode_http_answer(response_content)
             answer = _validate_http_answer(case, parsed)
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             error = 'invalid_typed_response'
@@ -198,6 +221,7 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         'request_sha256': request_hash, 'response_sha256': response_hash,
         'http_status': response_status, 'attempts': len(history), 'retry_history': history,
         'finish_reason': finish_reason, 'validation_error': validation_detail,
+        'response_wrapper_removed': response_wrapper,
         'usage': {k: v for k, v in (response_body.get('usage', {}) if isinstance(response_body, dict) else {}).items()
                   if k in {'prompt_tokens', 'completion_tokens', 'total_tokens'} and isinstance(v, int) and not isinstance(v, bool)},
     }
