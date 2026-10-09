@@ -110,15 +110,30 @@ def atomic_checkpoint(path, state):
         raise
 
 
-def immutable_cpu_snapshot(value):
+def immutable_cpu_snapshot(value, *, _tensor_storage_memo=None):
     """Copy a checkpoint tree into detached CPU tensors and immutable metadata values.
 
     The returned tree has no tensor storage shared with a live model or optimizer,
     so a background writer can serialize it while training continues. Unsupported
     leaf types fail closed instead of risking a shallow or device-backed copy.
     """
+    if _tensor_storage_memo is None:
+        _tensor_storage_memo = {}
     if isinstance(value, torch.Tensor):
-        return value.detach().to(device='cpu', copy=True)
+        if value.layout != torch.strided or value.is_conj() or value.is_neg():
+            raise TypeError('checkpoint snapshots require ordinary strided tensors')
+        storage = value.untyped_storage()
+        if storage.nbytes() == 0:
+            return value.detach().to(device='cpu', copy=True)
+        key = (str(value.device), storage.data_ptr(), storage.nbytes())
+        base = _tensor_storage_memo.get(key)
+        if base is None:
+            byte_view = torch.empty(0, dtype=torch.uint8, device=value.device).set_(
+                storage, 0, (storage.nbytes(),), (1,))
+            base = byte_view.detach().to(device='cpu', copy=True)
+            _tensor_storage_memo[key] = base
+        return torch.empty(0, dtype=value.dtype, device='cpu').set_(
+            base.untyped_storage(), value.storage_offset(), tuple(value.size()), tuple(value.stride()))
     if value is None or isinstance(value, (str, bytes, bool, int, float, complex)):
         return value
     if isinstance(value, (torch.device, torch.dtype)):
@@ -126,28 +141,33 @@ def immutable_cpu_snapshot(value):
     if isinstance(value, torch.Size):
         return torch.Size(value)
     if isinstance(value, OrderedDict):
-        result = OrderedDict((immutable_cpu_snapshot(k), immutable_cpu_snapshot(v))
+        result = OrderedDict((immutable_cpu_snapshot(k, _tensor_storage_memo=_tensor_storage_memo),
+                             immutable_cpu_snapshot(v, _tensor_storage_memo=_tensor_storage_memo))
                              for k, v in value.items())
         if hasattr(value, '_metadata'):
-            result._metadata = immutable_cpu_snapshot(value._metadata)
+            result._metadata = immutable_cpu_snapshot(value._metadata, _tensor_storage_memo=_tensor_storage_memo)
         return result
     if isinstance(value, defaultdict):
+        if value.default_factory is not None:
+            raise TypeError('checkpoint snapshot rejects defaultdict factories')
         result = defaultdict(value.default_factory)
-        result.update((immutable_cpu_snapshot(k), immutable_cpu_snapshot(v))
+        result.update((immutable_cpu_snapshot(k, _tensor_storage_memo=_tensor_storage_memo),
+                       immutable_cpu_snapshot(v, _tensor_storage_memo=_tensor_storage_memo))
                       for k, v in value.items())
         return result
     if isinstance(value, dict):
-        return {immutable_cpu_snapshot(k): immutable_cpu_snapshot(v)
+        return {immutable_cpu_snapshot(k, _tensor_storage_memo=_tensor_storage_memo):
+                immutable_cpu_snapshot(v, _tensor_storage_memo=_tensor_storage_memo)
                 for k, v in value.items()}
     if isinstance(value, list):
-        return [immutable_cpu_snapshot(item) for item in value]
+        return [immutable_cpu_snapshot(item, _tensor_storage_memo=_tensor_storage_memo) for item in value]
     if isinstance(value, tuple):
-        items = tuple(immutable_cpu_snapshot(item) for item in value)
+        items = tuple(immutable_cpu_snapshot(item, _tensor_storage_memo=_tensor_storage_memo) for item in value)
         return type(value)(*items) if hasattr(value, '_fields') else items
     if isinstance(value, set):
-        return {immutable_cpu_snapshot(item) for item in value}
+        return {immutable_cpu_snapshot(item, _tensor_storage_memo=_tensor_storage_memo) for item in value}
     if isinstance(value, frozenset):
-        return frozenset(immutable_cpu_snapshot(item) for item in value)
+        return frozenset(immutable_cpu_snapshot(item, _tensor_storage_memo=_tensor_storage_memo) for item in value)
     raise TypeError(f'unsupported checkpoint snapshot leaf: {type(value).__module__}.{type(value).__qualname__}')
 
 

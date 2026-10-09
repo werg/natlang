@@ -1,5 +1,7 @@
 import pytest
 import torch
+import random
+import threading
 
 from natlang_neuralese.train.trajectory_state import (
     AsyncAtomicCheckpointWriter, atomic_checkpoint, immutable_cpu_snapshot,
@@ -11,12 +13,15 @@ def test_immutable_cpu_snapshot_detaches_nested_tensor_state():
     from collections import OrderedDict
 
     source = torch.tensor([1., 2.], requires_grad=True)
-    state = {'model': OrderedDict(weight=source), 'rng': (1, 2, 3)}
+    state = {'model': OrderedDict(weight=source, tail=source[1:]), 'rng': (1, 2, 3)}
     state['model']._metadata = {'version': 1}
     snapshot = immutable_cpu_snapshot(state)
     source.data.fill_(9.)
     assert snapshot['model']['weight'].device.type == 'cpu'
     assert snapshot['model']['weight'].tolist() == [1., 2.]
+    assert snapshot['model']['weight'].untyped_storage().data_ptr() == snapshot['model']['tail'].untyped_storage().data_ptr()
+    snapshot['model']['tail'][0] = 5.
+    assert snapshot['model']['weight'][1].item() == 5.
     assert snapshot['model']['weight'].requires_grad is False
     assert snapshot['model']._metadata == {'version': 1}
     assert snapshot['rng'] == (1, 2, 3)
@@ -27,13 +32,14 @@ def test_async_atomic_checkpoint_writes_snapshot_and_runs_callback(tmp_path):
     source = torch.tensor([3., 4.])
     callbacks = []
     writer = AsyncAtomicCheckpointWriter()
-    writer.submit(destination, {'step': 7, 'tensor': source},
+    writer.submit(destination, {'step': 7, 'tensor': source, 'tail': source[1:]},
                   after_write=lambda snapshot: callbacks.append(snapshot['step']))
     source.fill_(8.)
     writer.drain()
     saved = torch.load(destination, map_location='cpu', weights_only=False)
     assert saved['step'] == 7
     assert torch.equal(saved['tensor'], torch.tensor([3., 4.]))
+    assert saved['tensor'].untyped_storage().data_ptr() == saved['tail'].untyped_storage().data_ptr()
     assert callbacks == [7]
     assert not destination.with_suffix('.pending').exists()
 
@@ -73,9 +79,94 @@ def test_async_atomic_checkpoint_propagates_post_write_failure(tmp_path):
     assert torch.load(destination, map_location='cpu', weights_only=False)['step'] == 4
 
 
+def test_async_snapshot_preserves_committed_model_optimizer_and_rng(tmp_path):
+    destination = tmp_path / 'full-state.pt'
+    original_python_rng = random.getstate()
+    original_torch_rng = torch.get_rng_state()
+    model = torch.nn.Linear(3, 2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+    optimizer.zero_grad(set_to_none=True)
+    model(torch.ones(1, 3)).sum().backward()
+    optimizer.step()
+    state = {
+        'step': 19,
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'python_rng': random.getstate(),
+        'torch_rng': torch.get_rng_state(),
+    }
+    expected = immutable_cpu_snapshot(state)
+    callback_started = threading.Event()
+    release_callback = threading.Event()
+    writer = AsyncAtomicCheckpointWriter()
+
+    def blocked_callback(_snapshot):
+        callback_started.set()
+        if not release_callback.wait(5):
+            raise TimeoutError('test did not release checkpoint callback')
+
+    writer.submit(destination, state, after_write=blocked_callback)
+    try:
+        assert callback_started.wait(5)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.add_(3)
+            for values in optimizer.state.values():
+                for value in values.values():
+                    if isinstance(value, torch.Tensor):
+                        value.add_(2)
+        random.random()
+        torch.manual_seed(9981)
+    finally:
+        release_callback.set()
+        random.setstate(original_python_rng)
+        torch.set_rng_state(original_torch_rng)
+    writer.drain()
+    saved = torch.load(destination, map_location='cpu', weights_only=False)
+    assert saved['step'] == expected['step']
+    assert torch.equal(saved['model']['weight'], expected['model']['weight'])
+    assert torch.equal(saved['model']['bias'], expected['model']['bias'])
+    assert saved['optimizer']['state'].keys() == expected['optimizer']['state'].keys()
+    for key, expected_slots in expected['optimizer']['state'].items():
+        for name, expected_value in expected_slots.items():
+            actual = saved['optimizer']['state'][key][name]
+            if isinstance(expected_value, torch.Tensor):
+                assert torch.equal(actual, expected_value)
+            else:
+                assert actual == expected_value
+    assert saved['python_rng'] == expected['python_rng']
+    assert torch.equal(saved['torch_rng'], expected['torch_rng'])
+
+
+def test_synchronous_emergency_write_drains_prior_snapshot(tmp_path):
+    destination = tmp_path / 'state.pt'
+    callback_started = threading.Event()
+    release_callback = threading.Event()
+    writer = AsyncAtomicCheckpointWriter()
+
+    def blocked_callback(_snapshot):
+        callback_started.set()
+        if not release_callback.wait(5):
+            raise TimeoutError('test did not release pending write')
+
+    writer.submit(destination, {'step': 1}, after_write=blocked_callback)
+    assert callback_started.wait(5)
+    timer = threading.Timer(0.05, release_callback.set)
+    timer.start()
+    writer.write_synchronously(destination, {'step': 2, 'emergency': True})
+    timer.join()
+    assert torch.load(destination, map_location='cpu', weights_only=False) == {
+        'step': 2, 'emergency': True,
+    }
+    assert not writer.pending
+
+
 def test_immutable_cpu_snapshot_rejects_unsupported_leaves():
     with pytest.raises(TypeError, match='unsupported checkpoint snapshot leaf'):
         immutable_cpu_snapshot({'bad': object()})
+    from collections import defaultdict
+    with pytest.raises(TypeError, match='defaultdict factories'):
+        immutable_cpu_snapshot(defaultdict(list, value=1))
 
 
 def test_sketch_horizon_change_requires_declared_continuation():

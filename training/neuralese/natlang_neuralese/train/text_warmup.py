@@ -1550,6 +1550,7 @@ def main(argv=None):
     last_save=[time.monotonic()]
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
              retain_best=False, wait=False):
+        checkpoint_writer.drain()
         last_save[0]=time.monotonic()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
