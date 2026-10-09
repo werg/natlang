@@ -5,7 +5,7 @@ args:
   snapshot: RepoSnapshot
   checks: string[]
   seeds: string[]
-returns: Intent
+returns: CheckedIntent
 ---
 Restate request for the later stages. snapshot.files are the files the migration may change (path, lines); checks are
 the ids of the checks that will run on the result; seeds are strings the requester wants searched.

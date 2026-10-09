@@ -5,7 +5,7 @@ args:
   snapshot: RepoSnapshot
   findings: Finding[]
 uses: [site/locate, site/classify, site/edit]
-returns: Patch[]
+returns: CheckedPatches
 ---
 Repair the candidate at snapshot.revision from findings, each of them repairable. Work in eval, one finding at a time
 in parallel with Promise.all.

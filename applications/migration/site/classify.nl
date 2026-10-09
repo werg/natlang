@@ -4,7 +4,7 @@ args:
   intent: Intent
   site: Site
   evidence?: string
-returns: Usage
+returns: CheckedUsage
 ---
 Classify the use of intent.old in site.text. evidence, when given, is what a failing check or rejected patch said about
 this site.

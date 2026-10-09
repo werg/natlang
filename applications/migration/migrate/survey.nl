@@ -4,7 +4,7 @@ args:
   intent: Intent
   revision: string
 uses: [site/locate]
-returns: Site[]
+returns: CheckedSite[]
 ---
 Find the sites of intent at revision. The repository service searches and reads exactly; locate widens one hit. Work
 in eval.
