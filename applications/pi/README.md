@@ -90,7 +90,8 @@ a training job (about 170 generated tokens/s across all requests, about 28 per s
 - Wiring tests: 25/25. pi-durable's own suite (crisp defaults): 967 tests.
 - Conformance (pi-durable's harness suites against the natural-language task kinds, 322 tests). A long run keeps the
   code it loaded, so each run is stopped and restarted on the newest code when fixes land. Run 4: 118 of 128 pass.
-  Run 5: 155 of 166 pass. Every failure of both either passes alone on the current code or led to a fix: a null head
+  Run 5: 155 of 166 pass. Apart from the parallel-round timing deviation below, every failure of both either passes
+  alone on the current code or led to a fix: a null head
   handed to pi's planner (a spurious system entry), a final provider or tool failure that was retried or cleaned
   instead of faulting, hooks and tool runs repeated within a phase (now once-effects), a registry missing pi's
   built-in tasks accepted, an eval built-in that collided with a function of the folder (`transcript`, every eval in
