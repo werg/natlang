@@ -922,6 +922,13 @@ export class NativeToolAgent {
           function: { name: 'list_files', arguments: '{}' } }] },
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
+    const refinement = this.options.refinement;
+    if (refinement) session.refinementCheck = async (value, type, path) => {
+      const failures = await refinement.checker.checkValue(value, type, session.env,
+        { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
+          signal: session.runtime.signal, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
+      return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
+    };
     const messages = openingMessages();
     const decided = await this.decisionReadout(session, messages);
     if (decided !== false) return decided;
@@ -1240,9 +1247,12 @@ export class NativeToolAgent {
       }
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;
-      if (refinementFailures) {
+      // A refinement rejected a proposed result: from the gate above, or from an eval that returned or finished one.
+      const refinedResult = results.find(result => result.codes?.some(code => code === 'refinement-unsatisfied' || code === 'refinement-undecided'));
+      if (refinementFailures || refinedResult) {
         if (++refinementRepairs > this.options.refinement!.checker.repairBudget(repairLimit))
-          return `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}`;
+          return refinementFailures ? `${refinementFailures[0]!.code}: ${refinementFailures[0]!.message}` :
+            /refinement-(?:unsatisfied|undecided): [^\n]*/.exec(refinedResult!.text)?.[0] ?? 'refinement-unsatisfied: the result does not satisfy its refined type';
         continue;
       }
       if (session.failureSerial > previousFailureSerial) {
