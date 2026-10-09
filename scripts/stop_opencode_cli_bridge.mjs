@@ -47,7 +47,12 @@ async function verifyOwner(pid, output) {
   const args = bytes.toString('utf8').split('\0').filter(Boolean);
   const script = resolve(repository, 'scripts/opencode-cli-loopback-bwrap-launch.mjs');
   const outIndex = args.indexOf('--out');
-  return args.includes(script) && outIndex >= 0 && resolve(args[outIndex + 1] ?? '') === output;
+  let processCwd;
+  try { processCwd = await realpath(`/proc/${pid}/cwd`); }
+  catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
+  // Resolve relative argv entries against the owned process's cwd, not ours.
+  return args[1] !== undefined && resolve(processCwd, args[1]) === script
+    && outIndex >= 0 && resolve(processCwd, args[outIndex + 1] ?? '') === output;
 }
 
 async function stop({ pidFile, output, timeoutMs }) {
