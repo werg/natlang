@@ -309,7 +309,11 @@ Initial NVIDIA v1 failed before an SDK call because its proposed model ID omitte
 the namespace; independent v2 uses `nvidia/nemotron-3-super-120b-a12b` and has
 completed real tool calls. Gemini v1 failed with Google's missing thought-signature
 error during tool history; investigate the shared adapter before relaunch.
-Kilo, ordinary Z.AI and a smaller Groq task are being prepared. These are held
+Kilo is producing actual saved turns. Z.AI v3 retries transient429s at the
+request layer; v1/v2 are preserved. Gemini v2 uses the repaired runtime and is
+making actual calls. NVIDIA completed its first exact case and has a serial
+queue for source indices1–4. A shared HTTP decision-label backend for shorter
+Groq tasks is being implemented. These are held
 teacher samples of existing source groups, not new worlds or admitted training
 data. Inspect actual requests and terminal accounting before reporting success.
 

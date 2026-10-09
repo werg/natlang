@@ -464,6 +464,10 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             raise ValueError(f'entry count exceeds reviewed batch ceiling: {entry.get("key")}')
         if count > 1 and remote:
             raise ValueError('provider queues remain single-case')
+        if 'request_retries' in entry:
+            retries = entry['request_retries']
+            if type(retries) is not int or retries < 0:
+                raise ValueError(f'entry request_retries must be a nonnegative integer: {entry.get("key")}')
         if 'context_tokens' in entry:
             context_tokens = entry['context_tokens']
             if type(context_tokens) is not int or context_tokens < 1:
@@ -533,6 +537,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
+        if 'request_retries' in entry:
+            command += ['--request-retries', str(entry['request_retries'])]
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
             '--server', server or 'http://127.0.0.1:8081']
         if external:

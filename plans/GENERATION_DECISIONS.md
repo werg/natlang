@@ -3296,3 +3296,27 @@ request; preserve that attempt and relaunch independently with the full ID.
 Gemini's tool-history rejection is an integration failure requiring thought
 signature preservation, not a model quality negative. Diagnose the common
 adapter instead of excluding Google's requirement or labeling this as bad data.
+
+## 2026-10-09 — Gemini history repair and correct request-retry layer
+
+`f790049f` preserves actual provider tool signatures through stored raw calls
+and planner replay. Explicitly marked host-generated scope/prelude calls render
+as exact labeled context for Google APIs; generic HTTP strips that internal
+marker from wire messages. Fresh runtime v4 compiled1230 files and reference
+replay passed five cases/60 decisions/20 reads. Gemini v2 is making actual calls;
+old rejected attempt remains intact.
+
+NVIDIA's full first case produced the exact PROC-910 decision. Four remaining
+proven V22 source rows are now queued serially on NVIDIA using fresh runtime v4,
+with3 request retries and0 whole-case retries. All teacher outputs stay held.
+
+Z.AI transient HTTP429/code1305 continues under load. Pop initially changed
+`transport_retries`, which controls a different retry layer and did not increase
+the failed-request allowance. Corrected supervisor now validates and forwards
+optional queue `request_retries` to the existing collector implementation. Z.AI
+v3 explicitly uses3 delayed exponential request retries and0 whole-case retries.
+Both prior attempts are retained; provider overload is not a semantic negative.
+
+Groq's native runtime prompt exceeded its free8K TPM allowance even on a small
+source. Use complete short typed-decision tasks instead, through the shared
+decision-label pipeline, rather than truncate required interpreter context.
