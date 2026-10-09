@@ -12,7 +12,7 @@
   your machine's state in `coord.py status --set`, not in a stream of notes.
 - Give each concurrently running agent its own coordination reader identity:
   use `coord.py --as <machine>-<agent-role>` or `COORD_AS`. Codex helpers must
-  not acknowledge the owner's default `<machine>-codex` cursor. Forward
+  not acknowledge the owner's reader cursor (inspect `coord.py whoami`). Forward
   decisions and requests outside your task to the owner; acknowledgement is
   not implementation or acceptance of a decision.
 - Synchronize code through small commits and frequent fetch/merge/push to

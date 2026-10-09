@@ -178,6 +178,9 @@ def default_identity(machine):
         return os.environ['COORD_AS']
     if os.environ.get('CLAUDE_CODE_SESSION_ID'):
         return f"{machine}-claude-{os.environ['CLAUDE_CODE_SESSION_ID'][:8]}"
+    codex = os.environ.get('CODEX_THREAD_ID') or os.environ.get('CODEX_SESSION_ID')
+    if codex:
+        return f'{machine}-codex-{codex[:8]}'
     if any(key.startswith('CODEX') for key in os.environ):
         return f'{machine}-codex'
     return f'{machine}-agent'

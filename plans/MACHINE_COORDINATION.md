@@ -34,14 +34,15 @@ How it works:
   Undelivered copies wait in `.coordination/outbox/`, and every later command
   retries them.
 - Every reader has its own cursor (`.coordination/cursors/`). A Claude session
-  reads as `<machine>-claude-<session>`, Codex as `<machine>-codex`; `--as`
-  overrides. Concurrent Codex agents must each set a distinct `--as` or
-  `COORD_AS`; the default Codex identity is shared, not session-specific.
-  Helpers using the owner's identity can acknowledge a decision before the
-  owner sees it. Pop observed this on October 9 and now uses separate helper
-  identities. Forward decisions and requests outside your task to the owner.
-  A new reader starts where the machine's other readers are; use `log` or
-  `show` to review earlier decisions. Acknowledgement is not adoption.
+  reads as `<machine>-claude-<session>`, Codex as `<machine>-codex-<thread>`
+  when `CODEX_THREAD_ID` is available (otherwise `<machine>-codex`). `--as` or
+  `COORD_AS` overrides. Concurrent helpers must each use a distinct reader
+  identity: inherited thread IDs or fallback names can otherwise share the
+  owner's cursor and acknowledge a decision before the owner sees it. Pop
+  observed this on October 9 and now uses separate helper identities.
+  Forward decisions and requests outside your task to the owner. A new reader
+  starts where the machine's other readers are; use `log` or `show` to review
+  earlier decisions. Acknowledgement is not adoption.
 - `request` messages stay open until someone `reply`s or `close`s them, and
   every reader on the addressed machine sees them until then.
 - Each machine has one overwritten status page (`status --set`), so the other
