@@ -1,0 +1,242 @@
+{
+ "first": {
+  "checkpoint_step": 4,
+  "export": {
+   "abs_sum": 429.1807061681575,
+   "elements": 7520,
+   "sha256": "5b1fee0bc8ad6823a4e2e0595bfe49d5dedb58481ab4bf4411717b144c6e2b64",
+   "sum": 29.589079583758576
+  },
+  "heads": {
+   "abs_sum": 612.2069032538529,
+   "elements": 11744,
+   "sha256": "cd9edb33f2d01bd3646e5def84745d5e683fc8af213bfbdfd7676a75c37f0c74",
+   "sum": 29.28850850222443
+  },
+  "losses": [
+   4.7366437911987305,
+   9.657211303710938,
+   8.723138809204102,
+   8.306569576263428
+  ],
+  "optimizer": {
+   "abs_sum": 142.67714638303673,
+   "elements": 89387,
+   "sha256": "f3902ca66c618ce6df5d3147d610d7cffb3638f692c5ef5fef3876dfc12a5892",
+   "sum": 134.25081540068467
+  },
+  "phases": [
+   "projection_only",
+   "whole_transformer_adaptation",
+   "whole_transformer_adaptation",
+   "whole_transformer_adaptation"
+  ],
+  "rng": {
+   "abs_sum": 0.0,
+   "elements": 5056,
+   "sha256": "9718d693de2f10887499957f01767d5a58ee7f040cfaeb562cb5ca4cc36b749a",
+   "sum": 0.0
+  },
+  "schedule": {
+   "adaptation_started_eval": 2,
+   "config": {
+    "backbone_ramp_evals": 1,
+    "heads": [
+     "input_map",
+     "full_depth"
+    ],
+    "max_sequence_passes": 3,
+    "min_evals": 2,
+    "min_relative_improvement": 1.0,
+    "pass_ramp_evals": 1,
+    "patience": 1
+   },
+   "eval_count": 5,
+   "head_state": {
+    "full_depth": {
+     "best": 2.4222748279571533,
+     "history": [
+      2.4222748279571533,
+      1.9800517559051514,
+      1.6078563928604126,
+      1.298012137413025,
+      1.0420233011245728
+     ],
+     "last_significant_eval": 1,
+     "plateau": {
+      "best_error": 2.4222748279571533,
+      "error": 1.9800517559051514,
+      "eval": 2,
+      "slope": -0.44222307205200195,
+      "stale_evals": 1
+     }
+    },
+    "input_map": {
+     "best": 2.314368724822998,
+     "history": [
+      2.314368724822998,
+      2.3500704765319824,
+      2.327277421951294,
+      2.2255187034606934,
+      2.0241596698760986
+     ],
+     "last_significant_eval": 1,
+     "plateau": {
+      "best_error": 2.314368724822998,
+      "error": 2.3500704765319824,
+      "eval": 2,
+      "slope": 0.035701751708984375,
+      "stale_evals": 1
+     }
+    }
+   },
+   "schema": "natlang.projection-first-schedule/2"
+  },
+  "sequence_passes": [
+   1,
+   1,
+   2,
+   3
+  ],
+  "steps_logged": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "student_parameters": {
+   "abs_sum": 1095.8056939822147,
+   "elements": 44672,
+   "sha256": "d0790e5fe92b75bca71fb5bea8da618f89413ff21be8b0479bbe760fba228693",
+   "sum": 288.3061835121282
+  },
+  "updates": {
+   "backbone": true,
+   "full_projection": true,
+   "input_map": true
+  }
+ },
+ "resumed": {
+  "checkpoint_step": 5,
+  "export": {
+   "abs_sum": 429.4287253900002,
+   "elements": 7520,
+   "sha256": "6b406e07e1693a36b93a6329e3fa8fb0672038d1e0ac8d6861a6fb31a5f0e2e0",
+   "sum": 29.579212395565264
+  },
+  "heads": {
+   "abs_sum": 613.1030427242549,
+   "elements": 11744,
+   "sha256": "d701f48113e0017685e57ae31227ccc769c32fbe8cfdb8c78c00b0c3ebd79789",
+   "sum": 29.287811158199474
+  },
+  "losses": [
+   4.7366437911987305,
+   9.657211303710938,
+   8.723138809204102,
+   8.306569576263428,
+   7.8473615646362305
+  ],
+  "optimizer": {
+   "abs_sum": 187.26166852704603,
+   "elements": 89387,
+   "sha256": "88847e75ab4647e359399cd01c30cfcabdd5270fd037057885dde7e2a09334b9",
+   "sum": 177.3164837345932
+  },
+  "phases": [
+   "projection_only",
+   "whole_transformer_adaptation",
+   "whole_transformer_adaptation",
+   "whole_transformer_adaptation",
+   "whole_transformer_adaptation"
+  ],
+  "rng": {
+   "abs_sum": 0.0,
+   "elements": 5056,
+   "sha256": "0cb4ff4f39804ca0b4ec3bc497a2513a8571abaca23a69c542ea6eb24e4587a2",
+   "sum": 0.0
+  },
+  "schedule": {
+   "adaptation_started_eval": 2,
+   "config": {
+    "backbone_ramp_evals": 1,
+    "heads": [
+     "input_map",
+     "full_depth"
+    ],
+    "max_sequence_passes": 3,
+    "min_evals": 2,
+    "min_relative_improvement": 1.0,
+    "pass_ramp_evals": 1,
+    "patience": 1
+   },
+   "eval_count": 6,
+   "head_state": {
+    "full_depth": {
+     "best": 2.4222748279571533,
+     "history": [
+      2.4222748279571533,
+      1.9800517559051514,
+      1.6078563928604126,
+      1.298012137413025,
+      1.0420233011245728,
+      0.8313048481941223
+     ],
+     "last_significant_eval": 1,
+     "plateau": {
+      "best_error": 2.4222748279571533,
+      "error": 1.9800517559051514,
+      "eval": 2,
+      "slope": -0.44222307205200195,
+      "stale_evals": 1
+     }
+    },
+    "input_map": {
+     "best": 2.314368724822998,
+     "history": [
+      2.314368724822998,
+      2.3500704765319824,
+      2.327277421951294,
+      2.2255187034606934,
+      2.0241596698760986,
+      1.7060381174087524
+     ],
+     "last_significant_eval": 1,
+     "plateau": {
+      "best_error": 2.314368724822998,
+      "error": 2.3500704765319824,
+      "eval": 2,
+      "slope": 0.035701751708984375,
+      "stale_evals": 1
+     }
+    }
+   },
+   "schema": "natlang.projection-first-schedule/2"
+  },
+  "sequence_passes": [
+   1,
+   1,
+   2,
+   3,
+   3
+  ],
+  "steps_logged": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "student_parameters": {
+   "abs_sum": 1096.6919457243393,
+   "elements": 44672,
+   "sha256": "0a639294a5ab7d91f8edae7f184a42e766f809afbc266c5271baa2078a1e8501",
+   "sum": 288.3041294777149
+  },
+  "updates": {
+   "backbone": true,
+   "full_projection": true,
+   "input_map": true
+  }
+ }
+}
