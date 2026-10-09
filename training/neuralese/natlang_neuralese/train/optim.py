@@ -105,3 +105,51 @@ def make_port_optimizer(policy: str, backbone, heads, lr: float, momentum: float
     embedding_ids = {id(p) for module in heads.modules() if isinstance(module, nn.Embedding) for p in module.parameters()}
     return PortMuonAdamW(named, lr=lr, vocab_size=int(backbone.embedding_weight.shape[0]), embedding_ids=embedding_ids,
                          momentum=momentum)
+
+
+def stochastic_round_(target: torch.Tensor, value: torch.Tensor) -> None:
+    """Write FP32 ``value`` into BF16 ``target`` with unbiased stochastic rounding: random low mantissa bits are added
+    before truncation, so updates below BF16 resolution survive in expectation."""
+    bits = value.contiguous().view(torch.int32)
+    noise = torch.randint_like(bits, 0, 1 << 16)
+    target.copy_(((bits + noise) & -65536).view(torch.float32))
+
+
+class LionSR(torch.optim.Optimizer):
+    """Lion (sign of interpolated momentum; one BF16 momentum buffer) for BF16 latents with stochastic-rounding
+    writes: the memory-lean optimizer of Mellum's full-latent QAT (2 copies of the weights instead of 4-6). The update
+    magnitude is ``lr`` per element, so for ternary latents ``lr`` is set in units of the codes' scale."""
+
+    def __init__(self, params, lr: float, betas=(0.9, 0.99), weight_decay: float = 0.0, chunk: int = 1 << 26):
+        super().__init__(params, dict(lr=lr, betas=betas, weight_decay=weight_decay))
+        self.chunk = chunk
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        if closure is not None:
+            raise ValueError("LionSR does not support closures")
+        for group in self.param_groups:
+            beta1, beta2 = group["betas"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                state = self.state[p]
+                if "momentum" not in state:
+                    state["momentum"] = torch.zeros_like(p, dtype=torch.bfloat16)
+                flat_p, flat_g, flat_m = p.view(-1), p.grad.view(-1), state["momentum"].view(-1)
+                for start in range(0, flat_p.numel(), self.chunk):
+                    end = start + self.chunk
+                    g = flat_g[start:end].float()
+                    m = flat_m[start:end].float()
+                    update = (beta1 * m + (1 - beta1) * g).sign_()
+                    value = flat_p[start:end].float()
+                    if group["weight_decay"]:
+                        value.mul_(1 - group["lr"] * group["weight_decay"])
+                        value.add_(update, alpha=-group["lr"])
+                    else:
+                        value.add_(update, alpha=-group["lr"])
+                    if flat_p.dtype == torch.bfloat16:
+                        stochastic_round_(flat_p[start:end], value)
+                    else:
+                        flat_p[start:end].copy_(value)
+                    flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))

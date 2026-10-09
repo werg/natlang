@@ -322,14 +322,38 @@ class DenseExperts(nn.Module):
     @torch.no_grad()
     def permute(self, order: torch.Tensor):
         for name in ("gate_up", "down"):
-            setattr(self, name, getattr(self, name)[order.to(getattr(self, name).device)].contiguous())
+            value = getattr(self, name)
+            permuted = value[order.to(value.device)].contiguous()
+            if isinstance(value, nn.Parameter):
+                value.data = permuted  # a latent keeps its identity (optimizer state is per parameter)
+            else:
+                setattr(self, name, permuted)
+
+    quantize = False
+
+    def make_latent(self) -> list[nn.Parameter]:
+        """Full-latent QAT (plans/mellum-port.md): the BF16 weights become trainable latents and every forward uses
+        their ternary codes (Maple's per-row rule, straight-through), so training moves codes, not only scales."""
+        for name in ("gate_up", "down"):
+            value = getattr(self, name)
+            if not isinstance(value, nn.Parameter):
+                del self._buffers[name]
+                setattr(self, name, nn.Parameter(value.detach().clone(), requires_grad=True))
+        self.quantize = True
+        return [self.gate_up, self.down]
+
+    def _value(self, weight, dtype):
+        if not self.quantize:
+            return weight.to(dtype)
+        from .ternary import ternarize_ste
+        return ternarize_ste(weight).to(dtype)
 
     def weights(self, index, dtype):
-        return self.gate_up[index].to(dtype), self.down[index].to(dtype)
+        return self._value(self.gate_up[index], dtype), self._value(self.down[index], dtype)
 
     def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
-        y = x @ self.gate_up[index].to(x.dtype).T
-        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ self.down[index].to(x.dtype).T
+        y = x @ self._value(self.gate_up[index], x.dtype).T
+        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ self._value(self.down[index], x.dtype).T
 
 
 class SparseMoE(nn.Module):

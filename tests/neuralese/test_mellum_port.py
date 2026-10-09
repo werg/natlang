@@ -102,3 +102,37 @@ def test_mellum_markers_are_its_spare_added_tokens_and_maple_keeps_unused_rows(t
         family_controls(mellum, Vocab({}))
     maple = SimpleNamespace(config=SimpleNamespace(model_type="maple"))
     assert family_controls(maple, Vocab({"a": 0})).open_id == QWEN_OPEN_ID
+
+
+def test_latent_ternary_experts_forward_their_codes_and_train_the_latents(tmp_path):
+    from natlang_neuralese.maple.ternary import ternarize
+
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    reference = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    for layer, ref in zip(model.model.layers, reference.model.layers):
+        layer.mlp.experts.make_latent()
+        with torch.no_grad():
+            for e in range(EXPERTS):
+                ref.mlp.experts.gate_up[e] = ternarize(ref.mlp.experts.gate_up[e])
+                ref.mlp.experts.down[e] = ternarize(ref.mlp.experts.down[e])
+    ids = torch.randint(0, 128, (1, 12))
+    logits = model(ids).logits
+    with torch.no_grad():
+        assert torch.allclose(logits, reference(ids).logits, atol=1e-5)
+    logits.float().square().mean().backward()
+    latent = model.model.layers[0].mlp.experts.gate_up
+    assert isinstance(latent, torch.nn.Parameter) and latent.grad is not None and latent.grad.abs().sum() > 0
+
+
+def test_stochastic_rounding_is_unbiased_and_lion_moves_by_lr():
+    from natlang_neuralese.train.optim import LionSR, stochastic_round_
+
+    torch.manual_seed(0)
+    target = torch.empty(200_000, dtype=torch.bfloat16)
+    stochastic_round_(target, torch.full((200_000,), 1.0 + 1e-4))
+    assert abs(float(target.float().mean()) - (1.0 + 1e-4)) < 2e-5  # BF16 spacing at 1.0 is 7.8e-3
+    p = torch.nn.Parameter(torch.zeros(1000, dtype=torch.float32))
+    p.grad = torch.ones(1000)
+    LionSR([p], lr=0.01).step()
+    assert torch.allclose(p.detach(), torch.full((1000,), -0.01))
