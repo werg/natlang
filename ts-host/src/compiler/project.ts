@@ -7,6 +7,7 @@
  * - Ordinary project files are type-checked, `nl` expressions are planned against the checker, and the
  *   emitted JavaScript calls the runtime through `__natlang`.
  */
+import { checkSequentialNlLoops } from './sequential-loops.js';
 import ts from 'typescript';
 import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
@@ -384,6 +385,7 @@ export function compileProject(options: BuildOptions): BuildResult {
   }
   const sources = rootNames.map(path => program.getSourceFile(path)).filter((file): file is ts.SourceFile => !!file);
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
+  for (const file of sources) diagnostics.push(...checkSequentialNlLoops(file, source => rel(source.fileName)));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
   const readouts = new Map<ts.SourceFile, import('./neuralese.js').NeuraleseReadout[]>();

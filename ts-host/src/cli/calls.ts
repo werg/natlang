@@ -71,6 +71,23 @@ function describeCall(store: CallStore, record: CallRecord): string {
     ...(store.children(record.call_id).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`))].join('\n');
 }
 
+/**
+ * Batch occupancy of the model requests in a set of events (plans/BATCHED_EXECUTION.md §3.6): how many requests the
+ * scheduler had in flight when each was sent, the size of the batch it left in, and how long it queued.
+ */
+export function occupancyOf(events: readonly Record<string, unknown>[]) {
+  const sent = events.filter(event => event.kind === 'model_request' && event.phase === 'end' && typeof event.batch_id === 'string');
+  const num = (event: Record<string, unknown>, key: string) => Number(event[key]) || 0;
+  const waits = sent.map(event => num(event, 'queue_wait_ms')).sort((x, y) => x - y);
+  const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const at = (p: number) => waits.length ? waits[Math.min(waits.length - 1, Math.ceil(p * waits.length) - 1)]! : 0;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return { requests: events.filter(event => event.kind === 'model_request' && event.phase === 'end').length, scheduled: sent.length,
+    batches: new Set(sent.map(event => event.batch_id)).size, mean_in_flight: round(mean(sent.map(event => num(event, 'in_flight')))),
+    max_in_flight: Math.max(0, ...sent.map(event => num(event, 'in_flight'))), mean_batch_size: round(mean(sent.map(event => num(event, 'batch_size')))),
+    queue_wait_ms_p50: round(at(0.5)), queue_wait_ms_p95: round(at(0.95)), running_turns: sent.filter(event => event.schedule_priority === 'running').length };
+}
+
 /** `natlang traces ...` */
 export async function tracesCommand(argv: string[]): Promise<number> {
   const args = parse(argv);
@@ -117,6 +134,17 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     print(json ? expanded(store, record) : describeCall(store, record), json);
     return 0;
   }
+  if (action === 'occupancy') {
+    const rows = store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), since: text(args, '--since'),
+      limit: number(args, '--limit', 200), audits: args.options.has('--all') });
+    const per = rows.map(row => ({ call_id: row.call_id, definition_name: row.definition_name, ...occupancyOf(store.events(row.call_id) ?? []) }))
+      .filter(row => row.requests > 0);
+    const total = occupancyOf(rows.flatMap(row => (store.events(row.call_id) ?? []).map(event => ({ ...event }))));
+    print(json ? { total, calls: per } : [`${rows.length} calls, ${total.requests} model requests, ${total.scheduled} with scheduler records in ${total.batches} batches`,
+      `in flight when sent: mean ${total.mean_in_flight}, max ${total.max_in_flight}; batch size mean ${total.mean_batch_size}; queue wait p50 ${total.queue_wait_ms_p50} ms, p95 ${total.queue_wait_ms_p95} ms; ${total.running_turns} turns of running calls`,
+      table(per, ['call_id', 'definition_name', 'requests', 'scheduled', 'batches', 'mean_in_flight', 'max_in_flight', 'mean_batch_size', 'queue_wait_ms_p95'])].join('\n'), json);
+    return 0;
+  }
   if (action === 'export') {
     for (const row of store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), limit: number(args, '--limit', 1000),
       audits: args.options.has('--all') })) {
@@ -147,7 +175,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     return 0;
   }
   if (action === 'evict') { print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined)} bytes`, false); return 0; }
-  throw new Error('usage: natlang traces status|hot|list|show|export|pin|unpin|annotate|config|evict');
+  throw new Error('usage: natlang traces status|hot|list|show|occupancy|export|pin|unpin|annotate|config|evict');
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */

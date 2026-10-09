@@ -7,7 +7,7 @@
  * probability score) and, on a Neuralese server, differentiated. A call opts in with `readout: decision` in its
  * frontmatter, or every finite-typed call does when the model config sets `decisionReadout: 'finite-returns'`.
  */
-import type { DecisionScorer } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contracts.js';
 import type { Type, TypeEnv } from './types.js';
 
 export type DecisionValue = string | number | boolean | null;
@@ -48,6 +48,15 @@ export const decisionPrompt = (replies: string[]) =>
 export function decisionScorer(driver: unknown): DecisionScorer | undefined {
   const decide = (driver as { decide?: unknown } | null)?.decide;
   return typeof decide === 'function' ? decide as DecisionScorer : undefined;
+}
+
+/**
+ * Score several decision requests at once. A scorer with its own `scoreMany` (batched on the server, or coalescing
+ * the readouts of concurrent calls) is used; otherwise the items are issued concurrently, so the model scheduler and
+ * the server see them together. One entry per item; an item that fails does so alone.
+ */
+export function scoreMany(scorer: DecisionScorer, items: DecisionRequest[], signal?: AbortSignal): Promise<PromiseSettledResult<DecisionScores>[]> {
+  return scorer.scoreMany ? scorer.scoreMany(items, signal) : Promise.allSettled(items.map(item => scorer(item, signal)));
 }
 
 /** Normalised probabilities from log-probabilities (stable softmax). */
