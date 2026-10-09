@@ -173,18 +173,30 @@ class AssemblerInvariantTests(unittest.TestCase):
                 source.write_text(json.dumps({"id": ident}) + "\n")
                 review = root / f"review-{index}.json"
                 review.write_text(json.dumps({"review": index}) + "\n")
-                approval = {
-                    "schema": "natlang.root-per-action-training-admission/1",
-                    "review_path": review.name, "review_sha256": builder.sha(review),
-                    "input_pins": {source.name: {"sha256": builder.sha(source), "bytes": source.stat().st_size}},
-                    "rows": [{"native_id": ident, "decision": "admit-ordinary-native-action", "training_admission": True,
-                              "split": "train", "source_group": group,
-                              "target_sha256": builder.target_digest({"target": target})}],
-                    "admitted_native_count": 1, "held_source_contract_final_count": 0,
-                    "held_ambiguous_source_read_scope_count": 0, "failed_count": 0, "already_adopted_count": 0,
-                    "whole_trajectory_admission": False, "runtime_qualification": False,
-                    "active_gpu_inputs_changed": False, "new_world_credit": False,
-                }
+                if index == 0:
+                    approval = {
+                        "schema": "natlang.root-per-action-training-admission/1",
+                        "review_path": review.name, "review_sha256": builder.sha(review),
+                        "input_pins": {source.name: {"sha256": builder.sha(source), "bytes": source.stat().st_size}},
+                        "rows": [{"native_id": ident, "decision": "admit-ordinary-native-action", "training_admission": True,
+                                  "split": "train", "source_group": group,
+                                  "target_sha256": builder.target_digest({"target": target})}],
+                        "admitted_native_count": 1, "held_source_contract_final_count": 0,
+                        "held_ambiguous_source_read_scope_count": 0, "failed_count": 0, "already_adopted_count": 0,
+                        "whole_trajectory_admission": False, "runtime_qualification": False,
+                        "active_gpu_inputs_changed": False, "new_world_credit": False,
+                    }
+                else:
+                    approval = {
+                        "schema": "natlang.root-selected-action-admission/1",
+                        "rows": [{"native_id": ident, "decision": "admit-exact-selected-native-action-SFT-only",
+                                  "split": "train", "source_groups": [group],
+                                  "target_sha256": builder.target_digest({"target": target})}],
+                        "counts": {"selected_native_actions": 1, "train_actions": 1, "test_actions": 0,
+                                   "whole_trajectories": 0, "new_worlds": 0},
+                        "qualifications": {"learned_writer": False, "recurrence": False},
+                        "integration": {"active_GPU_inputs_changed": False},
+                    }
                 approval_path = root / f"approval-{index}.json"
                 approval_path.write_text(json.dumps(approval) + "\n")
                 approvals.append(approval_path)

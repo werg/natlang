@@ -256,10 +256,10 @@ def main():
     approvals = [(path, json.loads(path.read_text())) for path in args.approval]
     if not approvals:
         raise ValueError('at least one root approval receipt is required')
-    approvals_are_per_action = all(approval.get('schema') == 'natlang.root-per-action-training-admission/1'
-                                   for _, approval in approvals)
-    if len(approvals) > 1 and not approvals_are_per_action:
-        raise ValueError('multiple approvals are supported only for independent root per-action receipts')
+    approved_schemas = {'natlang.root-per-action-training-admission/1',
+                        'natlang.root-selected-action-admission/1'}
+    if len(approvals) > 1 and any(approval.get('schema') not in approved_schemas for _, approval in approvals):
+        raise ValueError('multiple approvals require independently validated root action admission receipts')
     base_receipt = json.loads(paths['base-receipt'].read_text())
     root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
     prefix_binding = base_receipt.get('schema') == 'natlang.corpus-prefix-binding/1'
@@ -304,6 +304,7 @@ def main():
             raise ValueError('base root receipt does not bind the native piece prefix hash')
     approval_by_id = {}
     approval_sha_by_id = {}
+    approval_schema_by_id = {}
     approval_ids_by_receipt = []
     root_action_admission = False
     root_per_action_admission = False
@@ -364,6 +365,7 @@ def main():
             approval_by_id, approval_sha_by_id, current_by_id, receipt_hash)
         approval_ids_by_receipt.append({'path': str(approval_path.resolve()), 'sha256': receipt_hash,
                                         'approved_ids': current_ids})
+        approval_schema_by_id.update({ident: approval.get('schema') for ident in current_ids})
         # If the receipt provides an artifacts mapping, enforce hashes for every named input it binds.
         artifact_hashes = approval.get('artifact_hashes', {})
         for raw, expected in artifact_hashes.items():
@@ -381,8 +383,6 @@ def main():
                        {f'approval-{i+1}': path for i, (path, _) in enumerate(approvals)})
     if not approved:
         raise ValueError('approval receipts contain no approved IDs')
-    if root_per_action_admission and root_action_admission:
-        raise ValueError('cannot mix root action receipt schemas in one approval set')
     native_only = root_action_admission or root_per_action_admission
     base_n = list(rows(paths['base-native'])); base_r = list(rows(paths['base-recurrence']))
     delta_n = list(rows(paths['delta-native']))
@@ -403,6 +403,8 @@ def main():
         row = dict(row)
         if root_action_admission or root_per_action_admission:
             decision = approval_by_id[row['id']]
+            row_schema = approval_schema_by_id[row['id']]
+            row_is_root_action = row_schema == 'natlang.root-selected-action-admission/1'
             if target_digest(row) != decision.get('target_sha256'):
                 raise ValueError(f'root admission target digest mismatch: {row["id"]}')
             decision_groups = decision.get('source_groups')
@@ -410,15 +412,15 @@ def main():
                 decision_groups = [decision['source_group']]
             groups_match = (isinstance(decision_groups, list) and bool(decision_groups)
                             and (decision_groups == (row.get('source_groups') or [])
-                                 if root_action_admission else
+                                 if row_is_root_action else
                                  set(decision_groups).issubset(set(row.get('source_groups') or []))))
             if row.get('split') != decision.get('split') or not groups_match:
                 raise ValueError(f'root admission source split/group mismatch: {row["id"]}')
             row['training_admission'] = {
                 'approved': True,
-                'kind': ('root-per-action-native-action-sft-only' if root_per_action_admission
+                'kind': ('root-per-action-native-action-sft-only' if not row_is_root_action
                          else 'root-selected-native-action-sft-only'),
-                'status': 'admitted-ordinary-native-action' if root_per_action_admission
+                'status': 'admitted-ordinary-native-action' if not row_is_root_action
                           else 'admitted-exact-selected-native-action',
                 'root_admission_sha256': approval_sha_by_id[row['id']],
                 'decision': decision['decision'], 'role': decision.get('role')}
@@ -466,8 +468,8 @@ def main():
           'status': 'compact delta only; separate root integration review required',
           'compact_only': True,
           'approval': {**approval_summary,
-                       'id_field': ('rows.native_id where decision=admit-ordinary-native-action and training_admission=true'
-                                    if root_per_action_admission else args.approval_id_field)},
+                       'id_field': ('rows.native_id under receipt-specific strict decision/training_admission predicates'
+                                    if root_action_admission or root_per_action_admission else args.approval_id_field)},
           'admitted_facets': {'native': True, 'recurrence': False, 'native_only_receipt': native_only},
           'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
                      for k,v in {**paths, **approval_inputs, 'delta-recurrence': delta_r}.items() if k != 'out'},
@@ -529,8 +531,8 @@ def main():
       'schema': 'natlang.approved-neuralese-cohort-assembly-proposal/1',
       'status': 'proposal-only; separate root publication/admission review required',
       'approval': {**approval_summary,
-                   'id_field': ('rows.native_id where decision=admit-ordinary-native-action and training_admission=true'
-                                if root_per_action_admission else args.approval_id_field)},
+                   'id_field': ('rows.native_id under receipt-specific strict decision/training_admission predicates'
+                                if root_action_admission or root_per_action_admission else args.approval_id_field)},
       'admitted_facets': {'native': True, 'recurrence': not native_only,
                           'native_only_receipt': native_only},
       'inputs': {k: {'path': str(v.resolve()), 'sha256': sha(v), 'bytes': v.stat().st_size}
