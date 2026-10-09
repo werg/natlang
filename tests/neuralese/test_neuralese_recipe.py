@@ -1,4 +1,10 @@
 import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -428,3 +434,67 @@ def test_every_declared_shared_core_warmup_names_its_input_mode():
         for stage in recipe['stages']:
             if stage['kind'] == 'core_text_warmup':
                 assert stage['parameters']['neuralese_input'] in {'map', 'sketch'}
+
+
+def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp_path):
+    from natlang_neuralese.train.recipe import _ChildSignalForwarder
+
+    ready, received = tmp_path / 'ready', tmp_path / 'received'
+    child_code = (
+        'import pathlib,signal,sys,time; '
+        'ready=pathlib.Path(sys.argv[1]); received=pathlib.Path(sys.argv[2]); '
+        'signal.signal(signal.SIGTERM, lambda *_: (received.write_text("term"), sys.exit(0))); '
+        'ready.write_text("ready"); time.sleep(30)'
+    )
+    forwarder = _ChildSignalForwarder()
+    previous = signal.getsignal(signal.SIGTERM)
+    forwarder.install()
+
+    def send_after_child_ready():
+        deadline = time.monotonic() + 3
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    sender = threading.Thread(target=send_after_child_ready)
+    try:
+        sender.start()
+        result = forwarder.run([sys.executable, '-c', child_code, str(ready), str(received)])
+        sender.join(timeout=3)
+        assert not sender.is_alive()
+        assert forwarder.stopped == [True]
+        assert result.returncode == 0
+        assert received.read_text() == 'term'
+    finally:
+        forwarder.close()
+    assert signal.getsignal(signal.SIGTERM) == previous
+
+
+def test_child_signal_forwarder_handles_signal_before_child_attachment(tmp_path):
+    from natlang_neuralese.train.recipe import _ChildSignalForwarder
+
+    ready, received = tmp_path / 'ready', tmp_path / 'received'
+    child_code = (
+        'import pathlib,signal,sys,time; '
+        'ready=pathlib.Path(sys.argv[1]); received=pathlib.Path(sys.argv[2]); '
+        'signal.signal(signal.SIGTERM, lambda *_: (received.write_text("term"), sys.exit(0))); '
+        'ready.write_text("ready"); time.sleep(30)'
+    )
+    forwarder = _ChildSignalForwarder()
+    forwarder.install()
+    child = None
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+        child = subprocess.Popen([sys.executable, '-c', child_code, str(ready), str(received)])
+        deadline = time.monotonic() + 3
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        forwarder.attach(child)
+        assert child.wait(timeout=3) == 0
+        assert received.read_text() == 'term'
+    finally:
+        if child is not None and child.poll() is None:
+            child.kill()
+            child.wait(timeout=3)
+        forwarder.close()

@@ -303,6 +303,55 @@ def write_json(path, value):
     pending.replace(path)
 
 
+class _ChildSignalForwarder:
+    """Forward container termination signals to the active training child.
+
+    Container PID 1 can ignore the default SIGTERM disposition. Recipe runners
+    therefore install a handler and explicitly notify their child, allowing the
+    trainer to finish its current update and write its resumable checkpoint.
+    The same object is used by direct and multi-stage recipes.
+    """
+    def __init__(self):
+        self.stopped = [False]
+        self.child = [None]
+        self._previous = {}
+
+    def _handle(self, sig, _frame):
+        self.stopped[0] = True
+        child = self.child[0]
+        if child is not None and child.poll() is None:
+            child.send_signal(sig)
+
+    def install(self):
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            self._previous[sig] = signal.getsignal(sig)
+            signal.signal(sig, self._handle)
+
+    def attach(self, child):
+        self.child[0] = child
+        # A signal can arrive after the handler is installed but before Popen
+        # returns. Deliver it once the process handle becomes available.
+        if self.stopped[0] and child.poll() is None:
+            child.send_signal(signal.SIGTERM)
+        return child
+
+    def detach(self, child):
+        if self.child[0] is child:
+            self.child[0] = None
+
+    def close(self):
+        for sig, previous in self._previous.items():
+            signal.signal(sig, previous)
+        self._previous.clear()
+
+    def run(self, command, *, env=None):
+        child = self.attach(subprocess.Popen(command, env=env))
+        try:
+            return subprocess.CompletedProcess(command, child.wait())
+        finally:
+            self.detach(child)
+
+
 def stage_parameter_args(parameters):
     """Serialize a validated stage's typed options into CLI arguments."""
     command = []
@@ -394,7 +443,12 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
     print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
-    result = subprocess.run(command, env=environment, check=False)
+    signal_forwarder = _ChildSignalForwarder()
+    signal_forwarder.install()
+    try:
+        result = signal_forwarder.run(command, env=environment)
+    finally:
+        signal_forwarder.close()
     stage_report = stage_output / 'report.json'
     report = json.loads(stage_report.read_text()) if stage_report.is_file() else None
     qualified = False
@@ -531,17 +585,17 @@ def main(argv=None):
                               'recipe_plan_sha256': sha(plan_path),
                               'frozen_runtime_sha256': plan.get('code', {}),
                               'stage_inputs': stage_inputs})
-    stopped = [False]
-    child = [None]
-    def interrupt(*_):
-        stopped[0] = True
-        if child[0] is not None:
-            child[0].send_signal(signal.SIGTERM)
-    for sig in [signal.SIGINT, signal.SIGTERM]:
-        signal.signal(sig, interrupt)
+    signal_forwarder = _ChildSignalForwarder()
+    signal_forwarder.install()
+    stopped = signal_forwarder.stopped
     reports = []
     feedback_checkpoint = None
     for stage in recipe['stages']:
+        if stopped[0]:
+            signal_forwarder.close()
+            print(json.dumps({'status': 'checkpointed_on_signal', 'stage': stage['id'],
+                              'before_child_start': True}), flush=True)
+            return
         directory = args.out / stage['id']
         report_path = args.out / (stage['id'] + '-report.json')
         kind = stage['kind']
@@ -588,11 +642,11 @@ def main(argv=None):
             environment = dict(os.environ)
             environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
             print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
-            child[0] = subprocess.Popen(command, env=environment)
-            code = child[0].wait()
-            child[0] = None
+            result = signal_forwarder.run(command, env=environment)
+            code = result.returncode
             if stopped[0]:
                 print(json.dumps({'status': 'checkpointed_on_signal', 'stage': stage['id']}), flush=True)
+                signal_forwarder.close()
                 return
             if code:
                 raise RuntimeError('stage failed: ' + stage['id'])
@@ -635,7 +689,9 @@ def main(argv=None):
                                        'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
             write_json(args.out / 'foundation-certificate.json', certificate)
         if args.until == stage['id']:
+            signal_forwarder.close()
             return
+    signal_forwarder.close()
     print(json.dumps({'status': 'recipe_completed', 'foundation_runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
 
 
