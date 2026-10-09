@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from luna_source_inventory import verify as verify_luna_source_inventory
 
 
 def sha(path: Path) -> str:
@@ -29,7 +30,8 @@ def main() -> None:
     args = parser.parse_args()
     plan_path = args.plan.resolve()
     plan = json.loads(plan_path.read_text())
-    if plan.get("schema") != "natlang.reviewed_luna_dispatch_plan/1":
+    schema = plan.get("schema")
+    if schema not in {"natlang.reviewed_luna_dispatch_plan/1", "natlang.reviewed_luna_dispatch_plan/2"}:
         raise ValueError("unsupported dispatch plan schema")
     for path_text, expected in (plan.get("artifact_hashes") or {}).items():
         require_file(Path(path_text), expected, "artifact pin")
@@ -41,6 +43,15 @@ def main() -> None:
                  if (parent / "training/neuralese_corpora.json").is_file()), None)
     if root is None:
         raise ValueError("cannot locate repository root from the dispatch plan")
+    if schema == "natlang.reviewed_luna_dispatch_plan/2":
+        source_inventory = plan.get("source_inventory")
+        if not isinstance(source_inventory, dict):
+            raise ValueError("plan v2 lacks a source inventory binding")
+        inventory_path = resolve(source_inventory.get("path", ""), plan_path.parent)
+        expected = source_inventory.get("sha256")
+        require_file(inventory_path, expected, "source inventory")
+        source_path = resolve(plan.get("source", ""), plan_path.parent)
+        verify_luna_source_inventory(inventory_path, source_path, plan.get("cases") or [])
     def linked_path(name: str, hash_name: str | None = None) -> Path:
         value = prior.get(name)
         if not isinstance(value, str) or not value:
