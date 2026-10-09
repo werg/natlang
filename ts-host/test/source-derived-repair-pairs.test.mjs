@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { loadSourceDerivedRepairCandidates, sourceDerivedRepairReviewPair,
   validateSourceDerivedRepairItem } from '../scripts/source-derived-repair-pairs.mjs';
@@ -46,6 +47,14 @@ test('holds target, prompt, evidence, and source-group tampering', async () => {
   const invalidScope = structuredClone(items[0]);
   invalidScope.pair_contract.no_grader_or_expected_output_in_provider_context = false;
   assert.equal(validateSourceDerivedRepairItem(invalidScope).reason, 'counterfactual_scope_flags_invalid');
+  const extraArgument = structuredClone(items[0]);
+  extraArgument.counterfactual_repair.target_arguments.unexpected = true;
+  extraArgument.counterfactual_repair.target_tool_call.function.arguments = JSON.stringify(extraArgument.counterfactual_repair.target_arguments);
+  assert.equal(validateSourceDerivedRepairItem(extraArgument).reason, 'typed_terminal_call_arguments_mismatch');
+  const badStatus = structuredClone(items[0]);
+  badStatus.counterfactual_repair.target_arguments.status = 'blocked';
+  badStatus.counterfactual_repair.target_tool_call.function.arguments = JSON.stringify(badStatus.counterfactual_repair.target_arguments);
+  assert.equal(validateSourceDerivedRepairItem(badStatus).reason, 'typed_terminal_call_arguments_mismatch');
   const wrongGroupContract = structuredClone(items[0]);
   wrongGroupContract.pair_contract.preserves_source_group_and_split = false;
   assert.equal(validateSourceDerivedRepairItem(wrongGroupContract).reason, 'counterfactual_scope_flags_invalid');
@@ -58,4 +67,30 @@ test('rejects malformed source-derived typed fact shape', async () => {
   river.counterfactual_repair.target_arguments.value.rationale = 'extra field';
   river.counterfactual_repair.target_tool_call.function.arguments = JSON.stringify(river.counterfactual_repair.target_arguments);
   assert.equal(validateSourceDerivedRepairItem(river).reason, 'source_derived_typed_fact_does_not_match_pinned_source');
+  const malformedJson = structuredClone(items[0]);
+  malformedJson.counterfactual_repair.target_tool_call.function.arguments = '{bad';
+  assert.equal(validateSourceDerivedRepairItem(malformedJson).reason, 'typed_terminal_call_arguments_malformed_json');
+  const alteredTargetPin = structuredClone(items[0]);
+  alteredTargetPin.counterfactual_repair.target_canonical_sha256 = '0'.repeat(64);
+  assert.equal(validateSourceDerivedRepairItem(alteredTargetPin).reason, 'counterfactual_target_hash_mismatch');
+});
+
+test('resolves artifact paths from repo markers at varied depth and accepts a one-item review fixture', async () => {
+  const loaded = await loadSourceDerivedRepairCandidates(proposalPath);
+  const temporaryRoot = await mkdtemp(path.join(root, '.source-derived-repair-depth-'));
+  const nested = path.join(temporaryRoot, 'a', 'b', 'c', 'proposal.json');
+  try {
+    await mkdir(path.dirname(nested), { recursive: true });
+    await writeFile(nested, JSON.stringify({ ...loaded.proposal, items: [loaded.items[0]] }));
+    const subset = await loadSourceDerivedRepairCandidates(nested);
+    assert.equal(subset.items.length, 1);
+    assert.equal(subset.items[0].id, loaded.items[0].id);
+
+    const tampered = structuredClone(subset.proposal);
+    tampered.items[0].original_provider_decision.request_sha256 = '0'.repeat(64);
+    await writeFile(nested, JSON.stringify(tampered));
+    await assert.rejects(loadSourceDerivedRepairCandidates(nested), /proposal request\/action\/context differs/);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 });

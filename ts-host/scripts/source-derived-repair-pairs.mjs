@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { responseTarget, PREFERENCE_VERSION } from '../dist/teacher/handoff.js';
 
@@ -13,6 +13,11 @@ export function validateSourceDerivedRepairItem(item) {
   const source = item?.source, original = item?.original_provider_decision;
   const repair = item?.counterfactual_repair, contract = item?.pair_contract;
   if (!item?.id || !source || !original || !repair || !contract) return fail('missing_required_repair_fields');
+  if (!source.eligibility_file_body || typeof source.eligibility_file_body !== 'object' ||
+      Array.isArray(source.eligibility_file_body) || !repair.target_tool_call?.function ||
+      typeof repair.target_tool_call.function !== 'object') return fail('source_or_typed_target_shape_invalid');
+  if (!Array.isArray(original.provider_context) || !Array.isArray(original.tools_offered) ||
+      !Array.isArray(original.observed_model_response?.calls)) return fail('provider_context_or_observed_action_missing');
   if (source.split !== 'train') return fail('source_not_train_split');
   if (!source.source_id || !source.source_group || !source.program_id || !source.source_row_sha256_including_lf)
     return fail('source_identity_or_row_pin_missing');
@@ -24,7 +29,8 @@ export function validateSourceDerivedRepairItem(item) {
   if (sha256(canonical(original.provider_context)) !== original.provider_context_canonical_sha256 ||
       contract.original_context_hash !== original.provider_context_canonical_sha256)
     return fail('provider_context_hash_mismatch');
-  if (sha256(canonical(original.tools_offered)) !== original.tools_offered_canonical_sha256)
+  if (!/^[a-f0-9]{64}$/.test(original.tools_offered_canonical_sha256 ?? '') ||
+      sha256(canonical(original.tools_offered)) !== original.tools_offered_canonical_sha256)
     return fail('offered_tool_schema_hash_mismatch');
   if (repair.target_is_counterfactual !== true || repair.target_is_model_observed !== false ||
       repair.original_model_hidden_states_equivalent !== false || repair.successful_task_completion_claimed !== false ||
@@ -36,9 +42,14 @@ export function validateSourceDerivedRepairItem(item) {
       contract.same_exact_provider_context !== true || contract.same_offered_return_result_tool_schema !== true ||
       contract.preserves_source_group_and_split !== true)
     return fail('counterfactual_scope_flags_invalid');
-  if (repair.target_arguments?.status !== 'success' || !Object.hasOwn(repair.target_arguments, 'value') ||
-      canonical(repair.target_arguments) !== canonical(repair.target_tool_call?.function?.arguments
-        ? JSON.parse(repair.target_tool_call.function.arguments) : null))
+  if (!repair.target_arguments || typeof repair.target_arguments !== 'object' || Array.isArray(repair.target_arguments))
+    return fail('typed_terminal_call_arguments_invalid');
+  let encodedArguments;
+  try { encodedArguments = JSON.parse(repair.target_tool_call?.function?.arguments); }
+  catch { return fail('typed_terminal_call_arguments_malformed_json'); }
+  if (repair.target_arguments.status !== 'success' || !Object.hasOwn(repair.target_arguments, 'value') ||
+      Object.keys(repair.target_arguments).sort().join(',') !== 'status,value' ||
+      canonical(repair.target_arguments) !== canonical(encodedArguments))
     return fail('typed_terminal_call_arguments_mismatch');
   if (repair.target_tool_call?.function?.name !== 'return_result' ||
       canonical(repair.target_value) !== canonical(repair.target_arguments.value))
@@ -66,12 +77,14 @@ export function validateSourceDerivedRepairItem(item) {
   if (sha256(canonical(source.eligibility_file_body)) !== source.eligibility_file_body_sha256 ||
       repair.source_oracle_lineage?.exact_eligibility_source_body_sha256 !== source.eligibility_file_body_sha256)
     return fail('source_evidence_hash_mismatch');
+  if (sha256(canonical(original.observed_model_response)) !== original.original_target_sha256)
+    return fail('observed_target_hash_mismatch');
+  if (sha256(canonical(repair.target_tool_call)) !== repair.target_canonical_sha256)
+    return fail('counterfactual_target_hash_mismatch');
   const captured = original.typed_child_capture_record?.host_capture_value ??
     original.typed_child_capture_record?.returned_host_value;
   const observedFalse = captured === false || (captured && typeof captured === 'object' && captured.eligible === false);
   if (!observedFalse) return fail('observed_rejected_value_not_false');
-  if (!Array.isArray(original.provider_context) || !Array.isArray(original.tools_offered) ||
-      !Array.isArray(original.observed_model_response?.calls)) return fail('provider_context_or_observed_action_missing');
   const observedCalls = original.observed_model_response.calls;
   if (observedCalls.length !== 1 || typeof observedCalls[0]?.[0] !== 'string' || !observedCalls[0]?.[1])
     return fail('observed_terminal_action_missing');
@@ -79,7 +92,7 @@ export function validateSourceDerivedRepairItem(item) {
 }
 
 export async function loadSourceDerivedRepairCandidates(proposalPath) {
-  const base = path.resolve(path.dirname(proposalPath), '../../../../');
+  const base = await findRepositoryRoot(path.dirname(path.resolve(proposalPath)));
   const proposalBytes = await readFile(proposalPath);
   const proposal = JSON.parse(proposalBytes.toString('utf8'));
   if (proposal.schema !== 'natlang.source-derived-counterfactual-action-repair-review/2' ||
@@ -87,29 +100,56 @@ export async function loadSourceDerivedRepairCandidates(proposalPath) {
     throw new Error('unsupported source-derived repair proposal schema or disposition');
   const pinFile = async (pin, label) => {
     if (!pin?.path || !/^[a-f0-9]{64}$/.test(pin.sha256 ?? '')) throw new Error(`${label}: missing immutable path/hash pin`);
-    const bytes = await readFile(path.resolve(base, pin.path));
+    const bytes = await readFile(resolveRepoArtifact(base, pin.path));
     if (sha256(bytes) !== pin.sha256) throw new Error(`${label}: pinned file hash mismatch`);
     return bytes;
   };
   const audit = JSON.parse((await pinFile(proposal.audit_receipt, 'source audit')).toString('utf8'));
   const inventory = JSON.parse((await pinFile(proposal.source_inventory, 'source inventory')).toString('utf8'));
-  if (inventory.source_sha256 !== proposal.source_inventory.source_sha256)
+  if (!audit || !Array.isArray(audit.cases) || !inventory ||
+      !/^[a-f0-9]{64}$/.test(inventory.source_sha256 ?? '') ||
+      inventory.source_sha256 !== proposal.source_inventory.source_sha256 ||
+      audit.source?.sha256 !== inventory.source_sha256)
     throw new Error('source inventory does not bind the pinned source corpus');
-  const sourceBytes = await readFile(path.resolve(base, inventory.source_path));
+  const sourceBytes = await readFile(resolveRepoArtifact(base, inventory.source_path));
   if (sha256(sourceBytes) !== inventory.source_sha256) throw new Error('source corpus hash mismatch');
-  const sourceLines = sourceBytes.toString('utf8').split(/(?<=\n)/);
+  const sourceLines = sourceBytes.toString('utf8').split(/(?<=\n)/).filter(Boolean);
   const resultCache = new Map();
+  const seen = new Set();
   for (const item of proposal.items) {
     const checked = validateSourceDerivedRepairItem(item);
     if (!checked.ok) throw new Error(`${item?.id ?? 'unknown repair'}: ${checked.reason}`);
+    if (seen.has(item.id)) throw new Error(`${item.id}: duplicate proposal item ID`);
+    seen.add(item.id);
     if (item.source.source_file_sha256 !== inventory.source_sha256) throw new Error(`${item.id}: source corpus pin mismatch`);
     const sourceLine = sourceLines.find(line => line.endsWith('\n') &&
       (JSON.parse(line).source_ids ?? []).includes(item.source.source_id));
     if (!sourceLine || sha256(sourceLine) !== item.source.source_row_sha256_including_lf)
       throw new Error(`${item.id}: exact source row bytes do not match`);
     const sourceRow = JSON.parse(sourceLine);
-    if (sourceRow.split !== item.source.split || !sourceRow.source_groups?.includes(item.source.source_group))
+    if (sourceRow.id !== item.source.program_id || sourceRow.split !== item.source.split ||
+        !Array.isArray(sourceRow.source_ids) || !sourceRow.source_ids.includes(item.source.source_id) ||
+        !Array.isArray(sourceRow.source_groups) || !sourceRow.source_groups.includes(item.source.source_group))
       throw new Error(`${item.id}: source split/group binding mismatch`);
+    const auditCases = audit.cases.filter(candidate => candidate?.source?.source_id === item.source.source_id);
+    if (auditCases.length !== 1) throw new Error(`${item.id}: source audit case is missing or ambiguous`);
+    const auditCase = auditCases[0];
+    const auditSource = auditCase.source, auditRun = auditCase.sampled_execution, auditDecision = auditCase.first_wrong_decision;
+    if (auditSource.program_id !== item.source.program_id || auditSource.split !== item.source.split ||
+        auditSource.source_group !== item.source.source_group ||
+        auditSource.source_row_sha256_including_lf !== item.source.source_row_sha256_including_lf ||
+        auditSource.physical_jsonl_index !== item.source.physical_source_index ||
+        auditRun.result_sha256 !== item.original_provider_decision.raw_result_sha256 ||
+        auditDecision.call_id !== item.original_provider_decision.invocation_id ||
+        canonical(auditDecision.returned_host_value) !== canonical(item.original_provider_decision.observed_host_value))
+      throw new Error(`${item.id}: source audit receipt does not bind this source/action/result`);
+    const proposalDecision = item.original_provider_decision.exact_callstore_first_wrong_decision;
+    if (!proposalDecision || auditDecision.callstore_record_hash !== proposalDecision.callstore_record_hash ||
+        auditDecision.callstore_events_hash !== proposalDecision.callstore_events_hash ||
+        auditDecision.initial_state_sha256 !== proposalDecision.initial_state_sha256 ||
+        canonical(auditDecision.terminal_eval_action) !== canonical(proposalDecision.terminal_eval_action) ||
+        auditDecision.returned_value_sha256 !== proposalDecision.returned_value_sha256)
+      throw new Error(`${item.id}: source audit does not bind the exact first wrong action/capture`);
     const folderFiles = sourceRow.semantics?.folder_files ?? {};
     const eligibilityText = folderFiles[item.source.eligibility_file];
     const noticeText = folderFiles[item.source.review_notice_file];
@@ -125,7 +165,7 @@ export async function loadSourceDerivedRepairCandidates(proposalPath) {
     const expectedValues = [...Object.values(expectedFiles), sourceRow.semantics?.expected];
     if (expectedValues.some(expected => typeof expected === 'string' && expected && providerContextText.includes(expected)))
       throw new Error(`${item.id}: grader expected output appears in the provider prompt`);
-    const resultPath = path.resolve(base, item.original_provider_decision.raw_result_path);
+    const resultPath = resolveRepoArtifact(base, item.original_provider_decision.raw_result_path);
     let result = resultCache.get(resultPath);
     if (!result) {
       const resultBytes = await readFile(resultPath);
@@ -145,9 +185,33 @@ export async function loadSourceDerivedRepairCandidates(proposalPath) {
     if (canonical(event.assistant) !== canonical(item.original_provider_decision.observed_assistant))
       throw new Error(`${item.id}: raw provider terminal action differs from pinned assistant action`);
   }
-  if (proposal.items.length !== 3) throw new Error('expected exactly three source-audited repair candidates');
+  if (!Array.isArray(proposal.items)) throw new Error('source-derived repair items must be an array');
   return { proposal, proposal_sha256: sha256(proposalBytes), audit_sha256: proposal.audit_receipt.sha256,
     source_inventory_sha256: proposal.source_inventory.sha256, items: proposal.items, audit };
+}
+
+async function findRepositoryRoot(start) {
+  let current = start;
+  while (true) {
+    try {
+      await Promise.all([access(path.join(current, 'scripts/coordination_inbox.py')),
+        access(path.join(current, 'training/neuralese_corpora.json'))]);
+      return current;
+    } catch { /* keep walking toward filesystem root */ }
+    const parent = path.dirname(current);
+    if (parent === current) throw new Error(`could not locate repository root from ${start}`);
+    current = parent;
+  }
+}
+
+function resolveRepoArtifact(root, relativePath) {
+  if (typeof relativePath !== 'string' || !relativePath)
+    throw new Error('artifact locator must be a non-empty path');
+  const resolved = path.isAbsolute(relativePath) ? path.resolve(relativePath) : path.resolve(root, relativePath);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative.startsWith(`..${path.sep}`) || relative === '..')
+    throw new Error(`artifact locator escapes repository root: ${relativePath}`);
+  return resolved;
 }
 
 export function sourceDerivedRepairReviewPair(item) {
