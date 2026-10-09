@@ -94,6 +94,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
   for (let attempt = 1; ; attempt++) {
     try {
       phaseState.failed = undefined;
+      phaseState.advanced = undefined;
       const summary = await host.natlang.run(() => entry(attempt === 1 ? facts : { ...facts, previousAttempt }), { services, serviceDeclarations, signal: runtime.signal,
         name: `${task.kind}#${task.id}:${phase}` });
       // An executor that returned normally after a final failure still faults the task (the catch below).
