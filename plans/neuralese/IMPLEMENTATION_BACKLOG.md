@@ -62,11 +62,11 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | 1 Consumer tracing over graph records | not started | No consumer classifier; `native/graph.ts` records nodes |
 | 2 Compiler conversion pass (value/function/skill sites) | partial | `neuralese-rewrite-trajectories.mjs`, `neuralese-convert-trajectories.mjs` (data side only) |
 | 3 Converted-task builds, both forms executed | not started | — |
-| 4 Graph-level replay trainer | partial | Per-call replay: `serve/grad.py` GradSession, `train/execution.py`; no multi-call graph trainer |
+| 4 Graph-level replay trainer | built (smoke) | `train/graph_replay.py`: whole-program replay of `natlang.replay-record/1` records with propagated writes (S5 §3.2 step 5; S4 teacher forcing keeps recorded values, so upstream training needs propagation), soft-value bank, trained/initial/zeroed/shuffled controls and G2 gate; records from `ts-host/src/neuralese/replay-records.ts` (`learningService({replayRecords})`); producers now include function-captured calls (`learning.ts` `Recorder.nested`). Closures beyond recorded producers not covered |
 | 5 Fresh-rollout pipeline recorded as graphs | partial | `ts-host/src/neuralese/recording.ts`; no campaign driver |
-| 6 Text versions of operators, `compose`; trajectory collection | partial | Text bodies plus `buildStandardLibrary` in `ts-host/src/neuralese/combinators.ts`; no Mellum stdlib built, no collection |
-| 7 Operator training as soft values | not started | — |
-| 8 Law losses and law suite | partial | Law objectives in `learning.ts` and the server; no law measurements per dialect |
+| 6 Text versions of operators, `compose`; trajectory collection | partial | Text bodies plus `buildStandardLibrary`; Python `stdlib.py`; LFM2.5-350M (pilot-v4 heads) text stdlib artifact `stdlib-lfm25-350m-pilotv4-text-20261009-v1`; operator cases `neuralese-operator-cases-20261009-v1` (`data/operator_cases.py`, code-computed targets) and collector `ts-host/scripts/neuralese-collect-operator-records.mjs` (read, map, zip/split, laws); no Mellum stdlib, `compose` not collected |
+| 7 Operator training as soft values | built (smoke, unqualified) | `graph_replay` trains the stdlib bodies: 60 steps on 144 records; held 72: trained 2.989 vs initial 3.460, zeroed 3.169, shuffled 3.224 (G2 passed); artifact `stdlib-lfm25-350m-pilotv4-trained-20261009-v1`. Text-init is worse than zeroed bodies. No full-size run, no live runtime check |
+| 8 Law losses and law suite | partial | Law objectives in `learning.ts` and the server; combineIdentity and splitZip collected and trained in the S5 smoke (held: 1.94→1.62, 2.26→1.64); no law suite per dialect |
 | 9–13 Curriculum, literal data, agreement eval, G2 harness, data products | not started | — |
 
 ## S6 soft skills and meta-learning (with LEARNING_CONTINUUM M0–M7)
@@ -116,8 +116,8 @@ Out of 44 audited deliverables (updated 2026-10-09 after the artifact work and a
 | 2 | Mellum foundation warm-up, runtime check, recurrence via shared recipes (#45), with nested members (#44) | Mellum session; recipes via the C3 recipe consolidation by dgx-claude-7351f337 |
 | 3 | Artifact registry plus a standard recipe/trainer include path (done 2026-10-09 except publication); next: backbone-specific dialect tags (decision), Mellum runs pass `--bank` and register their banks | backlog agent; dialect: owner |
 | 4 | Mellum text-initialised artifacts: standard library (`buildStandardLibrary` against a Mellum server) and system-prompt bank (from a Mellum trajectory run with `--bank`, or the TS builder against a Mellum server) | backlog agent once a Mellum server runs |
-| 5 | S5 multi-call graph replay (credit across chains of calls and closures); per-call replay over converted records exists in `trajectories.py` | backlog agent, in new modules |
-| 6 | Operator/combinator training samples and operator training (S5 items 6–7) with law terms | backlog agent |
+| 5 | S5 multi-call graph replay (credit across chains of calls and closures); per-call replay over converted records exists in `trajectories.py` | built 2026-10-10 (`train/graph_replay.py`, smoke-gated); next: full-size run, Mellum records |
+| 6 | Operator/combinator training samples and operator training (S5 items 6–7) with law terms | built 2026-10-10 (smoke, unqualified artifacts); next: scale cases, live runtime check |
 | 7 | Reference server serving Mellum students (QAT-converted latents, read adapter) | Mellum session |
 | 8 | llama.cpp/wasm for Mellum (MoE + ternary) and refreshing the browser build to the fork pin | batched-scoring/fork agent |
 | 9 | S7 rollout task record, environment contract and rollout driver (smoke done 2026-10-09; next: monitors, multi-round on Mellum) | RL sub-agent |

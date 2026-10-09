@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-operator-cases-20261009-v1",
+  "owner": "dgx",
+  "path": "runs/neuralese-operator-cases-20261009-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 1240039,
+      "sha256": "74553fe4efbc11aae457f2eeea9c6985d9d30160d90d0d0e41c3c9df9b11dd97",
+      "lines": 2000
+    }
+  ],
+  "bytes": 1240039
+}

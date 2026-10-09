@@ -4,6 +4,9 @@ args:
   syntax: Syntax
 returns: Checked
 ---
+First look at syntax's diagnostics, which the parser filled in. When it has any, return them unchanged as the
+diagnostics, with no declarations, and analyze nothing. Otherwise analyze syntax as follows.
+
 Analyze syntax, a parsed Rust program in the subset this compiler takes, and return its declarations with every node
 analyzed, and its errors. The subset:
 - free functions and `main`; structs of scalar fields, with `impl` blocks;

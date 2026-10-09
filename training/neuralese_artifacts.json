@@ -118,6 +118,78 @@
       ]
     },
     {
+      "id": "stdlib-lfm25-350m-pilotv4-text-20261009-v1",
+      "kind": "standard-library",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/neuralese/combinators.ts",
+        "builder": "ts-host/src/runtime/node-files.ts:buildStandardLibrary"
+      },
+      "training": null,
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "stdlib.nz": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/stdlib-text-init.nz"
+      },
+      "registered": "2026-10-09T22:12:02+00:00",
+      "notes": "Text-initialised combinator bodies (encode of each COMBINATORS description) for LFM2.5-350M with the runs/neuralese-s3-pilot-20261005-v4 heads; the init of S5 operator training. Pre-training controls on held operator records: text-init 3.460 is worse than zeroed bodies 3.169.",
+      "path": "data/neuralese/artifacts/stdlib-lfm25-350m-pilotv4-text-20261009-v1",
+      "files": [
+        "stdlib.nz"
+      ]
+    },
+    {
+      "id": "stdlib-lfm25-350m-pilotv4-trained-20261009-v1",
+      "kind": "standard-library",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "trained",
+        "parent": "stdlib-lfm25-350m-pilotv4-text-20261009-v1"
+      },
+      "training": {
+        "corpora": [
+          "neuralese-s5-operator-replay-records-20261009-v1"
+        ],
+        "trainer": "natlang_neuralese.train.graph_replay",
+        "commit": "a78372fcdb016d271118bfbfbc602ee1db6bb610",
+        "run": "runs/neuralese-s5-operator-smoke-20261009-v1/train"
+      },
+      "qualification": {
+        "status": "unqualified",
+        "evidence": [
+          "runs/neuralese-s5-operator-smoke-20261009-v1/train/result.json"
+        ]
+      },
+      "origin": {
+        "stdlib.nz": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/train/trained.nz",
+        "result.json": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/train/result.json",
+        "train.jsonl": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/train/train.jsonl"
+      },
+      "registered": "2026-10-09T22:12:06+00:00",
+      "notes": "S5 smoke: 60 steps whole-program replay (propagated writes) over 144 train records; held 72 records: trained 2.989 vs initial 3.460, zeroed 3.169, shuffled 3.224 (G2 margin 0 passed). Smoke only, 24 train cases; unqualified until a real run and live runtime check.",
+      "path": "data/neuralese/artifacts/stdlib-lfm25-350m-pilotv4-trained-20261009-v1",
+      "files": [
+        "result.json",
+        "stdlib.nz",
+        "train.jsonl"
+      ]
+    },
+    {
       "id": "system-prompt-bank-lfm2.5-350m-text-init-20261004-v1",
       "kind": "prompt-bank",
       "owner": "dgx",

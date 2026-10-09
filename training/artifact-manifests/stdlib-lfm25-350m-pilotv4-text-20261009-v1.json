@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "stdlib-lfm25-350m-pilotv4-text-20261009-v1",
+  "kind": "standard-library",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/stdlib-lfm25-350m-pilotv4-text-20261009-v1",
+  "files": [
+    {
+      "path": "stdlib.nz",
+      "bytes": 818512,
+      "sha256": "9ec73f477eb07144f44d21f679fbe4e3716317c051d2fe79e30daa125063880d",
+      "nz": {
+        "exports": [
+          "ap",
+          "combine",
+          "convert",
+          "gloss",
+          "map",
+          "read",
+          "split",
+          "splitList",
+          "zip"
+        ],
+        "blocks": 9,
+        "dialects": [
+          "nd:natlang@1"
+        ],
+        "widths": [
+          1024
+        ]
+      }
+    }
+  ],
+  "bytes": 818512
+}

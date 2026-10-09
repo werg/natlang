@@ -47,6 +47,8 @@ export type LowerOptions = {
   scalarConversions?: ReadonlyMap<string, { argument: number; conversion: 'Number' | 'Boolean'; conditional?: true }>;
   /** Standard String#replace calls whose Neuralese string receiver is materialized before lookup. */
   stringReplaces?: ReadonlyMap<string, { conditional?: true }>;
+  /** Calls of named functions that are part of a possible hand-off, by `start:end` in the source, with their site IDs. */
+  fusionSites?: ReadonlyMap<string, string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -319,6 +321,16 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       }
       if (options.readouts?.has(`${source.getStart(file)}:${source.getEnd()}`) && ts.isExpression(node))
         return readNeuralese(node);
+      // A call that is part of a possible hand-off between named functions: the arguments are evaluated where they stand,
+      // the call itself runs under its site ID (runtime/fusion.ts matches it against the planned edges).
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && !source.questionDotToken && options.fusionSites?.has(`${source.getStart(file)}:${source.getEnd()}`)) {
+        const visited = ts.visitEachChild(node, visit, context);
+        const rest = f.createUniqueName('__natlang_fuse_args');
+        const call = f.createArrowFunction(undefined, undefined, [f.createParameterDeclaration(undefined, f.createToken(ts.SyntaxKind.DotDotDotToken), rest)],
+          undefined, undefined, f.createCallExpression(visited.expression, undefined, [f.createSpreadElement(rest)]));
+        return f.createCallExpression(runtime('fuseSite'), undefined,
+          [f.createStringLiteral(options.fusionSites.get(`${source.getStart(file)}:${source.getEnd()}`)!), call, ...visited.arguments]);
+      }
       // `nl<Result>`instructions`.with({ ... })` is equivalent to the explicit-capture tag form.
       // Revisit it with the existing explicitInline lowering, which evaluates interpolation expressions before
       // reading snapshot captures and builds live capture accessors.

@@ -41,6 +41,7 @@ def main():
     p.add_argument('--timeout', type=float, default=120)
     p.add_argument('--workers', type=int, default=4, help='parallel quota groups; at most one in-flight call per group')
     p.add_argument('--wait', action='store_true', help='wait for cooldowns instead of exiting with unfinished cases')
+    p.add_argument('--wait-for-owner', action='store_true', help='queue this source behind the current project pool owner')
     args = p.parse_args()
     if args.limit < 0 or args.timeout <= 0 or args.workers < 1:
         p.error('limit must be nonnegative and timeout positive')
@@ -61,10 +62,15 @@ def main():
     state_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     lock = open(str(state_path) + '.lock', 'a')
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        p.error('another pool owns this project state; use its queue, not another state file')
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if not args.wait_for_owner:
+                p.error('another pool owns this project state; use its queue, not another state file')
+            print(json.dumps({'event': 'waiting_for_project_owner'}), flush=True)
+            time.sleep(30)
     state = json.loads(state_path.read_text()) if state_path.exists() else {'groups': {}, 'cursor': 0}
     groups = state.setdefault('groups', {})
     identity = {'schema': 'natlang.gemini-decision-pool/1', 'training_admission': False,
