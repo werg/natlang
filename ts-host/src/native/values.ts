@@ -2,6 +2,7 @@ import { checkHost, fitsType, formatType, parseType, TypeEnv } from './types.js'
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
 import { isNeuraleseRef, neuraleseRef, soleSentinel } from './neuralese.js';
+import { isFusedRef } from './fusion-blocks.js';
 
 export const MISSING = Symbol('natlang-missing');
 export type Missing = typeof MISSING;
@@ -140,6 +141,8 @@ export type CoerceOptions = { /** Keep structurally compatible extra record prop
 
 export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', options: CoerceOptions = {}): Value {
   const wanted = env.resolve(type);
+  // A block a fused hand-off wrote (runtime/fusion.ts) stands for the value its declared type names.
+  if (wanted.kind !== 'neuralese' && raw !== null && typeof raw === 'object' && isFusedRef(raw)) return raw as unknown as Value;
   // A refinement is structural here (its base); the predicate is checked by native/refinement.ts where the value enters.
   if (wanted.kind === 'refined' || wanted.kind === 'untrusted') return coerce(raw, wanted.base, env, path, options);
   if (wanted.kind === 'host') {

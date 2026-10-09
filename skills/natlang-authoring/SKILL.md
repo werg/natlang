@@ -17,6 +17,8 @@ Read [language and source contracts](references/language.md) before creating or 
 
 Put a property of a value in its type rather than in a guard sentence: read [constraints belong in types](references/refinements.md) for `Is<T, "predicate">`, when to use it and how to phrase the predicate.
 
+To let the runtime keep an intermediate value as Neuralese between stages, write the chain so its data flow is explicit: read [orchestrators that can fuse](references/fusion.md).
+
 For evaluation suites, instruction optimization, or trainable program guidance, read [adaptation and evaluation](references/adaptation.md). It covers component selection, independent scoring, fresh fixtures, bounded search, report review, and artifact activation. Ordinary authoring does not require an optimization run.
 
 ## Build a real program

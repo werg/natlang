@@ -100,6 +100,8 @@ export type NatlangRuntimeOptions = {
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   /** Law-based combinator rewrites and their measurements (spec/NEURALESE_REWRITES.md); every rule is off without it. */
   rewrites?: import('../compiler/rewrites.js').RewriteGate;
+  /** Fused hand-offs between functions (plans/FUSED_PIPELINES.md); absent or mode `off`, every hand-off is text. */
+  fusion?: import('./fusion.js').FusionOptions;
   /**
    * The call record store (plans/TRACE_SPECIALIZATION.md): every call is recorded there and served from its
    * compilations. Default: the machine's store on Node (`$NATLANG_CALL_STORE`); `false` records nothing.

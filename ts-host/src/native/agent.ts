@@ -925,10 +925,10 @@ export class NativeToolAgent {
           interpretation: 'listed_in_invocation_opening_not_awareness' });
       return [{ role: 'system', content: systemPrompt() },
         { role: 'user', content: scopeOpening },
-        ...(reading ? [{ role: 'assistant', content: '', ...thought(OPENING_THOUGHT), tool_calls: [{ id: 'scope_0', type: 'function',
+        ...(reading ? [{ role: 'assistant', content: '', natlang_host_generated: true, ...thought(OPENING_THOUGHT), tool_calls: [{ id: 'scope_0', type: 'function',
           function: { name: 'eval', arguments: JSON.stringify({ code: reading.code }) } }] },
         { role: 'tool', tool_call_id: 'scope_0', content: reading.text }] : []),
-        ...(session.lam.projectTransaction ? [{ role: 'assistant', content: '', ...thought(FOLDER_THOUGHT), tool_calls: [{ id: 'scope_1', type: 'function',
+        ...(session.lam.projectTransaction ? [{ role: 'assistant', content: '', natlang_host_generated: true, ...thought(FOLDER_THOUGHT), tool_calls: [{ id: 'scope_1', type: 'function',
           function: { name: 'list_files', arguments: '{}' } }] },
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };

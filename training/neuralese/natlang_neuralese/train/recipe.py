@@ -27,7 +27,7 @@ HANDLERS = {
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','qat_latent_lr',
-                          'member_weight','member_tokens','member_eval_windows',
+                          'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',
                           'optimizer_state','optimizer_added'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
