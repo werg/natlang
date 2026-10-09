@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build a review-only proposal joining admitted derived text targets to observed readers.
+"""Build review-only derived-body/reader edges and optional held R candidates.
 
-This does not create native actions or recurrence records. Each emitted row is a
-counterfactual pairing of an independently admitted derived body target with an
-actual later reader action, preserving the actual source graph and clearly
-labeling the proposed learned writer-to-reader relation as nonhistorical.
+Each emitted edge pairs an independently admitted derived body target with an
+actual reader action, preserving the source graph and labeling any proposed
+learned writer-to-reader relation as counterfactual and nonhistorical. Optional
+R output remains unadmitted pending separate review.
 """
 import argparse
 import copy
@@ -84,7 +84,8 @@ def _replace_message_block_with_read(value, block_id, read_name, body):
                     changed[key] = child
                 else:
                     replacement, count = _replace_message_block_with_read(parsed, block_id, read_name, body)
-                    changed[key] = json.dumps(replacement, ensure_ascii=False, separators=(",", ":"))
+                    changed[key] = (json.dumps(replacement, ensure_ascii=False, separators=(",", ":"))
+                                    if count else child)
                     occurrences += count
             else:
                 replacement, count = _replace_message_block_with_read(child, block_id, read_name, body)

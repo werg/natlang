@@ -10,6 +10,13 @@ SPEC.loader.exec_module(builder)
 
 
 class CounterfactualRecurrenceRowsTests(unittest.TestCase):
+    def test_preserves_unrelated_serialized_tool_arguments(self):
+        original = '{ "unrelated" : [1,  2] }'
+        projected, occurrences = builder._replace_message_block_with_read(
+            {"tool": {"arguments": original}}, "nz1_absent", "soft-state:nz1_absent", "body")
+        self.assertEqual(occurrences, 0)
+        self.assertEqual(projected["tool"]["arguments"], original)
+
     def test_projects_admitted_body_and_reader_port_without_admitting_r(self):
         body = "Observed typed body"
         block_id = "nz1_example"

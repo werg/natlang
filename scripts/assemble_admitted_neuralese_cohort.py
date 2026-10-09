@@ -57,6 +57,87 @@ def target_digest(row):
     # the insertion order used by the source converter.
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
+def json_digest(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+
+def validate_root_recurrence_facet_approval(approval, approval_path, delta_rows, *, root=CODE_ROOT):
+    """Validate explicit recurrence-only admission for exact held R records."""
+    if approval.get('schema') != 'natlang.root-neuralese-record-facet-admission/1':
+        raise ValueError('unsupported root record-facet admission schema')
+    if (approval.get('decision') != 'admit-exact-counterfactual-recurrence-only'
+            or approval.get('facet') != 'recurrence'
+            or approval.get('training_recurrence_facet') is not True
+            or approval.get('native_sft') is not False
+            or approval.get('ordinary_text') is not False
+            or approval.get('task_or_trajectory_admission') is not False
+            or approval.get('runtime_qualification') is not False
+            or approval.get('active_gpu_inputs_changed') is not False
+            or not no_new_world_credit(approval.get('new_world_credit'))):
+        raise ValueError('root record-facet receipt exceeds recurrence-only scope')
+    for path_field, hash_field in (('review_path', 'review_sha256'), ('proof_path', 'proof_sha256')):
+        rel, expected = approval.get(path_field), approval.get(hash_field)
+        path = Path(rel) if isinstance(rel, str) else Path('/')
+        if (not isinstance(rel, str) or path.is_absolute() or not isinstance(expected, str)
+                or len(expected) != 64):
+            raise ValueError(f'root recurrence receipt lacks a repository-relative {path_field} pin')
+        resolved = (root / path).resolve()
+        if (not resolved.is_relative_to(root.resolve()) or not resolved.is_file()
+                or sha(resolved) != expected):
+            raise ValueError(f'root recurrence {path_field} is missing or mismatched')
+    pins = approval.get('input_pins')
+    if not isinstance(pins, dict) or not pins:
+        raise ValueError('root recurrence receipt lacks input pins')
+    for rel, pin in pins.items():
+        path = Path(rel)
+        if path.is_absolute() or not isinstance(pin, dict):
+            raise ValueError('root recurrence input pin is malformed')
+        resolved = (root / path).resolve()
+        if (not resolved.is_relative_to(root.resolve()) or not resolved.is_file()
+                or sha(resolved) != pin.get('sha256')
+                or resolved.stat().st_size != pin.get('bytes')):
+            raise ValueError(f'root recurrence input is missing or mismatched: {rel}')
+    if approval.get('review_path') not in pins or approval.get('proof_path') not in pins:
+        raise ValueError('root recurrence review and proof must also be included in input_pins')
+    seen, admitted = set(), {}
+    for item in approval.get('rows', []):
+        ident = item.get('id')
+        if not isinstance(ident, str) or not ident or ident in seen:
+            raise ValueError(f'root recurrence receipt has missing/duplicate record ID: {ident!r}')
+        seen.add(ident)
+        if (item.get('decision') != 'admit-counterfactual-recurrence-record'
+                or item.get('facet') != 'recurrence'
+                or item.get('training_admission') is not True
+                or item.get('native_sft') is not False
+                or item.get('ordinary_text') is not False
+                or item.get('task_or_trajectory_admission') is not False
+                or item.get('runtime_qualification') is not False
+                or item.get('active_gpu_inputs_changed') is not False):
+            raise ValueError(f'root recurrence row exceeds its facet scope: {ident}')
+        if (item.get('kind') not in {'derived-body-as-proposed-learned-writer',
+                                     'observed-reader-with-proposed-learned-writer-input'}
+                or item.get('split') not in {'train', 'test'}
+                or not isinstance(item.get('source_groups'), list) or not item['source_groups']
+                or not all(isinstance(group, str) and group for group in item['source_groups'])):
+            raise ValueError(f'root recurrence row lacks exact source/split/kind: {ident}')
+        admitted[ident] = item
+    if approval.get('admitted_recurrence_count') != len(admitted):
+        raise ValueError('root recurrence admitted count conflicts with exact row decisions')
+    ids = [row.get('id') for row in delta_rows]
+    if (not admitted or len(ids) != len(set(ids)) or set(ids) != set(admitted)):
+        raise ValueError('recurrence delta IDs do not equal root-admitted facet IDs exactly')
+    for row in delta_rows:
+        ident = row['id']
+        decision = admitted[ident]
+        view = row.get('counterfactual_recurrence_view') or {}
+        if (decision['kind'] != view.get('role')
+                or decision['target_sha256'] != target_digest(row)
+                or decision['messages_sha256'] != json_digest(row.get('messages') or [])
+                or decision['split'] != row.get('split')
+                or decision['source_groups'] != row.get('source_groups')):
+            raise ValueError(f'root recurrence target/context/source mismatch: {ident}')
+    return admitted
+
 def validate_root_per_action_approval(approval, delta_rows, *, root=CODE_ROOT):
     """Validate a mixed root review and return only its admitted native decisions."""
     if approval.get('schema') != 'natlang.root-per-action-training-admission/1':
@@ -209,6 +290,149 @@ def merge_pieces(prefix: Path, delta: Path, output: Path):
     return {'added': len(additions), 'exact_duplicates': sorted(duplicates), 'total': len(prior)}
 
 
+def assemble_recurrence_facet_proposal(*, args, paths, approval_path, approval, repo_root, audit_script):
+    """Append an explicitly recurrence-only approved delta; keep native bytes untouched."""
+    if not args.compact_only:
+        raise ValueError('recurrence-facet admission currently requires --compact-only')
+    if args.delta_recurrence is None or args.delta_recurrence_pieces is None:
+        raise ValueError('recurrence-facet admission requires explicit recurrence record and piece deltas')
+    if len(args.approval) != 1:
+        raise ValueError('recurrence-facet admission requires exactly one record-facet receipt')
+    if args.delta_native.stat().st_size or args.delta_pieces.stat().st_size:
+        raise ValueError('recurrence-facet admission requires byte-empty native and native-piece deltas')
+    if approval.get('schema') != 'natlang.root-neuralese-record-facet-admission/1':
+        raise ValueError('recurrence-facet admission requires a record-facet receipt')
+    base_native_rows = list(rows(paths['base-native']))
+    base_recurrence_rows = list(rows(paths['base-recurrence']))
+    base_recurrence_ids = {row['id'] for row in base_recurrence_rows}
+    delta_recurrence = list(rows(args.delta_recurrence))
+    admitted = validate_root_recurrence_facet_approval(
+        approval, approval_path, delta_recurrence, root=repo_root)
+    pins = approval.get('input_pins') or {}
+    for path in (args.delta_recurrence, args.delta_recurrence_pieces):
+        try:
+            rel = path.resolve().relative_to(repo_root).as_posix()
+        except ValueError as exc:
+            raise ValueError('recurrence delta inputs must be inside the canonical repository root') from exc
+        pin = pins.get(rel)
+        if (not pin or pin.get('sha256') != sha(path) or pin.get('bytes') != path.stat().st_size):
+            raise ValueError(f'root recurrence receipt does not pin exact delta input: {rel}')
+    new_ids = [row['id'] for row in delta_recurrence]
+    if set(new_ids) & base_recurrence_ids:
+        raise ValueError('recurrence delta ID already occurs in the base prefix')
+
+    base_piece_rows = list(rows(paths['base-recurrence-pieces'], 'name'))
+    delta_piece_rows = list(rows(args.delta_recurrence_pieces, 'name'))
+    base_pieces = {row['name']: row for row in base_piece_rows}
+    delta_pieces = {row['name']: row for row in delta_piece_rows}
+    wanted = set().union(*(referenced_soft(row.get('messages')) |
+                           referenced_soft(row.get('target')) for row in delta_recurrence))
+    for name, piece in delta_pieces.items():
+        prior = base_pieces.get(name)
+        if prior is not None and prior != piece:
+            raise ValueError(f'recurrence piece conflicts with base piece: {name}')
+    available = set(base_pieces) | set(delta_pieces)
+    if wanted - available:
+        raise ValueError(f'missing recurrence pieces: {sorted(wanted-available)}')
+    if set(delta_pieces) - wanted:
+        raise ValueError(f'unreferenced recurrence pieces: {sorted(set(delta_pieces)-wanted)}')
+
+    receipt_sha = sha(approval_path)
+    admitted_rows = []
+    for source_row in delta_recurrence:
+        row = dict(source_row)
+        decision = admitted[row['id']]
+        row['training_admission'] = {
+            'approved': True, 'kind': 'root-counterfactual-recurrence-only',
+            'facet': 'recurrence', 'root_admission_sha256': receipt_sha,
+            'decision': decision['decision'],
+        }
+        row['recurrence_admission'] = {
+            'approved': True, 'kind': 'root-counterfactual-recurrence-only',
+            'root_admission_sha256': receipt_sha,
+        }
+        row['native_sft_admission'] = {'approved': False}
+        row['ordinary_text_admission'] = {'approved': False}
+        row['task_or_trajectory_admission'] = {'approved': False}
+        row['runtime_qualification'] = False
+        row['decision'] = {**(row.get('decision') or {}),
+                           'training_approved': False,
+                           'training_admission_facet': 'recurrence'}
+        view = dict(row.get('counterfactual_recurrence_view') or {})
+        view['training_admission'] = True
+        view['recurrence_admission'] = True
+        view['native_sft_admission'] = False
+        view['root_recurrence_facet_admission_sha256'] = receipt_sha
+        row['counterfactual_recurrence_view'] = view
+        admitted_rows.append(row)
+
+    out = args.out.resolve()
+    if any(out.iterdir()):
+        raise ValueError(f'output directory is not empty: {out}')
+    names = {'delta_recurrence': 'delta-recurrence-records.jsonl',
+             'delta_recurrence_pieces': 'delta-recurrence-pieces.jsonl',
+             'audit': 'recurrence-audit.json'}
+    delta_output = out / names['delta_recurrence']
+    with delta_output.open('xb') as stream:
+        for row in admitted_rows:
+            stream.write(line(row))
+    shutil.copyfile(args.delta_recurrence_pieces, out / names['delta_recurrence_pieces'])
+    audit_path = out / names['audit']
+    subprocess.run([sys.executable, str(audit_script),
+                    str(paths['base-recurrence']), str(delta_output),
+                    '--out', str(audit_path)], cwd=repo_root, check=True)
+    recurrence_audit = json.loads(audit_path.read_text())
+    if recurrence_audit.get('structurally_closed') is not True:
+        raise ValueError('base plus recurrence-facet delta is not structurally closed')
+    virtual_ids = base_recurrence_ids | set(new_ids)
+    if len(virtual_ids) != len(base_recurrence_rows) + len(new_ids):
+        raise ValueError('recurrence IDs are not unique across the virtual union')
+    output_manifest = {}
+    for name in names.values():
+        output_path = out / name
+        output_manifest[name] = {'sha256': sha(output_path), 'bytes': output_path.stat().st_size}
+        if name.endswith('.jsonl'):
+            output_manifest[name]['rows'] = sum(1 for _ in rows(
+                output_path, 'name' if name == 'delta-recurrence-pieces.jsonl' else 'id'))
+    manifest = {
+      'schema': 'natlang.approved-neuralese-compact-recurrence-delta-proposal/1',
+      'status': 'compact recurrence-only delta; publication and training activation require separate review',
+      'compact_only': True, 'repo_root': str(repo_root),
+      'approval': {'path': str(approval_path.resolve()), 'sha256': receipt_sha,
+                   'approved_ids': new_ids, 'facet': 'recurrence'},
+      'argv': sys.argv,
+      'invocation': {'canonical_repo_root': str(repo_root),
+                     'auditor_path': str(audit_script),
+                     'admission_facet': 'recurrence', 'compact_only': True},
+      'admitted_facets': {'native': False, 'ordinary_text': False, 'recurrence': True,
+                          'task_or_trajectory': False, 'runtime_qualification': False},
+      'inputs': {key: {'path': str(path.resolve()), 'sha256': sha(path), 'bytes': path.stat().st_size}
+                 for key, path in {**paths, 'delta-recurrence': args.delta_recurrence,
+                                   'delta-recurrence-pieces': args.delta_recurrence_pieces,
+                                   'approval': approval_path}.items() if key != 'out'},
+      'unchanged_native_prefix': {'path': str(paths['base-native'].resolve()),
+          'sha256': sha(paths['base-native']), 'bytes': paths['base-native'].stat().st_size,
+          'rows': len(base_native_rows), 'delta_rows': 0, 'output_copy_made': False},
+      'virtual_recurrence': {'base_rows': len(base_recurrence_rows),
+          'added_rows': len(admitted_rows), 'total_rows': len(base_recurrence_rows)+len(admitted_rows),
+          'ids_unique': True, 'base_sha256': sha(paths['base-recurrence'])},
+      'piece_merge': {'base_pieces': len(base_piece_rows), 'delta_pieces': len(delta_piece_rows),
+                      'virtual_piece_count': len(base_pieces | delta_pieces)},
+      'recurrence_audit': recurrence_audit,
+      'outputs': output_manifest,
+      'assembler': {'path': str(Path(__file__).relative_to(CODE_ROOT)), 'sha256': sha(Path(__file__))},
+      'auditor': {'path': str(audit_script), 'sha256': sha(audit_script)},
+      'limits': {'native_delta_rows': 0, 'new_native_action_credit': False,
+                 'new_text_document_credit': False, 'new_world_credit': False,
+                 'whole_trajectory_admission': False, 'active_gpu_inputs_changed': False,
+                 'publication': False, 'training_launch': False}}
+    manifest_path = out / 'proposal-manifest.json'
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
+    print(json.dumps({'status': manifest['status'], 'native_rows_unchanged': len(base_native_rows),
+                      'recurrence_rows': manifest['virtual_recurrence'],
+                      'proposal_manifest_sha256': sha(manifest_path)}, indent=2))
+
+
 def audit_splits(path: Path):
     return audit_split_rows(rows(path))
 
@@ -244,6 +468,10 @@ def main():
                    help='root approval receipt; repeat to combine independently validated per-action receipts')
     p.add_argument('--delta-recurrence', type=Path,
                    help='defaults to --delta-native when the approved records feed both streams')
+    p.add_argument('--delta-recurrence-pieces', type=Path,
+                   help='optional distinct soft-piece delta for recurrence-only admission')
+    p.add_argument('--admission-facet', choices=('native', 'recurrence'), default='native',
+                   help='admission stream to change; recurrence mode preserves the native prefix and adds no native rows')
     p.add_argument('--approval-id-field', default='approved_row_ids')
     p.add_argument('--admission-kind', default='exact-native-runtime-oracle')
     p.add_argument('--repo-root', type=Path, default=CODE_ROOT,
@@ -314,6 +542,13 @@ def main():
             raise ValueError('base root receipt does not bind the native prefix hash')
         if base_receipt.get('pieces_sha256') != sha(paths['base-native-pieces']):
             raise ValueError('base root receipt does not bind the native piece prefix hash')
+    if args.admission_facet == 'recurrence':
+        if len(approvals) != 1:
+            raise ValueError('recurrence-facet mode requires exactly one root receipt')
+        assemble_recurrence_facet_proposal(
+            args=args, paths=paths, approval_path=approvals[0][0], approval=approvals[0][1],
+            repo_root=repo_root, audit_script=audit_script)
+        return
     approval_by_id = {}
     approval_sha_by_id = {}
     approval_schema_by_id = {}

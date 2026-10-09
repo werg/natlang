@@ -16,6 +16,124 @@ SPEC.loader.exec_module(builder)
 
 
 class AssemblerInvariantTests(unittest.TestCase):
+    def test_recurrence_facet_receipt_binds_only_recurrence_rows_and_false_other_facets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = {"role": "assistant", "content": "counterfactual"}
+            messages = [{"role": "user", "content": "context"}]
+            row = {"id": "cf:r1", "target": target, "messages": messages,
+                   "split": "train", "source_groups": ["g"],
+                   "counterfactual_recurrence_view": {"role": "derived-body-as-proposed-learned-writer"}}
+            delta = root / "delta-r.jsonl"; delta.write_text(json.dumps(row) + "\n")
+            pieces = root / "delta-r-pieces.jsonl"; pieces.write_text("")
+            review = root / "review.json"; review.write_text('{"review":true}\n')
+            proof = root / "proof.json"; proof.write_text('{"proof":true}\n')
+            approval = {
+                "schema": "natlang.root-neuralese-record-facet-admission/1",
+                "decision": "admit-exact-counterfactual-recurrence-only", "facet": "recurrence",
+                "training_recurrence_facet": True, "native_sft": False, "ordinary_text": False,
+                "task_or_trajectory_admission": False, "runtime_qualification": False,
+                "active_gpu_inputs_changed": False, "new_world_credit": 0,
+                "review_path": "review.json", "review_sha256": builder.sha(review),
+                "proof_path": "proof.json", "proof_sha256": builder.sha(proof),
+                "admitted_recurrence_count": 1,
+                "input_pins": {
+                    "review.json": {"sha256": builder.sha(review), "bytes": review.stat().st_size},
+                    "proof.json": {"sha256": builder.sha(proof), "bytes": proof.stat().st_size},
+                    "delta-r.jsonl": {"sha256": builder.sha(delta), "bytes": delta.stat().st_size},
+                    "delta-r-pieces.jsonl": {"sha256": builder.sha(pieces), "bytes": pieces.stat().st_size}},
+                "rows": [{"id": "cf:r1", "decision": "admit-counterfactual-recurrence-record",
+                          "facet": "recurrence", "kind": "derived-body-as-proposed-learned-writer",
+                          "training_admission": True, "native_sft": False, "ordinary_text": False,
+                          "task_or_trajectory_admission": False, "runtime_qualification": False,
+                          "active_gpu_inputs_changed": False,
+                          "target_sha256": builder.target_digest(row),
+                          "messages_sha256": builder.json_digest(messages), "split": "train",
+                          "source_groups": ["g"]}]}
+            selected = builder.validate_root_recurrence_facet_approval(
+                approval, root / "approval.json", [row], root=root)
+            self.assertEqual(list(selected), ["cf:r1"])
+            bad_count = dict(approval, admitted_recurrence_count=0)
+            with self.assertRaisesRegex(ValueError, "admitted count conflicts"):
+                builder.validate_root_recurrence_facet_approval(
+                    bad_count, root / "approval.json", [row], root=root)
+            changed = dict(row, messages=[{"role": "user", "content": "changed"}])
+            with self.assertRaisesRegex(ValueError, "target/context/source mismatch"):
+                builder.validate_root_recurrence_facet_approval(
+                    approval, root / "approval.json", [changed], root=root)
+
+    def test_recurrence_only_assembler_does_not_add_native_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base_n = root / "native.jsonl"; base_n.write_text('{"id":"n0","split":"train","source_groups":["g0"]}\n')
+            base_r = root / "recurrence.jsonl"; base_r.write_text('{"id":"r0","split":"train","source_groups":["g0"],"messages":[],"target":{}}\n')
+            base_np = root / "native-pieces.jsonl"; base_np.write_text("")
+            base_rp = root / "recurrence-pieces.jsonl"; base_rp.write_text("")
+            delta_n = root / "delta-native.jsonl"; delta_n.write_text("")
+            delta_np = root / "delta-native-pieces.jsonl"; delta_np.write_text("")
+            target = {"role": "assistant", "content": "counterfactual"}
+            messages = [{"role": "user", "content": "context"}]
+            row = {"id": "cf:r1", "target": target, "messages": messages,
+                   "split": "train", "source_groups": ["g1"],
+                   "training_admission": {"approved": False},
+                   "counterfactual_recurrence_view": {"role": "derived-body-as-proposed-learned-writer"}}
+            delta_r = root / "delta-r.jsonl"; delta_r.write_text(json.dumps(row) + "\n")
+            delta_rp = root / "delta-r-pieces.jsonl"; delta_rp.write_text("")
+            review = root / "review.json"; review.write_text('{"review":true}\n')
+            proof = root / "proof.json"; proof.write_text('{"proof":true}\n')
+            pins = {"review.json": {"sha256": builder.sha(review), "bytes": review.stat().st_size},
+                    "proof.json": {"sha256": builder.sha(proof), "bytes": proof.stat().st_size},
+                    "delta-r.jsonl": {"sha256": builder.sha(delta_r), "bytes": delta_r.stat().st_size},
+                    "delta-r-pieces.jsonl": {"sha256": builder.sha(delta_rp), "bytes": delta_rp.stat().st_size}}
+            approval = root / "approval.json"
+            approval.write_text(json.dumps({
+                "schema": "natlang.root-neuralese-record-facet-admission/1",
+                "decision": "admit-exact-counterfactual-recurrence-only", "facet": "recurrence",
+                "training_recurrence_facet": True, "native_sft": False, "ordinary_text": False,
+                "task_or_trajectory_admission": False, "runtime_qualification": False,
+                "active_gpu_inputs_changed": False, "new_world_credit": 0,
+                "review_path": "review.json", "review_sha256": builder.sha(review),
+                "proof_path": "proof.json", "proof_sha256": builder.sha(proof), "input_pins": pins,
+                "admitted_recurrence_count": 1,
+                "rows": [{"id": "cf:r1", "decision": "admit-counterfactual-recurrence-record",
+                          "facet": "recurrence", "kind": "derived-body-as-proposed-learned-writer",
+                          "training_admission": True, "native_sft": False, "ordinary_text": False,
+                          "task_or_trajectory_admission": False, "runtime_qualification": False,
+                          "active_gpu_inputs_changed": False,
+                          "target_sha256": builder.target_digest(row),
+                          "messages_sha256": builder.json_digest(messages), "split": "train",
+                          "source_groups": ["g1"]}]}))
+            prefix = root / "base-receipt.json"
+            prefix.write_text(json.dumps({"schema": "natlang.corpus-prefix-binding/1",
+                "status": "verified-exact-prefix", "training_admission": False, "files": {
+                "native-records.jsonl": {"sha256": builder.sha(base_n)},
+                "recurrence-records.jsonl": {"sha256": builder.sha(base_r)},
+                "native-pieces.jsonl": {"sha256": builder.sha(base_np)},
+                "recurrence-pieces.jsonl": {"sha256": builder.sha(base_rp)}}}))
+            out = root / "out"
+            argv = ["assembler", "--base-native", str(base_n), "--base-recurrence", str(base_r),
+                    "--base-receipt", str(prefix), "--delta-native", str(delta_n),
+                    "--delta-recurrence", str(delta_r), "--delta-pieces", str(delta_np),
+                    "--delta-recurrence-pieces", str(delta_rp), "--base-native-pieces", str(base_np),
+                    "--base-recurrence-pieces", str(base_rp), "--approval", str(approval),
+                    "--out", str(out), "--repo-root", str(root), "--compact-only", "--admission-facet", "recurrence"]
+            def fake_audit(command, **kwargs):
+                Path(command[-1]).write_text(json.dumps({"structurally_closed": True, "records": 2}))
+            with patch.object(sys, "argv", argv), patch.object(builder.subprocess, "run", side_effect=fake_audit):
+                builder.main()
+            admitted = list(builder.rows(out / "delta-recurrence-records.jsonl"))
+            self.assertEqual(len(admitted), 1)
+            self.assertEqual(admitted[0]["training_admission"]["facet"], "recurrence")
+            self.assertTrue(admitted[0]["recurrence_admission"]["approved"])
+            self.assertFalse(admitted[0]["native_sft_admission"]["approved"])
+            self.assertEqual((out / "delta-native-records.jsonl").exists(), False)
+            self.assertEqual(base_n.read_text(), '{"id":"n0","split":"train","source_groups":["g0"]}\n')
+            manifest = json.loads((out / "proposal-manifest.json").read_text())
+            self.assertEqual(manifest["admitted_facets"],
+                             {"native": False, "ordinary_text": False, "recurrence": True,
+                              "task_or_trajectory": False, "runtime_qualification": False})
+            self.assertEqual(manifest["virtual_recurrence"]["total_rows"], 2)
+
     def _mixed_admission(self, root):
         target = {"role": "assistant", "content": "approved"}
         source = root / "source.jsonl"

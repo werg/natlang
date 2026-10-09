@@ -1,0 +1,160 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-counterfactual-recurrence-only-20-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v1/frozen-execution-closure-v1.json",
+      "bytes": 9405,
+      "sha256": "6b87f559fdc684ffb170c9caa484e9caceb5e72bf18e3f014de66ba9035c1b7b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/assembler-v2.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/assembler-v2.stdout.json",
+      "bytes": 4950,
+      "sha256": "890cbc3e6da8c517faef0471df87d95ce006f8842053db00390d168cc8375481"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/assemble_admitted_neuralese_cohort.py",
+      "bytes": 52284,
+      "sha256": "b71f61724ea0676dbd754d2ab700fcba5f3891245c3f1554221067dbbb21ec49"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/audit_neuralese_recurrence.py",
+      "bytes": 49169,
+      "sha256": "4b487d85b1444d0cd9c112fc7859f2e7da62362bca1dc740fdebd2649b80e1fa"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_admission_scope.py",
+      "bytes": 550,
+      "sha256": "7d329665797582c36f898231830c8c9b48daf051d3e0daa5f8ca33a0118a0161"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_derived_writer_admission.py",
+      "bytes": 6137,
+      "sha256": "850cfb63f268b6deebac1323c8eafa2278f56e41e251daa797d0e99b117166d9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_integration_adoption.py",
+      "bytes": 6626,
+      "sha256": "bd1647cd3c036c1beb62f5b03dd79bdb2c381f4631db4ab44a64152953aa72f2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/snapshot-manifest.json",
+      "bytes": 943,
+      "sha256": "d7a3febc116d26d9f4825be798d916fbd3562ea64800f7e9ea1ec878cbce83e1"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/frozen-execution-closure-v2.json",
+      "bytes": 14548,
+      "sha256": "f73ea52433cde68feb865b563d76f2be0451c55ebfa46d51991ca4347c293d3b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/inputs/native-empty.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/inputs/native-pieces-empty.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v1/assembler.stdout.json",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/delta-recurrence-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/delta-recurrence-records.jsonl",
+      "bytes": 2983117,
+      "sha256": "29ce9f320c5aea9a5abc06fcef26610139849195ec347509789f329f252207f4",
+      "lines": 20
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/proposal-manifest.json",
+      "bytes": 15668,
+      "sha256": "b9d8184a4a6062c57a3c2812e75f12de8708bba90b776c38a0f2e8bd06292d16"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/recurrence-audit.json",
+      "bytes": 4510,
+      "sha256": "4c6e0f4b1a0ce802d40a677d1d1f08e84d92849ed903976f29a42c17efa94fea"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-adoption-v1.json",
+      "bytes": 1761,
+      "sha256": "9a94cb39d0b452fbdff6346970cb8f0f4c6866a015ca09a0d892be12b3663226"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-review-v1.json",
+      "bytes": 2235,
+      "sha256": "cf27b9d5f5e4d056327a2637c8acd9b0f2da41884b43a6abee9cfb9bc20c1618"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/audit-supplement-v2.json",
+      "bytes": 8191,
+      "sha256": "0cc73ddba5af918ac1102270888e3b14e89b0ba74eafb86773903a49d59396d0"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/counterfactual-pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/counterfactual-recurrence-records.jsonl",
+      "bytes": 2969677,
+      "sha256": "756b6110200a2e057375f1e8f6b0f95e8c09c2f3271328f83557b45608580a75",
+      "lines": 20
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/proposal-manifest.json",
+      "bytes": 15449,
+      "sha256": "ec83b742e7ac0bbfbb572421ffda11cc4ae4e004c7484705cea4fd611bf8840a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/proof.json",
+      "bytes": 4397,
+      "sha256": "13e68afb14efa0040d91942a81a84e3a4615c8ed07abbad79a4ad404e1606a4a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/root-recurrence-facet-admission-v1.json",
+      "bytes": 22803,
+      "sha256": "dde9393f871f9dab42ecee9fa7d098eeb08b526cf9b21f85dfde2a080e267603"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/root-semantic-review-v1.json",
+      "bytes": 1293,
+      "sha256": "724877cb5c1ed4b62255d8c56036105dcdeca452775a47d1a7af4aa0e91f4ec4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/structural-audit.json",
+      "bytes": 924,
+      "sha256": "20c8a6e1e975ca09ce0a3713edfd83a5822050baef337fbcf217785aa2240c1f"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+      "bytes": 1941,
+      "sha256": "76ad042a1fb45c9b3a002a469be6c160645543a35750a426541cc012d0e3c136"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json",
+      "bytes": 6284,
+      "sha256": "db43586b406e5d4d6535e4e11bdd46a53120d1695eb7c4988e3d24b6993c8ee8"
+    }
+  ],
+  "bytes": 6182862
+}

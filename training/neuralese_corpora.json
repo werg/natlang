@@ -15543,6 +15543,49 @@
         "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
       ],
       "notes": "Root adoption runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/eleven-readout-native-text-proposal-v1/root-independent-composition-review-v1/root-native-text-composition-adoption-v1.json SHA-256 ec0b16392499886fa04794bf02fdb922c1f533365346310b180f32dcdb8d77be approves this exact delta. See packet manifest for zero omissions and split/group audit. This compact closure contains frozen conversion/renderer source, selected source results/traces and native captures, root action admission, composition review/adoption, and output manifests. No recurrence admission, whole-trajectory admission, original eval hidden-state equivalence, learned-writer/runtime qualification, performance claim, new-world credit, or active-input mutation."
+    },
+    {
+      "id": "luna-counterfactual-recurrence-only-20-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/assembler-v2.stderr.log",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/assembler-v2.stdout.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/assemble_admitted_neuralese_cohort.py",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/audit_neuralese_recurrence.py",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_admission_scope.py",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_derived_writer_admission.py",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/scripts/root_integration_adoption.py",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/code-snapshot/snapshot-manifest.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v1/frozen-execution-closure-v1.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/frozen-execution-closure-v2.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/inputs/native-empty.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/inputs/native-pieces-empty.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v1/assembler.stdout.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/delta-recurrence-pieces.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/delta-recurrence-records.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/proposal-manifest.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/proposal-v2/recurrence-audit.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-adoption-v1.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-review-v1.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/audit-supplement-v2.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/counterfactual-pieces.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/counterfactual-recurrence-records.jsonl",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/proposal-manifest.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/proof.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/root-recurrence-facet-admission-v1.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/root-independent-review-v1/root-semantic-review-v1.json",
+        "luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-reader-proposal-v13/structural-audit.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-adoption-v2.json",
+        "v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/root-integration-review-v2.json"
+      ],
+      "admission": "Root adopted exactly 20 recurrence-facet rows: 9 counterfactual derived-body writer views and 11 authenticated observed-reader views. Adds 20 train recurrence rows (no test rows) to R=4961 for virtual R=4981 (3092 train/1889 test). The native delta is byte-empty; existing virtual native=5529 and text=4759 are unchanged. This is recurrence-only admission, not 20 new native actions or ordinary text documents.",
+      "derived_from": [
+        "luna-eleven-readout-native-text-20261009-v1",
+        "luna-derived-body-native-text-nine-20261009-v1",
+        "v18-v19-full-approved-consolidation-5467-native-4699-text-4961-r-20261009-v1"
+      ],
+      "notes": "Root recurrence-only composition adoption runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/root-independent-closure-review-v1/root-recurrence-composition-adoption-v1.json SHA-256 9a94cb39d0b452fbdff6346970cb8f0f4c6866a015ca09a0d892be12b3663226 approves this exact delta. Frozen execution closure runs/luna-criterion-evidence-carry-v7-distinct-rich-20261009-v1/evidence/action-audit-v1/root-derived-body-conversion-v2/counterfactual-r-facet-assembly-v2/frozen-execution-closure-v2.json binds argv, code snapshot, source rows, base adoption, and outputs. Combined structural audit passed with zero missing/ambiguous/cross-split/cyclic/mixed-group/selected-write-binding failures. The R target pair is explicitly counterfactual: it uses admitted derived body supervision with authenticated original reader context/action, and does not claim original eval hidden-state equivalence, learned runtime qualification, or causal output-state qualification. Native SFT, ordinary text, whole trajectories, DPO, new-world credit, runtime qualification, and active training inputs are unchanged. Compact recurrence delta only; no full base copy."
     }
   ],
   "coverage_backlog": [
