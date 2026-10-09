@@ -608,7 +608,12 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
   if (outputs.length !== 1) return;
   const host = outputs[0]!;
   if (host.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== invocationId ||
-      host.complete !== true || host.terminal_action_seq !== actionEvent.seq || !Object.hasOwn(host, 'value')) return;
+      host.complete !== true || !Object.hasOwn(host, 'value')) return;
+  const terminalSeq = host.terminal_action_seq;
+  const directCompletion = terminalSeq === actionEvent.seq;
+  const stagedCompletion = directCompletion ? undefined :
+    stagedEvalReturnCompletionProof(row, invocationId, actionEvent, terminalSeq, host.result_type);
+  if (!directCompletion && (!stagedCompletion || actionEvent.name !== 'eval')) return;
   const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
   const allowedSources = actionEvent.name === 'return_result' ? ['return_result'] : ['eval-return', 'eval-finish'];
   const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === invocationId &&
@@ -624,6 +629,12 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
         typeof type !== 'string' || !type.startsWith('Neuralese<') || typeof bodySha !== 'string' ||
         !/^[0-9a-f]{64}$/.test(bodySha) || write.truncated !== false || !Number.isSafeInteger(write.seq) ||
         !Number.isSafeInteger(actionEvent.seq) || Number(write.seq) >= Number(actionEvent.seq)) continue;
+    // A nonterminal eval-return can still be the actual typed writer when the same
+    // invocation later commits that exact staged result with status-only success.
+    // Keep this proof on the originating eval action; never retag the completion
+    // helper as the writer or accept an overwritten earlier staged result.
+    if (stagedCompletion && (write.source !== 'eval-return' || write.result_type !== host.result_type ||
+        typeof actionEvent.result_text !== 'string' || !actionEvent.result_text.includes(block))) continue;
     const inputs = Array.isArray(write.inputs) ? write.inputs as Dict[] : [];
     const sourceNodes = inputs.filter(input => input.port === 'result-source' && typeof input.node === 'string')
       .map(input => input.node as string);
@@ -683,10 +694,45 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
       raw_response_sha256: typeof rawResponseSha256 === 'string' ? rawResponseSha256 : null,
       ...(write.source_kind === 'typed-json-result' && exactRawValue ?
         { raw_model_value_sha256: hexDigest(canonical(model.value)) } : {}),
-      ...(body === undefined ? {} : { body_source: body }), body_source_basis: bodyBasis } });
+      ...(body === undefined ? {} : { body_source: body }), body_source_basis: bodyBasis,
+      ...(stagedCompletion ? { staged_success_completion: structuredClone(stagedCompletion) } : {}) } });
   }
   const receipts = [...refs.values()].map(entry => entry.receipt);
   return receipts.length ? receipts : undefined;
+}
+
+/** Bind a nonterminal eval-return writer to the later status-only completion of
+ * that exact staged value in the same invocation. The terminal context must show
+ * the staged result produced by this eval event as the latest staged candidate. */
+function stagedEvalReturnCompletionProof(row: NativeRow, invocationId: string, actionEvent: Dict,
+  terminalSeq: unknown, expectedResultType: unknown): Dict | undefined {
+  if (actionEvent.name !== 'eval' || !Number.isSafeInteger(actionEvent.seq) ||
+      !Number.isSafeInteger(terminalSeq) || Number(terminalSeq) <= Number(actionEvent.seq)) return;
+  const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger as Dict[] : [];
+  const terminalEvents = ledger.filter(event => event.call_id === invocationId && event.name === 'return_result' &&
+    event.seq === terminalSeq && event.outcome === 'completed');
+  if (terminalEvents.length !== 1) return;
+  const terminalEvent = terminalEvents[0]!;
+  const args = terminalEvent.arguments && typeof terminalEvent.arguments === 'object' &&
+    !Array.isArray(terminalEvent.arguments) ? terminalEvent.arguments as Dict : {};
+  if ((args.status ?? 'success') !== 'success' || Object.hasOwn(args, 'value')) return;
+  const trajectory = Array.isArray(row.trajectory) ? row.trajectory as Dict[] : [];
+  const terminalSteps = trajectory.filter(step => {
+    const assistant = step.assistant && typeof step.assistant === 'object' && !Array.isArray(step.assistant) ?
+      step.assistant as Dict : {};
+    const calls = Array.isArray(assistant.calls) ? assistant.calls as Dict[] : [];
+    return step.phase === 'action' && step.invocation_id === invocationId && calls.some(call =>
+      call.source_tool === 'return_result' && canonical(call.arguments) === canonical(args) &&
+      hasExactRawModelCall(step, call));
+  });
+  if (terminalSteps.length !== 1) return;
+  const context = Array.isArray(terminalSteps[0]!.context) ? terminalSteps[0]!.context as Dict[] : [];
+  const returnType = contextDeclaredReturnType(context);
+  if (typeof expectedResultType !== 'string' || returnType !== expectedResultType) return;
+  const proof = statusOnlySuccessProof(args, context, invocationId, returnType, ledger, terminalSeq);
+  if (!proof || proof.basis !== 'same-invocation-staged-result' || proof.staged_action_seq !== actionEvent.seq ||
+      (typeof actionEvent.tool_call_id === 'string' && proof.staged_call_id !== actionEvent.tool_call_id)) return;
+  return proof;
 }
 
 /** A bounded diagnostic preview is never executable data unless the exact value came from a raw model call. */

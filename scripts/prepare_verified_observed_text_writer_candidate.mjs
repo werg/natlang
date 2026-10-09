@@ -28,6 +28,14 @@ const options = args(process.argv);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const bytes = value => Buffer.from(JSON.stringify(value));
 const digest = value => sha(bytes(value));
+const allowedObservedWriterSources = new Set(['eval-finish', 'eval-return', 'return_result']);
+function graphHasAuthenticatedWriter(graph, receipt) {
+  return Array.isArray(graph) && graph.some(event => event.kind === 'block_write' &&
+    event.call_id === receipt.invocation_id && event.block === receipt.block_id &&
+    event.source === receipt.source && event.source_kind === receipt.source_kind &&
+    event.result_type === receipt.result_type && event.text_body_sha256 === receipt.body_sha256 &&
+    event.truncated === false);
+}
 const resultPath = resolve(options.result), outputPath = resolve(options.output);
 const modulePath = pathToFileURL(resolve(options.materializer));
 const manifestPath = resolve(options['code-manifest']);
@@ -49,6 +57,23 @@ const writerLedgerEntries = (raw.outcome?.invocation_ledger ?? []).filter(item =
   item.invocation_id === source.source_ref.invocation_id);
 if (writerLedgerEntries.length !== 1) throw new Error('writer invocation ledger entry is not unique');
 const writerLedger = writerLedgerEntries[0];
+// A direct/staged typed-result receipt on the originating action is already
+// the native writer supervision. Check this before the derived-body path tries
+// to locate a terminal model action: staged eval-return deliberately links to
+// a later status-only completion on another native row.
+const existingTypedWriter = (source.decision?.assistant?.calls ?? []).flatMap(call =>
+  call.outcome?.typed_result_writes ?? []).some(receipt => {
+  if (receipt.schema !== 'natlang.typed-result-write/1' ||
+      receipt.invocation_id !== source.source_ref.invocation_id ||
+      receipt.writer_call_id !== source.source_ref.invocation_id ||
+      receipt.result_type !== 'Neuralese<string>' ||
+      receipt.source_kind !== 'typed-text-result' ||
+      !allowedObservedWriterSources.has(receipt.source) ||
+      typeof receipt.block_id !== 'string' || typeof receipt.body_sha256 !== 'string') return false;
+  return graphHasAuthenticatedWriter(raw.outcome?.execution_graph, receipt);
+});
+if (existingTypedWriter)
+  throw new Error('original sampled action already has an authenticated typed-result writer receipt for this exact block/body; do not add a duplicate derived target');
 const capture = source.source_ref?.host_result_capture?.capture;
 const blockRef = capture?.value?.$neuralese;
 const invocationEntries = (raw.outcome?.invocation_ledger ?? []).filter(item =>
@@ -63,12 +88,13 @@ if (!capture || capture.kind !== 'host_capture' || capture.complete !== true ||
   throw new Error('writer host capture does not bind a completed Neuralese<string> block');
 const terminal = source.decision?.assistant?.calls?.filter(call =>
   call.outcome?.trace_seq === capture.terminal_action_seq);
-if (!Array.isArray(terminal) || terminal.length !== 1) throw new Error('native terminal action does not match host capture');
+const terminalActionMatches = Array.isArray(terminal) && terminal.length === 1;
 const graph = Array.isArray(raw.outcome?.execution_graph) ? raw.outcome.execution_graph : [];
 const writerEvents = graph.filter(event => event.kind === 'block_write' &&
   event.call_id === source.source_ref.invocation_id && event.block === blockRef.id &&
-  event.source === 'eval-finish' && event.result_type === 'Neuralese<string>' && event.truncated === false);
-if (writerEvents.length !== 1) throw new Error(`expected one exact eval-finish graph writer; found ${writerEvents.length}`);
+  ['eval-finish', 'eval-return', 'return_result'].includes(event.source) &&
+  event.result_type === 'Neuralese<string>' && event.truncated === false);
+if (writerEvents.length !== 1) throw new Error(`expected one exact authenticated Neuralese<string> graph writer; found ${writerEvents.length}`);
 const event = writerEvents[0];
 const readerRows = [];
 for (const row of rows) {
@@ -77,10 +103,11 @@ for (const row of rows) {
     const block = receipt.block ?? {};
     if (receipt.schema !== 'natlang.provider-expanded-read-context/2' ||
         receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
+        !allowedObservedWriterSources.has(producer.source) ||
         producer.call_id !== source.source_ref.invocation_id || producer.node !== event.node ||
         block.id !== blockRef.id || block.type !== 'Neuralese<string>' ||
         typeof block.body !== 'string' || sha(Buffer.from(block.body)) !== event.text_body_sha256 ||
-        producer.text_body_sha256 !== event.text_body_sha256 || producer.source !== 'eval-finish') continue;
+        producer.text_body_sha256 !== event.text_body_sha256 || producer.source !== event.source) continue;
     const read = receipt.block_read, turn = receipt.model_turn;
     if (!read || !turn || read.call_id !== row.source_ref.invocation_id || turn.call_id !== row.source_ref.invocation_id ||
         !read.inputs?.some(input => input.node === event.node && input.block === blockRef.id) ||
@@ -92,6 +119,13 @@ for (const row of rows) {
 if (readerRows.length === 0) throw new Error('no authenticated downstream provider read found');
 const body = readerRows[0].receipt.block.body;
 if (readerRows.some(({ receipt }) => receipt.block.body !== body)) throw new Error('read receipts disagree on body');
+const directBodyTarget = (source.target?.tool_calls ?? []).some(call => {
+  if (call.function?.name !== 'return_result') return false;
+  try { return JSON.parse(call.function.arguments).value === body; } catch { return false; }
+}) || source.target?.content === body;
+if (directBodyTarget)
+  throw new Error('original sampled native target already contains this exact writer body; do not create a duplicate derived target');
+if (!terminalActionMatches) throw new Error('native terminal action does not match host capture');
 const turns = raw.trajectory.map((turn, index) => ({ turn, index })).filter(({ turn }) =>
   turn.invocation_id === source.source_ref.invocation_id &&
   turn.raw_response_sha256 === source.decision.source_raw_response_sha256);
@@ -150,7 +184,8 @@ const candidate = {
     read_node: receipt.block_read.node, read_inputs: receipt.block_read.inputs,
     model_turn_node: receipt.model_turn.node, model_turn_inputs: receipt.model_turn.inputs })),
   derived_supervision: { role: 'derived_sft_target_not_original_assistant_action',
-    transformation: 'authenticated-observed-eval-finish-Neuralese-string-to-direct-return-result/1',
+    transformation: 'authenticated-observed-Neuralese-string-to-direct-return-result/2',
+    producer_event_source: event.source,
     original_target: source.target, original_target_sha256: digest(source.target),
     original_messages: source.messages, original_messages_sha256: digest(source.messages),
     target: derivedTarget, target_sha256: digest(derivedTarget), derived_call_id: callId,

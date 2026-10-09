@@ -214,6 +214,100 @@ test('status-only success requires a same-invocation linked staged typed result 
   assert.equal(fake.training_admission.approved, false);
 });
 
+test('eval-return typed writer is attached to its source action only when later status-only success commits the same latest block', () => {
+  const invocationId = 'staged-eval-writer';
+  const blockId = `nz1_${'d'.repeat(32)}`;
+  const body = 'Priority register evidence: item A is 82 and item B is 91.';
+  const bodySha = createHash('sha256').update(body).digest('hex');
+  const evalCallId = 'eval-result-call';
+  const evalArgs = { code: 'return notes;' };
+  const finishArgs = { status: 'success' };
+  const stagedNotice = `Staged ${blockId} as the result. If this is the result of the task you were given and you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.`;
+  const returnType = 'Neuralese<string>';
+  const user = { role: 'user', content: `You are inside this call: revise(): ${returnType}\n\nReturn the current notes.` };
+  const modelEvalCall = { id: evalCallId, type: 'function', function: { name: 'eval', arguments: JSON.stringify(evalArgs) } };
+  const make = () => {
+    const row = nativeRow('staged-eval-return-writer');
+    const terminalContext = [system, user, { role: 'assistant', content: '', tool_calls: [modelEvalCall] },
+      { role: 'tool', tool_call_id: evalCallId, content: stagedNotice }];
+    row.outcome.action_ledger = [
+      { seq: 3, call_id: invocationId, tool_call_id: evalCallId, name: 'eval', arguments: evalArgs,
+        outcome: 'ok', result_text: stagedNotice },
+      { seq: 4, call_id: invocationId, name: 'return_result', arguments: finishArgs,
+        outcome: 'completed', result_text: `Returned ${blockId}.` },
+    ];
+    row.outcome.execution_graph = [
+      { kind: 'model_turn', seq: 1, call_id: invocationId, node: `${invocationId}#turn1`, turn: 1,
+        inputs: [{ node: `call:${invocationId}`, port: 'invocation' }] },
+      { kind: 'block_write', seq: 2, call_id: invocationId, block: blockId, node: `${invocationId}#write1`,
+        turn: `${invocationId}#turn1`, inputs: [{ node: `${invocationId}#turn1`, port: 'result-source' }],
+        truncated: false, result_type: returnType, source_kind: 'typed-text-result', source: 'eval-return',
+        marker_context: 'return-result', text_body_sha256: bodySha },
+    ];
+    row.outcome.invocation_ledger = [{ invocation_id: invocationId,
+      inline_instruction_site: { returns: { natlang: returnType } },
+      host_result: { kind: 'host_capture', capture_kind: 'invocation_output', call_id: invocationId,
+        complete: true, result_type: returnType, value: { $neuralese: { id: blockId, type: returnType } },
+        terminal_action_seq: 4 } }];
+    row.trajectory = [
+      { phase: 'action', invocation_id: invocationId, context: [system, user], tools_offered: schema,
+        assistant: { content: '', reasoning: 'Return accumulated notes.', calls: [{ tool: 'eval', source_tool: 'eval',
+          arguments: evalArgs, call_id: evalCallId }] },
+        model_response: { raw_calls: [{ id: evalCallId, function: { name: 'eval', arguments: JSON.stringify(evalArgs) } }] },
+        request_sha256: 'staged-eval-request', raw_response_sha256: 'staged-eval-raw' },
+      { phase: 'action', invocation_id: invocationId, context: terminalContext, tools_offered: schema,
+        assistant: { content: '', reasoning: 'Commit the staged notes.', calls: [{ tool: 'return_result', source_tool: 'return_result',
+          arguments: finishArgs, call_id: null }] },
+        model_response: { raw_calls: [{ function: { name: 'return_result', arguments: JSON.stringify(finishArgs) } }] },
+        request_sha256: 'staged-finish-request', raw_response_sha256: 'staged-finish-raw' },
+    ];
+    return row;
+  };
+  const row = make();
+  const turns = materializeNativeRows([row], { directAnswers: true }).turns;
+  const writer = turns.find(turn => turn.decision.index === 0);
+  const receipt = writer.decision.assistant.calls[0].outcome.typed_result_writes[0];
+  assert.equal(receipt.source, 'eval-return');
+  assert.equal(receipt.result_type, returnType);
+  assert.equal(receipt.block_id, blockId);
+  assert.equal(receipt.body_sha256, bodySha);
+  assert.equal(receipt.body_source, undefined, 'the typed graph receipt binds the body digest; reads supply exact text separately');
+  assert.equal(receipt.action_seq, 3);
+  assert.equal(receipt.staged_success_completion.terminal_action_seq, 4);
+  assert.equal(receipt.staged_success_completion.staged_call_id, evalCallId);
+
+  const overwritten = make();
+  const otherBlock = `nz1_${'e'.repeat(32)}`;
+  const otherCallId = 'later-eval-call';
+  const otherNotice = stagedNotice.replace(blockId, otherBlock);
+  const otherCall = { id: otherCallId, type: 'function', function: { name: 'eval', arguments: '{"code":"return newer;"}' } };
+  const secondEvalContext = [...overwritten.trajectory[1].context, { role: 'assistant', content: '', tool_calls: [otherCall] },
+    { role: 'tool', tool_call_id: otherCallId, content: otherNotice }];
+  overwritten.trajectory.splice(1, 0, { phase: 'action', invocation_id: invocationId, context: overwritten.trajectory[0].context,
+    tools_offered: schema, assistant: { content: '', reasoning: 'Stage a replacement result.', calls: [{ tool: 'eval',
+      source_tool: 'eval', arguments: { code: 'return newer;' }, call_id: otherCallId }] },
+    model_response: { raw_calls: [{ id: otherCallId, function: { name: 'eval', arguments: '{"code":"return newer;"}' } }] },
+    request_sha256: 'later-eval-request', raw_response_sha256: 'later-eval-raw' });
+  overwritten.trajectory[2].context = secondEvalContext;
+  overwritten.outcome.action_ledger.push({ seq: 4, call_id: invocationId, tool_call_id: otherCallId, name: 'eval',
+    arguments: { code: 'return newer;' }, outcome: 'ok', result_text: otherNotice });
+  overwritten.outcome.action_ledger[1].seq = 5;
+  overwritten.outcome.action_ledger.sort((left, right) => left.seq - right.seq);
+  overwritten.outcome.invocation_ledger[0].host_result.terminal_action_seq = 5;
+  const overwrittenWriter = materializeNativeRows([overwritten], { directAnswers: true }).turns
+    .find(turn => turn.decision.index === 0);
+  assert.ok(overwrittenWriter, JSON.stringify(materializeNativeRows([overwritten], { directAnswers: true })));
+  assert.equal(overwrittenWriter.decision.assistant.calls[0].outcome.typed_result_writes, undefined,
+    'an earlier eval-return is not a writer when a later staged result was committed');
+
+  const misattributed = make();
+  misattributed.outcome.execution_graph[1].source = 'return_result';
+  const helper = materializeNativeRows([misattributed], { directAnswers: true }).turns
+    .find(turn => turn.decision.index === 0);
+  assert.equal(helper.decision.assistant.calls[0].outcome.typed_result_writes, undefined,
+    'the status-only completion helper is not retagged as the writer');
+});
+
 test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
   for (const curriculum of [
     { family: 'folio_batch', shape: 'story337' },
