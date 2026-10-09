@@ -93,6 +93,49 @@ def test_schedule_validates_observations_and_changed_resume_config():
         other.load_state_dict(state)
 
 
+def test_mapped_input_handoff_preserves_historical_shallow_schedule_state():
+    options = dict(min_evals=2, patience=3, min_relative_improvement=.01,
+                   backbone_ramp_evals=4, pass_ramp_evals=2)
+    source = ProjectionFirstSchedule(heads=('shallow', 'full_depth'), **options)
+    for index in range(31):
+        source.observe({'shallow': .2 - index * .001,
+                        'full_depth': .21 - index * .001})
+    saved = source.state_dict()
+
+    resumed = ProjectionFirstSchedule(heads=('input_map', 'full_depth'), **options)
+    resumed.load_mapped_input_handoff_state_dict(saved)
+    restored = resumed.state_dict()
+
+    expected = copy.deepcopy(saved)
+    expected['config']['heads'] = ['input_map', 'full_depth']
+    expected['head_state']['input_map'] = expected['head_state'].pop('shallow')
+    assert restored == expected
+    assert resumed.eval_count == 31
+    assert len(restored['head_state']['input_map']['history']) == 31
+    assert restored['head_state']['input_map']['plateau'] == saved['head_state']['shallow']['plateau']
+    assert resumed.controls()['phase'] == source.controls()['phase']
+    assert resumed.controls()['sequence_passes'] == source.controls()['sequence_passes']
+
+
+def test_mapped_input_handoff_rejects_any_non_alias_schedule_change_without_mutation():
+    source = ProjectionFirstSchedule(heads=('shallow', 'full_depth'), patience=3)
+    source.observe({'shallow': .2, 'full_depth': .3})
+    saved = source.state_dict()
+
+    changed_config = copy.deepcopy(saved)
+    changed_config['config']['patience'] = 4
+    resumed = ProjectionFirstSchedule(heads=('input_map', 'full_depth'), patience=3)
+    with pytest.raises(ValueError, match='configuration changed'):
+        resumed.load_mapped_input_handoff_state_dict(changed_config)
+    assert resumed.eval_count == 0
+
+    wrong_alias = copy.deepcopy(saved)
+    wrong_alias['config']['heads'] = ['other', 'full_depth']
+    with pytest.raises(ValueError, match='historical shallow alias'):
+        resumed.load_mapped_input_handoff_state_dict(wrong_alias)
+    assert resumed.eval_count == 0
+
+
 def test_plateau_snapshot_is_retained_after_adaptation_starts():
     schedule = ProjectionFirstSchedule(min_evals=1, patience=1)
     schedule.observe({'shallow': 1., 'full_depth': 2.})

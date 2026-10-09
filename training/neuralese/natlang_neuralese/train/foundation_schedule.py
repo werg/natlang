@@ -177,3 +177,33 @@ class ProjectionFirstSchedule:
         self.eval_count = count
         self.head_state = copy.deepcopy(state["head_state"])
         self.adaptation_started_eval = started
+
+    def load_mapped_input_handoff_state_dict(self, state):
+        """Restore the historical mapped-input schedule's semantic head alias.
+
+        The original mapped-input implementation serialized its map metric as
+        ``shallow``. The shared implementation names the same metric
+        ``input_map``. This one continuation path renames only that key; every
+        other schedule setting, counter, history and plateau must still match
+        exactly. This is not a general schedule-configuration migration.
+        """
+        if self.config["heads"] != ["input_map", "full_depth"]:
+            raise ValueError("mapped-input schedule handoff requires input_map/full_depth heads")
+        if not isinstance(state, dict) or not isinstance(state.get("config"), dict):
+            raise ValueError("invalid projection-first schedule state")
+        saved_config = dict(state["config"])
+        if saved_config.get("heads") != ["shallow", "full_depth"]:
+            raise ValueError("mapped-input schedule handoff requires the historical shallow alias")
+        saved_head_state = state.get("head_state")
+        if not isinstance(saved_head_state, dict) or set(saved_head_state) != {"shallow", "full_depth"}:
+            raise ValueError("invalid historical mapped-input schedule head state")
+
+        migrated = copy.deepcopy(state)
+        migrated["config"]["heads"] = ["input_map", "full_depth"]
+        migrated["head_state"] = {
+            "input_map": migrated["head_state"].pop("shallow"),
+            "full_depth": migrated["head_state"]["full_depth"],
+        }
+        # The ordinary loader retains strict equality for every non-alias field
+        # and validates all state counters and history values.
+        self.load_state_dict(migrated)

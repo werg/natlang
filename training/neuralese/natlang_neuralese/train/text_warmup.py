@@ -1311,7 +1311,19 @@ def main(argv=None):
                                 for key in continuation.get('heads',{}))))
             if same_foundation and continuation.get('schedule'):
                 # An unchanged objective may continue its plateau/ramp phase.
-                schedule.load_state_dict(continuation['schedule'])
+                saved_schedule_heads=(continuation['schedule'].get('config') or {}).get('heads')
+                if a.ar_feedback_fixup and saved_schedule_heads==['shallow','full_depth']:
+                    # The map checkpoint predates the shared metric label:
+                    # its saved ``shallow`` key is this same input-map metric.
+                    # Preserve its exact schedule history through the narrow
+                    # alias migration instead of resetting the plateau.
+                    schedule.load_mapped_input_handoff_state_dict(continuation['schedule'])
+                    print(json.dumps({'event':'mapped_input_schedule_head_renamed',
+                                      'source_head':'shallow','current_head':'input_map',
+                                      'source_step':continuation['step'],
+                                      'preserved_eval_count':schedule.eval_count}),flush=True)
+                else:
+                    schedule.load_state_dict(continuation['schedule'])
                 last_schedule_step=continuation['last_schedule_step']
                 print(json.dumps({'event':'foundation_schedule_restored',
                                   'source_step':continuation['step'],
