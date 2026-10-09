@@ -36,7 +36,7 @@ cases:
     title: 'grad through a context item reaches the item'
     stage: S5
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: "valueAndGrad(s => objective(program.in(ctx.with({ skill: s })), cases), ctx.skill)"
     expect: 'A nonzero gradient with the shape of ctx.skill; a grad node in the graph; model weights unchanged.'
 
@@ -85,7 +85,7 @@ cases:
     title: 'Learning requires the natlang:learning service'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'A function without the natlang:learning service calls grad.'
     expect: 'The call fails as an unavailable service.'
 
