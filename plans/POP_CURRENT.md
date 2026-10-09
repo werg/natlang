@@ -43,7 +43,7 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
 ### Step5 Preview Free
 
-`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Final token-suffix audit and explicit composition/publication remain pending; no recurrence or hidden-state admission. Step5 is actively generating the distinct Microgrid source under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
+`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Token-suffix audit passed and root composition adopted17native/17text; curated publication/sync remain pending; no recurrence or hidden-state admission. Step5 Microgrid terminated on repeated endpoint-unavailable503 errors, with captures sealed under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
 
 ### Failure repairs and skills
 
@@ -53,7 +53,7 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
 ## Corpus inventory
 
-Current admitted facets:5684 native (3649train/2035test),4880 text (3176/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets are excluded until explicit adoption.
+Current admitted facets:5701 native (3666train/2035test),4897 text (3193/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets are excluded until explicit adoption.
 
 - Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
 - Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
