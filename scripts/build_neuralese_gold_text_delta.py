@@ -46,14 +46,36 @@ def load_pinned_tokenizer(tokenizer_path):
     """
     from transformers import AutoTokenizer, PreTrainedTokenizerFast
     path = Path(tokenizer_path)
+    config_path = path / "tokenizer_config.json"
+    backend_path = path / "tokenizer.json"
+    config = json.loads(config_path.read_text()) if config_path.is_file() else {}
+    expected_class = config.get("tokenizer_class")
+
+    def verify(tokenizer):
+        actual_class = type(tokenizer).__name__
+        if expected_class == "TokenizersBackend":
+            # Transformers 5.x may materialize this serialized backend through
+            # either its named facade or the generic fast-tokenizer wrapper.
+            # In both cases the loaded backend must be exactly the pinned JSON.
+            if actual_class not in {"TokenizersBackend", "PreTrainedTokenizerFast"}:
+                raise ValueError(f"tokenizer class mismatch: expected TokenizersBackend, got {actual_class}")
+            backend = getattr(tokenizer, "backend_tokenizer", None)
+            if backend is None or not callable(getattr(backend, "to_str", None)) or not backend_path.is_file():
+                raise ValueError("TokenizersBackend requires its exact serialized tokenizer.json backend")
+            try:
+                loaded_backend = json.loads(backend.to_str())
+                pinned_backend = json.loads(backend_path.read_text())
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError("TokenizersBackend serialized backend is invalid") from exc
+            if loaded_backend != pinned_backend:
+                raise ValueError("loaded tokenizer backend differs from pinned tokenizer.json")
+        elif expected_class and actual_class != expected_class:
+            raise ValueError(f"tokenizer class mismatch: config declares {expected_class}, loader returned {actual_class}")
+        return tokenizer
+
     try:
-        return AutoTokenizer.from_pretrained(str(path), local_files_only=True)
+        loaded = AutoTokenizer.from_pretrained(str(path), local_files_only=True)
     except ValueError as exc:
-        config_path = path / "tokenizer_config.json"
-        backend_path = path / "tokenizer.json"
-        if not config_path.is_file():
-            raise
-        config = json.loads(config_path.read_text())
         if config.get("tokenizer_class") != "TokenizersBackend" or "TokenizersBackend" not in str(exc):
             raise
         if not backend_path.is_file():
@@ -71,7 +93,8 @@ def load_pinned_tokenizer(tokenizer_path):
         for name in ("padding_side", "truncation_side", "legacy", "spaces_between_special_tokens"):
             if name in config:
                 setattr(tokenizer, name, config[name])
-        return tokenizer
+        return verify(tokenizer)
+    return verify(loaded)
 
 
 def read_records(path):
