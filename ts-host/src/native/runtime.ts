@@ -95,7 +95,7 @@ function diagnosticArgument(value: unknown, holder: string, liveIdentity?: (valu
 }
 
 const DIAGNOSTIC_HINTS: Record<string, string> = {
-  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
+  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields. With `nl.with<T>`, T is the child result type; use `nl.with<CaptureRecord, Result>` only when you want to type both the captures and result. The child input is passed separately.',
   'unknown-field': 'Use one of the fields listed as expected.',
   'no-such-path': 'Use a variable or field that exists in the scope.',
   'capture-conflict': 'Another caller changed that captured variable; run the eval again with its current value.',
@@ -134,6 +134,7 @@ neuralese.textReadSource.read or inspect/copy its fields to read a value. Use th
 read(value), or a supported JavaScript text-conversion context such as String(value) for
 Neuralese<string>. The runtime performs the configured typed readout; the descriptor itself does not perform it.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
+  const verdict: Neuralese<(statement: string) => Promise<"allow" | "deny">> = nl\`Choose allow or deny for the statement.\`;
   const decision = await decide(verdict, statement);
   decision.value                    the function's answer
   decision.probabilities            { value, probability }[] for its finite result choices

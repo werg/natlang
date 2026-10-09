@@ -367,7 +367,7 @@ export function createNatlangRuntime(options: NatlangRuntimeOptions = {}): Natla
  * host, decide(...) in eval. Without a scored readout the answer has probability 1 and `scored` is false.
  */
 export async function decideInFrame<A extends unknown[], T>(frame: Frame, fn: (...args: A) => Promise<T>, args: A): Promise<Decision<T>> {
-  if (typeof fn !== 'function') throw new TypeError('decide(fn, ...args) needs a function to call, such as a natural-language function with a finite result type');
+  if (typeof fn !== 'function') throw new TypeError('decide(fn, ...args) needs a callable function in scope, such as `const verdict = nl<boolean>`...`; await decide(verdict, item)`. Pass the function first and its arguments afterward.');
   let readout: DecisionReadout | undefined;
   const value = await runInFrame({ ...frame, readout: scored => { readout ??= scored; } }, () => fn(...args));
   const scored = readout as DecisionReadout | undefined;

@@ -4,6 +4,8 @@ import { createNatlangRuntime, loadVirtualNatlang } from '../dist/index.js';
 import { finiteValues, softmax } from '../dist/native/decision.js';
 import { parseType, TypeEnv } from '../dist/native/types.js';
 import { promptLogprobDecider } from '../dist/model/chat-completion.js';
+import { currentFrame } from '../dist/runtime/context.js';
+import { decideInFrame } from '../dist/runtime/runtime.js';
 
 test('finite result types list their values; open types are not finite', () => {
   const env = new TypeEnv({ Verdict: parseType('"knight" | "knave"') });
@@ -120,4 +122,12 @@ test('decide(fn, ...args) in eval gives a function the distribution of a decisio
   const plain = scriptedModel(opening => opening.includes('Refuse statement') ?
     'const d = await decide(verdict, statement); return `${d.value} ${d.confidence} ${d.scored}`;' : 'return "knight";');
   assert.equal(await createNatlangRuntime({ model: plain.driver }).run(() => loadVirtualNatlang(files, 'gate.nl')('x')), 'knight 1 false');
+});
+
+test('decide rejects a non-callable with direct callable guidance', async () => {
+  const runtime = createNatlangRuntime();
+  await runtime.run(async () => {
+    await assert.rejects(() => decideInFrame(currentFrame(), {}, []),
+      /needs a callable function in scope.*await decide\(verdict, item\).*Pass the function first/);
+  });
 });

@@ -74,8 +74,16 @@ test('read_code documents the injected decide helper instead of asking for progr
   assert.equal(docs, BUILT_IN_DOCS.decide);
   assert.match(docs, /decide\(fn, \.\.\.args\)/);
   assert.match(docs, /first argument must be a callable function in scope/);
+  assert.match(docs, /const verdict: Neuralese<\(statement: string\) => Promise</);
   assert.match(docs, /one probability-1 answer with scored=false/);
   assert.match(READ_CODE_DESCRIPTION, /eval built-ins \(nl, iterateOn, transcript, decide\)/);
+});
+
+test('nl.with docs distinguish its child result from captured context', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  assert.match(BUILT_IN_DOCS.nl, /In nl\.with<T>, T describes the result, not the capture object/);
+  assert.match(BUILT_IN_DOCS.nl, /In nl\.with<C, T>, C is a finite capture-record schema\s+and T is the result/);
+  assert.match(BUILT_IN_DOCS.nl, /the callable's input is passed separately/);
 });
 
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {
