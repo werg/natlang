@@ -130,22 +130,43 @@ def choose_targets(messages: list[dict], assistants: list[int], targets: str, pe
     return sorted((readers + rest)[:per_trajectory])
 
 
-def admission(transcript: Normalized) -> dict[str, Any]:
-    """The record's admission by explicit criteria: a resolved task, every step mapped exactly to the dialect."""
-    reasons = ([] if transcript.resolved else ['task not resolved']) + (['lossy steps'] if transcript.lossy else [])
-    return {'kind': 'harness-bench-criteria/1', 'criteria': ['resolved', 'exact-mapping'],
+def admission(transcript: Normalized, replay: dict[str, Any] | None) -> dict[str, Any]:
+    """The record's admission by explicit criteria: a resolved task; observations in pi's own results, replayed and
+    verified (the record holds only steps before any divergence); every kept step mapped exactly to the dialect."""
+    reasons = ([] if transcript.resolved else ['task not resolved']) + ([] if replay else ['observations not replayed']) + \
+        (['lossy steps'] if transcript.lossy and not replay else [])
+    return {'kind': 'harness-bench-criteria/2', 'criteria': ['resolved', 'pi-replayed-verified', 'exact-mapping'],
             'approved': not reasons, **({'held': reasons} if reasons else {})}
 
 
-def build(row: dict[str, Any], *, system_piece: str, surface_sha: str, tools: list[dict], corpus: str, test_percent: int,
-          digest_chars: int, preview_chars: int, targets: str, per_trajectory: int, seed: int) -> Iterable[dict]:
-    transcript = normalize(row, 'pi')
+def replayed(line: dict[str, Any]) -> tuple[Normalized, dict[str, Any] | None]:
+    """A replayed trajectory (`natlang run applications/pi -- replay`) as a transcript, cut before the step where
+    replay diverged: only verified steps, all in pi's own results, become records."""
+    report = line.get('replay')
+    messages = line['messages']
+    if report and report.get('diverged'):
+        cut = report['diverged']['message']
+        # Back to the assistant turn that made the diverging call: neither it nor anything after it is kept.
+        while cut > 0 and messages[cut - 1]['role'] != 'assistant':
+            cut -= 1
+        messages = messages[:max(cut - 1, 0)]
+    fields = {name: line.get(name) for name in ('id', 'instance_id', 'repo', 'resolved', 'mapping', 'goal', 'cwd', 'lossy', 'patch', 'views')}
+    fields['messages'] = messages
+    fields['lossy'] = fields['lossy'] or []
+    fields['views'] = fields['views'] or []
+    return Normalized(**fields), report
+
+
+def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, tools: list[dict], corpus: str, test_percent: int,
+          digest_chars: int, preview_chars: int, targets: str, per_trajectory: int, seed: int,
+          transcript: Normalized | None = None, replay: dict[str, Any] | None = None, row_sha: str | None = None) -> Iterable[dict]:
+    transcript = transcript or normalize(row, 'pi')
     messages, assistants, digests = native_messages(transcript, system_piece, digest_chars, preview_chars)
     rng = random.Random(f'{seed}:{transcript.id}')
     split = split_of(transcript.repo, test_percent)
-    admitted = admission(transcript)
+    admitted = admission(transcript, replay)
     groups = [f'swe-rebench-repo:{transcript.repo}', f'swe-rebench-instance:{transcript.instance_id}']
-    row_sha = sha(json.dumps(row.get('trajectory'), sort_keys=True, default=str))
+    row_sha = row_sha or sha(json.dumps((row or {}).get('trajectory'), sort_keys=True, default=str))
     for index in choose_targets(messages, assistants, targets, per_trajectory, rng):
         prefix = messages[:index]
         yield {
@@ -154,7 +175,9 @@ def build(row: dict[str, Any], *, system_piece: str, surface_sha: str, tools: li
                            'source_row_sha256': row_sha, 'message_index': index},
             'provenance': {'builder': BUILDER, 'corpus': corpus, 'dialect': DIALECT, 'mapping': 'pi', 'harness': 'pi',
                            'surface_sha256': surface_sha, 'teacher': 'Qwen3-Coder-480B-A35B-Instruct (OpenHands 0.54)',
-                           'digest_chars': digest_chars, 'preview_chars': preview_chars},
+                           'digest_chars': digest_chars, 'preview_chars': preview_chars,
+                           'observations': 'pi-replayed' if replay else 'teacher-recorded',
+                           **({'replay': replay} if replay else {})},
             'task': {'kind': 'agent_trajectory', 'instance_id': transcript.instance_id, 'repo': transcript.repo,
                      'goal': transcript.goal},
             'family': 'harness_bench', 'task_family': 'swe', 'task_kind': 'agent_trajectory', 'task_modality': 'code',
@@ -170,7 +193,9 @@ def build(row: dict[str, Any], *, system_piece: str, surface_sha: str, tools: li
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('--trajectories', required=True, help='SWE-rebench OpenHands trajectories parquet')
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--trajectories', help='SWE-rebench OpenHands trajectories parquet (teacher-recorded observations)')
+    source.add_argument('--replayed', help='`natlang run applications/pi -- replay` output (pi-replayed observations)')
     parser.add_argument('--surface', required=True, help='`natlang run applications/pi -- surface --companion` output')
     parser.add_argument('--corpus', required=True, help='the source corpus id in training/neuralese_corpora.json')
     parser.add_argument('--out', required=True)
@@ -192,15 +217,27 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     summary = {'builder': BUILDER, 'corpus': args.corpus, 'surface_sha256': surface_sha, 'trajectories': 0, 'records': 0,
                'by_split': {'train': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'digest_parts': 0}
+    def sources() -> Iterable[dict[str, Any]]:
+        if args.replayed:
+            with open(args.replayed) as lines:
+                for line in lines:
+                    if line.strip():
+                        transcript, report = replayed(json.loads(line))
+                        yield {'transcript': transcript, 'replay': report, 'row': None, 'row_sha': json.loads(line).get('source_row_sha256')}
+        else:
+            columns = ['trajectory_id', 'instance_id', 'repo', 'trajectory', 'model_patch', 'resolved']
+            for row in rows(args.trajectories, columns):
+                yield {'transcript': None, 'replay': None, 'row': row, 'row_sha': None}
+
     with (out / 'records.jsonl').open('w') as handle:
-        columns = ['trajectory_id', 'instance_id', 'repo', 'trajectory', 'model_patch', 'resolved']
-        for number, row in enumerate(rows(args.trajectories, columns)):
+        for number, item in enumerate(sources()):
             if number < args.offset:
                 continue
             if args.limit and number >= args.offset + args.limit:
                 break
             summary['trajectories'] += 1
-            for record in build(row, system_piece=system_piece, surface_sha=surface_sha, tools=tools, corpus=args.corpus,
+            for record in build(item['row'], transcript=item['transcript'], replay=item['replay'], row_sha=item['row_sha'],
+                                system_piece=system_piece, surface_sha=surface_sha, tools=tools, corpus=args.corpus,
                                 test_percent=args.test_percent, digest_chars=args.digest_chars,
                                 preview_chars=args.preview_chars, targets=args.targets,
                                 per_trajectory=args.per_trajectory, seed=args.seed):
