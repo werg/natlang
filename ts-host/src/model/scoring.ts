@@ -24,6 +24,7 @@ export function concurrentScoreMany(score: ScoreOne): ScoreMany {
 export function coalescingScorer(base: DecisionScorer, options: { windowMs?: number; maxItems?: number } = {}): DecisionScorer {
   const windowMs = options.windowMs ?? 0, maxItems = options.maxItems ?? 256;
   const many: ScoreMany = base.scoreMany ?? concurrentScoreMany(base);
+  let batchCounter = 0;
   type Pending = { item: DecisionRequest; signal?: AbortSignal; resolve: (value: DecisionScores) => void; reject: (reason: unknown) => void };
   let pending: Pending[] = [], timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
@@ -32,11 +33,12 @@ export function coalescingScorer(base: DecisionScorer, options: { windowMs?: num
     if (!batch.length) return;
     // The batch has no signal of its own: one caller's abort must not cancel the others. An aborted caller is
     // rejected at once (below) and its score is dropped.
+    const batchId = `d${++batchCounter}`;
     many(batch.map(entry => entry.item)).then(results => {
       batch.forEach((entry, index) => {
         const result = results[index];
         if (!result) entry.reject(new Error('scoreMany returned too few results'));
-        else if (result.status === 'fulfilled') entry.resolve(result.value);
+        else if (result.status === 'fulfilled') entry.resolve({ ...result.value, batch: { batch_id: batchId, batch_size: batch.length } });
         else entry.reject(result.reason);
       });
     }, failure => batch.forEach(entry => entry.reject(failure)));

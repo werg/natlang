@@ -188,7 +188,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         '-c', String(plan.totalContext), '-ngl',
         String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
         '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
-      error.write(`natlang: starting managed model ${basename(modelPath)}\n`);
+      error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });
       child.once('error', failure => { recentError = `${recentError}\n${failure.message}`.slice(-16000); });

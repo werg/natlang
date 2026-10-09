@@ -51,7 +51,9 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
  * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
  */
 export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[] };
-export type DecisionScores = { log_probs: number[]; tokens?: number[] };
+export type DecisionScores = { log_probs: number[]; tokens?: number[];
+  /** Set by a coalescing scorer: the batch this readout was scored in. */
+  batch?: { batch_id: string; batch_size: number } };
 export type DecisionScorer = ((request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>) & {
   /**
    * Score many requests at once, so the backend can batch them (plans/BATCHED_EXECUTION.md §3.3). One entry per item,

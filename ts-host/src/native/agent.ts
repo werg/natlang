@@ -881,7 +881,8 @@ export class NativeToolAgent {
     const chosen = probabilities.indexOf(Math.max(...probabilities));
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
       log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
-      duration_ms: Math.round(performance.now() - started) });
+      duration_ms: Math.round(performance.now() - started),
+      ...(scores.batch ? { batch_id: scores.batch.batch_id, batch_size: scores.batch.batch_size } : {}) });
     lam.return = values[chosen] as Value;
     lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probabilities[index]])) });
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';

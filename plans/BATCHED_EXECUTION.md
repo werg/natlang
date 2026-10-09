@@ -158,7 +158,7 @@ Done: steps 1, 3, 4, 5, 6 and the TypeScript half of step 2. Tests: `test/schedu
   `/v1/neuralese/decide_many` (with block uploads handled as `decide` does); not implemented.
 
 **Server slots (`model/server-slots.ts`, `local-server.ts`).** `slots = clamp(floor((budget - modelBytes) /
-(contextTokens * kvBytesPerToken)), 1, 8)`, budget = half of available memory (or `local.memoryBudgetMiB`),
+(contextTokens * kvBytesPerToken)), 1, 8)`, default KV budget = min(half of available memory, 4 GiB), shown by `natlang doctor` and the server start line (an explicit `local.memoryBudgetMiB`, which covers weights and KV, is not capped),
 `kvBytesPerToken` 64 KiB by default; `local.parallel` wins. `-c` is the per-slot context times the slots. Requests to
 the managed server carry `cache_prompt: true`. `natlang doctor` reports `serverSlots`, `slotPlan` and `batching`.
 Note the default `--parallel` changes from 1 to the memory-sized value; on DGX set `local.memoryBudgetMiB` from the
@@ -175,7 +175,7 @@ messages and differ first at the arguments.
 
 **Observability (step 5).** `ModelTurn.scheduling` carries `batch_id`, `batch_size`, `in_flight`, `queue_wait_ms`,
 `priority`; the `model_request` end event records them as `batch_id`, `batch_size`, `in_flight`, `queue_wait_ms`,
-`schedule_priority`. Decision readouts do not record them yet. `natlang traces occupancy` summarises them per call and
+`schedule_priority`. Coalesced decision readouts record `batch_id`/`batch_size` on their `decision_readout` event. `natlang traces occupancy` summarises them per call and
 in total. Prefix tokens reused are already in the turn stats (`cachedTokens`) but not in the event.
 
 **Loop diagnostic (step 6).** `compiler/sequential-loops.ts`, called from `compiler/project.ts`. The diagnostic code
@@ -188,7 +188,7 @@ is `nl-sequential-loop` (severity warning). `natlang check` now prints warnings 
   using the type checker (rather than the `.nl` import and `nl` tag syntax) belongs in `compiler/eval-check.ts` or
   `inline.ts`.
 - `native/runtime.ts` / `runtime/hooks.ts`: pass `turn` and the function name in the model request, so the scheduler
-  can group by function instead of by system-message hash, and trace decision-readout batch records.
+  can group by function instead of by system-message hash, and (decision-readout batch records are done).
 - `improvement/services.ts`, `applications/pi/*`: construct their model drivers with the session's scheduler (they
   currently build their own `requestLimit`/drivers if they set `concurrency`).
 - `skills/natlang-authoring/references/language.md`: one line telling authors that `Promise.all(items.map(f))`

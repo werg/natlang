@@ -211,6 +211,8 @@ test('decision readouts that arrive together are scored by one scoreMany; failur
   assert.deepEqual(batches, [3]);
   assert.deepEqual(results.map(item => item.status), ['fulfilled', 'rejected', 'fulfilled']);
   assert.deepEqual(results[0].value.log_probs, [-1, -2]);
+  assert.equal(results[0].value.batch.batch_size, 3, 'a coalesced readout records its batch');
+  assert.equal(results[0].value.batch.batch_id, results[2].value.batch.batch_id);
   const controller = new AbortController();
   const aborted = scorer({ messages: [], options: ['a'] }, controller.signal);
   const other = scorer({ messages: [], options: ['a'] });
@@ -274,19 +276,27 @@ test('explicit-batch scoring posts prefix and continuations once, then falls bac
   } finally { await new Promise(resolve => instance.close(resolve)); }
 });
 
-test('server slots follow the memory formula unless configured', () => {
+test('server slots follow the memory formula unless configured; the default KV budget is capped at 4 GiB', () => {
   const GiB = 2 ** 30;
-  const base = { modelBytes: 1 * GiB, defaultContextTokens: 8192, environment: {} };
-  // budget 8 GiB, weights 1 GiB, per slot 8192 * 65536 = 0.5 GiB -> 14 slots, capped at 8
-  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 16 * GiB }).slots, 8);
-  // budget 2 GiB -> (2 - 1) / 0.5 = 2 slots
+  const base = { modelBytes: 1 * GiB, defaultContextTokens: 8192, environment: {} };   // 0.5 GiB of KV per slot
+  // default: min(free / 2, 4 GiB) of KV alone
+  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 1024 * GiB }).slots, 8);
+  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 1024 * GiB }).budgetBytes, 4 * GiB);
   const small = planServerSlots({ ...base, availableMemoryBytes: 4 * GiB });
-  assert.equal(small.slots, 2);
-  assert.equal(small.totalContext, 16384);
-  assert.equal(small.source, 'memory');
-  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 1 * GiB }).slots, 1);
+  assert.equal(small.slots, 4);
+  assert.equal(small.totalContext, 32768);
+  assert.equal(small.budgetSource, 'default');
+  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 0.5 * GiB }).slots, 1);
+  // 16K context at 64 KiB/token is 1 GiB per slot: about 4 slots under the cap, however much memory is free
+  const wide = planServerSlots({ ...base, defaultContextTokens: 16384, availableMemoryBytes: 512 * GiB });
+  assert.equal(wide.slots, 4);
+  assert.match(wide.formula, /4294967296/);
+  // explicit settings win and are not capped
   assert.equal(planServerSlots({ ...base, availableMemoryBytes: 64 * GiB, local: { parallel: 3, contextTokens: 4096 } }).slots, 3);
-  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 64 * GiB, local: { memoryBudgetMiB: 2048 } }).slots, 2);
+  const explicit = planServerSlots({ ...base, availableMemoryBytes: 1 * GiB, local: { memoryBudgetMiB: 2048 } });
+  assert.equal(explicit.slots, 2);
+  assert.equal(explicit.budgetSource, 'memoryBudgetMiB');
+  assert.equal(planServerSlots({ ...base, availableMemoryBytes: 1 * GiB, local: { memoryBudgetMiB: 20 * 1024 } }).slots, 8);
   assert.equal(planServerSlots({ ...base, availableMemoryBytes: 64 * GiB, local: { kvBytesPerToken: 2 ** 20, memoryBudgetMiB: 4096 } }).slots, 1);
   assert.equal(planServerSlots({ ...base, availableMemoryBytes: 64 * GiB, environment: { NATLANG_MODEL_MEMORY_BUDGET_MIB: '3072' } }).slots, 4);
 });

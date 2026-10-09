@@ -354,7 +354,8 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
     apiKey: choice.kind === 'external' ? Boolean(process.env[choice.apiKeyEnv]) : null,
     providerAuthConfigured: choice.kind === 'pi-provider' ? piReady : null,
     // Batched execution (plans/BATCHED_EXECUTION.md): the slots a managed server starts with and the scheduler's limits.
-    serverSlots: slotPlan?.slots ?? null, slotPlan: slotPlan ?? null,
+    serverSlots: slotPlan?.slots ?? null, kvBudgetMiB: slotPlan?.budgetBytes == null ? null : Math.round(slotPlan.budgetBytes / 2 ** 20),
+    kvBudgetSource: slotPlan?.budgetSource ?? null, slotPlan: slotPlan ?? null,
     batching: choice.kind === 'pi-provider' ? null : { mode: choice.batching?.mode ?? 'server-continuous',
       maxConcurrent: choice.batching?.maxConcurrent ?? choice.concurrency ?? slotPlan?.slots ?? null,
       coalesceMs: choice.batching?.coalesceMs ?? null, scoreEndpoint: choice.batching?.scoreEndpoint ?? null } } };
