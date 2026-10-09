@@ -262,3 +262,28 @@ def test_row_scaled_lion_moves_each_row_by_its_scale():
     p.grad = torch.ones(2, 4)
     LionSR([{"params": [p], "row_scale": torch.tensor([[1.0], [0.01]])}], lr=0.1).step()
     assert torch.allclose(p.detach(), torch.tensor([[-0.1] * 4, [-0.001] * 4]))
+
+
+def test_unbound_dense_experts_give_the_same_output_and_gradients_as_per_expert_indexing(tmp_path):
+    from natlang_neuralese.maple.model import DenseExperts, SparseMoE
+
+    tiny_mellum(tmp_path)
+    model = load_maple(tmp_path, device="cpu", dtype=torch.float32, ternary_attention=False)
+    moe = model.model.layers[0].mlp
+    assert isinstance(moe.experts, DenseExperts)
+    latents = moe.experts.make_latent()
+    h = torch.randn(1, 12, model.config.hidden_size)
+    moe(h).square().sum().backward()
+    fast = [q.grad.clone() for q in latents]
+    for q in latents:
+        q.grad = None
+    unbound = DenseExperts.unbound
+    try:
+        DenseExperts.unbound = lambda self, dtype: (
+            tuple(self._value(self.gate_up[i], dtype) for i in range(self.gate_up.shape[0])),
+            tuple(self._value(self.down[i], dtype) for i in range(self.down.shape[0])))
+        moe(h).square().sum().backward()
+    finally:
+        DenseExperts.unbound = unbound
+    for q, g in zip(latents, fast):
+        assert torch.allclose(q.grad, g, atol=1e-5)

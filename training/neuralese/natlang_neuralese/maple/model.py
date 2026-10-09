@@ -355,6 +355,16 @@ class DenseExperts(nn.Module):
         y = x @ self._value(self.gate_up[index], x.dtype).T
         return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ self._value(self.down[index], x.dtype).T
 
+    def unbound(self, dtype) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
+        """Every expert's (ramped ternary) weights from one op per tensor. Indexing the latent per expert instead
+        makes each expert's backward materialise a zero gradient the size of all experts (64x per tensor per
+        layer: most of a Mellum QAT step); unbind's backward stacks all expert gradients once."""
+        return self._value(self.gate_up, dtype).unbind(0), self._value(self.down, dtype).unbind(0)
+
+    def run_weights(self, x: torch.Tensor, gate_up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
+        y = x @ gate_up.T
+        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ down.T
+
 
 class SparseMoE(nn.Module):
     def __init__(self, config: MapleConfig):
@@ -412,11 +422,16 @@ class SparseMoE(nn.Module):
         token = order // self.top_k
         counts = torch.bincount(flat, minlength=self.gate.weight.shape[0]).tolist()
         out = torch.zeros(flat.numel(), shape[-1], device=x.device, dtype=x.dtype)
+        if isinstance(self.experts, DenseExperts):
+            gate_ups, downs = self.experts.unbound(x.dtype)
+            run = lambda xs, e: self.experts.run_weights(xs, gate_ups[e], downs[e])
+        else:
+            run = lambda xs, e: self.experts.run(xs, e, x.dtype)
         start = 0
         for expert, count in enumerate(counts):
             if count:
                 rows = order[start:start + count]
-                out[rows] = self.experts.run(x[token[start:start + count]], expert, x.dtype)
+                out[rows] = run(x[token[start:start + count]], expert)
                 start += count
         out = (out.view(-1, self.top_k, shape[-1]).float() * weights[..., None]).sum(1)
         return out.to(h.dtype).view(shape)
