@@ -1,0 +1,17 @@
+{
+  "limits": {
+    "outputBytes": { "value": 65536, "why": "The last 64 KiB of each of stdout and stderr is kept: enough for an error and its context, bounded so a noisy command cannot fill memory or the session." },
+    "timeoutMs": { "value": 600000, "why": "A recipe that sets no timeoutMs of its own stops after 10 minutes: long enough for ordinary commands, short enough that a hung command does not hold the session." },
+    "maxTimeoutMs": { "value": 86400000, "why": "No recipe may wait longer than 24 hours, whatever its timeoutMs says." },
+    "killDelayMs": { "value": 5000, "why": "After the terminate signal a command has 5 seconds to clean up before it is killed." }
+  },
+  "recipes": [
+    { "id": "repository-status", "description": "inspect concise Git working tree status", "argv": ["git", "status", "--short"] },
+    { "id": "repository-diff", "description": "summarize current uncommitted Git changes", "argv": ["git", "diff", "--stat"] },
+    { "id": "list-files", "description": "list workspace files tracked or visible to ripgrep", "argv": ["rg", "--files"] },
+    { "id": "test-typescript-host", "description": "build and test the natlang TypeScript host",
+      "argv": ["npm", "--prefix", "ts-host", "test"], "timeoutMs": 3600000 },
+    { "id": "build-typescript-host", "description": "build the natlang TypeScript host and browser bundle",
+      "argv": ["npm", "--prefix", "ts-host", "run", "build"], "timeoutMs": 3600000 }
+  ]
+}

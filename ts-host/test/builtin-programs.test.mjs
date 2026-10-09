@@ -47,3 +47,18 @@ test('the built-ins ship in the build and in the staged npm package', () => {
   const staged = new URL('../../npm-packages/node/dist/builtin/sources.generated.js', import.meta.url);
   if (existsSync(new URL('../../npm-packages/node/dist/index.js', import.meta.url))) assert.ok(existsSync(staged), 'the node package stages the built-ins');
 });
+
+test('readNote reads the file a request names and returns it as untrusted text', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { createNatlangRuntime, openFolder } = await import('../dist/index.js');
+  const { scriptedModel } = await import('./support/natlang.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'natlang-readnote-'));
+  writeFileSync(join(dir, 'brief.md'), 'the brief');
+  try {
+    const model = scriptedModel(() => 'return await files.file("brief.md").readText()');
+    const text = await createNatlangRuntime({ model: model.driver }).run(() => builtin('readNote')('use brief.md', openFolder(dir).root()));
+    assert.equal(String(text), 'the brief');
+    assert.match(model.openings[0], /Find the supporting file that request names/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

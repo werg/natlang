@@ -1,13 +1,13 @@
 import type { Untrusted } from '@natlang/node';
 
 /** Which implementation runs a hot-path policy. Both answer the same interface; the setting selects. */
-export type Policy = "crisp" | "natlang";
+export type Policy = "crisp" | "nl" | "shadow";
 
 /** The wiki's policy settings, passed to every stage that has a pluggable part. */
 export type WikiSettings = {
-  /** Summarizing one update into a Change, once per update: "crisp" compares texts exactly, "natlang" reads the intent. */
+  /** Summarizing one update into a Change, once per update: "crisp" compares texts exactly, "nl" reads the intent, "shadow" runs both and records whether they agree. */
   changes: Policy,
-  /** Judging whether a recorded cell result survives an edit: "crisp" drops all results, "natlang" follows dependencies. */
+  /** Judging whether a recorded cell result survives an edit: "crisp" drops all results, "nl" follows dependencies, "shadow" runs both and records whether they agree. */
   staleness: Policy,
 };
 

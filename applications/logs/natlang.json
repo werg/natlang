@@ -3,7 +3,7 @@
   "name": "@natlang/log-console",
   "version": "0.4.0",
   "description": "A guided and streaming semantic log anomaly tracker.",
-  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "console.ts", "types.ts", "services.d.ts", "investigate.nl", "investigate", "tsconfig.json"],
+  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "console.ts", "types.ts", "services.d.ts", "investigate.nl", "retire.nl", "investigate", "tsconfig.json"],
   "targets": { "monitor": { "entry": "console.ts", "authority": ["stream:stdin", "filesystem:logs", "filesystem:files"],
     "description": "Explore a demo, import JSONL, enter records, or consume a stdin stream." } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

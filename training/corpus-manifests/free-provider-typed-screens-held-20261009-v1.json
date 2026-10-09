@@ -1,0 +1,254 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-typed-screens-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v1/closeout-v1.json",
+      "bytes": 322,
+      "sha256": "726253c9c82c88c40843526df5f5176f8a32d23ce30193a0cdcf5743c1130e80"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v1/labels.jsonl",
+      "bytes": 11875,
+      "sha256": "20b01bea4d1ba0ad83a3621761d1dfec4fcddb3fa4c5d989e43e236b1f2b1b4d",
+      "lines": 16
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 744,
+      "sha256": "3bce159504d85fd50af63cc9a7c153cfc4172fe7a85b5ab58937e65138a4ee29"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1013,
+      "sha256": "b3f076df74f2e260870bd1ba8fabf229fe22b55a1eb2d79552003a6cd2e28d36"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v1/worker.log",
+      "bytes": 762,
+      "sha256": "919e27dabadfea085c806afad3e8f7a066363dbf53ae4d694180fb5f5e7375d0"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v2/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "e452df129b64a5f071b69d9466a7c44f0896d9e811f6cfeecdb7d330d9db38f4"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v2/labels.jsonl",
+      "bytes": 3201,
+      "sha256": "733aac3f6c99956533e38c392d3a2c507e98cabd1279dec8da2b02abded7df9a",
+      "lines": 4
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v2/labels.jsonl.manifest.json",
+      "bytes": 782,
+      "sha256": "7207f715b968ef940a0439f6af4e57461e5e53dfe168da9be9340091a1fa069a"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1119,
+      "sha256": "ac05a891aec59652c1952dbc12afaebefdc16f943e168848b3f39217a6ef8d02"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-short-decisions-v2/worker.log",
+      "bytes": 218,
+      "sha256": "57af8b8ffed6547f49dbba3a0da1ea9d7ea18659fa424f1f48cb01633f5c7db9"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v1/closeout-v1.json",
+      "bytes": 322,
+      "sha256": "b6bce5c515e5d2a2528603b39f262bde2ef49a1defa78197fe230cbbab03de08"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v1/labels.jsonl",
+      "bytes": 11747,
+      "sha256": "3406bd89bed2efb6e7b2f8953c30a5343c85c0877c372ce21d8d72894c68cba5",
+      "lines": 16
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 736,
+      "sha256": "f8d45db2bdcc5f7cc30058460cfa547dd1d3f58e05381afdf39142d8ff819b97"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1001,
+      "sha256": "c027cea24294c62c5621e6bcede67c1b53a292566e60d3c0ee2bfee6053ac06c"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v1/worker.log",
+      "bytes": 762,
+      "sha256": "919e27dabadfea085c806afad3e8f7a066363dbf53ae4d694180fb5f5e7375d0"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v2/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "f219f55f4144578db3765395f5659ad3378a3d2d9f375b3523624eb0f029ff7c"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v2/labels.jsonl",
+      "bytes": 3336,
+      "sha256": "af9856af722fff5ff76a97bcf26d9ac6bd6ff551faed603fd62e19bc5b471dcb",
+      "lines": 4
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v2/labels.jsonl.manifest.json",
+      "bytes": 774,
+      "sha256": "830427909764de80a42b96a5541c0911df497b94fec9c5b60b0b2414e9884f20"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1107,
+      "sha256": "3f68f86e42d4259ab65bd1adc95d5477c15c7ac620784897da68a916931e2dcf"
+    },
+    {
+      "path": "provider-google-gemma-4-31b-it-short-decisions-v2/worker.log",
+      "bytes": 220,
+      "sha256": "fb367e99eed36a90b656598855148f989cffcd411a127144bf37c44866b73b2e"
+    },
+    {
+      "path": "provider-groq-oss20b-short-decisions-v1/baseline-v1.json",
+      "bytes": 528,
+      "sha256": "850a947f22ca5c076082de0285118fec08385864638a413c543024dab2130013"
+    },
+    {
+      "path": "provider-groq-oss20b-short-decisions-v1/closeout-v1.json",
+      "bytes": 322,
+      "sha256": "1226771d79b92d32b20a8a686ff74a5a61fb8d8b7e3e1fcad7b1ed2c78ed6aa1"
+    },
+    {
+      "path": "provider-groq-oss20b-short-decisions-v1/labels.jsonl",
+      "bytes": 12379,
+      "sha256": "0e056bec42cd29ef115fd431b2214a79e4ee61ca66d9b12df7d9bbf362f7de31",
+      "lines": 16
+    },
+    {
+      "path": "provider-groq-oss20b-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 717,
+      "sha256": "b9dd28b7c2d5a7c5531bd92db5773f24c66c91bd94e4b8086dd482d3250bb64e"
+    },
+    {
+      "path": "provider-groq-oss20b-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1124,
+      "sha256": "334ac4943788afa93e50aefe82b5d14270330541c4c70eda56ee596427d033bf"
+    },
+    {
+      "path": "provider-groq-short-decisions-v1/cases.jsonl",
+      "bytes": 7359,
+      "sha256": "863781e0f461202b9c29bbcba72f858270a7355bf184853bbf2b06b4db4f56d7",
+      "lines": 16
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v1/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "72b97bc3905197f82d7a15d835ff8ee428ee3d6cced9c29adfcd8b63b6c728d5"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v1/labels.jsonl",
+      "bytes": 2943,
+      "sha256": "7998667c9d6323c0c24587f1ed2f42defd4e12704172f6c9dacc28ca8f2452b0",
+      "lines": 4
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 736,
+      "sha256": "d7ece3a62d067a7275bef3952ace16cb3b14d166f65559649b197c71e0cd490e"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1036,
+      "sha256": "797af8ab60fe224444fc496c77d8602d489e0d340b521ee7ec9b80c7cfdc5e72"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v1/worker.log",
+      "bytes": 218,
+      "sha256": "7beb7407be53bea9da9eabe05c94da328f2ef5690b4e0d17a97eb3e739a0630b"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v2/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "eacbd8f42d60f0f0a92331635302cf1f9097349000d00644570efc900832b558"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v2/labels.jsonl",
+      "bytes": 3178,
+      "sha256": "03fd41b74255339d2d4ecd4ba49b5c027d9ec170bc94350d8cc4ce8323fb54d1",
+      "lines": 4
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v2/labels.jsonl.manifest.json",
+      "bytes": 768,
+      "sha256": "ad810efec2fce20bc6d9d2e5397ff8decca0b93bfe7132914a110a7a00a763df"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1121,
+      "sha256": "be112f10560ad7e84a3d802c7e68a132d81c011288182a3d1a818a86a02628e3"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-short-decisions-v2/worker.log",
+      "bytes": 218,
+      "sha256": "61e6ca76b2a7bfeb3c1638a03cf3f94021402688ac32a9984bb88f911edb97d0"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v1/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "bbbbf6c051aa4c3416c35c9832a82019d50bcb2548187ffdf7a953c1ee447e42"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v1/labels.jsonl",
+      "bytes": 3331,
+      "sha256": "b47defcb58760e7af98afdafcd10a75f102c601ae3182fdfc0db1f7c5f127daa",
+      "lines": 4
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 752,
+      "sha256": "5caadebb0f2a1391442e0338d3cd9f2270829c1e3f474a32711e3af00047916e"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1060,
+      "sha256": "c4fe8955cd4e325969316806f03fded5c74410bf309a1f888a1166f301f97e25"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v1/worker.log",
+      "bytes": 220,
+      "sha256": "df16fcd9c7154cae990bac8153634defe6c5714140bca0e95b00d2599b5639f6"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v2/closeout-v1.json",
+      "bytes": 320,
+      "sha256": "6ec07a220fcfa9f518039c24953e341916d475fb6c8b95b2455c27d2b67344d6"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v2/labels.jsonl",
+      "bytes": 3241,
+      "sha256": "1952d3d5284238c7131d80764785c4bf68cc101ee73b314dfff274151b119822",
+      "lines": 4
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v2/labels.jsonl.manifest.json",
+      "bytes": 791,
+      "sha256": "4ded7e5befeae17e378d4aeda05a381ea3a01db4c8f34965a7023036f5b4b5db"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v2/launch-receipt-v1.json",
+      "bytes": 1152,
+      "sha256": "628e772aa55d799dc257f2530cc6dccbbed563d1e531ea2c6218cd68490e908e"
+    },
+    {
+      "path": "provider-openrouter-nvidia-nemotron-3.5-lightning-free-short-decisions-v2/worker.log",
+      "bytes": 218,
+      "sha256": "0897a06a2328fc1436c6274953282a57fe1cfebf4dfb22ac8403e41562b4b165"
+    },
+    {
+      "path": "typed-provider-closeouts-v1.json",
+      "bytes": 3768,
+      "sha256": "ca4302ed87e031bd240939d3c4db6ca4f89858f7d22ffaf66b9e1d533da95d55"
+    }
+  ],
+  "bytes": 89141
+}

@@ -6,14 +6,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { FolderHandle } from '@natlang/node';
+import { untrusted, type FolderHandle, type Untrusted } from '@natlang/node';
 import type { EvidenceCollection } from '../evidence/index.js';
 import outline from './outline.nl';
-import compose from './compose.nl';
-import type { Document } from './types.js';
+import readNote from './read_note.nl';
+import writeSection from './write_section.nl';
+import { outlineProblems, unsourcedNumbers } from './checks.js';
+import type { Document, OutlineSection, Passage, Section, Table } from './types.js';
 
 export type * from './types.js';
-export type Table = { columns: string[], rows: (string | number)[][] };
+export * from './checks.js';
 export type PublishCheck = { ok: boolean, revision: string, detail: string };
 export type PublishReport = { status: 'prepared' | 'rejected', target: string, revision: string,
   markdown_sha256: string, html_sha256: string, detail: string };
@@ -39,6 +41,9 @@ export class DocumentPublisher {
     this.tables = structuredClone(tables);
     this.assets = structuredClone(assets);
   }
+
+  /** A table of the store, or null when the id names none. */
+  table(id: string): Table | null { return this.tables[id] ? structuredClone(this.tables[id]!) : null; }
 
   check(document: Document): PublishCheck {
     try {
@@ -133,12 +138,54 @@ export class DocumentPublisher {
   drainEvents(): Record<string, unknown>[] { return this.events.splice(0); }
 }
 
-/** Compose a cited document from pinned passages, then check and publish it. */
+type Written = { section: Section } | { problem: string };
+
+/**
+ * One section: the model writes body and claims over the section's passages; the host fills revisions and checks the
+ * citations and the numbers. A section that fails is written once more with the problems; the others are untouched.
+ */
+async function composeSection(publisher: DocumentPublisher, brief: string, planned: OutlineSection, passages: Passage[],
+    table: Table | null, note: Untrusted<string>): Promise<Written> {
+  let problem = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const draft = problem ? await writeSection(brief, planned.heading, planned.purpose, passages, table, note, problem) :
+      await writeSection(brief, planned.heading, planned.purpose, passages, table, note);
+    const claims = publisher.evidence.cite(draft.claims, passages);
+    const found = [...publisher.evidence.citationProblems(passages, claims).map(row => row.problem)];
+    const numbers = unsourcedNumbers(draft.body, passages, table);
+    if (numbers.length) found.push(`the body states numbers that neither the passages nor the table give: ${numbers.join(', ')}`);
+    if (!found.length) return { section: { heading: planned.heading, body: draft.body, claims, ...(planned.table_id ? { table_id: planned.table_id } : {}) } };
+    problem = found.join('\n');
+  }
+  return { problem };
+}
+
+/**
+ * Compose a cited document from pinned passages, then check and publish it. The outline assigns passages, a table and
+ * assets to each section; the sections are written at once; the host adds the evidence revision, the claim revisions,
+ * the table and the assets, and the exact check and atomic publish decide the rest.
+ */
 export async function publishBrief(publisher: DocumentPublisher, request: PublishRequest): Promise<PublishReport> {
   const { brief, span_ids, collection_revision, table_ids, asset_ids, target, files } = request;
   const passages = publisher.evidence.read(span_ids, collection_revision);
-  const plan = await outline(brief, passages, table_ids, asset_ids, files);
-  const document = await compose(brief, plan, passages, collection_revision, table_ids, asset_ids, files);
+  const note = untrusted(files ? await readNote(brief, files) : '', 'editorial note');
+  const offered = { passage_ids: passages.map(passage => passage.id), table_ids, asset_ids };
+  let plan = await outline(brief, passages, table_ids, asset_ids, note);
+  let problems = outlineProblems(plan, offered);
+  if (problems.length) {
+    plan = await outline(brief, passages, table_ids, asset_ids, note, problems.join('\n'));
+    problems = outlineProblems(plan, offered);
+  }
+  if (problems.length) return rejected(target, `invalid outline: ${problems.join('; ')}`);
+  const byId = new Map(passages.map(passage => [passage.id, passage]));
+  const written = await Promise.all(plan.sections.map(planned => composeSection(publisher, brief, planned,
+    [...new Set(planned.passage_ids)].map(id => byId.get(id)!), planned.table_id ? publisher.table(planned.table_id) : null, note)));
+  const failed = written.flatMap((result, index) => 'problem' in result ?
+    [`section ${JSON.stringify(plan.sections[index]!.heading)}: ${result.problem.split('\n').join('; ')}`] : []);
+  if (failed.length) return rejected(target, failed.join(' | '));
+  const document: Document = { title: plan.title, evidence_revision: collection_revision,
+    sections: written.map(result => (result as { section: Section }).section),
+    assets: [...new Set(plan.sections.flatMap(planned => planned.asset_ids))] };
   const checked = publisher.check(document);
   return checked.ok ? publisher.publish(document, target) : rejected(target, checked.detail);
 }

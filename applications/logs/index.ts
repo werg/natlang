@@ -4,8 +4,9 @@
  * pure bounded `commit` of a decision into the incident state, and `step`, which folds one event:
  * snapshot, decide (model calls), carry out the effects as data, commit.
  */
-import { untrusted, type FolderHandle } from '@natlang/node';
+import { pluggable, pluggableMode, untrusted, type FolderHandle, type PluggableSetting } from '@natlang/node';
 import investigate from './investigate.nl';
+import retire from './retire.nl';
 import type { Alert, ClosedIncident, Decision, Effect, Evidence, Incident, IncidentState, LogEvent, LogSettings, Observation,
   SearchQuery, SearchResult } from './types.js';
 
@@ -13,7 +14,9 @@ export type * from './types.js';
 export type AlertSink = (alert: { key: string, service: string, code: string, claim: string, evidence_ids: string[] }) =>
   Promise<{ status?: string, detail?: string } | undefined>;
 
-export const defaultSettings: LogSettings = { significance: 'natlang', window_ms: 60_000, threshold: 3, quiet_ms: 300_000, max_members: 50 };
+/** The crisp defaults are the numbers and rules the investigator always used; `retire` and `significance` are modes (crisp, nl or shadow). */
+export const defaultSettings: LogSettings = { significance: 'nl', window_ms: 60_000, threshold: 3, quiet_ms: 300_000, max_members: 50,
+  retire: 'crisp', max_open: 20, max_closed: 20 };
 export const emptyIncidentState = (): IncidentState =>
   ({ cursor: -1, observed: 0, alerts: [], unknowns: [], status: 'idle', incidents: [], closed: [] });
 
@@ -99,10 +102,14 @@ export class LogWorkspace {
   readonly index: LogIndex;
   readonly sink: AlertSinkService;
 
-  constructor({ windowMs, threshold, quietMs, significance, sendAlert = null }:
-    { windowMs?: number, threshold?: number, quietMs?: number, significance?: LogSettings['significance'], sendAlert?: AlertSink | null } = {}) {
+  constructor({ windowMs, threshold, quietMs, significance, retire, maxOpen, maxClosed, sendAlert = null }:
+    { windowMs?: number, threshold?: number, quietMs?: number, significance?: PluggableSetting, retire?: PluggableSetting,
+      maxOpen?: number, maxClosed?: number, sendAlert?: AlertSink | null } = {}) {
+    // Modes are crisp, nl or shadow; the older spelling "natlang" is accepted and means nl.
     this.settings = { ...defaultSettings, ...windowMs !== undefined ? { window_ms: windowMs } : {}, ...threshold !== undefined ? { threshold } : {},
-      ...quietMs !== undefined ? { quiet_ms: quietMs } : {}, ...significance ? { significance } : {} };
+      ...quietMs !== undefined ? { quiet_ms: quietMs } : {}, ...maxOpen !== undefined ? { max_open: maxOpen } : {},
+      ...maxClosed !== undefined ? { max_closed: maxClosed } : {},
+      significance: pluggableMode(significance, defaultSettings.significance), retire: pluggableMode(retire, defaultSettings.retire) };
     this.index = new LogIndex(this.settings.window_ms);
     this.sink = new AlertSinkService(this.index, sendAlert);
   }
@@ -117,11 +124,69 @@ export class LogWorkspace {
 
 const keepNewest = <T>(rows: T[], max: number) => rows.slice(Math.max(0, rows.length - max));
 
+/** The statuses a state can take after an event, given what the sink did. */
+export type Status = IncidentState['status'];
+
+/**
+ * The open incidents after this event, before the cap: the state's incidents without the ones the decision folded, the
+ * decision's incident (kept without its alert key when the sink refused the alert), and only those whose timer
+ * (closes_at) has not passed at the event's time.
+ */
+export function candidates(state: IncidentState, item: LogEvent, decision: Decision, receipts: Alert[]): { incidents: Incident[], live: Incident[] } {
+  const refused = receipts.some(row => row.status === 'insufficient');
+  let incidents = state.incidents.filter(row => !decision.folded.includes(row.id));
+  if (decision.incident) {
+    const next: Incident = refused ? { ...decision.incident, alert_key: null } : decision.incident;
+    incidents = incidents.some(row => row.id === next.id) ? incidents.map(row => row.id === next.id ? next : row) : [...incidents, next];
+  }
+  return { incidents, live: incidents.filter(row => row.closes_at >= item.occurred_at) };
+}
+
+/** The crisp retention rule: when more than max_open incidents are open, the least recently seen leave. */
+export function evictOldest(live: Incident[], settings: LogSettings = defaultSettings): string[] {
+  const newest = new Set(keepNewest([...live].sort((x, y) => x.last_seen - y.last_seen), settings.max_open));
+  return live.filter(row => !newest.has(row)).map(row => row.id);
+}
+
+/**
+ * The exact bound on a retirement choice: the IDs must be open incidents, each once, and enough of them must leave for the
+ * list to fit max_open; when the choice leaves it too long, the least recently seen of the rest leave too.
+ */
+export function boundedEviction(live: Incident[], chosen: string[], settings: LogSettings = defaultSettings): string[] {
+  const ids = new Set(live.map(row => row.id));
+  const leaving = new Set(chosen.filter(id => ids.has(id)));
+  const rest = live.filter(row => !leaving.has(row.id));
+  for (const id of evictOldest(rest, settings)) leaving.add(id);
+  return [...leaving];
+}
+
+/** Which open incidents leave the list. A pluggable part: the crisp rule above, or retire.nl, bounded by boundedEviction. */
+export async function chooseEviction(live: Incident[], settings: LogSettings): Promise<string[]> {
+  if (live.length <= settings.max_open) return [];
+  const chosen = await pluggable({ crisp: () => evictOldest(live, settings), nl: async () => boundedEviction(live, await retire(live, settings), settings) },
+    settings.retire, { name: 'logs.retire', serve: 'crisp', same: (exact, judged) => [...exact].sort().join() === [...boundedEviction(live, judged, settings)].sort().join() })();
+  return boundedEviction(live, chosen, settings);
+}
+
+/**
+ * The status after an event. The stage names one (Decision.status); crisp code accepts it only when the sink's receipts allow it:
+ * a delivery whose outcome is unknown is delivery-unknown, a delivered alert is alerted, and without either the event is
+ * observing or investigating. Anything else, or no status, takes the exact ladder.
+ */
+export function statusAfter(decision: Decision, receipts: Alert[]): Status {
+  const kept = receipts.filter(row => row.status !== 'insufficient' && row.status !== 'duplicate');
+  if (kept.some(row => row.status === 'unknown')) return 'delivery-unknown';
+  if (kept.length) return 'alerted';
+  if (decision.status === 'observing' || decision.status === 'investigating') return decision.status;
+  return decision.escalation.action === 'ignore' ? 'observing' : 'investigating';
+}
+
 /**
  * The commit: apply a decision and the receipts of its effects to the state. Pure and bounded: it retires incidents whose
- * timer (closes_at) has passed at the event's time, and caps the open and closed lists.
+ * timer (closes_at) has passed at the event's time, and caps the open and closed lists. `evict` names the open incidents
+ * that leave because the list is full (chooseEviction); without it the crisp rule decides.
  */
-export function commit(state: IncidentState, item: LogEvent, decision: Decision, receipts: Alert[], settings: LogSettings = defaultSettings): IncidentState {
+export function commit(state: IncidentState, item: LogEvent, decision: Decision, receipts: Alert[], settings: LogSettings = defaultSettings, evict?: string[]): IncidentState {
   const cursor = item.cursor;
   if (item.kind === 'gap') {
     const note = decision.gap;
@@ -130,22 +195,14 @@ export function commit(state: IncidentState, item: LogEvent, decision: Decision,
   }
   const observed = state.observed + 1;
   const unknowns = decision.escalation.uncertainty ? [...state.unknowns, `${item.id}: ${decision.escalation.uncertainty}`] : state.unknowns;
-  const refused = receipts.some(row => row.status === 'insufficient');
-  let incidents = state.incidents.filter(row => !decision.folded.includes(row.id));
-  if (decision.incident) {
-    const next: Incident = refused ? { ...decision.incident, alert_key: null } : decision.incident;
-    incidents = incidents.some(row => row.id === next.id) ? incidents.map(row => row.id === next.id ? next : row) : [...incidents, next];
-  }
-  const live = incidents.filter(row => row.closes_at >= item.occurred_at);
-  const newest = new Set(keepNewest([...live].sort((x, y) => x.last_seen - y.last_seen), 20));
-  const open = live.filter(row => newest.has(row));
-  const retired = incidents.filter(row => !newest.has(row));
+  const { incidents, live } = candidates(state, item, decision, receipts);
+  const leaving = new Set(boundedEviction(live, evict ?? [], settings));
+  const open = live.filter(row => !leaving.has(row.id));
+  const retired = incidents.filter(row => !open.includes(row));
   const closed: ClosedIncident[] = keepNewest([...state.closed, ...retired.map(row => ({ id: row.id, closed_at: item.occurred_at, count: row.count,
-    severity: row.severity, alert_key: row.alert_key, summary: row.summary }))], 20);
+    severity: row.severity, alert_key: row.alert_key, summary: row.summary }))], settings.max_closed);
   const kept = receipts.filter(row => row.status !== 'insufficient' && row.status !== 'duplicate');
-  const status = kept.some(row => row.status === 'unknown') ? 'delivery-unknown' : kept.length ? 'alerted'
-    : decision.escalation.action === 'ignore' ? 'observing' : 'investigating';
-  return { cursor, observed, unknowns, incidents: open, closed, alerts: [...state.alerts, ...kept], status };
+  return { cursor, observed, unknowns, incidents: open, closed, alerts: [...state.alerts, ...kept], status: statusAfter(decision, receipts) };
 }
 
 /** Fold one log or source-gap event into the incident state. */
@@ -156,5 +213,6 @@ export async function step(logs: LogWorkspace, state: IncidentState, item: LogEv
   const decision = await investigate(item, observation, state.incidents, logs.settings, files);
   const receipts: Alert[] = [];
   for (const effect of decision.effects ?? []) receipts.push(await logs.sink.deliver(effect));
-  return commit(state, item, decision, receipts, logs.settings);
+  const evict = item.kind === 'log' ? await chooseEviction(candidates(state, item, decision, receipts).live, logs.settings) : undefined;
+  return commit(state, item, decision, receipts, logs.settings, evict);
 }

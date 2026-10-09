@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import type { PluggableSetting } from '@natlang/node';
 import type { Action, Decision, Fault, MessageKind, Operation, Outgoing, OutboxEntry, Receipt, WorkflowEvent, WorkflowState } from './types.js';
 
-/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natlang' and 'natural-language' are deprecated spellings of 'nl', accepted and normalized. */
 export type Implementation = Exclude<PluggableSetting, undefined>;
 
 async function readJson<T>(path: string, fallback: T): Promise<T> {

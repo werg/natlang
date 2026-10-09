@@ -7,10 +7,13 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, extname, join, relative, resolve } from 'node:path';
+import { untrusted } from '@natlang/node';
 import planSearch from './plan_search.nl';
 import select from './select.nl';
-import compose from './compose.nl';
-import type { Draft, EvidenceAnswer, EvidenceStatus, Passage, SearchResult } from './types.js';
+import claimsFor from './claims.nl';
+import findGaps from './gaps.nl';
+import writeAnswer from './write_answer.nl';
+import type { Claim, ClaimDraft, Draft, EvidenceAnswer, EvidenceStatus, Passage, SearchResult } from './types.js';
 
 export type * from './types.js';
 export type EvidenceDocument = { id: string, text: string };
@@ -34,7 +37,7 @@ export class EvidenceCollection {
     let cursor = 0, index = 0;
     for (const part of text.split(/\n[ \t]*\n/)) {
       const start = text.indexOf(part, cursor), content = part.trim();
-      if (content) spans.push({ id: `${id}#p${index++}`, source_id: id, revision, start, end: start + part.length, text: content });
+      if (content) spans.push({ id: `${id}#p${index++}`, source_id: id, revision, start, end: start + part.length, text: untrusted(content, `document ${id}`) });
       cursor = start + part.length;
     }
     this.docs.set(id, { id, text, revision, spans });
@@ -57,7 +60,7 @@ export class EvidenceCollection {
     const hits = [...this.docs.values()].flatMap(doc => doc.spans.map(span => {
       const body = new Set(tokens(span.text));
       const score = words.reduce((sum, word) => sum + (body.has(word) ? 1 : 0), 0);
-      return { id: span.id, source_id: span.source_id, revision: span.revision, preview: span.text.slice(0, 200), score };
+      return { id: span.id, source_id: span.source_id, revision: span.revision, preview: untrusted(span.text.slice(0, 200), `document ${span.source_id}`), score };
     })).filter(row => row.score > 0).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
     const result = { hits: hits.slice(0, this.maxHits), total: hits.length, truncated: hits.length > this.maxHits,
       collection_revision: this.revision() };
@@ -79,14 +82,34 @@ export class EvidenceCollection {
     return spans;
   }
 
+  /** The host's fact about each claim a model wrote: the revision of the passage it cites ("" when it cites none). */
+  cite(drafts: ClaimDraft[], passages: Passage[]): Claim[] {
+    const byId = new Map(passages.map(span => [span.id, span]));
+    return drafts.map(draft => ({ text: draft.text, span_id: draft.span_id, revision: byId.get(draft.span_id)?.revision ?? '', quote: draft.quote }));
+  }
+
+  /**
+   * What is wrong with the claims, one sentence each (empty when every citation holds): the passage is one of `passages`,
+   * is the passage the collection retains, carries the claim's revision, and contains the quote.
+   */
+  citationProblems(passages: Passage[], claims: Claim[]): { span_id: string, problem: string }[] {
+    const byId = new Map(passages.map(span => [span.id, span])), actual = this.spans();
+    const problems: { span_id: string, problem: string }[] = [];
+    for (const claim of claims) {
+      const span = byId.get(claim.span_id), source = actual.get(claim.span_id), label = `claim "${String(claim.text).slice(0, 60)}"`;
+      const problem = !span ? `${label}: span_id ${JSON.stringify(claim.span_id)} is not the id of a passage given (ids: ${passages.map(item => item.id).join(', ')})` :
+        !source || JSON.stringify(span) !== JSON.stringify(source) ? `${label}: passage ${span.id} differs from the retained text` :
+        span.revision !== claim.revision ? `${label}: revision does not match passage ${span.id}` :
+        !claim.quote ? `${label}: the quote is empty; copy a short stretch of words from passage ${span.id}` :
+        !span.text.includes(claim.quote) ? `${label}: the quote ${JSON.stringify(String(claim.quote).slice(0, 60))} does not occur in passage ${span.id}; copy a short stretch of words from that passage` : '';
+      if (problem) problems.push({ span_id: claim.span_id, problem });
+    }
+    return problems;
+  }
+
   verify(passages: Passage[], draft: Draft, collectionRevision: string): EvidenceAnswer {
     if (collectionRevision !== this.revision()) throw new Error('collection changed before verification');
-    const byId = new Map(passages.map(span => [span.id, span])), actual = this.spans();
-    const bad = draft.claims.filter(claim => {
-      const span = byId.get(claim.span_id), source = actual.get(claim.span_id);
-      return !span || !source || JSON.stringify(span) !== JSON.stringify(source) || span.revision !== claim.revision ||
-        !claim.quote || !span.text.includes(claim.quote);
-    }).map(claim => claim.span_id);
+    const bad = this.citationProblems(passages, draft.claims).map(row => row.span_id);
     const status: EvidenceStatus = bad.length ? 'invalid-citation' : draft.claims.length ?
       draft.gaps.length ? 'partial' : 'citation-checked' : 'unresolved';
     this.events.push({ operation: 'evidence.verify', status, claims: draft.claims.length, bad, collection_revision: collectionRevision });
@@ -101,11 +124,35 @@ export class EvidenceCollection {
   }
 }
 
-/** Search, read exact passages, compose a cited answer, and verify every citation. */
+const unresolved = (collection_revision: string, detail: string): EvidenceAnswer =>
+  ({ status: 'unresolved', answer: '', claims: [], gaps: [detail], collection_revision, detail });
+
+/** The ids a selection names that are not hits of the search, as the sentence a second attempt starts from. */
+function hitProblem(ids: string[], found: SearchResult): string {
+  const offered = new Set(found.hits.map(hit => hit.id)), unknown = ids.filter(id => !offered.has(id));
+  return unknown.length ? `These ids are not hits of found: ${unknown.join(', ')}. The hit ids are: ${[...offered].join(', ') || '(none)'}.` : '';
+}
+
+/** The limitation line the host adds when the search returned fewer hits than matched. */
+export const truncationGap = (found: SearchResult): string =>
+  `Retrieval was truncated: ${found.hits.length} of ${found.total} matching passages were returned.`;
+
+/**
+ * Search, read exact passages, compose a cited answer, and verify every citation. The model decides what to search,
+ * which hits to read, the claims, the gaps and the prose; the host fills revisions and the truncation line and checks
+ * ids and quotes. A rejected id list or claim list goes back to its stage once with the exact problem.
+ */
 export async function answer(evidence: EvidenceCollection, question: string): Promise<EvidenceAnswer> {
   const found = evidence.search(await planSearch(question));
-  const passages = evidence.read([...new Set(await select(question, found))], found.collection_revision);
-  const draft = await compose(question, passages, found.truncated);
+  let ids = [...await select(question, found)], problem = hitProblem(ids, found);
+  if (problem) { ids = [...await select(question, found, problem)]; problem = hitProblem(ids, found); }
+  if (problem) return unresolved(found.collection_revision, `Invalid selection: ${problem}`);
+  const passages = evidence.read(ids, found.collection_revision);
+  let claims = evidence.cite(await claimsFor(question, passages), passages);
+  const wrong = evidence.citationProblems(passages, claims);
+  if (wrong.length) claims = evidence.cite(await claimsFor(question, passages, wrong.map(row => row.problem).join('\n')), passages);
+  const gaps = [...await findGaps(question, claims, passages), ...(found.truncated ? [truncationGap(found)] : [])];
+  const draft: Draft = { answer: await writeAnswer(question, claims, gaps), claims, gaps };
   return evidence.verify(passages, draft, found.collection_revision);
 }
 

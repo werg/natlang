@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime } from '../dist/index.js';
-import { WorkflowDesk, WorkflowService, checkMessage, stepFull, validate } from '../../applications/dist/workflow/index.js';
+import { WorkflowDesk, WorkflowService, allowedReview, checkMessage, crispReview, reviewAfter, stepFull, validate } from '../../applications/dist/workflow/index.js';
 import { readFileSync } from 'node:fs';
 import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
 
@@ -333,4 +333,32 @@ test('a wait of zero milliseconds is sent back to the recovery stage', async () 
   const decision = await refined(model.driver).run(() => handle.choose.recover(snapshot, limits));
   assert.equal(decision.waitMs, 50);
   assert.match(model.feedback[0], /positive whole number of milliseconds/);
+});
+
+test('when an order is looked at again is pluggable: crisp by default, when.nl bounded by the exact check, shadow serves crisp', async () => {
+  const order = pending => ({ order_id: 'o', amount: 1, revision: 1, phase: 'charged', pending, checks: 0, obligations: [], history: [], outbox: [] });
+  const decision = waitMs => ({ action: 'wait', reason: 'r', ...waitMs ? { waitMs } : {} });
+  assert.equal(crispReview(order('o:charge'), decision(), 30_000), 30_000);
+  assert.equal(crispReview(order('o:charge'), decision(500), 30_000), 500);
+  assert.equal(crispReview(order(''), decision(), 30_000), null);
+  assert.equal(crispReview(order(''), decision(700), 30_000), 700);
+  assert.equal(allowedReview(null, order('o:charge')), false, 'a pending order is always reviewed');
+  assert.equal(allowedReview(null, order('')), true);
+  assert.equal(allowedReview(0, order('')), false);
+  assert.equal(allowedReview(1.5, order('')), false);
+  assert.equal(allowedReview(250, order('o:charge')), true);
+  let answer = 'return 1234;';
+  let asked = 0;
+  const model = scriptedModel(opening => { if (!opening.includes('milliseconds between reviews')) return null; asked++; return answer; });
+  const runtime = createNatlangRuntime({ model: model.driver });
+  const options = timing => ({ run: run(runtime), delay: 30_000, ...timing ? { timing } : {} });
+  assert.equal(await reviewAfter(order('o:charge'), decision(), options()), 30_000, 'crisp is the default and calls no model');
+  assert.equal(asked, 0);
+  assert.equal(await reviewAfter(order('o:charge'), decision(), options('nl')), 1234);
+  assert.equal(await reviewAfter(order('o:charge'), decision(), options('natural-language')), 1234, 'the deprecated spelling is accepted');
+  assert.equal(await reviewAfter(order('o:charge'), decision(), options('shadow')), 30_000, 'shadow serves the crisp answer');
+  answer = 'return null;';
+  assert.equal(await reviewAfter(order('o:charge'), decision(), options('nl')), 30_000, 'an answer the bound refuses is replaced by the crisp rule');
+  answer = 'return -5;';
+  assert.equal(await reviewAfter(order(''), decision(), options('nl')), null);
 });

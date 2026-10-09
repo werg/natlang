@@ -323,3 +323,10 @@ data. Inspect actual requests and terminal accounting before reporting success.
 Shared evaluator `b189b0e1` adds generated-position bands and common first-close
 prefix metrics without extra rollouts or changes to the existing fixed-span gate.
 No active frozen GPU runtime is hot-patched.
+
+Smaller teacher screens: Gemini3.5FlashLite first case exact (14 saved turns),
+remaining four source rows queued. Gemini3.8 daily quota exhausted;2.5FlashLite
+404 for this account. Groq GPT-OSS20B16 short labels complete,0 errors. ZAI
+GLM4.5Flash alternate free pool active. NVIDIA Nano unavailable for account;
+GPT-OSS20B tiny probe succeeded and full HTTP case is active. Shared retry and
+wire-control updates apply only to runtime-small-teachers-v5 and future freezes.

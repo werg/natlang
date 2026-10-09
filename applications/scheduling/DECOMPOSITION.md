@@ -67,7 +67,7 @@ The executors are small models, so instructions spell algorithms out as numbered
 | Free time: windows minus busy time | inline | `scheduler/domains` | Same algorithm. |
 | Per task: free time inside `[earliest, latest]` (after limits), slot-aligned, long enough for the duration | fn | `scheduler/domains` | The extraction the owner lists: windows, durations, fixed commitments. Its result, `Domain[]`, is data every later stage reads. |
 | Dependencies: `after` of a task joined with the limits' `after` | inline | `scheduler/domains` | Carried into `Domain.after`. |
-| Dependency order, cycles, unknown ids | crisp | `scheduler/order.ts` | A topological sort has no decision a scheduler book discusses. It reports a cycle in words, and the driver turns that into a question. |
+| Dependency order, cycles, unknown ids (one implementation, depth first in task order; `Problem.order` uses it too) | crisp | `scheduler/order.ts` | A topological sort has no decision a scheduler book discusses. It reports a cycle in words, and the driver turns that into a question. |
 | Non-overlap | not a stage | `construct` and `Problem.check` | It is the rule enumeration respects and the verifier enforces. |
 
 ## Candidates

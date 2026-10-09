@@ -47,6 +47,10 @@ The executors are small models, so instructions spell rules out as numbered step
 
 - **Stay close to JS; no unbounded loops.** The policy is a bounded chain of calls. Retries are counted from the
   history (`limits.transientRetries`), not looped. The one repeat is "validate, ask again once with the problem".
+- **Pluggable timing: when an order is looked at again.** `reviewAfter` is pluggable (`timing`): crisp by default
+  (`crispReview`: the decision's `waitMs`, else the review delay for a pending order), `when.nl` otherwise, and
+  `allowedReview` refuses any answer that is not a positive whole number of milliseconds (or null with nothing pending).
+  The status of a step is the decision's action, which the stage returns and `ledger.validate` checks as allowed.
 - **Pluggable hot path: the next action.** It runs on every event of every order. One interface, `(Snapshot, Limits)
   → Decision`, with two implementations: `handle.crisp` (`handle/crisp.ts`, a table, no model call) and `handle.nl`
   (the natural-language policy, which runs `handle/choose.nl`). The host setting `step(..., { policy })` selects. The

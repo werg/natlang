@@ -59,7 +59,7 @@ def _json_schema(case):
         'required': ['probabilities'], 'additionalProperties': False}}
 
 
-def _http_payload(case, model, reasoning_effort, max_output_tokens):
+def _http_payload(case, model, reasoning_effort, max_output_tokens, response_format='json_schema'):
     labels = case.get('options') if case.get('kind') == 'choice' else case.get('levels')
     task = {'kind': case['kind'], 'question': case['question'], 'state': case['state']}
     if labels is not None:
@@ -72,16 +72,23 @@ def _http_payload(case, model, reasoning_effort, max_output_tokens):
         'For choice or score, return a probability distribution over every supplied label; '
         'all probabilities must be between 0 and 1 and sum to 1. Return only the requested JSON object.'
     )
-    return {
+    if response_format != 'json_schema':
+        task['output_schema'] = _json_schema(case)['schema']
+    payload = {
         'model': model,
         'messages': [
             {'role': 'system', 'content': system},
             {'role': 'user', 'content': json.dumps(task, ensure_ascii=False, separators=(',', ':'))},
         ],
-        'response_format': {'type': 'json_schema', 'json_schema': _json_schema(case)},
-        'reasoning_effort': reasoning_effort,
         'max_tokens': max_output_tokens,
     }
+    if response_format == 'json_schema':
+        payload['response_format'] = {'type': 'json_schema', 'json_schema': _json_schema(case)}
+    elif response_format == 'json_object':
+        payload['response_format'] = {'type': 'json_object'}
+    if reasoning_effort != 'omit':
+        payload['reasoning_effort'] = reasoning_effort
+    return payload
 
 
 def _retry_after_seconds(value):
@@ -97,6 +104,29 @@ def _retry_after_seconds(value):
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
+def _decode_http_answer(content):
+    """Accept one JSON value with an optional Markdown wrapper, never arbitrary suffix prose."""
+    if not isinstance(content, str):
+        raise ValueError('response content must be text')
+    text = content.strip()
+    wrapper = None
+    if text.startswith('```'):
+        first, separator, remainder = text.partition('\n')
+        if not separator or first.lower() not in {'```', '```json'}:
+            raise ValueError('unsupported JSON fence')
+        if not remainder.rstrip().endswith('```'):
+            raise ValueError('unterminated JSON fence')
+        text = remainder.rstrip()[:-3].strip()
+        wrapper = 'markdown_json_fence'
+    parsed, end = json.JSONDecoder().raw_decode(text)
+    suffix = text[end:].strip()
+    if suffix == '```' and wrapper is None:
+        wrapper = 'trailing_markdown_fence'
+    elif suffix:
+        raise ValueError('extra content after JSON answer')
+    return parsed, wrapper
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Do not forward a bearer credential to a redirected endpoint."""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -104,8 +134,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_backoff,
-                  max_backoff, reasoning_effort, max_output_tokens):
-    payload = _http_payload(case, model, reasoning_effort, max_output_tokens)
+                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema'):
+    payload = _http_payload(case, model, reasoning_effort, max_output_tokens, response_format)
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     request_hash = hashlib.sha256(body).hexdigest()
     request = urllib.request.Request(endpoint, data=body, method='POST', headers={
@@ -170,25 +200,35 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         history_entry['sleep_seconds'] = delay
         time.sleep(delay)
 
-    answer, error = None, None
+    answer, error, validation_detail = None, None, None
+    response_content, finish_reason, response_wrapper = None, None, None
     if response_status != 200:
         error = f'http_{response_status}' if response_status else 'network_error'
     else:
         try:
-            content = response_body['choices'][0]['message']['content']
-            parsed = json.loads(content)
+            choice = response_body['choices'][0]
+            finish_reason = choice.get('finish_reason')
+            response_content = choice['message']['content']
+            parsed, response_wrapper = _decode_http_answer(response_content)
             answer = _validate_http_answer(case, parsed)
-        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             error = 'invalid_typed_response'
+            validation_detail = {'type': type(exc).__name__, 'message': str(exc)[:300]}
     if error:
         answer = {'error': error}
     provenance = {
         'backend': 'openai-compatible', 'model': model, 'endpoint': endpoint,
         'request_sha256': request_hash, 'response_sha256': response_hash,
         'http_status': response_status, 'attempts': len(history), 'retry_history': history,
+        'finish_reason': finish_reason, 'validation_error': validation_detail,
+        'response_wrapper_removed': response_wrapper,
         'usage': {k: v for k, v in (response_body.get('usage', {}) if isinstance(response_body, dict) else {}).items()
                   if k in {'prompt_tokens', 'completion_tokens', 'total_tokens'} and isinstance(v, int) and not isinstance(v, bool)},
     }
+    if isinstance(response_content, str):
+        provenance['response_content'] = response_content[:65536]
+        provenance['response_content_truncated'] = len(response_content) > 65536
+        provenance['response_content_sha256'] = hashlib.sha256(response_content.encode('utf-8')).hexdigest()
     return answer, provenance
 
 
@@ -231,7 +271,9 @@ def main():
     parser.add_argument('--retries', type=int, default=3, help='bounded retries for HTTP 429/5xx or network errors')
     parser.add_argument('--initial-backoff', type=float, default=30)
     parser.add_argument('--max-backoff', type=float, default=300)
-    parser.add_argument('--reasoning-effort', choices=['low', 'medium', 'high'], default='low')
+    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'low', 'medium', 'high'], default='low')
+    parser.add_argument('--response-format', choices=['json_schema', 'json_object', 'text'], default='json_schema',
+                        help='provider wire format; all responses still undergo identical strict JSON validation')
     parser.add_argument('--max-output-tokens', type=int, default=256)
     parser.add_argument('--request-interval-seconds', type=float, default=0,
                         help='minimum interval between case request starts; HTTP backend only')
@@ -256,6 +298,7 @@ def main():
             'selection': {'families': sorted(set(args.family)), 'limit': args.limit},
             'adapter_sha256': hashlib.sha256(open(__file__, 'rb').read()).hexdigest(),
             'request_settings': {'reasoning_effort': args.reasoning_effort,
+                                 'response_format': args.response_format,
                                  'max_output_tokens': args.max_output_tokens,
                                  'request_interval_seconds': args.request_interval_seconds},
             'training_admission': False,
@@ -333,7 +376,8 @@ def main():
                                  timeout=args.timeout, retries=args.retries,
                                  initial_backoff=args.initial_backoff, max_backoff=args.max_backoff,
                                  reasoning_effort=args.reasoning_effort,
-                                 max_output_tokens=args.max_output_tokens)
+                                 max_output_tokens=args.max_output_tokens,
+                                 response_format=args.response_format)
 
     started, count, errors = time.time(), 0, 0
     last_request_start = None

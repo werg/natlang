@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime } from '../dist/index.js';
-import { LogWorkspace, LogIndex, commit, emptyIncidentState, step, defaultSettings } from '../../applications/dist/logs/index.js';
+import { LogWorkspace, LogIndex, boundedEviction, chooseEviction, commit, emptyIncidentState, evictOldest, statusAfter, step, defaultSettings } from '../../applications/dist/logs/index.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const line = (id, cursor, code, message, level = 'WARN', service = 'api') => ({ kind: 'log', id, cursor,
@@ -179,4 +179,52 @@ test('commit folds incidents, retires closed ones, lets a refused alert be retri
   assert.equal(gapped.status, 'gap');
   assert.equal(gapped.incidents.find(row => row.id === 'a').closes_at, 7000 + defaultSettings.quiet_ms);
   assert.match(gapped.unknowns[0], /collector down/);
+});
+
+const incidentAt = (id, last_seen, extra = {}) => ({ id, opened_at: 0, last_seen, closes_at: 1_000_000, services: ['api'], codes: ['x'], members: [id], count: 1,
+  severity: '', hypotheses: [], alert_key: null, summary: '', ...extra });
+
+test('modes are crisp, nl or shadow; the older spelling natlang is accepted and means nl', () => {
+  assert.equal(defaultSettings.significance, 'nl');
+  assert.equal(defaultSettings.retire, 'crisp', 'the crisp default of the new pluggable part');
+  assert.equal(new LogWorkspace({ significance: 'natlang' }).settings.significance, 'nl');
+  assert.equal(new LogWorkspace({ significance: 'shadow', retire: 'natural-language' }).settings.retire, 'nl');
+  assert.throws(() => new LogWorkspace({ significance: 'fast' }), /crisp.*nl.*shadow/);
+});
+
+test('the stage names the status and crisp code accepts it only when the sink allows it', () => {
+  const none = { action: 'ignore', severity: '', claim: '', uncertainty: '', hypothesis_id: '', cited: [] };
+  const decision = (extra = {}) => ({ significance: 'watch', incident: null, folded: [], escalation: none, effects: [], gap: null, ...extra });
+  const receipt = status => ({ status, key: 'k', detail: '' });
+  assert.equal(statusAfter(decision({ status: 'investigating' }), []), 'investigating', 'the stage names it');
+  assert.equal(statusAfter(decision({ status: 'observing', escalation: { ...none, action: 'investigate' } }), []), 'observing');
+  assert.equal(statusAfter(decision(), []), 'observing', 'no status: the exact ladder');
+  assert.equal(statusAfter(decision({ escalation: { ...none, action: 'investigate' } }), []), 'investigating');
+  assert.equal(statusAfter(decision({ status: 'alerted' }), []), 'observing', 'alerted needs a delivered alert');
+  assert.equal(statusAfter(decision({ status: 'alerted' }), [receipt('insufficient')]), 'observing', 'a refused alert is not an alert');
+  assert.equal(statusAfter(decision({ status: 'observing' }), [receipt('sent')]), 'alerted', 'a delivered alert is alerted');
+  assert.equal(statusAfter(decision({ status: 'alerted' }), [receipt('unknown')]), 'delivery-unknown');
+  assert.equal(statusAfter(decision({ status: 'bogus' }), []), 'observing');
+});
+
+test('retirement is pluggable: the crisp rule by default, retire.nl bounded by the exact check, shadow serves crisp', async () => {
+  const live = [incidentAt('a', 1), incidentAt('b', 2), incidentAt('c', 3), incidentAt('d', 4)];
+  const settings = { ...defaultSettings, max_open: 2 };
+  assert.deepEqual(evictOldest(live, settings), ['a', 'b']);
+  assert.deepEqual(boundedEviction(live, ['d', 'ghost', 'd'], settings), ['d', 'a'], 'unknown ids are dropped, and too few leaving is made up crisply');
+  assert.deepEqual(boundedEviction(live, [], { ...defaultSettings, max_open: 4 }), []);
+  assert.deepEqual(await chooseEviction(live.slice(0, 2), settings), [], 'nothing leaves a list that fits');
+  assert.deepEqual(await chooseEviction(live, { ...settings, retire: 'crisp' }), ['a', 'b']);
+  const model = scriptedModel(opening => opening.includes('Choose the IDs of the') ? `return ['c', 'ghost'];` : null);
+  const runtime = createNatlangRuntime({ model: model.driver });
+  assert.deepEqual((await runtime.run(() => chooseEviction(live, { ...settings, retire: 'nl' }))).sort(), ['a', 'c'],
+    'the model chose c; the exact bound adds the least recently seen until two remain');
+  assert.deepEqual(await runtime.run(() => chooseEviction(live, { ...settings, retire: 'shadow' })), ['a', 'b'], 'shadow serves the crisp answer');
+  // The commit applies the choice.
+  const none = { action: 'ignore', severity: '', claim: '', uncertainty: '', hypothesis_id: '', cited: [] };
+  const state = { ...emptyIncidentState(), incidents: live };
+  const next = commit(state, line('e', 5, 'x', 'm'), { significance: 'watch', incident: null, folded: [], escalation: none, effects: [], gap: null }, [], settings, ['c']);
+  assert.deepEqual(next.incidents.map(row => row.id), ['b', 'd'], 'c left by choice, a by the bound');
+  assert.deepEqual(next.closed.map(row => row.id).sort(), ['a', 'c']);
+  assert.equal(commit(state, line('e', 5, 'x', 'm'), { significance: 'watch', incident: null, folded: [], escalation: none, effects: [], gap: null }, [], { ...settings, max_open: 4, max_closed: 1 }).incidents.length, 4);
 });

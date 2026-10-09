@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/failure-explainer",
+  "version": "0.1.0",
+  "description": "Advisory explanations of failures (plans/FAILURE_EXPLANATION_PROGRAM.md): a student-projection failure the audit left unclassified, the admission reasons no rule classifies, and a failed eval gate. Crisp code computes the facts and checks every answer; the output goes to separate files labelled with the explainer's hash, and nothing the pipeline acts on reads it.",
+  "include": ["README.md", "index.ts", "types.ts", "refinements.ts", "explainFailure.nl", "triageRejections.nl", "explainGateFailure.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

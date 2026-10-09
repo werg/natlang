@@ -436,11 +436,40 @@ export function parseModule(path: string, text: string, inherited: Record<string
 const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts') && !name.endsWith('.d.ts'))) &&
   name !== 'types.ts';
 
+/**
+ * The type aliases of a `types.ts`, including those it re-exports from another types module with
+ * `export type { A, B } from "../other/types.js"` or `export * from "./more.js"`. Two applications share one definition
+ * that way instead of declaring it twice. Only relative specifiers that name a readable file are followed.
+ */
+export function readTypesFile(path: string, files: SourceFiles, seen: string[] = []): Record<string, string> {
+  const text = files.read(path);
+  const own = readTypeAliases(text);
+  if (!/\bexport\b[^;]*\bfrom\b/.test(text)) return own;
+  const source = ts.createSourceFile('types.ts', text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const result: Record<string, string> = {};
+  for (const statement of source.statements) {
+    if (!ts.isExportDeclaration(statement) || !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    if (!specifier.startsWith('.')) continue;
+    const base = files.join(files.dirname(path), specifier.replace(/\.(?:[cm]?js|ts)$/, ''));
+    const target = [`${base}.ts`, files.join(base, 'index.ts')].find(candidate => files.isFile(candidate));
+    if (!target || seen.includes(target) || target === path) continue;
+    const there = readTypesFile(target, files, [...seen, path]);
+    const clause = statement.exportClause;
+    if (!clause) Object.assign(result, there);
+    else if (ts.isNamedExports(clause)) for (const element of clause.elements) {
+      const from = (element.propertyName ?? element.name).text;
+      if (there[from] !== undefined) result[element.name.text] = there[from]!;
+    }
+  }
+  return { ...result, ...own };
+}
+
 /** Load a callable folder into a record tree. `inherited` holds type aliases from enclosing folders. */
 export function loadCallableFolder(dir: string, files: SourceFiles, inherited: Record<string, string> = {}): Record<string, ItemRecord> {
   if (!files.isDirectory(dir)) return {};
   const typesFile = files.join(dir, 'types.ts');
-  const types = { ...inherited, ...(files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {}) };
+  const types = { ...inherited, ...(files.isFile(typesFile) ? readTypesFile(typesFile, files) : {}) };
   const entries = files.list(dir).filter(name => !name.startsWith('.')).sort();
   const items: Record<string, ItemRecord> = {};
   const mine: string[] = [];
@@ -554,7 +583,7 @@ function packageTypes(dir: string, files: SourceFiles): Record<string, string> {
   const layers: Record<string, string>[] = [];
   for (let current = dir; ; current = files.dirname(current)) {
     const typesFile = files.join(current, 'types.ts');
-    if (files.isFile(typesFile)) layers.push(readTypeAliases(files.read(typesFile)));
+    if (files.isFile(typesFile)) layers.push(readTypesFile(typesFile, files));
     const root = files.isFile(files.join(current, 'natlang.json')) || files.isFile(files.join(current, 'package.json'));
     if (root || files.dirname(current) === current) break;
   }

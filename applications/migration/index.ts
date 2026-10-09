@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import type { NatlangRuntime, PluggableSetting } from '@natlang/node';
+import { pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
 import migrateFlow from './migrate.nl';
 import type { Check, ChangedFile, Migration, MigrationReport, Patch, RepoSnapshot, SearchHit, SearchResult, Validation } from './types.js';
 
@@ -20,14 +20,14 @@ export type CheckCommand = { id: string, argv: string[], timeoutMs?: number };
 
 /** The pluggable policy points, and the implementation each runs when the host does not choose. */
 export type PolicyPoint = 'exact' | 'settled';
-/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natlang' and 'natural-language' are deprecated spellings of 'nl', accepted and normalized. */
 export type Implementation = Exclude<PluggableSetting, undefined>;
-export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { exact: 'natural-language', settled: 'natural-language' };
+export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { exact: 'nl', settled: 'nl' };
 
 /** What the natural-language stages see of the `repository` service. Types are those of types.ts. */
 export const repositoryDeclaration = `/** The repository under migration: candidate revisions held in memory, the original checkout untouched. */
-/** Which implementation runs a pluggable policy point: 'crisp' or 'natural-language'. */
-export function implementation(point: 'exact' | 'settled'): 'crisp' | 'natural-language';
+/** Which implementation runs a pluggable policy point: 'crisp', 'nl' or 'shadow'. */
+export function implementation(point: 'exact' | 'settled'): 'crisp' | 'nl' | 'shadow';
 /** Search every manifest file of a revision (default: the base) for an exact string. Hits carry path, 1-based line, offset and an excerpt. */
 export function search(query: string, revision?: string): SearchResult;
 /** The text of lines from..to (1-based, inclusive) of a file at a revision, exactly as stored. */
@@ -109,9 +109,9 @@ export class RepositoryMigration {
     return contents;
   }
 
-  implementation(point: PolicyPoint): Implementation {
+  implementation(point: PolicyPoint): PluggableMode {
     if (!Object.hasOwn(this.policy, point)) throw new Error(`unknown policy point: ${point}`);
-    return this.policy[point];
+    return pluggableMode(this.policy[point]);
   }
 
   /** Lines from..to (1-based, inclusive) exactly as stored. */

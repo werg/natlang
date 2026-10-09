@@ -11,6 +11,7 @@ import { BUILTIN_SOURCES, builtinNames } from '../builtin/index.js';
 import { loadCallableFolder, type ItemRecord, type NatlangRecord, type SourceFiles } from './loader.js';
 import { namedCallable, type NatlangCallable } from './callable.js';
 import type { CallableDefinition } from './kernel.js';
+import { definitionKey } from '../calls/recorder.js';
 
 const ROOT = '/natlang-builtin';
 
@@ -67,4 +68,11 @@ export function builtinDefinition(name: string): CallableDefinition {
     body: record.instructions.replace(/\n$/, ''),
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, ...(raw.endsWith('?') ? { optional: true } : {}) })),
     returns: record.returns, types: record.types, codebase: {}, subtype: record.subtype };
+}
+
+/** The revision key a built-in's compilations and calls are stored under (what ran, as run); receipts of a built-in reviewer cite it. */
+export function builtinDefinitionKey(name: string): string {
+  const definition = builtinDefinition(name);
+  return definitionKey({ id: definition.id, body: definition.body, params: definition.params, returns: definition.returns,
+    types: definition.types, subtype: definition.subtype });
 }

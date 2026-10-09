@@ -11,8 +11,8 @@ Promote memory to registers in fn, as LLVM's SROA and mem2reg do. flow is fn's c
 
 1. Split aggregates (SROA). An `alloca` of a struct or array that is accessed only through `getelementptr` with
    constant indices, then loaded or stored, becomes one alloca per accessed field or element.
-2. Promotable allocas: those whose address is only the pointer operand of loads and stores of one type. It is never
-   stored, passed to a call, compared, cast or offset. Keep every other alloca as it is.
+2. Promotable allocas: those whose every use is as the pointer operand of a load or a store of one type. Keep every other
+   alloca as it is.
 3. Phi placement, per promotable alloca. Its definition blocks are the blocks that store to it. Place a phi for it at
    every block in the iterated dominance frontier of those blocks: their frontiers, then the frontiers of the blocks
    added, until nothing new comes in (use flow's frontiers).
@@ -28,4 +28,4 @@ context holds the module's types, globals and function declarations. Check the r
 only (same signature and behavior); if nothing applies, answer fn unchanged.
 
 problem, when given, says why an earlier answer was rejected (the verifier's message, or how the program's output
-changed); make sure your answer does not have it.
+changed); make your answer free of it.

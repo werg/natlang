@@ -50,7 +50,6 @@ else {
     state = { ...state, snapshot: candidate, validation, revisions: [snapshot.revision, candidate.revision] };
   } catch (error) { state = { ...state, rejected: error.message }; }
 }
-const stop = repository.implementation('settled') === 'crisp' ? settledCrisp : settled;
 let final;
 try { final = await round.iterateOn(state, intent).withMeasure(s => s.remaining).until(stop); }
 catch (error) { if (error.name === 'IterationLimitError') final = error.lastState; else throw error; }
@@ -269,7 +268,9 @@ test('failed checks, stale patch context and exact lines remain visible for repa
     assert.equal(repository.lines('caller.mjs', 2, 2), 'export const total = sum(2, 3);');
     assert.equal(repository.count('caller.mjs', 'sum'), 2);
     assert.throws(() => repository.lines('caller.mjs', 0, 1), /invalid line range/);
-    assert.equal(repository.implementation('exact'), 'natural-language');
+    assert.equal(repository.implementation('exact'), 'nl');
+    assert.equal(new RepositoryMigration(root, { files: Object.keys(source), policy: { exact: 'natural-language', settled: 'shadow' } }).implementation('exact'), 'nl', 'the deprecated spelling is normalized');
+    assert.equal(new RepositoryMigration(root, { files: Object.keys(source), policy: { settled: 'shadow' } }).implementation('settled'), 'shadow');
     assert.throws(() => repository.implementation('speed'), /unknown policy point/);
     const broken = repository.apply(base, [{ path: 'lib.mjs', old: 'function sum(', new: 'function add(' }]);
     const validation = await repository.validate(broken.revision);

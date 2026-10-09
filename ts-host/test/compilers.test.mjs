@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { createNatlangRuntime } from '../dist/index.js';
-import { compile, normalize, splitAssembly } from '../../applications/dist/compilers/index.js';
+import { compile, normalize } from '../../applications/dist/compilers/index.js';
 import { toolchain, toolchainAvailable, toolchainDeclaration } from '../../applications/dist/compilers/toolchain.js';
 import compiler from '../../applications/dist/compilers/compiler.nl.js';
 import { scriptedModel } from './support/natlang.mjs';
@@ -92,30 +92,6 @@ function compilerModel(pipeline = null) {
 test('module text keeps one declaration per symbol and none for defined functions', () => {
   assert.equal(normalize('declare i32 @f(i32)\ndeclare i32 @printf(ptr, ...)\ndeclare i32 @printf(ptr, ...)\ndefine i32 @f(i32 %a) {\n  ret i32 %a\n}'),
     'declare i32 @printf(ptr, ...)\ndefine i32 @f(i32 %a) {\n  ret i32 %a\n}');
-  const { functions, rest } = splitAssembly('\t.text\n\t.globl\tf\n\t.p2align\t2\n\t.type\tf,@function\nf:\n\t.cfi_startproc\n\tret\n.Lfunc_end0:\n\t.size\tf, .Lfunc_end0-f\n\t.cfi_endproc\n\n\t.data\ng:\n\t.xword\t5');
-  assert.deepEqual([...functions.keys()], ['f']);
-  assert.match(functions.get('f'), /^\t\.globl\tf\n[^]*\.cfi_endproc$/);
-  assert.match(rest, /\.data\ng:/);
-});
-
-test('every compiler stage is checked by running the program; a wrong stage is retried once, then rejected', { skip }, async () => {
-  const { model, seen } = compilerModel();
-  const runtime = createNatlangRuntime({ model: model.driver });
-  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
-  const result = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: true });
-  assert.deepEqual(result.diagnostics, []);
-  assert.equal(result.ok, true);
-  const record = (fn, stage) => result.records.find(r => r.function === fn && r.stage === stage);
-  assert.deepEqual([record('square', 'simplify').accepted, record('square', 'simplify').attempts], [true, 2], 'retried with the behavior difference');
-  assert.deepEqual([record('square', 'dce').accepted, record('square', 'dce').attempts], [false, 2], 'invalid IR is rejected twice');
-  assert.ok(seen.includes('simplify:square:retry'));
-  assert.match(result.ir, /define i32 @square\(i32 %x\) \{\nentry:\n  %mul = mul nsw i32 %x, %x/, 'square keeps its last accepted version');
-  assert.match(result.ir, /define i32 @main\(\) \{\nentry:\n  %call = call i32 @square\(i32 6\)/, 'main is in SSA form');
-  for (const stage of ['select', 'liveness', 'allocate', 'frame', 'emit', 'codegen', 'peephole']) assert.equal(record('main', stage).accepted, true, stage);
-  for (const stage of ['parse', 'analyze', 'declare']) assert.equal(record('(module)', stage).accepted, true, stage);
-  assert.ok(record('square', 'flow'), 'the passes that need control flow got it');
-  assert.equal(result.records.filter(r => r.function === 'square' && r.stage === 'flow').length, 1, 'flow is computed once per version of a function');
-  assert.equal((await toolchain.runAssembly(result.assembly)).stdout, '42\n');
 });
 
 // What an interpreter of compiler.nl might write, cut down: every stage is reached through the callable folder.
@@ -198,10 +174,35 @@ const RUST_IR = {
     '  %p = call i32 (ptr, ...) @printf(ptr @.str.0, i64 %x)\n  ret i32 0\n}',
 };
 
+test('compile runs compiler.nl and verifies its module and program; the host holds no pass-manager policy', { skip }, async () => {
+  const { model } = compilerModel(PIPELINE);
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
+  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const result = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: true });
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.records.map(r => [r.stage, r.accepted]), [['compiler.nl', true], ['verify', true], ['run ir', true], ['run assembly', true]]);
+  assert.deepEqual(result.log, ['verify true', 'reference "42\\n"', 'assembly "42\\n"']);
+  // An expected output the program does not print is a failure of the final check, not of the pass manager.
+  const wrong = await compile(SOURCE, { language: 'c', level: 'O2', run, backend: true, expected: ['41\n'] });
+  assert.equal(wrong.ok, false);
+  assert.match(wrong.diagnostics[0], /printed "42\\n".*instead of "41\\n"/);
+  assert.equal(wrong.records.at(-1).stage, 'run ir');
+});
+
+const RUST_PIPELINE = `const syntax = await rust.parse(source);
+const checked = await rust.analyze(syntax);
+const frame = await rust.declare(checked);
+const runtimeText = await runtime(frame.header);
+const header = frame.header + '\\n' + runtimeText;
+const lowered = await Promise.all(frame.functions.map(fn => rust.lower(fn, header)));
+return { ir: [header, ...lowered].join('\\n'), assembly: '', diagnostics: [], log: [] };`;
+
 test('a Rust program goes through the Rust front end and the shared runtime stage', { skip }, async () => {
   const seen = [];
   const model = scriptedModel(opening => {
     const answer = value => `return ${JSON.stringify(value)};`;
+    if (opening.includes('Compile source, a program in language')) return RUST_PIPELINE;
     if (opening.includes('Parse source, a Rust 2021 program')) { seen.push('parse');
       return answer({ declarations: [node('ItemFn', 1, 'square'), node('ItemFn', 2, 'main')], diagnostics: [] }); }
     if (opening.includes('Analyze syntax, a parsed Rust program')) { seen.push('analyze'); return 'return { declarations: syntax.declarations, diagnostics: [] };'; }
@@ -214,7 +215,7 @@ test('a Rust program goes through the Rust front end and the shared runtime stag
     if (opening.includes('Choose the passes')) return answer([]);
     return null;
   });
-  const runtime = createNatlangRuntime({ model: model.driver });
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
   const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
   const result = await compile(RUST, { language: 'rust', level: 'O1', run, backend: false });
   assert.deepEqual(result.diagnostics, []);

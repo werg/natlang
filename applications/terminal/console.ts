@@ -29,7 +29,7 @@ export async function main(context: TargetContext): Promise<number> {
   const checkpoint = store.load(emptyTerminalSession());
   if (checkpoint.state.status === 'running' || checkpoint.state.status === 'cancel-requested')
     completions.push({ kind: 'recover', id: `recover-${checkpoint.revision}`, request_id: checkpoint.state.active_request,
-      job_id: checkpoint.state.active_job, text: '', status: 'unknown', detail: 'host process restarted' });
+      job_id: checkpoint.state.active_job, text: '', status: 'unknown', detail: 'host process restarted', cancel_requested: false });
   const loop: EventLoop<Session, TerminalView, TerminalEvent> = new EventLoop({
     initialState: checkpoint.state, initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
     reduce: (state, event) => step(terminal, state, event, openFolder(context.workspace).root()), view,
@@ -37,9 +37,9 @@ export async function main(context: TargetContext): Promise<number> {
   try {
     await runTerminalShell(loop, { input: context.io.input as never, output: context.io.output as never, color: context.io.color,
       events: completions,
-      event: (text, id) => ({ kind: 'request', id, request_id: '', job_id: '', text, status: '', detail: '' }),
+      event: (text, id) => ({ kind: 'request', id, request_id: '', job_id: '', text, status: '', detail: '', cancel_requested: false }),
       cancelEvent: id => ({ kind: 'cancel', id, request_id: loop.state.active_request, job_id: loop.state.active_job,
-        text: '', status: '', detail: '' }),
+        text: '', status: '', detail: '', cancel_requested: false }),
       commands: {
         recipes: { description: 'list exact operations natlang can choose', run: () => library.recipes()
           .map(recipe => `${recipe.id}  ${recipe.description}`).join('\n') },

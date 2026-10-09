@@ -1,6 +1,19 @@
 # Publisher: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented (reviewed after the fact, plans/OWNER_REVIEW.md). Files: `read_note.nl`, `outline.nl`,
+`write_section.nl`, `checks.ts` (`outlineProblems`, `unsourcedNumbers`), `index.ts` (`publishBrief`, `composeSection`).
+
+Implementation notes:
+- Passage and Claim come from `../evidence/types.ts` through a type re-export in `types.ts`; the loader
+  (`readTypesFile`) follows relative `export type { ... } from` and `export * from` in a `types.ts`.
+- Context-dependent refinements (ids offered, quote occurs, numbers in sources) are crisp host checks with one repair
+  attempt, not `Is<>` types: a checker sees only the value. A section's numbers are checked against all the passages
+  assigned to that section and its table. A number is a digit run with optional separators; thousands commas are
+  ignored. Number words are not scanned.
+- The outline check requires offered ids, a title, at least one section, and each table and asset in one section. A
+  passage may serve several sections or none.
+- `publishBrief` rejects (no partial publish) when an outline or a section fails twice, naming the sections.
+- `note` is read once by `read_note.nl` (only when `files` is given) and passed as `Untrusted<string>`.
 
 `publishBrief` (`index.ts:137-144`) reads pinned passages, calls `outline`, calls `compose`, checks the document and
 publishes it atomically. The crisp half is right: the check (`index.ts:43-68`), the two renderers

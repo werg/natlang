@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { Block, DayView, Hard, Offered, Placement, TaskView, Verdict, Violation } from './types.js';
+import { topologicalOrder } from './scheduler/order.js';
 
 export type Task = { id: string, minutes: number, earliest: number, latest: number, after: string[], preference?: string };
 export type TaskInput = Omit<Task, 'earliest' | 'latest'> & { earliest: string, latest: string };
@@ -50,18 +51,11 @@ export class Problem {
   constructor(readonly windows: { start: number, end: number }[], readonly tasks: Map<string, Task>, readonly fixed: Slot[],
     readonly slot: number, readonly origin: number, readonly offset: number) {}
 
-  /** Dependency order; throws "task dependency cycle". */
+  /** Dependency order, the same one the stages use (scheduler/order.ts); throws "task dependency cycle" for a cycle. */
   order(): string[] {
-    const done = new Set<string>(), active = new Set<string>(), sorted: string[] = [];
-    const visit = (id: string) => {
-      if (active.has(id)) throw new Error('task dependency cycle');
-      if (done.has(id)) return;
-      active.add(id);
-      for (const dependency of this.tasks.get(id)!.after) visit(dependency);
-      active.delete(id); done.add(id); sorted.push(id);
-    };
-    for (const id of this.tasks.keys()) visit(id);
-    return sorted;
+    const ordering = topologicalOrder([...this.tasks.values()].map(task => ({ task: task.id, after: task.after })));
+    if (ordering.problem) throw new Error(/cycle/.test(ordering.problem) ? `task dependency cycle: ${ordering.problem}` : ordering.problem);
+    return ordering.order;
   }
 
   private rel(epoch: number): number { return epoch - this.origin; }

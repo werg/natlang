@@ -3337,3 +3337,34 @@ This is held decision-label generation, not complete interpreter trajectories;
 conversion and admission remain explicit pending work. Kilo's first complete
 interpreter case was wrong (PROC-910. / none / no_action); completion alone does
 not establish quality. NVIDIA's corresponding case matched the exact oracle.
+
+## 2026-10-09 — Smaller free teachers and availability screens
+
+User approved trying smaller/faster models. Gemini3.8Flash exhausted this
+project's20-request daily quota; stop that queue rather than keep retrying it.
+Gemini2.5FlashLite appears in the catalog but returned404 for new users and
+explicitly recommended3.5FlashLite. Independent3.5FlashLite attempt completed
+the exact PROC-910 target in14 saved turns; serial remaining four sources queued.
+Google pricing lists3.5FlashLite free input/output. Quotas remain account-specific.
+
+Groq GPT-OSS20B completed the same16 short labels with0 errors through the shared
+paced labeler. These are selected easy short inputs, not a representative model
+comparison. Z.AI's other explicitly free model GLM4.5Flash is producing turns;
+this is an alternative free capacity pool, not a proven size/speed improvement.
+NVIDIA's catalog Nano30B-A3B failed curated Pi lookup and then direct inference
+returned an account-specific404. Its GPT-OSS20B tiny probe succeeded; a full
+case now uses the shared HTTP route with low reasoning. Shared chat controls
+accept an explicit reasoning_effort field; no new provider backend is needed.
+
+Shared retry handling now reads Google's JSON-encoded RetryInfo duration so a
+supplied long quota-reset delay is preserved rather than replaced by minute
+retries. Existing frozen jobs are unchanged. Runtime-small-teachers-v5 compiled
+1261 files and its scripted five-case proof passed60 decisions/20 reads.
+
+Closed NVIDIA/Kilo quality receipts live under quality-review-v1. Both traces
+contain four iterateOn steps. Kilo's final interpreter had the accumulated
+notes visible but assumed a textual format omitting the explicit true token;
+its regex matched no candidates and also retained sentence punctuation in the
+ID. Preserve child-level attribution; this is not a parent delegation negative.
+Observed saved completion counters49142/48160 are distinct from unavailable
+full billable usage. No blanket action admission or preference-pair admission.

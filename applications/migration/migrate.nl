@@ -26,9 +26,8 @@ writes the original checkout. Work in eval and return the result as an object bu
    the failed edits. Otherwise try: candidate = repository.apply(snapshot.revision, patches), then validation =
    await repository.validate(candidate.revision), and state = { ...state, snapshot: candidate, validation,
    revisions: [snapshot.revision, candidate.revision] }. When apply rejects, rejected = the error's message.
-6. Repair. stop = settledCrisp when repository.implementation("settled") is "crisp", else settled. final = await
-   round.iterateOn(state, intent).withMeasure(s => s.remaining).until(stop). When the loop ends with an error whose
-   name is "IterationLimitError", final = the error's lastState: the repair budget is spent and the last candidate is
+6. Repair. final = await round.iterateOn(state, intent).withMeasure(s => s.remaining).until(stop). stop(state) says
+   whether the repair loop is settled. When the loop ends with an error whose name is "IterationLimitError", final = the error's lastState: the repair budget is spent and the last candidate is
    the honest result. Any other error is raised.
 7. Report. validation = final.validation, or await repository.validate(final.snapshot.revision) when it is null.
    report = repository.report(final.snapshot.revision, validation). closing = summarize(intent, planned, edits, final,

@@ -1,11 +1,11 @@
 import type { Untrusted } from '@natlang/node';
 
 /** Which implementation runs a hot-path policy. Both answer the same interface; the setting selects. */
-export type Policy = "crisp" | "natlang";
+export type Policy = "crisp" | "nl" | "shadow";
 
 /** The investigator's settings, passed to every stage that uses them. Times are milliseconds of event time. */
 export type LogSettings = {
-  /** Judging each log line's significance, once per line: "crisp" reads level and code, "natlang" reads the line. */
+  /** Judging each log line's significance, once per line: "crisp" reads level and code, "nl" reads the line, "shadow" runs both and records whether they agree. */
   significance: Policy,
   /** How far back evidence for one event reaches. */
   window_ms: number,
@@ -15,6 +15,12 @@ export type LogSettings = {
   quiet_ms: number,
   /** How many member IDs an incident remembers (the newest). */
   max_members: number,
+  /** Choosing which incidents leave the open list when it is over max_open: "crisp" keeps the most recently seen, "nl" reads the incidents, "shadow" runs both and records whether they agree. */
+  retire: Policy,
+  /** How many incidents stay open at most. */
+  max_open: number,
+  /** How many closed incidents are remembered (the newest). */
+  max_closed: number,
 };
 
 /** A log line, or a gap in the source (kind "gap": records are missing around occurred_at). */
@@ -82,7 +88,11 @@ export type GapNote = { affected: string[], unknown: string };
 
 /** What the investigation decided for one event; the host commits it. */
 export type Decision = { significance: Significance, incident: Incident | null, folded: string[], escalation: Escalation,
-  effects: Effect[], gap: GapNote | null };
+  effects: Effect[], gap: GapNote | null,
+  /** Where the event leaves the investigation: observing (nothing to look into yet), investigating (looked, not enough to alert) or alerted (an alert is asked for). Delivery of the alert settles whether it stays alerted. */
+  status?: Verdict };
+/** The status a stage names for the event. */
+export type Verdict = "observing" | "investigating" | "alerted";
 
 export type Alert = { status: "local" | "sent" | "unknown" | "duplicate" | "insufficient", key: string, detail: string };
 export type IncidentState = { cursor: number, observed: number, alerts: Alert[], unknowns: string[],
