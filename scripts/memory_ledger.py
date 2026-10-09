@@ -165,7 +165,14 @@ def cgroup_usage(root, gpu):
         pids = [int(p) for p in open(os.path.join(root, 'cgroup.procs')).read().split()]
     except OSError:
         return None
-    return host + sum(gpu.get(pid, 0) for pid in pids)
+    # Page cache charged to the cgroup is reclaimable, not the job's working set: a job writing a 47 GB checkpoint
+    # otherwise reads 10+ GB over its real use. Shared memory (also counted as file) stays.
+    try:
+        stat = dict(line.split() for line in open(os.path.join(root, 'memory.stat')))
+        host -= max(0, int(stat.get('file', 0)) - int(stat.get('shmem', 0)))
+    except (OSError, ValueError):
+        pass
+    return max(0, host) + sum(gpu.get(pid, 0) for pid in pids)
 
 
 def container_cgroup(command):
@@ -387,7 +394,11 @@ def guard(args):
             release = None
         if mem_free() < 2 * floor and reclaimable() >= 2 * GIB and release is None and time.time() >= next_release:
             idle = ['ionice', '-c3'] if shutil.which('ionice') else []
-            release = subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
+            # Its own transient unit: the release balloons anonymous memory a GiB at a time, which inside the
+            # guard's 256 MB cgroup got the guard itself OOM-killed (2026-10-09 22:04).
+            own_unit = ['systemd-run', '--user', '--quiet', '--pipe', '--wait', '--collect',
+                        '-p', 'MemoryMax=26G', '-p', 'MemorySwapMax=0'] if shutil.which('systemd-run') else []
+            release = subprocess.Popen(own_unit + idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
                                        stdout=subprocess.PIPE, text=True)
         with ledger() as state:
             live = live_claims(state, gpu_usage())
