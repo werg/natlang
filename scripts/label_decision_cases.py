@@ -276,7 +276,7 @@ def main():
     parser.add_argument('--retries', type=int, default=3, help='bounded retries for HTTP 429/5xx or network errors')
     parser.add_argument('--initial-backoff', type=float, default=30)
     parser.add_argument('--max-backoff', type=float, default=300)
-    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'low', 'medium', 'high'], default='low')
+    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'minimal', 'low', 'medium', 'high'], default='low')
     parser.add_argument('--response-format', choices=['json_schema', 'json_object', 'text'], default='json_schema',
                         help='provider wire format; all responses still undergo identical strict JSON validation')
     parser.add_argument('--max-output-tokens', type=int, default=256)

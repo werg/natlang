@@ -1,3 +1,9 @@
+## Gemini Lite efficiency screen — 2026-10-09 21:56 UTC
+
+- Gemini3.5FlashLite mixed cohort first91rows were91typed-valid under low reasoning;3.1Lite was27/27at same633s observation. This is ongoing type validity, not semantic quality. The newer Lite has much higher observed throughput on this workload.
+- Four-case3.1Lite minimal-reasoning screen PID768388 returned4valid/0errors in73s (same mixed-cohort first four inputs). It does not demonstrate enough speed improvement to interrupt/replace the already-running low-reasoning worker. Shared labeler now accepts minimal, matching shared teacher wire parser; provider capability remains explicit per job.
+- OpenRouter actual PoolsideLagunaXS2.1 free screen PID768474 uses zero prompt/completion/request ceilings and provider sort=throughput; first actual label valid,42s. Zero-price control is not a text distillation flag. Anonymous Kilo Poolside4/3typed-valid,NorthMiniCode4/2,Inkling firsttwo429; retain actual final outcomes before promoting.
+
 ## Further current free endpoints — 2026-10-09 21:52 UTC
 
 - Live Kilo public catalog now includes Step5Preview, Ling3.1Flash, Laguna2.1XS/S, InklingSmall, NorthMiniCode and Nemotron3.5Lightning; do not assume the earlier12model catalog stays current. Anonymous four-row shared labeler screens started for PoolsideLagunaXS2.1, InklingSmall, NorthMiniCode; receipt PIDs/argv authoritative. Four per model,10s pacing,1retry, explicit free slugs; no credential reuse across providers. Original Kilo first full-case122calls remain recorded, respect200/hour/IP if throttled.
