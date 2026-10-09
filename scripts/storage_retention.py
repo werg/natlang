@@ -152,13 +152,21 @@ def registered_files(policy: dict, repo: Path = REPO) -> set[str]:
             if not paths:
                 base = repo / entry.get('path', '')
                 paths = [base / item for item in entry.get('include', [])] or [base]
+            real_base = os.path.realpath(base)  # one resolution per entry: a repo symlink into the HDD
+            on_nvme = any(str(root) == real_base or real_base.startswith(str(root) + '/')
+                          for root in LOGICAL_ROOTS.values())
             for path in paths:
                 found.add(str(path))
-                try:
-                    if path.is_symlink():
-                        found.add(os.path.realpath(path))
-                except OSError:
-                    pass
+                found.add(str(Path(real_base) / path.relative_to(base)) if base in path.parents or path == base
+                          else str(path))
+                # Archived files are NVMe symlinks to their HDD copy: per-file only there (an lstat of 100k+ files
+                # on the busy HDD took minutes).
+                if on_nvme:
+                    try:
+                        if path.is_symlink():
+                            found.add(os.path.realpath(path))
+                    except OSError:
+                        pass
     return found
 
 
