@@ -573,8 +573,10 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
     ``cache``: a directory of converted-state shards (codes and scales, ~21 GB in ~1 GB files). Read when it exists
     (sequential reads instead of 18,651 memory-mapped tensors), written after a fresh conversion otherwise. The published checkpoint
     is already ternary, so the cached attention equals the latent and serves QAT too."""
-    if dense_experts is None:  # a published non-ternary checkpoint loads exactly unless asked to ternarize
-        dense_experts = MapleConfig.from_dir(path).model_type != "maple"
+    if dense_experts is None:  # a published non-ternary checkpoint loads exactly unless asked to ternarize; an
+        # exported QAT conversion (maple/qat_export.py) is already ternary and loads in the deployed form
+        config = MapleConfig.from_dir(path)
+        dense_experts = config.model_type != "maple" and not getattr(config, "natlang_deployed_ternary", None)
     if cache is not None and Path(cache).is_dir() and layers is None and experts is None:
         config = MapleConfig.from_dir(path)
         config.dense_experts = dense_experts
