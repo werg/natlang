@@ -26,7 +26,7 @@ logs confirm all four optimizer groups and the foundation schedule/RNG restored;
 no fresh-optimizer fallback occurred. The source was previously qualified only
 for its earlier data and gates; this changed corpus has a fresh baseline and
 must earn new gates. Input is the adopted4880-row text file, 3176 train / 1704
-heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239bc94e4393d08e0572`;
+heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`;
 the admitted87 target-bound documents are already in it and must not be appended
 again. Native records/pieces are source bindings, not extra text rows.
 
@@ -48,8 +48,12 @@ AR fixup v2 is running as `luna-ar-feedback-best23936-v2`, recipe
 `training/neuralese/recipes/luna-ar-feedback-fixup-4880-best23936-20261009-v2.json`
 (commit `6dcaac85`, SHA `e1a50f2941c121658ac5c0daf4fd57caaf193372426c594495860bec98b104bd`).
 It pins shared code `cf582398` and the same Docker image. Live logs confirm all
-four optimizer groups and31 schedule observations restored. The fresh AR
-baseline is computing; no new qualification or completed-update claim yet.
+four optimizer groups and31 schedule observations restored. The latest reviewed
+evaluation is step24320; its alignment gate remains false. Short/medium/long
+consumer agreement is .894/.549/.278. The single projected AR control first
+diverges at target144 (crisp control remains exact for256 tokens), after being
+exact at24192. This fluctuating control is not broad qualification. Training
+has progressed beyond24320; inspect live logs for the current step.
 Driver/launch receipts are under
 `/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v2/`.
 Failed v1 launch evidence remains preserved under its original path.
