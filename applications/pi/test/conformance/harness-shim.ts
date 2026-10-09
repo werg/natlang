@@ -7,8 +7,6 @@
  * Executor: PI_EXECUTOR_ENDPOINT (default http://127.0.0.1:8083), PI_EXECUTOR_MODEL, PI_EXECUTOR_CONCURRENCY;
  * PI_TRACE_DIR keeps the natlang traces; PI_PHASE_LOG prints each phase.
  */
-import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as durable from '../../vendor/durable/src/index.ts';
 import type { HarnessOptions, Storage } from '../../vendor/durable/src/index.ts';
@@ -31,33 +29,8 @@ const natlang = createNatlangRuntime({
   programRoot: root.replace(/\/$/, ''),
   ...(process.env.PI_TRACE_DIR ? { trace: fileTraceSink(process.env.PI_TRACE_DIR) } : {}),
 });
-/** The newest modification time of the port's own .nl and .ts files (not vendor/, node_modules/ or build output). */
-function sourceStamp(dir = root): number {
-  let newest = 0;
-  for (const item of readdirSync(dir, { withFileTypes: true })) {
-    if (item.name.startsWith('.') || item.name === 'vendor' || item.name === 'node_modules' || item.name === 'test') continue;
-    const path = join(dir, item.name);
-    if (item.isDirectory()) newest = Math.max(newest, sourceStamp(path));
-    else if (/\.(nl|ts)$/.test(item.name) && !item.name.endsWith('.d.nl.ts')) newest = Math.max(newest, statSync(path).mtimeMs);
-  }
-  return newest;
-}
-
-/**
- * A phase entry that reloads its function (and the functions of its folder) when the port's sources changed, so a
- * long run uses the newest instructions from its next phase on (owner rule: newest code always).
- */
-const entry = (name: string): Entry => {
-  let loaded = loadNatlang(`${root}${name}.nl`, root) as unknown as Entry, stamp = sourceStamp();
-  return ((...args: Parameters<Entry>) => {
-    const now = sourceStamp();
-    if (now !== stamp) {
-      try { loaded = loadNatlang(`${root}${name}.nl`, root) as unknown as Entry; stamp = now; }
-      catch (error) { console.error(`pi conformance: keeping the loaded ${name}.nl, the changed sources do not load: ${error instanceof Error ? error.message : String(error)}`); }
-    }
-    return loaded(...args);
-  }) as Entry;
-};
+// Live functions: a long run uses edited instructions from each phase's next call on (owner rule: newest code always).
+const entry = (name: string) => loadNatlang(`${root}${name}.nl`, root, { live: true }) as unknown as Entry;
 const entries = { generation: entry('generation'), tool: entry('tool'), compaction: entry('compaction') };
 const pick = (name: string): Implementation => process.env[name] === 'natural-language' ? 'natural-language' : 'crisp';
 export const phaseLog: string[] = [];

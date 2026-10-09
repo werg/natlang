@@ -28,6 +28,39 @@ const SUMMARIZE = {
     'export const rules = { strict: true };\n',
 };
 
+test('a live function follows its sources from the next call on, and keeps its last definition when they do not load', async () => {
+  const root = tree(SUMMARIZE);
+  const summarize = loadNatlang(join(root, 'summarize.nl'), root, { live: true });
+  const model = scriptedModel(opening => opening.includes('Shorten text to its first word') ? 'return text.split(" ")[0]' :
+    opening.includes('Shorten text to its last word') ? 'return text.split(" ").at(-1)' :
+    opening.includes('Summarize text.') ? 'const shortened = await shorten(text); return { text: shortened, short: is_short(shortened) }' :
+    opening.includes('Summarize text, then louder.') ? 'const shortened = await shorten(text); return { text: louder(shortened), short: is_short(shortened) }' : null);
+  const runtime = createNatlangRuntime({ model: model.driver });
+  assert.deepEqual(await runtime.run(() => summarize('Hello brave new world')), { text: 'Hello', short: true });
+
+  // An edited child, an edited helper, a new helper and new instructions: the next call sees all of them.
+  writeFileSync(join(root, 'summarize/shorten.nl'), nlFile({ text: 'string' }, 'string', 'Shorten text to its last word.'));
+  writeFileSync(join(root, 'summarize/is_short.ts'), 'export default function is_short(text: string): boolean { return text.length < 3; }\n');
+  writeFileSync(join(root, 'summarize/louder.ts'), 'export default function louder(text: string): string { return text.toUpperCase(); }\n');
+  writeFileSync(join(root, 'summarize.nl'), nlFile({ text: 'string' }, 'Summary', 'Summarize text, then louder. Use shorten, louder and is_short.'));
+  assert.deepEqual(await runtime.run(() => summarize('Hello brave new world')), { text: 'WORLD', short: false });
+  assert.equal(summarize.is_short('ab'), true);
+  assert.equal(await runtime.run(() => summarize.shorten('Alpha beta')), 'beta');
+  assert.equal(summarize.louder('x'), 'X');
+
+  // Sources that do not load: the last definition stays, and the error is reported once.
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = message => warnings.push(String(message));
+  try {
+    writeFileSync(join(root, 'summarize.nl'), '---\nargs: [\n---\nbroken\n');
+    assert.deepEqual(await runtime.run(() => summarize('Hello brave new world')), { text: 'WORLD', short: false });
+    assert.deepEqual(await runtime.run(() => summarize('Hello brave new world')), { text: 'WORLD', short: false });
+  } finally { console.warn = warn; }
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^natlang: summarize keeps its last definition; the changed sources do not load: /);
+});
+
 test('a named function exposes its callable folder as a typed hierarchy in host code and in the agent listing', async () => {
   const root = tree(SUMMARIZE);
   const summarize = loadNatlang(join(root, 'summarize.nl'));

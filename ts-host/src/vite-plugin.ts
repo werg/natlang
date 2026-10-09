@@ -17,8 +17,12 @@ function packageRoot(file: string): string {
   }
 }
 
-/** `root`: the package root for every `.nl` file (default: the nearest package.json above each file). */
-export function natlangVitePlugin(options: { root?: string } = {}) {
+/**
+ * `root`: the package root for every `.nl` file (default: the nearest package.json above each file). `live` (default
+ * true): each function follows its sources while the process runs (loadNatlang's live option), so a long test run
+ * uses edited instructions from the next call on; false loads each function once.
+ */
+export function natlangVitePlugin(options: { root?: string; live?: boolean } = {}) {
   return {
     name: 'natlang-functions',
     enforce: 'pre' as const,
@@ -27,7 +31,8 @@ export function natlangVitePlugin(options: { root?: string } = {}) {
       if (!file.endsWith('.nl')) return null;
       const root = options.root ?? packageRoot(file);
       return `import { loadNatlang } from ${JSON.stringify(runtimeEntry)};\n` +
-        `export default loadNatlang(${JSON.stringify(file)}, ${JSON.stringify(root.endsWith('/') ? root : `${root}/`)});\n`;
+        `export default loadNatlang(${JSON.stringify(file)}, ${JSON.stringify(root.endsWith('/') ? root : `${root}/`)}, ` +
+        `{ live: ${options.live ?? true} });\n`;
     },
   };
 }
