@@ -125,7 +125,7 @@ become dashes, e.g. `neuralese-chat-stream-unavailable`).
 
 | Capability | Meaning | Reference | Fork (native, wasm) |
 | --- | --- | --- | --- |
-| `chat`, `decide`, `score`, `render`, `guidance.check`, `encode`, `write`, `digest`, `template`, `store` | The endpoints and fields of the same names below. | yes | yes |
+| `chat`, `decide`, `score`, `render`, `guidance.check`, `encode`, `write`, `view`, `template`, `store` | The endpoints and fields of the same names below. | yes | yes |
 | `store.owners` | Owner-scoped holds, pins and collection (`x-natlang-owner`). | listed once its store implements holds | yes |
 | `chat.stream` | `"stream": true` on chat completions. | yes | no |
 | `template.value-type`, `template.argument-path` | `neuralese_template.value_type` other than `"string"`, `neuralese_template.argument_path`. | yes | no |
@@ -246,7 +246,7 @@ Each answers 201 with the new block's meta.
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}`. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes` as `neuralese_passes`). 500 `neuralese-write` if no block was written. | both |
 | `POST /v1/neuralese/encode` | Text into a block in one forward pass through the port (supplied-input write, one vector per token, no stop decision): `{"text", "type"?, "context"?}`, where `context` is chat messages without blocks rendered as the write site. Errors: `neuralese-encode`. Producer `{"kind": "text-encode", "text"}`. | both |
 | `POST /v1/neuralese/embed` | A block initialised from the token embeddings of `{"text", "type"?}`. Errors: `neuralese-embed`. | reference only (`embed`); the fork answers 501 `neuralese-embed-unavailable` |
-| `POST /v1/neuralese/digest` | The digest operator (`natlang_neuralese/digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}`. Answers the digest block's meta plus `parts` (1 unless the value exceeds the write site's window and is digested in chunks, then combined) and `window` (default: the model's context less the site's text, the block and a margin; a request `window` can only lower it). `system` is the digest instructions, as text or parts. | both |
+| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`natlang_neuralese/view.py`, pinned by `tests/fixtures/view-site.json`): `{"value", "instructions"?, "system"?, "window"?}`. Every write is the template write of view's body at its site: the system text is the body (`system`, as text or parts with its soft form; default the body's text), the user message gives `instructions` (if any) and the value, and the reply is forced by template readout to `return_result(status="success", value=…)` with the value written as a block (the site offers that one tool). Without `instructions` the view is faithful compression. Answers the view block's meta plus `parts` (1 unless the value exceeds the write site's window and is viewed in chunks, then combined at a combine site that reads the part views) and `window` (default: the model's context less the site's text, the block and a margin; a request `window` can only lower it). | both |
 
 ### Readouts
 

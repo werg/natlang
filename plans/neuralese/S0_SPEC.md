@@ -122,6 +122,7 @@ splitList<E, D>(v: Neuralese<E[], D>): Promise<Neuralese<E, D>[]>;
 read<T, D>(v: Neuralese<T, D>): Promise<T>;
 convert<T, D1, D2>(v: Neuralese<T, D1>, to: D2): Promise<Neuralese<T, D2>>;
 gloss(v: Neuralese<unknown, Dialect>): Promise<string>;
+ask<T, D>(v: Neuralese<T, D>, question: string): Promise<string>;   // = read(map(v, question))
 ```
 
 The learning helpers (`grad`, `valueAndGrad`, `stopGradient`, objectives, optimisers, `save`) are in §9 and are exported from `natlang:learning`.
@@ -134,9 +135,10 @@ The learning helpers (`grad`, `valueAndGrad`, `stopGradient`, objectives, optimi
 - **`split` and `splitList`** are the only way to get soft parts of a structured soft value. They are explicit because each costs a model call; field access stays a compile error.
 - **`read`** is the only way out. It produces a `T`, validated like any call result, and fails with `NatlangCallError` on an invalid readout.
 - **`convert`** moves a value between dialects.
+- **`ask(v, question)`** is the query operator, defined in the library as `read(map(v, question))`: `map` writes the answer to `question` from `v` as a `Neuralese<string>` and `read` reads it out. It has no body of its own; its target is its law (§4.2).
 - **Kleisli composition** needs no combinator. A natural-language function with `Neuralese` parameters and a `Neuralese` result is a Kleisli arrow, and calling such functions in sequence is `flatMap`.
 
-Each combinator except `empty` is a **system natural-language function** whose instructions are a soft body stored in the standard library's own Neuralese file (§5). The operators are therefore trainable like any other function. The library's bodies are the default; a model or program may keep its own tuned bodies as values in its context (per program, promoted to the pool when they help broadly). Tensor registration, the ports, type validation and store access remain runtime primitives under them.
+Each combinator except `empty` and `ask` is a **system natural-language function** whose instructions are a soft body stored in the standard library's own Neuralese file (§5). The operators are therefore trainable like any other function. The library's bodies are the default; a model or program may keep its own tuned bodies as values in its context (per program, promoted to the pool when they help broadly). Tensor registration, the ports, type validation and store access remain runtime primitives under them.
 
 ### 4.2 Laws
 
@@ -150,6 +152,7 @@ The laws hold approximately and are trained to some degree in S5 as consistency 
 | Combine associativity | `combine(combine(a, b), c) ≈ combine(a, combine(b, c))` |
 | Combine identity | `combine(v, empty()) ≈ v` |
 | Split/zip | `split(zip(a, b)) ≈ [a, b]` |
+| Ask | `ask(v, q) ≈ answer(q, read(v))`: answering from the block matches answering from the full text |
 
 "≈" is measured through `read` and through downstream consumers, never as vector equality.
 
@@ -173,7 +176,7 @@ The natlang compiler (`ts-host/src/compiler/`, which already lowers `nl`, `itera
 
 ### 4.4 Purpose
 
-Purpose is not part of the type and not an argument of any combinator. A value is written for a purpose at its write site: the producing function's instructions, its declared result type and its causal context determine what the block encodes. A separate "re-encode this value for purpose X" call is an anti-pattern. If a program needs a different view, it writes one from the exact source with a function whose instructions say what the view is for.
+Purpose is not part of the type and not an argument of any combinator. A value is written for a purpose at its write site: the producing function's instructions, its declared result type and its causal context determine what the block encodes. A separate "re-encode this value for purpose X" call is an anti-pattern. If a program needs a different view, it writes one from the exact source with a function whose instructions say what the view is for: the builtin `view(value, instructions)` (faithful without instructions, purpose-shaped with them; DECISIONS.md 2026-10-09), whose `Neuralese<string>` instance is the template write of its body.
 
 ## 5. File format
 

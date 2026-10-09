@@ -19,7 +19,7 @@ watches the conversation and the workspace and does five kinds of work:
    It also keeps the session's own state: the goal, the hypotheses tried, the dead ends, what the agent believes.
 2. **Researches ahead.** From the goal and the latest turn, it predicts what the agent will need next. It reads those
    files, greps, looks up documentation (local docs, installed packages' types, man pages, and the web where allowed),
-   runs read-only commands and tests in a scratch copy, and digests the results before the agent asks.
+   runs read-only commands and tests in a scratch copy, and has views of the results ready before the agent asks.
 3. **Saves context.** It compresses large tool outputs into a summary plus a handle the agent can expand. It notices
    repeated reads and points to what is already known. It writes compaction summaries from its knowledge base instead
    of from the transcript alone, and it keeps exact text recallable after a cut.
@@ -120,8 +120,15 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
   briefing. The text form stays recorded beside it, for logs and for agents without the port.
 - Knowledge-base entries keep Neuralese encodings keyed by content hash and dialect. They are regenerated when the
   dialect changes, as with any stored value.
-- Compaction summaries can be Neuralese digests: an explicit compression operator (TRAINING_RECIPE.md stage 4),
-  qualified separately.
+- Compaction summaries and large tool outputs can be Neuralese views: the Neuralese instance of the runtime's builtin
+  `view(value, instructions?)` (DECISIONS.md 2026-10-09, "one summarizer family"), with the call's intent as its
+  instructions; an explicit operator stage (TRAINING_RECIPE.md "The view operator stage"), qualified separately.
+- **How `shape.nl` relates to `view`.** `view`'s crisp instance returns a string written from the value; `shape.nl`
+  returns an `OutputShape`: line ranges the host copies verbatim from the exact output, plus a one-sentence gist. That
+  keeps every shown line exact and lets the host clamp the selection to the budget, which a free-text view cannot
+  promise, so `shape.nl` is not rewritten as `view`'s crisp instance; it stays the crisp shaping policy. The Neuralese
+  shaping mode (HARNESS_BENCH.md §5) is `view(output, intent)` at its Neuralese instance, shown with the `recall`
+  handle; the harness bench trains exactly that site (view parts with the agent's intent as instructions).
 - `recall` returns exact text when the agent asks for it. Neuralese is the dense default, text is the fallback.
 
 This depends on the runtime qualification gates of the Neuralese programme. Until a channel is qualified for those

@@ -133,8 +133,9 @@ replace the active map training path.
 5. **Function execution and recurrence:** consume the exact qualified weights for
    soft instructions/arguments, child results and skill use. Keep text replay and
    requalify the channel when backbone deltas change its states. Compression is an
-   explicit task/operator (for example a digest or a summarizing natlang lambda),
-   not a mandatory global curriculum or fixed ratio for ordinary calls.
+   explicit task/operator (the builtin `view(value, instructions?)`, see "The view
+   operator stage" below), not a mandatory global curriculum or fixed ratio for
+   ordinary calls.
 
 The shared runner implements these stages, including certified raw-port checkpoint
 construction and actual serving encode/read/write and gradient replay controls.
@@ -312,12 +313,35 @@ qualifies the actual starting channel against its exact parent; subsequent learn
 weights do not inherit this certificate. This phase has no compression pressure.
 
 
+## The view operator stage
+
+DECISIONS.md 2026-10-09 ("one summarizer family"): the only summarizer is the builtin
+`view(value, instructions?)` (ts-host `builtin/view.nl`), a representation-generic
+function whose `Neuralese<string>` instance is the template write of its body.
+Without instructions it is faithful compression, trained so that `read(view(x))`
+reproduces `x`; with instructions it keeps what their purpose needs. Training and
+serving use one write site (`natlang_neuralese/view.py`): view's body as the system
+text (soft parameter `prompt:view`), the instructions and the value as the user
+message, the reply forced to `return_result(status="success", value="` and the
+write, chunked beyond `--view-window` tokens; the servers' `POST /v1/neuralese/view`
+writes at the same site. The trajectory trainer's `--view written` writes every view
+part (listing values; harness-bench tool outputs with the agent's intent as
+instructions) there each step, trained by the readers' losses (`--distill` from the
+crisp preview). It is a declared operator stage in both students' recipes, admitted
+only after each student's identity, distillation and runtime qualification for the
+exact weights. Gate: reconstruction fidelity per artifact type against compression
+ratio; QA with block vs full text vs none (`ask(block, q)` = `read(map(block, q))`,
+whose law is answering from the block as from the full text); correct vs shuffled
+block; purpose sensitivity; and pi's next-action loss with view blocks vs crisp
+views vs full outputs. Records with `digest` parts (before the rename) are refused
+and converted by `scripts/neuralese_data/digest_to_view.py` into a new corpus.
+
 ## Owner clarification: compression is an operator, not the training goal
 
 2026-10-06: ordinary neuralese natlang lambda calls are not required to compress.
 The current priorities are soft instructions and arguments, typed child-result
-transport/recurrence, skill discovery/use and task execution. Large-input digest
-or summarizing lambda tasks can supply explicit compression examples separately,
+transport/recurrence, skill discovery/use and task execution. Large-input view
+tasks (the builtin `view`) can supply explicit compression examples separately,
 with their own output contract and evaluation. Do not impose a global shortened
 payload ratio or defer ordinary function training until a compression curriculum
 has run. The full-depth residual reference kept one vector per token and no

@@ -91,7 +91,7 @@ In `runtime/iterate.ts`:
 
 ## 3. Model-turn protocol and block endpoints
 
-The protocol both servers serve (content parts, chat-completion extensions, block store, write/encode/embed/digest, decisions, render, learning, adapters, info) is specified in `spec/NEURALESE_PORT.md`, "Wire protocol", including which endpoints only one server serves. Runtime-side notes:
+The protocol both servers serve (content parts, chat-completion extensions, block store, write/encode/embed/view, decisions, render, learning, adapters, info) is specified in `spec/NEURALESE_PORT.md`, "Wire protocol", including which endpoints only one server serves. Runtime-side notes:
 
 - **Tool-call arguments.** LFM2.5 uses Pythonic tool calls in `<|tool_call_start|>[…]<|tool_call_end|>`. A literal inside a string argument (for example `eval(code="const p: Neuralese<Plan> = <block>;")`) is returned as a structured argument: an array of text and Neuralese parts. `chat-completion.ts` reassembles it, and the runtime treats it as source text with an embedded literal.
 - **No fallback.** A transport whose backend lacks a dialect fails with `neuralese-unsupported-backend`. The runtime reads the dialects a server speaks from `GET /v1/neuralese/info`.

@@ -35,7 +35,7 @@ Runtimes:
 | … adapters as `{code, projection}` | yes | 501 | `adapters.projection` |
 | `POST /v1/neuralese/decide` | yes | yes | `decide` |
 | `POST /v1/natlang/score`, `/v1/neuralese/decide_many` | yes, grouped by (adapters, messages, tools) | yes, the same grouping | `score` |
-| `POST /v1/neuralese/encode`, `write`, `digest` | yes | yes | `encode`, `write`, `digest` |
+| `POST /v1/neuralese/encode`, `write`, `view` (was `digest`; each view write a template write of view's body, DECISIONS.md 2026-10-09) | yes | yes | `encode`, `write`, `view` |
 | `POST /v1/neuralese/render`, `guidance/check` | yes | yes | `render`, `guidance.check` |
 | Block store: `PUT/GET /blocks/{id}`, `/meta`, `/pin`, `/unpin`, `POST /collect`, `x-natlang-owner` | yes | yes | `store`, `store.owners` |
 | `POST /v1/neuralese/grad` | yes (order 1 and 2) | 501 | `grad`, `grad.order2` |
@@ -76,7 +76,7 @@ start of the rendered prompt, the shallow/final stop source fixed by the loaded 
 | 21 | Per-item `error` strings in batched scoring differ. | both | accepted (documented in the spec) |
 | 22 | Tool-call parsing: the fork parses Pythonic calls and a complete `<think>…</think>`; the reference also parses `<tool_call>` JSON and a lone `</think>`. | spec "Response fields" | accepted for now (spec row); port to the fork if a backbone emits JSON calls |
 | 23 | Payload noise generators differ at `τ > 0`. | spec | inherent (different RNGs); documented |
-| 24 | Concurrency: the reference serializes grad/decide/score/optim/encode under one lock and batches chat, write and digest through the engine; the fork serializes everything under one mutex. | `http.py` `grad_lock`; fork `mutex` | same results, different throughput; documented |
+| 24 | Concurrency: the reference serializes grad/decide/score/optim/encode under one lock and batches chat, write and view through the engine; the fork serializes everything under one mutex. | `http.py` `grad_lock`; fork `mutex` | same results, different throughput; documented |
 | 25 | Owner-scoped store: the fork has it (915afccb7); the reference's Python side is uncommitted work in another session. | `git status` in the shared checkout | in progress elsewhere; the reference lists `store.owners` automatically once its store implements holds |
 
 ## Conformance

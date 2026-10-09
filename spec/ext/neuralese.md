@@ -68,6 +68,17 @@ the dialect its constraint names (`DefaultDialect`: the reader's). Call records
 keep the definition and the representation it ran at; a host runs a call at a
 given representation with `invokeAt(fn, args, { kind: "crisp" | "neuralese" })`.
 
+**View.** The builtin `view(value: string, instructions?: string): R` (with
+`R: string | Neuralese<string>`) is the one summarizer: without instructions a
+faithful compression (everything needed to reproduce the value; trained so that
+`read(view(x))` reproduces `x`), with instructions what their purpose needs.
+Its `string` instance is the crisp view; its `Neuralese<string>` instance is
+the template write of the same body, which a Neuralese server runs at its
+declared write site (`POST /v1/neuralese/view`, chunking values longer than
+the site's window). Where a call's opening listing would cut off an argument,
+a runtime with a Neuralese server lists that argument's view instead, written
+for the receiving call, and the variable keeps the whole value.
+
 **Literal.** At the model-token level a soft value is written
 `<|neuralese|>⟦z1⟧…⟦zL⟧<|/neuralese|>`: two control tokens around the vectors and
 nothing else. Its type comes from the contextual type (an annotation, a
@@ -102,7 +113,9 @@ captures in the opening scope. Text functions may take and return soft values;
 soft arguments appear as literals in the opening declarations.
 
 **Combinators.** `natlang:neuralese` exports `map`, `zip`, `ap`, `combine`,
-`empty`, `split`, `splitList`, `read`, `convert`, and `gloss`. `read` is the only
+`empty`, `split`, `splitList`, `read`, `convert`, `gloss`, and the query operator
+`ask(v, question)`, defined as `read(map(v, question))`: the answer to `question`
+from what `v` holds, a string. `read` is the only
 way from a soft value to a `T`; it is validated like a call result and fails with
 `NatlangCallError`. Implicit string conversions use this same `read` body and
 require the task to provide a loaded standard library; a text provider may use an
@@ -110,7 +123,7 @@ explicit, digest checked implementation of the declared read source, recorded as
 non-learned provenance. Without a configured read body they fail with
 the structured `neuralese-readout-unavailable` capability error. The runtime
 never reads vector payloads as text. `split` and `splitList` are the only way to soft parts of a
-structured value. Each combinator except `empty` is a system natural-language
+structured value. Each combinator except `empty` and `ask` is a system natural-language
 function with a soft body, trainable like any other; a program may bind its own
 tuned bodies in its context. None takes a purpose argument: a value encodes what
 its write site (the producing function's instructions, declared result, and
@@ -118,7 +131,8 @@ context) wrote it for.
 
 **Laws and rewrites.** The combinators approximately satisfy map identity, map
 fusion, read/map commutation, combine associativity and identity, and split of
-zip. The compiler may rewrite programs with these laws when a rule is enabled
+zip; `ask` approximately satisfies `ask(v, q) ≈ q` answered from `read(v)` (answering
+from the block matches answering from the full text). The compiler may rewrite programs with these laws when a rule is enabled
 for the current model and dialect version
 ([NEURALESE_REWRITES.md](../NEURALESE_REWRITES.md)); every applied rewrite is
 traced.

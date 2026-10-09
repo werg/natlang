@@ -107,7 +107,8 @@ Each operator body is initialised from a text description of the operator (token
 | `convert` | Consumers in the target dialect; trained only when a second dialect exists. |
 | `compose` | Map fusion: the composed function must agree with sequential application. |
 | `gloss` | Human-readable diagnostic quality; never a training target for other operators. |
-| `digest` | Consumers of the opening listing it appears in (the receiving call's target turns), with a length cost on the stop head; the teacher sees the crisp listing (decision 43). |
+| `ask` | Defined as `read(map(v, q))`, no body of its own: its law, answering from the block as from the full text, is the target of `map` and `read` on questions. |
+| `view` | The builtin `view(value, instructions?)` at its Neuralese instance (was `digest`; DECISIONS.md 2026-10-09): consumers of the opening listing or tool result it appears in (the receiving call's or the agent's target turns), with a length cost on the stop head; the teacher sees the crisp preview. Faithful views (no instructions) also train on reconstruction (`read(view(x))` reproduces `x`). |
 
 Operators bind their own skills where useful (S0 §4.1), and those skills train with them.
 

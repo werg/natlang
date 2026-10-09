@@ -48,12 +48,14 @@ Inline `nl` calls that capture by name mention are rewritten to `nl.with({ … }
 
 Version 3, 2026-10-05 (decisions 40–42; S5 §2.2; v3 adds child results). `ts-host/scripts/neuralese-convert-trajectories.mjs`
 (`src/compiler/neuralese-conversion.ts`) converts a site when it is reused, handed from one agent to another, or large
-enough that a digest saves context; values read once by the call that produced them stay text.
+enough that a view saves context; values read once by the call that produced them stay text.
 
 - **Parts.** A converted message's `content` is a list of parts: `{ "type": "text", "text" }`,
   `{ "type": "soft", "name" }` (a trainable soft parameter), `{ "type": "read", "name" }` (a block written elsewhere
-  in the trajectory) and `{ "type": "digest", "name", "source", "preview" }` (a digest the digest operator writes from
-  `source`, the full value; `preview` is the listing's crisp cut-off text).
+  in the trajectory) and `{ "type": "view", "name", "source", "preview" }` (a view the builtin `view`'s Neuralese
+  instance writes from `source`, the full value; `preview` is the listing's crisp cut-off text). Records before
+  conversion version 15 (harness-bench: `natlang.harness-bench-conversion/2`) named this part `digest`; trainers refuse
+  it, and `scripts/neuralese_data/digest_to_view.py` converts such records into a new corpus.
 - **Soft parameters**, initialised by `encode` (one forward pass through the port, no summarising call):
   `prompt:<piece>` for the runtime's prompt pieces (`src/native/system-prompts.ts`); `prompt:system@<sha12>` for
   system text of an older runtime; `guidance@<sha12>` for program guidance; `instructions@<sha12>` for instructions
@@ -65,11 +67,14 @@ enough that a digest saves context; values read once by the call that produced t
   block there, `source` (the crisp note) is the teacher's view. The pinned note message becomes
   `[soft prompt:handover/open, read handover:<sha12> (with its `source`, since the producing call may be outside
   the record), soft prompt:handover/close]`.
-- **Digests.** In the opening listing (`scope_0`), a value the runtime cut off becomes a digest site when the record
+- **Views.** In the opening listing (`scope_0`), a value the runtime cut off becomes a view site when the record
   holds the full value (the root call's `task.program_ir.semantics.inputs`); the part also names the `holder` variable
-  and its `value_type`. Trainers write it at the operator's write site (`natlang_neuralese/digest.py`, mirroring
-  `ts-host/src/neuralese/digest.ts`, both pinned by `tests/fixtures/digest-site.json`) and list it as the runtime does:
-  the block, then `  // digest of the value; <holder> holds all of it`. The `prompt:digest` piece is in the pieces file.
+  and its `value_type`, and may carry `instructions` (what the view is for, e.g. an agent's intent at a tool call) and
+  `note`. Trainers write it as the template write of view's body at its site (`natlang_neuralese/view.py`, the same
+  site the servers' `/v1/neuralese/view` writes at; `ts-host/src/neuralese/view.ts` calls it; pinned by
+  `tests/fixtures/view-site.json`), written for the receiving call (`listing_instructions`) unless the part names its
+  instructions, and list it as the runtime does: the block, then `  // view of the value; <holder> holds all of it`.
+  The `prompt:view` piece (view's body) is in the pieces file.
 - **Child results** (calling a function, retrieving its value, splicing it into the caller's trajectory). A first
   pass over the corpus collects, per collected run (`source_ref.trajectory_id`), the values child `nl` calls return
   (`return_result` with status success in a child call's final record; text or structured, as text) and the eval
@@ -81,7 +86,7 @@ enough that a digest saves context; values read once by the call that produced t
 - **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
   tool outputs and instructions (`single-use`); child results whose producer is not in the corpus
   (`producer-missing`), whose returned values are all short (`crisp-value`) or not printed as returned
-  (`value-not-printed`); digests without the
+  (`value-not-printed`); views without the
   full value (`full-value-unavailable`), `nl` literals (`later-curriculum-step`), turn-count notices (`dynamic-text`).
 
 ## Literal rendering
