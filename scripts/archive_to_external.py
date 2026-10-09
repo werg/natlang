@@ -316,6 +316,16 @@ def main(argv=None):
                    help='delete package/kernel caches under ~/.cache that rebuild themselves ' + str(REGENERABLE_CACHES))
     p.add_argument('--until-done', action='store_true', help='repeat --budget-gb batches until nothing is movable')
     a = p.parse_args(argv)
+    if a.apply:  # one applying run at a time (the hourly timer and a manual cleanout must not copy the same file)
+        import fcntl
+        lock_path = HOME / '.local' / 'state' / 'natlang' / 'archive-to-external.lock'
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = open(lock_path, 'w')
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(json.dumps({'skipped': 'another archive run is applying'}))
+            return 0
     roots = tuple(a.root) if a.root else ROOTS
     excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes()
     held = open_paths()
