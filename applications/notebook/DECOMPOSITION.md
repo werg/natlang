@@ -1,6 +1,6 @@
 # Notebook: decomposition, part by part
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is restructured until the owner has reviewed it.
+Status: implemented 2026-10-09 on the owner's instruction to finish everything; review after the fact (plans/OWNER_REVIEW.md). "As built" at the end records where the build settles this draft.
 
 `runNotebook` (`index.ts:172-180`) walks the goal's dependency closure one ready cell at a time, then explains the
 result. The workspace (cells, revisions, SQLite and JavaScript execution, invalidation) is crisp and correct. Three
@@ -135,11 +135,29 @@ type CellEvidence = { id, revision, status, sample, has_null: boolean, empty: bo
 5. **`Untrusted<string>`** rendering of samples and notes.
 6. **Drop `output_sha256`** from the model-visible `CellResult`.
 
-## Questions for the owner
+## Questions for the owner, as resolved in the build
 
-1. Keep the natural-language `nextCell` at all? If shadow runs show full agreement with the lowest-id order, the
-   function can be retired and the model call disappears. It is kept pluggable until then.
-2. The 2 s JavaScript cell timeout (`index.ts:23`) is a sandbox safety bound, not a termination argument. Keep it as
-   a named, settable default, or remove it until a problem shows up (the "no premature limits" rule)?
-3. Should natural language also write cells (propose a SQL or JavaScript cell for a request that no existing cell
-   answers)? That is new behavior, and this draft does not include it.
+1. **`nextCell` stays pluggable, crisp by default.** `NotebookOptions.nextCellMode` (`crisp` | `nl` | `shadow`, default
+   `crisp`; `--next-cell MODE` in the console). Shadow serves the crisp choice and traces `pluggable_shadow` events named
+   `notebook.nextCell`, so agreement can be read before the model function is retired. The default costs no model call per
+   cell.
+2. **The 2 s JavaScript timeout stays as a named, settable default.** A `vm` cell with an endless loop would otherwise hang the
+   host, so this is a sandbox bound, not a limit on the work: `CELL_TIMEOUT_MS`, overridable with the `cellTimeoutMs`
+   workspace option.
+3. **Natural language does not write cells.** New behavior, not included.
+
+## As built
+
+- Files: `choose_goal.nl` (now with `finals`), `nextCell.nl`, `answerFromCells.nl`; `choose_cell.nl` and `explain.nl` are
+  gone. The note read is the shared runtime built-in `readNote`.
+- The host computes `CellEvidence` (`has_null`, `empty`, `truncated`; the output hash is not part of it) and `limits` (failed
+  or stale cells, blocked or invalid runs) and passes them to `answerFromCells`. `checkCitations` verifies the `id@revision`
+  citations against the cells that ran, with one retry carrying the problem; an answer still unchecked leaves the problem in
+  `NotebookRun.detail`.
+- `chooseGoal` and the nl `nextCell` answers are checked against the ids they must come from (`cells`, `ready`) and return once
+  with the problem. These checks are exact TypeScript over host context; value-only `Is<...>` types cannot see `cells` or
+  `ready`.
+- The loop ends by `withMeasure(remainingCells)`: the number of required cells not yet run, 0 once the run has stopped, so the
+  hard step count is gone.
+- Cell samples and notes: the note is `Untrusted<string>`, and so is each sample in the evidence. The question is the user's
+  own request and stays a plain string.
