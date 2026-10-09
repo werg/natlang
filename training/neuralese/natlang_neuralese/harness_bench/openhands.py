@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator
 
 DIALECT = 'openhands-v0.54'
-_WORKSPACE = re.compile(r'^/workspace/[^/]+/?')
 _ISSUE = re.compile(r'<issue_description>\s*(.*?)\s*</issue_description>', re.S)
 _UPLOADED = re.compile(r'<uploaded_files>\s*(\S+)\s*</uploaded_files>')
 
@@ -40,11 +39,14 @@ class Normalized:
     messages: list[dict[str, Any]]
     lossy: list[dict[str, Any]] = field(default_factory=list)
     patch: str = ''
+    # Calls that came from a `view` without a range: a read of a file or a listing of a directory, which only the
+    # workspace can tell apart (replay decides; the mapping guesses from the name).
+    views: list[str] = field(default_factory=list)
 
     def record(self) -> dict[str, Any]:
         return {'id': self.id, 'instance_id': self.instance_id, 'repo': self.repo, 'resolved': self.resolved,
                 'dialect': DIALECT, 'mapping': self.mapping, 'goal': self.goal, 'cwd': self.cwd,
-                'messages': self.messages, 'lossy': self.lossy, 'patch': self.patch}
+                'messages': self.messages, 'lossy': self.lossy, 'patch': self.patch, 'views': self.views}
 
 
 def _relative(path: Any, cwd: str) -> Any:
@@ -53,7 +55,8 @@ def _relative(path: Any, cwd: str) -> Any:
         return path
     if cwd and (path == cwd or path.startswith(cwd.rstrip('/') + '/')):
         return path[len(cwd.rstrip('/')) + 1:] or '.'
-    return _WORKSPACE.sub('', path) or '.' if path.startswith('/workspace/') else path
+    # Outside the task's workspace (a sibling directory the environment provided): the path stays as it is.
+    return path
 
 
 def _quote(path: str) -> str:
@@ -128,8 +131,21 @@ def _text(content: Any) -> str:
     return '' if content is None else str(content)
 
 
-def normalize(row: dict[str, Any], mapping: str = 'pi') -> Normalized:
-    """One dataset row as a pi transcript."""
+def _renamed(value: Any, old: str, new: str) -> Any:
+    """`value` with the directory `old` renamed to `new` in every string (paths in arguments, commands and output)."""
+    if isinstance(value, str):
+        return value.replace(old, new)
+    if isinstance(value, list):
+        return [_renamed(item, old, new) for item in value]
+    if isinstance(value, dict):
+        return {key: _renamed(item, old, new) for key, item in value.items()}
+    return value
+
+
+def normalize(row: dict[str, Any], mapping: str = 'pi', workspace: str | None = None) -> Normalized:
+    """One dataset row as a pi transcript. With `workspace`, the task's own workspace directory (OpenHands'
+    `/workspace/<repo>__<version>`) is renamed to it throughout, so every trajectory works in the same directory as the
+    harness's system prompt names it; a rename is all it is, so commands and outputs stay consistent."""
     if mapping not in ('pi', 'native'):
         raise ValueError(f'unknown mapping {mapping}')
     trajectory = row['trajectory']
@@ -143,6 +159,7 @@ def normalize(row: dict[str, Any], mapping: str = 'pi') -> Normalized:
     # Tool calls the transcript dropped (think), whose results are dropped too.
     dropped: set[str] = set()
     names: dict[str, str] = {}
+    views: list[str] = []
     goal = ''
     for index, message in enumerate(trajectory):
         role = message.get('role')
@@ -173,7 +190,10 @@ def normalize(row: dict[str, Any], mapping: str = 'pi') -> Normalized:
                     dropped.add(call['id'])
                     continue
                 if mapping == 'pi':
+                    raw = args
                     name, args, reason = _pi_call(name, args, cwd)
+                    if raw.get('command') == 'view' and not isinstance(raw.get('view_range'), list):
+                        views.append(call['id'])
                     if reason:
                         lossy.append({'message': len(messages), 'step': index, 'reason': reason})
                 elif 'path' in args:
@@ -193,9 +213,11 @@ def normalize(row: dict[str, Any], mapping: str = 'pi') -> Normalized:
             messages.append({'role': 'toolResult', 'toolCallId': call_id, 'toolName': names.get(call_id, message.get('name') or ''),
                              'content': [{'type': 'text', 'text': text}],
                              'isError': text.startswith('ERROR:') or text.startswith('Error')})
+    if workspace and cwd:
+        messages, lossy, goal, cwd = _renamed(messages, cwd, workspace), lossy, _renamed(goal, cwd, workspace), workspace
     return Normalized(id=str(row.get('trajectory_id') or row.get('instance_id')), instance_id=str(row.get('instance_id', '')),
                       repo=str(row.get('repo', '')), resolved=resolved(row.get('resolved')), mapping=mapping, goal=goal,
-                      cwd=cwd, messages=messages, lossy=lossy, patch=str(row.get('model_patch') or ''))
+                      cwd=cwd, messages=messages, lossy=lossy, patch=str(row.get('model_patch') or ''), views=views)
 
 
 def rows(path: str, columns: Iterable[str] | None = None) -> Iterator[dict[str, Any]]:

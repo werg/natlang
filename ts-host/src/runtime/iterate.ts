@@ -74,9 +74,9 @@ export class IterationStepError extends IterationFailure {
 }
 /** A caller-supplied `withLimit` bound was reached. */
 export class IterationLimitError extends IterationFailure {
-  /** `iteration-unbounded` when a TypeScript predicate (or review-off loop) has neither measure nor step limit. */
-  readonly code?: 'iteration-unbounded';
-  constructor(message: string, lastState: unknown, trajectory: IterationTrajectory<unknown>, code?: 'iteration-unbounded') {
+  /** `iteration-unbounded` when a TypeScript predicate (or review-off loop) has neither measure nor step limit; `iteration-measure-exhausted` when the measure reached 0 with the stopping condition still false. */
+  readonly code?: 'iteration-unbounded' | 'iteration-measure-exhausted';
+  constructor(message: string, lastState: unknown, trajectory: IterationTrajectory<unknown>, code?: 'iteration-unbounded' | 'iteration-measure-exhausted') {
     super(code ? `${code}: ${message}` : message, lastState, trajectory); this.name = 'IterationLimitError';
     if (code) this.code = code;
   }
@@ -337,7 +337,9 @@ export class Iteration<T> {
         task.checkOpen();
         frame.signal?.throwIfAborted();
         if (remaining === 0)
-          throw new IterationLimitError('iteration exhausted its remaining work measure', state, trajectory as never);
+          throw new IterationLimitError('the remaining-work measure reached 0 while the stopping condition is still false; ' +
+            'let the measure count the steps still needed, so that it is 0 only where `until` is true', state, trajectory as never,
+            'iteration-measure-exhausted');
         if (this.limit.maxSteps !== undefined && steps.length >= this.limit.maxSteps)
           throw new IterationLimitError(`iteration reached its limit of ${this.limit.maxSteps} steps`, state, trajectory as never);
         if (this.limit.deadlineMs !== undefined && Date.now() - started >= this.limit.deadlineMs)
@@ -347,11 +349,9 @@ export class Iteration<T> {
         try { next = await runInFrame(frame, () => this.step(state, ...this.fixed)); }
         catch (error) { throw new IterationStepError(`step ${steps.length + 1} failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error); }
         const nextRemaining = measure(next);
-        if (remaining !== undefined && nextRemaining! >= remaining)
-          throw new IterationDivergedError('remaining work measure did not decrease', state, trajectory as never);
-        remaining = nextRemaining;
         const elapsed = Date.now() - before;
         activeMs += elapsed;
+        const previous = state;
         state = next;
         states.push(state);
         const hash = stableHash(state);
@@ -360,6 +360,14 @@ export class Iteration<T> {
         steps.push({ iteration, callId: task.traces.at(-1)?.callId ?? '', elapsedMs: elapsed, stateHash: hash });
         await emit({ kind: 'step', iteration, state });
         if (await check()) { await emit({ kind: 'done', iteration, state }); return state; }
+        // Every step that continues the loop must lower the measure; the step that satisfies `until` ends it and need not.
+        if (remaining !== undefined && nextRemaining! >= remaining) {
+          // The failing step is not kept: the error reports the last state that did lower the measure.
+          states.pop(); steps.pop(); state = previous;
+          throw new IterationDivergedError(`the remaining-work measure went from ${remaining} to ${nextRemaining} on a step that did not finish; ` +
+            'let each continuing step lower it', state, trajectory as never);
+        }
+        remaining = nextRemaining;
         if (judge !== 'off' && reviewDue(stats, iteration, activeMs, lastReviewAt)) {
           lastReviewAt = iteration; reviews++;
           const verdict = await runInFrame(frame, () => judge(trajectory, { stepName: stepMeta?.definition.name ?? (this.step.name || 'step'),

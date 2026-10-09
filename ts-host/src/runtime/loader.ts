@@ -12,7 +12,7 @@ import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import { parseType, TypeEnv } from '../native/types.js';
 import { finiteValues } from '../native/decision.js';
-import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
+import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
 
@@ -163,9 +163,8 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
 }
 
 function checkName(path: string, name: string): void {
-  if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is not a valid callable name`);
-  if (RESERVED_CALLABLE_PROPERTIES.has(name))
-    throw new NatlangSourceError(path, `${JSON.stringify(name)} collides with a built-in function property; rename it`);
+  if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, invalidNameMessage(name));
+  if (RESERVED_CALLABLE_PROPERTIES.has(name)) throw new NatlangSourceError(path, reservedNameMessage(name));
 }
 
 function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>): void {
@@ -223,8 +222,20 @@ function packageRoot(dir: string, files: SourceFiles): string {
   }
 }
 
-/** Items being attached through `uses`, by path: a function cannot use itself or one of its users. */
-const ATTACHING = new Set<string>();
+/** Items being attached through `uses`, outermost first: a function cannot use itself or one of its users. */
+const ATTACHING: string[] = [];
+/** Functions of callable folders whose load is still running, by file path: a `uses` naming one shares that record. */
+const LOADING = new Map<string, NatlangRecord>();
+/** The `uses` edges between records of folders being loaded, by file path, to find a cycle among siblings. */
+const LOADING_EDGES = new Map<string, Set<string>>();
+const reaches = (from: string, to: string, seen = new Set<string>()): boolean => {
+  if (from === to) return true;
+  if (seen.has(from)) return false;
+  seen.add(from);
+  return [...LOADING_EDGES.get(from) ?? []].some(next => reaches(next, to, seen));
+};
+const cycleMessage = (item: string, path: string[]) =>
+  `uses ${item}, which leads back to this function (${path.join(' -> ')}); remove one of these uses so that a function cannot reach itself`;
 
 /**
  * Add the items `record.uses` names to its codebase under their base names: `harness/cut` is `<root>/harness/cut.nl`,
@@ -240,8 +251,18 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
       throw new NatlangSourceError(path, `uses ${item}, but its folder already has an item named ${name}; rename one of them`);
     const target = files.isFile(`${base}.nl`) ? `${base}.nl` : files.isFile(`${base}.ts`) ? `${base}.ts` : undefined;
     if (!target) throw new NatlangSourceError(path, `uses ${item}, but the package has no ${item}.nl or ${item}.ts`);
-    if (ATTACHING.has(target)) throw new NatlangSourceError(path, `uses ${item}, which uses this function in turn; a function cannot reach itself`);
-    ATTACHING.add(target);
+    const base0 = (file: string) => files.relative?.(file) ?? file;
+    if (ATTACHING.includes(target) || target === path)
+      throw new NatlangSourceError(path, cycleMessage(item, [...ATTACHING.slice(Math.max(0, ATTACHING.indexOf(target))), target].map(base0)));
+    // A sibling or relative in a folder this load is still reading is that very record, not a second copy of its owner.
+    const live = LOADING.get(target);
+    if (live) {
+      if (reaches(target, path)) throw new NatlangSourceError(path, cycleMessage(item, [path, target, path].map(base0)));
+      LOADING_EDGES.set(path, (LOADING_EDGES.get(path) ?? new Set()).add(target));
+      record.codebase[name] = live;
+      continue;
+    }
+    ATTACHING.push(target);
     try {
       if (target.endsWith('.nl')) record.codebase[name] = loadNamedFunction(target, files);
       else {
@@ -250,7 +271,7 @@ function attachUses(record: NatlangRecord, path: string, files: SourceFiles): vo
         module.codebase = loadCallableFolder(files.join(dir, name), files, module.types);
         record.codebase[name] = module;
       }
-    } finally { ATTACHING.delete(target); }
+    } finally { ATTACHING.pop(); }
   }
 }
 
@@ -422,10 +443,13 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
   const types = { ...inherited, ...(files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {}) };
   const entries = files.list(dir).filter(name => !name.startsWith('.')).sort();
   const items: Record<string, ItemRecord> = {};
+  const mine: string[] = [];
   const add = (name: string, record: ItemRecord, path: string) => {
     if (Object.hasOwn(items, name)) throw new NatlangSourceError(path, `two items in ${dir} are named ${JSON.stringify(name)}`);
     items[name] = record;
+    if (record.kind === 'natlang' && files !== PATH_ONLY) { LOADING.set(path, record); mine.push(path); }
   };
+  try {
   for (const entry of entries) {
     const path = files.join(dir, entry);
     if (!files.isFile(path) || !isSource(entry) || entry.endsWith('.d.ts') || entry.endsWith('.d.nl.ts')) continue;
@@ -453,6 +477,7 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
     if (item.kind === 'natlang' && item.uses) attachUses(item, files.join(dir, `${name}.nl`), files);
   if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
+  } finally { for (const path of mine) { LOADING.delete(path); LOADING_EDGES.delete(path); } }
 }
 
 /**

@@ -9,6 +9,7 @@ import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
 import { TypeEnv, containsRefinement, parseType, type Type } from '../native/types.js';
+import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
@@ -208,7 +209,11 @@ function checkedServices(task: Frame['task'], frame: Frame, services: Readonly<R
     try { types[name] = parseType(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
   }
   const checker = task.refinementChecker(), judges = task.refinementJudges(model, frame);
+  const registry = scopedUntrusted(task);
   return checkServiceResults(services as Record<string, unknown>, types, async (value, type, label) => {
+    // Outside text enters here: its source is the service method, and the renderer shows it as data from then on.
+    if (containsUntrusted(type, env)) registry.markTyped(value, type, env, label);
+    if (!containsRefinement(type, env)) return;
     const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit }, label);
     if (failures.length) throw failureError(failures[0]!);
   }) as Readonly<Record<string, object>>;

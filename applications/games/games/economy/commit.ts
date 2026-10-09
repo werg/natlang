@@ -11,7 +11,7 @@ import rules from './validate/rules.js';
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export default function commit(state: EconomyState, effects: EconomyEffects): Committed {
+export default async function commit(state: EconomyState, effects: EconomyEffects): Promise<Committed> {
   const refuse = (problem: string): Committed => ({ ok: false, state, events: [], problem });
   const { submissions, settlement } = effects;
   const ids = state.merchants.map(row => row.id);
@@ -22,7 +22,7 @@ export default function commit(state: EconomyState, effects: EconomyEffects): Co
     const verdict = rules(ids, submission);
     if (!verdict.ok) return refuse(`${submission.actor}: ${verdict.reason}`);
   }
-  const expected = order(state.seed, state.tick, actors);
+  const expected = await order(state.seed, state.tick, actors);
   if (!same(effects.order, expected) || !same(submissions.map(row => row.actor), expected))
     return refuse('the intents settle in the seeded order of this seed and tick');
   if (!same(settlement.outcomes.map(row => row.actor), expected)) return refuse('there is one outcome per intent, in the seeded order');

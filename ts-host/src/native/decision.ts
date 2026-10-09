@@ -21,7 +21,7 @@ export function finiteValues(type: Type, env: TypeEnv): DecisionValue[] | null {
     if (depth > 32) return false;
     const resolved = item.kind === 'name' ? env.resolve(item) : item;
     switch (resolved.kind) {
-      case 'refined': return visit(resolved.base, depth + 1);
+      case 'refined': case 'untrusted': return visit(resolved.base, depth + 1);
       case 'lit': out.push(resolved.value); return true;
       case 'union': return resolved.members.every(member => visit(member, depth + 1));
       case 'prim':

@@ -19,9 +19,12 @@ test('reference child selection follows the current scoped FileHandle, not a car
     { role: 'tool', tool_call_id: 'scope_0', content: [{ type: 'text', text:
       'source: FileHandle = folder.file("pass-02.md")\npriorNotes contains pass-01.md from an earlier step.' }] },
   ];
-  const response = await referenceDriver(record)({ messages: context });
-  assert.equal(response.calls[0][1].path, 'pass-02.md');
-  assert.equal(response.calls[1][1].value, 'current');
+  // A child's `calls` play one per turn, so the same driver answers the opening and then the next turn.
+  const driver = referenceDriver(record);
+  const first = await driver({ messages: context });
+  assert.equal(first.calls[0][1].path, 'pass-02.md');
+  const second = await driver({ messages: context });
+  assert.equal(second.calls[0][1].value, 'current');
 
   record.curriculum.reference.children.push(child('pass-02.md', 'conflict'));
   const ambiguous = await referenceDriver(record)({ messages: context });

@@ -171,23 +171,14 @@ written in the code, which carries them as doc comments and crisp checks; each i
 
 ## Limitations met while porting
 
-- **Callable-folder TypeScript cannot import node modules**, so the SHA-256 of the seeded order is written out in
-  `games/economy/order.ts` (about 40 lines, checked against `node:crypto` in the tests). A `random` service would
-  replace it.
-- **`natlang check` does not apply the finite-iteration policy to callable-folder TypeScript**: `for (... of
-  array.entries())` passed `check` and was rejected only when the turn ran (ts-host/src/native/runtime.ts, the eval
-  policy message "iterates an array, string, Map or Set"). The commits use counted loops.
-- **Local type inference from an initializer can pick the wrong type.** `const picks = await Promise.all(ids.map(async
-  id => ({ actor: id, intent: await choose(...) })))` was given the type `TradeIntent[]` (the callee's return) and the
-  binding was rejected with `type-mismatch`; an annotation (`const picks: Submission[]`) fixes it
-  (ts-host/src/native/runtime.ts:1982, `scopeInitializerType`). The stage instructions name their data types, but a
-  small model that does not annotate hits this.
-- **Types: no intersections or index signatures** in `types.ts` (`A & B` and `{ [k: string]: unknown }` fail
-  `callable-scope` parsing), so `TurnReport` repeats the fields of `Turn` and `GameEvent` is `Record<string, unknown>`.
+- **Callable-folder TypeScript imports no node modules**, but WebCrypto is a standard global there: the SHA-256 of the
+  seeded order is `crypto.subtle.digest` in `games/economy/order.ts` (so `order` and `commit` are async). A `random`
+  service would replace it.
 - **Names that collide with function properties** (`apply`) are rejected in callable folders; the ledger uses `post`.
 - **A helper two items need** (`economy/ledger.ts`) is both a child of `economy` (so `economy` sees it as a callable)
   and reached by `settle/policy` through `uses`. It cannot be hidden from the economy's eval scope.
 - **No refinement types yet**, so all constraints in "Refinements" are doc comments plus the commit checks.
-- **No shadow comparison** (NL against crisp on the same input, disagreements recorded) between the two
-  implementations of a pluggable part; plans/REFINEMENT_TYPES.md describes it for refinements and it would apply
-  here. The tests compare them on fixed scenarios.
+- **Shadow comparison** of the two implementations of a pluggable part is `pluggable(..., 'shadow')` from
+  `@natlang/node`: set `validate`, `settle` or `resolve` to `'shadow'` and each call runs both, serves the
+  natural-language result and records a `pluggable_shadow` event with `agree`. `remember` and `narrate` have no
+  comparable crisp result (the crisp side is a degraded form), so they stay two-valued.

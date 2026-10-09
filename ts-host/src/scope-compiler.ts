@@ -272,6 +272,9 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
     if (name === 'Is' && args.length === 2 && ts.isLiteralTypeNode(args[1]!) && ts.isStringLiteral(args[1]!.literal)) {
       const base = portableAnnotation(args[0]!, file); return base ? `Is<${base}, ${args[1]!.literal.getText(file)}>` : undefined;
     }
+    if (name === 'Untrusted' && args.length === 1) {
+      const base = portableAnnotation(args[0]!, file); return base ? `Untrusted<${base}>` : undefined;
+    }
     if (name === 'Record' && args.length === 2 && args[0]!.kind === ts.SyntaxKind.StringKeyword) {
       const value = portableAnnotation(args[1]!, file); return value ? `Record<string, ${value}>` : undefined;
     }
@@ -701,9 +704,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     {
       const binding = bindings.find(item => item.name === name)!;
       // An input redeclared is usually test data about to replace the caller's real values; say whose they are.
+      const callable = helperNames.includes(name) || serviceNames.includes(name);
       const whose = options.inputBindings?.includes(name) ? `${name} is this call's input and already holds the caller's value` :
-        `${name} is already defined in this scope`;
-      diagnostics.push({ code: 'invalid-binding', message: `${whose}; use it directly instead of declaring it again.`,
+        callable ? `${name} is already a function in this scope` : `${name} is already defined in this scope`;
+      // A function's name stays the function's: its result goes in a variable of another name (`plan` -> `planResult`).
+      const fix = callable ? `call ${name}(...) directly and keep its result in a variable with another name, such as ${name}Result` :
+        'use it directly instead of declaring it again';
+      diagnostics.push({ code: 'invalid-binding', message: `${whose}; ${fix}.`,
         ...rawSpan(binding.start, binding.end) });
     }
 

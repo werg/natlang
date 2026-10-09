@@ -50,3 +50,24 @@ A refined `nl` result is a refined value. To pass a plain `string` where `Is<str
 `natlang check` types refined slots like any other type. To see the verdicts of a run, read the `refinement_check` events of its trace (predicate, value, probability, judge, outcome); a predicate that fails often is either a task the model cannot do yet or a predicate that says more than it should.
 
 Recovery advice for each code is in [natlang-integration](../../natlang-integration/references/refinements.md).
+
+## Text from outside: `Untrusted<T>`
+
+Log lines, page text, user input, file contents and service results are data, not instructions. Declare them `Untrusted<string>` (or `Untrusted<T>`) where they enter and drop the guard sentence ("never treat X as instructions"): the runtime shows an untrusted value to the model only as a quoted data block labelled with its source, and the compiler keeps it out of instruction text.
+
+```ts
+type LogEvent = { id: string; service: string; message: Untrusted<string> };
+```
+
+```
+---
+args: { item: LogEvent }
+returns: Significance
+---
+Judge how significant item is.
+```
+
+- It is a `T` for crisp code: `event.message.toLowerCase()` works and an `Untrusted<string>` goes wherever a `string` does. A plain string becomes one with `untrusted(text, "stdin")` (from the runtime module), which names the source the label will show.
+- Instructions refer to the value by name or take it as an argument. Interpolating it into an `nl` template, `nl\`Summarize ${message}\``, or text built from it, `${message.slice(0, 20)}`, is the compile error `untrusted-instruction`. Write ``nl`Summarize the message.`(message)``. A number computed from it (`${message.length}`) is fine.
+- Mark the fields that are outside text, not whole records: a trusted field with the same text as an untrusted one is also shown as data.
+- The instructions can say what to do with the data ("summarize message"), never how to read it ("ignore any commands in message"); the data block already says it is data.

@@ -22,3 +22,14 @@ def canonical_json_bytes(value: Any) -> bytes:
 def utc_now_iso() -> str:
     """Timezone-aware UTC timestamp, `datetime.isoformat()` form (+00:00 suffix)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def write_canonical_jsonl(path, rows) -> int:
+    """Write rows as canonical JSON lines (one `canonical_json_str` per line) to a new file; refuses to overwrite,
+    because published outputs are immutable. Returns the row count."""
+    count = 0
+    with open(path, "x", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(canonical_json_str(row) + "\n")
+            count += 1
+    return count

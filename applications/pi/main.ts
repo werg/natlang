@@ -22,6 +22,8 @@
  *   --quiet                                 no phase log on stderr
  * `natlang run applications/pi -- eval [NAME...] [--out DIR] [--minutes N] [options]`: the tasks in tasks/, each on a
  * fresh git copy of its repository, judged by its check command.
+ * `natlang run applications/pi -- replay --in PREPARED.jsonl --out REPLAYED.jsonl [--repos DIR]`: teacher trajectories
+ * replayed in pi's own tools over their base commits (bench/replay.ts), for training records.
  * `natlang run applications/pi -- surface [--cwd DIR] [--companion]`: the agent's system prompt and tool schemas as JSON
  * (surface.ts), for training records built from other agents' trajectories.
  */
@@ -39,12 +41,13 @@ import type { EntryId } from './vendor/durable/src/types.ts';
 import { codingRegistry, createEnvs } from './extensions/index.ts';
 import { companion } from './extensions/companion/index.ts';
 import { agentSurface } from './surface.ts';
+import { replayFile } from './bench/replay.ts';
 import type { Harness } from './vendor/durable/src/harness/harness.ts';
 import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
-  '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--out', '--minutes'];
+  '--session', '--context', '--scheduler', '--admission', '--planning', '--shaping', '--out', '--minutes', '--in', '--repos'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
@@ -150,6 +153,12 @@ export async function runTask(target: TargetContext, args: string[], task: strin
 export async function main(target: TargetContext): Promise<number> {
   const args = target.args;
   if (args[0] === 'eval') return evaluate(target, args.slice(1));
+  if (args[0] === 'replay') {
+    const input = option(args, '--in'), output = option(args, '--out');
+    if (!input || !output) throw new Error('usage: replay --in PREPARED.jsonl --out REPLAYED.jsonl [--repos DIR]');
+    await replayFile(input, output, option(args, '--repos') ?? join(process.env.HOME ?? '.', 'data/harness-bench/repos'), line => target.io.error.write(`${line}\n`));
+    return 0;
+  }
   if (args[0] === 'surface') {
     process.stdout.write(JSON.stringify(agentSurface({ cwd: option(args, '--cwd') ?? '/workspace', companion: args.includes('--companion') })) + '\n');
     return 0;

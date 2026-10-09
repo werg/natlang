@@ -8,6 +8,7 @@ import { resolveFrame } from './runtime.js';
 import { traceFor } from '../native/graph.js';
 import { RefinementError, canonicalValue, failureError } from '../native/refinement.js';
 import { hexDigest } from '../native/hash.js';
+import { hostUntrusted } from '../native/untrusted.js';
 import { normalizePredicate } from '../native/types.js';
 export { Deopt } from '../calls/dispatch.js';
 
@@ -87,6 +88,23 @@ declare const natlangRefinement: unique symbol;
  */
 export type Is<T, P extends string> = T & { readonly [natlangRefinement]: { [K in P]: true } };
 
+declare const natlangUntrusted: unique symbol;
+/**
+ * A `T` that came from outside the program (plans/REFINEMENT_TYPES.md section 4). It is a `T` for crisp code. The model sees
+ * it only as a quoted data block labelled with its source, and the compiler refuses it in instruction text
+ * (`untrusted-instruction`).
+ */
+export type Untrusted<T> = T & { readonly [natlangUntrusted]: true };
+
+/**
+ * Mark `value` as coming from `source` (a short label such as "stdin" or "index.search") and return it as an
+ * `Untrusted<T>`. Every string inside the value is shown to a model as data from `source`.
+ */
+export function untrusted<T>(value: T, source = 'outside the program'): Untrusted<T> {
+  hostUntrusted.markAll(value, source);
+  return value as Untrusted<T>;
+}
+
 const checkedPredicate = (predicate: unknown): string => {
   const text = typeof predicate === 'string' ? normalizePredicate(predicate) : '';
   if (!text) throw new RefinementError('refinement-predicate-invalid',
@@ -131,3 +149,7 @@ export function assume(value: unknown, predicate?: string): unknown {
     value: shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown, value_sha256: hexDigest(shown) });
   return value;
 }
+
+/** Host and application helper: one entry point over a crisp and a natural-language implementation (see ./pluggable.ts). */
+export { pluggable } from "./pluggable.js";
+export type { PluggableMode, PluggableImplementations, PluggableOptions } from "./pluggable.js";

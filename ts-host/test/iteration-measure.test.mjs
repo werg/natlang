@@ -45,6 +45,28 @@ test('measures cannot stall, increase, become fractional or be replenished', asy
     .withMeasure(n => n).until(n => n === 0)), 0);
 });
 
+test('the step that satisfies the stopping condition need not lower the measure', async () => {
+  // remaining work: one pass lowers it, then a final check pass leaves it at 1 and satisfies `until`.
+  const states = [{ left: 2, ok: false }, { left: 1, ok: false }, { left: 1, ok: true }];
+  let at = 0;
+  const result = await run(() => iterateOn(() => states[++at], states[0]).withMeasure(s => s.left)
+    .checkProgress('off').until(s => s.ok));
+  assert.deepEqual(result, { left: 1, ok: true });
+  // A step that continues the loop without lowering the measure is still refused, naming the fix, and the failing step is dropped.
+  await assert.rejects(() => run(() => iterateOn(s => ({ left: s.left, n: s.n + 1 }), { left: 2, n: 0 }).withMeasure(s => s.left)
+    .checkProgress('off').until(s => s.n === 5)), error => {
+    assert.ok(error instanceof IterationDivergedError); assert.match(error.message, /went from 2 to 2.*lower it/);
+    assert.equal(error.lastState.n, 0); assert.equal(error.trajectory.length, 1); return true;
+  });
+});
+
+test('a measure at 0 while the stopping condition is false names iteration-measure-exhausted', async () => {
+  await assert.rejects(() => run(() => iterateOn(n => n + 1, 0).withMeasure(() => 0).checkProgress('off').until(() => false)), error => {
+    assert.ok(error instanceof IterationLimitError); assert.equal(error.code, 'iteration-measure-exhausted');
+    assert.match(error.message, /count the steps still needed/); return true;
+  });
+});
+
 test('folder measure violations retain the last joint source/state checkpoint', async () => {
   const folder = Folder.fromFiles({'entry.ts':'before'});
   const reducer = { async [APPLY_TO_FOLDER](draft) { await draft.file('entry.ts').writeText('after'); return {remaining:2}; } };

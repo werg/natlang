@@ -14,6 +14,7 @@ import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { digestNote } from './prompt.js';
+import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
@@ -89,12 +90,13 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 export function inputsListing(session: NativeSession, digests: Readonly<Record<string, string>> = {}): string {
   const lam = session.lam;
   if (lam.type.kind !== 'lambda') return '{}';
+  session.markUntrusted();
   const root = lam.projectTransaction?.folder;
   return lam.type.params.fields.map(field => {
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     // A large value written as a digest (DECISIONS.md 43) shows the digest; the variable holds the value itself.
     const shown = digests[field.name] ? neuraleseSentinel(digests[field.name]!) + digestNote(field.name) :
-      renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId });
+      renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
       if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
@@ -155,7 +157,7 @@ export function collapseHistory(messages: Record<string, unknown>[], keptStart: 
 function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
   if (depth > 5) return {};
   const resolved = env.resolve(type);
-  if (resolved.kind === 'refined') return schemaOf(resolved.base, env, depth);
+  if (resolved.kind === 'refined' || resolved.kind === 'untrusted') return schemaOf(resolved.base, env, depth);
   if (resolved.kind === 'prim' && resolved.name === 'unknown') return {};
   if (resolved.kind === 'prim') return { type: { string: 'string', Blob: 'string', number: 'number',
     boolean: 'boolean', null: 'null', Folder: 'object', FileHandle: 'object' }[resolved.name as Exclude<typeof resolved.name, 'unknown'>],
@@ -198,13 +200,14 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
  * The one way a value is shown to the model: a TypeScript literal cut at item and field boundaries when it is long
  * (scopeExpression), or a preview when it has no literal form (live values). `holder` is where all of it is.
  */
-export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder; liveIdentity?: (value: object) => number } = {}): string {
+export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder; liveIdentity?: (value: object) => number;
+  /** Where untrusted text came from; a string it knows is shown as a quoted data block. */ untrusted?: UntrustedRegistry } = {}): string {
   if (value === undefined) return 'undefined';
   const requested=options.budget??SHOWN_CHARS;
   const budget=Number.isFinite(requested)?Math.max(0,requested):Infinity;
   // Render once at the requested budget. Building the complete literal first made even a
   // 2,000-character scope preview allocate the entire value (including combinatorial arrays).
-  return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder, options.liveIdentity);
+  return scopeExpression(value, options.root, options.holder, budget, { nodes: 0, depth: 0, untrusted: options.untrusted }) ?? previewValue(value as Value, options.holder, options.liveIdentity);
 }
 
 /** Whether a captured value is a weight adapter (`Adapter`): it acts on the model's weights for this call's turns and
@@ -274,7 +277,7 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
-  state = { nodes: 0, depth: 0 }): string | undefined {
+  state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
   if (++state.nodes > 8192 || state.depth >= 64)
     return cutNote('inspection limit reached', { holder });
   state.depth++;
@@ -295,6 +298,12 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
   if (typeof value === 'string') {
+    // Text from outside the program is data: a labelled block, never a bare literal (native/untrusted.ts).
+    const source = state.untrusted?.sourceOf(value);
+    if (source !== undefined) {
+      if (value.length <= Math.max(16, budget)) return untrustedBlock(value, source);
+      return `${untrustedBlock(value.slice(0, Math.max(0, budget)), source)}${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
+    }
     // Long record keys can exhaust the preview budget before their values.
     // Preserve tiny labels such as "0"/"1" rather than showing an empty string
     // with a truncation note; the literal is shorter than that note anyway.
@@ -349,7 +358,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   // goes to the longer fields, so a record that fits is shown whole and a long field cannot hide the short ones.
   const budgets = fields.map(()=>budget);
   if (Number.isFinite(budget)) {
-    const probe = { nodes: state.nodes, depth: state.depth };
+    const probe = { nodes: state.nodes, depth: state.depth, untrusted: state.untrusted };
     const needs = fields.map(field=>{
       const text=scopeExpression(field.item,root,field.holder,Math.max(0,available),probe);
       return text===undefined?0:text.length;
@@ -428,7 +437,7 @@ export class NativeToolAgent {
     for (const field of lam.type.params.fields) {
       if (!Object.hasOwn(lam.args, field.name)) continue;
       const value = lam.args[field.name]!;
-      if (!renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId }).includes('<<cut off:')) continue;
+      if (!renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
@@ -755,13 +764,14 @@ export class NativeToolAgent {
   private scopeReading(session: NativeSession, digests: Readonly<Record<string, string>> = {}): { code: string; text: string } | undefined {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return;
+    session.markUntrusted();
     const lines: string[] = [], names: string[] = [];
     const root = lam.projectTransaction?.folder;
     const section = (heading: string, body: string[]) => { if (body.length) lines.push(...(lines.length ? [''] : []), heading, ...body); };
     const declared = (keyword: string, name: string, type: string, value: Value, note = ''): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
       const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
-      const expression = scopeExpression(value, root, name);
+      const expression = scopeExpression(value, root, name, SHOWN_CHARS, { nodes: 0, depth: 0, untrusted: session.runtime.untrusted });
       names.push(name);
       return expression === undefined ?
         `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name, session.runtime.displayLiveId)}${note}` :
@@ -797,7 +807,7 @@ export class NativeToolAgent {
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
       declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
     if (lam.return !== MISSING)
-      section('// Your staged result:', [`// ${renderValue(lam.return, { root, liveIdentity: session.runtime.displayLiveId })}`]);
+      section('// Your staged result:', [`// ${renderValue(lam.return, { root, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted })}`]);
     if (!lines.length) return;
     // The arguments appear in the eval's result, not as literals in its code: they come from the caller.
     return { code: lines.join('\n'), text: (params.length ? inputsListing(session, digests) + '\n' : '') +

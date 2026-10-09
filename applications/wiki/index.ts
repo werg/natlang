@@ -8,7 +8,7 @@
  */
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-import { defineNatlang, type FolderHandle, type InvocationTrace, type NatlangRuntime } from '@natlang/node';
+import { defineNatlang, untrusted, type FolderHandle, type InvocationTrace, type NatlangRuntime } from '@natlang/node';
 import mergePages from './merge.nl';
 import maintainPage from './maintain.nl';
 import planCells from './cells.nl';
@@ -116,6 +116,7 @@ export class WikiWorkspace {
       const prior = seen.get(update.id);
       if (prior && JSON.stringify(prior) !== JSON.stringify(update)) return bad('conflicting duplicate update ID');
       seen.set(update.id, update);
+      untrusted(update.text, `wiki update ${update.id}`);
     }
     const ordered = [...seen.values()].sort((a, b) => a.id.localeCompare(b.id));
     return { valid: true, detail: '', updates: ordered, presentation: hash(ordered.map(row => row.id)) };

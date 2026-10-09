@@ -192,10 +192,12 @@ def test_conversion7_remains_enabled_for_legacy_reviewed_families_without_new_ma
     assert len((out/'records.jsonl').read_text().splitlines())==2
 
 
-def test_shared_current_conversion_contract_accepts_reviewed_v13_and_holds_future_versions(tmp_path,monkeypatch):
+def test_shared_current_conversion_contract_accepts_reviewed_current_and_holds_future_versions(tmp_path,monkeypatch):
     records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
-    current=row('current-train','train','current:train',version=13)
-    future=row('future-train','train','future:train',version=14)
+    # Track the shared compiler's version instead of a literal that goes stale at each bump.
+    number=assembler._current_conversion_number()
+    current=row('current-train','train','current:train',version=number)
+    future=row('future-train','train','future:train',version=number+1)
     baseline=row('baseline-test','test','baseline:test',family='decision_skill_catalog')
     write_jsonl(records,[current,future,baseline])
     review=review_for(records,pieces,allow_ids=['current-train','future-train','baseline-test'])

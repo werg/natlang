@@ -1,3 +1,5 @@
+import type { Untrusted } from '@natlang/node';
+
 /** Which implementation runs a hot-path policy. Both answer the same interface; the setting selects. */
 export type Policy = "crisp" | "natlang";
 
@@ -17,11 +19,13 @@ export type LogSettings = {
 
 /** A log line, or a gap in the source (kind "gap": records are missing around occurred_at). */
 export type LogEvent = { kind: "log" | "gap", id: string, cursor: number, occurred_at: number, arrived_at: number,
-  service: string, code: string, level: string, message: string };
+  service: string, code: string, level: string,
+  /** Text from outside the program: shown to a model as quoted data, never as instructions. */
+  message: Untrusted<string> };
 /** What the index knows of an ingested line. count is the lines of its service and code in the window ending at it. */
 export type Observation = { id: string, status: "new" | "duplicate", service: string, code: string, occurred_at: number,
   count: number, late: boolean };
-export type Evidence = { id: string, service: string, code: string, occurred_at: number, level: string, message: string };
+export type Evidence = { id: string, service: string, code: string, occurred_at: number, level: string, message: Untrusted<string> };
 
 // The exact index service ---------------------------------------------------------------------------------------
 

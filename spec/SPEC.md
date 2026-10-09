@@ -146,7 +146,7 @@ TypeScript outside callable folders is unrestricted.
 ## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
-counted `for` loops, and array methods. A counted loop reads its bound once,
+counted `for` loops (the condition may join the counter bound to an early exit with `&&`, as in `i < n && !found`), and array methods. A counted loop reads its bound once,
 when it starts; the bound must be a finite number and the counter must advance
 toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
 defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
@@ -173,7 +173,13 @@ stream of events):
   function returning `boolean`. It is checked on the initial state and after
   every step.
 - `withMeasure(state => n)` supplies a non-negative integer that must decrease at
-  every step; `withLimit({ maxSteps })` a hard step bound. A deadline alone is
+  every step that continues the loop. The step after which `until` is true ends
+  the loop and need not lower it, so a measure that counts the work still to do
+  needs no padding (`2*remaining + running`). A measure at 0 while `until` is
+  still false ends the loop with `IterationLimitError` coded
+  `iteration-measure-exhausted`, since a further step could not lower it; a
+  continuing step that does not lower it is `IterationDivergedError`, whose
+  trajectory ends at the last state that did. `withLimit({ maxSteps })` a hard step bound. A deadline alone is
   not a bound.
 - With a TypeScript predicate, a measure or a step limit is required
   (`iteration-unbounded`). With a natural-language predicate none is required:
@@ -389,7 +395,9 @@ when the caller sets them.
 ## Types
 
 Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
-records, arrays, `Record<string, T>`, literal unions, optional fields and
+records, arrays, `Record<string, T>` (also written `{ [key: string]: T }`),
+intersections of object types (`A & { extra: string }`, merged into one record),
+indexed access with a literal key (`State['status']`), literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be
@@ -452,6 +460,43 @@ disagreement is traced as `refinement_shadow`). Crisp checkers come from the run
 
 **Trace.** Every check is a `refinement_check` event: path, predicate, value, outcome, probability, judge and where
 the verdict came from (`crisp`, `judge`, `cache`, `escalation`). `refinement_assumed` records an `assume`.
+
+## Untrusted<T>
+
+`Untrusted<T>` is `T` that came from outside the program: a file, an HTTP body, user text, a tool or service result.
+It is structurally `T`; what it adds is how a model sees it and where it may go.
+
+- **Entry.** A service method whose result type is declared in `refinements.services` as `Untrusted<...>` (or a type
+  containing it, such as `{ evidence: { message: Untrusted<string> }[] }`), a parameter or captured variable typed
+  `Untrusted<...>`, and `untrusted(value, source)` (exported by the runtime module; it returns the value typed
+  `Untrusted<T>`). Only the strings at `Untrusted` positions are marked, so a record keeps its trusted fields as
+  ordinary literals.
+- **Rendering.** The one value renderer (arguments, scope, eval results, staged results) shows a marked string as a
+  fenced data block with an info line naming the source, never as a bare literal and never inside instruction text:
+  a line "```untrusted data from index.search", the text verbatim, and a closing fence. The fence is three backticks,
+  or one more than the longest run of backticks in the text, so no text can close it. A long text is cut at the
+  usual budget with the usual cut-off note. Ordinary values render as before.
+- **Provenance.** The label is the origin: `service.method` for a declared service result, the label given to
+  `untrusted(value, source)`, else `argument <name> of <function>` or `variable <name>`. The first source that marked a
+  text is kept. Like refinement evidence it is kept by content (a string has no hidden tag): a registry per task, with a
+  host-level registry behind it for text marked before any task runs, bounded in entries and characters. A string the
+  program derives from an untrusted one (a slice, a concatenation) is a new string and is not tracked at run time; a
+  trusted string equal to a marked one is shown as data too. Mark the exact fields that are outside text, not whole
+  records.
+- **Fit.** `Untrusted<B>` fits `T` when `B` fits `T`; `T` fits `Untrusted<B>` when `T` fits `B` (a plain value only
+  loses trust). In TypeScript `Untrusted<T>` is `T & brand`, so it is a `T` everywhere, and a plain `T` is not an
+  `Untrusted<T>` until `untrusted(value, source)` returns one. `Untrusted<Is<T, P>>` and `Is<Untrusted<T>, P>`
+  carry both.
+- **Instruction positions.** The text of a natlang function is the author's. In a `.nl` file the body is fixed text
+  that refers to arguments by name; a value is never spliced into it, so a `.nl` body cannot receive untrusted text as
+  instructions and the model reads each argument from the rendered scope. The one splice is the template literal of an
+  inline `nl` call, where `${expression}` is evaluated at call time and becomes part of the instructions. There the
+  compiler reports `untrusted-instruction` when the interpolated expression is `Untrusted<T>`, or is text built from
+  an untrusted expression (`${message.slice(0, 20)}`, `${"[" + message + "]"}`); a number or boolean computed from one
+  (`${message.length}`) is not text and passes. Names an instruction mentions (captured by mention or `nl.with`) and
+  arguments of the call are not splices: they are rendered as data. The message is one sentence with the fix: pass the
+  value as an argument instead, as in ``nl`Summarize the message.`(message)``. Interpolation inside eval code (a
+  one-shot ``nl(`... ${x}`)``) is not typed by the project compiler and is not checked.
 
 ## Directory reducers
 
