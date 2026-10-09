@@ -159,6 +159,41 @@ test('zero audited actions keep the strict JSON envelope protocol', () => {
   assert.equal(result.finalTextStatus, 'strict_json_envelope_no_actions');
 });
 
+test('one whole-response fenced JSON envelope is normalized then strictly validated', () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const argumentsValue = { plan: 'Evidence: the bound record is visible.', nested: { count: 2 } };
+  const inner = JSON.stringify({ content: '', toolCalls: [{ name: 'execution_plan', arguments: argumentsValue }] });
+  const responseText = `${fence}json\n${inner}\n${fence}`;
+  const parsed = parseOpenCodeEnvelope(responseText, ['execution_plan']);
+  assert.equal(parsed.normalization, 'whole_response_json_fence');
+  assert.equal(parsed.calls.length, 1);
+  assert.deepEqual(parsed.calls[0].arguments, argumentsValue);
+  const result = buildAuditedCompletion({ responseText, names: ['execution_plan'], recordedActions: [] });
+  assert.equal(result.responseNormalization, 'whole_response_json_fence');
+  assert.equal(result.finalTextStatus, 'validated_prompt_directed_text_actions_whole_response_json_fence');
+  assert.deepEqual(JSON.parse(result.calls[0].function.arguments), argumentsValue);
+
+  const unlabeled = `${fence}\n${JSON.stringify({ content: 'plain result', toolCalls: [] })}\n${fence}`;
+  const plain = buildAuditedCompletion({ responseText: unlabeled, names: ['execution_plan'], recordedActions: [] });
+  assert.equal(plain.responseNormalization, 'whole_response_unlabeled_fence');
+  assert.equal(plain.finalTextStatus, 'json_envelope_no_actions_whole_response_unlabeled_fence');
+  assert.equal(plain.content, 'plain result');
+});
+
+test('fenced envelope normalization rejects prose, multiple or nested fences, malformed JSON, and undeclared tools', () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const valid = JSON.stringify({ content: '', toolCalls: [{ name: 'eval', arguments: { code: 'return 1;' } }] });
+  for (const responseText of [
+    `prefix\n${fence}json\n${valid}\n${fence}`,
+    `${fence}json\n${valid}\n${fence}\nsuffix`,
+    `${fence}json\n${valid}\n${fence}\n\n${fence}json\n${valid}\n${fence}`,
+    `${fence}json\n{"content":"","toolCalls":[{"name":"eval","arguments":{"code":"return ${fence}nested${fence}"}}]}\n${fence}`,
+    `${fence}json\n{bad json}\n${fence}`,
+  ]) assert.throws(() => parseOpenCodeEnvelope(responseText, ['eval']));
+  assert.throws(() => parseOpenCodeEnvelope(`${fence}json\n${valid}\n${fence}`, ['read_file']), /declared Natlang tool/);
+  assert.throws(() => parseOpenCodeEnvelope(`${fence}JSON\n${valid}\n${fence}`, ['eval']));
+});
+
 test('official SDK direct JSON typed-result fallback is preserved as content only', () => {
   const raw = '{"candidateId":"ABD-1A","score":82}';
   const result = buildAuditedCompletion({ responseText: raw, names: ['eval'], recordedActions: [] });

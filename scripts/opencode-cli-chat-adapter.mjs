@@ -142,28 +142,42 @@ export function parseOpenCodeEnvelope(text, names) {
   let value, normalization = 'strict_json';
   try { value = JSON.parse(text); }
   catch {
-    // Some model responses contain literal line breaks/tabs inside JSON string
-    // values. Escaping those controls is semantics-preserving; do not repair
-    // quotes, commas, delimiters, or any other malformed JSON structure.
-    let inString = false, escaped = false, changed = false, repaired = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i], code = text.charCodeAt(i);
-      if (inString) {
-        if (escaped) { repaired += char; escaped = false; continue; }
-        if (char === '\\') { repaired += char; escaped = true; continue; }
-        if (char === '"') { repaired += char; inString = false; continue; }
-        if (code <= 0x1f) {
-          repaired += `\\u${code.toString(16).padStart(4, '0')}`;
-          changed = true;
-          continue;
-        }
-      } else if (char === '"') inString = true;
-      repaired += char;
+    // The official CLI sometimes returns its structured envelope in one
+    // complete Markdown JSON fence. Accept only that whole-response wrapper;
+    // do not trim prose, repair JSON, or touch any tool arguments.
+    const fenced = /^```(json)?[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*(?:\r?\n)?$/.exec(text);
+    if (fenced) {
+      if (fenced[2].includes('```')) throw new Error('OpenCode CLI returned invalid JSON text');
+      try {
+        value = JSON.parse(fenced[2]);
+        normalization = fenced[1] === 'json' ? 'whole_response_json_fence' : 'whole_response_unlabeled_fence';
+      } catch {
+        throw new Error('OpenCode CLI returned invalid JSON text');
+      }
+    } else {
+      // Some model responses contain literal line breaks/tabs inside JSON string
+      // values. Escaping those controls is semantics-preserving; do not repair
+      // quotes, commas, delimiters, or any other malformed JSON structure.
+      let inString = false, escaped = false, changed = false, repaired = '';
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i], code = text.charCodeAt(i);
+        if (inString) {
+          if (escaped) { repaired += char; escaped = false; continue; }
+          if (char === '\\') { repaired += char; escaped = true; continue; }
+          if (char === '"') { repaired += char; inString = false; continue; }
+          if (code <= 0x1f) {
+            repaired += `\\u${code.toString(16).padStart(4, '0')}`;
+            changed = true;
+            continue;
+          }
+        } else if (char === '"') inString = true;
+        repaired += char;
+      }
+      if (!changed) throw new Error('OpenCode CLI returned invalid JSON text');
+      try { value = JSON.parse(repaired); }
+      catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
+      normalization = 'raw_string_controls_escaped';
     }
-    if (!changed) throw new Error('OpenCode CLI returned invalid JSON text');
-    try { value = JSON.parse(repaired); }
-    catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
-    normalization = 'raw_string_controls_escaped';
   }
   if (!isObject(value) || Object.keys(value).sort().join(',') !== 'content,toolCalls' ||
       typeof value.content !== 'string' || !Array.isArray(value.toolCalls))
@@ -215,8 +229,13 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
     return { content: textCalls.length ? null : (envelope.content || null), calls: textCalls,
       responseNormalization: envelope.normalization,
       finalTextStatus: textCalls.length ? (envelope.normalization === 'strict_json'
-        ? 'validated_prompt_directed_text_actions' : 'validated_prompt_directed_text_actions_raw_controls_escaped')
-        : (envelope.normalization === 'strict_json' ? 'strict_json_envelope_no_actions' : 'json_envelope_no_actions_raw_controls_escaped'),
+        ? 'validated_prompt_directed_text_actions'
+        : envelope.normalization === 'raw_string_controls_escaped'
+          ? 'validated_prompt_directed_text_actions_raw_controls_escaped'
+          : `validated_prompt_directed_text_actions_${envelope.normalization}`)
+        : (envelope.normalization === 'strict_json' ? 'strict_json_envelope_no_actions'
+          : envelope.normalization === 'raw_string_controls_escaped' ? 'json_envelope_no_actions_raw_controls_escaped'
+            : `json_envelope_no_actions_${envelope.normalization}`),
       actionRoute: textCalls.length ? 'prompt_directed_text_envelope' : 'strict_json_text_no_actions',
       actionFidelity: textCalls.length ? 'prompt_directed_text' : 'none' };
   }
