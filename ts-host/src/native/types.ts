@@ -19,7 +19,10 @@ export type Type =
    * inline merge when parsed; an alias among the members merges when it is resolved. */
   | { kind: 'intersection'; members: Type[] }
   /** `T['field']`: the type of a field of a record, or the element of a dictionary, found when it is resolved. */
-  | { kind: 'index'; base: Type; key: string };
+  | { kind: 'index'; base: Type; key: string }
+  /** `Untrusted<T>`: a `T` that came from outside the program. Structurally `base`; the model-facing renderer always
+   * shows it as a quoted data block (native/untrusted.ts) and it never enters instruction text (plans/REFINEMENT_TYPES.md). */
+  | { kind: 'untrusted'; base: Type };
 
 /** The dialect a `Neuralese<T>` without a second argument names; a program's configuration binds it. */
 export const DEFAULT_DIALECT = 'DefaultDialect';
@@ -241,6 +244,7 @@ class Parser {
       this.eat('>');
       return { kind: 'refined', base, predicate };
     }
+    if (token.value === 'Untrusted' && this.peek()?.value === '<') return { kind: 'untrusted', base: this.args(1)[0]! };
     if (token.value === 'Live' && this.peek()?.value === '<') {
       // Live<"TypeScript text", "tag" | "class" | "shape" | "function" | "any", "detail">
       this.eat('<');
@@ -296,6 +300,7 @@ export function formatType(type: Type): string {
     case 'intersection': return type.members.map(m => m.kind === 'union' ? `(${formatType(m)})` : formatType(m)).join(' & ');
     case 'index': return `${type.base.kind === 'union' || type.base.kind === 'intersection' ? `(${formatType(type.base)})` : formatType(type.base)}[${JSON.stringify(type.key)}]`;
     case 'refined': return `Is<${formatType(type.base)}, ${JSON.stringify(type.predicate)}>`;
+    case 'untrusted': return `Untrusted<${formatType(type.base)}>`;
     case 'neuralese': return isAdapterType(type) ? 'Adapter' : `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
       `, ${JSON.stringify(type.dialect)}`}>`;
   }
@@ -306,7 +311,7 @@ function children(type: Type): Type[] {
   switch (type.kind) {
     case 'record': return type.fields.map(field => field.type);
     case 'list': case 'dict': case 'neuralese': return [type.element];
-    case 'refined': return [type.base];
+    case 'refined': case 'untrusted': return [type.base];
     case 'union': case 'intersection': return type.members;
     case 'index': return [type.base];
     case 'lambda': return [type.params, type.returns];
@@ -363,7 +368,7 @@ export class TypeEnv {
     if (type.kind === 'name') { if (!this.lookup(type.name)) throw new TypeSyntaxError(`unknown type name ${type.name}`); return; }
     if (type.kind === 'record') for (const field of type.fields) this.checkNames(field.type);
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
-    if (type.kind === 'refined') this.checkNames(type.base);
+    if (type.kind === 'refined' || type.kind === 'untrusted') this.checkNames(type.base);
     if (type.kind === 'union' || type.kind === 'intersection') for (const member of type.members) this.checkNames(member);
     if (type.kind === 'index') this.checkNames(type.base);
     if (type.kind === 'lambda') { this.checkNames(type.params); this.checkNames(type.returns); }
@@ -388,6 +393,9 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   const a = env.resolve(source), b = env.resolve(target);
   if (JSON.stringify(a) === JSON.stringify(b)) return true;
   if (a.kind === 'union') return a.members.every(member => fitsType(member, b, env, seen));
+  // Untrusted<T> is a T for crisp code; a plain value fits an Untrusted slot (it only loses trust, never gains it).
+  if (b.kind === 'untrusted') return fitsType(a.kind === 'untrusted' ? a.base : a, b.base, env, seen);
+  if (a.kind === 'untrusted') return fitsType(a.base, b, env, seen);
   // A refinement is forgotten going out; going in, the value must fit the base (the predicate is an obligation,
   // see fitObligations) and an already-refined value must carry every predicate of the target.
   if (b.kind === 'refined') {
@@ -447,6 +455,8 @@ export function containsRefinement(type: Type, env: TypeEnv, seen = new Set<stri
 export function fitObligations(source: Type, target: Type, env = new TypeEnv(), path = 'value'): { path: string; predicate: string }[] | null {
   if (!fitsType(source, target, env)) return null;
   const a = env.resolve(source), b = env.resolve(target);
+  if (b.kind === 'untrusted' || a.kind === 'untrusted')
+    return fitObligations(a.kind === 'untrusted' ? a.base : a, b.kind === 'untrusted' ? b.base : b, env, path);
   if (b.kind === 'refined') {
     const wanted = refinementChain(b, env), have = refinementChain(a, env);
     return wanted.predicates.filter(p => !have.predicates.includes(p)).map(predicate => ({ path, predicate }));
