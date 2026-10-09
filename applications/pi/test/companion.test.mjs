@@ -125,3 +125,55 @@ test('a long tool output reaches the agent shaped, and recall returns it whole',
   assert.equal(recalled, long);
   await harness.close(context);
 });
+
+test('with natural-language shaping, the companion keeps the lines shape.nl chose, once per call', async () => {
+  const shapes = [];
+  const scripted = m.scriptedModel(opening => {
+    if (opening.includes('You accompany a coding agent')) return `return { focus: 'x', facts: [], warnings: [], suggestions: [] };`;
+    if (!opening.includes('too long to show whole')) return null;
+    shapes.push(opening);
+    return `const lines = output.split("\\n"); const at = lines.findIndex(line => line.startsWith("FAIL")) + 1;
+      return { keep: [{ from: at, to: at + 1 }, { from: lines.length, to: lines.length }], gist: "1 failing test of 2000" };`;
+  });
+  const natlang = m.natlang.createNatlangRuntime({ model: scripted.driver });
+  const faux = m.ai.fauxProvider();
+  const models = m.ai.createModels();
+  models.setProvider(faux.provider);
+  const context = m.chord.BACKGROUND_CONTEXT;
+  const registry = m.durable.createRegistry();
+  const lines = Array.from({ length: 2000 }, (_, i) => `ok ${i}`);
+  lines[1200] = 'FAIL parser handles empty input';
+  lines[1201] = '  expected [] but got undefined';
+  lines[1999] = '1999 passed, 1 failed';
+  registry.install({ name: 'tools', tools: [{ name: 'bash', description: 'Run', parameters: { type: 'object', properties: { command: { type: 'string' } } },
+    execute: async () => ({ content: [{ type: 'text', text: lines.join('\n') }] }) }] });
+  let harness;
+  const reports = [];
+  registry.install(m.companion.companion(natlang, { harness: () => harness, shaping: 'natural-language', onReport: error => reports.push(String(error)) }));
+  faux.setResponses([
+    m.ai.fauxAssistantMessage([m.ai.fauxToolCall('bash', { command: 'npm test' }, { id: 'c1' })], { stopReason: 'toolUse' }),
+    m.ai.fauxAssistantMessage('done'),
+  ]);
+  harness = await m.durable.Harness.open(new m.memory.MemoryStorage(), { models, registry }, context);
+  const conversation = await harness.root(context, { agent: { model: { provider: 'faux', modelId: 'faux-1' } } });
+  harness.resume();
+  assert.equal((await (await conversation.submit({ type: 'input', content: 'test' }, context)).wait(context)).status, 'done');
+  const [shown] = (await conversation.entries({ order: 'ascending' }, 50, undefined, context)).items.flatMap(entry => entry.model ?? [])
+    .filter(message => message.role === 'toolResult').map(message => message.content[0].text);
+  assert.equal(shown, '[The companion shortened this output of 2000 lines: 1 failing test of 2000 recall("c1") returns it whole.]\n' +
+    '[… lines 1–1200 …]\nFAIL parser handles empty input\n  expected [] but got undefined\n[… lines 1203–1999 …]\n1999 passed, 1 failed',
+    reports.join('; '));
+  assert.equal(shapes.length, 1);
+  assert.match(shapes[0], /call: string = "bash \{\\"command\\":\\"npm test\\"\}"/);
+  await harness.close(context);
+});
+
+test('a shape is clamped, merged and held to its budget whatever it asks for', () => {
+  const text = ['a', 'bb', 'ccc', 'dddd', 'eeeee'].join('\n');
+  assert.equal(m.companion.renderShape(text, 'h', { keep: [{ from: 4, to: 99 }, { from: 0, to: 1 }, { from: 2, to: 2 }], gist: 'g.' }),
+    '[The companion shortened this output of 5 lines: g. recall("h") returns it whole.]\na\nbb\n[… lines 3–3 …]\ndddd\neeeee');
+  assert.equal(m.companion.renderShape(text, 'h', { keep: [{ from: 1, to: 5 }], gist: 'g.' }, 6),
+    '[The companion shortened this output of 5 lines: g. recall("h") returns it whole.]\na\nbb\n[… lines 3–5 …]');
+  assert.equal(m.companion.renderShape(text, 'h', { keep: [], gist: 'g.' }),
+    '[The companion shortened this output of 5 lines: g. recall("h") returns it whole.]\n[… lines 1–5 …]');
+});
