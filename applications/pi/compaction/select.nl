@@ -12,6 +12,8 @@ commit's result: the caller then knows you committed, and which state.
 
 1. view = context() (the current committed model context). policy = facts.settings.compaction.
    k = cut(view, policy.keepRecentTokens): the index in view.entries of the first entry kept verbatim, or null.
+   Always ask cut: this task exists because a compaction was requested, so policy.enabled (which governs only
+   automatic compaction) does not matter here, and only cut decides whether there is anything to compact.
 2. k is null: nothing to compact. Commit [{ op: "compactionStatus", remove: true },
    { op: "next", state: { status: "terminal", outcome: { status: "completed", result: {} } } }] and return
    { committed }.
