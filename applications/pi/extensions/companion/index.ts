@@ -10,9 +10,10 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
-import type { Message, ToolCall } from '@earendil-works/pi-ai';
+import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
+import type { AssistantMessage, Message, Models, ToolCall } from '@earendil-works/pi-ai';
 import { pluggable, pluggableMode, type NatlangRuntime, type PluggableSetting } from '@natlang/node';
-import { defineDoc, defineDocFamily } from '../../vendor/durable/src/documents.ts';
+import { defineDoc } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
 import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
 import { hook } from '../../vendor/durable/src/harness/define.ts';
@@ -20,8 +21,10 @@ import type { Harness } from '../../vendor/durable/src/harness/harness.ts';
 import type { Extension, HookApi, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
+import { ProviderDoc } from '../../vendor/durable/src/harness/provider.ts';
 import type { Briefing, FileKnowledge, FileSummary, Observation, OutputShape } from '../../types.ts';
-import { transcriptText } from '../../host/natlang-provider.ts';
+import { modelReader, transcriptText } from '../../host/natlang-provider.ts';
+import { forceView, ToolOutputs, VIEW_LIMIT, ViewIntents, viewIntent, type ViewDocs } from '../../host/views.ts';
 import observe from './observe.nl';
 import shape from './shape.nl';
 
@@ -35,14 +38,17 @@ export const CompanionFiles = defineDoc<{ files: Record<string, FileKnowledge> }
   kind: 'pi.companion.files', version: 1, scope: 'session', initial: () => ({ files: {} }),
 });
 
-/** The full text of a tool output the agent saw shaped, by tool call ID (its recall handle). */
-export const CompanionOutputs = defineDocFamily<{ tool: string; text: string }, { tool: string; text: string }>({
-  kind: 'pi.companion.output', version: 1, scope: 'conversation', history: 'latest', fork: 'current', family: true,
-  initial: seed => seed,
-});
+/**
+ * The full text of a long tool output, by tool call ID (its recall handle): the value input of the output's stored view
+ * call (host/views.ts).
+ */
+export const CompanionOutputs = ToolOutputs;
 
 const TASK = 'pi.companion';
-/** Tool outputs longer than this many characters reach the agent shaped: their head and tail, and a recall handle. */
+/**
+ * Tool outputs longer than this many characters reach a text reader shaped: their head and tail, and a recall handle.
+ * Outputs longer than VIEW_LIMIT (host/views.ts) are stored as view calls, which a Neuralese reader reads as blocks.
+ */
 const SHAPE_LIMIT = 6_000;
 const SHAPE_HEAD = 2_500;
 const SHAPE_TAIL = 2_000;
@@ -262,6 +268,26 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
     }
   };
 
+  /**
+   * Latency: the agent model's reader is declared at startup, so when it is Neuralese the view of a stored output is
+   * written right away, in the background, for that reader only; the request that reads it joins or finds it
+   * (host/views.ts forceView). A failure here is reported; the request forcing the call fails loudly if it persists.
+   */
+  const preforce = async (conversationId: ConversationId, call: string, models: Models) => {
+    try {
+      const context = BACKGROUND_CONTEXT;
+      const harness = options.harness();
+      const conversation = await harness.conversation(conversationId, context);
+      const ref = conversation && (await conversation.agent(context)).model;
+      const model = ref && models.getModel(ref.provider, ref.modelId);
+      if (!conversation || !model || modelReader(model).kind !== 'neuralese') return;
+      const owner = (await harness.snapshot(ProviderDoc, conversationId, context))?.sessionId;
+      if (!owner) return;
+      const docs: ViewDocs = { conversationId, read: harness, commit: (change, at) => conversation.commit(change, at) };
+      await forceView(docs, call, { models, model, owner, store: natlang.options.neuralese?.store }, context);
+    } catch (error) { options.onReport?.(error); }
+  };
+
   /** Start a companion run for the conversation unless one is pending or running. */
   const start = async (conversationId: ConversationId, basis: number | undefined, context: Context) => {
     try {
@@ -283,6 +309,7 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
       parameters: { type: 'object', properties: { handle: { type: 'string', description: 'The handle from the note in the shortened output' } }, required: ['handle'] } as never,
       replay: 'safe',
       async execute(args, api, context): Promise<ToolExecutionResult> {
+        // The raw output: recall forces nothing, whatever the reader.
         const handle = String((args as { handle?: unknown }).handle ?? '');
         const stored = await options.harness().snapshot(CompanionOutputs, api.conversationId, handle, context);
         if (!stored) return { content: [{ type: 'text', text: `No shortened output has the handle ${JSON.stringify(handle)}.` }], isError: true };
@@ -297,18 +324,33 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
       },
     }],
     hooks: [hook(ToolTask, {
-      // A long output is kept whole in the companion's store and reaches the agent shaped (COMPANION.md §1.3).
+      // A long output is kept whole in the companion's store and stored as a call of view (host/views.ts): the result
+      // holds its text form, shaped when it is longer than SHAPE_LIMIT (COMPANION.md §1.3 and §6), with the reference.
       async afterTool(call, result, api, context) {
         const parts = result.content ?? [];
         const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
-        if (call.name === 'recall' || text.length <= SHAPE_LIMIT) return undefined;
+        if (call.name === 'recall' || text.length <= VIEW_LIMIT) return undefined;
         try {
           const conversation = await options.harness().conversation(api.conversationId, context);
           await conversation?.commit(async tx => { await tx.doc(CompanionOutputs, api.conversationId, call.id, { tool: call.name, text }); }, context);
         } catch (error) { options.onReport?.(error); return undefined; }
-        return { ...result, content: [{ type: 'text', text: await shaped(call, text, api, context) }, ...parts.filter(part => part.type !== 'text')] };
+        const shown = text.length > SHAPE_LIMIT ? await shaped(call, text, api, context) : text;
+        void preforce(api.conversationId, call.id, api.models);
+        return { ...result, content: [{ type: 'text', text: shown, stored: { function: 'view', call: call.id } } as never,
+          ...parts.filter(part => part.type !== 'text')] };
       },
     }), hook(GenerationTask, {
+      // The intent of each tool call, while the agent's model reads Neuralese: the view of the call's output is written
+      // for it (host/views.ts viewIntent, the harness bench's records.py intent()).
+      async afterResponse(message, api, context) {
+        const calls = message.content.filter((part): part is ToolCall => part.type === 'toolCall');
+        const model = calls.length ? api.models.getModel(message.provider, message.model) : undefined;
+        if (!model || modelReader(model).kind !== 'neuralese') return;
+        const conversation = await options.harness().conversation(api.conversationId, context);
+        await conversation?.commit(async tx => {
+          for (const call of calls) await tx.doc(ViewIntents, api.conversationId, call.id, { intent: viewIntent(message as AssistantMessage, call) });
+        }, context);
+      },
       // After every tool round: the agent has new information, and the companion catches up while it thinks.
       async afterTools(assistant, _results, api, context) { await start(api.conversationId, assistant as number, context); },
     })],

@@ -31,7 +31,18 @@ export type ModelInfo = {
   reasoning: boolean;
 };
 
-export type TextContent = { type: "text"; text: string; textSignature?: string };
+/**
+ * `stored`: this text is the text form of a stored call (StoredCallRef); a model whose reader is a Neuralese dialect is
+ * sent the call's Neuralese result in its place. Keep the field when copying the part.
+ */
+export type TextContent = { type: "text"; text: string; textSignature?: string; stored?: StoredCallRef };
+/**
+ * A call stored instead of a produced value (plans/neuralese/DECISIONS.md 2026-10-09, "representation chosen by use"):
+ * a long tool output is stored as a call of `view` (its inputs: the whole output, and the agent's intent when it made the
+ * tool call), keyed by the tool call's ID. Text readers read the text part that carries the reference; a Neuralese
+ * reader forces the call at its own dialect (host/views.ts), once per call and dialect.
+ */
+export type StoredCallRef = { function: "view"; call: string };
 export type ThinkingContent = { type: "thinking"; thinking: string; thinkingSignature?: string; redacted?: boolean };
 export type ImageContent = { type: "image"; data: string; mimeType: string };
 /**

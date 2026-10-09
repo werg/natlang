@@ -32,8 +32,12 @@ export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, opt
 /** What the agent model reads: text, or the blocks of one Neuralese dialect (at most `maxBlockLength` positions each). */
 export type AgentReader = { kind: 'text' } | { kind: 'neuralese'; dialect: string; maxBlockLength?: number };
 
-/** The driver for a model; `reasoning`: the request asks for thinking (pi's thinking level is not "off"). */
-export type NatlangDrivers = (model: Model<Api>, options: { reasoning: boolean }) => ModelDriver;
+/**
+ * The driver for a model; `reasoning`: the request asks for thinking (pi's thinking level is not "off"); `owner`: the
+ * conversation's provider session ID, which a Neuralese server's driver sends as the owner of its blocks
+ * (`x-natlang-owner`), so the conversation's pins and collections are its own.
+ */
+export type NatlangDrivers = (model: Model<Api>, options: { reasoning: boolean; owner?: string }) => ModelDriver;
 
 /** Whether a content part is a Neuralese block. */
 export function isNeuraleseContent(part: unknown): part is NeuraleseContent {
@@ -423,7 +427,8 @@ async function* turnEvents(model: Model<Api>, driver: ModelDriver, context: Tran
  */
 export function natlangApi(drivers: NatlangDrivers, store?: NeuraleseStore): ProviderStreams {
   const stream = (model: Model<Api>, context: TranscriptContext, options: SimpleStreamOptions = {}): AssistantMessageEventStream =>
-    lazyStream(model, async () => turnEvents(model, drivers(model, { reasoning: Boolean(options.reasoning) }), context, options, store) as
+    lazyStream(model, async () => turnEvents(model, drivers(model, { reasoning: Boolean(options.reasoning),
+      ...(options.sessionId ? { owner: options.sessionId } : {}) }), context, options, store) as
       AsyncIterable<AssistantMessageEvent>);
   return { stream: (model, context, options?: StreamOptions) => stream(model, context, options), streamSimple: stream };
 }

@@ -95,26 +95,31 @@ export async function agentModels(args: string[], launcher?: { endpoint: string;
   if (transport !== 'natlang' && option(args, '--agent-reader')) throw new Error('--agent-reader needs --agent-transport natlang');
   const reader: AgentReader = transport === 'natlang' ? await declareReader(option(args, '--agent-reader') ?? 'text', root, { apiKey }) :
     { kind: 'text' };
-  // One natlang driver per thinking setting, sent as the template argument pi-ai's qwen-chat-template format sends.
-  const drivers = new Map<boolean, ModelDriver>();
-  const driver = (reasoning: boolean): ModelDriver => {
+  // One natlang driver per thinking setting, sent as the template argument pi-ai's qwen-chat-template format sends; for a
+  // Neuralese server also one per owner (the conversation's provider session ID), whose blocks its requests hold.
+  const drivers = new Map<string, ModelDriver>();
+  const driver = (reasoning: boolean, owner?: string): ModelDriver => {
     const settings = { endpoint: root, model: modelId, apiKey,
       request: { chat_template_kwargs: { enable_thinking: reasoning, preserve_thinking: true } } };
-    if (!drivers.has(reasoning)) drivers.set(reasoning, reader.kind === 'neuralese' ?
-      neuraleseServerModelTurn({ ...settings, store }) : openAICompatibleModelTurn(settings));
-    return drivers.get(reasoning)!;
+    const key = reader.kind === 'neuralese' ? `${reasoning}\0${owner ?? ''}` : String(reasoning);
+    if (!drivers.has(key)) drivers.set(key, reader.kind === 'neuralese' ?
+      neuraleseServerModelTurn({ ...settings, store, ...(owner ? { owner } : {}) }) : openAICompatibleModelTurn(settings));
+    return drivers.get(key)!;
   };
   const models = createModels();
   models.setProvider(createProvider({
     id: 'agent', name: 'Agent', baseUrl,
-    auth: { apiKey: { name: 'agent key', resolve: async () => ({ auth: { apiKey: apiKey ?? 'none' } }) } },
+    // pi-ai's OpenAI-compatible provider needs some key; the natlang transport sends one only when it is given (its
+    // drivers, and the view requests of host/views.ts, read it from here).
+    auth: { apiKey: { name: 'agent key', resolve: async () => ({ auth: transport === 'natlang' ? (apiKey ? { apiKey } : {}) :
+      { apiKey: apiKey ?? 'none' } }) } },
     models: [{ id: modelId, name: modelId, api: transport === 'natlang' ? 'natlang-model-turn' : 'openai-completions', provider: 'agent',
       baseUrl, input: ['text'], reasoning: true, reader,
       contextWindow: Number(option(args, '--context-window') ?? 65536), maxTokens: Number(option(args, '--max-tokens') ?? 16384),
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       compat: { thinkingFormat: 'qwen-chat-template', supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
         maxTokensField: 'max_tokens' } } as never],
-    api: transport === 'natlang' ? natlangApi((_model, { reasoning }) => driver(reasoning), store) : openAICompletionsApi(),
+    api: transport === 'natlang' ? natlangApi((_model, { reasoning, owner }) => driver(reasoning, owner), store) : openAICompletionsApi(),
   }));
   return { models, ref: { provider: 'agent', modelId } };
 }

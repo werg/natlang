@@ -15,6 +15,7 @@ import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, T
 import { ONCE_EFFECTS, type NeuraleseStore } from '@natlang/node';
 import { plain } from './durable.ts';
 import { blockPositions, modelReader, isNeuraleseContent, neuraleseBlockIds, neuraleseBlocks, noteBlockMeta } from './natlang-provider.ts';
+import { collectViewBlocks, forceStoredViews, VIEW_FAILED, VIEW_UNAVAILABLE, type ViewDocs } from './views.ts';
 
 /**
  * A provider's message as the Session line stores it: strict JSON, or a rejection as pi-durable's commit would give
@@ -39,6 +40,12 @@ function unreadable(model: Model<Api>): AssistantMessage {
       '(declare a Neuralese reader for it: --agent-transport natlang --agent-reader DIALECT)' };
 }
 
+/** The answer when a stored view call could not be forced for a Neuralese reader (views.ts): the request is not sent. */
+function unforced(model: Model<Api>, error: unknown, aborted: boolean): AssistantMessage {
+  return { ...unreadable(model), stopReason: aborted ? 'aborted' : 'error',
+    errorMessage: error instanceof Error ? error.message : String(error) };
+}
+
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
 
 /** Options of one turn: the pinned stream options plus the thinking level, the provider session and a token cap. */
@@ -47,10 +54,16 @@ export type TurnOptions = StreamOptions & { thinkingLevel: ThinkingLevel; sessio
 /**
  * `streamAttempt`: for a generation task, the attempt its request streams into pi.live (pi-durable's generation
  * request always streams; compaction never does), so a turn the executor sends without `live` still streams.
- * `store`: the runtime's Neuralese store, where token estimates read each block's length.
+ * `store`: the runtime's Neuralese store, where token estimates read each block's length and blocks are archived.
+ * `collect`: the task's requests are its conversation's context (a generation task), so a request to a Neuralese reader
+ * collects the conversation's blocks on the server when the context's head moved (views.ts `collectViewBlocks`).
+ *
+ * For a model whose reader is a Neuralese dialect, `turn` sends each stored view call (views.ts) as its block, forced
+ * once per call and dialect under the conversation's owner (its provider session ID); a call that cannot be forced
+ * fails the turn (`neuralese-view-unavailable`: retryable; `neuralese-view-failed`: not), never falling back to text.
  */
 export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number, phase: { failed?: string } = {},
-    store?: NeuraleseStore) {
+    store?: NeuraleseStore, service: { collect?: boolean } = {}) {
   const resolve = (ref: ModelRef): Model<Api> => {
     const model = ref && runtime.models.getModel(ref.provider, ref.modelId);
     if (!model) throw new Error(`Model ${ref?.provider}/${ref?.modelId} is not available`);
@@ -70,18 +83,35 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
       return { provider: model.provider, modelId: model.id, name: model.name, contextWindow: model.contextWindow ?? 0,
         maxTokens: model.maxTokens ?? 0, reasoning: Boolean(model.reasoning) };
     },
-    turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
+    async turn(model: ModelRef, messages: Message[], turn: TurnOptions, live?: { attempt: number }): Promise<AssistantMessage> {
       // A generation always has the user's input in its context: an empty list is a slip in the eval, not a request.
-      if (!Array.isArray(messages) || messages.length === 0) return Promise.reject(new Error('ai.turn got no messages. ' +
+      if (!Array.isArray(messages) || messages.length === 0) throw new Error('ai.turn got no messages. ' +
         'The context through the cutoff is never empty: check whether the eval cleared the list it was building from ' +
-        '(for example messages.length = 0 on the same array it then copies back), and pass the context\'s messages.'));
+        '(for example messages.length = 0 on the same array it then copies back), and pass the context\'s messages.');
       const resolved = resolve(model);
+      const reader = modelReader(resolved);
       // A Neuralese block reaches only a model that reads its dialect (natlang-provider.ts); there is no text fallback.
-      if (modelReader(resolved).kind !== 'neuralese' && messages.some(message => neuraleseBlocks(message)))
-        return Promise.resolve(storable(unreadable(resolved), phase));
+      if (reader.kind !== 'neuralese' && messages.some(message => neuraleseBlocks(message))) return storable(unreadable(resolved), phase);
+      let sent = messages;
+      if (reader.kind === 'neuralese') {
+        // Stored view calls at this reader's dialect, under the conversation's owner (views.ts).
+        const docs: ViewDocs = { conversationId: runtime.conversationId, read: runtime,
+          commit: (change, at) => runtime.commit(async tx => { await change(tx); return undefined; }, at) };
+        const views = { models: runtime.models, model: resolved, owner: turn.sessionId, store };
+        try { sent = await forceStoredViews(messages, docs, views, context); }
+        catch (error) { return storable(unforced(resolved, error, Boolean(runtime.signal?.aborted)), phase); }
+        if (service.collect) {
+          // A generation's request is the context: when its head moved (the first request, a compaction, a reset), the
+          // owner's blocks are collected to the ones it references. Housekeeping: a failure is reported, not fatal.
+          try {
+            const head = (await runtime.context(runtime.conversationId, context)).head?.id ?? 0;
+            await collectViewBlocks(docs, views, new Set(neuraleseBlockIds(sent)), head, context);
+          } catch (error) { runtime.report(error); }
+        }
+      }
       const attempt = live?.attempt ?? streamAttempt?.();
-      return (attempt !== undefined ? streamResponse(runtime as never, resolved, messages, options(turn), attempt, context) :
-        runtime.models.completeSimple(resolved, { messages }, options(turn))).then(message => storable(message, phase));
+      return storable(await (attempt !== undefined ? streamResponse(runtime as never, resolved, sent, options(turn), attempt, context) :
+        runtime.models.completeSimple(resolved, { messages: sent }, options(turn))), phase);
     },
     poll(model: ModelRef, handle: DeferredHandle): Promise<AssistantMessage> {
       return runtime.models.fetchDeferred(resolve(model), handle as never, { signal: runtime.signal }).then(message => storable(message, phase));
@@ -90,8 +120,10 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
       await runtime.models.cancelDeferred(resolve(model), handle as never);
     },
     failure(message: AssistantMessage): { overflow: boolean; retryable: boolean } {
-      return { overflow: message.stopReason === 'error' && isContextOverflow(message),
-        retryable: message.stopReason === 'error' && isRetryableAssistantError(message) };
+      // A stored view that could not be forced says itself whether a retry may succeed (views.ts).
+      const view = message.errorMessage?.startsWith(VIEW_UNAVAILABLE) ? true : message.errorMessage?.startsWith(VIEW_FAILED) ? false : undefined;
+      return { overflow: message.stopReason === 'error' && view === undefined && isContextOverflow(message),
+        retryable: message.stopReason === 'error' && (view ?? isRetryableAssistantError(message)) };
     },
     retryDelayMs(policy: RetryPolicy, attempt: number): number { return retryDelayMs(policy, attempt); },
     estimateTokens(messages: Message[]): number[] {
@@ -131,7 +163,10 @@ export function model(ref: ModelRef): ModelInfo | null;
  * thinkingLevel, sessionId (the conversation's provider session) and an optional maxTokens. With live, the host
  * publishes the growing answer into pi.live.generation for that attempt, and finishes publishing before this returns.
  * Messages holding a Neuralese block, sent to a model that reads text, fail with "neuralese-unsupported-backend" (there
- * is no text fallback). Rejects only when the model is not in the catalog.
+ * is no text fallback). To a model that reads Neuralese, a text part with a stored call (its stored field) is sent as
+ * the call's block; when the block cannot be written the answer is stopReason "error" with an errorMessage starting
+ * "neuralese-view-unavailable" (failure says retryable) or "neuralese-view-failed". Rejects only when the model is not in
+ * the catalog.
  */
 export function turn(model: ModelRef, messages: Message[], options: StreamOptions & { thinkingLevel: ThinkingLevel; sessionId: string; maxTokens?: number }, live?: { attempt: number }): Promise<AssistantMessage>;
 /** Check a deferred response once; still pending: stopReason "deferred" with a new handle. */
