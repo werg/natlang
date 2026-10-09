@@ -29,6 +29,14 @@
 These rules apply to every agent on every machine. Paste the short form into any
 subagent brief. Reasons and history are in the linked documents.
 
+**The main rule: think in natlang-native terms.** Before building anything (an
+app, a runtime component, a compiler pass, a tool, a policy, a review step),
+first ask how it would be a natlang program: typed natural-language functions,
+callable folders, services for the outside world, and crisp code only where
+exactness or the outside world requires it. Start from that design and justify
+every piece of crisp code. Do not start from conventional code and add natlang
+afterwards. The rules below are consequences of this one.
+
 - **Policy is natural language; mechanism is crisp.** Any component that decides
   something (which tier serves, what to fuse, what to promote, which task runs,
   how to recover) is a natlang program. This includes natlang's own runtime and
