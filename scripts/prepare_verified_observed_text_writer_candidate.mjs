@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { verifyPinnedCodeClosure } from './verified_code_closure.mjs';
 
 function args(argv) {
   const values = {};
@@ -33,10 +34,8 @@ const manifestPath = resolve(options['code-manifest']);
 const manifestBytes = readFileSync(manifestPath), manifest = JSON.parse(manifestBytes);
 const materializerBytes = readFileSync(resolve(options.materializer));
 const materializerSha = sha(materializerBytes);
-const manifestEntry = (manifest.closure_files ?? []).find(item =>
-  resolve(manifestPath, '..', item.path) === resolve(options.materializer));
-if (manifest.schema !== 'natlang.river-native-materializer-code-inputs/3' || !manifestEntry ||
-    manifestEntry.sha256 !== materializerSha)
+const verifiedClosure = verifyPinnedCodeClosure(manifestPath, options.materializer);
+if (verifiedClosure.artifact.sha256 !== materializerSha)
   throw new Error('code manifest does not pin the exact materializer module');
 const { materializeNativeRows } = await import(modulePath.href);
 const rawBytes = readFileSync(resultPath), raw = JSON.parse(rawBytes);
@@ -120,6 +119,13 @@ const derivedTarget = { role: 'assistant', content: '', tool_calls: [{ id: callI
 const candidate = {
   schema: 'natlang.derived-observed-text-writer-candidate/1',
   proposal_id: `derived-writer:${source.id}:${event.text_body_sha256.slice(0, 16)}`,
+  conversion_provenance: {
+    converter_path: resolve(process.argv[1]),
+    converter_sha256: sha(readFileSync(resolve(process.argv[1]))),
+    closure_verifier_path: resolve(new URL('./verified_code_closure.mjs', import.meta.url).pathname),
+    closure_verifier_sha256: sha(readFileSync(new URL('./verified_code_closure.mjs', import.meta.url))),
+    verified_code_closure: verifiedClosure
+  },
   source_result: { path: resultPath, sha256: sha(rawBytes), trace_sha256: source.provenance.trace_sha256,
     code_manifest_path: manifestPath, code_manifest_sha256: sha(manifestBytes),
     materializer_module_path: resolve(options.materializer), materializer_module_sha256: materializerSha,

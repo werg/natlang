@@ -5,6 +5,7 @@ import hashlib
 import json
 import copy
 import re
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 
@@ -87,6 +88,8 @@ def _protected_target_sidecar_equivalence(record, receipt, metadata):
 def _authenticated_derived_semantic_text_write(record):
     """Validate the explicitly transformed pure-literal eval-to-text target view."""
     derived = record.get("derived_target")
+    if isinstance(derived, dict) and derived.get("schema") == "natlang.root-admitted-derived-text-writer-target/1":
+        return _authenticated_root_derived_text_writer(record, derived)
     conversion = record.get("neuralese_conversion") or {}
     writes = conversion.get("derived_semantic_text_writes")
     if not isinstance(derived, dict) or not isinstance(writes, list) or len(writes) != 1:
@@ -214,6 +217,118 @@ def _authenticated_derived_semantic_text_write(record):
         return None
     return {"name": write["name"], "body": body, "body_sha256": source["body_sha256"],
             "block_id": source["block_id"], "source": "derived-equivalent-pure-literal-target"}
+
+
+def _authenticated_root_derived_text_writer(record, derived):
+    """Validate a root-admitted computed text target without treating it as a native write."""
+    target = record.get("target") or {}
+    calls = target.get("tool_calls") if isinstance(target, dict) else None
+    admission_meta = record.get("training_admission") or {}
+    admission_path = derived.get("root_admission_path")
+    candidate_path = derived.get("conversion_candidate_path")
+    if (not isinstance(admission_path, str) or not isinstance(candidate_path, str)
+            or not Path(admission_path).is_file() or not Path(candidate_path).is_file()):
+        return None
+    try:
+        admission_bytes = Path(admission_path).read_bytes()
+        candidate_bytes = Path(candidate_path).read_bytes()
+        admission = json.loads(admission_bytes)
+        candidate = json.loads(candidate_bytes)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (_sha(admission_bytes) != derived.get("root_admission_sha256")
+            or _sha(admission_bytes) != admission_meta.get("receipt_sha256")
+            or _sha(candidate_bytes) != derived.get("conversion_candidate_sha256")
+            or admission.get("schema") != "natlang.root-derived-observed-text-writer-admission/1"
+            or admission.get("decision") != "admit-derived-observed-text-writer-body"
+            or admission.get("training_admission") is not True
+            or admission.get("original_action_admission") is not False
+            or admission.get("limits", {}).get("whole_trajectory_admission") is not False
+            or admission.get("limits", {}).get("runtime_gradient_qualification") is not False
+            or admission.get("limits", {}).get("active_training_inputs_changed") is not False
+            or admission_meta.get("kind") != "root-derived-text-writer-body-admission"
+            or admission_meta.get("approved") is not True
+            or candidate.get("schema") != "natlang.derived-observed-text-writer-candidate/1"
+            or candidate.get("proposal_id") != admission.get("proposal_id")
+            or candidate.get("exact_body_sha256") != admission.get("exact_body_sha256")
+            or candidate.get("derived_supervision", {}).get("target_sha256") != admission.get("derived_target_sha256")
+            or derived.get("proposal_id") != admission.get("proposal_id")
+            or derived.get("original_native_record_id") != admission.get("source_native_record_id")
+            or derived.get("exact_body_sha256") != admission.get("exact_body_sha256")
+            or derived.get("target_sha256") != admission.get("derived_target_sha256")
+            or derived.get("original_eval_hidden_states_equivalent") is not False
+            or derived.get("recurrence_admission") is not False
+            or derived.get("runtime_gradient_qualification") is not False
+            or record.get("trace_admission", {}).get("admitted") is not False
+            or record.get("split") != admission.get("split")
+            or admission.get("source_group") not in record.get("source_groups", [])):
+        return None
+    root = next((parent.parent for parent in Path(admission_path).resolve().parents
+                 if parent.name == "runs" and (parent.parent / "training/neuralese_corpora.json").is_file()), None)
+    if root is None:
+        return None
+    for rel, pin in (admission.get("input_pins") or {}).items():
+        path = (root / rel).resolve()
+        if (not path.is_relative_to(root) or not path.is_file() or not isinstance(pin, dict)
+                or _sha(path.read_bytes()) != pin.get("sha256")
+                or path.stat().st_size != pin.get("bytes")):
+            return None
+    conversion = candidate.get("conversion_provenance") or {}
+    converter_path = conversion.get("converter_path")
+    verifier_path = conversion.get("closure_verifier_path")
+    closure = conversion.get("verified_code_closure") or {}
+    manifest_path = closure.get("manifest_path")
+    if not all(isinstance(x, str) and Path(x).is_file() for x in (converter_path, verifier_path, manifest_path)):
+        return None
+    if (_sha(Path(converter_path).read_bytes()) != conversion.get("converter_sha256")
+            or _sha(Path(verifier_path).read_bytes()) != conversion.get("closure_verifier_sha256")
+            or _sha(Path(manifest_path).read_bytes()) != closure.get("manifest_sha256")):
+        return None
+    try:
+        manifest = json.loads(Path(manifest_path).read_bytes())
+    except (OSError, json.JSONDecodeError):
+        return None
+    entries = manifest.get("closure_files")
+    if not isinstance(entries, list) or not entries:
+        return None
+    verified = []
+    manifest_dir = Path(manifest_path).resolve().parent
+    for entry in entries:
+        rel = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(rel, str):
+            return None
+        path = (manifest_dir / rel).resolve()
+        if not path.is_relative_to(manifest_dir) or not path.is_file():
+            return None
+        contents = path.read_bytes()
+        if (_sha(contents) != entry.get("sha256")
+                or (entry.get("bytes") is not None and len(contents) != entry.get("bytes"))):
+            return None
+        verified.append({"path": rel, "sha256": _sha(contents), "bytes": len(contents)})
+    if (_sha(json.dumps(verified, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            != closure.get("closure_sha256") or len(verified) != closure.get("closure_files_verified")):
+        return None
+    if not isinstance(calls, list) or len(calls) != 1:
+        return None
+    call = calls[0]
+    fn = call.get("function") if isinstance(call, dict) else None
+    try:
+        args = json.loads(fn.get("arguments")) if isinstance(fn, dict) and isinstance(fn.get("arguments"), str) else None
+    except json.JSONDecodeError:
+        return None
+    value = args.get("value") if isinstance(args, dict) else None
+    body = value if isinstance(value, str) else None
+    if (fn.get("name") != "return_result" or args.get("status") != "success"
+            or body is None or _sha(body.encode("utf-8")) != admission.get("exact_body_sha256")
+            or _sha(json.dumps(target, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                != admission.get("derived_target_sha256")
+            or _sha(json.dumps(derived.get("original_target"), ensure_ascii=False,
+                               separators=(",", ":")).encode("utf-8")) != derived.get("original_target_sha256")
+            or _sha(json.dumps(record.get("messages") or [], ensure_ascii=False,
+                               separators=(",", ":")).encode("utf-8")) != derived.get("original_messages_sha256")):
+        return None
+    return {"body": body, "body_sha256": admission["exact_body_sha256"],
+            "source": "root-admitted-derived-text-writer-body", "native_runtime_write": False}
 
 
 def _canonical(value: Any) -> str:
@@ -779,7 +894,15 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or item.get("parent_invocation_id") != receipt.get("parent_invocation_id")):
             raise ValueError("context-only provider read receipt does not authenticate exact body and graph")
         if source_binding_present:
-            protected_target_sha = _sha(_canonical(record.get("target")).encode("utf-8"))
+            # A separately admitted derived text writer keeps provider reads
+            # bound to the original sampled action. Its converted target is a
+            # new supervision object and is not the action that made the read.
+            derived = record.get("derived_target") or {}
+            selected_action_target = (derived.get("original_target")
+                                      if derived.get("schema") ==
+                                      "natlang.root-admitted-derived-text-writer-target/1"
+                                      else record.get("target"))
+            protected_target_sha = _sha(_canonical(selected_action_target).encode("utf-8"))
             target_adapter = receipt.get("target_binding_adapter")
             adapter_valid = (_protected_target_sidecar_equivalence(record, receipt, item)
                              if target_adapter is not None else False)
@@ -953,7 +1076,8 @@ def native_gold_packet(tokenizer, messages, target, tools):
     return text,ids,boundary
 
 
-def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
+def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
+                   require_independent_splits: bool = True):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -963,7 +1087,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     calls are never executed. Pieces resolve soft references; only explicit
     handover/read source values resolve handovers.
     """
-    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False)
+    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False,
+                           require_independent_splits=require_independent_splits)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -972,10 +1097,11 @@ def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping
     This API creates review artifacts only. It does not set admission fields,
     and its receipt is explicitly ineligible for training.
     """
-    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=True)
+    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=True,
+                           require_independent_splits=True)
 
 
-def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
+def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True):
     from ..train.trajectories import crisp_messages, handover_notes
 
     fingerprint = tokenizer_fingerprint(tokenizer)
@@ -1061,7 +1187,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
                 row["capture_context_augmentation_attestations"])
     rows = list(dedup.values())
     same_split_dupes = n_before - excluded_train_held - len(rows)
-    if (not preview_only and
+    if (not preview_only and require_independent_splits and
             (not any(row["split"] == "train" for row in rows) or
              not any(row["split"] == "test" for row in rows))):
         raise ValueError("nonempty independent train and held text required")

@@ -13625,6 +13625,39 @@
         "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1"
       ],
       "notes": "Compact selected delta only: three independently reviewed train actions from one existing clinic source group, plus three faithful ordinary-text documents. Root adopted exact native/text union on the full 5450-native/4682-text base (virtual totals 5453/4685; recurrence remains 4961). No duplicated prior cohort, no recurrence/trajectory/DPO/runtime/learned-writer qualification, no new-world credit, and no active GPU input change. The generation provenance is pinned to OpenCode Zen opencode/step-5-preview-free, low, with main and small aliases equal; CLI physical/upstream request count is unknown. Root-selected-action admission explicitly excludes two other native rows."
+    },
+    {
+      "id": "luna-river-derived-writer-native-text-delta-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/records/derived-writer-stage2.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/records/derived-writer-stage2.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/pieces/delta-pieces.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/README.md",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/anchor-selection.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-omissions.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-provenance.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/delta-text.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/output-manifest.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/packet-manifest.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/provider-context-bindings.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/receipt.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/source-coverage.jsonl",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/derived-writer-text-delta-review-v1.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/root-derived-native-text-delta-review-v1.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/text-proposal-v4/root-derived-native-text-delta-adoption-v1.json",
+        "luna-river-bound-skill-propagation-20261009-v3/evidence/root-derived-writer-body-admission-v1.json",
+        "luna-river-bound-skill-propagation-20261009-v3/evidence/river-v3-derived-writer-candidate-v5.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-code-manifest-v1.json",
+        "luna-river-bound-skill-propagation-20261009-v3/derived-writer-delta-v1/inputs/renderer-current-root-derived-v3/renderer-package-manifest-v1.json"
+      ],
+      "admission": "root-adopted one derived native SFT action and one ordinary-text train document; no recurrence addition, no active training input change, and no writer/runtime/gradient or trajectory qualification",
+      "derived_from": [
+        "luna-river-bound-skill-propagation-20261009-v3",
+        "v18-v19-full-approved-consolidation-5450-native-4682-text-4961-r-20261009-v1"
+      ],
+      "notes": "Compact standalone derived delta. Root adoption 07efb4706a752721498286e4c8daee84f06f9bf4eb95d820f82d0e78176c9617 approves exactly one derived native SFT row and one ordinary-text train document, with zero test rows and zero recurrence rows. The text builder historical diagnostic base was 4682 documents (2978 train/1704 test), yielding 4683 (2979/1704); root verified closure against the current adopted base of 4699 documents (2995 train/1704 test), yielding virtual 4700 (2996/1704). Current recurrence remains 4961; this capsule does not replace or modify the current cumulative inputs (4699-text and 4961-recurrence cohorts; the native base is preserved as its separately adopted snapshot). Text suffix/tokenizer fingerprint e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. Derived target provenance is distinct from the original sampled eval action. No automatic activation."
     }
   ],
   "coverage_backlog": [

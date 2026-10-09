@@ -150,6 +150,99 @@ class AssemblerInvariantTests(unittest.TestCase):
             self.assertEqual(manifest["admitted_facets"],
                              {"native": True, "recurrence": False, "native_only_receipt": True})
 
+    def test_multiple_per_action_receipts_union_only_their_pinned_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            native = root / "native.jsonl"; recurrence = root / "recurrence.jsonl"
+            native_pieces = root / "native-pieces.jsonl"; recurrence_pieces = root / "recurrence-pieces.jsonl"
+            delta_native = root / "delta-native.jsonl"; delta_pieces = root / "delta-pieces.jsonl"
+            native.write_text(json.dumps({"id": "base", "split": "train", "source_groups": ["base"]}) + "\n")
+            recurrence.write_text('{"id":"base-r","links":[]}\n')
+            native_pieces.write_text(""); recurrence_pieces.write_text(""); delta_pieces.write_text("")
+            rows = []
+            approvals = []
+            approval_hashes = {}
+            for index in range(2):
+                ident = f"selected-{index}"
+                group = f"group-{index}"
+                target = {"role": "assistant", "content": f"target {index}"}
+                rows.append({"id": ident, "split": "train", "source_groups": [group], "source_ids": [f"source-{index}"],
+                             "target": target, "messages": [], "decision": {"failed_action": False},
+                             "training_admission": {"approved": False}})
+                source = root / f"source-{index}.jsonl"
+                source.write_text(json.dumps({"id": ident}) + "\n")
+                review = root / f"review-{index}.json"
+                review.write_text(json.dumps({"review": index}) + "\n")
+                if index == 0:
+                    approval = {
+                        "schema": "natlang.root-per-action-training-admission/1",
+                        "review_path": review.name, "review_sha256": builder.sha(review),
+                        "input_pins": {source.name: {"sha256": builder.sha(source), "bytes": source.stat().st_size}},
+                        "rows": [{"native_id": ident, "decision": "admit-ordinary-native-action", "training_admission": True,
+                                  "split": "train", "source_group": group,
+                                  "target_sha256": builder.target_digest({"target": target})}],
+                        "admitted_native_count": 1, "held_source_contract_final_count": 0,
+                        "held_ambiguous_source_read_scope_count": 0, "failed_count": 0, "already_adopted_count": 0,
+                        "whole_trajectory_admission": False, "runtime_qualification": False,
+                        "active_gpu_inputs_changed": False, "new_world_credit": False,
+                    }
+                else:
+                    approval = {
+                        "schema": "natlang.root-selected-action-admission/1",
+                        "rows": [{"native_id": ident, "decision": "admit-exact-selected-native-action-SFT-only",
+                                  "split": "train", "source_groups": [group],
+                                  "target_sha256": builder.target_digest({"target": target})}],
+                        "counts": {"selected_native_actions": 1, "train_actions": 1, "test_actions": 0,
+                                   "whole_trajectories": 0, "new_worlds": 0},
+                        "qualifications": {"learned_writer": False, "recurrence": False},
+                        "integration": {"active_GPU_inputs_changed": False},
+                    }
+                approval_path = root / f"approval-{index}.json"
+                approval_path.write_text(json.dumps(approval) + "\n")
+                approvals.append(approval_path)
+                approval_hashes[ident] = builder.sha(approval_path)
+            delta_native.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            base_receipt = root / "base-receipt.json"
+            base_receipt.write_text(json.dumps({"schema": "natlang.corpus-prefix-binding/1",
+                "status": "verified-exact-prefix", "training_admission": False, "files": {
+                "native-records.jsonl": {"sha256": builder.sha(native)},
+                "recurrence-records.jsonl": {"sha256": builder.sha(recurrence)},
+                "native-pieces.jsonl": {"sha256": builder.sha(native_pieces)},
+                "recurrence-pieces.jsonl": {"sha256": builder.sha(recurrence_pieces)}}}))
+            out = root / "out"
+            argv = ["assembler", "--base-native", str(native), "--base-recurrence", str(recurrence),
+                    "--base-receipt", str(base_receipt), "--delta-native", str(delta_native),
+                    "--delta-pieces", str(delta_pieces), "--base-native-pieces", str(native_pieces),
+                    "--base-recurrence-pieces", str(recurrence_pieces), "--out", str(out), "--compact-only"]
+            for approval_path in approvals:
+                argv.extend(["--approval", str(approval_path)])
+            original_validate = builder.validate_root_per_action_approval
+            def validate_at_temp(approval, delta_rows, **kwargs):
+                return original_validate(approval, delta_rows, root=root)
+            def fake_audit(command, **kwargs):
+                Path(command[-1]).write_text(json.dumps({"structurally_closed": True, "linked_edges": 0}))
+            with patch.object(sys, "argv", argv), patch.object(builder, "validate_root_per_action_approval", side_effect=validate_at_temp), \
+                 patch.object(builder.subprocess, "run", side_effect=fake_audit):
+                builder.main()
+            admitted = list(builder.rows(out / "delta-native-records.jsonl"))
+            self.assertEqual([row["id"] for row in admitted], ["selected-0", "selected-1"])
+            for row in admitted:
+                self.assertTrue(row["training_admission"]["approved"])
+                self.assertEqual(row["training_admission"]["root_admission_sha256"], approval_hashes[row["id"]])
+                self.assertEqual(row["decision"]["root_action_admission_sha256"], approval_hashes[row["id"]])
+            manifest = json.loads((out / "proposal-manifest.json").read_text())
+            self.assertEqual([item["sha256"] for item in manifest["approval"]["receipts"]],
+                             [builder.sha(path) for path in approvals])
+
+    def test_multiple_per_action_receipts_reject_duplicate_ids(self):
+        first_row = {"decision": "admit-ordinary-native-action", "target_sha256": "a" * 64}
+        same_row = json.loads(json.dumps(first_row))
+        conflicting_row = {**first_row, "target_sha256": "b" * 64}
+        with self.assertRaisesRegex(ValueError, "duplicate approval IDs across receipts"):
+            builder.merge_root_approval_rows({"same": first_row}, {"same": "f" * 64}, {"same": same_row}, "f" * 64)
+        with self.assertRaisesRegex(ValueError, "conflicting duplicate approval ID"):
+            builder.merge_root_approval_rows({"same": first_row}, {"same": "f" * 64}, {"same": conflicting_row}, "e" * 64)
+
     def test_selected_action_receipt_rejects_changed_target(self):
         target = {"role": "assistant", "content": "original"}
         row = {"id": "selected", "target": target}

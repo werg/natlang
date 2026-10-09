@@ -103,7 +103,14 @@ def bind_exact_provider_contexts(records):
             block_id, body, body_hash = block.get("id"), block.get("body"), block.get("body_sha256")
             occurrences = provider_context_occurrences(record.get("messages") or [], block_id)
             if occurrences == 0: continue
-            target_hash = sha(canonical(record.get("target") or {}).encode())
+            # A root-admitted derived target has a separate ID/target. Provider
+            # reads still bind to the original sampled assistant action that
+            # supplied the visible message context.
+            derived = record.get("derived_target") or {}
+            source_action_target = (derived.get("original_target")
+                                    if derived.get("schema") == "natlang.root-admitted-derived-text-writer-target/1"
+                                    else record.get("target"))
+            target_hash = sha(canonical(source_action_target or {}).encode())
             required = {
                 "schema": "natlang.provider-expanded-read-context/2",
                 "invocation_id": source_ref.get("invocation_id"),
@@ -366,6 +373,47 @@ def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT)
         raise ValueError("delta records do not equal root-admitted per-action IDs")
     return admitted
 
+def admitted_root_derived_writer_row(receipt, *, delta_records, root: Path = ROOT):
+    """Validate one root-admitted derived writer target, separate from its original action."""
+    if (receipt.get("schema") != "natlang.root-derived-observed-text-writer-admission/1"
+            or receipt.get("decision") != "admit-derived-observed-text-writer-body"
+            or receipt.get("training_admission") is not True
+            or receipt.get("original_action_admission") is not False
+            or receipt.get("limits", {}).get("whole_trajectory_admission") is not False
+            or receipt.get("limits", {}).get("runtime_gradient_qualification") is not False
+            or receipt.get("limits", {}).get("active_training_inputs_changed") is not False):
+        raise ValueError("root receipt does not admit only the derived writer body")
+    pins = receipt.get("input_pins")
+    if not isinstance(pins, dict) or not pins:
+        raise ValueError("root derived-writer admission lacks input pins")
+    root = root.resolve()
+    for rel, pin in pins.items():
+        path = Path(rel)
+        if path.is_absolute() or not isinstance(pin, dict):
+            raise ValueError("root derived-writer input pin is malformed")
+        path = (root / path).resolve()
+        if (not path.is_relative_to(root) or not path.is_file()
+                or sha_file(path) != pin.get("sha256") or path.stat().st_size != pin.get("bytes")):
+            raise ValueError(f"root derived-writer input pin is missing or mismatched: {rel}")
+    proposal_id = receipt.get("proposal_id")
+    if not isinstance(proposal_id, str) or len(delta_records) != 1 or delta_records[0].get("id") != proposal_id:
+        raise ValueError("derived-writer delta must contain exactly the approved proposal ID")
+    row = delta_records[0]
+    derived = row.get("derived_target")
+    if (not isinstance(derived, dict)
+            or derived.get("schema") != "natlang.root-admitted-derived-text-writer-target/1"
+            or derived.get("proposal_id") != proposal_id
+            or derived.get("original_native_record_id") != receipt.get("source_native_record_id")
+            or derived.get("exact_body_sha256") != receipt.get("exact_body_sha256")
+            or derived.get("target_sha256") != receipt.get("derived_target_sha256")
+            or sha(json.dumps(row.get("target"), ensure_ascii=False, separators=(",", ":")).encode())
+                != receipt.get("derived_target_sha256")
+            or row.get("split") != receipt.get("split")
+            or receipt.get("source_group") not in row.get("source_groups", [])):
+        raise ValueError("derived-writer row does not match root body/target/source/split admission")
+    return [{"native_id": proposal_id, "target_sha256": receipt["derived_target_sha256"],
+             "split": receipt["split"], "source_group": receipt["source_group"]}]
+
 def append_prefix(prefix: Path, output: Path, additions: list[dict]):
     with output.open("xb") as f:
         with prefix.open("rb") as src:
@@ -421,6 +469,11 @@ def main():
     adoption_bindings = root_integration_adoption_bindings(base_approval)
     base_receipt_path = args.base_text.parent / "receipt.json"
     base_prefix_receipt = resolve_base_text_prefix_metadata(adoption_bindings, base_receipt_path)
+    if (not isinstance(base_prefix_receipt.get("train_documents"), int)
+            or not isinstance(base_prefix_receipt.get("test_documents"), int)
+            or base_prefix_receipt["train_documents"] < 1
+            or base_prefix_receipt["test_documents"] < 1):
+        raise ValueError("root-adopted base text prefix lacks independently populated train and held splits")
     approved_text = args.twin_of_text or args.base_text
     def manifest_binds(text):  # a root admission that binds the packet's output manifest, which binds the text
         manifest = text.parent / "output-manifest.json"
@@ -490,6 +543,7 @@ def main():
     source_approval = json.loads(args.source_approval.read_text())
     root_action_admission = source_approval.get("schema") == "natlang.root-selected-action-admission/1"
     root_per_action_admission = source_approval.get("schema") == "natlang.root-per-action-training-admission/1"
+    root_derived_writer_admission = source_approval.get("schema") == "natlang.root-derived-observed-text-writer-admission/1"
     admission_rows = source_approval.get("rows", []) if root_action_admission else []
     if root_action_admission:
         approved_ids = [item.get("native_id") for item in admission_rows]
@@ -514,19 +568,25 @@ def main():
         admission_rows = admitted_root_per_action_rows(
             source_approval, delta_ids={row.get("id") for row in delta_records})
         approved_ids = [item["native_id"] for item in admission_rows]
+    elif root_derived_writer_admission:
+        admission_rows = admitted_root_derived_writer_row(source_approval, delta_records=delta_records)
+        approved_ids = [item["native_id"] for item in admission_rows]
     else:
         approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
     if not isinstance(approved_ids, list) or set(approved_ids) != delta_ids or len(approved_ids) != len(delta_ids):
         raise ValueError("delta records do not equal source approval IDs")
-    if root_action_admission or root_per_action_admission:
+    if root_action_admission or root_per_action_admission or root_derived_writer_admission:
         admitted_by_id = {item["native_id"]: item for item in admission_rows}
         for row in delta_records:
             admission = admitted_by_id.get(row.get("id"))
-            digest = sha(json.dumps(row.get("target"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
+            digest = sha(json.dumps(row.get("target"), ensure_ascii=False,
+                                    sort_keys=not root_derived_writer_admission, separators=(",", ":")).encode())
             if not admission or digest != admission.get("target_sha256"):
                 raise ValueError(f"root action admission target binding mismatch: {row.get('id')}")
-            if root_per_action_admission:
+            if root_derived_writer_admission:
+                group_ok = admission.get("source_group") in row.get("source_groups", [])
+            elif root_per_action_admission:
                 groups = row.get("source_groups", [])
                 group_ok = (isinstance(admission.get("source_group"), str)
                             and admission["source_group"] in groups)
@@ -541,7 +601,8 @@ def main():
             # only after ID/target/split/group bindings pass; raw source bytes stay
             # pinned and unchanged.
             row["training_admission"] = {
-                "kind": "root-selected-action-admission",
+                "kind": ("root-derived-text-writer-body-admission" if root_derived_writer_admission
+                         else "root-selected-action-admission"),
                 "approved": True,
                 "receipt_sha256": sha_file(args.source_approval),
             }
@@ -603,7 +664,8 @@ def main():
     # only to the real, previously derived base packet.
     for anchor in anchors:
         rendered, helper_receipt, omissions, provenance = gold_text_rows(
-            [*delta_records, anchor], pieces, tokenizer=tokenizer)
+            [*delta_records, anchor], pieces, tokenizer=tokenizer,
+            require_independent_splits=False)
         qualification = anchor_qualification(anchor, rendered, omissions, helper_receipt)
         anchor_attempts.append({"id": anchor.get("id"),
                                 "source_record_sha256": anchor.get("_source_record_sha256"),
@@ -686,6 +748,12 @@ def main():
                     "rendering": helper_receipt["rendering"],
                     "supervision": helper_receipt["supervision"],
                     "ordinary_text_stage_only": True,
+                    "split_qualification": {
+                        "renderer_delta_call_requires_both_splits": False,
+                        "base_prefix_train_documents": base_prefix_receipt["train_documents"],
+                        "base_prefix_test_documents": base_prefix_receipt["test_documents"],
+                        "base_root_adoption_sha256": sha_file(args.base_root_receipt),
+                    },
                     "base_renderer_code": old_receipt.get("renderer_code", {}),
                     "documents": virtual_base_docs + len(additions),
                     "train_documents": virtual_base_train + sum(x["split"] == "train" for x in additions),
@@ -704,6 +772,8 @@ def main():
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
                     "delta_root_action_admission_overlay_records": len(admission_rows)
                     if (root_action_admission or root_per_action_admission) else 0,
+                    "delta_root_derived_writer_admission_records": len(admission_rows)
+                    if root_derived_writer_admission else 0,
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "delta_authenticated_provider_context_only_blocks": len(provider_context_bindings),
                     "provider_context_bindings_sha256": sha(context_binding_bytes),
@@ -776,7 +846,7 @@ def main():
         + ("It contains compact selected deltas; admitted prefixes are referenced by exact root receipts and are not copied. "
            if args.compact_only else "Its `text.jsonl` and `provenance.jsonl` preserve the supplied admitted text packet as exact byte prefixes. ")
         + "The selected delta was rendered with the shared `gold_text_rows` helper and the pinned tokenizer fingerprint recorded in `receipt.json`; no model generation or tools were used.\n\n"
-        f"The base prefix contains {old_receipt['documents']} documents; this proposal appends {len(additions)} new documents from {len(delta_records)} selected source-reviewed native records. "
+        f"The base prefix contains {old_receipt['documents']} documents; this proposal appends {len(additions)} new documents from {len(delta_records)} selected source-reviewed records. "
         f"{hydrated_contexts} exact named Neuralese reader-context blocks were hydrated from successful, hash-bound writer target sources in the same split and source group; attestations are recorded in `provenance.jsonl`. "
         "The current delta renderer records typed eval-finish marker sidecars and separately labeled full capture context augmentations. Those augmentations come from authenticated same-invocation snapshots and do not claim the omitted text was historically provider-visible. "
         "Hydrated blocks and capture augmentations add context only; they do not create separate target rows. "
