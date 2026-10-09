@@ -397,6 +397,55 @@ of the variant it matches (`checkpoint/cutoff: expected number`), not as the
 whole union. Recursive function types are
 rejected (see Iteration and termination).
 
+## Is<T, P> refinement types
+
+`Is<T, "predicate">` is `T` plus a natural-language predicate that its values satisfy:
+`type Reply = Is<string, "a reply to the customer that is polite and does not blame them">`. `T` is any natlang
+type; `P` is one nonempty string literal that describes the wanted values positively (a conjunction is one
+sentence). `Is<Is<T, "a">, "b">` means both. Whitespace in `P` is normalized. An empty or non-literal `P` is
+`refinement-predicate-invalid`, reported when the type is read.
+
+Structure is unchanged: a value is checked against `T` as before, and a refined value is a `T` everywhere. The
+predicate is an obligation checked where a value enters a refined slot:
+
+- the return of an `nl` call or a `.nl` function, after the structural check (a failure goes back to the executing
+  model as a tool error on `return_result` or its reply, and the model repairs it within the repair budget:
+  `maxFailureRepairs`, else `refinements.repairs`, default 3; past it the call fails with the refinement's code);
+- an argument into a refined parameter, checked at the caller (a failure throws and the callee does not start);
+- a service result whose type is declared in `refinements.services`;
+- `refine(value, predicate)`, which checks and returns an `Is<T, P>`, and `assume(value, predicate)`, which
+  returns one without checking and records the assumption in the trace.
+
+Records, arrays and dictionaries check each refined position; the checks of one value are issued together.
+
+Fit: `Is<B, P>` fits `T` when `B` fits `T`; `T` fits `Is<B, P>` when `T` fits `B`, with the check as the
+obligation of that site; `Is<B, P>` fits `Is<B', P'>` without a check when `B` fits `B'` and the predicates
+are equal after whitespace normalization (for nested types, every predicate of the target is present).
+
+**The check.** The judge is one `readout: decision` scoring pass on the call's model (or `refinements.judge`):
+the value is shown as data, the predicate as the question, and P(true) is read from the scores of `true` and
+`false`. A verdict is cached by `(sha256 of the canonical value, normalized predicate, judge id)`, so the same value
+is not judged twice. The value passes at P(true) at or above `threshold` (default 0.5). Inside an optional
+uncertainty `band` the `policy` applies: `accept`, `reject` (fail with `refinement-undecided`), or `escalate`
+to the model named by `escalate`. A model that cannot score replies cannot judge: the check is
+`refinement-undecided` unless a crisp checker decides.
+
+**Errors.** `refinement-unsatisfied`: the predicate was judged false. `refinement-undecided`: the probability fell
+inside the band under the `reject` policy, or nothing could judge. `refinement-predicate-invalid`: `P` is empty
+or not a string literal. Each message is one sentence that names the predicate and the fix. A call that ends on a
+refinement rejects with `RefinementCallError` (a `NatlangCallError` with `code`); a rejected argument, service
+result or `refine` throws `RefinementError`.
+
+**Settings** (`natlang.json`, `refinements`): `threshold`, `band: { low, high }`, `policy`, `mode`, `judge`,
+`escalate`, `repairs`, `predicates` (the same fields per normalized predicate) and `services`
+(`"service.method": "Is<string, \"…\">"`). `mode` is `crisp` (default: a crisp checker that returns a boolean
+decides, `undefined` defers to the judge), `nl` (judge only), or `shadow` (the judge decides; every crisp/judge
+disagreement is traced as `refinement_shadow`). Crisp checkers come from the runtime option
+`refinements.crisp` or the `refinements` table exported by `native/types.ts`, keyed by the normalized predicate.
+
+**Trace.** Every check is a `refinement_check` event: path, predicate, value, outcome, probability, judge and where
+the verdict came from (`crisp`, `judge`, `cache`, `escalation`). `refinement_assumed` records an `assume`.
+
 ## Directory reducers
 
 A directory reducer's first parameter is a `Folder` (or a handle from

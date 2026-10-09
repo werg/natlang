@@ -8,6 +8,7 @@ import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
+import type { RefinementSettings } from '../native/refinement.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
@@ -402,11 +403,13 @@ function compileFor(root: string, entry: string, outDir: string, installed: bool
 type Launch = { root: string; target: NatlangTarget; targetName: string; installed?: boolean;
   package?: TargetContext['package']; dependencies: TargetContext['dependencies']; stateKey: string };
 
-/** The recording and specialization settings of the package at `root` (natlang.json). */
-function readManifestSettings(root: string): { recording?: { exclude?: string[] }; specialization?: 'off' | 'shadow' | 'on' } {
+/** The recording, specialization and refinement settings of the package at `root` (natlang.json). */
+function readManifestSettings(root: string): { recording?: { exclude?: string[] }; specialization?: 'off' | 'shadow' | 'on';
+  refinements?: RefinementSettings } {
   try {
     const manifest = parsePackageManifest(JSON.parse(readFileSync(join(root, 'natlang.json'), 'utf8')));
-    return { ...(manifest.recording ? { recording: manifest.recording } : {}), ...(manifest.specialization ? { specialization: manifest.specialization } : {}) };
+    return { ...(manifest.recording ? { recording: manifest.recording } : {}), ...(manifest.specialization ? { specialization: manifest.specialization } : {}),
+      ...(manifest.refinements ? { refinements: manifest.refinements } : {}) };
   } catch { return {}; }
 }
 

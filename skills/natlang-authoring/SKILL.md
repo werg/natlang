@@ -15,6 +15,8 @@ Locate the natlang checkout or installed `@natlang/node` / `@natlang/browser` ve
 
 Read [language and source contracts](references/language.md) before creating or restructuring code, [algorithm patterns](references/patterns.md) for loops, reducers, reconciliation, and generated methods, and [verification and diagnosis](references/verification.md) when testing or debugging. The [review example](assets/review/review.nl) shows a named function whose callable folder holds a semantic helper and an exact aggregation; copy the whole `assets/review/` directory.
 
+Put a property of a value in its type rather than in a guard sentence: read [constraints belong in types](references/refinements.md) for `Is<T, "predicate">`, when to use it and how to phrase the predicate.
+
 For evaluation suites, instruction optimization, or trainable program guidance, read [adaptation and evaluation](references/adaptation.md). It covers component selection, independent scoring, fresh fixtures, bounded search, report review, and artifact activation. Ordinary authoring does not require an optimization run.
 
 ## Build a real program
