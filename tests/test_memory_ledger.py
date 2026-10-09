@@ -11,9 +11,19 @@ def claim(cls, budget, used, admitted):
     return {'class': cls, 'budget': budget * GIB, 'used': used * GIB, 'admitted': admitted}
 
 
-def test_over_budget_unit_is_stopped_first_even_above_the_floor():
+def test_over_budget_unit_is_stopped_first_only_under_memory_pressure():
     live = {'a.service': claim('experiment', 8, 4, 1), 'b.service': claim('collection', 4, 6, 2)}
-    assert ledger.victim(live, False, 1.15) == ('b.service', 'over budget')
+    assert ledger.victim(live, False, 1.15, pressure=True) == ('b.service', 'over budget under memory pressure')
+    assert ledger.victim(live, False, 1.15, pressure=False) == (None, None)  # plenty of memory: keep the work
+    assert ledger.victim(live, True, 1.15) == ('b.service', 'over budget under memory pressure')
+
+
+def test_admission_learns_each_job_familys_measured_peak():
+    assert ledger.family('natlang-mellum-qat-test-210556.service') == 'natlang-mellum-qat-test'
+    assert ledger.family('natlang-maple-reg-c224705.service') == 'natlang-maple-reg'
+    state = {'family_peaks': {'natlang-mellum-qat-test': 10 * GIB}}
+    assert ledger.learned_budget(state, 'natlang-mellum-qat-test-999999.service', 4 * GIB) == 11 * GIB
+    assert ledger.learned_budget(state, 'natlang-other.service', 4 * GIB) == 4 * GIB
 
 
 def test_floor_breach_stops_the_lowest_priority_newest_unit():
