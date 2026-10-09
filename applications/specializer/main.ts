@@ -66,7 +66,7 @@ function reducerRuntime(context: TargetContext, store: CallStore): NatlangRuntim
 export async function specializeOne(context: TargetContext, store: CallStore, key: string, options: Options): Promise<string> {
   const minCalls = options.minCalls ?? store.settings().minCalls;
   const subject = study(store, key);
-  if (!subject) return 'no usable calls';
+  if (!subject) return `${store.calls({ key, limit: 1, audits: true })[0]?.definition_name ?? key}: no usable calls (none from a model that spent tokens)`;
   const name = subject.definition.name;
   const crisp = crispDecline(subject, minCalls);
   if (crisp) {
