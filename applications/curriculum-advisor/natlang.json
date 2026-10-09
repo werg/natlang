@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/curriculum-advisor",
+  "version": "0.1.0",
+  "description": "Advisory judgments for curriculum collection (plans/NATLANG_NATIVE_REVIEW.md, P6): whether a held extractive-answer row deserves a human review (never admission), and which batch to collect next (a proposal, never a schedule). Crisp code computes the facts and checks every answer; output goes to separate files labelled with the advisor's hash.",
+  "include": ["README.md", "index.ts", "types.ts", "refinements.ts", "judgeAnswerEquivalence.nl", "nextCollectionBatch.nl", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
