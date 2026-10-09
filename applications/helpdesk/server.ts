@@ -5,10 +5,11 @@
  *   POST /tickets/:id/messages   { id, author, text }   a customer writes
  *   POST /tickets/:id/replies    { id, author, text }   an agent answers
  *   POST /tickets/:id/close      { id }
- *   GET  /tickets/:id                                   the ticket, with triage and the draft reply
- *   GET  /inbox                                         tickets a customer is waiting on, escalated first
+ *   GET  /tickets/:id                                   the ticket: triage, the draft reply, what it still needs, its escalation plan
+ *   GET  /inbox                                         tickets a customer is waiting on, in the queue order
  */
 import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TargetContext } from '@natlang/node';
 import { HelpDesk, TicketStore, type DeskRequest, type Ticket } from './index.js';
@@ -57,13 +58,26 @@ export async function serveHelpDesk(desk: HelpDesk, port = 0, host = '127.0.0.1'
   return { url: `http://${host}:${typeof address === 'object' && address ? address.port : port}`, server };
 }
 
-/** `natlang run applications/helpdesk -- --port 8080`: the desk with the launcher's model, until interrupted. */
+const option = (args: string[], name: string): string | undefined => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
+
+/**
+ * `natlang run applications/helpdesk -- --port 8080`: the desk with the launcher's model, until interrupted.
+ *
+ *   --deadline-mode crisp|nl|shadow   how long a ticket may wait (default crisp: the response-time table)
+ *   --service-policy FILE             the desk's written service policy that `nl` reads
+ *   --inbox-mode crisp|nl|shadow      the agents' queue order (default crisp: escalated first, then by deadline)
+ *   --ranking-policy FILE             the desk's written ranking rules that `nl` reads
+ *   --escalation-mode crisp|nl|shadow how an escalation is planned (default nl)
+ */
 export default async function main(context: TargetContext): Promise<number> {
-  const index = context.args.indexOf('--port');
-  const port = index >= 0 ? Number(context.args[index + 1]) : 0;
+  const port = Number(option(context.args, '--port') ?? 0);
+  const text = (name: string) => { const path = option(context.args, name); return path ? readFileSync(path, 'utf8') : undefined; };
   const desk = new HelpDesk({ store: new TicketStore(join(context.stateDirectory, 'tickets')),
     run: (fn, signal) => context.runtime.run(fn, { signal }),
-    onEscalate: ticket => { context.io.output.write(`escalated ${ticket.id}: ${ticket.triage?.summary ?? 'no triage yet'}\n`); },
+    deadlineMode: option(context.args, '--deadline-mode') as never, deadlinePolicy: text('--service-policy'),
+    inboxMode: option(context.args, '--inbox-mode') as never, rankingPolicy: text('--ranking-policy'),
+    escalationMode: option(context.args, '--escalation-mode') as never,
+    onEscalate: (ticket, plan) => { context.io.output.write(`escalated ${ticket.id} to ${plan.notify}: ${plan.note}\n`); },
     onFailure: (ticket, error) => { context.io.error.write(`ticket ${ticket}: ${String((error as Error)?.message ?? error)}\n`); } });
   await desk.start();
   const { url, server } = await serveHelpDesk(desk, port);

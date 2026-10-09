@@ -2,8 +2,8 @@
   "schema": "natlang.package/v2",
   "name": "@natlang/helpdesk",
   "version": "0.1.0",
-  "description": "A multi-user support desk: per-ticket event loops, natural-language triage and draft replies, response deadlines.",
-  "include": ["index.ts", "server.ts", "triage.nl", "draft_reply.nl", "tsconfig.json"],
+  "description": "A multi-user support desk: per-ticket event loops, natural-language triage, missing details and draft replies, pluggable response deadlines and queue order, escalation plans.",
+  "include": ["DECOMPOSITION.md", "index.ts", "server.ts", "types.ts", "refinements.ts", "triage", "reply", "deadline", "escalate", "inbox", "tsconfig.json"],
   "targets": { "helpdesk": { "entry": "server.ts", "export": "default", "authority": ["filesystem:state", "network:listen"],
     "description": "Serve the support desk over HTTP: customers write, agents answer, overdue tickets escalate." } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
