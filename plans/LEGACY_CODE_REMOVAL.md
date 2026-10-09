@@ -29,7 +29,7 @@ Owner asked whether legacy code goes too, after the Maple-Preview BF16 checkpoin
 
 ## Removed by owner decision (2026-10-10)
 
-Owner: "You have my authorization to make the deletions of storage and old candidate code." The 36 unreferenced scripts unchanged since 2026-10-02 were removed in three commits: student candidates (Sharp-MiniCPM5, Spark-X2.5, Ling, LoRA overlay merge), Bonsai teacher and remote teacher hosts, pre-Neuralese crisp teacher/SFT polish and one-off source tooling. Instructional docs carry a removal note; dated historical plans are left as history. Data and storage were not part of this change.
+Owner: "You have my authorization to make the deletions of storage and old candidate code." 34 of the 36 scripts were removed in three commits, plus 14 test files that exercised only them: student candidates (Sharp-MiniCPM5, Spark-X2.5, Ling, LoRA overlay merge), Bonsai teacher and remote teacher hosts, pre-Neuralese crisp teacher/SFT polish and one-off source tooling. Instructional docs carry a removal note; dated historical plans are left as history. Data and storage were not part of this change. Kept after all: `scripts/clone_runtime_tree.py` and `scripts/self_improvement_data.py`, which current pipeline scripts import by bare module name (the first scan missed sibling imports). Repo-root test collection and the dependent suites match origin/main (27 failures there predate this change).
 
 - `scripts/acquire_directory_sources.py`
 - `scripts/acquire_workflowevals.py`
@@ -37,7 +37,6 @@ Owner: "You have my authorization to make the deletions of storage and old candi
 - `scripts/audit_recovered_sources.py`
 - `scripts/audit_static_data.py`
 - `scripts/build_teacher_coverage_selection.py`
-- `scripts/clone_runtime_tree.py`
 - `scripts/combine_sft.py`
 - `scripts/create_model_swap_config.py`
 - `scripts/interleave_teacher_queue.py`
@@ -58,7 +57,6 @@ Owner: "You have my authorization to make the deletions of storage and old candi
 - `scripts/select_sft.py`
 - `scripts/select_teacher_polish.py`
 - `scripts/select_teacher_programs.py`
-- `scripts/self_improvement_data.py`
 - `scripts/serve_minicpm.sh`
 - `scripts/spark_training_model.py`
 - `scripts/start_reviewed_remote_successor.py`
