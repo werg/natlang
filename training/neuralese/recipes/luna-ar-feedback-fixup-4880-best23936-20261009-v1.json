@@ -1,0 +1,275 @@
+{
+  "execution": "direct_shared_stage",
+  "id": "luna-ar-feedback-fixup-4880-best23936-20261009-v1",
+  "inputs": {
+    "continue_from": {
+      "path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-source-step23936-v1/best-checkpoint.pt",
+      "sha256": "adc6bfd59a5e0e67fa243270035f32da4688d25a73cdbb5a0da83276c11ecb1d"
+    },
+    "heads": {
+      "path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-source-step23936-v1/best-heads.pt",
+      "sha256": "c73d46511451ded3e6d304bce489765e0c08be458c44fe47500e022bf6834f48"
+    },
+    "pieces": {
+      "path": "/home/werg/natlang/runs/v18-v19-native-soft-edge-review-20261009-v1/cumulative-full-assembly-v3/native-pieces.jsonl",
+      "sha256": "b3a30bae2767cbeb7fa5dd4ebd7b8bd062f5eb82449c48d13b9de6a6965592f0"
+    },
+    "records": {
+      "path": "/home/werg/natlang/runs/luna-authored-root-remaining-four-multilambda-20261009-v1/evidence/compact-62-luna-1-step-native-text-proposal-v1/compact-112-expanded-v1/root-independent-targetbound-replay-v1/repair-native103.jsonl",
+      "sha256": "a261046dacb5e53ddda168acfd4a13ab2ea59a52312e933aa6e901149c1889e6"
+    },
+    "student_checkpoint": {
+      "path": "/home/werg/natlang/runs/neuralese-local-stage-consumer-20261006-v7/checkpoint.pt",
+      "sha256": "6c7f3accb826f00b81cf032c9e50177ab26590a7031ce2b4db3044aaa55ffa75"
+    },
+    "text_data": {
+      "path": "/srv/storage/natlang/prepared/neuralese-foundation-text-input-4880-20261009-v1/text-data.jsonl",
+      "sha256": "b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572"
+    }
+  },
+  "limitations": [
+    "The source step-23936 checkpoint failed the original 0.995 alignment gate. The .99 comparator is a held advisory only; it does not qualify or rewrite the source run.",
+    "Step 24064 remains a separately recorded regression and is not the chosen source checkpoint.",
+    "The preflight does not clone, hardlink, or mutate the source checkpoint/head files and does not start a training process.",
+    "The exact step-23936 full-state and heads files are pinned through verified same-filesystem hardlinks and a frozen copied best manifest. The source trainer atomically replaces best paths, so later best selection does not alter these inodes."
+  ],
+  "lineage": {
+    "evidence": [
+      {
+        "path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-source-step23936-v1/best-checkpoint.json",
+        "role": "source_map_best_manifest",
+        "sha256": "b760e0965a624a7c615d8984017a2badcc7413b6a454d560b34bc2bcf75b9c02"
+      },
+      {
+        "path": "/home/werg/natlang/runs/neuralese-map-refresh-4880-from-qualified-22272-20261009-v5/alignment-gate-clause-review-step23936-v2.json",
+        "role": "step23936_strict_gate_review",
+        "sha256": "6bc6f5cd272ea57a2e4c1075a920f4e4e972ffdb1170660a999ba216135e80c6"
+      },
+      {
+        "path": "/home/werg/natlang/runs/neuralese-map-refresh-4880-from-qualified-22272-20261009-v5/advisory-min-agreement-099-step24064-v1.json",
+        "role": "step24064_min099_advisory_only",
+        "sha256": "a13e29ca6a97e5fe9c656ddb4a55da57e7d8cdc17d3c9cfe565a6b02a5221c6b"
+      },
+      {
+        "path": "/home/werg/natlang/training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json",
+        "role": "source_map_parent_recipe",
+        "sha256": "2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84"
+      },
+      {
+        "path": "/home/werg/natlang/training/neuralese/recipes/raw-recurrence-v1.json",
+        "role": "canonical_raw_recurrence_stage_policy",
+        "sha256": "d356754947e9aec82ec03823862ae93c71f3c42fb4d3ea8c54b30ee5e2649ca4"
+      },
+      {
+        "path": "/home/werg/natlang/runs/neuralese-gold-text-serving-boundary-refresh-20261009-v1/publication-candidate-v3/evidence/review/root-refresh-composition-adoption-v2.json",
+        "role": "adopted_text_root_receipt",
+        "sha256": "cc9a339cfa0ab25b663d727fa7eabb9f7abf637ff8dee7f4e88da6ba0df477e9"
+      },
+      {
+        "path": "/home/werg/natlang/runs/neuralese-foundation-text-input-4880-20261009-v1/loader-validation-receipt-v1.json",
+        "role": "text_loader_validation",
+        "sha256": "d0f80a44e09484cbeac31ce7e526dbbe12cd6f6aff8b4ee36fbb1ea5eaca3a29"
+      },
+      {
+        "path": "/home/werg/natlang/runs/neuralese-foundation-text-input-4880-20261009-v1/root-concatenation-verification-v1.json",
+        "role": "text_concatenation_verification",
+        "sha256": "f1fc73aaa469f7b7dac06210549ffab0a234c79e5f1cb983443193a64dc774e3"
+      },
+      {
+        "path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-source-step23936-v1/freeze-receipt-v1.json",
+        "role": "frozen_source_pair_receipt",
+        "sha256": "57423955b5cbda2e49841c8c27dc2cfe953fc65a6154500fda46c64955af2cfb"
+      },
+      {
+        "path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-runtime-9182c74d-v2/runtime-snapshot-manifest-v1.json",
+        "role": "frozen_shared_runtime_package_manifest",
+        "sha256": "ce185647ead8a74669c72c6a3a2b7a7e0af5fe6a77427d3313f95af473b943e2"
+      }
+    ],
+    "optimizer_policy": "Restore the complete optimizer moments, schedule, model/head state and RNG from the full step-23936 checkpoint. The AR fixup adds no parameters, so a fresh optimizer fallback is a failed precondition; the fresh objective must reset held baseline/best/streak and earn two new AR gates.",
+    "qualification_scope": "Fresh AR-feedback held qualification only on this exact 4,880-row text split, using max CE delta 0.05, max relative embedding MSE 0.025, min agreement 0.99 and two consecutive gates. This does not inherit the failed 0.995 map gate, prior map qualification, runtime transport, task execution, stopping, or recurrence qualification.",
+    "required_launch_events": [
+      "optimizer_state_restored",
+      "foundation_schedule_restored",
+      "fresh_held_baseline"
+    ],
+    "scope": "Continue the exact nonqualified step-23936 map best full checkpoint and matching best serving heads on the unchanged adopted 4,880-row split. Run up to 1,024 additional updates (absolute cap 24,960) with genuinely sequential self-fed projected Neuralese history generated under no_grad, then the shared full-depth consumer against unchanged gold next-token targets. Target blocks are at most 256 positions; each block keeps up to 16,128 actual preceding positions inside the 16,384-token window. The real close token remains supervised once. No future gold tokens feed the self-fed history."
+  },
+  "outputs": {
+    "checkpoint_storage": "external durable storage; fresh path; current/best full-state and heads plus atomic reserve",
+    "directory": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-from-best23936-20261009-v1/direct-stage-run"
+  },
+  "parameters": {
+    "ar_feedback_fixup": true,
+    "backbone_ramp_evals": 4,
+    "backbone_training": "full",
+    "batch": 1,
+    "checkpoint_every": 128,
+    "checkpoint_layers": true,
+    "checkpoint_minutes": 10.0,
+    "consecutive_gates": 2,
+    "cutoff": 8,
+    "embedding_weight": 1.0,
+    "eval_every": 128,
+    "held_documents": 16,
+    "input_map_kernel": 4,
+    "input_map_rank": 64,
+    "lr": 3e-05,
+    "max_ce_delta": 0.05,
+    "max_relative_mse": 0.025,
+    "min_agreement": 0.99,
+    "optimizer": "muon",
+    "pass_ramp_evals": 2,
+    "prefix_tokens": 32,
+    "projection_min_evals": 2,
+    "projection_min_improvement": 0.01,
+    "projection_patience": 3,
+    "rank": 16,
+    "seed": 0,
+    "sketch_lr": 0.0003,
+    "sketch_weight": 1.0,
+    "steps": 24960,
+    "target_tokens": 256,
+    "text_weight": 0.25,
+    "tokens": 16384
+  },
+  "parent_recipe": {
+    "path": "training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json",
+    "sha256": "2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84"
+  },
+  "runtime": {
+    "image": "sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de",
+    "offline": true,
+    "package_code": {
+      "__init__.py": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0",
+      "data/__init__.py": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4",
+      "data/context_refs.py": "654d29a39f3224b1eb7c240b21aeadbe7edd8062302d0f53b52634ef74ec7cc3",
+      "data/fixtures.py": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b",
+      "data/records.py": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190",
+      "data/render.py": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78",
+      "data/shortcuts.py": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766",
+      "data/stream.py": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3",
+      "data/text_corpus.py": "1525f3f6f00d567b99bd5cf6c5c4e142ff08ca99a98d45134d6b2c5807741281",
+      "devices.py": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa",
+      "digest.py": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7",
+      "eval/__init__.py": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051",
+      "eval/bench.py": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b",
+      "eval/cache_diagnostics.py": "11c070e1b78ddd3235d4ee936726c918cf05aaa73115c1f8f1eecc892b6c314b",
+      "eval/ffn_dispatch.py": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027",
+      "eval/foundation.py": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2",
+      "eval/harness.py": "c0d3e742b9f4180aab03e0c2109b6de390f3c8b7e6224e8fd3e41a21a6718749",
+      "eval/inference.py": "44ed81c9a861861c273695abbf1d7ec37240deaed7e81c1729b430553e0c597f",
+      "eval/latent_sketch.py": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3",
+      "eval/local_stage.py": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6",
+      "eval/mtp_draft_probe.py": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0",
+      "eval/projected_history.py": "84c8ae0644e9de04af4a299c23de5745c8fc991ce844902917ccc0c62bddd61e",
+      "eval/raw_port_handoff.py": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b",
+      "eval/raw_writer_trace.py": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947",
+      "eval/recurrence_autoregressive_history.py": "c1975be1390e608bbec32371d4e6c387deff1265dae6d36b253a7d58c0e8a598",
+      "eval/recurrence_runtime.py": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054",
+      "eval/residual_transition.py": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359",
+      "eval/scheduler_throughput.py": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064",
+      "eval/sketch_cutoff_probe.py": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09",
+      "eval/stopping_diagnostics.py": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37",
+      "eval/text_warmup_runtime.py": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d",
+      "eval/trajectory_execution.py": "f31c9958f0605d8a73418cf2a60be434fca53a8289fbddaa384a4f6bf3816dd9",
+      "export/__init__.py": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5",
+      "export/__main__.py": "550ee92deb8c5e6e29ccc9a0e52d64b1025c98bac800af991d584f03b2dca9b4",
+      "export/adapters.py": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af",
+      "export/gguf.py": "3b24512db9513b1420af7f0617e61333ce708c953a023385b740eda94a3955f4",
+      "harness_bench/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "harness_bench/openhands.py": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a",
+      "laws.py": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2",
+      "maple/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "maple/export_member.py": "0f08326d600018694a4a81ff6670f40456070469175e4138ebe69a63ef727843",
+      "maple/family.py": "2fd302ea00628e819f0a380e65d49598eae6439f1bad268b2737bae53ce23d86",
+      "maple/foundation_heads.py": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d",
+      "maple/fused_moe.py": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053",
+      "maple/gate_diagnostic.py": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3",
+      "maple/maple_port.py": "0c703d39ccf53124f36f8e8a97cfe72a068eaac2f7071c0406c39217f46160ca",
+      "maple/model.py": "598d4ba99de4766ff2817f20c1d020e6eeadb8da1f0297a0d50648fd74fa7abc",
+      "maple/nested_train.py": "4707794b65753c1ccbcecec334db5f71390815b327734c5e724b07ac50cec969",
+      "maple/qat_convert.py": "2558ba38321065846399ef9765c6f1257ea0e9d8a7cf98b607901e457ac86c93",
+      "maple/routing.py": "75d1e0c829b0414ebf84c5808d28145e7c882528b571394276a82f967409dcc6",
+      "maple/student.py": "0527cd0c07a058331f413af82d951ede8d02a73d3d43725ce93429bd0491b4be",
+      "maple/ternary.py": "f072b2b367e27d05f08937b3c9e985ca46991b874e903faaf99cd672cd88a1cd",
+      "model/__init__.py": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0",
+      "model/capacity.py": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472",
+      "model/causal_feedback.py": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0",
+      "model/dialect.py": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186",
+      "model/heads.py": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f",
+      "model/hf_port.py": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e",
+      "model/input_map.py": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d",
+      "model/isolated_sequence.py": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020",
+      "model/lfm2_port.py": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57",
+      "model/projections.py": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486",
+      "model/tiny_adapters.py": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052",
+      "nz.py": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6",
+      "prompt_bank.py": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc",
+      "read.py": "45e3128aba58dc7eca8a26b7fe72397316df055bf508e0f168145a0971eb039f",
+      "serve/__init__.py": "7ab3d1048c33e4a1f6bb1c207c46b74bedba498089e2ab3f1030de9edc4e9794",
+      "serve/__main__.py": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e",
+      "serve/batch.py": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68",
+      "serve/chat.py": "d3b5911d81c136b0c12351f5fa7546136e7e6fc73c47027808c9197ceae0332e",
+      "serve/crossing.py": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d",
+      "serve/engine.py": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c",
+      "serve/grad.py": "d68877d79ccb07494f218f609fdaeaa4f652943a1b1000c4c5480ecee1ed9ed2",
+      "serve/guidance.py": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962",
+      "serve/http.py": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2",
+      "serve/recurrence_checkpoint.py": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361",
+      "serve/store.py": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f",
+      "serve/token_cache.py": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374",
+      "serve/vllm_rollout.py": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f",
+      "shared_space.py": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a",
+      "train/__init__.py": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f",
+      "train/adapters.py": "836e5056063d11d061d7c8e34a21817a68431788bd096ac3e39b9a8816d22a72",
+      "train/backbone_policy.py": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32",
+      "train/bootstrap_data.py": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1",
+      "train/causal_bootstrap.py": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b",
+      "train/checkpoint_safety.py": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3",
+      "train/decision.py": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298",
+      "train/delta_e2e.py": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745",
+      "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
+      "train/execution.py": "b25557a08567b640c73eec4734d4aa4686ea87887a992266b632fe91b371e62c",
+      "train/export_trajectory.py": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab",
+      "train/exposure_curriculum.py": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3",
+      "train/exposure_data.py": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639",
+      "train/foundation_schedule.py": "8de20702422f8a06ea9a63fce17ccdac065304f5c277f16e7cc82a63450ba0c2",
+      "train/inline_instructions.py": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c",
+      "train/joint.py": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951",
+      "train/joint_kd.py": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf",
+      "train/losses.py": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795",
+      "train/memory.py": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef",
+      "train/memory_estimator.py": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17",
+      "train/memory_policy.py": "473f1eafcac454f31cf952e6ba5b58a66496cf00270f13f852f1f72dd110c930",
+      "train/optim.py": "be9b3e80598ef873aa23253d1fd5aace3fa2cc8a4c06b31723f6e4fefa213883",
+      "train/output_embedding_projection.py": "96433fd6c9b8194f7e6ddc4ef1488c0705ed80e07098fd142557e457b9439551",
+      "train/port_handoff.py": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37",
+      "train/projection.py": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194",
+      "train/projection_anchor.py": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8",
+      "train/projection_e2e.py": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be",
+      "train/recipe.py": "76584a20e0ce4ff71415455c7fdb8b6664986032e283ca8cdf11cd3f313f44e2",
+      "train/recurrence.py": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d",
+      "train/sketch_defaults.py": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38",
+      "train/sketch_handoff.py": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a",
+      "train/staging.py": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19",
+      "train/text_warmup.py": "368fce5dc044bd141811f3d09e5589cd626c5139e97445e36774b51c189728a3",
+      "train/trajectories.py": "72419c9bb9ec449b4c9563c903ff31be3f98668a9a419a35f148f21b2d4533cc",
+      "train/trajectory_probe.py": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79",
+      "train/trajectory_state.py": "b97f008dd8e066ddd1011f8545df7f6cd72e4d64baab0d81ea46263d7227169f",
+      "train/verified_heads_handoff.py": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0",
+      "write.py": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    },
+    "package_code_manifest_sha256": "22ae8702292fe4df554c797f52fa44d4e6cbbc6de3bd779823657111c197df8f",
+    "package_snapshot_manifest_path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-runtime-9182c74d-v2/runtime-snapshot-manifest-v1.json",
+    "package_snapshot_manifest_sha256": "ce185647ead8a74669c72c6a3a2b7a7e0af5fe6a77427d3313f95af473b943e2",
+    "package_snapshot_path": "/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/frozen-runtime-9182c74d-v2/training/neuralese",
+    "repo_commit": "9182c74d25cf125ad7ef946299deb164c6006f80"
+  },
+  "schema": "natlang.neuralese-declared-direct-stage/1",
+  "stage": {
+    "id": "autoregressive_text_fixup",
+    "kind": "core_text_warmup"
+  },
+  "status": "reviewed launch candidate; do not launch until root preflight and transition approval"
+}
