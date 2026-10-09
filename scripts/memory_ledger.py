@@ -205,6 +205,15 @@ def ledger():
         os.replace(tmp, STATE)
 
 
+def container_name(command):
+    """The container a unit's command attaches to or runs (``docker start -a NAME`` or ``docker run --name NAME``):
+    stopping the unit only ends the docker client, so the container must be stopped by name."""
+    text = ' '.join(command) if isinstance(command, list) else str(command or '')
+    found = re.search(r'docker start (?:-a|--attach) (\S+)', text) or \
+        re.search(r'docker run\b.*?--name[ =](\S+)', text)
+    return found.group(1).strip("'\"") if found else None
+
+
 def family(unit):
     """A unit's job family: its name without trailing time/hash suffixes (natlang-foo-test-210556 → natlang-foo-test)."""
     return re.sub(r'(-[0-9a-f]{4,})+$', '', unit.removesuffix('.service'))
@@ -287,6 +296,9 @@ def run(args):
                '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     for env in args.env:
         command += ['-E', env]
+    container = container_name(args.command)
+    if container:  # a stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger)
+        command += ['-p', f'ExecStopPost=-/usr/bin/docker stop -t 30 {container}']
     result = subprocess.run(command + args.command)
     if result.returncode:
         with ledger() as state:
@@ -399,10 +411,9 @@ def guard(args):
             subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
             # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
             # its memory. Stop the container itself.
-            container = re.search(r'docker start (?:-a|--attach) (\S+)',
-                                  ' '.join(command) if isinstance(command, list) else str(command or ''))
+            container = container_name(command)
             if container:
-                subprocess.Popen(['docker', 'stop', '-t', '20', container.group(1).strip("'\"")])
+                subprocess.Popen(['docker', 'stop', '-t', '20', container])
             subprocess.Popen(['sh', '-c', f'sleep 20; systemctl --user stop {shlex.quote(unit)} 2>/dev/null'])
             stopped[unit] = time.time()
         if args.once:

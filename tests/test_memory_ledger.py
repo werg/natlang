@@ -193,3 +193,9 @@ def test_re_adoption_keeps_the_admission_time_and_peak_and_can_hold_the_budget(m
         held = state['claims']['warmup.service']
     assert (held['admitted'], held['budget'], held['peak'], held['peak_since'], held['hold_budget'], held['command']) == \
         (123.0, 42 * GIB, 38 * GIB, 200.0, True, ['docker', 'start', '-a', 'w'])
+
+
+def test_container_names_come_from_attached_and_named_runs():
+    assert ledger.container_name(['docker', 'start', '-a', 'natlang-x']) == 'natlang-x'
+    assert ledger.container_name('/usr/bin/docker run --rm --name pi-executor --gpus all img') == 'pi-executor'
+    assert ledger.container_name(['python3', 'train.py']) is None
