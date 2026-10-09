@@ -80,6 +80,19 @@ separately. A short supervised prefix does not qualify the full channel; held
 metrics continue to score the complete span. It does not issue a
 runtime or recurrence certificate.
 
+The October 9 owner decision in `DECISIONS.md` changes the next self-feedback
+qualification contract: compare ordinary token inputs and projected payloads on
+the same generated history (distribution KL and argmax agreement), then compare
+plain-model scoring of projected and crisp generated continuations. Gold-tail
+metrics and context-valid prefix coverage remain diagnostics. Earlier strict
+gate failures remain unchanged, and active frozen jobs keep their pinned gate.
+Pop owns this shared evaluator. Initial proposed thresholds, declared before its
+first matched measurements, are minimum agreement 0.99, maximum
+KL(plain || projected) 0.02 nats/token, and maximum own-output plain-model CE gap
+0.05 nats/token, each per stratum. These are a proposal for review, not an
+existing channel or runtime certificate. A checked declaration and exact-weight
+evaluation must land before this contract can qualify a new handoff.
+
 The canonical `raw-recurrence-v1` recipe places `autoregressive_text_fixup`
 after the mapped text warm-up. The runner binds its `checkpoint.pt` and
 `heads.pt` from that exact predecessor. Its declared `steps` are additional
