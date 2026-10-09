@@ -6,12 +6,14 @@ import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
-import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
+import { NEURALESE_LITERAL_INTRINSIC, type GenericInstantiation, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES } from './intrinsics.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
-  children: EvalImport[] };
+  children: EvalImport[];
+  /** A representation-generic result: `returns` is its crisp instance, `constraint` what a call may instantiate it as. */
+  generic?: { constraint: string } };
 
 export type EvalScopeDeclarations = {
   /** Stable parent call identity keeps independently created inline functions distinct. */
@@ -51,6 +53,7 @@ function importType(item: EvalImport, known: ReadonlySet<string>): string {
   const members = children.length ? ` & { ${children.join('; ')} }` : '';
   if (item.kind === 'module') return `{ ${children.join('; ')} }`;
   if (item.kind === 'TypeScript' && !item.async) return `((${params.join(', ')}) => ${returns})${members}`;
+  if (item.generic) return `NatlangGenericFunction<[${params.join(', ')}], ${typeScriptText(item.generic.constraint, known)}, ${returns}>${members}`;
   return `NatlangFunction<[${params.join(', ')}], ${returns}>${members}`;
 }
 
@@ -107,7 +110,8 @@ export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\
  * relative to the snippet text.
  */
 export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations): { plans: InlineLambdaPlan[];
-  diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[]; readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[] } {
+  diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[]; readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[];
+  instantiations: GenericInstantiation[] } {
   const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
   const virtualProgram = (text: string, iterationHelper?: string) => createVirtualProgram({
     [SCOPE_FILE]: scopeDeclarations(scope, iterationHelper), [SNIPPET_FILE]: `${prefix}${text}\n}\n` }, EVAL_COMPILER_OPTIONS);
@@ -154,7 +158,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
   const snippet = program.getSourceFile(SNIPPET_FILE)!;
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));
-  const { plans, diagnostics, neuralese, readouts, rebinds } = analyzeInlineLambdas(program, [snippet], {
+  const { plans, diagnostics, neuralese, readouts, rebinds, instantiations } = analyzeInlineLambdas(program, [snippet], {
     sourceRevision: hexDigest(`${scope.scopeIdentity ?? ''}\0${source}`),
     scopeFiles: [scopeFile], displayPath: () => 'eval', recursiveTypes: true,
     classify: declaration => declaration.getSourceFile() === scopeFile ?
@@ -171,7 +175,8 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
     diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(item => ({ ...shift(item),
       ...(item.callback ? { callback: { start: item.callback.start - offset, end: item.callback.end - offset } } : {}) })),
     rebinds: rebinds.map(site => ({ ...site, start: site.start - offset, end: site.end - offset,
-      templateStart: site.templateStart - offset, templateEnd: site.templateEnd - offset })) };
+      templateStart: site.templateStart - offset, templateEnd: site.templateEnd - offset })),
+    instantiations: instantiations.map(shift) };
 }
 
 /**

@@ -33,6 +33,12 @@ export interface NatlangCallableMethods<A extends unknown[], R> {
 }
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 export type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
+/**
+ * A natural-language function with a representation-generic result (`generic: { R: T | Neuralese<T> }`, `returns: R`):
+ * each call's expected type instantiates `R`, and a call that expects nothing in particular gets `T`.
+ */
+export type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R extends C = T>(...args: A) => Promise<R>) &
+  NatlangCallableMethods<A, T> & { readonly __natlangGenericResult?: C };
 /** An \`nl\` function without a type argument; the compiler infers its signature from its uses. */
 export type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;

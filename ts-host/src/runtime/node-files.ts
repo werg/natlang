@@ -64,7 +64,7 @@ function liveCallable(name: string, load: () => { callable: NatlangCallable; wat
     return current.callable;
   };
   const meta = callableMeta(current.callable)!;
-  const live = makeCallable({ ...meta, invoke: (args, frame) => callableMeta(fresh())!.invoke(args, frame) });
+  const live = makeCallable({ ...meta, invoke: (args, frame, at) => callableMeta(fresh())!.invoke(args, frame, at) });
   // What others read from the callable (its definition, its data captures) is the current definition's.
   for (const key of ['definition', 'captures'] as const) if (key in meta)
     Object.defineProperty(callableMeta(live)!, key, { get: () => callableMeta(current.callable)![key], enumerable: true });

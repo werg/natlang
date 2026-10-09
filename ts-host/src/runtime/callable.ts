@@ -7,7 +7,8 @@
 import { RESERVED_CALLABLE_PROPERTIES, reservedNameMessage } from '../compiler/intrinsics.js';
 import { APPLY_TO_FOLDER, type FolderHandle } from '../native/scoped-fs.js';
 import { currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
-import { invokeDefinition, type CallableDefinition, type CaptureCell } from './kernel.js';
+import { invokeDefinition, type CallableDefinition, type CaptureCell, type Instantiation } from './kernel.js';
+import { checkRepresentation, type Representation } from '../native/representation.js';
 import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type NatlangRecord } from './loader.js';
 import { moduleInstance } from './modules.js';
 import { resolveFrame } from './runtime.js';
@@ -32,7 +33,8 @@ export type CallableMeta = {
   /** A compiler-owned inline `nl` recipe. Only these generated callables support `.with(record)`. */
   rebindInline?: (captures: Record<string, unknown>, origin?: import('./lowered.js').InlineInstructionOrigin,
     sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>) => NatlangCallable;
-  invoke(args: unknown[], frame: Frame): Promise<unknown>;
+  /** Run a call; `at` is the representation its result is used as (a compiled call site's, or a host's `invokeAt`). */
+  invoke(args: unknown[], frame: Frame, at?: Instantiation): Promise<unknown>;
 };
 
 /**
@@ -79,25 +81,40 @@ export function defineChild(target: object, name: string, value: unknown): void 
   Object.defineProperty(target, name, { value, enumerable: true, writable: false, configurable: false });
 }
 
-export function makeCallable(meta: CallableMeta): NatlangCallable {
+/** Start one call of a callable in the frame it resolves to. */
+function startCall(meta: CallableMeta, args: unknown[], at?: Instantiation): Promise<unknown> {
   // A call model code starts and never awaits must not end the host as an unhandled rejection (see invokeDefinition).
-  const fn = function (...args: unknown[]) {
-    let started: unknown;
-    const call = (async () => {
-      const bound = meta.bound ?? resolveFrame(meta.created);
-      // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
-      // its decision readout to a decide(...) around it.
-      const current = currentFrame();
-      const same = current && current.task === bound.task && current.parentCallId === bound.parentCallId;
-      const signal = same && current.signal && current.signal !== bound.signal ? current.signal : undefined;
-      const readout = same && current.readout !== bound.readout ? current.readout : undefined;
-      const frame = signal || readout ? { ...bound, ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
-      return started = meta.invoke(args, frame);
-    })();
-    if (started && typeof started === 'object') startedCalls.set(call, started);
-    call.catch(() => {});
-    return call;
-  };
+  let started: unknown;
+  const call = (async () => {
+    const bound = meta.bound ?? resolveFrame(meta.created);
+    // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
+    // its decision readout to a decide(...) around it.
+    const current = currentFrame();
+    const same = current && current.task === bound.task && current.parentCallId === bound.parentCallId;
+    const signal = same && current.signal && current.signal !== bound.signal ? current.signal : undefined;
+    const readout = same && current.readout !== bound.readout ? current.readout : undefined;
+    const frame = signal || readout ? { ...bound, ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
+    return started = meta.invoke(args, frame, at);
+  })();
+  if (started && typeof started === 'object') startedCalls.set(call, started);
+  call.catch(() => {});
+  return call;
+}
+
+/**
+ * Call a natlang function with its result at `representation` (DECISIONS.md 2026-10-09): `{ kind: "crisp" }` runs a
+ * representation-generic result's crisp instance, `{ kind: "neuralese" }` its Neuralese instance as a template write.
+ * Compiled call sites pass the instance their expected type picks; hosts use this to run a stored call for the
+ * reader that consumes it. A function without a generic result runs only at the representation it declares.
+ */
+export function invokeAt(fn: unknown, args: readonly unknown[], representation: Representation, site?: string): Promise<unknown> {
+  const meta = callableMeta(fn);
+  if (!meta) throw new TypeError('invokeAt calls a natlang function (a named .nl function or an nl value)');
+  return startCall(meta, [...args], { representation: checkRepresentation(representation), ...(site ? { site } : {}) });
+}
+
+export function makeCallable(meta: CallableMeta): NatlangCallable {
+  const fn = function (...args: unknown[]) { return startCall(meta, args); };
   Object.defineProperty(fn, 'name', { value: meta.definition.name });
   Object.defineProperty(fn, NATLANG_CALLABLE, { value: meta });
   Object.defineProperty(fn, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>
@@ -116,7 +133,7 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
 export function natlangDefinition(record: NatlangRecord): CallableDefinition {
   return { programId: record.programId, id: record.id, name: record.name, body: record.instructions,
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })),
-    returns: record.returns, types: record.types, codebase: record.codebase as Record<string, unknown>,
+    returns: record.returns, ...(record.generic ? { generic: record.generic } : {}), types: record.types, codebase: record.codebase as Record<string, unknown>,
     subtype: record.subtype, ...(record.readout ? { readout: record.readout } : {}), ...(record.model ? { model: record.model } : {}), description: record.description, source: record.source, revision: record.revision };
 }
 
@@ -128,7 +145,8 @@ export function namedCallable(name: string, record: NatlangRecord, bound?: Frame
   const dataBinding = () => cells === null ? (cells = dataCellsOf(record)) : cells;
   const captures = () => dataBinding()?.captures;
   const meta: CallableMeta = { definition, kind: 'named', bound,
-    invoke: (args, frame) => invokeDefinition(frame, definition, args, record.contextData ? { captures: captures()!, ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : undefined) };
+    invoke: (args, frame, at) => invokeDefinition(frame, definition, args, { ...(record.contextData ? { captures: captures()!,
+      ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : {}), ...(at ? { at } : {}) }) };
   if (record.contextData) Object.defineProperty(meta, 'captures', { get: captures, enumerable: true });
   const fn = makeCallable(meta);
   if (definition.subtype === 'directory-reducer')
@@ -221,7 +239,7 @@ export function inlineCallable(definition: CallableDefinition, instructions: str
   return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound, captures, instructions,
     ...(rebindInline ? { rebindInline } : {}),
     options: { classes, manifest },
-    invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
+    invoke: (args, frame, at) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
       ...(frame.skillFiles ? { skillFiles: frame.skillFiles } : {}),
-      manifest }) });
+      manifest, ...(at ? { at } : {}) }) });
 }

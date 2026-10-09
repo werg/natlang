@@ -2,7 +2,8 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
-import { checkNeuralese, neuraleseParts, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
+import { checkGenericResults, checkNeuralese, neuraleseParts, type GenericInstantiation, type NeuraleseLiteral,
+  type NeuraleseReadout } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 export type InlineRebindSite = { start: number; end: number; templateStart: number; templateEnd: number;
@@ -14,7 +15,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'neuralese-readout-sync' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'untrusted-instruction';
+    'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'untrusted-instruction';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -198,7 +199,7 @@ type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
   options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[];
-    readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[] } {
+    readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[]; instantiations: GenericInstantiation[] } {
   const checker = program.getTypeChecker();
   const plans: InlineLambdaPlan[] = [];
   const labels = new Set<string>();
@@ -837,6 +838,9 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const readouts: NeuraleseReadout[] = [];
   for (const file of files) neuralese.push(...checkNeuralese(checker, file, report,
     { recursiveTypes: options.recursiveTypes, readouts }).map(literal => ({ ...literal, file: displayPath(file) })));
+  // Representation-generic results: the instance each call site's expected type picks (DECISIONS.md 2026-10-09).
+  const instantiations: GenericInstantiation[] = [];
+  for (const file of files) checkGenericResults(checker, file, report, instantiations);
   const rebinds: InlineRebindSite[] = [];
   const tagPlans = new Map<ts.Symbol, { tag: ts.TaggedTemplateExpression; plan: InlineLambdaPlan }>();
   const planAt = (tag: ts.TaggedTemplateExpression) => plans.find(plan => plan.sourceSpan.file === displayPath(tag.getSourceFile()) &&
@@ -954,7 +958,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     };
     findRebinds(file);
   }
-  return { plans, diagnostics, neuralese, readouts, rebinds };
+  return { plans, diagnostics, neuralese, readouts, rebinds, instantiations };
 }
 
 /** The initial state and fixed arguments when an `nl` expression is the step of an `iterateOn` call. */

@@ -41,7 +41,8 @@ function importOf(name: string, record: ItemRecord): EvalImport {
   const params = Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') }));
   if (record.subtype === 'directory-reducer') params.unshift({ name: 'folder', type: 'Folder', optional: false });
   return { name, params, returns: record.returns, async: true,
-    kind: record.subtype === 'directory-reducer' ? 'directory reducer' : 'natural language', children };
+    kind: record.subtype === 'directory-reducer' ? 'directory reducer' : 'natural language', children,
+    ...(record.generic ? { generic: { constraint: record.generic.constraint } } : {}) };
 }
 
 /** Describe a session's typed scope for the eval checker. */

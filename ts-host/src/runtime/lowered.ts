@@ -12,7 +12,8 @@ import { parseType, refinements as crispTable, TypeEnv } from '../native/types.j
 import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, currentFrame, guard, runInFrame } from './context.js';
-import { callableMeta, callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
+import { callableMeta, callableTree, inlineCallable, invokeAt, namedCallable, type NatlangCallable } from './callable.js';
+import type { Representation } from '../native/representation.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
@@ -400,6 +401,15 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound,
     { inline_instruction_site: { ...instructionSite(plan, renderedValues, origin),
       ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } }, rebindInline);
+}
+
+/**
+ * A call site of a natlang function with a representation-generic result, as the compiler lowered it: `fn(args)`
+ * becomes `instantiate(fn, representation, site)(args)`, the representation being the instance its expected type
+ * picked (DECISIONS.md 2026-10-09).
+ */
+export function instantiate(fn: unknown, representation: Representation, site: string): (...args: unknown[]) => Promise<unknown> {
+  return (...args: unknown[]) => invokeAt(fn, args, representation, site);
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */

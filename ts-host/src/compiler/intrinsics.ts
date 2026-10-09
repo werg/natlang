@@ -132,6 +132,9 @@ interface NatlangCallableMethods<A extends unknown[], R> {
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
+/** A natural-language function with a representation-generic result: each call's expected type instantiates R (T by default). */
+type NatlangGenericFunction<A extends unknown[], C, T extends C> = (<R extends C = T>(...args: A) => Promise<R>) &
+  NatlangCallableMethods<A, T> & { readonly __natlangGenericResult?: C };
 /** An inline \`nl\` value can be instantiated again with a fresh snapshot of the same named captures. */
 type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFunction<A, R> & {
   with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
