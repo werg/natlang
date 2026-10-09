@@ -130,6 +130,30 @@ function rowSha256(line) {
   return sha256(Buffer.from(line.replace(/\r$/, ''), 'utf8'));
 }
 
+/** The teacher CLI's --start is a zero-based physical JSONL row offset. */
+export function verifyStep5CollectorSourceSelection({ plan, collectorArgv }) {
+  if (plan?.schema !== 'natlang.step5_authored_root_source_case_launch_plan/1')
+    return { ok: true, skipped: true };
+  const source = plan.source;
+  if (!Array.isArray(collectorArgv) || !collectorArgv.every(value => typeof value === 'string') ||
+      typeof source?.path !== 'string' || !Number.isSafeInteger(source.index) || source.index < 0)
+    throw new Error('authored-root collector lacks exact source selection');
+  if (resolve(collectorArgv[1] ?? '') !== resolve(source.path))
+    throw new Error('actual collector source path does not match the plan source path');
+  const flags = collectorArgv.slice(4);
+  if (flags.includes('--all')) throw new Error('single-source collector must not use --all');
+  const numericFlag = name => {
+    const positions = flags.flatMap((value, index) => value === name ? [index] : []);
+    if (positions.length !== 1 || !/^\d+$/.test(flags[positions[0] + 1] ?? ''))
+      throw new Error(`actual collector ${name} must occur once with an integer value`);
+    return Number(flags[positions[0] + 1]);
+  };
+  const start = numericFlag('--start'), limit = numericFlag('--limit');
+  if (start !== source.index || limit !== 1)
+    throw new Error('actual collector zero-based --start/--limit does not select the plan source row');
+  return { ok: true, source_path: source.path, source_index: source.index, start, limit };
+}
+
 /**
  * Bind an authored-root Step 5 plan and its exact-source fake proof to the
  * selected physical source JSONL row. This prevents a valid neighboring-row

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding } from '../scripts/opencode-step5-preflight.mjs';
+import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding, verifyStep5CollectorSourceSelection } from '../scripts/opencode-step5-preflight.mjs';
 
 const alias = 'opencode/step-5-preview-free';
 const bootstrapConfig = { model_alias: alias, main_model: alias, small_model: alias };
@@ -145,6 +145,18 @@ function authoredSourceBindingFixture() {
       sha256: createHash('sha256').update(sourceProofText).digest('hex') } } };
   return { plan, sourceCasesText, sourceProofText, source, record, sourceSha256, sourceRowSha256 };
 }
+
+test('collector selects the exact zero-based authored source row before launch', () => {
+  const { plan } = authoredSourceBindingFixture();
+  const argv = ['cli.js', plan.source.path, 'jobs', 'results.jsonl', '--start', '0', '--limit', '1'];
+  assert.equal(verifyStep5CollectorSourceSelection({ plan, collectorArgv: argv }).start, 0);
+  for (const bad of [
+    argv.map((v, i) => i === 5 ? '1' : v),
+    argv.map((v, i) => i === 1 ? 'runs/other.jsonl' : v),
+    [...argv, '--start', '0'], [...argv, '--all'],
+    argv.map((v, i) => i === 7 ? '2' : v), argv.slice(0, 4)
+  ]) assert.throws(() => verifyStep5CollectorSourceSelection({ plan, collectorArgv: bad }), /collector/);
+});
 
 test('authored-root preflight binds the exact physical source row to its fake proof', () => {
   const fixture = authoredSourceBindingFixture();

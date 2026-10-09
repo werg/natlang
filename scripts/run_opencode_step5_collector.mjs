@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding } from './opencode-step5-preflight.mjs';
+import { verifyStep5ArtifactClosure, verifyStep5ModelPair, verifyStep5SourceBinding, verifyStep5CollectorSourceSelection } from './opencode-step5-preflight.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 async function main(argv) {
@@ -24,6 +24,7 @@ async function main(argv) {
     readFile(options.get('--collector-argv-json'), 'utf8')
   ]);
   const plan = JSON.parse(planText), bootstrapConfig = JSON.parse(bridgeText), collectorArgv = JSON.parse(argvText);
+  const sourceSelection = verifyStep5CollectorSourceSelection({ plan, collectorArgv });
   const artifactClosure = await verifyStep5ArtifactClosure({ plan, repoRoot: process.cwd() });
   let sourceBinding = null;
   if (plan?.schema === 'natlang.step5_authored_root_source_case_launch_plan/1') {
@@ -43,7 +44,8 @@ async function main(argv) {
   const receiptPath = options.get('--receipt');
   const receipt = { schema: 'natlang.opencode_step5_collector_launch/1', plan_sha256: hash(planText),
     bridge_config_sha256: hash(bridgeText), collector_argv_sha256: hash(argvText), ...pairing,
-    artifact_closure: artifactClosure, ...(sourceBinding ? { source_binding: sourceBinding } : {}),
+    artifact_closure: artifactClosure, source_selection: sourceSelection,
+    ...(sourceBinding ? { source_binding: sourceBinding } : {}),
     collector_argv: collectorArgv, parent_pid: process.pid, started_at: new Date().toISOString(), status: 'starting' };
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
   let receiptWrite = Promise.resolve();
