@@ -25,8 +25,7 @@ Decisions: **fn**, **inline**, **implicit**, **crisp**, **service**, **host**, *
   `group.measure`, case assembly, replay on recorded calls, the runtime judge's blinded comparison, saving, the
   call store. A model cannot be asked for these.
 - **Process control stays with the owning session.** The specializer reads the executor load (`waitForIdle`) and
-  waits for it; it never stops or starts other processes. The heartbeat program (plans/HEARTBEAT_PROGRAM.md) is the
-  place where unit-level decisions are advised.
+  waits for it; it never stops or starts other processes.
 - **Interruptible and resumable.** Every step reads from and writes to the call store; `SIGTERM` finishes the
   current step (`main.ts:260-261`). This stays.
 - **State model.** One pass over a definition is decide-then-commit: study (snapshot), writers decide per group,
