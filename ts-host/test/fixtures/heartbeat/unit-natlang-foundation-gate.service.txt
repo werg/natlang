@@ -1,0 +1,6 @@
+LoadState=loaded
+ActiveState=inactive
+SubState=dead
+Result=success
+ExecMainStatus=0
+ActiveEnterTimestamp=Fri 2026-10-09 09:00:00 UTC

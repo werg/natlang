@@ -1,0 +1,4 @@
+# HELP vllm:num_requests_running Number of requests currently running on GPU.
+vllm:num_requests_running{engine="0",model_name="qwen"} 3.0
+vllm:num_requests_waiting{engine="0",model_name="qwen"} 4.0
+vllm:other_metric{engine="0"} 12
