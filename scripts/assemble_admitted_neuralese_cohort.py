@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from root_integration_adoption import root_integration_adoption_bindings
 from root_derived_writer_admission import admitted_root_derived_writer_rows
+from root_admission_scope import no_new_world_credit
 
 
 def sha(path: Path) -> str:
@@ -111,7 +112,7 @@ def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
     if (approval.get('whole_trajectory_admission') is not False
             or approval.get('runtime_qualification') is not False
             or approval.get('active_gpu_inputs_changed') is not False
-            or approval.get('new_world_credit') is not False):
+            or not no_new_world_credit(approval.get('new_world_credit'))):
         raise ValueError('root per-action approval includes an unsupported admission facet')
     ids = [row.get('id') for row in delta_rows]
     if len(ids) != len(set(ids)) or set(ids) != set(admitted):

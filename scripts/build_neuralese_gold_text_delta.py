@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from root_derived_writer_admission import admitted_root_derived_writer_rows
 sys.path.insert(0, str(ROOT / "scripts"))
 from root_integration_adoption import root_integration_adoption_bindings
+from root_admission_scope import no_new_world_credit
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -488,7 +489,7 @@ def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT)
     if (receipt.get("whole_trajectory_admission") is not False
             or receipt.get("runtime_qualification") is not False
             or receipt.get("active_gpu_inputs_changed") is not False
-            or receipt.get("new_world_credit") is not False):
+            or not no_new_world_credit(receipt.get("new_world_credit"))):
         raise ValueError("root per-action receipt includes an unsupported admission facet")
     approved_ids = [row["native_id"] for row in admitted]
     if delta_ids is not None and (not isinstance(delta_ids, set) or delta_ids != set(approved_ids)):
