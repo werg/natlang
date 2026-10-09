@@ -87,6 +87,7 @@ if (values['source-derived-repairs']) {
       provenance: repairProvenance,
       disposition: candidate.disposition, synthetic_target: candidate.synthetic_target,
       observed_rejected_target: candidate.observed_rejected_target,
+      chosen_code_validation: candidate.chosen_code_validation ?? null,
       runtime_or_hidden_state_equivalence: false, successful_task_completion_claimed: false,
       pair: candidate.pair });
     audit.push({ id: sourceRepairId, source_id: sourceRepairSource,
