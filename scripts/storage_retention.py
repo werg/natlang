@@ -394,7 +394,13 @@ def run(args) -> dict:
     policy = load_policy(args.policy)
     registered = registered_files(policy)
     revisions: dict = {}
-    entries, totals = scan(policy, args.roots, registered, revisions)
+    if getattr(args, 'from_report', None):  # reuse a report's walk (hours on the HDD); classification is redone
+        previous = json.loads(Path(args.from_report).read_text())
+        keys = ('path', 'logical', 'bytes', 'mtime', 'category', 'run')
+        entries = [{k: e[k] for k in keys} for e in previous['entries']]
+        totals, revisions = previous['totals'], previous.get('sync_revisions', {})
+    else:
+        entries, totals = scan(policy, args.roots, registered, revisions)
     text = reference_text(policy)
     active = active_state(policy['roots']['scan'])
     classified = classify(entries, policy, registered=registered, text=text, active=active)
@@ -441,6 +447,7 @@ def main(argv=None):
     p.add_argument('--manifest', default=str(STATE / 'deletions.jsonl'))
     p.add_argument('--out', default=str(STATE / 'retention-latest.json'))
     p.add_argument('--no-docker', action='store_true')
+    p.add_argument('--from-report', default=None, help="reuse a report's scan (JSON) instead of walking again")
     args = p.parse_args(argv)
     report = run(args)
     out = Path(args.out)
