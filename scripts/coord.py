@@ -238,6 +238,9 @@ def main():
     close.add_argument('-m', '--message', default='closed')
     inbox = sub.add_parser('inbox', help='unread messages for me and open requests to my machine')
     inbox.add_argument('--ack', action='store_true', help='mark the shown messages read')
+    inbox.add_argument('--json', action='store_true', help='read-only JSON for programs: unread, open requests and the '
+                       'messages addressed to this machine in the last --hours; never moves a cursor')
+    inbox.add_argument('--hours', type=float, default=24)
     sub.add_parser('brief', help='one-line summary for hooks; silent when there is nothing new')
     sub.add_parser('open', help='open requests on both machines')
     show = sub.add_parser('show', help='print messages by id (prefix match) with their thread')
@@ -247,6 +250,7 @@ def main():
     log.add_argument('--grep')
     log.add_argument('--from', dest='sender')
     log.add_argument('--legacy', action='store_true', help='include the imported legacy inbox')
+    log.add_argument('--json', action='store_true', help='messages as a JSON list')
     status = sub.add_parser('status', help='show both machines\' status pages; --set replaces mine from stdin')
     status.add_argument('--set', action='store_true')
     sub.add_parser('whoami')
@@ -296,6 +300,15 @@ def main():
                       and m['received_at'] > cursor['since'] and m['id'] not in read]
             open_requests = [m for m in messages if m['kind'] == 'request' and m['id'] not in resolved
                              and addressed(m, store, me) and m not in unread]
+            if args.command == 'inbox' and args.json:
+                if args.ack:
+                    sys.exit('coord: --json is read-only and cannot be combined with --ack')
+                cutoff = stamp(now() - datetime.timedelta(hours=args.hours))
+                recent = [m for m in messages if addressed(m, store, me) and m['from'] != me and not m.get('legacy')
+                          and (m.get('sent_at') or m.get('received_at') or '') >= cutoff]
+                print(json.dumps({'machine': store.machine, 'reader': me, 'unread': unread, 'open_requests': open_requests,
+                                  'recent': recent, 'resolved': sorted(resolved)}, ensure_ascii=False))
+                return
             if args.command == 'brief':
                 if unread or open_requests:
                     urgent = sum(1 for m in unread if m.get('urgent'))
@@ -334,6 +347,9 @@ def main():
             selected = [m for m in messages if (args.legacy or not m.get('legacy'))
                         and (not args.sender or m['from'] == args.sender)
                         and (not args.grep or re.search(args.grep, m['body'] + (m.get('subject') or ''), re.I))]
+            if args.json:
+                print(json.dumps(selected[-args.n:], ensure_ascii=False))
+                return
             for message in selected[-args.n:]:
                 print(render(message))
         elif args.command == 'status':

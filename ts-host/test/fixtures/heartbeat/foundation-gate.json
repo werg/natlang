@@ -1,0 +1,6 @@
+{
+  "schema": "natlang.neuralese-foundation-control/1",
+  "token_aligned_reference_passed": false,
+  "causal_distillation_passed": true,
+  "details": { "nested": { "cosine": 0.62 } }
+}

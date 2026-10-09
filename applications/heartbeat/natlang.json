@@ -1,0 +1,12 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/heartbeat",
+  "version": "0.1.0",
+  "description": "The hourly check-in as a natlang program: read-only evidence collectors, diagnoseRun, triageInbox and planNext, an owner-edited action allowlist, and advisory-first reversible auto-apply (plans/HEARTBEAT_PROGRAM.md).",
+  "include": ["README.md", "main.ts", "types.ts", "host.ts", "actions.ts", "actions.json", "watch.json", "apply.ts", "compare.ts", "heartbeat.ts", "ladder.ts", "record.ts", "verify.ts",
+    "collect", "diagnoseRun.nl", "triageInbox.nl", "planNext.nl", "tsconfig.json"],
+  "targets": { "heartbeat": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands"],
+    "commands": ["python3", "systemctl", "systemd-run", "journalctl", "git", "df", "nvidia-smi"],
+    "description": "natlang run applications/heartbeat -- [cycle|collect|report|compare|record] [--stage shadow|advisory|auto] [--no-record] [--repo DIR]" } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
