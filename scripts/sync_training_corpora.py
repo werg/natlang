@@ -522,6 +522,10 @@ for i in p['files']:
 """
         subprocess.run(['ssh', args.host, 'python3 -c ' + shlex.quote(source_guard)],
                        input=json.dumps({'root': remote, 'files': manifest['files']}), text=True, check=True)
+    else:
+        errors, _, _ = verify_files(root, manifest['files'])
+        if errors:
+            raise ValueError('local source does not match immutable manifest: ' + json.dumps(errors))
     # Destination existing bytes are immutable; matching files can be reused.
     # Mismatches fail rather than replacing another agent's artifact.
     guard = """import json,sys,hashlib,shutil
@@ -549,7 +553,10 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
         # The preflight hashed every existing destination; never rewrite it.
         # Preserve finalized best/current checkpoint and corpus hard links so
         # transferring aliases does not duplicate gigabytes of immutable bytes.
-        subprocess.run(['rsync', '-rzH', '--ignore-existing', '--protect-args', '--partial', '--partial-dir=.sync-partial',
+        # Verification admits file aliases by their target bytes. Materialize
+        # those exact manifest entries remotely rather than skipping symlinks
+        # or transporting machine-specific storage paths.
+        subprocess.run(['rsync', '-rzH', '--copy-links', '--ignore-existing', '--protect-args', '--partial', '--partial-dir=.sync-partial',
                         '--files-from=' + file_list.name, '--stats', source, destination], check=True)
     if pull:
         verify(repo, manifest, receipt_group='corpus-restores' if selected else 'corpus-receipts')
