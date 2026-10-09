@@ -32,6 +32,8 @@ export type Frame = Readonly<{
   adHocDepth?: number;
   /** System prompt text for the one invocation started in this frame (not inherited by its children). */
   systemAddendum?: string;
+  /** The call site the compiler marked for the one call started in this frame (compiler/call-flow.ts, runtime/fusion.ts). */
+  fusionSite?: string;
   /** Ancestor-visible scoped handles rebased into this invocation's copy-on-write view. */
   scopedHandleReplacements?: ReadonlyMap<Folder | FolderHandle | FileHandle, Folder | FolderHandle | FileHandle>;
   /**

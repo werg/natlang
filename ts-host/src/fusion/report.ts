@@ -22,7 +22,7 @@ export function fusionReport(facts: FusionFacts, plan: FusionPlan, settings: Fus
     const decision = entry?.decision ?? 'keep-text';
     return { id: edge.id, scope: edge.scope, chain: edge.chain, type: edge.type, flow: edge.flow, decision,
       reason: entry?.reason ?? 'not decided', readers: edge.readers.map(reader => ({ kind: reader.kind, detail: reader.detail, certain: reader.certain })),
-      engaged: decision === 'fuse' && edge.scopeKind === 'nl',
+      engaged: decision === 'fuse' && (edge.scopeKind === 'nl' || !!edge.sites),
       readerEvidence: edge.observed ? { observed: { ...edge.observed } } : 'proven' as const };
   });
   const fuse = edges.filter(edge => edge.decision === 'fuse');

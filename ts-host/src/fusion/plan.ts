@@ -105,15 +105,15 @@ export function verifyPlan(facts: FusionFacts, plan: unknown, options: PlanOptio
 }
 
 /**
- * The edges the runtime can engage: planned `fuse` edges whose orchestrator is a natural-language function. A fused
- * hand-off inside crisp TypeScript is planned and reported, but the runtime only sees calls made by natural-language
- * parents, so it keeps those as text.
+ * The edges the runtime can engage: planned `fuse` edges inside a natural-language orchestrator (the runtime reads the scope
+ * from the calling function) and inside crisp TypeScript (the compiler marked the two calls; the edge carries their sites).
  */
 export function fusedEdges(facts: FusionFacts, plan: FusionPlan): FusionEdgeSpec[] {
   const fuse = new Set(plan.edges.filter(entry => entry.decision === 'fuse').map(entry => entry.edge));
-  return facts.edges.filter(edge => fuse.has(edge.id) && edge.scopeKind === 'nl' && edge.consumer.param).map(edge => ({
+  return facts.edges.filter(edge => fuse.has(edge.id) && edge.consumer.param && (edge.scopeKind === 'nl' || edge.sites)).map(edge => ({
     id: edge.id, scope: edge.scope, producer: { source: edge.producer.source },
-    consumer: { source: edge.consumer.source, param: edge.consumer.param! }, type: edge.type }));
+    consumer: { source: edge.consumer.source, param: edge.consumer.param! }, type: edge.type,
+    ...(edge.scopeKind === 'typescript' && edge.sites ? { sites: edge.sites } : {}) }));
 }
 
 /** The plan with every problem edge set to text, and the reasons recorded. */

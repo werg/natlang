@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { createNatlangRuntime, loadNatlang, nodeSourceFiles } from '../dist/index.js';
+import { buildProject, createNatlangRuntime, loadNatlang, nodeSourceFiles } from '../dist/index.js';
 import { openCallStore } from '../dist/calls/store.js';
 import { fusionFacts, observedFromStore, formatFusionReport, crispPlan, verifyPlan, repairedPlan, nlPlan, nlPlannerFrom, planFusion, fusedEdges, fusionStatus, fusionReport,
   parseFusionSettings } from '../dist/fusion/index.js';
@@ -74,8 +74,9 @@ test('the fact service lists candidate edges with their readers and the crisp pl
   assert.equal(decision(nested).decision, 'fuse');
   assert.ok(read.readers.some(reader => reader.kind === 'crisp-code'));
   assert.equal(decision(read).decision, 'keep-text');
-  // Only edges inside natural-language scopes can engage at run time.
-  assert.deepEqual(fusedEdges(facts, plan).map(edge => edge.producer.source), ['orch/parse.nl']);
+  // Edges of natural-language scopes engage by their calling function, edges of TypeScript scopes by the marked call sites.
+  assert.deepEqual(fusedEdges(facts, plan).map(edge => edge.producer.source), ['orch/parse.nl', 'first.nl']);
+  assert.equal(fusedEdges(facts, plan).filter(edge => edge.sites).length, 1);
   const report = fusionReport(facts, plan, parseFusionSettings(undefined));
   assert.equal(report.counts.fuse, 2);
   assert.equal(report.counts.nlScopeFuse, 1);
@@ -451,4 +452,87 @@ test('explicit chains: a nested call or a variable used only by the next stage i
   assert.equal(bound.plan.edges[0].decision, 'fuse');
   const read = decide('a = first(x). When a.length is 0 return "". Return second(a).');
   assert.equal(read.plan.edges[0].decision, 'keep-text');
+});
+
+// --- Crisp TypeScript orchestrators: the compiler marks the calls, the runtime fuses the planned edges -------------
+
+const TS_APP = {
+  'package.json': JSON.stringify({ name: 'fixture-fusion', private: true, type: 'module' }),
+  'natlang.json': '{}',
+  'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, skipLibCheck: true,
+    rootDir: 'src', outDir: 'dist' }, include: ['src/**/*.ts'] }),
+  'src/parse.nl': stage('  source: string', 'string', 'STAGE-PARSE: parse source.'),
+  'src/analyze.nl': stage('  syntax: string', 'string', 'STAGE-ANALYZE: analyze syntax.'),
+  'src/host.ts': `import parse from './parse.nl';
+import analyze from './analyze.nl';
+export async function nested(source: string) { return analyze(await parse(source)); }
+export async function bound(source: string) { const tree = await parse(source); return analyze(tree); }
+export async function reads(source: string) { const tree = await parse(source); console.log(tree.length); return analyze(tree); }
+export async function twice(source: string) { const tree = await parse(source); return [await analyze(tree), await analyze(tree)]; }
+export async function unrelated(source: string) { return analyze(source); }
+`,
+};
+const RUNTIME_MODULE = { url: new URL('../dist/index.js', import.meta.url).href,
+  types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
+
+test('TypeScript orchestrators: the facts name each hand-off\'s call sites; a re-read, shared or exported value is not fusible', () => {
+  const root = folder({ ...TS_APP, 'src/exported.ts': `import parse from './parse.nl';
+import analyze from './analyze.nl';
+export const tree = await parse('x');
+export const checked = await analyze(tree);
+` });
+  const facts = fusionFacts(root, nodeSourceFiles(root));
+  const plan = crispPlan(facts);
+  const byScope = Object.fromEntries(['nested', 'bound', 'reads', 'twice', 'unrelated'].map(name => [name, facts.edges.filter(edge => edge.scope === `src/host.ts#${name}`)]));
+  const decision = edge => plan.edges.find(entry => entry.edge === edge.id).decision;
+  assert.deepEqual(byScope.nested.map(decision), ['fuse']);
+  assert.deepEqual(byScope.bound.map(decision), ['fuse']);
+  assert.deepEqual(byScope.reads.map(decision), ['keep-text']);
+  assert.ok(byScope.twice.length && byScope.twice.every(edge => decision(edge) === 'keep-text'), 'a value two calls receive is not fused');
+  assert.equal(byScope.unrelated.length, 0);
+  const exported = facts.edges.filter(edge => edge.scope.startsWith('src/exported.ts'));
+  assert.equal(exported.length, 1);
+  assert.equal(decision(exported[0]), 'keep-text');
+  assert.ok(exported[0].readers.some(reader => reader.kind === 'host-return' && /exported/.test(reader.detail)));
+  for (const edge of byScope.nested.concat(byScope.bound)) assert.match(edge.sites.producer, /^src\/host\.ts@\d+$/);
+  assert.equal(fusedEdges(facts, plan).filter(edge => edge.sites).length, 2);
+  assert.equal(fusionReport(facts, plan, parseFusionSettings(undefined)).edges.filter(edge => edge.engaged).length, 2);
+});
+
+test('TypeScript orchestrators: with fusion on under the emulation the planned hand-offs pass a block, the others stay text; off changes nothing', async () => {
+  const root = folder(TS_APP);
+  const result = buildProject({ project: root, runtimeModule: RUNTIME_MODULE });
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
+  const host = join(root, 'dist/host.js');
+  const code = readFileSync(host, 'utf8');
+  // nested: parse, analyze; bound: parse, analyze; reads: parse, analyze; twice: parse, both analyzes.
+  assert.equal((code.match(/__natlang\.fuseSite\(/g) ?? []).length, 9, code);
+  assert.ok(!/unrelated[^\n]*fuseSite/.test(code), 'a call with no producer is left alone');
+  const facts = fusionFacts(root, nodeSourceFiles(root));
+  const edges = fusedEdges(facts, crispPlan(facts));
+  const module = await import(pathToFileURL(host).href);
+
+  const run = async (name, fusion) => {
+    const log = [];
+    const emulation = createTextNeuraleseEmulation();
+    const runtime = createNatlangRuntime({ model: emulation.wrap(scriptedModel(log)), calls: false, neuralese: emulation.runtime,
+      ...(fusion ? { fusion: { edges, ...fusion } } : {}) });
+    const value = await runtime.run(() => module[name]('int main(){}'));
+    return { value, log, analyze: log.filter(entry => entry.which === 'STAGE-ANALYZE') };
+  };
+  const on = { mode: 'on', emulation: { dialect: TEXT_NEURALESE_DIALECT } };
+  for (const name of ['nested', 'bound']) {
+    const fused = await run(name, on);
+    assert.equal(fused.value, 'checked:TREE-1', name);
+    assert.match(fused.analyze[0].text, /Neuralese text block id=nz1_/, `${name}: the analyzer was shown a block`);
+  }
+  for (const name of ['reads', 'twice']) {
+    const kept = await run(name, on);
+    assert.ok(kept.analyze.length && kept.analyze.every(entry => !/Neuralese text block/.test(entry.text)), `${name}: text`);
+  }
+  const off = await run('nested', undefined);
+  assert.equal(off.value, 'checked:TREE-1');
+  assert.ok(!/Neuralese text block/.test(off.analyze[0].text), 'fusion off: text');
+  const explicitOff = await run('nested', { mode: 'off' });
+  assert.ok(!/Neuralese text block/.test(explicitOff.analyze[0].text));
 });

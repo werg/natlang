@@ -33,6 +33,11 @@ export type FusionEdgeSpec = {
   consumer: { source: string; param: string };
   /** The declared result type of the producer (`T`). */
   type: string;
+  /**
+   * Edges of crisp TypeScript orchestrators have no calling function to read the scope from. The compiler marks the two
+   * calls instead (`__natlang.fuseSite`), and these are their site IDs (`file@offset`, compiler/call-flow.ts).
+   */
+  sites?: { producer: string; consumer: string };
 };
 
 /**
@@ -93,6 +98,11 @@ export function fusionStatus(options: FusionOptions, neuralese: NeuraleseRuntime
 }
 
 const sameSource = (a: string, b: string): boolean => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+/** `file@offset` IDs are equal when the offsets are and the files are the same file up to a leading directory. */
+const sameSite = (a: string, b: string): boolean => {
+  const at = a.lastIndexOf('@'), other = b.lastIndexOf('@');
+  return at > 0 && other > 0 && a.slice(at) === b.slice(other) && sameSource(a.slice(0, at), b.slice(0, other));
+};
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ?
   Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
 
@@ -107,6 +117,10 @@ type FusedDefinition = { returns: string; params: { name: string; type: string; 
 
 type EdgeState = { fallbackReported: boolean; fused: number; consumed: number; shadows: number };
 const STATES = new WeakMap<object, Map<string, EdgeState>>();
+const HOST_EVENTS = new WeakMap<object, { kind: string; data: Record<string, unknown> }[]>();
+
+/** Fusion events of calls the host made (crisp TypeScript orchestrators), which have no calling function's trace to join. */
+export function fusionHostEvents(task: object): readonly { kind: string; data: Record<string, unknown> }[] { return HOST_EVENTS.get(task) ?? []; }
 const UNCONSUMED = new WeakMap<object, Set<string>>();
 
 /** Edges that produced a fused block no consumer took, per task (a planned consumer never received it). */
@@ -114,7 +128,9 @@ export function unconsumedFusedBlocks(task: object): string[] { return [...(UNCO
 
 function emit(frame: Frame, kind: string, data: Record<string, unknown>): void {
   const trace = traceFor(frame.parentCallId);
-  trace?.emit(kind, { call_id: frame.parentCallId ?? null, ...data });
+  if (trace) { trace.emit(kind, { call_id: frame.parentCallId ?? null, ...data }); return; }
+  const events = HOST_EVENTS.get(frame.task) ?? (HOST_EVENTS.set(frame.task, []), HOST_EVENTS.get(frame.task)!);
+  events.push({ kind, data });
 }
 
 /**
@@ -126,19 +142,28 @@ export function engageFusion<D extends FusedDefinition & { source?: string; name
     frame: Frame, definition: D, inputs: readonly unknown[],
     invoke: (frame: Frame, definition: D, inputs: unknown[]) => Promise<unknown>): { definition: D; produced?: (value: unknown) => void } | undefined {
   const options = frame.task.runtime.options.fusion;
-  if (!options || options.mode === 'off' || !definition.source || !frame.parentCallId || (definition as { subtype?: string }).subtype === 'directory-reducer') return undefined;
-  const parent = (traceFor(frame.parentCallId)?.events[0] ?? {}) as Record<string, unknown>;
-  const scope = typeof parent.definition_source === 'string' ? parent.definition_source : undefined;
-  if (!scope) return undefined;
-  const asProducer = /\bNeuralese\s*</.test(definition.returns) ? [] : options.edges.filter(edge => sameSource(edge.scope, scope) && sameSource(edge.producer.source, definition.source!));
-  const asConsumer = options.edges.filter(edge => sameSource(edge.scope, scope) && sameSource(edge.consumer.source, definition.source!));
+  if (!options || options.mode === 'off' || !definition.source || (definition as { subtype?: string }).subtype === 'directory-reducer') return undefined;
+  const soft = (type: string) => `Neuralese<${type}>`;
+  let asProducer: FusionEdgeSpec[], asConsumer: FusionEdgeSpec[];
+  if (frame.fusionSite) {
+    // A call the compiler marked in crisp TypeScript: the edge names the call sites, and the function must be the edge's own.
+    const site = frame.fusionSite;
+    asProducer = /\bNeuralese\s*</.test(definition.returns) ? [] : options.edges.filter(edge => edge.sites && sameSite(edge.sites.producer, site) && sameSource(edge.producer.source, definition.source!));
+    asConsumer = options.edges.filter(edge => edge.sites && sameSite(edge.sites.consumer, site) && sameSource(edge.consumer.source, definition.source!));
+  } else {
+    if (!frame.parentCallId) return undefined;
+    const parent = (traceFor(frame.parentCallId)?.events[0] ?? {}) as Record<string, unknown>;
+    const scope = typeof parent.definition_source === 'string' ? parent.definition_source : undefined;
+    if (!scope) return undefined;
+    asProducer = /\bNeuralese\s*</.test(definition.returns) ? [] : options.edges.filter(edge => !edge.sites && sameSource(edge.scope, scope) && sameSource(edge.producer.source, definition.source!));
+    asConsumer = options.edges.filter(edge => !edge.sites && sameSource(edge.scope, scope) && sameSource(edge.consumer.source, definition.source!));
+  }
   if (!asProducer.length && !asConsumer.length) return undefined;
   const states = STATES.get(frame.task) ?? (STATES.set(frame.task, new Map()), STATES.get(frame.task)!);
   const state = (edge: FusionEdgeSpec): EdgeState => states.get(edge.id) ?? (states.set(edge.id, { fallbackReported: false, fused: 0, consumed: 0, shadows: 0 }), states.get(edge.id)!);
   const model = frame.task.model((definition as { model?: string }).model);
   const status = fusionStatus(options, frame.task.runtime.options.neuralese, model);
   const mark = status.ok && status.emulation ? { emulation: true } : {};
-  const soft = (type: string) => `Neuralese<${type}>`;
   let result: D = definition;
 
   // The consumer receives a block a fused producer wrote: retype the parameter. A text value (the producer fell back or
