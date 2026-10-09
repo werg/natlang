@@ -806,6 +806,15 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                              for occurrence in writer.get("write_occurrences", [])))
                     and writer.get("body_sha256") == body_sha256
                     and writer.get("body") == body]
+        if len(eligible) > 1:
+            coalesced = _coalesce_text_writer_event_aliases(
+                eligible, block_id=block_id, block_type=item.get("type"), body=body,
+                body_sha256=body_sha256,
+                writer_call_id=(producer.get("call_id") if context_refs else item.get("producer_call_id")),
+                writer_write_node=item.get("producer_write_node"), writer_name=name,
+                source_row_sha256=reader_source_row, split=split, source_groups=source_groups)
+            if coalesced is not None:
+                eligible = [coalesced]
         if len(eligible) == 1:
             writer = eligible[0]
             attestations.append({key: value for key, value in writer.items() if key != "body"} | {
@@ -1020,6 +1029,61 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             "body_sha256": body_sha256, "body": body,
             "source_kind": "provider-expanded-context-only-same-run-read"})
     return attestations
+
+
+def _coalesce_text_writer_event_aliases(candidates, *, block_id, block_type, body,
+                                       body_sha256, writer_call_id, writer_write_node,
+                                       writer_name, source_row_sha256, split, source_groups):
+    """Coalesce duplicate source rows for one exact writer event in text context only.
+
+    Native records and separately admitted derived-body records can both describe
+    the same provider write. They may ground one text input only when the event,
+    typed block, body and source scope are identical. This does not merge their
+    training targets or recurrence/runtime representations.
+    """
+    if not candidates:
+        return None
+    expected_groups = tuple(sorted(set(source_groups or [])))
+    aliases = []
+    signatures = set()
+    for writer in candidates:
+        occurrence_nodes = {item.get("writer_write_node") for item in writer.get("write_occurrences", [])
+                            if isinstance(item, dict)}
+        event_nodes = {writer.get("writer_write_node"), *occurrence_nodes}
+        # Every view must bind to the exact call and graph node named by the
+        # already authenticated provider read receipt.
+        if (writer.get("writer_invocation_id") != writer_call_id
+                or writer_write_node not in event_nodes
+                or writer.get("writer_split") != split
+                or writer.get("writer_source_row_sha256") != source_row_sha256
+                or tuple(sorted(set(writer.get("writer_source_groups") or []))) != expected_groups
+                or writer.get("write_name") != writer_name
+                or writer.get("body_sha256") != body_sha256
+                or writer.get("body") != body
+                or block_type != "Neuralese<string>"
+                or not isinstance(block_id, str) or not block_id.startswith("nz1_")):
+            return None
+        signature = (block_id, block_type, body_sha256, writer_call_id, writer_write_node,
+                     writer.get("write_name"), tuple(writer.get("result_path") or []),
+                     writer.get("source_kind"), source_row_sha256, split, expected_groups)
+        signatures.add(signature)
+        aliases.append({"record_id": writer.get("writer_record_id"),
+                        "record_sha256": writer.get("writer_record_sha256"),
+                        "source_kind": writer.get("source_kind"),
+                        "source_row_sha256": writer.get("writer_source_row_sha256"),
+                        "split": writer.get("writer_split"),
+                        "source_groups": sorted(set(writer.get("writer_source_groups") or [])),
+                        "write_name": writer.get("write_name"),
+                        "write_node": writer.get("writer_write_node")})
+    if len(signatures) != 1:
+        return None
+    # Keep a deterministic representative for existing consumers while making
+    # every equivalent source-record attribution explicit in the text receipt.
+    representative = sorted(candidates, key=lambda item: (str(item.get("writer_record_id")),
+                                                           str(item.get("writer_record_sha256"))))[0]
+    return {**representative,
+            "equivalent_writer_source_records": sorted(aliases,
+                key=lambda item: (str(item.get("record_id")), str(item.get("record_sha256"))))}
 
 
 def _hydrate_tool_argument_blocks(messages, bodies, read_bodies=None):

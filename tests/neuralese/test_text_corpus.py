@@ -573,3 +573,107 @@ def test_derived_pure_literal_target_has_explicit_nonruntime_writer_receipt():
         changed = json.loads(json.dumps(row))
         mutate(changed)
         assert _authenticated_derived_semantic_text_write(changed) is None
+
+
+def test_text_provider_read_coalesces_only_duplicate_views_of_same_authenticated_writer_event():
+    from natlang_neuralese.data.text_corpus import (_attested_provider_expanded_reads,
+                                                   _coalesce_text_writer_event_aliases)
+
+    block_id = "nz1_" + "e" * 52
+    body = "Exact source body for one provider write."
+    body_sha = _sha(body)
+    reader_call, writer_call = "reader/4", "writer/2"
+    read_node, turn_node, write_node = "reader/4#7", "reader/4#turn1", "writer/2#9"
+    row_sha, trace_sha = "a" * 64, "b" * 64
+    request_sha, rendered_sha, transport_sha = "c" * 64, "d" * 64, "e" * 64
+    group = "source-group"
+    write_event = {"kind": "block_write", "call_id": writer_call, "node": write_node,
+                   "block": block_id, "source_kind": "typed-text-result",
+                   "result_type": "Neuralese<string>", "text_body_sha256": body_sha}
+    provider_receipt = {
+        "schema": "natlang.provider-expanded-read-context/2", "origin": "same-run-producer",
+        "invocation_id": reader_call, "parent_invocation_id": "root-call", "source_row_sha256": row_sha,
+        "trace_sha256": trace_sha, "transport_provenance_sha256": transport_sha,
+        "raw_request_sha256": request_sha, "rendered_request_sha256": rendered_sha,
+        "block": {"id": block_id, "type": "Neuralese<string>", "body": body,
+                  "body_sha256": body_sha, "learned_vectors": False},
+        "block_read": {"kind": "block_read", "call_id": reader_call, "node": read_node,
+                       "block": block_id, "inputs": [{"node": write_node, "block": block_id}]},
+        "model_turn": {"kind": "model_turn", "call_id": reader_call, "node": turn_node,
+                       "inputs": [{"node": read_node, "block": block_id}]},
+        "context_occurrences": 1, "producer_write": write_event,
+        "writer_target_selected": False, "learned_vectors": False,
+        "qualification_certificate": False, "training_admission": False,
+    }
+    reader = {
+        "id": "reader", "split": "train", "source_groups": [group],
+        "source_ref": {"source_row_sha256": row_sha, "invocation_id": reader_call,
+                       "parent_invocation_id": "root-call",
+                       "provider_expanded_read_contexts": [provider_receipt]},
+        "neuralese_conversion": {"external_context_inputs": [{
+            "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
+            "learner_representation": "typed-read-from-authenticated-runtime-writer-event-context-only",
+            "block_id": block_id, "type": "Neuralese<string>", "body_sha256": body_sha,
+            "invocation_id": reader_call, "parent_invocation_id": "root-call",
+            "source_row_sha256": row_sha, "trace_sha256": trace_sha,
+            "read_node": read_node, "model_turn_node": turn_node, "producer_write_node": write_node,
+            "producer_call_id": writer_call, "writer_target_selected": False,
+            "context_occurrences": 1, "transport_provenance_sha256": transport_sha,
+            "raw_request_sha256": request_sha, "rendered_request_sha256": rendered_sha,
+            "learned_vectors": False, "qualification_certificate": False,
+            "training_admission": False,
+        }]},
+        "messages": [{"role": "user", "content": [{"type": "read",
+            "name": f"soft-state:{block_id}", "source": body}]}],
+    }
+    base_writer = {
+        "writer_source_row_sha256": row_sha, "writer_split": "train",
+        "writer_source_groups": [group], "write_name": f"soft-state:{block_id}",
+        "body": body, "body_sha256": body_sha, "writer_invocation_id": writer_call,
+        "writer_write_node": write_node, "result_path": ["return"],
+        "source_kind": "same-run-provider-expanded-writer-context",
+        "write_occurrences": [{"writer_write_node": write_node}],
+    }
+    first = {**base_writer, "writer_record_id": "native-writer",
+             "writer_record_sha256": "1" * 64}
+    second = {**base_writer, "writer_record_id": "derived-writer:native-writer",
+              "writer_record_sha256": "2" * 64}
+
+    attestations = _attested_provider_expanded_reads(
+        reader, {block_id: [first, second]}, split="train", source_groups=[group])
+    assert len(attestations) == 1
+    assert attestations[0]["source_kind"] == "provider-expanded-same-run-read"
+    assert {item["record_id"] for item in attestations[0]["equivalent_writer_source_records"]} == {
+        "native-writer", "derived-writer:native-writer"}
+
+    event_kwargs = {"block_id": block_id, "block_type": "Neuralese<string>", "body": body,
+                    "body_sha256": body_sha, "writer_call_id": writer_call,
+                    "writer_write_node": write_node, "writer_name": f"soft-state:{block_id}",
+                    "source_row_sha256": row_sha, "split": "train", "source_groups": [group]}
+    for field, value in (("writer_invocation_id", "other-writer/2"),
+                         ("writer_write_node", "other-writer/2#9"),
+                         ("body_sha256", "f" * 64),
+                         ("body", "a different body"),
+                         ("writer_source_row_sha256", "9" * 64),
+                         ("writer_split", "test"),
+                         ("writer_source_groups", ["other-source-group"]),
+                         ("source_kind", "a-different-writer-source"),
+                         ("write_name", "soft-state:another-block"),
+                         ("result_path", ["nested", "value"])):
+        tampered = {**second, field: value}
+        if field == "writer_write_node":
+            tampered["write_occurrences"] = [{"writer_write_node": value}]
+        assert _coalesce_text_writer_event_aliases(
+            [first, tampered], **event_kwargs) is None, field
+        if field not in {"writer_source_row_sha256", "writer_split", "writer_source_groups",
+                         "body_sha256", "body", "writer_write_node"}:
+            # The resolver has already filtered incompatible source/split/body/node
+            # candidates. A second candidate that survives those checks must still
+            # be rejected when its event identity differs.
+            try:
+                _attested_provider_expanded_reads(
+                    reader, {block_id: [first, tampered]}, split="train", source_groups=[group])
+            except ValueError as exc:
+                assert "ambiguous" in str(exc)
+            else:
+                raise AssertionError(f"distinct eligible writer event accepted after tampering {field}")
