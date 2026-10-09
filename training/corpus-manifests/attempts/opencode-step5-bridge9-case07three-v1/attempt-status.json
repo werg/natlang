@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-publication-attempt/1",
+  "id": "opencode-step5-bridge9-case07three-native-text-20261009-v1",
+  "status": "superseded-unpublished-provisional-manifest",
+  "purpose": "Preserve the first manifest/verification attempt; this ID is not a registered or published training corpus.",
+  "provisional_manifest": {
+    "path": "training/corpus-manifests/attempts/opencode-step5-bridge9-case07three-v1/provisional-manifest.json",
+    "sha256": "ed0df8827f1a090a6c7443ee05fb933a09a013a35ba1bced7ba4681ac0692834",
+    "bytes": 103187
+  },
+  "provisional_manifest_original_path": "training/corpus-manifests/opencode-step5-bridge9-case07three-native-text-20261009-v1.json",
+  "verification_receipt": {
+    "path": "training/corpus-manifests/attempts/opencode-step5-bridge9-case07three-v1/local-verification-receipt.json",
+    "sha256": "c3d6a2da81509ce7cb6aad87e4f0b20f2602bc73682328e56795f229a97cadf6",
+    "bytes": 95909,
+    "scope": "local-only"
+  },
+  "verification_receipt_reported_identity_sha256": "8a47bd480f10fc6825bde8169f6884fa48b94a958f461bbdcc72741aef144d16",
+  "publish_attempt": {
+    "command": "python3 scripts/sync_training_corpora.py publish --machine pop --id opencode-step5-bridge9-case07three-native-text-20261009-v1",
+    "outcome": "rejected",
+    "error": "immutable snapshot changed: target manifest did not match publisher-canonical generated snapshot; initial hand-built manifest omitted top-level total bytes and per-JSONL line counts."
+  },
+  "sync_attempt": {
+    "pop_to_dgx": "completed with remote hash verification before canonical publication; data-only transfer, not publication/admission",
+    "remote_verification_receipt_file": "not separately persisted by sync command; command output preserved in agent/tool log"
+  },
+  "superseded_by": {
+    "id": "opencode-step5-bridge9-case07three-native-text-20261009-v2",
+    "manifest_path": "training/corpus-manifests/opencode-step5-bridge9-case07three-native-text-20261009-v2.json",
+    "manifest_identity_sha256": "dfdf2d828ccfa4e977c5c212ba05283655efc1112ccb70f2573acb1207ff10d5",
+    "publication_and_local_remote_verification": "passed"
+  },
+  "limits": "The provisional verification only established local file-stat/hash agreement under the provisional manifest identity. It was not a canonical publish, did not grant admission, and did not change the adopted 12-action scope or counts."
+}
