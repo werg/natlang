@@ -61,6 +61,30 @@ This binding uses16K total context,256 generated target positions, unchanged
 gold targets,1024 additional updates, fresh .99/.05/.025 gates and two
 consecutive passes. No transport or recurrence qualification is inherited.
 
+### Deferred matched AR evaluation
+
+The six-window held-test crisp-versus-projected diagnostic is prepared but not
+run. Its source pair is the frozen step23936 checkpoint/heads; the optimizer
+checkpoint is hash-checked only, while inference loads the paired heads export.
+Selection and source pins are in
+`runs/neuralese-ar-matched-multistratum-23936-20261009-v1/window-selection-v4.json`
+(SHA `cdf3f550e7fcb6172ac57085bb17d77f8366767376aeb826c7c23e19bc908cb7`)
+and the frozen-code-bound `source-recipe-v5.json` (SHA
+`a3735ddfa6b825b0e85e886a30f7973e48b66d7e9bedff8b73247d1762f3b6ad`). The
+118-file Python package snapshot is under
+`/srv/storage/natlang-artifacts/ar-matched-eval-v4/frozen-runtime-v1/`; its
+inventory receipt SHA is `5be037143b19e9064c0f643ab2dbe3710fe2b94fd46ec51a4faad79bf596164b`
+and matches the reviewed source-recipe inventory exactly. Use this frozen
+package through `PYTHONPATH`, not mutable checkout code. The pinned image is
+`sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
+
+Do not launch while AR training is active. The prior CPU attempt remains a
+preserved failure with no result; CPU inference uses fp32 and its estimated
+model-plus-heads peak exceeds the preferred 2.5 GiB limit. After the GPU owner
+confirms training has ended, recheck host/GPU headroom, run the prepared CUDA
+command in a fresh external output directory, and keep the report diagnostic
+only. It grants no foundation, runtime, or task qualification.
+
 The DGX owner direction is to phase the raw-token-embedding projection anchor
 out after warm-in using a declared decay, then adapt the read port to learned
 Neuralese vectors with a full-rank residual read adapter. It is not a request to
