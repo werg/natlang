@@ -71,6 +71,11 @@ export type EdgeFacts = {
   finite: boolean;
   /** The sentence of the orchestrator's instructions the edge was read from (prose scopes). */
   excerpt?: string;
+  /**
+   * Present when the readers were read from recorded eval code in the call store instead of proven from the source:
+   * the reader set is then observed, with its own run count and the store revision. Absent: the readers are proven.
+   */
+  observed?: ObservedEvidence;
 };
 
 export type FusionFacts = {
@@ -339,9 +344,18 @@ function implicitConsumers(text: string, site: CallSite, sites: readonly CallSit
   return [{ name: next.reference, position: 0, detail: `the next stage after ${site.reference}, joined by "${between.trim().slice(0, 40)}"`, at: next.start }];
 }
 
-// --- Crisp TypeScript orchestrators --------------------------------------------------------------------------------
+// --- Code that calls named functions: crisp TypeScript orchestrators and recorded eval programs ------------------------
 
 type Binding = { stage: NatlangRecord; path: string };
+
+/**
+ * What the analysis knows about the code it reads. `crisp-typescript`: an orchestrator written in TypeScript, where any
+ * other function that receives a value is crisp code. `eval`: code the orchestrating model wrote and ran (recorded in the
+ * call store), where a call to a host service is a `service` reader and any other use is the model reading the value.
+ */
+type CodeContext = { file: ts.SourceFile; fileName: string; imports: ReadonlyMap<string, ItemRecord>; mode: 'crisp-typescript' | 'eval';
+  /** Line numbers are shifted by this many lines (a wrapper added above the code). */
+  lineOffset: number };
 
 function importedFunctions(file: ts.SourceFile, fileName: string, resolve: (from: string, specifier: string) => NatlangRecord | undefined):
     Map<string, NatlangRecord> {
@@ -357,7 +371,7 @@ function importedFunctions(file: ts.SourceFile, fileName: string, resolve: (from
   return out;
 }
 
-function memberStage(record: NatlangRecord, names: string[]): NatlangRecord | undefined {
+function memberStage(record: ItemRecord, names: string[]): NatlangRecord | undefined {
   let current: ItemRecord = record;
   for (const name of names) {
     const child: ItemRecord | undefined = current.codebase[name];
@@ -368,30 +382,102 @@ function memberStage(record: NatlangRecord, names: string[]): NatlangRecord | un
 }
 
 /** The named function a call expression invokes: `plan(...)`, `database.plan(...)`. */
-function calleeOf(call: ts.CallExpression, imports: ReadonlyMap<string, NatlangRecord>): Binding | undefined {
+function calleeOf(call: ts.CallExpression, imports: ReadonlyMap<string, ItemRecord>): Binding | undefined {
   const names: string[] = [];
   let expression: ts.Expression = call.expression;
   while (ts.isPropertyAccessExpression(expression)) { names.unshift(expression.name.text); expression = expression.expression; }
   if (!ts.isIdentifier(expression)) return undefined;
   const root = imports.get(expression.text);
   if (!root) return undefined;
-  const stage = names.length ? memberStage(root, names) : root;
+  const stage = names.length ? memberStage(root, names) : root.kind === 'natlang' ? root : undefined;
   return stage ? { stage, path: [expression.text, ...names].join('.') } : undefined;
 }
 
-const unwrap = (node: ts.Expression): ts.Expression => {
+const transparent = (node: ts.Node): boolean =>
+  ts.isParenthesizedExpression(node) || ts.isAwaitExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node);
+const unwrap = (node: ts.Node): ts.Node => {
   let current = node;
-  while (ts.isParenthesizedExpression(current) || ts.isAwaitExpression(current) || ts.isAsExpression(current) || ts.isNonNullExpression(current))
-    current = current.expression;
+  while (transparent(current)) current = (current as ts.ParenthesizedExpression).expression;
   return current;
 };
+
+/** The call a value is an argument of, looking through await, parentheses and casts. */
+function nestedCall(node: ts.Node): ts.CallExpression | undefined {
+  for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
+    if (ts.isCallExpression(current)) return current;
+    if (!(ts.isParenthesizedExpression(current) || ts.isAwaitExpression(current) || ts.isAsExpression(current))) return undefined;
+  }
+  return undefined;
+}
+
+const argumentPosition = (call: ts.CallExpression, node: ts.Node): number =>
+  call.arguments.findIndex(argument => argument === node || (node.pos >= argument.pos && node.end <= argument.end));
+
+const lineIn = (ctx: CodeContext, node: ts.Node): number => ctx.file.getLineAndCharacterOfPosition(node.getStart(ctx.file)).line + 1 - ctx.lineOffset;
+const siteIn = (ctx: CodeContext, node: ts.Node): string => `${ctx.fileName}:${lineIn(ctx, node)}`;
+
+/** A use of a value in code: who reads it, and the function when it is one of the named functions. */
+type CodeUse = { reader: Reader; consumer?: Binding; position?: number };
+
+/** Who reads the value `node` (an identifier holding it, or the call that made it) in the place it is used. */
+function useOf(ctx: CodeContext, node: ts.Node): CodeUse {
+  const site = siteIn(ctx, node);
+  const call = nestedCall(node);
+  const asArgument = !!call && call.arguments.some(argument => unwrap(argument) === unwrap(node));
+  const callee = call && asArgument ? calleeOf(call, ctx.imports) : undefined;
+  if (callee) return { reader: { kind: 'consumer', name: callee.path, site, detail: `argument of ${callee.path}`, certain: true },
+    consumer: callee, position: argumentPosition(call!, node) };
+  if (ts.isReturnStatement(node.parent) || (node.parent && ts.isReturnStatement(node.parent.parent ?? node.parent)))
+    return { reader: { kind: 'host-return', site, detail: ctx.mode === 'eval' ? 'returned by the orchestrator' : 'returned to the caller', certain: true } };
+  if (call && asArgument) {
+    const text = call.expression.getText(ctx.file);
+    const crisp = ctx.mode === 'crisp-typescript' || ctx.imports.get(text.split('.')[0]!)?.kind === 'module';
+    return { reader: { kind: crisp ? 'crisp-code' : 'service', name: text, site, detail: `passed to ${text}`, certain: true } };
+  }
+  return { reader: { kind: ctx.mode === 'eval' ? 'eval' : 'crisp-code', site,
+    detail: `${ctx.mode === 'eval' ? 'read by the orchestrating model' : 'read by crisp code'}: ${node.parent.getText(ctx.file).slice(0, 60)}`, certain: true } };
+}
+
+/** How the result of one call of a named function travels in the code around it. */
+type CallFlow = { form: 'nested' | 'bound' | 'loose'; variable: string | null; uses: CodeUse[]; anchor: ts.Node };
+
+function flowOfCall(ctx: CodeContext, node: ts.CallExpression): CallFlow {
+  // B(await A(x)): the value never has a name.
+  const outer = nestedCall(node);
+  const parent = node.parent;
+  const direct = outer && outer !== node && (ts.isAwaitExpression(parent) || ts.isParenthesizedExpression(parent) || parent === outer);
+  const consumer = direct ? calleeOf(outer!, ctx.imports) : undefined;
+  if (consumer && outer!.arguments.some(argument => unwrap(argument) === node))
+    return { form: 'nested', variable: null, anchor: node, uses: [{ reader: { kind: 'consumer', name: consumer.path, site: `${ctx.fileName}:${lineIn(ctx, outer!)}`,
+      detail: `argument of ${consumer.path}`, certain: true }, consumer, position: argumentPosition(outer!, node) }] };
+  // const v = await A(x): every reference to v in the enclosing function is a reader.
+  let declaration: ts.Node | undefined = parent;
+  while (declaration && transparent(declaration)) declaration = declaration.parent;
+  if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
+    const bound = declaration;
+    const name = declaration.name.text;
+    let region: ts.Node = ctx.file;
+    for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent)
+      if (ts.isFunctionLike(current) || ts.isSourceFile(current)) { region = current; break; }
+    const uses: CodeUse[] = [];
+    const find = (item: ts.Node): void => {
+      if (ts.isIdentifier(item) && item.text === name && item !== bound.name &&
+          !(ts.isPropertyAccessExpression(item.parent) && item.parent.name === item)) uses.push(useOf(ctx, item));
+      ts.forEachChild(item, find);
+    };
+    find(region);
+    return { form: 'bound', variable: name, uses, anchor: declaration };
+  }
+  // Anything else (a statement of its own, a destructuring, part of a larger expression): the surrounding code reads it.
+  return { form: 'loose', variable: null, uses: [useOf(ctx, node)], anchor: node };
+}
 
 function typescriptEdges(fileName: string, text: string, resolve: (from: string, specifier: string) => NatlangRecord | undefined): EdgeFacts[] {
   const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const imports = importedFunctions(file, fileName, resolve);
   if (!imports.size) return [];
+  const ctx: CodeContext = { file, fileName, imports, mode: 'crisp-typescript', lineOffset: 0 };
   const edges: EdgeFacts[] = [];
-  const lineOf = (node: ts.Node) => file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
   const functionName = (node: ts.Node): string => {
     for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
       if ((ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current)) && current.name) return current.name.getText(file);
@@ -399,11 +485,6 @@ function typescriptEdges(fileName: string, text: string, resolve: (from: string,
         (ts.isArrowFunction(current.initializer) || ts.isFunctionExpression(current.initializer))) return current.name.text;
     }
     return '<module>';
-  };
-  const scopeNode = (node: ts.Node): ts.Node => {
-    for (let current: ts.Node | undefined = node.parent; current; current = current.parent)
-      if (ts.isFunctionLike(current) || ts.isSourceFile(current)) return current;
-    return file;
   };
   const sitesIn = new Map<string, number>();
   const visit = (node: ts.Node): void => {
@@ -418,65 +499,23 @@ function typescriptEdges(fileName: string, text: string, resolve: (from: string,
       readers: Reader[], anchor: ts.Node) => {
     const scope = `${fileName}#${functionName(anchor)}`;
     const { param, paramType } = consumerParam({ path: consumer.path, record: consumer.stage }, position);
-    edges.push({ id: `${scope}|${producer.stage.source}|${consumer.stage.source}|${lineOf(anchor)}`, scope, scopeKind: 'typescript',
+    edges.push({ id: `${scope}|${producer.stage.source}|${consumer.stage.source}|${lineIn(ctx, anchor)}`, scope, scopeKind: 'typescript',
       chain: `${producer.path} -> ${consumer.path}`, producer: refOf(producer.stage), consumer: { ...refOf(consumer.stage), param, paramType },
       type: producer.stage.returns, flow, variable, dialect: DEFAULT_DIALECT, readers,
       producerSites: sitesIn.get(producer.stage.source) ?? 1, consumerSites: sitesIn.get(consumer.stage.source) ?? 1,
       alreadySoft: isSoft(producer.stage.returns) || (paramType ? isSoft(paramType) : false),
       finite: isFinite_(producer.stage.returns) });
   };
-  const argumentPosition = (call: ts.CallExpression, node: ts.Node): number =>
-    call.arguments.findIndex(argument => argument === node || (node.pos >= argument.pos && node.end <= argument.end));
-  const nestedCall = (node: ts.Node): ts.CallExpression | undefined => {
-    for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-      if (ts.isCallExpression(current)) return current;
-      if (!(ts.isParenthesizedExpression(current) || ts.isAwaitExpression(current) || ts.isAsExpression(current))) return undefined;
-    }
-    return undefined;
-  };
   const walk = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const producer = calleeOf(node, imports);
       if (producer) {
-        // B(await A(x)): the value never has a name.
-        const outer = nestedCall(node);
-        const parent = node.parent;
-        const direct = outer && outer !== node && (ts.isAwaitExpression(parent) || ts.isParenthesizedExpression(parent) || parent === outer);
-        const consumer = direct ? calleeOf(outer!, imports) : undefined;
-        if (consumer && outer!.arguments.some(argument => unwrap(argument) === node)) {
-          addEdge(producer, consumer, argumentPosition(outer!, node), null, 'nested',
-            [{ kind: 'consumer', name: consumer.path, site: `${fileName}:${lineOf(outer!)}`, detail: `argument of ${consumer.path}`, certain: true }], node);
-        } else {
-          // const v = await A(x): every reference to v in the enclosing function is a reader.
-          let declaration: ts.Node | undefined = parent;
-          while (declaration && (ts.isAwaitExpression(declaration) || ts.isParenthesizedExpression(declaration) || ts.isAsExpression(declaration))) declaration = declaration.parent;
-          if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
-            const name = declaration.name.text, region = scopeNode(declaration);
-            const uses: { reader: Reader; consumer?: Binding; position?: number }[] = [];
-            const find = (item: ts.Node): void => {
-              if (ts.isIdentifier(item) && item.text === name && item !== declaration!.name && !(ts.isPropertyAccessExpression(item.parent) && item.parent.name === item)) {
-                const site = `${fileName}:${lineOf(item)}`;
-                const call = nestedCall(item);
-                const callee = call && call.arguments.some(argument => unwrap(argument) === item) ? calleeOf(call, imports) : undefined;
-                if (callee) uses.push({ reader: { kind: 'consumer', name: callee.path, site, detail: `argument of ${callee.path}`, certain: true },
-                  consumer: callee, position: argumentPosition(call!, item) });
-                else if (ts.isReturnStatement(item.parent) || ts.isReturnStatement(item.parent.parent ?? item.parent))
-                  uses.push({ reader: { kind: 'host-return', site, detail: 'returned to the caller', certain: true } });
-                else if (call && call.arguments.some(argument => unwrap(argument) === item))
-                  uses.push({ reader: { kind: 'crisp-code', name: call.expression.getText(file), site,
-                    detail: `passed to ${call.expression.getText(file)}`, certain: true } });
-                else uses.push({ reader: { kind: 'crisp-code', site, detail: `read by crisp code: ${item.parent.getText(file).slice(0, 60)}`, certain: true } });
-              }
-              ts.forEachChild(item, find);
-            };
-            find(region);
-            for (const use of uses) {
-              if (use.reader.kind !== 'consumer' || !use.consumer) continue;
-              const readers: Reader[] = [use.reader, ...uses.filter(other => other !== use).map(other => other.reader.kind === 'consumer' ?
-                { ...other.reader, kind: 'other-call' as const } : other.reader)];
-              addEdge(producer, use.consumer, use.position ?? 0, name, 'bound', readers, declaration);
-            }
-          }
+        const flow = flowOfCall(ctx, node);
+        if (flow.form !== 'loose') for (const use of flow.uses) {
+          if (use.reader.kind !== 'consumer' || !use.consumer) continue;
+          const readers: Reader[] = flow.form === 'nested' ? [use.reader] :
+            [use.reader, ...flow.uses.filter(other => other !== use).map(other => other.reader.kind === 'consumer' ? { ...other.reader, kind: 'other-call' as const } : other.reader)];
+          addEdge(producer, use.consumer, use.position ?? 0, flow.variable, flow.form, readers, flow.anchor);
         }
       }
     }
@@ -486,6 +525,91 @@ function typescriptEdges(fileName: string, text: string, resolve: (from: string,
   return edges;
 }
 
+// --- Observed readers ----------------------------------------------------------------------------------------------
+
+/** One recorded run of an orchestrator: the eval programs the model ran, in order. */
+export type ObservedRun = { id: string; evals: readonly string[] };
+
+/**
+ * Recorded runs of orchestrators, from the call store. `runs` returns the model-driven runs of the orchestrator at
+ * `scope` that ran exactly these `instructions`, and a revision naming the store state they were read from (the plan
+ * records it, so a later store can be told apart). `minRuns` is the number of supporting runs a plan will accept.
+ */
+export type ObservedSource = { minRuns: number;
+  runs(scope: string, instructions: string): { revision: string; runs: readonly ObservedRun[] } };
+
+/** What a plan is told about an edge whose readers were read from recorded eval code instead of proven from source. */
+export type ObservedEvidence = {
+  /** Runs in which every producer call fed only the consumer. */
+  runs: number;
+  /** Runs in which some producer call was read by something else (its readers are then listed on the edge). */
+  contradicted: number;
+  /** The number of supporting runs a plan accepts (the verifier's setting). */
+  minRuns: number;
+  /** The store state the runs were read from. */
+  revision: string;
+};
+
+/** The call sites of the stages in one run's eval programs, with how each result travels. */
+function evalSites(record: NatlangRecord, run: ObservedRun): { producer: Binding; flow: CallFlow; ctx: CodeContext }[] {
+  const text = `export {};\nasync function __orchestrator() {\n${run.evals.join('\n;\n')}\n}\n`;
+  const file = ts.createSourceFile(`eval:${run.id}`, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const ctx: CodeContext = { file, fileName: `${record.source}@${run.id}`, imports: new Map(Object.entries(record.codebase)), mode: 'eval', lineOffset: 2 };
+  const sites: { producer: Binding; flow: CallFlow; ctx: CodeContext }[] = [];
+  const walk = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const producer = calleeOf(node, ctx.imports);
+      if (producer) sites.push({ producer, flow: flowOfCall(ctx, node), ctx });
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+  return sites;
+}
+
+/**
+ * Replace the unknown reader of hand-offs the prose only implies (`typed` and `implicit` edges) by what the recorded runs
+ * show. A run supports an edge when every call of the producer in it passes the value to the consumer's parameter and
+ * to nothing else; it contradicts when some call of the producer is read by anything else (including the model's own
+ * code, a service or the result of the orchestrator). The edge is proven by observation only when no run contradicts it;
+ * the verifier then asks for enough supporting runs.
+ */
+function observeEdges(record: NatlangRecord, edges: EdgeFacts[], observed: ObservedSource): void {
+  const candidates = edges.filter(edge => edge.scopeKind === 'nl' && (edge.flow === 'typed' || edge.flow === 'implicit') &&
+    edge.readers.every(reader => reader.kind === 'consumer' || !reader.certain));
+  if (!candidates.length) return;
+  const { revision, runs } = observed.runs(record.source, record.instructions);
+  if (!runs.length) return;
+  const tallies = new Map<string, { supported: number; contradicted: number; outside: Reader[] }>(
+    candidates.map(edge => [edge.id, { supported: 0, contradicted: 0, outside: [] }]));
+  for (const run of runs) {
+    const sites = evalSites(record, run);
+    for (const edge of candidates) {
+      const own = sites.filter(site => site.producer.stage.source === edge.producer.source);
+      if (!own.length) continue;
+      const tally = tallies.get(edge.id)!;
+      const outside: Reader[] = [];
+      for (const site of own) {
+        const feeds = site.flow.uses.filter(use => use.consumer?.stage.source === edge.consumer.source &&
+          consumerParam({ path: use.consumer.path, record: use.consumer.stage }, use.position ?? 0).param === edge.consumer.param);
+        const others = site.flow.uses.filter(use => !feeds.includes(use));
+        if (feeds.length !== 1) outside.push({ kind: 'eval', site: site.ctx.fileName,
+          detail: feeds.length ? 'the model passes the value to the consumer more than once' : 'the model does not pass the value to the consumer', certain: true });
+        for (const use of others) outside.push(use.reader.kind === 'consumer' ? { ...use.reader, kind: 'other-call' } : use.reader);
+      }
+      if (outside.length) { tally.contradicted++; tally.outside.push(...outside); } else tally.supported++;
+    }
+  }
+  for (const edge of candidates) {
+    const tally = tallies.get(edge.id)!;
+    if (!tally.supported && !tally.contradicted) continue;
+    edge.observed = { runs: tally.supported, contradicted: tally.contradicted, minRuns: observed.minRuns, revision };
+    const consumer = edge.readers.find(reader => reader.kind === 'consumer')!;
+    edge.readers = [{ ...consumer, certain: true, detail: `${consumer.detail}; seen in ${tally.supported} recorded run${tally.supported === 1 ? '' : 's'}` },
+      ...tally.outside.slice(0, 5)];
+  }
+}
+
 // --- The project -------------------------------------------------------------------------------------------------
 
 /**
@@ -493,7 +617,7 @@ function typescriptEdges(fileName: string, text: string, resolve: (from: string,
  * `typescript` limits crisp-orchestrator analysis to the listed files when given (default: every `.ts` outside
  * test, vendor and build directories).
  */
-export function fusionFacts(root: string, files: SourceFiles, options: { typescript?: readonly string[] } = {}): FusionFacts {
+export function fusionFacts(root: string, files: SourceFiles, options: { typescript?: readonly string[]; observed?: ObservedSource } = {}): FusionFacts {
   const skipped: FusionFacts['skipped'] = [];
   const nlFiles: string[] = [], tsFiles: string[] = [];
   const walk = (dir: string, insideFolder: boolean): void => {
@@ -516,7 +640,9 @@ export function fusionFacts(root: string, files: SourceFiles, options: { typescr
     const stages = stagesOf(record);
     if (stages.length) {
       scopes.push({ scope: record.source, kind: 'nl', stages: stages.length });
-      edges.push(...proseEdges(record, stages));
+      const found = proseEdges(record, stages);
+      if (options.observed) observeEdges(record, found, options.observed);
+      edges.push(...found);
     }
     for (const item of Object.values(record.codebase)) {
       if (item.kind === 'natlang') visitRecord(item);
