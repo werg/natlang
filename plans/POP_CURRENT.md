@@ -259,9 +259,15 @@ token limits), Z.AI `glm-4.7-flash` for longer trajectories (free, 200K context;
 actual account concurrency unverified). Mistral is optional pending actual free
 API allowance shown in the account. No generation quality claim yet.
 
+At the user's request, Gemini and NVIDIA hosted free inference are also in
+the integration shortlist. The installed shared Pi backend already supports
+Google, NVIDIA, Groq and Z.AI. Use available free models and verified account
+quotas; Gemini limits are project-scoped, not multiplied by keys.
+
 Private blank credential templates were prepared at
-`~/.config/natlang/{groq,zai,mistral}.env` (mode0600), with respectively
-`GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`. Kilo needs no key for anonymous
+`~/.config/natlang/{groq,zai,mistral,gemini,nvidia}.env` (mode0600), with respectively
+`GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY`,
+`NVIDIA_API_KEY`. Kilo needs no key for anonymous
 free access. Keys remain outside Git/logs/chat. Existing shared external HTTP
 transport should be reused; do not clone a launcher per provider. Integration
 planning is read-only so far: no provider inference or worker launch yet.
@@ -271,3 +277,8 @@ https://console.groq.com/docs/rate-limits ;
 https://docs.z.ai/guides/overview/pricing ;
 https://docs.z.ai/guides/llm/glm-4.7 ;
 https://docs.mistral.ai/admin/billing-usage/subscriptions .
+
+Additional setup sources: https://aistudio.google.com/apikey ;
+https://ai.google.dev/gemini-api/docs/rate-limits ;
+https://build.nvidia.com ;
+https://docs.nvidia.com/nemo/retriever/26.5.0/extraction/api-keys/ .
