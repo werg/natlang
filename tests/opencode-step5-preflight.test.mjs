@@ -155,6 +155,18 @@ test('authored-root preflight binds the exact physical source row to its fake pr
     exact_source_fake_proof_sha256: fixture.plan.reference_protocol.exact_source_fake_proof.sha256 });
 });
 
+test('authored-root preflight accepts the proof schema zero-based source_index field', () => {
+  const fixture = authoredSourceBindingFixture();
+  const proof = JSON.parse(fixture.sourceProofText);
+  delete proof.source_row_index;
+  proof.source_index = 0;
+  const sourceProofText = JSON.stringify(proof);
+  const plan = { ...fixture.plan, reference_protocol: { exact_source_fake_proof: {
+    path: 'runs/fake-proof-source-index.json', bytes: Buffer.byteLength(sourceProofText),
+    sha256: createHash('sha256').update(sourceProofText).digest('hex') } } };
+  assert.equal(verifyStep5SourceBinding({ ...fixture, plan, sourceProofText }).source_index, 0);
+});
+
 test('authored-root preflight rejects an exact-source proof copied from another row', () => {
   const fixture = authoredSourceBindingFixture();
   const other = { ...fixture.record, id: 'source:clinic:row0', source_groups: ['world:clinic:2'] };
