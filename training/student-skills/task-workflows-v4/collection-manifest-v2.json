@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.student_skill_collection_candidate/1",
+  "collection_id": "task-workflows-v4-candidate",
+  "status": "held-proposal-not-activated",
+  "based_on_collection": "training/student-skills/task-workflows-v3",
+  "supersedes_manifest": {
+    "path": "training/student-skills/task-workflows-v4/collection-manifest.json",
+    "sha256": "11c4c6b0d37b39e4354fd68b7cad27df2fbb20c56233df65e5bd6e22a17ec3eb",
+    "reason": "Adds exact action-review evidence pin and explicit no-diagnostic/no-activation bounds."
+  },
+  "scope": "Generic criterion logic guidance only; skill text contains no case IDs, world names, gold answers, or domain-specific predicates.",
+  "supporting_review": {
+    "path": "runs/luna-criterion-evidence-carry-v7-next5-train-20261009-v1/evidence/next5-scenario3-local-action-review-proposal-v1.json",
+    "sha256": "baeb16b5715ce4517076d269fe6728cf9c93c85adc555bb0538cba7913cd9f02",
+    "review_disposition": "three action candidates and one held action; root review pending",
+    "interpretation": "The sampled rows are authored-root and action-scoped; no controlled skill experiment or generalization result is claimed."
+  },
+  "decision_policy": "When evidence asserts that at least one conjunctive requirement failed, the whole conjunction is false even if the cause is not localized. Record cause uncertainty separately. Do not infer failure from merely possible language.",
+  "files": [
+    {
+      "path": "skills/calculate-from-data/SKILL.md",
+      "sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f",
+      "bytes": 734,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v3/skills/calculate-from-data/SKILL.md",
+      "reuses_sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f"
+    },
+    {
+      "path": "skills/complete-the-call/SKILL.md",
+      "sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f",
+      "bytes": 840,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v3/skills/complete-the-call/SKILL.md",
+      "reuses_sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f"
+    },
+    {
+      "path": "skills/inspect-callable-apis/SKILL.md",
+      "sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795",
+      "bytes": 789,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v3/skills/inspect-callable-apis/SKILL.md",
+      "reuses_sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795"
+    },
+    {
+      "path": "skills/judge-against-criteria/SKILL.md",
+      "sha256": "29d2f2f52173edabcbd767c0ae5589a544c2ee4e2e7d72cd95e78d6044786d2a",
+      "bytes": 2517,
+      "status": "proposed-revision",
+      "replaces_path": "training/student-skills/task-workflows-v3/skills/judge-against-criteria/SKILL.md",
+      "replaces_sha256": "71152f51872cd1b4134da820ef79c735aa146f3e2730caede2bfdd23d7da790b"
+    },
+    {
+      "path": "skills/move-and-verify-files/SKILL.md",
+      "sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267",
+      "bytes": 693,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v3/skills/move-and-verify-files/SKILL.md",
+      "reuses_sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267"
+    },
+    {
+      "path": "skills/resume-after-partial-effects/SKILL.md",
+      "sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592",
+      "bytes": 705,
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v3/skills/resume-after-partial-effects/SKILL.md",
+      "reuses_sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592"
+    }
+  ],
+  "activation": false,
+  "training_admission": false,
+  "external_diagnostic_authorized": false
+}
