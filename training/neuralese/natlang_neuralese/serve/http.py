@@ -2,14 +2,14 @@
 
 | Endpoint | Meaning |
 | --- | --- |
-| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (this server only; the fork answers `stream-unsupported`), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens, a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage` and `neuralese`). |
+| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (this server only; the fork answers `stream-unsupported`), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens, a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
 | `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly) and `projections` (adapter-code decoders). |
+| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `projections` (adapter-code decoders) and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
-| `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through collection. |
-| `POST /v1/neuralese/collect` | Drop unpinned blocks not in `{"referenced": […]}`. |
+| `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through every collection (pins count per owner). |
+| `POST /v1/neuralese/collect` | `{"referenced": […]}`: with an owner, the owner now holds exactly the referenced blocks (and its pinned ones); blocks it released are dropped unless another owner holds or pins them. Without an owner, drops the blocks no owner holds or pins that are not referenced. Answers `{"removed": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
 | `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
 | `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. |
@@ -22,6 +22,11 @@
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type"?, "context"?}` → block metadata. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
 | `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
+
+Owners (serve/store.py `TensorStore`): a client names itself (a session or runtime ID) in the `x-natlang-owner`
+header. That owner holds every block it uploads and every block ID the server names to it in a response, and its pins
+and collections are its own: one session's collection never drops another's blocks. With `--store-dir` blocks, holds
+and pins outlive restarts; a client that still gets `neuralese-unknown-block` re-uploads the block from its archive.
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
@@ -53,6 +58,19 @@ from .grad import GradSession, decide, decide_many, embed_text, encode_text, new
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
+_BLOCK_ID = re.compile(r"^nz1_[a-z2-7]+$")
+OWNER_HEADER = "x-natlang-owner"
+
+
+def block_ids(value) -> set[str]:
+    """Every block ID a JSON value names (as a whole string anywhere in it)."""
+    if isinstance(value, str):
+        return {value} if _BLOCK_ID.match(value) else set()
+    if isinstance(value, dict):
+        return set().union(*map(block_ids, value.values())) if value else set()
+    if isinstance(value, (list, tuple)):
+        return set().union(*map(block_ids, value)) if value else set()
+    return set()
 _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 
 
@@ -96,8 +114,20 @@ def make_handler(engine: Engine):
             self.end_headers()
             self.wfile.write(body)
 
+        @property
+        def _owner(self) -> str | None:
+            return self.headers.get(OWNER_HEADER) or None
+
+        def _hold(self, value):
+            """The requesting owner holds every block the server names to it."""
+            if self._owner is not None:
+                ids = block_ids(value)
+                if ids:
+                    engine.store.hold(self._owner, ids)
+            return value
+
         def _json(self, status: int, value):
-            self._send(status, json.dumps(value).encode())
+            self._send(status, json.dumps(self._hold(value) if status < 400 else value).encode())
 
         def _error(self, status: int, code: str, detail: str):
             self._json(status, {"error": {"code": code, "message": detail}})
@@ -112,7 +142,8 @@ def make_handler(engine: Engine):
                 return self._json(200, {"object": "list", "data": [{"id": engine.model_name, "object": "model"}]})
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
-                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 2,
+                                        "store": {"owners": True, "persistent": engine.store.directory is not None},
+                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 2, "stream": True,
                                         "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()}})
@@ -129,6 +160,7 @@ def make_handler(engine: Engine):
                     return self._error(404, "neuralese-unknown-block", match.group(1))
                 if match.group(2) == "/meta":
                     return self._json(200, block.meta())
+                self._hold(block.id)
                 return self._send(200, encode_block(block), "application/octet-stream")
             self._error(404, "not-found", self.path)
 
@@ -142,7 +174,7 @@ def make_handler(engine: Engine):
                 return self._error(400, "neuralese-bad-block", str(error))
             if block.id != match.group(1):
                 return self._error(400, "neuralese-id-mismatch", f"content hashes to {block.id}")
-            stored = engine.store.put(block)
+            stored = engine.store.put(block, self._owner)
             self._json(201, stored.meta())
 
         def do_POST(self):
@@ -151,7 +183,7 @@ def make_handler(engine: Engine):
                     return self._chat(json.loads(self._body() or b"{}"))
                 if self.path == "/v1/neuralese/collect":
                     referenced = set(json.loads(self._body() or b"{}").get("referenced") or [])
-                    return self._json(200, {"removed": engine.store.collect(referenced)})
+                    return self._send(200, json.dumps({"removed": engine.store.collect(referenced, self._owner)}).encode())
                 if self.path == "/v1/neuralese/grad":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
@@ -236,9 +268,9 @@ def make_handler(engine: Engine):
                 match = _BLOCK.match(self.path)
                 if match and match.group(2) in ("/pin", "/unpin"):
                     if match.group(2) == "/pin":
-                        engine.store.pin(match.group(1))
+                        engine.store.pin(match.group(1), self._owner)
                     else:
-                        engine.store.unpin(match.group(1))
+                        engine.store.unpin(match.group(1), self._owner)
                     return self._json(200, {"ok": True})
                 self._error(404, "not-found", self.path)
             except KeyError as error:
@@ -272,7 +304,7 @@ def make_handler(engine: Engine):
             self.wfile.flush()
 
         def _event(self, value):
-            self._chunk(b"data: " + (value if isinstance(value, bytes) else json.dumps(value).encode()) + b"\n\n")
+            self._chunk(b"data: " + (value if isinstance(value, bytes) else json.dumps(self._hold(value)).encode()) + b"\n\n")
 
         def _stream(self, request: GenerationRequest):
             deltas: queue.Queue = queue.Queue()
@@ -337,7 +369,9 @@ def make_handler(engine: Engine):
                                                       for i, c in enumerate(calls)]}))
                 self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": message,
                                                                 "usage": response["usage"],
-                                                                "neuralese": response["neuralese"]}))
+                                                                "neuralese": response["neuralese"],
+                                                                **({"x_natlang_guidance": response["x_natlang_guidance"]}
+                                                                   if "x_natlang_guidance" in response else {})}))
             except RequestError as error:
                 self._event({"error": {"code": error.code, "message": str(error)}})
             except Exception as error:  # noqa: BLE001 - reported to the client

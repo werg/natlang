@@ -1,10 +1,11 @@
-"""`python -m natlang_neuralese.serve --port 8090 [--device cuda] [--heads checkpoint.pt]`"""
+"""`python -m natlang_neuralese.serve --port 8090 [--device cuda] [--heads checkpoint.pt] [--store-dir [DIR]]`"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import sys
 
 from . import load_engine
@@ -33,6 +34,11 @@ def main(argv=None):
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
     parser.add_argument("--projection", action="append", default=[], metavar="NAME=PATH",
                         help="an adapter projection P (model/projections.py) served under NAME; repeatable")
+    parser.add_argument("--store-dir", nargs="?", const="", default=None, metavar="DIR",
+                        help="keep blocks, holds and pins on disk so they outlive restarts (serve/store.py); without DIR, "
+                             "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
+    parser.add_argument("--store-resident-gb", type=float, default=2.0,
+                        help="with --store-dir: payload memory kept resident (least recently used blocks are evicted)")
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
@@ -71,6 +77,12 @@ def main(argv=None):
             parser.error('runtime qualification requires a recurrence checkpoint')
         engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
     engine.prefill_padding = args.prefill_padding
+    if args.store_dir is not None:
+        from ..common.paths import resolve
+        from .store import TensorStore
+
+        directory = args.store_dir or resolve("data_nvme", "neuralese-blocks", re.sub(r"[^A-Za-z0-9._-]+", "_", engine.dialect))
+        engine.store = TensorStore(directory, int(args.store_resident_gb * 2**30))  # the loaders return an empty store
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
     if args.projection:
         from ..model.projections import AdapterProjection
