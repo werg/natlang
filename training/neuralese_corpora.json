@@ -18440,6 +18440,17 @@
       "notes": "Closed AR-feedback final step24960 checkpoint, current heads and diagnostic reports. Alignment gate failed; foundation/runtime/task qualification false. No new training examples or training input files are included.",
       "artifact_locator_map": "artifact-locator-map-v1.json",
       "status": "published-artifact-evidence-only"
+    },
+    {
+      "id": "neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-adopted-text-composition-training-input-no-new-example-admission",
+      "status": "published-derived-text-input",
+      "notes": "4962 exact ordered previously root-adopted text rows (3258train/1704test). First4880 bytes reproduce prior adopted input;82 unique train rows added, no held changes. Source snapshot pins seven streams and original root admission receipt. Current shared loader and independent root exact-byte concatenation verified. No new action admission or alignment/runtime qualification. Native/recurrence unions referenced, not counted as extra text. text-data.jsonl is a file-leaf alias to external immutable body; sync materializes exact bytes."
     }
   ],
   "coverage_backlog": [
