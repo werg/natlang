@@ -15,8 +15,9 @@ heavy job declare a budget and enforces it from outside the job:
            read-once checkpoints and corpora makes model loads fail with "CUDA error: out of memory" while
            MemAvailable looks ample. `run` and `guard` call it when MemFree is short.
   status   claims with measured use (cgroup memory plus each process's CUDA memory from nvidia-smi).
-  guard    loop: stop a unit that exceeds its budget, and when free memory falls below the floor stop the
-           lowest-priority admitted unit. Only units admitted through this ledger are ever stopped.
+  guard    loop: under memory pressure (available below twice the floor) stop the unit most over its budget,
+           and below the floor the lowest-priority admitted unit; without pressure an over-budget unit keeps
+           running and its budget is raised to what it uses. Admission learns each job family's measured peak. Only units admitted through this ledger are ever stopped.
 
 Outstanding demand of a running claim is its budget minus what it already uses, so a job still ramping up is
 counted at its full budget and a job at its peak is counted once, through MemAvailable. A claim that has run for
@@ -204,6 +205,18 @@ def ledger():
         os.replace(tmp, STATE)
 
 
+def family(unit):
+    """A unit's job family: its name without trailing time/hash suffixes (natlang-foo-test-210556 → natlang-foo-test)."""
+    return re.sub(r'(-[0-9a-f]{4,})+$', '', unit.removesuffix('.service'))
+
+
+def learned_budget(state, unit, budget):
+    """The admission budget: at least the family's measured peak plus 10% (guessed budgets were the main cause of
+    over-budget stops and of refused admissions)."""
+    peak = state.get('family_peaks', {}).get(family(unit), 0)
+    return max(budget, int(peak * 1.1))
+
+
 def live_claims(state, gpu):
     """Claims whose unit still runs, with measured use and the highest use measured so far; claims of finished
     units are released."""
@@ -211,6 +224,9 @@ def live_claims(state, gpu):
     for unit, claim in list(state['claims'].items()):
         used = unit_usage(unit, gpu, claim.get('command'))
         if used is None and time.time() - claim['admitted'] > 30:  # give systemd a moment to start the unit
+            if claim.get('peak'):  # the family's measured peak sizes its next admission
+                peaks = state.setdefault('family_peaks', {})
+                peaks[family(unit)] = max(peaks.get(family(unit), 0), claim['peak'])
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
             continue
@@ -248,6 +264,11 @@ def run(args):
             free, live = headroom(state, gpu_usage())
             if unit in live:
                 raise SystemExit(f'{unit} already holds a claim')
+            learned = learned_budget(state, unit, budget)
+            if learned > budget:
+                print(json.dumps({'budget_raised_to_measured_peak_gb': round(learned / GIB, 1),
+                                  'requested_gb': args.budget_gb, 'family': family(unit)}), file=sys.stderr)
+                budget = learned
             if free - budget >= reserve:
                 state['claims'][unit] = {'budget': budget, 'class': args.cls, 'admitted': time.time(),
                                          'command': args.command, 'host_max': args.host_max_gb,
@@ -259,11 +280,11 @@ def run(args):
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims, '
                              f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
         time.sleep(30)
-    host_max = args.host_max_gb or args.budget_gb
+    host_max = args.host_max_gb or max(args.budget_gb, budget / GIB)
     command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}', '-p', f'OOMPolicy={args.oom_policy}',
                '--working-directory', os.path.abspath(args.workdir),
-               '-E', f'NATLANG_CUDA_MEMORY_GB={args.budget_gb}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
+               '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     for env in args.env:
         command += ['-E', env]
     result = subprocess.run(command + args.command)
@@ -271,7 +292,7 @@ def run(args):
         with ledger() as state:
             state['claims'].pop(unit, None)
         raise SystemExit(result.returncode)
-    print(json.dumps({'unit': unit, 'budget_gb': args.budget_gb, 'class': args.cls, 'free_gb': round(free / GIB, 1)}))
+    print(json.dumps({'unit': unit, 'budget_gb': round(budget / GIB, 1), 'class': args.cls, 'free_gb': round(free / GIB, 1)}))
 
 
 def main_command(unit):
@@ -320,11 +341,16 @@ def status(args):
                                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
 
 
-def victim(live, floor_breached, overshoot):
-    """The unit to stop: first any over its budget by the overshoot factor, then the lowest-priority newest."""
+def victim(live, floor_breached, overshoot, pressure=None):
+    """The unit to stop, only under memory pressure (available below twice the floor; ``pressure`` defaults to
+    ``floor_breached``): first the unit most over its budget by the overshoot factor, then, below the floor, the
+    lowest-priority newest. A unit over its budget while memory is plentiful is not stopped (the guard raises its
+    budget to what it uses instead): over 3 days, 7 of 9 over-budget stops happened with >20 GB still available,
+    so they protected nothing and cost the work."""
+    pressure = floor_breached if pressure is None else pressure
     over = [(c['used'] / c['budget'], u) for u, c in live.items() if c['used'] > c['budget'] * overshoot]
-    if over:
-        return max(over)[1], 'over budget'
+    if over and (pressure or floor_breached):
+        return max(over)[1], 'over budget under memory pressure'
     if floor_breached and live:
         return max(live, key=lambda u: (CLASSES[live[u]['class']], live[u]['admitted'])), 'free memory below floor'
     return None, None
@@ -354,7 +380,14 @@ def guard(args):
         with ledger() as state:
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
-            unit, reason = victim(live, mem_available() < floor, args.overshoot)
+            available = mem_available()
+            unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor)
+            for name, claim in live.items():  # overshoot without pressure: the budget becomes what it uses
+                if not unit and claim['used'] > claim['budget'] * args.overshoot and name in state['claims']:
+                    raised = int(claim['used'] * 1.1)
+                    state['claims'][name]['budget'] = raised
+                    state['events'].append({'time': time.time(), 'event': 'budget raised', 'unit': name,
+                                            'used': claim['used'], 'budget': raised, 'available': available})
             command = state['claims'].get(unit, {}).get('command') if unit else None
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
