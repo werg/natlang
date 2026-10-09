@@ -37,7 +37,7 @@ export { ONCE_EFFECTS } from './native/effects.js';
 export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, ModelContentPart } from './contracts.js';
-export { neuraleseServerModelTurn } from './model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, withRestoredBlocks, OWNER_HEADER } from './model/neuralese-server.js';
 export type { NeuraleseServerOptions } from './model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
 export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from './native/neuralese.js';
