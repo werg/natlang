@@ -1,0 +1,312 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v22-followups-and-kilo-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-001/collector.log",
+      "bytes": 46738,
+      "sha256": "9e4e02c4fddaa027fa7c1a04432d7f6514627df529f1287bd0bf62fbea9862a7"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.result.json",
+      "bytes": 1315282,
+      "sha256": "d6474b6fddee8b27d350e0d3588d6118abec12361579719c328bd2eeb21c9372"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+      "bytes": 423527,
+      "sha256": "08b9a4a4af32589991655f51b7dbd90d8cdfcfcb62c03adc303bc8f0f96d20e0",
+      "lines": 269
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-001/results.jsonl",
+      "bytes": 1315282,
+      "sha256": "d6474b6fddee8b27d350e0d3588d6118abec12361579719c328bd2eeb21c9372",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-001/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "16b6c857e5d3ffc768db63a3fbb1329fc0f873a7d4c0be482c29bf7d1cfb7795"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-002/collector.log",
+      "bytes": 41245,
+      "sha256": "4f3ec249a4642c5c826e0693e6621477d2c80a26a3c843cc06ed82a6853c4a53"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.result.json",
+      "bytes": 1117155,
+      "sha256": "1a3126fc3a90011534cb840400c9d66426155440553441f5f0fab9e4c8927d36"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.trace.jsonl",
+      "bytes": 352017,
+      "sha256": "5445b262d555e2b70835bc5fc6e845b65e529c25754d2718ffc0c6bfabc021dd",
+      "lines": 228
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-002/results.jsonl",
+      "bytes": 1117155,
+      "sha256": "1a3126fc3a90011534cb840400c9d66426155440553441f5f0fab9e4c8927d36",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-002/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "2afc53a3b3671114a4539151b571ef40026b5e1d6daf37708a4be04c5f66fc08"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-003/collector.log",
+      "bytes": 42621,
+      "sha256": "1c7968307a74d5fcbd0c18b4f8dac83701f2526b274da39460bfc3629894e6df"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.result.json",
+      "bytes": 1271155,
+      "sha256": "29b47ba396c1a23eece6500239176809fab7d2bdedb6a64fc5fec5e9e36e70a4"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.trace.jsonl",
+      "bytes": 479673,
+      "sha256": "3db4177dace255daa7cabe59341b91108775564100efc86d35e9dddd4349e275",
+      "lines": 249
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-003/results.jsonl",
+      "bytes": 1271155,
+      "sha256": "29b47ba396c1a23eece6500239176809fab7d2bdedb6a64fc5fec5e9e36e70a4",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-003/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "b34a97acd098253a746bb708ce7012edd3142fe641a137948010e387309af90d"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-004/collector.log",
+      "bytes": 246087,
+      "sha256": "858a63dab90bed48a4f64f5ae5c883e356172cbefab3a62c3c3789a6af2c8e6c"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.result.json",
+      "bytes": 7342489,
+      "sha256": "f1ca7f9fb02f53be210b3365de466d329696c8642290a7b0c9432da3c87f760a"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+      "bytes": 1683803,
+      "sha256": "6af0b5e8140eabfa88f0a7dca3bca6178098d7a8cf5a7e1c6e238631a00e7715",
+      "lines": 927
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-004/results.jsonl",
+      "bytes": 7342489,
+      "sha256": "f1ca7f9fb02f53be210b3365de466d329696c8642290a7b0c9432da3c87f760a",
+      "lines": 1
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/case-004/results.jsonl.manifest.json",
+      "bytes": 1694,
+      "sha256": "bd639d4612a8414af2120dd55245ba208d439b150546edcdeccf5b6df305c6ed"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/journal.jsonl",
+      "bytes": 31349,
+      "sha256": "4b87e06c80eee90fb3617ae8afe6d9b8cf06a29adcfb73ea1e652fc699c5cb1c",
+      "lines": 37
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/launch-receipt-v1.json",
+      "bytes": 938,
+      "sha256": "c13cbe0d3abdf268dccfca1efe62b30edf442593c7d24cd3d3c085d2eec8959c"
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/queue.jsonl",
+      "bytes": 3716,
+      "sha256": "51babbbd4f9faf5b4b82aef4793bca7b3171ba38cbf936f0d67e1b69116ffd95",
+      "lines": 4
+    },
+    {
+      "path": "provider-gemini35-flash-lite-source-indices-1-4-v1/supervisor-stdout-v1.log",
+      "bytes": 31349,
+      "sha256": "4b87e06c80eee90fb3617ae8afe6d9b8cf06a29adcfb73ea1e652fc699c5cb1c"
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/collector.log",
+      "bytes": 425,
+      "sha256": "c13ea11a9050e2e1dabc1615ba734f547afd602e2ad8611ddc12c57da9c03940"
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 4041828,
+      "sha256": "c5f35016f5d77c44850b276953bc431c9d26cc3ca573c6c48e0a271dc3b79ae8"
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 798595,
+      "sha256": "353ab0096f939899d2b9c9c8a8bcb67f4026fb7c60455172bda55b270e3fa421",
+      "lines": 603
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/journal.jsonl",
+      "bytes": 15058,
+      "sha256": "fda1495ebc03db1ec06c232416479ee9c53ba84d1d63e99eacfbe1fce819a1e3",
+      "lines": 21
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/launch-receipt-v1.json",
+      "bytes": 971,
+      "sha256": "37eae9451ee3a57fc74597614507514f39a67002379bc1e07299d40fe92dbf21"
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/results.jsonl",
+      "bytes": 4041828,
+      "sha256": "c5f35016f5d77c44850b276953bc431c9d26cc3ca573c6c48e0a271dc3b79ae8",
+      "lines": 1
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/results.jsonl.manifest.json",
+      "bytes": 1714,
+      "sha256": "730a3731abdea53a21719b672ddce015d017bde116c51e08875fe073467e3a49"
+    },
+    {
+      "path": "provider-kilo-nvidia-free-source-index-0-v1/supervisor-stdout-v1.log",
+      "bytes": 15058,
+      "sha256": "fda1495ebc03db1ec06c232416479ee9c53ba84d1d63e99eacfbe1fce819a1e3"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-001/collector.log",
+      "bytes": 102951,
+      "sha256": "026207015c6ef6ab09718e06e7bc3e174273b29b3f1d960de402adcfd8e68e2e"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.result.json",
+      "bytes": 2520483,
+      "sha256": "6e2579a9dc123668f53fb334a320e199009b22b42bc0fb5527b8f5efb795c373"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-001/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+      "bytes": 504245,
+      "sha256": "5549637885f2e6e957a8254021455e2f5754fd7aee4842d79f004a9d672ac18f",
+      "lines": 357
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-001/results.jsonl",
+      "bytes": 2520483,
+      "sha256": "6e2579a9dc123668f53fb334a320e199009b22b42bc0fb5527b8f5efb795c373",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-001/results.jsonl.manifest.json",
+      "bytes": 1701,
+      "sha256": "19c42f434c97a3556a02dba369086764986ca3087554a5db18edd2421918b5a7"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-002/collector.log",
+      "bytes": 79298,
+      "sha256": "86f9feafeb74bef25fd9f703b9670b55ccb34232c7f5604fcde520c8889e4c05"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.result.json",
+      "bytes": 1958412,
+      "sha256": "0ece3a0b9ad3e4b234dd441d888c479a92e5943a485b0e1dc99b39f103e4d124"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-002/jobs/000002-f2726c36961ae380.trace.jsonl",
+      "bytes": 465130,
+      "sha256": "7ee05915f2c9329b6a806151fce408761e0f2507ef2c6517614e766ca176662e",
+      "lines": 245
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-002/results.jsonl",
+      "bytes": 1958412,
+      "sha256": "0ece3a0b9ad3e4b234dd441d888c479a92e5943a485b0e1dc99b39f103e4d124",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-002/results.jsonl.manifest.json",
+      "bytes": 1702,
+      "sha256": "1305393c9855f0161464e40b17068889b32b5db8921d8df6cb391edc3b9b47a9"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-003/collector.log",
+      "bytes": 263762,
+      "sha256": "7c66501d06e4eba7e2df3c2fbd355ffe91862ca5cd10feeea459f5bd9fc11368"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.result.json",
+      "bytes": 9834611,
+      "sha256": "7dfed2f3a5bad274b36d0197b024ab89be0cf21747c6ec0f128be003d057b583"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-003/jobs/000003-af5a8095c1e55a57.trace.jsonl",
+      "bytes": 1620872,
+      "sha256": "1235574eccfeead8f066fdcfce33336c70cee29608e65faa221b849c4200214c",
+      "lines": 982
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-003/results.jsonl",
+      "bytes": 9834611,
+      "sha256": "7dfed2f3a5bad274b36d0197b024ab89be0cf21747c6ec0f128be003d057b583",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-003/results.jsonl.manifest.json",
+      "bytes": 1707,
+      "sha256": "55c050bc02fe145e1f7581588fdfc63ed6fa37b12ac4846f98bbfdd7fd87067d"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-004/collector.log",
+      "bytes": 133276,
+      "sha256": "56dd3995ee4373b998e85042ea195a74cb966c06208f7761eeb95d75496ce305"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.result.json",
+      "bytes": 3148073,
+      "sha256": "f2602fba22f504e288338d95dcb54ec601c69292a41459df8cee72239f4c7bb1"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+      "bytes": 663949,
+      "sha256": "6f1e1be366b8bffb9d06305d149cff3ea863d86ae9a7ab9e0d3ad537d6096407",
+      "lines": 454
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-004/results.jsonl",
+      "bytes": 3148073,
+      "sha256": "f2602fba22f504e288338d95dcb54ec601c69292a41459df8cee72239f4c7bb1",
+      "lines": 1
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/case-004/results.jsonl.manifest.json",
+      "bytes": 1703,
+      "sha256": "dc8ac32162921adacbaa9811c348950833286b39c7266d1e4384ed838377c549"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/journal.jsonl",
+      "bytes": 58131,
+      "sha256": "a40f959af75397b0567649b26e28a6ad1d81fa55e692c7b3605d515c1019a592",
+      "lines": 67
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/launch-receipt-v1.json",
+      "bytes": 1240,
+      "sha256": "e65de2cac5f8f0f9fe4c34b4669c30953c50d32ce44dfbfde8e319a1ca8f3ac8"
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/queue.jsonl",
+      "bytes": 3508,
+      "sha256": "61193a232ed70528a0f8451febe1a8ee33764fa93cc4a09656fc2097e3eb9e5d",
+      "lines": 4
+    },
+    {
+      "path": "provider-nvidia-source-indices-1-4-v1/supervisor-stdout-v1.log",
+      "bytes": 58131,
+      "sha256": "a40f959af75397b0567649b26e28a6ad1d81fa55e692c7b3605d515c1019a592"
+    }
+  ],
+  "bytes": 73281927
+}
