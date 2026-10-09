@@ -269,3 +269,25 @@ Pop; DGX resource management remains with the DGX agent.
 ## Bounded test scratch on shared training machines
 
 Run focused container tests with a read-only root and repository mount, a bounded `/tmp` tmpfs (512MiB by default), offline model access and cache paths under that tmpfs. CUDA/Triton JIT shared libraries require `exec` on the bounded tmpfs (`/tmp:rw,exec,nosuid,size=512m`); the Docker default `noexec` causes a deployment failure before the first update. Broad test discovery can create gigabytes of disposable files even with a read-only repository. An incomplete suite does not qualify a change. Monitor host disk headroom before tests and checkpoints; preserve active parent/full optimizer checkpoints. Offload inactive local weights only after fresh local and canonical remote SHA/size verification, recording the receipt and notifying the owning agent. Never remove the sole canonical backup.
+
+## Storage: NVMe working set and the external archive (DGX)
+
+The NVMe (`/`) holds latency-critical working data: models, scorer databases (`/home/werg/data/bird-sqlite`), hot
+training inputs, running jobs' outputs. Finished large artifacts move to the external disk automatically:
+
+- `scripts/archive_to_external.py`, run hourly by the user timer `natlang-archive-to-external.timer` (unit files in
+  `scripts/systemd/`, installed to `~/.config/systemd/user/`; DGX only unless Pop opts in). At most 50 GB per run,
+  idle I/O priority.
+- Candidates are regular files ≥ 1 GiB under `~/natlang/runs` and `~/data` that have been neither modified nor read
+  for 24 h and that no process has open (host `/proc` fds and maps, which include container processes).
+- Excluded: `~/data/models`, `~/data/bird-sqlite`, `~/natlang-data-nvme`, the running Mellum QAT conversion and its
+  teacher dumps, every path named by an active memory-ledger claim (its command and its container's arguments),
+  paths listed in `~/.config/natlang/archive-exclude.txt`, and directories with a `.keep-on-nvme` marker.
+- Move protocol: copy to `/mnt/external/natlang-development-data/archive/<runs|data>/<relative path>` (mtime kept),
+  fsync, verify size and SHA-256 and that the source did not change, then atomically replace the source with a
+  symlink to the copy, so every reader keeps working (more slowly). Each move is a line in
+  `/mnt/external/natlang-development-data/archive/manifest.jsonl`. Nothing is deleted without a verified copy;
+  symlinks are never followed; dry run by default (`--apply` to act, `--report` lists `~/.cache` and git-ignored
+  large items for manual review).
+- To bring a file back for latency-critical use, copy it from the archive over the symlink (`cp --remove-destination`)
+  and add a `.keep-on-nvme` marker or an exclude line.

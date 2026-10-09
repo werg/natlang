@@ -1,0 +1,9 @@
+[Unit]
+Description=Archive finished NVMe artifacts to the external disk every hour
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+AccuracySec=5min
+Unit=natlang-archive-to-external.service
+[Install]
+WantedBy=timers.target

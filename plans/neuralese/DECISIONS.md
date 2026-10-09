@@ -1252,3 +1252,28 @@ Thresholds are declared in the recipe before evaluation and are not tuned on hel
 gates stay recorded as evidence and are not reinterpreted. Pop owns the shared evaluator and reporting
 (eval.strata, built on the shared rollout and `causal_gold_prefix_mask`). Running frozen jobs keep their pinned code;
 the new gate applies to evaluations of their checkpoints through the common evaluator.
+
+### 2026-10-09 — representation chosen by use: generic results, stored calls, digests as template writes
+
+Owner decision. A value is produced in the representation its consumer reads, never produced in one form and
+degraded to another.
+
+- **Generic results.** A natlang function may declare a representation-generic result,
+  `R extends string | Neuralese<string, D>` (and likewise for other element types). Each call site instantiates `R`
+  from its expected type, as inline `nl` already takes its signature from context. The runtime runs the `string`
+  instance as text generation and the `Neuralese` instance as a template write of the same body (decision 44). A
+  function declared `string` stays text (decision 9 holds: the polymorphism is explicit in the signature).
+- **Dialects are static facts.** `DefaultDialect` binds to the configured port's dialect, and a block's stored dialect
+  is checked wherever a value is coerced to a `Neuralese` type. A consumer's reader type (text, or a dialect) is
+  declared by configuration and checked at startup (the server's `/v1/neuralese/info`), not discovered by a failing
+  request.
+- **Stored calls, forced per reader.** Where a value's consumers are not known when it is made (a tool output in the
+  pi harness), the call is stored (function, inputs) and each consumer forces it at its own representation, memoized
+  durably per (call, representation). Raw inputs stay what text readers read; nothing is produced that no one reads.
+- **Digests are template writes of a natlang function (supersedes the fixed operator of decision 43).** The digest is
+  the `Neuralese` instance of an ordinary generic function (the builtin `digest.nl`, and pi's tool-output `view`)
+  conditioned on the consumer's intent; its `string` instance is the crisp view. The trajectory trainer's
+  `--digest written` writes through that function's template write site, so training and serving use one definition.
+- **Blocks outlive server restarts.** A durable session archives the bytes of each block it references
+  (content-addressed export/import) and restores them on `neuralese-unknown-block`; sessions pin what they reference
+  and never collect other sessions' blocks.

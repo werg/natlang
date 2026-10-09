@@ -199,3 +199,10 @@ def test_container_names_come_from_attached_and_named_runs():
     assert ledger.container_name(['docker', 'start', '-a', 'natlang-x']) == 'natlang-x'
     assert ledger.container_name('/usr/bin/docker run --rm --name pi-executor --gpus all img') == 'pi-executor'
     assert ledger.container_name(['python3', 'train.py']) is None
+
+
+def test_cgroup_usage_leaves_out_reclaimable_page_cache_but_keeps_shared_memory(tmp_path):
+    (tmp_path / 'memory.current').write_text(str(30 * GIB))
+    (tmp_path / 'cgroup.procs').write_text('7\n')
+    (tmp_path / 'memory.stat').write_text(f'anon {18 * GIB}\nfile {12 * GIB}\nshmem {2 * GIB}\n')
+    assert ledger.cgroup_usage(str(tmp_path), {7: 5 * GIB}) == 30 * GIB - 10 * GIB + 5 * GIB
