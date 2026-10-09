@@ -11,14 +11,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "training/neuralese"))
 from natlang_neuralese.data.text_corpus import gold_text_rows
-
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
 def read_source(path: Path):

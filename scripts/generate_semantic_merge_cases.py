@@ -10,16 +10,16 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SEEDS = ROOT / "codebases/semantic_merge/scenarios/seed_cases.jsonl"
 EVAL_GROUPS = frozenset({"counter-correction", "map-independent", "list-order-conflict",
                          "tree-move-rename", "schedule-time-conflict", "scene-move-recolor"})
-
-
-def canonical(value) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def split_for(group: str) -> str:

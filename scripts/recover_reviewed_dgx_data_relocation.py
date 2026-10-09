@@ -18,6 +18,10 @@ import re
 import subprocess
 import sys
 import tempfile
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha256  # noqa: E402
 
 EXTERNAL = Path('/mnt/external')
 DEST_ROOT = EXTERNAL / 'natlang-storage-20261002'
@@ -31,10 +35,6 @@ TREES = (
 
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat()
-
-
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def atomic_json(path: Path, value: dict) -> None:

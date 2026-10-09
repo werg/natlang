@@ -18,14 +18,10 @@ import sys
 import time
 from pathlib import Path
 from generation_authority import authority_lock
-
-
-def sha(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def read_json(path):

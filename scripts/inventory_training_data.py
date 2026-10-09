@@ -12,14 +12,10 @@ import uuid
 
 from run_training_pipeline import atomic_json
 from reviewed_training_inputs import resolve_reviewed_turn_inputs
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 
 def catalog(repo, config=None):

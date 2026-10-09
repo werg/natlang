@@ -18,13 +18,13 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as _sha  # noqa: E402
 
 SCHEMA = "natlang.hf_parquet_acquisition/1"
 DEFAULT_BATCH_ROWS = 1000
-
-
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def _file_sha(path: Path) -> str:

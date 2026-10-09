@@ -15,14 +15,14 @@ import uuid
 import xml.etree.ElementTree as ET
 
 from acquire_visual_sources import contained, digest, safe_path, write_json
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
 def sha(value):
     return hashlib.sha256(value if isinstance(value, bytes) else value.encode()).hexdigest()
-
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
 
 
 class Resources(HTMLParser):

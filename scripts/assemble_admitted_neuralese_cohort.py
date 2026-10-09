@@ -23,14 +23,10 @@ sys.path.insert(0, str(CODE_ROOT / 'scripts'))
 from root_integration_adoption import root_integration_adoption_bindings
 from root_derived_writer_admission import admitted_root_derived_writer_rows
 from root_admission_scope import no_new_world_credit
-
-
-def sha(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open('rb') as f:
-        for chunk in iter(lambda: f.read(1 << 20), b''):
-            h.update(chunk)
-    return h.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def rows(path: Path, key='id'):

@@ -7,24 +7,15 @@ import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256, canonical_json_sha256_hex as canonical_sha  # noqa: E402
 
 
 def line_count(path: Path) -> int:
     with path.open("rb") as stream:
         return sum(1 for line in stream if line.strip())
-
-
-def canonical_sha(value) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
-                                     separators=(",", ":")).encode()).hexdigest()
 
 
 def prepare(source: Path, out: Path, *, source_manifest: Path) -> dict:

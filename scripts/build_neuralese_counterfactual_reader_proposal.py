@@ -13,15 +13,14 @@ import json
 import os
 import sys
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import canonical_json_bytes as canonical  # noqa: E402
 
 
 def sha_bytes(value):
     return hashlib.sha256(value).hexdigest()
-
-
-def canonical(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
 
 
 def sha_json(value):

@@ -13,6 +13,10 @@ import json
 from pathlib import Path
 import shlex
 import sys
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 ROOT = Path('/home/werg/natlang')
 BASE = ROOT / 'runs/dgx-qwen36-current-train-refresh-20261003'
@@ -40,14 +44,6 @@ V42_RUNTIME_PINS = {
 
 def sha_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
-
-
-def sha(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open('rb') as f:
-        for block in iter(lambda: f.read(1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def read_rows(path: Path):

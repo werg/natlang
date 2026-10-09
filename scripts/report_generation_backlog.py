@@ -16,6 +16,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -24,14 +28,6 @@ REPO = Path(__file__).resolve().parents[1]
 def repo_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else REPO / path
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def pin(path: Path, inputs: dict[str, dict[str, Any]]) -> str:

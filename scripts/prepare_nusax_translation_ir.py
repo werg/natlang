@@ -15,6 +15,11 @@ import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes, sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_bytes as canonical_bytes  # noqa: E402
 
 NUSAX_REVISION = "75b0be5d982348332509f296e10d9bf9cb66d60f"
 NUSAX_REPOSITORY = "https://github.com/IndoNLP/nusax"
@@ -56,22 +61,6 @@ RIGHTS_EVIDENCE = {
         "status": "platform-level source permissions and item-level redistribution rights are not established by these dataset-level declarations",
     },
 }
-
-
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def canonical_bytes(value: Any) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def jsonl(path: Path) -> list[dict[str, Any]]:

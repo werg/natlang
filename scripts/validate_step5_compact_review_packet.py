@@ -7,12 +7,12 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def verify_pin(pin: dict[str, Any]) -> Path:

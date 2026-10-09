@@ -13,17 +13,14 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha256  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_bytes as canonical  # noqa: E402
 
 
 VERSION = "natlang.reviewed_legacy_turn_identity/1"
-
-
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
 def digest_file(path: Path) -> str:

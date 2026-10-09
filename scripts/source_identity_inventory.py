@@ -16,6 +16,10 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 
 CASE_NAMES = ("source.cases.jsonl", "cases.jsonl", "cases.ir.jsonl", "*.ir.jsonl")
@@ -25,14 +29,6 @@ ID_KEYS = {"source_id", "sourceId", "source_record_id", "sourceRecordId",
            "independent_world", "independentWorld", "world_id", "worldId"}
 GROUP_KEYS = {"source_group", "sourceGroup", "source_group_id", "sourceGroupId",
               "group_id", "groupId", "split_group", "splitGroup", "pair_group", "pairGroup"}
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def string_values(value: Any) -> list[str]:

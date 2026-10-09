@@ -14,14 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.corpus import digest, index_pairs, split_programs
 from scripts.training_append import ids_digest
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 
 def _read_json(path: Path, label: str) -> dict:

@@ -5,13 +5,13 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "training/neuralese"))
-
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def read_records(path: Path):

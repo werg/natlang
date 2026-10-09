@@ -18,6 +18,10 @@ import tempfile
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 
 OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
@@ -124,14 +128,6 @@ class ProviderObservations:
         return delta, {'pending_requests': list(self.requests.values()),
                        'latest_delta_at': self.latest_delta_at,
                        'invalid_events': self.invalid_events}
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def read_json(path):

@@ -4,18 +4,14 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as _sha  # noqa: E402
 
 
 SINGLE = 'natlang.root-derived-observed-text-writer-admission/1'
 INDEX = 'natlang.root-derived-body-admission-index/1'
-
-
-def _sha(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for block in iter(lambda: stream.read(1 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _read_pin(root: Path, relative: str, pin: dict) -> Path:

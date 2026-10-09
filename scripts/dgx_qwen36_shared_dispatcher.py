@@ -17,21 +17,14 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
+from natlang_neuralese.common.jsonio import utc_now_iso as utc_now  # noqa: E402
 
 
 draining = False
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def utc_now():
-    return datetime.now(timezone.utc).isoformat()
 
 
 def read_rows(path):

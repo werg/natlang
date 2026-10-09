@@ -9,10 +9,10 @@ from collections import Counter, defaultdict
 import hashlib
 import json
 from pathlib import Path
-
-
-def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def main():

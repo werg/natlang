@@ -8,14 +8,11 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
-
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_bytes as canonical  # noqa: E402
 
 
 def build(source: Path, selections: list[dict[str, Any]], skill_path: Path,

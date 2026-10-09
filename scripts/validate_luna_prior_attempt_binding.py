@@ -6,10 +6,10 @@ import hashlib
 import json
 from pathlib import Path
 from luna_source_inventory import verify as verify_luna_source_inventory
-
-
-def sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def resolve(path: str, plan_dir: Path) -> Path:

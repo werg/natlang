@@ -12,6 +12,10 @@ import re
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical_json  # noqa: E402
 
 VERSION = "natlang.port-record/1"
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "spec" / "neuralese-port-record.schema.json"
@@ -63,10 +67,6 @@ def normalize_text(text: str) -> str:
 
 def text_hash(text: str) -> str:
     return hashlib.sha256(normalize_text(text).encode("utf-8")).hexdigest()
-
-
-def canonical_json(value) -> str:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
 
 def content_hash(record: dict) -> str:

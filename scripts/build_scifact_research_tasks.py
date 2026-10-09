@@ -10,6 +10,10 @@ from pathlib import Path
 import re
 import tempfile
 from typing import Any
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha256, canonical_json_sha256_hex as canonical_sha  # noqa: E402
 
 REPOSITORY = "https://github.com/allenai/scifact"
 DATA_ARCHIVE_URL = "https://scifact.s3-us-west-2.amazonaws.com/release/latest/data.tar.gz"
@@ -19,15 +23,6 @@ ORACLE_LABEL_REFERENCE = "https://github.com/allenai/scifact/blob/master/verisci
 CLAIMS_LICENSE = "CC-BY-4.0"
 ABSTRACTS_LICENSE = "ODC-By-1.0"
 DATASET_CITATION = "Wadden et al., Fact or Fiction: Verifying Scientific Claims, EMNLP 2020"
-
-
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical_sha(value: Any) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return sha256(payload)
 
 
 def _read_jsonl(raw: bytes, label: str) -> list[tuple[int, dict[str, Any], str]]:

@@ -17,15 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "scripts"))
 from assemble_admitted_neuralese_cohort import target_digest
-
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def canonical_digest(value: Any) -> str:
-    data = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return sha(data)
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha, canonical_json_sha256_hex as canonical_digest  # noqa: E402
 
 
 def file_pin(path: Path) -> dict[str, Any]:

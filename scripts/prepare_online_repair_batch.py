@@ -9,13 +9,10 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
-
-
-def sha(path):
-    h=hashlib.sha256()
-    with Path(path).open('rb') as f:
-        for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
-    return h.hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 
 def source_scope_reason(program, eligible, reviewed):

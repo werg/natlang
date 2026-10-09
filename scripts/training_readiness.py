@@ -10,6 +10,10 @@ import tempfile
 from pathlib import Path
 
 import torch
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as _sha256_file  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -69,14 +73,6 @@ def validate_training_audit_tokenizer(manifest, tokenizer, model, revision):
                 "local_tokenizer_artifacts_sha256", "end_token"):
         if expected.get(key) != actual.get(key):
             raise ValueError(f"training audit tokenizer mismatch: {key}")
-
-
-def _sha256_file(path):
-    hasher = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            hasher.update(block)
-    return hasher.hexdigest()
 
 
 def validate_training_mix_audit(mix_path, data_path, target, training_manifest):

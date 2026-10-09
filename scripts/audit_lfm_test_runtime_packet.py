@@ -4,6 +4,10 @@ from __future__ import annotations
 import argparse, hashlib, json
 from collections import Counter, defaultdict
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
 
 def sha_file(path):
@@ -12,7 +16,6 @@ def sha_file(path):
         for b in iter(lambda:f.read(1024*1024),b''): h.update(b)
     return h.hexdigest()
 
-def canonical(value): return json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':'))
 def digest(value): return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 def audit(source, source_manifest, ready, packet, out):

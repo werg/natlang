@@ -11,10 +11,10 @@ import glob
 import hashlib
 import json
 from pathlib import Path
-
-
-def sha256_bytes(value):
-    return hashlib.sha256(value).hexdigest()
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
 
 
 def stable_json(value):

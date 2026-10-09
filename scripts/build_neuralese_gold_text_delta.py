@@ -23,9 +23,12 @@ from root_derived_writer_admission import admitted_root_derived_writer_rows
 sys.path.insert(0, str(ROOT / "scripts"))
 from root_integration_adoption import root_integration_adoption_bindings
 from root_admission_scope import no_new_world_credit
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as sha  # noqa: E402
+from natlang_neuralese.common.jsonio import canonical_json_str as canonical  # noqa: E402
 
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 def sha_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -70,8 +73,6 @@ def load_pinned_tokenizer(tokenizer_path):
                 setattr(tokenizer, name, config[name])
         return tokenizer
 
-def canonical(value) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 def read_records(path):
     out = []

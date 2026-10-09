@@ -11,6 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json
 from self_improvement_data import current_improvement_turns
 from reviewed_training_inputs import resolve_reviewed_turn_inputs
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as _sha256_file  # noqa: E402
 
 
 def file_project_has_subfunctions(ir):
@@ -29,14 +33,6 @@ def current_program_turns(path):
     with Path(path).open() as stream:
         return all(json.loads(line).get('task', {}).get('program_ir', {}).get('version')
                    == 'natlang.program/2' for line in stream if line.strip())
-
-
-def _sha256_file(path):
-    hasher = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            hasher.update(block)
-    return hasher.hexdigest()
 
 
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,

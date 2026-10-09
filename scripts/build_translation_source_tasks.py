@@ -15,6 +15,10 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 NUSAX_REVISION = "75b0be5d982348332509f296e10d9bf9cb66d60f"
 REPO_URL = "https://github.com/IndoNLP/nusax"
@@ -41,14 +45,6 @@ PINNED_FILES = {
     "datasets/mt/test.csv": "0082161de28a0a17a85fc6e02fc07a2e2514d8dd7f344ead95a88aa86dc706cc",
 }
 DATA_LICENSE = "CC-BY-SA-4.0"
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def jsonl_bytes(rows: Iterable[dict[str, Any]]) -> bytes:

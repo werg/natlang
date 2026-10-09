@@ -7,6 +7,10 @@ Existing corpora retain their own source policy. Evaluation records remain in a 
 import argparse, collections, functools, hashlib, json, re, subprocess
 from pathlib import Path
 from audit_neuralese_recurrence import names, validate_observed_output_audit
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 REVIEWED = {'decision_skill_catalog', 'decision_extract_chain'}
 # A source review can admit named v7 records from these families only; membership
@@ -29,12 +33,6 @@ def supported_conversion(version):
     """Accept positive historical converter versions through the shared compiler's current version."""
     match = re.fullmatch(r'natlang\.neuralese-conversion/(\d+)', version) if isinstance(version, str) else None
     return bool(match and 0 < int(match.group(1)) <= _current_conversion_number())
-
-def sha(path):
-    h=hashlib.sha256()
-    with path.open('rb') as f:
-        for block in iter(lambda:f.read(1<<20),b''):h.update(block)
-    return h.hexdigest()
 
 
 def artifact_key(path):

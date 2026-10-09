@@ -14,6 +14,10 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Any
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_hex as _sha  # noqa: E402
 
 CHUNK_ROWS = 128
 RENDERER_VERSION = "transformers-chat-template/4"
@@ -21,10 +25,6 @@ RENDERER_VERSION = "transformers-chat-template/4"
 
 def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
     return ("".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows)).encode()
-
-
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def _file_sha(path: Path) -> str:

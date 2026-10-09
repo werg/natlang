@@ -12,20 +12,16 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 REVISION = '9a98e35fe1c9ee255f78dd64771c7ae15a799481'
 SOURCE_SHA256 = 'c2509bf7ac580c262e2581d34d6403aa21682d2e10beb9ad85ad8820a7e33a40'
 MODEL_FILE = 'modeling_bailing_moe_v3.py'
 CONFIG_SHA256 = '9750d847957913f665a13c0b5a6537199e33c6f3ec970d9fcb55a0e5076d4012'
 CONFIGURATION_SHA256 = 'f2c048966aec8a2f042cfeb1351f74d51a28589b409c55baae7d24e841c1f6c4'
-
-
-def sha256_file(path):
-    result = hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
-            result.update(chunk)
-    return result.hexdigest()
 
 
 def replace_once(source, before, after):
