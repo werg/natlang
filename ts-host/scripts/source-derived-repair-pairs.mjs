@@ -138,6 +138,15 @@ export async function loadSourceDerivedRepairCandidates(proposalPath) {
     if (auditSource.program_id !== item.source.program_id || auditSource.split !== item.source.split ||
         auditSource.source_group !== item.source.source_group ||
         auditSource.source_row_sha256_including_lf !== item.source.source_row_sha256_including_lf ||
+        auditSource.eligibility_file !== item.source.eligibility_file ||
+        canonical(auditSource.eligibility_file_body) !== canonical(item.source.eligibility_file_body) ||
+        auditSource.eligibility_file_body_sha256 !== item.source.eligibility_file_body_sha256 ||
+        auditSource.review_notice_file !== item.source.review_notice_file ||
+        auditSource.review_notice_body !== item.source.review_notice_body ||
+        auditSource.review_notice_sha256 !== item.source.review_notice_sha256 ||
+        auditSource.independent_eligibility_audit_file !== item.source.eligibility_audit_file ||
+        auditSource.independent_eligibility_audit_body !== item.source.eligibility_audit_body ||
+        auditSource.independent_eligibility_audit_sha256 !== item.source.eligibility_audit_sha256 ||
         auditSource.physical_jsonl_index !== item.source.physical_source_index ||
         auditRun.result_sha256 !== item.original_provider_decision.raw_result_sha256 ||
         auditDecision.call_id !== item.original_provider_decision.invocation_id ||
