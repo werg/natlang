@@ -20,13 +20,12 @@ from .output_embedding_projection import sha
 
 HANDLERS = {
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
-                        'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','cutoff','group_size',
+                        'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','cutoff',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
-                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
-                          'input_map_kernel','input_map_rank','rollout_passes','rollout_start_passes',
-                          'max_sequence_passes','ar_feedback_fixup'},'result':'heads.pt'},
+                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
+                          'input_map_kernel','input_map_rank','ar_feedback_fixup'},'result':'heads.pt'},
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
@@ -157,9 +156,11 @@ def mapped_fixup_continuation(stage, reports):
     return checkpoint, heads
 
 
-def effective_stage_parameters(stage, reports):
+def effective_stage_parameters(stage, reports, recipe=None):
     """Resolve fixup ``steps`` as new updates above its exact predecessor step."""
-    parameters = dict(stage['parameters'])
+    parameter_defaults = (recipe or {}).get('stage_parameter_defaults', {})
+    parameters = dict(parameter_defaults.get(stage['kind'], {}))
+    parameters.update(stage['parameters'])
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup',False):
         predecessors = [report for report in reports
                         if report['id'] in stage['requires'] and
@@ -181,6 +182,15 @@ def load_recipe(path):
         return recipe
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
+    parameter_defaults = recipe.get('stage_parameter_defaults', {})
+    if not isinstance(parameter_defaults, dict):
+        raise ValueError('stage_parameter_defaults must map handler names to parameter objects')
+    for kind, defaults in parameter_defaults.items():
+        if (kind not in HANDLERS or not isinstance(defaults, dict) or
+                not set(defaults) <= HANDLERS[kind]['parameters']):
+            raise ValueError('invalid stage parameter defaults for ' + str(kind))
+        if not any(stage.get('kind') == kind for stage in recipe['stages']):
+            raise ValueError('unused stage parameter defaults for ' + str(kind))
     declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
     for stage in recipe['stages']:
         name, kind = stage.get('id'), stage.get('kind')
@@ -197,37 +207,16 @@ def load_recipe(path):
         if 'text_data' in parameters and 'text_data' in stage.get('inputs', {}):
             raise ValueError('text_data must be declared either as a named stage input or a legacy parameter')
         if kind == 'core_text_warmup':
-            neuralese_input = parameters.get('neuralese_input')
-            if neuralese_input not in {'map', 'sketch'}:
-                raise ValueError('core text warm-up must declare neuralese_input as map or sketch')
-            rollout_passes = parameters.get('rollout_passes', 0)
-            if type(rollout_passes) is not int or rollout_passes < 0 or rollout_passes == 1:
-                raise ValueError('invalid core text warm-up rollout_passes')
-            max_sequence_passes = parameters.get('max_sequence_passes', 3)
-            if type(max_sequence_passes) is not int or max_sequence_passes < 3:
-                raise ValueError('max_sequence_passes must be an integer of at least 3')
-            if neuralese_input == 'map' and rollout_passes != 0:
-                raise ValueError('mapped core text warm-up requires rollout_passes=0')
-            if neuralese_input == 'map' and max_sequence_passes != 3:
-                raise ValueError('max_sequence_passes applies only to the sketch sequence schedule')
             ar_feedback_fixup = parameters.get('ar_feedback_fixup', False)
             if type(ar_feedback_fixup) is not bool:
                 raise ValueError('ar_feedback_fixup must be boolean')
-            if ar_feedback_fixup and (neuralese_input != 'map' or
-                    not isinstance(stage.get('inputs', {}), dict)):
-                raise ValueError('AR feedback fixup requires map input')
+            if ar_feedback_fixup and not isinstance(stage.get('inputs', {}), dict):
+                raise ValueError('AR feedback fixup stage inputs must be an object')
             if ar_feedback_fixup and not any(
                     prior['id'] in required and prior['kind']=='core_text_warmup' and
-                    prior.get('parameters',{}).get('neuralese_input')=='map'
+                    not prior.get('parameters',{}).get('ar_feedback_fixup',False)
                     for prior in recipe['stages']):
                 raise ValueError('AR feedback fixup requires a preceding mapped-input warm-up stage')
-            if rollout_passes and max_sequence_passes != 3:
-                raise ValueError('choose either rollout_passes or max_sequence_passes above 3')
-            if 'rollout_start_passes' in parameters:
-                start_passes = parameters['rollout_start_passes']
-                if (type(start_passes) is not int or start_passes < 2 or rollout_passes == 0 or
-                        start_passes > rollout_passes):
-                    raise ValueError('rollout_start_passes must be an integer from 2 through rollout_passes')
             for option_name in ('input_map_kernel', 'input_map_rank'):
                 value = parameters.get(option_name, 4 if option_name == 'input_map_kernel' else 64)
                 if type(value) is not int or value < 1:
@@ -255,7 +244,7 @@ def load_recipe(path):
         if kind == 'core_text_warmup' and stage.get('parameters',{}).get('ar_feedback_fixup',False):
             predecessors = [s for s in recipe['stages'] if s['id'] in required and
                            s['kind']=='core_text_warmup' and
-                           s.get('parameters',{}).get('neuralese_input')=='map']
+                           not s.get('parameters',{}).get('ar_feedback_fixup',False)]
             if len(predecessors) != 1:
                 raise ValueError('AR feedback fixup requires exactly one mapped warm-up predecessor')
         if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
@@ -718,7 +707,7 @@ def main(argv=None):
                 if kind == 'verified_heads_handoff':
                     raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
                     command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
-                stage_parameters = effective_stage_parameters(stage,reports)
+                stage_parameters = effective_stage_parameters(stage,reports,recipe)
                 if 'text_data' in stage_inputs[stage['id']]:
                     stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
                 command += stage_parameter_args(stage_parameters)

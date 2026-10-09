@@ -112,17 +112,14 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
                                       readout_chunk_tokens: int = 128):
     """Estimate the peak retained geometry of one text-warmup update.
 
-    Pass zero is a single gold-history forward. Later sequence passes retain a
-    shallow producer and a full consumer/replay at the same time, so that
-    overlap is added and compared with pass zero. Passes themselves are
-    backpropagated and released serially: their estimates are never multiplied
-    by ``sequence_passes``. The consumer readout uses checkpointed chunks, so
+    Map adaptation may run a gold-history pass and mapped-history consumer at the
+    same time; the optional AR fixup also retains its detached full-depth producer
+    cache. These live tensors are included in the geometry. Passes are
+    backpropagated and released serially. The consumer readout uses checkpointed chunks, so
     at most one configured logit chunk is counted. Flex attention uses its
     fused/tiled path; this estimate intentionally has no quadratic T-by-T
-    attention-mask term. The current ``sequence_completions`` path forwards its
-    ``group_size`` argument, but ``replay_sequence_inputs`` does not chunk on
-    it and calls ``isolated_sequence`` for the full target; this estimate uses
-    that actual full-target call shape.
+    attention-mask term. The current map and AR objectives use complete target
+    spans; this estimate uses their actual full-target call shapes.
 
     The caller supplies the actual model layouts. ``shallow_layout`` must use
     the actual number of layers and summed K/V projection widths through the

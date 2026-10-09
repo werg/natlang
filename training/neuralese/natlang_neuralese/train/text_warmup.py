@@ -1,7 +1,7 @@
 """Teacherless full-stack neuralese warm-up on causally aligned ordinary text.
 
 Gold IDs anchor next-token CE and raw embedding targets. The input/output token
-space is fixed; transformer layers, sketch F and content residual train. Gold text history is teacher-forced; individual neuralese completions use the
+ space is fixed; transformer layers, the input map, and content residual train. Gold text history is teacher-forced; individual neuralese completions use the
 shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
@@ -12,8 +12,7 @@ from pathlib import Path
 import torch
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
-from .execution import (full_depth_projected_feedback_step, prefill_write_context,
-                        replay_sequence_inputs)
+from .execution import full_depth_projected_feedback_step, prefill_write_context
 from .output_embedding_projection import sha
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
@@ -55,8 +54,8 @@ _OBJECTIVE_METRIC_SCALARS = (
 )
 
 
-def objective_metric_scalars(secondary_projection='sketch'):
-    if secondary_projection not in {'sketch', 'input_map'}:
+def objective_metric_scalars(secondary_projection='input_map'):
+    if secondary_projection != 'input_map':
         raise ValueError('unknown secondary projection')
     return (*_OBJECTIVE_METRIC_SCALARS, secondary_projection+'_mse',
             'supervised_'+secondary_projection+'_mse')
@@ -103,7 +102,7 @@ class LinearModuleCallCounter:
                 for (name, class_name, shape, grad_enabled), count in sorted(self.counts.items())]
 
 
-def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, secondary_projection='sketch'):
+def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, secondary_projection='input_map'):
     """Extract scalar objective metrics with one device-to-host read.
 
     The objective stores only reduced scalar tensors here; predictions, token
@@ -277,32 +276,22 @@ TEXT_POSITION_WEIGHT_POLICY={
 }
 
 
-def text_supervision_policy(neuralese_input):
-    if neuralese_input not in {'map', 'sketch'}:
-        raise ValueError('unknown Neuralese text input mode')
-    # These are stable checkpoint IDs. The map's self-consistency objective
-    # occupies the historical secondary/sketch slot; report labels below carry
-    # the concrete implementation name without changing resume identity.
+def text_supervision_policy():
     return {**TEXT_POSITION_WEIGHT_POLICY,
             'objectives':['full_projection', 'sketch_projection', 'next_token_ce']}
 
 
-def warmup_display_labels(neuralese_input):
-    if neuralese_input not in {'map', 'sketch'}:
-        raise ValueError('unknown Neuralese text input mode')
+def warmup_display_labels():
     return {
-        'secondary_objective': ('neuralese_input_map_self_consistency' if neuralese_input == 'map'
-                                else 'shallow_feedback_projection'),
-        'secondary_head': 'heads.input_map' if neuralese_input == 'map' else 'heads.feedback',
-        'secondary_metric': 'input_map' if neuralese_input == 'map' else 'sketch',
-        'schedule_head': 'input_map' if neuralese_input == 'map' else 'shallow',
+        'secondary_objective': 'neuralese_input_map_self_consistency',
+        'secondary_head': 'heads.input_map',
+        'secondary_metric': 'input_map',
+        'schedule_head': 'input_map',
     }
 
 
-def display_update_flags(updates, neuralese_input):
-    labels = warmup_display_labels(neuralese_input)
-    return {(labels['secondary_metric'] if key == 'sketch' else key): value
-            for key, value in updates.items()}
+def display_update_flags(updates):
+    return dict(updates)
 
 
 def balanced_position_weights(span, suffix_starts):
@@ -424,51 +413,6 @@ def gold_completion(backbone, heads, prefix_ids, span_ids, *, auxiliary_scale=.0
 MATCHED_CONSUMERS=('full_projection','sketch_projection','live_greedy')
 
 
-def sequence_completions(backbone, heads, prefix_ids, span_ids, *, passes=3,
-                         fraction=1., group_size=16, auxiliary_scale=.05):
-    """Repeated shared shallow-layer passes, with one-consumer sketch credit.
-
-    Pass zero reads gold text. Every later pass consumes the preceding pass's
-    next-token predictions at their corresponding INPUT positions. Each pass
-    retains the same prefix and gold next-token targets. Replay recomputes its
-    producer from detached older inputs; output at j credits only the incoming
-    sketch at j, never a chain of older sketches or later consumer positions.
-    Consume/backpropagate each yielded pass before requesting the next to bound
-    memory. No optimizer update may occur between these passes.
-    """
-    if passes < 1 or not 0 <= fraction <= 1:
-        raise ValueError('positive sequence passes and bounded fraction required')
-    first=gold_completion(backbone,heads,prefix_ids,span_ids,auxiliary_scale=auxiliary_scale)
-    yield {**first,'pass_index':0}
-    # Never carry an earlier projection's activation graph into a later producer.
-    previous=backbone.embed(span_ids[:,:-1]).detach()
-    gold=previous
-    del first
-    for depth in range(1,passes):
-        producer= prefill_write_context(backbone,heads,backbone.embed(prefix_ids))
-        if previous.shape[1]:
-            shallow,_=backbone.run_layers(previous,range(0,heads.cutoff),producer.cache)
-            sources=torch.cat([producer.state[:,None],shallow],1)
-        else:
-            sources=producer.state[:,None]
-        predictions=heads.feedback(sources).to(gold.dtype)
-        replacements=(1-fraction)*gold+fraction*predictions[:,:-1]
-        fixed=replacements.detach()
-        consumer=prefill_write_context(backbone,heads,backbone.embed(prefix_ids))
-        if fixed.shape[1]:
-            history,completed=replay_sequence_inputs(
-                backbone,heads,consumer,fixed,replacements,group_size=group_size)
-            top=torch.cat([consumer.top[:,None],completed],1)
-            sources=torch.cat([consumer.state[:,None],history],1)
-        else:
-            top=consumer.top[:,None];sources=consumer.state[:,None]
-        auxiliary=sources.detach()+auxiliary_scale*(sources-sources.detach())
-        guesses=heads.feedback(auxiliary)
-        yield {'top':top,'sketches':guesses,'pass_index':depth}
-        previous=fixed
-        del producer,consumer,predictions,replacements,sources,guesses,top
-
-
 def mapped_completions(backbone, heads, prefix_ids, span_ids, *, passes=2):
     """Neuralese positions read the token-to-Neuralese input map (``heads.input_map``) of the gold tokens.
 
@@ -539,29 +483,23 @@ def autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids):
 
 
 def text_history_completions(backbone, heads, prefix_ids, span_ids, *, passes,
-                             input_map, ar_feedback_fixup=False, group_size=16):
-    """Select the declared history objective while preserving pass indices."""
+                             ar_feedback_fixup=False):
+    """Run the shared mapped-input objective or its detached self-fed fixup."""
     if ar_feedback_fixup:
         if passes != 2:
             raise ValueError('AR feedback fixup has exactly one gold control and one self-fed consumer pass')
         yield next(mapped_completions(backbone, heads, prefix_ids, span_ids, passes=1))
         yield autoregressive_feedback_completion(backbone, heads, prefix_ids, span_ids)
         return
-    if input_map:
-        yield from mapped_completions(backbone, heads, prefix_ids, span_ids, passes=min(passes, 2))
-    else:
-        yield from sequence_completions(backbone, heads, prefix_ids, span_ids,
-                                        passes=passes, group_size=group_size)
+    yield from mapped_completions(backbone, heads, prefix_ids, span_ids, passes=min(passes, 2))
 
 
-def text_history_pass_count(schedule_passes, *, input_map, ar_feedback_fixup=False):
-    """Resolve schedule depth to the exact passes required by the history objective."""
-    if ar_feedback_fixup:
-        return 2  # gold-context control plus self-fed consumer, even during pass-1 bootstrap
-    return min(schedule_passes, 2) if input_map else schedule_passes
+def text_history_pass_count(schedule_passes, *, ar_feedback_fixup=False):
+    """Map depth ramps to two passes; its AR fixup always uses both control and consumer."""
+    return 2 if ar_feedback_fixup else min(schedule_passes, 2)
 
 
-def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_completion, *, input_map):
+def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_completion):
     """Use the serving shallow feedback projection for matched-history diagnostics.
 
     A mapped warm-up's objective completion carries input-map outputs in its
@@ -569,7 +507,7 @@ def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_
     independent serving ``heads.feedback`` projection at the corresponding
     gold-history states.
     """
-    return gold_completion(backbone, heads, prefix_ids, span_ids) if input_map else objective_completion
+    return gold_completion(backbone, heads, prefix_ids, span_ids)
 
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
@@ -596,20 +534,9 @@ def alignment_selection_score(report, *, max_ce_delta=.1, max_relative_mse=.25, 
     return (0 if report.get('qualified') else 1,max(ratios,default=math.inf))
 
 
-def _alignment_qualification_pass_depth(*, input_map, schedule, rollout, update_controls):
-    """Return the only pass depth eligible for alignment streaks at this stage."""
-    if input_map:
-        return 2
-    if rollout is None:
-        if not schedule.plateau_reached:
-            return None
-        return update_controls.get('target_sequence_passes', 3)
-    if not schedule.plateau_reached:
-        return None
-    stage = update_controls.get('rollout')
-    if not stage or stage['phase'] != 'whole_stack':
-        return None
-    return stage['target_passes']
+def _alignment_qualification_pass_depth(*, schedule):
+    """Only a plateaued mapped two-pass objective can qualify alignment."""
+    return 2 if schedule.plateau_reached else None
 
 
 def retain_best_checkpoint(out, report):
@@ -805,8 +732,7 @@ def same_alignment_data(previous, current):
     # the held text-CE baseline. Missing fields in legacy checkpoints are
     # intentionally unequal: the old diagnostic's evaluation policy is not
     # authenticated well enough to reuse its value.
-    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens',
-              'rollout_passes', 'rollout_start_passes', 'max_sequence_passes')
+    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens')
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     if any(key not in old_options or key not in new_options for key in fields):
         return False
@@ -821,7 +747,7 @@ def same_alignment_data(previous, current):
 _FOUNDATION_CONTEXT_OPTIONS = (
     # These settings change the depth, token positions, or weighted objective
     # whose held projection plateau and recurrence alignment were measured.
-    'cutoff', 'tokens', 'prefix_tokens', 'group_size',
+    'cutoff', 'tokens', 'prefix_tokens',
     'embedding_weight', 'sketch_weight', 'text_weight',
     'projection_patience', 'projection_min_evals',
     'projection_min_improvement', 'backbone_ramp_evals', 'pass_ramp_evals',
@@ -915,7 +841,7 @@ def main(argv=None):
     for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
     p.add_argument('--device',default='cuda');p.add_argument('--steps',type=int,default=4096)
     p.add_argument('--tokens',type=int,default=1024);p.add_argument('--prefix-tokens',type=int,default=32)
-    p.add_argument('--cutoff',type=int,default=4);p.add_argument('--group-size',type=int,default=16)
+    p.add_argument('--cutoff',type=int,default=4)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
     p.add_argument('--backbone-training',choices=['auto','full','adapters','qat'],default='auto');p.add_argument('--rank',type=int,default=16)
@@ -927,43 +853,25 @@ def main(argv=None):
     p.add_argument('--projection-min-improvement',type=float,default=.01)
     p.add_argument('--backbone-ramp-evals',type=int,default=4)
     p.add_argument('--pass-ramp-evals',type=int,default=2)
-    p.add_argument('--max-sequence-passes',type=int,default=3,
-                   help='maximum depth of the shared projection-first sequence-pass schedule (default3)')
     p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
     p.add_argument('--checkpoint-minutes',type=float,default=10.,
                    help='also save full resumable state when this much wall time passed since the last save')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
-    p.add_argument('--rollout-passes',type=int,default=0,
-                   help='after whole-transformer adaptation starts, train and evaluate this many sequence passes '
-                        '(sketch rollout depth) instead of the schedule ramp of up to 3; 0 keeps the schedule')
-    p.add_argument('--rollout-sketch-first',action=argparse.BooleanOptionalAction,default=True,
-                   help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
-                        'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
-                        'a plateau at --rollout-passes unfreezes the whole stack at that depth')
     p.add_argument('--mask-system-prompt',action=argparse.BooleanOptionalAction,default=True,
                    help='the leading system prompt of each chat document is context only: no loss, no held metric')
     p.add_argument('--eval-only',action='store_true',
                    help='run one held evaluation of the restored state (use --continue-from into a fresh --out), '
                         'write eval-only.json and exit: no update, no checkpoint')
     p.add_argument('--ar-control-steps',type=int,default=256,
-                   help='held autoregressive controls (crisp greedy, full-projection and sketch self-fed rollouts) '
-                        'over this many positions of the first held batch; 0 disables. Diagnostic, not a gate')
-    p.add_argument('--rollout-converge-ratio',type=float,default=1.25,
-                   help='also deepen the sketch-only ramp once the deepest trained pass\'s held CE delta is within '
-                        'this ratio of the pass before it (the parallel rollout is settling); plateau stays the fallback')
-    p.add_argument('--rollout-start-passes',type=int,default=4,
-                   help='sketch-only rollout depth to start the one-pass-per-plateau ramp from')
+                   help='held autoregressive controls over this many positions of the first held batch; '
+                        '0 disables. Diagnostic, not a gate')
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
                    help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
                         'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
-    p.add_argument('--neuralese-input',choices=('sketch','map'),default='map',
-                   help='how Neuralese positions are filled in training: sketch = repeated shallow sketch passes; '
-                        'map = a learned token-to-Neuralese input map of the gold tokens (one parallel pass, '
-                        'self-consistent with the model\'s own projection)')
     p.add_argument('--ar-feedback-fixup',action='store_true',
-                   help='after a mapped-input continuation, train on a no-grad full-depth projected-payload rollout '
-                        'and a parallel consumer pass; gold targets stay fixed and the producer rollout is detached')
+                   help='train the mapped-input consumer on a detached full-depth autoregressive history; '
+                        'the gold targets stay fixed')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
@@ -978,16 +886,9 @@ def main(argv=None):
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
-    if a.ar_feedback_fixup and (a.neuralese_input!='map' or not a.continue_from):
-        p.error('--ar-feedback-fixup requires --neuralese-input map and a mapped --continue-from checkpoint')
-    if a.neuralese_input=='map' and a.rollout_passes:p.error('--neuralese-input map replaces the sketch rollout (--rollout-passes 0)')
-    if a.rollout_passes and a.rollout_passes<2:raise ValueError('--rollout-passes needs at least 2 (or 0 to keep the schedule)')
-    if a.max_sequence_passes<3:raise ValueError('--max-sequence-passes must be at least 3')
-    if a.neuralese_input=='map' and a.max_sequence_passes!=3:
-        raise ValueError('--max-sequence-passes applies only to the sketch sequence schedule')
-    if a.rollout_passes and a.max_sequence_passes!=3:
-        raise ValueError('choose either rollout_passes or max_sequence_passes above 3')
-    if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
+    if a.ar_feedback_fixup and not a.continue_from:
+        p.error('--ar-feedback-fixup requires a mapped --continue-from checkpoint')
+    if min(a.steps,a.tokens,a.prefix_tokens,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
@@ -1002,15 +903,13 @@ def main(argv=None):
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':('gold-context control then detached sequential full-depth projected-payload history; '
                               'parallel consumer retains unchanged gold targets' if a.ar_feedback_fixup else
-                              'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
-                              if a.neuralese_input=='map' else
-                              'gold seed; repeated shared shallow sequence passes with aligned predictions'),
+                              'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'),
               'ar_feedback_handoff_optimizer':'restore when parameter groups match; otherwise record a fresh optimizer with its reason'
                   if a.ar_feedback_fixup else None,
-              'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
-              'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
-              'supervision_policy':text_supervision_policy(a.neuralese_input),
-              'display':warmup_display_labels(a.neuralese_input),
+              'sketch_gradient':'detached_consumer',
+              'sketch_target_backbone_scale':0.,
+              'supervision_policy':text_supervision_policy(),
+              'display':warmup_display_labels(),
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
@@ -1054,8 +953,7 @@ def main(argv=None):
         old=continuation['identity']['options']
         if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
             raise ValueError('continuation optimizer/parameter policy differs')
-        if a.ar_feedback_fixup and (old.get('neuralese_input')!='map' or
-                not any(str(key).startswith('input_map.') for key in continuation.get('heads',{}))):
+        if a.ar_feedback_fixup and not any(str(key).startswith('input_map.') for key in continuation.get('heads',{})):
             raise ValueError('AR feedback fixup requires structurally present mapped-input heads')
     a.out.mkdir(parents=True,exist_ok=True)
     if a.cuda_reserved_cap_gb and a.device.startswith('cuda'):
@@ -1076,15 +974,13 @@ def main(argv=None):
     ffn_chunk_candidates=((default_ffn_chunk_tokens,) if getattr(backbone,'ternary',False)
                          else TEXT_WARMUP_FFN_CHUNKS)
     backbone.ffn_chunk_tokens=default_ffn_chunk_tokens
-    input_map=a.neuralese_input=='map'
-    secondary_metric_name='input_map' if input_map else 'sketch'
-    projection_schedule_name='shallow'
-    if input_map:
-        from ..model.input_map import NeuraleseInputMap
-        heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
-            kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
-    named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map' if input_map else 'feedback')
-    secondary_prefix='heads.input_map.' if input_map else 'heads.feedback.'
+    secondary_metric_name='input_map'
+    projection_schedule_name='input_map'
+    from ..model.input_map import NeuraleseInputMap
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],
+        kernel=a.input_map_kernel,rank=a.input_map_rank).to(a.device))
+    named=configure_student(engine,a.backbone_training,a.rank,secondary_head='input_map')
+    secondary_prefix='heads.input_map.'
     from ..maple.family import family_members, private_parameters
     family=family_members(backbone)
     if a.member_weight and not family:raise ValueError('--member-weight needs a nested-family student')
@@ -1243,7 +1139,7 @@ def main(argv=None):
         embedding_positions,secondary_positions=projection_errors(heads,top,out['sketches'],target,
                                                                secondary_target=out.get('secondary_target'))
         embedding,secondary=embedding_positions.mean(),secondary_positions.mean()
-        secondary_name='input_map' if input_map else 'sketch'
+        secondary_name='input_map'
         if out['pass_index']==0:
             with torch.no_grad():
                 baseline.update(prediction=prediction,ce=ce.detach(),
@@ -1268,7 +1164,7 @@ def main(argv=None):
               'close_probability':close_probability[ending].mean().detach(),
               'close_top1':(prediction[ending]==backbone.controls.close_id).float().mean().detach(),
               'premature_close_top1':(prediction[~ending]==backbone.controls.close_id).float().mean().detach()}
-        secondary_name='input_map' if input_map else 'sketch'
+        secondary_name='input_map'
         metrics={'ce':ce.detach(),'text_ce':plain_ce.detach(),'ce_delta':(ce-plain_ce).detach(),
           'relative_mse':embedding.detach(),secondary_name+'_mse':secondary.detach(),
           'text_embedding_mse':plain_embedding.detach(),
@@ -1310,26 +1206,19 @@ def main(argv=None):
         roles=(torch.tensor([r['roles'][r['prefix']:] for r in rows],device=span.device)
                if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
         completions=text_history_completions(backbone,heads,prefix,span,passes=passes,
-            input_map=input_map,ar_feedback_fixup=a.ar_feedback_fixup,group_size=a.group_size)
+            ar_feedback_fixup=a.ar_feedback_fixup)
         for out in completions:
             yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles)
 
-    step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
+    step=0;streak=0;best=None;updates={'backbone':False,'input_map':False,'full_projection':False}
     initial_text_ce={}
     remeasure_text_baseline=False
     schedule=ProjectionFirstSchedule(heads=(projection_schedule_name,'full_depth'),
         min_evals=a.projection_min_evals,patience=a.projection_patience,
         min_relative_improvement=a.projection_min_improvement,
         backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals,
-        max_sequence_passes=a.max_sequence_passes)
+        max_sequence_passes=3)
     last_schedule_step=None
-    from .foundation_schedule import RolloutStage
-    rollout=(RolloutStage(passes=a.rollout_passes,start_passes=a.rollout_start_passes,
-                          sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
-                          converge_ratio=a.rollout_converge_ratio,
-                          metric='non_system_targets' if a.mask_system_prompt else 'pooled',
-                          patience=a.projection_patience,min_relative_improvement=a.projection_min_improvement)
-             if a.rollout_passes else None)
     restored=resumed or continuation
     if restored:
         # A continuation may freeze a formerly trained head (e.g. feedback when
@@ -1341,10 +1230,9 @@ def main(argv=None):
             for n,v in restored['student_parameters'].items():
                 restore_parameters[n].copy_(v.to(restore_parameters[n]))
         del restore_parameters
-        fresh_map=input_map and not any(k.startswith('input_map.') for k in restored['heads'])
+        fresh_map=not any(k.startswith('input_map.') for k in restored['heads'])
         if fresh_map:
-            # A sketch-lineage state continues into the input map: the map starts at identity and its optimizer
-            # (whose parameter groups now differ) starts fresh.
+            # Raw foundation weights acquire the shared mapped-input objective here.
             missing,unexpected=heads.load_state_dict(restored['heads'],strict=False)
             if unexpected or any(not k.startswith('input_map.') for k in missing):
                 raise ValueError(f'continuation heads differ beyond the new input map: {missing} {unexpected}')
@@ -1368,8 +1256,8 @@ def main(argv=None):
             last_schedule_step=resumed['last_schedule_step']
         elif continuation:
             same_foundation=(same_foundation_context(continuation['identity'],identity) or
-                             (a.ar_feedback_fixup and
-                              continuation['identity'].get('options',{}).get('neuralese_input')=='map'))
+                             (a.ar_feedback_fixup and any(str(key).startswith('input_map.')
+                                for key in continuation.get('heads',{}))))
             if same_foundation and continuation.get('schedule'):
                 # An unchanged objective may continue its plateau/ramp phase.
                 schedule.load_state_dict(continuation['schedule'])
@@ -1381,7 +1269,7 @@ def main(argv=None):
             else:
                 # A changed depth/supervision objective starts a new plateau
                 # and must earn its own update and qualification evidence.
-                updates={'backbone':False,'sketch':False,'full_projection':False}
+                updates={'backbone':False,'input_map':False,'full_projection':False}
                 print(json.dumps({'event':'foundation_schedule_reinitialized',
                                   'source_step':continuation['step'],
                                   'same_foundation_context':same_foundation}),flush=True)
@@ -1389,10 +1277,6 @@ def main(argv=None):
                 initial_text_ce=continuation['initial_text_ce']
             else:
                 remeasure_text_baseline=True
-        if rollout is not None and restored.get('rollout'):
-            try:rollout.load_state_dict(restored['rollout'])
-            except ValueError:
-                if resumed:raise  # a continuation with another rollout depth/order starts its own stage
         restore_training_rng_state(restored,a.device)
     # Restoring a state_dict intentionally invalidates the cached zero-correction
     # proof. Re-establish it only after trainability flags and restored values
@@ -1432,9 +1316,7 @@ def main(argv=None):
     last_report=None
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
-        evaluation_passes=text_history_pass_count(
-            max(3,a.rollout_passes,a.max_sequence_passes),input_map=input_map,
-            ar_feedback_fixup=a.ar_feedback_fixup)
+        evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
         with torch.no_grad():
@@ -1452,8 +1334,7 @@ def main(argv=None):
                         ar_batch=(whole[:,:first],whole[:,first:])
                 def observe_projected_history(completion,live_tokens):
                     from ..eval.projected_history import projected_history_metrics
-                    matched_completion=matched_history_completion(backbone,heads,prefix,span,
-                        completion,input_map=input_map)
+                    matched_completion=matched_history_completion(backbone,heads,prefix,span,completion)
                     diagnostic=projected_history_metrics(backbone,heads,prefix,span,
                         completion=matched_completion,live_tokens=live_tokens,
                         consumers=MATCHED_CONSUMERS,per_window=True)
@@ -1463,7 +1344,7 @@ def main(argv=None):
                             'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
                             'scores':window_scores})
                 for _,m in objective(batch,evaluation_passes,projected_observer=observe_projected_history):
-                    if m['pass_index']==(1 if input_map else 2):
+                    if m['pass_index']==1:
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
                             boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
@@ -1500,19 +1381,9 @@ def main(argv=None):
         total=sum(r['tokens'] for r in projection_rows)
         errors={projection_schedule_name:sum(r[secondary_metric_name+'_mse']*r['tokens'] for r in projection_rows)/total,
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
-        # The plateau metric covers the sequence-history passes being trained
-        # (1 .. depth-1); deeper evaluated passes would swamp it while untrained.
-        if rollout is not None and schedule.plateau_reached:
-            trained_depth=rollout.controls()['passes']
-        elif input_map:
-            trained_depth=2
-        elif a.max_sequence_passes>3:
-            trained_depth=schedule.controls()['sequence_passes']
-        else:
-            trained_depth=3
-        rollout_rows=[r for k,r in strata.items() if 1<=int(k.split('-')[1])<trained_depth and not k.endswith('-last256')]
-        rollout_tokens=sum(r['tokens'] for r in rollout_rows)
-        rollout_ce_delta=sum(r['ce_delta']*r['tokens'] for r in rollout_rows)/rollout_tokens if rollout_tokens else None
+        history_rows=[r for k,r in strata.items() if k.startswith('pass-1-') and not k.endswith('-last256')]
+        history_tokens=sum(r['tokens'] for r in history_rows)
+        history_ce_delta=sum(r['ce_delta']*r['tokens'] for r in history_rows)/history_tokens if history_tokens else None
         pass_ce_deltas={}
         for key,row in strata.items():
             if key.endswith('-last256'):continue
@@ -1520,8 +1391,6 @@ def main(argv=None):
             total_row[0]+=row['ce_delta']*row['tokens'];total_row[1]+=row['tokens']
         pass_ce_deltas={index:value/count for index,(value,count) in pass_ce_deltas.items() if count}
         if observe_schedule and (last_schedule_step is None or step>last_schedule_step):
-            if rollout is not None and schedule.plateau_reached and rollout_ce_delta is not None:
-                rollout.observe(rollout_ce_delta,pass_ce_deltas)
             schedule.observe(errors);last_schedule_step=step
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
@@ -1540,18 +1409,16 @@ def main(argv=None):
                     'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
                     'evaluation_passes':evaluation_passes},
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
-                'updates':display_update_flags(updates,a.neuralese_input),
+                'updates':display_update_flags(updates),
                 'update_state_ids':dict(updates), 'display_labels':identity['display'],
                 'schedule':schedule.controls(),'schedule_display_labels':identity['display'],
-                'projection_held_errors':({'input_map':errors['shallow'],'full_depth':errors['full_depth']}
-                                           if input_map else errors),
-                ('input_map_history_ce_delta' if input_map else 'sketch_history_ce_delta'):rollout_ce_delta,
+                'projection_held_errors':{'input_map':errors['input_map'],'full_depth':errors['full_depth']},
+                'input_map_history_ce_delta':history_ce_delta,
                 'pass_ce_deltas':pass_ce_deltas,'evaluation_passes':evaluation_passes}
         if baseline_reason is not None:
             report['text_ce_baseline_remeasurement']={'reason':baseline_reason,
                 'schedule_observation':False,'model_or_optimizer_update':False,
                 'training_rng_preserved':bool(baseline_rng_preserved)}
-        if rollout is not None:report['rollout']=rollout.controls()
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         if family and a.member_eval_windows:
             report['family']=evaluate_members(backbone,[member_window(w) for w in held[:a.member_eval_windows]])
@@ -1579,9 +1446,8 @@ def main(argv=None):
             'weights_digest':report['weights_digest'],'held_probe_selection':held_selection_eval,
             'consumers':list(MATCHED_CONSUMERS),
             'pass_correspondence':{
-                'sketch_projection':('independent serving heads.feedback projection over pass-zero shallow states; '
-                                     'the training-only input map is not used here' if input_map else
-                                     'the shallow sketch history that sequence pass 1 consumes'),
+                'sketch_projection':'independent serving heads.feedback projection over pass-zero states; '
+                                    'the training-only input map is not used here',
                 'full_projection':'full-depth projected history (deployed channel)'},
             'read_interface':'heads.read_embeddings(backbone, payload[:, :-1])',
             'producer_reuse':'pass-zero gold-history top states and crisp next-token predictions from the same held batch',
@@ -1680,7 +1546,6 @@ def main(argv=None):
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
           'last_schedule_step':last_schedule_step,'code_handoffs':code_handoffs,
-          'rollout':rollout.state_dict() if rollout is not None else None,
           # Resource observations are resumable state, not recipe/model identity.
           'memory_estimator':memory_estimator.state_dict(),
           'activation_offload_state':{'schema':'natlang.text-warmup-offload-policy-telemetry/2',
@@ -2048,7 +1913,7 @@ def main(argv=None):
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
                  phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
-                 updates=display_update_flags(updates,a.neuralese_input),
+                 updates=display_update_flags(updates),
                  update_state_ids=dict(updates),display_labels=identity['display'])
         m[secondary_metric_name+'_gradient_norm']=float(prepared['secondary_norm'])
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
@@ -2059,7 +1924,7 @@ def main(argv=None):
         if step%a.eval_every==0:
             report=evaluate()
             qualification_depth=_alignment_qualification_pass_depth(
-                input_map=input_map,schedule=schedule,rollout=rollout,update_controls=controls)
+                schedule=schedule)
             streak=streak+1 if (qualification_depth is not None and passes==qualification_depth and
                 report['alignment_gate_passed'] and all(updates.values())) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
@@ -2100,20 +1965,13 @@ def main(argv=None):
             recover_postcommit_persistence_failure(error)
             return
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
-        passes=controls['sequence_passes'];sketch_only=False
-        passes=text_history_pass_count(passes,input_map=input_map,
+        passes=text_history_pass_count(controls['sequence_passes'],
                                        ar_feedback_fixup=a.ar_feedback_fixup)
-        if rollout is not None and not bootstrap:
-            stage=rollout.controls();passes=stage['passes'];sketch_only=stage['sketch_only']
-            # Sketch-only: the backbone and full projection are frozen (no gradients, so no optimizer update).
-            controls={**controls,'sequence_passes':passes,'rollout':stage,
-                      'backbone_lr_scale':0. if sketch_only else controls['backbone_lr_scale']}
         pre_attempt_rng=capture_training_rng_state(a.device)
         pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
         try:
             for name,q in named:
-                q.requires_grad_(name.startswith(secondary_prefix) if sketch_only else
-                                 not bootstrap or name.startswith((secondary_prefix,'heads.content.proj.')))
+                q.requires_grad_(not bootstrap or name.startswith((secondary_prefix,'heads.content.proj.')))
             for group in optimizer.param_groups:
                 group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
             w=windows['train'][random.randrange(len(windows['train']))]
@@ -2212,7 +2070,7 @@ def main(argv=None):
     try:
         report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
         report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-          updates=display_update_flags(updates,a.neuralese_input),status='checkpointed_on_signal' if stop[0] else 'complete',
+          updates=display_update_flags(updates),status='checkpointed_on_signal' if stop[0] else 'complete',
           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
         score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         improved=best is None or score<best['score']

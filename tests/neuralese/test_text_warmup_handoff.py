@@ -18,22 +18,21 @@ from natlang_neuralese.train.text_warmup import (
 
 def _identity():
     options = {
-        "cutoff": 2, "tokens": 256, "prefix_tokens": 32, "group_size": 8,
+        "cutoff": 2, "tokens": 256, "prefix_tokens": 32,
         "embedding_weight": 1.0, "sketch_weight": 1.0, "text_weight": 0.25,
         "projection_patience": 3, "projection_min_evals": 2,
         "projection_min_improvement": 0.01, "backbone_ramp_evals": 4,
         "pass_ramp_evals": 2,
         "mask_system_prompt": True, "held_documents": 16,
-        "rollout_passes": 0, "rollout_start_passes": 4, "max_sequence_passes": 3,
         "records": "records.jsonl", "pieces": "pieces.jsonl", "text_data": "text.jsonl",
     }
     return {
         "options": options,
         "inputs": {"records.jsonl": "r", "pieces.jsonl": "p", "text.jsonl": "t"},
         "target": "E(gold next token), fixed raw input table; no teacher; full-stack next-token CE",
-        "text_history": "gold seed; repeated shared shallow sequence passes with aligned predictions",
-        "sketch_gradient": "local_stage",
-        "sketch_target_backbone_scale": 0.05,
+        "text_history": "gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass",
+        "sketch_gradient": "detached_consumer",
+        "sketch_target_backbone_scale": 0.0,
         "supervision_policy": {
             "all_positions_fraction": 0.5,
             "observed_suffix_fraction": 0.5,
@@ -83,8 +82,8 @@ def test_cosmetic_map_report_labels_preserve_saved_resume_semantics():
             "qualification": "unweighted full-history complete-window and last256 strata",
         },
     )
-    after = {**before, "display": warmup_display_labels("map"),
-             "supervision_policy": text_supervision_policy("map")}
+    after = {**before, "display": warmup_display_labels(),
+             "supervision_policy": text_supervision_policy()}
     assert same_resume_identity(before, after)
     assert same_foundation_context(before, after)
     assert same_alignment_data(before, after)

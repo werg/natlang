@@ -443,29 +443,6 @@ def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sk
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 
-def replay_sequence_inputs(backbone, heads, pre, fixed, replacements, *, group_size=16):
-    """Complete aligned sequence inputs with one-position consumer adjoints.
-
-    ``fixed`` is the detached primal history of this sequence pass; replacements
-    have the SAME values, but carry the preceding pass's projection graph.
-    Each output credits only its corresponding replacement. Older projection
-    passes must be detached by the caller, while weight gradients remain live.
-    Returns the ordinary shallow history and isolated full-stack completions.
-    """
-    if group_size < 1 or fixed.shape != replacements.shape:
-        raise ValueError('aligned sequence inputs and positive group size required')
-    k, cache = heads.cutoff, pre.cache
-    if not torch.is_grad_enabled():
-        # Every isolated branch has the same primal inputs in sequence replay.
-        # Only its adjoint differs, and held inference has no adjoints. A single
-        # causal sequence therefore replaces the G duplicated branch forwards.
-        history,branch=backbone.run_layers(fixed,range(0,k),cache)
-        final,_=backbone.run_layers(history,range(k,backbone.num_layers),branch)
-        return history,final
-    result = backbone.isolated_sequence(fixed, replacements, cache, cutoff=k)
-    return result['history_shallow'], result['final']
-
-
 def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
                         reference_inputs=None, fraction=1., auxiliary_scale=.05,
                         terminal_guess=False):

@@ -9,7 +9,6 @@ from natlang_neuralese.train.text_warmup import (
     LinearModuleCallCounter,
     qualification,
     relative_mse,
-    sequence_completions,
     projection_losses,
     alignment_region_metrics,
     objective_metric_scalars,
@@ -71,42 +70,22 @@ def test_linear_module_call_counter_counts_shapes_grad_mode_and_cleans_up_on_err
                for row in counter.rows() for value in row.values())
 
 
-@pytest.mark.parametrize('passes',(4,5))
-def test_alignment_qualification_uses_deeper_whole_stack_target(passes):
+def test_alignment_qualification_uses_plateaued_two_pass_map_objective():
     from types import SimpleNamespace
     schedule=SimpleNamespace(plateau_reached=True)
-    rollout=SimpleNamespace(controls=lambda:{'target_passes':passes,'phase':'whole_stack'})
-    controls={'rollout':{'target_passes':passes,'phase':'whole_stack'}}
-    assert _alignment_qualification_pass_depth(
-        input_map=False,schedule=schedule,rollout=rollout,update_controls=controls)==passes
-    sketch_only={'rollout':{'target_passes':passes,'phase':'sketch_only'}}
-    assert _alignment_qualification_pass_depth(
-        input_map=False,schedule=schedule,rollout=rollout,update_controls=sketch_only) is None
-    assert _alignment_qualification_pass_depth(
-        input_map=False,schedule=SimpleNamespace(plateau_reached=False),
-        rollout=rollout,update_controls=controls) is None
-
-
-def test_alignment_qualification_default_depths_remain_declared():
-    assert _alignment_qualification_pass_depth(input_map=True,schedule=None,
-        rollout=None,update_controls={})==2
-    from types import SimpleNamespace
-    schedule=SimpleNamespace(plateau_reached=True)
-    assert _alignment_qualification_pass_depth(input_map=False,schedule=schedule,
-        rollout=None,update_controls={})==3
-    assert _alignment_qualification_pass_depth(input_map=False,schedule=schedule,
-        rollout=None,update_controls={'target_sequence_passes':5})==5
+    assert _alignment_qualification_pass_depth(schedule=schedule)==2
+    assert _alignment_qualification_pass_depth(schedule=SimpleNamespace(plateau_reached=False)) is None
 
 
 def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     def packet(tokens, close_targets, *, close_probability, close_top1, premature):
         values={key:torch.tensor(float(index + 1),requires_grad=True)
                 for index,key in enumerate((
-                    'ce','text_ce','ce_delta','relative_mse','sketch_mse',
+                    'ce','text_ce','ce_delta','relative_mse','input_map_mse',
                     'text_embedding_mse','embedding_mse_delta','text_argmax_agreement',
                     'gold_accuracy','close_targets','close_probability','close_top1',
                     'premature_close_top1','supervised_ce','supervised_embedding_mse',
-                    'supervised_sketch_mse'))}
+                    'supervised_input_map_mse'))}
         values.update(close_targets=torch.tensor(float(close_targets)),
                       close_probability=torch.tensor(close_probability),
                       close_top1=torch.tensor(close_top1),
@@ -128,7 +107,7 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     assert result[1]['close_top1']==0.
     assert result[1]['premature_close_top1']==0.
     assert result[0]['ce']==1.
-    assert result[1]['supervised_sketch_mse']==16.
+    assert result[1]['supervised_input_map_mse']==16.
     expected=0.
     for loss in losses:
         expected+=float(loss.detach())/2
@@ -136,10 +115,10 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     assert all(not isinstance(result[0][key],torch.Tensor)
                for key in ('ce','close_targets','close_probability'))
     for index in (0,1):
-        for key in ('ce','text_ce','ce_delta','relative_mse','sketch_mse',
+        for key in ('ce','text_ce','ce_delta','relative_mse','input_map_mse',
                     'text_embedding_mse','embedding_mse_delta','text_argmax_agreement',
                     'gold_accuracy','supervised_ce','supervised_embedding_mse',
-                    'supervised_sketch_mse'):
+                    'supervised_input_map_mse'):
             assert result[index][key]==float(metrics[index][key].detach())
 
     evaluated,_=materialize_objective_metrics([metrics[0]])
@@ -271,12 +250,6 @@ def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     torch.testing.assert_close(chunked_model.bias.grad,full_model.bias.grad,atol=2e-7,rtol=2e-6)
 
 
-def scheduled_completion(backbone,heads,prefix,span,*,fraction=1.,group_size=16):
-    # Exercise the final sequence pass with the historical test geometries.
-    return list(sequence_completions(backbone,heads,prefix,span,passes=2,
-                                     fraction=fraction,group_size=group_size))[-1]
-
-
 def tiny_student():
     try:
         from transformers import Lfm2Config, Lfm2ForCausalLM
@@ -300,74 +273,6 @@ def tiny_student():
     return backbone, heads
 
 
-def test_fraction_zero_matches_ordinary_causal_gold_forward():
-    backbone, heads = tiny_student()
-    prefix = torch.tensor([[1, 4, 7]])
-    span = torch.tensor([[9, 3, 5, 8]])
-    result = scheduled_completion(backbone, heads, prefix, span, fraction=0., group_size=2)
-    ids = torch.cat([prefix, span[:, :-1]], dim=1)
-    expected = backbone.forward_ids(ids, logits=False)['h_final'][:, prefix.shape[1] - 1:]
-    assert result['top'].shape == expected.shape
-    torch.testing.assert_close(result['top'], expected, atol=2e-5, rtol=2e-5)
-    assert result['sketches'].shape == span.shape + (backbone.embedding_weight.shape[1],)
-
-
-def test_fraction_one_trains_full_stack_and_feedback_without_embedding_targets_grad():
-    backbone, heads = tiny_student()
-    layer_weight = next(p for n, p in backbone.hf.named_parameters()
-                        if 'layers.0.' in n and p.ndim == 2)
-    layer_weight.requires_grad_(True)
-    prefix = torch.tensor([[1, 4, 7]])
-    span = torch.tensor([[9, 3, 5]])
-    result = scheduled_completion(backbone, heads, prefix, span, fraction=1., group_size=2)
-    # CE/top-state supervision reaches the real student stack and feedback projection.
-    loss = result['top'].square().mean() + relative_mse(result['sketches'], backbone.embed(span))
-    loss.backward()
-    assert layer_weight.grad is not None and layer_weight.grad.abs().sum() > 0
-    assert heads.feedback.correction.weight.grad is not None
-    assert heads.feedback.correction.weight.grad.abs().sum() > 0
-    # Gold token embeddings are fixed coordinates, never trainable target parameters.
-    assert not backbone.embedding_weight.requires_grad
-
-
-def test_suffix_changes_do_not_change_earlier_completion():
-    backbone, heads = tiny_student()
-    prefix = torch.tensor([[1, 4, 7]])
-    first = torch.tensor([[9, 3, 5, 8]])
-    changed_suffix = torch.tensor([[9, 3, 12, 13]])
-    out_a = scheduled_completion(backbone, heads, prefix, first, fraction=1., group_size=2)
-    out_b = scheduled_completion(backbone, heads, prefix, changed_suffix, fraction=1., group_size=2)
-    torch.testing.assert_close(out_a['top'][:, :2], out_b['top'][:, :2], atol=0, rtol=0)
-    torch.testing.assert_close(out_a['sketches'][:, :2], out_b['sketches'][:, :2], atol=0, rtol=0)
-
-
-def test_each_completion_has_only_its_own_replayed_sketch_credit():
-    backbone, heads = tiny_student()
-    prefix = torch.tensor([[1, 4, 7]])
-    span = torch.tensor([[9, 3, 5, 8]])
-    sketches = []
-    hook = heads.feedback.register_forward_hook(
-        lambda _module, _inputs, output: sketches.append(output) if torch.is_grad_enabled() else None
-    )
-    try:
-        # Re-run with hook active so the replay sketch nodes are captured.
-        result = scheduled_completion(backbone, heads, prefix, span, fraction=1., group_size=2)
-    finally:
-        hook.remove()
-    # The output sketches form one tensor, and each completion is locally replayed.
-    assert result['top'].shape[1] == span.shape[1]
-    assert result['sketches'].shape[1] == span.shape[1]
-    assert len(sketches) >= 1
-    grads = torch.autograd.grad(result['top'][:, 1].square().sum(), sketches,
-                                allow_unused=True, retain_graph=True)
-    # Replay calls that do not correspond to position 1 carry no path to its completion.
-    active = [i for i, grad in enumerate(grads) if grad is not None and grad.abs().sum() > 0]
-    assert active == [1]
-    # Sketch 0 is the only replacement in this first two-position replay group.
-    torch.testing.assert_close(grads[1][:, 1:], torch.zeros_like(grads[1][:, 1:]))
-    assert grads[1][:, 0].abs().sum() > 0
-
-
 def test_relative_mse_is_per_vector_and_targets_are_detached():
     pred = torch.tensor([[[2., 0.], [0., 3.]]], requires_grad=True)
     target = torch.tensor([[[1., 0.], [0., 1.]]], requires_grad=True)
@@ -377,68 +282,16 @@ def test_relative_mse_is_per_vector_and_targets_are_detached():
     assert grad is None or not grad.any()
 
 
-@pytest.mark.parametrize('passes',[1,2,3])
-def test_sequence_passes_match_causal_shifted_primal(passes):
-    backbone,heads=tiny_student()
-    prefix=torch.tensor([[1,4,7],[2,3,8]])
-    span=torch.tensor([[9,3,5,8],[4,11,12,7]])
-    with torch.no_grad():
-        actual=list(sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=2))
-        body=backbone.embed(span[:,:-1])
-        for depth in range(passes):
-            ordinary=backbone.forward_embeds(torch.cat([backbone.embed(prefix),body],1),
-                                            cutoff=heads.cutoff,logits=False)
-            start=prefix.shape[1]-1
-            expected=ordinary['h_final'][:,start:]
-            guesses=heads.feedback(ordinary['h_cut'][:,start:])
-            torch.testing.assert_close(actual[depth]['top'],expected,atol=2e-5,rtol=2e-5)
-            torch.testing.assert_close(actual[depth]['sketches'],guesses,atol=2e-5,rtol=2e-5)
-            assert actual[depth]['pass_index']==depth
-            # The prediction for body token j goes at INPUT j on the next pass.
-            body=guesses[:,:-1]
-
-
-def test_sequence_depth_and_position_sketch_credit_are_one_consumer_only():
-    backbone,heads=tiny_student()
-    prefix=torch.tensor([[1,4,7]])
-    span=torch.tensor([[9,3,5,8]])
-    calls=[]
-    hook=heads.feedback.register_forward_hook(lambda _m,_i,out:calls.append(out))
-    try:
-        outputs=list(sequence_completions(backbone,heads,prefix,span,passes=3,group_size=2))
-    finally:
-        hook.remove()
-    gradients=torch.autograd.grad(outputs[2]['top'][:,2].square().sum(),calls,
-                                  allow_unused=True,retain_graph=True)
-    # gold target F; pass1 producer F/aux F; pass2 producer F/aux F.
-    assert len(calls)==5
-    active=[i for i,g in enumerate(gradients) if g is not None and g.abs().sum()>0]
-    assert active==[3]
-    assert gradients[3][:,1].abs().sum()>0
-    torch.testing.assert_close(gradients[3][:,0],torch.zeros_like(gradients[3][:,0]))
-    torch.testing.assert_close(gradients[3][:,2:],torch.zeros_like(gradients[3][:,2:]))
-
-
-def test_sequence_passes_can_backpropagate_and_release_each_stage():
-    backbone,heads=tiny_student()
-    layer=next(p for n,p in backbone.hf.named_parameters() if 'layers.0.' in n and p.ndim==2)
-    layer.requires_grad_(True)
-    prefix=torch.tensor([[1,4,7]])
-    span=torch.tensor([[9,3,5,8]])
-    for output in sequence_completions(backbone,heads,prefix,span,passes=3,group_size=2):
-        (output['top'].square().mean()+relative_mse(output['sketches'],backbone.embed(span))).backward()
-    assert layer.grad is not None and layer.grad.abs().sum()>0
-    assert heads.feedback.correction.weight.grad.abs().sum()>0
-
-
 def test_projection_bootstrap_trains_both_maps_with_frozen_transformer():
     backbone,heads=tiny_student()
     prefix=torch.tensor([[1,4,7]])
     span=torch.tensor([[9,3,5,8]])
-    first=next(sequence_completions(backbone,heads,prefix,span,passes=1))
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    first=next(mapped_completions(backbone,heads,prefix,span,passes=1))
     full,shallow=projection_losses(heads,first['top'],first['sketches'],backbone.embed(span))
     (full+shallow).backward()
-    assert heads.feedback.correction.weight.grad.abs().sum()>0
+    assert heads.input_map.up.weight.grad.abs().sum()>0
     assert heads.content.proj.weight.grad.abs().sum()>0
     assert all(p.grad is None for p in backbone.hf.parameters())
 
@@ -467,7 +320,7 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     rows=list(map(json.loads,(tmp_path/'run'/'train.jsonl').read_text().splitlines()))
     assert rows[0]['phase']=='projection_only'
     assert rows[0]['backbone_gradient_norm']==0
-    assert rows[0]['updates']['sketch'] and rows[0]['updates']['full_projection']
+    assert rows[0]['updates']['input_map'] and rows[0]['updates']['full_projection']
     assert [r['schedule']['sequence_passes'] for r in rows]==[1,1,2,3]
     saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert saved['schedule']['adaptation_started_eval']==2
@@ -584,15 +437,18 @@ def test_document_boundaries_are_real_and_every_target_is_supervised_once(length
     assert all(len(w['ids'])<=9 for w in windows)
 
 
-def test_single_close_target_tail_is_supported():
+def test_single_close_target_is_supported_by_mapped_completions():
+    from natlang_neuralese.model.input_map import NeuraleseInputMap
+    from natlang_neuralese.train.text_warmup import mapped_completions
     backbone,heads=tiny_student()
-    prefix=torch.tensor([[1,4,7]])
+    heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+    prefix=torch.tensor([[backbone.controls.open_id]])
     span=torch.tensor([[backbone.controls.close_id]])
-    result=scheduled_completion(backbone,heads,prefix,span,fraction=1.)
+    result=next(mapped_completions(backbone,heads,prefix,span,passes=1))
     assert result['top'].shape[:2]==(1,1)
     loss=relative_mse(result['sketches'],backbone.embed(span))
     loss.backward()
-    assert heads.feedback.correction.weight.grad is not None
+    assert heads.input_map.up.weight.grad is not None
 
 
 def test_branch_checkpoint_preserves_values_and_parameter_gradients():
@@ -605,10 +461,13 @@ def test_branch_checkpoint_preserves_values_and_parameter_gradients():
     for checkpointed in [False,True]:
         backbone.checkpoint_layers=checkpointed
         backbone.hf.zero_grad();heads.zero_grad()
-        out=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
+        from natlang_neuralese.model.input_map import NeuraleseInputMap
+        if not hasattr(heads,'input_map'):
+            heads.add_module('input_map',NeuraleseInputMap(backbone.embedding_weight.shape[1],kernel=3,rank=4))
+        out=list(mapped_completions(backbone,heads,prefix,span))[-1]
         loss=out['top'].square().mean()+relative_mse(out['sketches'],backbone.embed(span))
         loss.backward()
-        results.append((out['top'].detach(),parameter.grad.clone(),heads.feedback.correction.weight.grad.clone()))
+        results.append((out['top'].detach(),parameter.grad.clone(),heads.input_map.up.weight.grad.clone()))
     for plain,checkpointed in zip(*results):
         torch.testing.assert_close(plain,checkpointed,atol=2e-5,rtol=2e-5)
 
@@ -631,30 +490,6 @@ def test_evaluation_batches_cap_tokens_per_batch():
     batches=list(evaluation_batches(windows,4,max_tokens=20))
     assert sorted(w['index'] for batch in batches for w in batch)==list(range(11))
     assert {len(b[0]['ids']):max(len(x) for x in batches if len(x[0]['ids'])==len(b[0]['ids'])) for b in batches}=={9:2,4:4,30:1}
-
-def test_full_sketch_fraction_still_uses_gold_text_history():
-    backbone,heads=tiny_student()
-    prefix=torch.tensor([[backbone.controls.open_id]])
-    first=torch.tensor([[9,3,5,8]])
-    changed=torch.tensor([[12,11,5,8]])
-    a=scheduled_completion(backbone,heads,prefix,first,fraction=1.,group_size=2)
-    b=scheduled_completion(backbone,heads,prefix,changed,fraction=1.,group_size=2)
-    # First decision shares the opening; later decisions must see the actual
-    # distinct document. Unconditional rollout ignored both documents here.
-    torch.testing.assert_close(a['top'][:,:2],b['top'][:,:2],atol=0,rtol=0)
-    assert not torch.equal(a['top'][:,2:],b['top'][:,2:])
-
-
-def test_teacher_forced_history_is_identical_in_training_and_evaluation():
-    backbone,heads=tiny_student()
-    prefix=torch.tensor([[1,4,7]])
-    span=torch.tensor([[9,3,5,8]])
-    trained=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
-    with torch.no_grad():
-        evaluated=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
-    for key in ['top','sketches']:
-        torch.testing.assert_close(trained[key],evaluated[key],atol=2e-5,rtol=2e-5)
-
 
 def test_balanced_suffix_weights_and_exact_weighted_readout_gradients():
     torch.manual_seed(84)
@@ -783,21 +618,6 @@ def test_held_evaluation_records_matched_projection_and_crisp_history_without_ch
     assert 'after a rollout diverges' in ar['gold_reference_interpretation']
 
 
-def test_autoregressive_sketch_rollout_matches_parallel_passes_on_early_positions():
-    import torch
-    from natlang_neuralese.eval.projected_history import autoregressive_payloads
-    from natlang_neuralese.train.text_warmup import sequence_completions
-    backbone,heads=tiny_student()
-    torch.manual_seed(0)
-    prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
-    with torch.no_grad():
-        sequential=autoregressive_payloads(backbone,heads,prefix,span.shape[1],kinds=('ar_sketch',))['ar_sketch']
-        passes=list(sequence_completions(backbone,heads,prefix,span,passes=4,group_size=1))
-    # Depth k reads pass k-1's sketches, so after 4 passes the first 3 consumed positions equal the
-    # sequential sketch rollout (the Jacobi property the rollout ramp relies on).
-    assert torch.allclose(passes[-1]['sketches'][:,:3].float(),sequential[:,:3].float(),atol=1e-4)
-
-
 def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_trainable():
     from natlang_neuralese.train.text_warmup import (
         autoregressive_feedback_completion, text_history_completions,
@@ -811,8 +631,8 @@ def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_traina
     first=autoregressive_feedback_completion(backbone,heads,prefix,span)
     second=autoregressive_feedback_completion(backbone,heads,prefix,changed)
     controls=list(text_history_completions(backbone,heads,prefix,span,passes=2,
-        input_map=True,ar_feedback_fixup=True))
-    assert text_history_pass_count(1,input_map=True,ar_feedback_fixup=True)==2
+        ar_feedback_fixup=True))
+    assert text_history_pass_count(1,ar_feedback_fixup=True)==2
     assert [row['pass_index'] for row in controls]==[0,1]
     gold_ids=torch.cat((prefix,span[:,:-1]),dim=1)
     gold_states=backbone.forward_embeds(backbone.embed(gold_ids),cutoff=heads.cutoff)['h_final']
@@ -1462,62 +1282,6 @@ def test_restart_before_first_checkpoint_preserves_partial_files(tmp_path,monkey
     assert 'Self CPU' in (out/'profile-step2.txt').read_text()
 
 
-def test_rollout_stage_unfreezes_after_sketch_plateau_and_restores():
-    from natlang_neuralese.train.foundation_schedule import RolloutStage
-    stage=RolloutStage(passes=6,start_passes=6,min_evals=2,patience=2)
-    phases=[stage.observe(v)['phase'] for v in (2.0,1.5,1.2,1.19,1.195,1.18)]
-    assert phases==['sketch_only']*4+['whole_stack']*2
-    again=RolloutStage(passes=6,start_passes=6,min_evals=2,patience=2);again.load_state_dict(stage.state_dict())
-    assert again.controls()==stage.controls()
-    import pytest
-    with pytest.raises(ValueError):RolloutStage(passes=4).load_state_dict(stage.state_dict())
-    assert RolloutStage(passes=3,sketch_first=False).controls()['sketch_only'] is False
-    negative=RolloutStage(passes=4,start_passes=4,min_evals=1,patience=1,min_relative_improvement=10)
-    assert [negative.observe(v)['phase'] for v in (-0.03,-0.04)]==['sketch_only','whole_stack']
-    ramp=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=1)
-    assert [(c['phase'],c['passes']) for c in map(ramp.observe,(2.,2.,1.,1.,.5,.5))]==[
-        ('sketch_only',4),('sketch_only',5),('sketch_only',5),('sketch_only',6),('sketch_only',6),('whole_stack',6)]
-    converging=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=9,converge_ratio=1.25)
-    assert converging.observe(3.,{1:.4,2:.55,3:6.2})['passes']==4
-    assert converging.observe(1.,{1:.4,2:.55,3:.65})['passes']==5
-    assert converging.controls()['deepened'][0]['reason']=='converged'
-    legacy={'schema':'natlang.sketch-rollout-stage/1','config':{'passes':6,'sketch_first':True},'phase':'sketch_only',
-            'history':[3.0],'best':3.0,'last_significant':1,'unfrozen_at_eval':None}
-    pooled=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=5)
-    for v in (2.,1.):pooled.observe(v)
-    remeasured=RolloutStage(passes=6,start_passes=4,min_evals=1,patience=5,metric='non_system_targets')
-    remeasured.load_state_dict(pooled.state_dict())
-    assert remeasured.controls()['best_ce_delta'] is None and remeasured.controls()['passes']==4
-    restarted=RolloutStage(passes=6,start_passes=4);restarted.load_state_dict(legacy)
-    assert restarted.controls()['passes']==4 and restarted.controls()['sketch_only']
-
-
-def test_sketch_rollout_trains_only_the_sketch_at_depth_then_evaluates_every_pass(tmp_path,monkeypatch):
-    import json
-    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=10)
-    args=[x for x in args]
-    args[args.index('--eval-every')+1]='1'
-    # Every improvement is insignificant, so both plateaus (projection, then sketch rollout) arrive early.
-    args+=['--neuralese-input','sketch','--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
-           '--rollout-passes','4','--rollout-start-passes','3']
-    module.main(args)
-    run=tmp_path/'run'
-    rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
-    sketch_rows=[r for r in rows if r['schedule'].get('rollout',{}).get('sketch_only')]
-    assert sketch_rows, [r['schedule'] for r in rows]
-    for row in sketch_rows:
-        assert row['schedule']['sequence_passes'] in (3,4)
-        assert row['backbone_gradient_norm']==0
-        assert row['sketch_gradient_norm']>0
-    evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
-    assert evals[-1]['evaluation_passes']==4
-    assert set(evals[-1]['pass_ce_deltas'])=={'0','1','2','3'} or set(evals[-1]['pass_ce_deltas'])=={0,1,2,3}
-    assert any(key.startswith('pass-3-') for key in evals[-1]['strata'])
-    assert 'rollout' in evals[-1]
-    assert {r['schedule']['sequence_passes'] for r in sketch_rows}=={3,4}
-    assert any(r['schedule'].get('rollout',{}).get('phase')=='whole_stack' and r['backbone_gradient_norm']>0 for r in rows)
-
-
 def test_sketch_cutoff_probe_collects_layer_states_and_scores_heads():
     import torch
     from natlang_neuralese.eval.sketch_cutoff_probe import head_scores, layer_states
@@ -1582,7 +1346,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     args=[x for x in args]
     args[args.index('--eval-every')+1]='1'
     args+=['--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
-           '--neuralese-input','map','--input-map-kernel','2','--input-map-rank','4']
+           '--input-map-kernel','2','--input-map-rank','4']
     module.main(args)
     run=tmp_path/'run'
     rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
@@ -1604,7 +1368,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     assert identity['display']['secondary_objective']=='neuralese_input_map_self_consistency'
     assert identity['display']['secondary_head']=='heads.input_map'
     assert all(r['updates'].get('input_map') for r in rows)
-    assert all(r['update_state_ids'].get('sketch') for r in rows)
+    assert all(r['update_state_ids'].get('input_map') for r in rows)
     report=evals[-1]['matched_projected_history']
     assert 'independent serving heads.feedback projection' in report['pass_correspondence']['sketch_projection']
     assert 'input map is not used here' in report['pass_correspondence']['sketch_projection']
@@ -1613,7 +1377,7 @@ def test_input_map_warmup_trains_the_map_and_exports_it_beside_serving_heads(tmp
     state=torch.load(run/'checkpoint.pt',weights_only=False)
     assert any(k.startswith('input_map.') for k in state['heads'])
     assert state['updates']['full_projection']
-    assert state['updates']['sketch']
+    assert state['updates']['input_map']
 
 
 def test_input_map_reports_name_the_actual_secondary_projection():
@@ -1624,10 +1388,10 @@ def test_input_map_reports_name_the_actual_secondary_projection():
     assert metrics[0]['input_map_mse']==1.
     assert metrics[0]['supervised_input_map_mse']==1.
     assert 'sketch_mse' not in metrics[0]
-    policy=text_supervision_policy('map')
+    policy=text_supervision_policy()
     assert policy['objectives']==['full_projection','sketch_projection','next_token_ce']
-    assert warmup_display_labels('map')['secondary_head']=='heads.input_map'
-    assert display_update_flags({'backbone': True, 'sketch': True}, 'map') == {
+    assert warmup_display_labels()['secondary_head']=='heads.input_map'
+    assert display_update_flags({'backbone': True, 'input_map': True}) == {
         'backbone': True, 'input_map': True}
 
 
@@ -1651,15 +1415,15 @@ def test_map_history_diagnostic_uses_serving_feedback_projection_not_training_ma
         input_map=NeuraleseInputMap(4,kernel=3,rank=4))
     prefix=torch.tensor([[9,3,5]]);span=torch.tensor([[8,4,7,6,2,5]])
     objective_completion=next(mapped_completions(backbone,heads,prefix,span))
-    matched=matched_history_completion(backbone,heads,prefix,span,objective_completion,input_map=True)
+    matched=matched_history_completion(backbone,heads,prefix,span,objective_completion)
     ordinary=backbone.forward_ids(torch.cat([prefix,span[:,:-1]],1),cutoff=heads.cutoff,logits=False)
     start=prefix.shape[1]-1
     expected=heads.feedback(ordinary['h_cut'][:,start:])
     torch.testing.assert_close(matched['sketches'],expected,atol=0,rtol=0)
     assert not torch.equal(matched['sketches'],objective_completion['sketches'])
-    policy=text_supervision_policy('map')
+    policy=text_supervision_policy()
     assert policy['objectives'][1]=='sketch_projection'
-    labels=warmup_display_labels('map')
+    labels=warmup_display_labels()
     assert labels['secondary_objective']=='neuralese_input_map_self_consistency'
     assert labels['secondary_head']=='heads.input_map'
     assert labels['schedule_head']=='input_map'
@@ -1694,7 +1458,7 @@ def test_sketch_checkpoint_continues_into_input_map_with_frozen_head_preserved(t
     continued_args=list(args)
     continued_args[continued_args.index('--out')+1]=str(tmp_path/'mapped')
     continued_args[continued_args.index('--steps')+1]='5'
-    continued_args+=['--continue-from',str(parent_path),'--neuralese-input','map',
+    continued_args+=['--continue-from',str(parent_path),
                      '--input-map-kernel','2','--input-map-rank','4']
     module.main(continued_args)
     child=torch.load(tmp_path/'mapped'/'checkpoint.pt',weights_only=False)

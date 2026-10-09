@@ -68,7 +68,7 @@ def test_ar_feedback_fixup_is_a_declared_map_continuation_mode(tmp_path):
     recipe['stages'].append({
         'id':'ar_feedback_fixup','kind':'core_text_warmup',
         'requires':['runtime_qualification'],
-        'parameters':{'neuralese_input':'map','ar_feedback_fixup':True},
+        'parameters':{'ar_feedback_fixup':True},
     })
     path=tmp_path/'recipe.json'
     path.write_text(json.dumps(recipe))
@@ -90,7 +90,7 @@ def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
     checkpoint,heads=mapped_fixup_continuation(by_id['autoregressive_text_fixup'],[predecessor])
     assert str(checkpoint)=='/run/core/checkpoint.pt'
     assert str(heads)=='/run/core/heads.pt'
-    assert effective_stage_parameters(by_id['autoregressive_text_fixup'],[predecessor])['steps']==23296
+    assert effective_stage_parameters(by_id['autoregressive_text_fixup'],[predecessor],recipe)['steps']==23296
 
 
 def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp_path):
@@ -116,7 +116,7 @@ def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp
     recipe['stages'].append({
         'id': 'core_text_warmup', 'kind': 'core_text_warmup',
         'requires': ['runtime_qualification'],
-        'parameters': {'neuralese_input': 'map'},
+        'parameters': {},
         'inputs': {'records': 'native.records', 'pieces': 'native.pieces',
                    'text_data': 'text.corpus'},
     })
@@ -192,7 +192,7 @@ def test_direct_shared_stage_recipe_pins_contract_and_builds_frozen_launch(tmp_p
                    (('records', records), ('pieces', pieces), ('text_data', text),
                     ('heads', heads), ('student_checkpoint', checkpoint))},
         'lineage': {'scope': 'test only'},
-        'parameters': {'steps': 4, 'neuralese_input': 'sketch', 'rollout_passes': 0},
+        'parameters': {'steps': 4},
         'outputs': {'directory': str(output)},
     }
     recipe_path = tmp_path / 'recipe.json'
@@ -293,7 +293,7 @@ def test_named_input_bindings_reject_incomplete_stage_roles(tmp_path):
     recipe['stages'].append({
         'id': 'core_text_warmup', 'kind': 'core_text_warmup',
         'requires': ['runtime_qualification'],
-        'parameters': {'neuralese_input': 'map'},
+        'parameters': {},
         'inputs': {'records': 'native.records'},
     })
     path = tmp_path / 'recipe.json'
@@ -340,7 +340,7 @@ def test_trained_map_continuation_requires_handoff_and_uses_same_full_checkpoint
     recipe['stages'].append({
         'id': 'core_text_warmup', 'kind': 'core_text_warmup',
         'requires': ['runtime_qualification', 'trained_heads_handoff'],
-        'parameters': {'neuralese_input': 'map', 'rollout_passes': 0},
+        'parameters': {},
         'inputs': {'records': 'raw-records', 'pieces': 'native-pieces',
                    'heads': 'serving-heads', 'continue_from': checkpoint},
     })
@@ -409,119 +409,56 @@ def test_raw_recipe_declares_full_depth_output_and_native_value_sizing():
     assert parameters['sketch_target_backbone_scale'] == 0.05
 
 
-def test_shared_text_recipe_trains_both_projections_to_plateau_then_sequence_passes():
+def test_shared_text_recipe_uses_one_mapped_graph_and_inherits_common_parameters():
+    from natlang_neuralese.train.recipe import effective_stage_parameters
     recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
-    p=next(stage['parameters'] for stage in recipe['stages'] if stage['kind']=='core_text_warmup')
-    assert 'aligned_steps' not in p and 'ramp_steps' not in p
-    assert p['projection_patience']==3 and p['projection_min_evals']==2
-    assert p['sketch_weight']==p['embedding_weight']==1.
-    assert p['sketch_lr']>p['lr']
-    assert (p['neuralese_input'], p['input_map_kernel'], p['input_map_rank'], p['rollout_passes']) == ('map', 4, 64, 0)
+    by_id={stage['id']:stage for stage in recipe['stages']}
+    core=effective_stage_parameters(by_id['core_text_warmup'],[],recipe)
+    predecessor={'id':'core_text_warmup','kind':'core_text_warmup','artifact':'/run/core/heads.pt',
+                 'gate':{'step':22272}}
+    ar=effective_stage_parameters(by_id['autoregressive_text_fixup'],[predecessor],recipe)
+    assert core['steps']==4096 and ar['steps']==23296
+    assert ar['ar_feedback_fixup'] is True
+    assert core['input_map_kernel']==ar['input_map_kernel']==4
+    assert core['input_map_rank']==ar['input_map_rank']==64
+    assert core['sketch_weight']==core['embedding_weight']==1.
+    assert core['sketch_lr']>core['lr']
+    assert 'neuralese_input' not in core and 'rollout_passes' not in core
+    assert by_id['core_text_warmup']['parameters']=={'steps':4096}
+    assert by_id['autoregressive_text_fixup']['parameters']=={'steps':1024,'ar_feedback_fixup':True}
 
 
-def test_core_text_recipe_requires_and_propagates_explicit_map_mode(tmp_path):
-    recipe = declared()
-    recipe['stages'].append({
-        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
-        'requires': ['runtime_qualification'],
-        'parameters': {'neuralese_input': 'map', 'input_map_kernel': 4,
-                       'input_map_rank': 64, 'rollout_passes': 0},
-    })
-    path = tmp_path / 'recipe.json'
+def test_active_core_text_recipe_has_no_objective_choice_or_sketch_rollout(tmp_path):
+    recipe=declared()
+    recipe['stages'].append({'id':'core_text_warmup','kind':'core_text_warmup',
+        'requires':['runtime_qualification'],'parameters':{'input_map_kernel':4,'input_map_rank':64}})
+    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
+    assert load_recipe(path)['stages'][-1]['parameters']['input_map_kernel']==4
+    recipe['stages'][-1]['parameters']={'neuralese_input':'sketch'}
     path.write_text(json.dumps(recipe))
-    assert load_recipe(path)['stages'][-1]['parameters']['neuralese_input'] == 'map'
-    assert stage_parameter_args(recipe['stages'][-1]['parameters']) == [
-        '--neuralese-input', 'map', '--input-map-kernel', '4',
-        '--input-map-rank', '64', '--rollout-passes', '0',
-    ]
-
-    recipe['stages'][-1]['parameters'] = {'rollout_passes': 0}
+    with pytest.raises(ValueError,match='unknown stage parameters'):
+        load_recipe(path)
+    recipe['stages'][-1]['parameters']={'rollout_passes':4}
     path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError, match='must declare neuralese_input'):
+    with pytest.raises(ValueError,match='unknown stage parameters'):
         load_recipe(path)
 
 
-def test_core_text_recipe_keeps_explicit_sketch_reproduction_and_rejects_map_rollout(tmp_path):
-    recipe = declared()
-    recipe['stages'].append({
-        'id': 'core_text_warmup', 'kind': 'core_text_warmup',
-        'requires': ['runtime_qualification'],
-        'parameters': {'neuralese_input': 'sketch', 'rollout_passes': 4},
-    })
-    path = tmp_path / 'recipe.json'
-    path.write_text(json.dumps(recipe))
-    assert load_recipe(path)['stages'][-1]['parameters']['neuralese_input'] == 'sketch'
-    recipe['stages'][-1]['parameters'] = {'neuralese_input': 'map', 'rollout_passes': 4}
-    path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError, match='requires rollout_passes=0'):
-        load_recipe(path)
+def test_active_text_warmup_cli_does_not_expose_legacy_sketch_objectives():
+    env=dict(os.environ)
+    env['PYTHONPATH']=str(Path(__file__).parents[2]/'training/neuralese')
+    help_text=subprocess.check_output([sys.executable,'-m','natlang_neuralese.train.text_warmup','--help'],env=env,text=True)
+    for obsolete in ('--neuralese-input','--rollout-passes','--rollout-start-passes','--max-sequence-passes'):
+        assert obsolete not in help_text
+    assert '--ar-feedback-fixup' in help_text
 
 
-@pytest.mark.parametrize(('passes','start'), [(4,3),(5,3)])
-def test_core_text_recipe_declares_deeper_rollout_start(tmp_path, passes, start):
-    from natlang_neuralese.train.recipe import stage_parameter_args
-    recipe=declared()
-    recipe['stages'].append({
-        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
-        'parameters':{'neuralese_input':'sketch','rollout_passes':passes,'rollout_start_passes':start},
-    })
-    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
-    loaded=load_recipe(path)
-    assert loaded['stages'][-1]['parameters']['rollout_start_passes']==3
-    assert stage_parameter_args(loaded['stages'][-1]['parameters'])==[
-        '--neuralese-input','sketch','--rollout-passes',str(passes),'--rollout-start-passes','3']
-
-
-@pytest.mark.parametrize(('passes','start'), [(0,3),(4,1),(4,5),(5,True)])
-def test_core_text_recipe_rejects_invalid_deeper_rollout_start(tmp_path, passes, start):
-    recipe=declared()
-    recipe['stages'].append({
-        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
-        'parameters':{'neuralese_input':'sketch','rollout_passes':passes,'rollout_start_passes':start},
-    })
-    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError,match='rollout_start_passes'):
-        load_recipe(path)
-
-
-@pytest.mark.parametrize('maximum',[4,5])
-def test_core_text_recipe_declares_projection_first_depth_extension(tmp_path,maximum):
-    from natlang_neuralese.train.recipe import stage_parameter_args
-    recipe=declared()
-    recipe['stages'].append({
-        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
-        'parameters':{'neuralese_input':'sketch','max_sequence_passes':maximum},
-    })
-    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
-    loaded=load_recipe(path)
-    assert loaded['stages'][-1]['parameters']['max_sequence_passes']==maximum
-    assert stage_parameter_args(loaded['stages'][-1]['parameters'])==[
-        '--neuralese-input','sketch','--max-sequence-passes',str(maximum)]
-
-
-@pytest.mark.parametrize(('mode','maximum','rollout'),[
-    ('sketch',2,0),('map',4,0),('sketch',4,4),('sketch',4.0,0),('sketch',True,0),
-])
-def test_core_text_recipe_rejects_invalid_projection_first_depth_extension(tmp_path,mode,maximum,rollout):
-    recipe=declared()
-    recipe['stages'].append({
-        'id':'core_text_warmup','kind':'core_text_warmup','requires':['runtime_qualification'],
-        'parameters':{'neuralese_input':mode,'max_sequence_passes':maximum,'rollout_passes':rollout},
-    })
-    path=tmp_path/'recipe.json';path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError,match='max_sequence_passes|choose either'):
-        load_recipe(path)
-
-
-def test_every_declared_shared_core_warmup_names_its_input_mode():
-    recipes = Path(__file__).parents[2] / 'training/neuralese/recipes'
-    declared_recipes = [json.loads(path.read_text()) for path in recipes.glob('*.json')]
-    for recipe in declared_recipes:
-        if recipe.get('schema') != 'natlang.neuralese-training-recipe/1':
-            continue
-        for stage in recipe['stages']:
-            if stage['kind'] == 'core_text_warmup':
-                assert stage['parameters']['neuralese_input'] in {'map', 'sketch'}
+def test_raw_recipe_declares_only_mapped_and_ar_feedback_text_stages():
+    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
+    warmups=[stage for stage in recipe['stages'] if stage['kind']=='core_text_warmup']
+    assert [stage['id'] for stage in warmups]==['core_text_warmup','autoregressive_text_fixup']
+    assert all('neuralese_input' not in stage['parameters'] for stage in warmups)
+    assert all('rollout_passes' not in stage['parameters'] for stage in warmups)
 
 
 def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp_path):
