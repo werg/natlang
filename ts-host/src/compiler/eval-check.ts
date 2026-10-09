@@ -89,8 +89,14 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
  */
 function serviceNamespace(name: string, declaration: string): string {
   const body = declaration.split('\n').filter(line => !/^\s*import\s/.test(line)).join('\n');
-  if (/^\s*declare (?:namespace|const) /.test(body)) return body.trim();
-  return `declare namespace ${name} {\n${body.replace(/^(\s*export\s+)declare\s+/gm, '$1')}\n}`;
+  const namespace = /^\s*declare (?:namespace|const) /.test(body) ? body.trim() :
+    `declare namespace ${name} {\n${body.replace(/^(\s*export\s+)declare\s+/gm, '$1')}\n}`;
+  // A declaration that exports a constant named after the service (`export const calendar: CalendarService`) says the
+  // service is that value: the binding takes the constant's type, and the declaration's other names stay its types.
+  const own = new RegExp(`^\\s*export\\s+(?:declare\\s+)?const\\s+${name}\\s*:`, 'm');
+  if (!namespace.startsWith(`declare namespace ${name} `) || !own.test(namespace)) return namespace;
+  const types = `__natlang_service_${name}`;
+  return `${namespace.replace(`declare namespace ${name} `, `declare namespace ${types} `)}\ndeclare const ${name}: typeof ${types}.${name};`;
 }
 
 /** Cheap test for whether a snippet needs the checked pass. */

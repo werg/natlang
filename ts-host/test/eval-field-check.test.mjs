@@ -58,3 +58,24 @@ test('a field one member of a union declares is how code tells the members apart
   assert.equal(await runtime.run(() => g({ base: 'b', content: 'c' })), 'c');
   assert.equal(await runtime.run(() => g({ error: 'no match' })), 'error no match');
 });
+
+test('a service declared as a constant of its own name is that value, and an unresolved type reads freely', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-fields-'));
+  writeFileSync(join(root, 'k.nl'), '---\nargs: {}\nreturns: string\n---\nCheck the plan.\n');
+  const run = async (declaration, code) => {
+    const errors = [];
+    const model = scriptedModel(() => code);
+    const driver = async request => { const last = request.messages.at(-1);
+      if (last.role === 'tool' && /undeclared-field/.test(String(last.content))) errors.push(String(last.content)); return model.driver(request); };
+    const runtime = createNatlangRuntime({ model: driver });
+    try { return { value: await runtime.run(() => loadNatlang(join(root, 'k.nl'))(), {
+      services: { calendar: { check: () => ({ ok: true, violations: [] }) } }, serviceDeclarations: { calendar: declaration } }) }; }
+    catch { return { error: errors.join('\n') }; }
+  };
+  const own = 'export type Verdict = { ok: boolean; violations: string[] };\nexport const calendar: { check(day: string): Verdict };';
+  assert.deepEqual(await run(own, 'return String(calendar.check("mon").ok);'), { value: 'true' });
+  assert.match((await run(own, 'return String(calendar.check("mon").okay);')).error, /calendar\.check\("mon"\) has no field okay: Verdict has ok, violations/);
+  const imported = "import type { CalendarService } from './calendar.ts';\nexport const calendar: CalendarService;";
+  assert.deepEqual(await run(imported, 'return String(calendar.check("mon").ok);'), { value: 'true' });
+});
+
