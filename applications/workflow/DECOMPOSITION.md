@@ -109,25 +109,34 @@ The executors are small models, so instructions spell rules out as numbered step
 
 ## Refinements
 
-Proposed `Is<T, P>` types, by slot (not implemented: `plans/REFINEMENT_TYPES.md`). Today each is a type doc comment
-and, where noted, a `ledger` check.
+Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). Decisions: (a) adopted with a crisp checker in
+`refinements.ts` (no model call), (b) a natural-language judge (proposed only: awaiting live evaluation, not wired),
+(c) left to the check that already enforces it exactly (`ledger.validate`, `ledger.checkMessage`, the commit), (d) not
+adopted: the value alone does not show the property. The refined result types are `Checked*` aliases in `types.ts`,
+named in the `returns` of the stage that produces the value; the host and the crisp policy keep the plain types. The compiled `.nl` modules register
+`refinements.ts` themselves, so an embedding host needs nothing more.
 
-| Slot | Proposed type |
-|---|---|
-| `Decision.reason` | `Is<string, "one sentence that names the state it was chosen from">` |
-| `Decision.waitMs` | `Is<number, "a whole number of milliseconds, positive, set when the order should be revisited">` |
-| `Decision.action` (on a `Snapshot` with `state.pending`) | `Is<Action, "reconcile, retry or wait">` |
-| `Decision.action` (on a `cancel` event) | `Is<Action, "refund, release or wait">` |
-| `Decision.action` | `Is<Action, "valid in state.phase">` (the transition table; `ledger.validate`) |
-| `Compensation.steps` | `Is<CompensationStep[], "refund before release; only effects that stand; each action once">` |
-| `Compensation.steps[].action` | `Is<"refund" \| "release", "undoes an effect that is recorded done and not yet undone">` |
-| `Facts.summary` | `Is<string, "plain words about the order: no operation keys, receipt ids or phase names">` |
-| `Facts.next` | `Is<string, "what the customer can expect next, without a date unless the history gives one">` |
-| `Outgoing.subject` | `Is<string, "one line of at most 60 characters, without a trailing period">` |
-| `Outgoing.body` | `Is<string, "polite, plain, accurate to the order's state, without blame, and without internal keys">` |
-| `Outgoing.kind` | `Is<MessageKind, "true of the order after the event: shipped only when the phase is shipped">` (`ledger.checkMessage`) |
-| `Limits.transientRetries`, `checksBeforeRetry` | `Is<number, "a whole number, at least 1">` |
-| `WorkflowState.obligations` | `Is<string[], "empty when nothing is owed, otherwise one sentence per open obligation">` |
+| Slot | Proposed type | Decision |
+|---|---|---|
+| `Decision.reason` | `Is<string, "one sentence that names the state it was chosen from">` | (d) The state is not in the value. |
+| `Decision.waitMs` | `Is<number, "a whole number of milliseconds, positive, set when the order should be revisited">` | (a) Weakened (`CheckedDecision`): positive whole number when given. Whether the order should be revisited needs the state (d). |
+| `Decision.action` (on a `Snapshot` with `state.pending`) | `Is<Action, "reconcile, retry or wait">` | (c) `ledger.validate`; the snapshot is not in the value. |
+| `Decision.action` (on a `cancel` event) | `Is<Action, "refund, release or wait">` | (c) `ledger.validate`. |
+| `Decision.action` | `Is<Action, "valid in state.phase">` | (c) The transition table, `ledger.validate`, which already sends the problem back to `choose`. |
+| `Compensation.steps` | `Is<CompensationStep[], "refund before release; only effects that stand; each action once">` | (a) Weakened (`CheckedCompensation`): refund before release, each at most once, a reason for each. Only effects that stand needs the history (c, `ledger.validate`). |
+| `Compensation.steps[].action` | `Is<"refund" \| "release", "undoes an effect that is recorded done and not yet undone">` | (c) The history is not in the value; `ledger.validate`. |
+| `Facts.summary` | `Is<string, "plain words about the order: no operation keys, receipt ids or phase names">` | (b) Proposed, awaiting live evaluation (not wired). A phase name such as "shipped" is also plain English, so no pattern decides it. |
+| `Facts.next` | `Is<string, "what the customer can expect next, without a date unless the history gives one">` | (d) The history is not in the value. |
+| `Outgoing.subject` | `Is<string, "one line of at most 60 characters, without a trailing period">` | (a) `CheckedOutgoing`, with a non-empty body. |
+| `Outgoing.body` | `Is<string, "polite, plain, accurate to the order's state, without blame, and without internal keys">` | (b) Proposed, awaiting live evaluation (not wired): one judge call per message; accuracy to the state needs the state, so the judge could only rate tone and plainness. |
+| `Outgoing.kind` | `Is<MessageKind, "true of the order after the event: shipped only when the phase is shipped">` | (c) `ledger.checkMessage`, which already sends the problem back to `compose`. |
+| `Limits.transientRetries`, `checksBeforeRetry` | `Is<number, "a whole number, at least 1">` | (d) A setting the host supplies, not a model output; a refined parameter would make every host cast it. Validate at the desk's construction instead. |
+| `WorkflowState.obligations` | `Is<string[], "empty when nothing is owed, otherwise one sentence per open obligation">` | (c) Built by the ledger, not by a model. |
+
+Counts: (a) 3, (b) 2, (c) 6, (d) 3.
+
+The model-facing text added to signatures is the `Is<...>` predicate of `CheckedDecision`, `CheckedCompensation` and
+`CheckedOutgoing`. No instruction sentence was changed.
 
 ## Changes from today
 

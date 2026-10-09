@@ -8,7 +8,6 @@ import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
-import { loadProgramRefinements } from './program-refinements.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
@@ -118,6 +117,7 @@ once per matching file and prints path<TAB>result. --filter prints matching inpu
   natlang traces list [--definition NAME] [--executor agent|crisp|crisp-agent] [--outcome X] [--since ISO] [--all]
   natlang traces show CALL [--events] [--json]
   natlang traces occupancy [--definition NAME] [--limit N]   Batch occupancy: requests in flight, batch size, queue wait.
+  natlang traces tiers [--definition NAME]                   Tiered engine: calls per tier, deopt rate, cost per tier.
   natlang traces export [--definition NAME] [--limit N]    One JSON record per line, values inlined.
   natlang traces pin|unpin CALL              Keep a call when the store evicts.
   natlang traces annotate CALL KIND VALUE    Attach feedback or a judgment to a call.
@@ -444,9 +444,8 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const program = inventory.manifest.adaptation!;
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
-  // Crisp checkers of refined predicates: the program's own refinements module, if it has one.
-  const crisp = await loadProgramRefinements(compiled, spec.installed ? join(stateDirectory, 'build') : join(spec.root, '.natlang', 'build'));
-  const refinements = crisp || manifest.refinements ? { ...manifest.refinements, ...(crisp ? { crisp } : {}) } : undefined;
+  // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
+  const refinements = manifest.refinements;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
     programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {

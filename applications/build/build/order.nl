@@ -4,7 +4,7 @@ args:
   graph: Graph
   goal: string
   needed: string[]
-returns: Plan
+returns: CheckedPlan
 ---
 Order needed, the closure of goal in graph, exactly in eval, level by level.
 

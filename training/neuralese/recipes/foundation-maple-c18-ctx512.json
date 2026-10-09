@@ -1,39 +1,16 @@
 {
- "schema": "natlang.neuralese-training-recipe/1",
- "id": "token-preserving-foundation-maple-c18-ctx512",
- "description": "foundation-maple-v1 at cutoff 18 with 512 context windows (v1 at cutoff 12 with 128 overfit: train KL 0.22, held KL 1.24 / agreement 0.54). 1,024 windows peak ~51 GB on unified memory, more than fits beside the teacher.",
- "stages": [
-  {
-   "id": "token_identity",
-   "kind": "token_identity",
-   "requires": [],
-   "parameters": {
-    "limit": 32,
-    "max_tokens": 512
-   }
-  },
-  {
-   "id": "embedding_distillation",
-   "kind": "causal_embedding_distillation",
-   "requires": [
-    "token_identity"
-   ],
-   "parameters": {
-    "cutoff": 18,
-    "steps": 8192,
-    "batch": 512,
-    "lr": 0.0003,
-    "tokens": 1024,
-    "contexts": 512,
-    "context_tokens": 1024,
-    "eval_every": 128,
-    "checkpoint_every": 128,
-    "agreement_gate": 0.9,
-    "kl_gate": 0.25,
-    "source_fraction": 0.25,
-    "argmax_weight": 0.1,
-    "seed": 0
-   }
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "token-preserving-foundation-maple-c18-ctx512",
+  "extends": "token-preserving-foundation-maple-v1",
+  "description": "foundation-maple-v1 at cutoff 18 with 512 context windows. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 18,
+          "contexts": 512
+        }
+      }
+    }
   }
- ]
 }

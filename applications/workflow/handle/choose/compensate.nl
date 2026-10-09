@@ -2,7 +2,7 @@
 description: Plan the compensation of an order that is being undone, in order.
 args:
   state: WorkflowState
-returns: Compensation
+returns: CheckedCompensation
 ---
 List the undos still to do for the order in state, from state.history. An effect stands when the history has an entry
 of that action with status "done", and no entry of its undo with status "done". The undo of charge is refund; the undo

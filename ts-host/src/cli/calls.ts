@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { CallStore, machineStoreRoot } from '../calls/store.js';
 import { exportSpecializationCorpus } from '../calls/corpus.js';
 import { renderEvidence, renderHistory, study } from '../calls/specializer.js';
+import { emptyEvidence, foldEvent, newTierEvidence, setTierState, type Evidence, type EvidenceState, type TierEvidence } from '../calls/evidence.js';
 import type { CallRecord, CallStoreSettings, CaseRole, CaseTier } from '../calls/types.js';
 
 type Args = { words: string[]; options: Map<string, string | true> };
@@ -69,6 +70,78 @@ function describeCall(store: CallStore, record: CallRecord): string {
     ...(cases.length ? ['cases:', ...cases.map(item => `  ${item.case_hash} ${item.role}${item.verdict ? ` ${item.verdict}` : ''}`)] : []),
     ...(store.annotations(record.call_id).map(item => `annotation ${item.kind}: ${short(item.value)}`)),
     ...(store.children(record.call_id).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`))].join('\n');
+}
+
+/** The stored compilation's cases of one function, as the tier-3 row of the ladder: the same evidence, summed over its cases. */
+export type CaseTierRow = { function: string; served: number; ms_per_call: number; state: string; evidence: Evidence;
+  saved_tokens: number; spent_tokens: number };
+
+/** Sum the evidence of a function's current compilation cases and join the store's savings (one accounting, `CallStore.savings`). */
+export function caseTiersOf(store: CallStore, definition?: string): CaseTierRow[] {
+  return store.savings({ definition }).flatMap(saving => {
+    const compilation = store.currentCompilation(saving.definition_key);
+    const evidence = emptyEvidence();
+    let active = 0, shadow = 0;
+    for (const item of compilation?.cases ?? []) {
+      const summary = store.caseSummary(item.hash);
+      if (!summary) continue;
+      for (const key of Object.keys(evidence) as (keyof Evidence)[]) evidence[key] += summary.evidence[key];
+      if (item.tier === 'active') active++; else if (item.tier === 'shadow') shadow++;
+    }
+    if (!compilation && !saving.served) return [];
+    return [{ function: saving.definition_name, served: saving.served, ms_per_call: saving.crisp_ms_per_call,
+      state: active ? 'active' : shadow ? 'shadow' : compilation ? 'demoted' : '-', evidence, saved_tokens: saving.saved_tokens, spent_tokens: saving.spent_tokens }];
+  });
+}
+
+/**
+ * One view of the ladder per function and tier. Event rows come from the tier events kept with calls (calls/tiers.ts):
+ * calls served, deopts and their rate, the cost of a served call, tokens wasted by attempts that were then deoptimized,
+ * the state the events imply and the evidence folded by the same module the cases use (calls/evidence.ts). The tier-3
+ * row for stored cases (`cases`) takes its calls, evidence, state and savings from the compilations and `CallStore.savings`
+ * instead, so served and saved are counted once, there.
+ */
+export function tiersOf(events: { value: unknown; definition_name: string | null; tokens_in: number; tokens_out: number; wall_ms: number }[],
+  definition?: string, cases: CaseTierRow[] = []) {
+  type Row = { function: string; tier: string; calls: number; deopts: number; deopt_rate: number; tokens_per_call: number; ms_per_call: number;
+    wasted_tokens: number; state: string; compared: number; worse: number; live: number; audited: number; handed_off: number; guard_misses: number;
+    net_tokens: number | null; tokens: number; ms: number; fold: TierEvidence; seeded: boolean };
+  const rows = new Map<string, Row>();
+  const open = (fn: string, tier: string): Row => {
+    const key = `${fn}\0${tier}`;
+    const row = rows.get(key) ?? { function: fn, tier, calls: 0, deopts: 0, deopt_rate: 0, tokens_per_call: 0, ms_per_call: 0, wasted_tokens: 0,
+      state: 'active', compared: 0, worse: 0, live: 0, audited: 0, handed_off: 0, guard_misses: 0, net_tokens: null, tokens: 0, ms: 0, fold: newTierEvidence('active'), seeded: false };
+    rows.set(key, row);
+    return row;
+  };
+  for (const { value, tokens_in, tokens_out, wall_ms } of events) {
+    const ev = value as { fn?: string; tier?: string; event?: string; kind?: string; own?: boolean; state?: EvidenceState };
+    if (!ev?.fn || !ev.tier || (definition && ev.fn !== definition)) continue;
+    const row = open(ev.fn, ev.tier);
+    const tokens = Number(tokens_in) + Number(tokens_out);
+    if (ev.event === 'served') { row.calls++; row.tokens += tokens; row.ms += Number(wall_ms); }
+    else if (ev.event === 'deopt') { row.deopts++; if (ev.own) row.wasted_tokens += tokens; }
+    else if (ev.event === 'promoted') setTierState(row.fold, 'active');
+    else if (ev.event === 'demoted') setTierState(row.fold, 'demoted');
+    if (ev.event !== 'promoted' && ev.event !== 'demoted') {
+      if (!row.seeded && ev.state) { row.fold.state = ev.state; row.seeded = true; }
+      foldEvent(row.fold, ev as { event: string; kind?: string });
+    }
+  }
+  for (const item of cases) {
+    const row = open(item.function, 'tier3');
+    row.calls = item.served; row.ms_per_call = item.ms_per_call; row.state = item.state; row.net_tokens = item.saved_tokens - item.spent_tokens;
+    row.fold.evidence = { ...item.evidence, guard_misses: row.fold.evidence.guard_misses, handed_off: item.evidence.handed_off };
+    row.fold.state = 'active';
+  }
+  return [...rows.values()].map(({ tokens, ms, fold, seeded: _seeded, ...row }) => {
+    const fromCases = cases.some(item => item.function === row.function) && row.tier === 'tier3';
+    const e = fold.evidence;
+    return { ...row, state: fromCases ? row.state : fold.state, compared: e.compared, worse: e.worse, live: e.live_compared, audited: e.audited,
+      handed_off: e.handed_off, guard_misses: e.guard_misses,
+      deopt_rate: row.calls + row.deopts ? Math.round(1000 * row.deopts / (row.calls + row.deopts)) / 1000 : 0,
+      tokens_per_call: fromCases ? 0 : row.calls ? Math.round(tokens / row.calls) : 0, ms_per_call: fromCases ? row.ms_per_call : row.calls ? Math.round(ms / row.calls) : 0 };
+  }).sort((x, y) => x.function.localeCompare(y.function) || y.tier.localeCompare(x.tier));
 }
 
 /**
@@ -145,6 +218,14 @@ export async function tracesCommand(argv: string[]): Promise<number> {
       table(per, ['call_id', 'definition_name', 'requests', 'scheduled', 'batches', 'mean_in_flight', 'max_in_flight', 'mean_batch_size', 'queue_wait_ms_p95'])].join('\n'), json);
     return 0;
   }
+  if (action === 'tiers') {
+    const rows = tiersOf(store.tierRows(), text(args, '--definition'), caseTiersOf(store, text(args, '--definition')));
+    print(json ? rows : rows.length ? [table(rows, ['function', 'tier', 'state', 'calls', 'deopts', 'deopt_rate', 'tokens_per_call', 'ms_per_call', 'wasted_tokens',
+      'compared', 'worse', 'live', 'audited', 'net_tokens']), 'tier 3 rows are the stored compilation: calls, evidence and net_tokens are the ones `natlang compilations list|savings` show; promotion policy: ' +
+      store.settings().promotionPolicy].join('\n') :
+      'no compilations or tier events recorded (plans/TIERED_ENGINE.md)', json);
+    return 0;
+  }
   if (action === 'export') {
     for (const row of store.calls({ definition: text(args, '--definition'), executor: text(args, '--executor'), limit: number(args, '--limit', 1000),
       audits: args.options.has('--all') })) {
@@ -169,13 +250,13 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     for (const pair of words) {
       const [key, value] = pair.split('=');
       if (!key || value === undefined) throw new Error('usage: natlang traces config [KEY=VALUE...]');
-      (changes as Record<string, unknown>)[key] = key === 'specialization' ? value : Number(value);
+      (changes as Record<string, unknown>)[key] = key === 'specialization' || key === 'promotionPolicy' ? value : Number(value);
     }
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
     return 0;
   }
   if (action === 'evict') { print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined)} bytes`, false); return 0; }
-  throw new Error('usage: natlang traces status|hot|list|show|occupancy|export|pin|unpin|annotate|config|evict');
+  throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|config|evict');
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */
@@ -283,7 +364,7 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     const shown = rows.map(row => ({ ...row, net_tokens: row.saved_tokens - row.spent_tokens,
       saved_time: `${(row.saved_ms / 60_000).toFixed(1)} min`, spent_time: `${(row.spent_ms / 60_000).toFixed(1)} min` }));
     print(json ? shown : table(shown, ['definition_name', 'served', 'agent_tokens_per_call', 'agent_ms_per_call', 'crisp_ms_per_call', 'saved_tokens',
-      'spent_tokens', 'net_tokens', 'saved_time', 'spent_time', 'definition_source']), json);
+      'spent_tokens', 'net_tokens', 'saved_time', 'spent_time', 'definition_source']) + (json ? '' : '\nper-tier evidence and cost: natlang traces tiers'), json);
     return 0;
   }
   if (action === 'findings') {

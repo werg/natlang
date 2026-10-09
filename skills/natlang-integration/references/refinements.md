@@ -1,13 +1,13 @@
 # Refinements (`Is<T, P>`): settings, errors and recovery
 
-`Is<T, "predicate">` slots are checked by the runtime; see the [spec](../../../spec/SPEC.md) ("Is<T, P> refinement types") for the rules and [constraints belong in types](../../natlang-authoring/references/refinements.md) for authoring.
+`Is<T, "predicate">` slots are checked by the runtime; see the [refinements extension](../../../spec/ext/refinements.md#ist-p-refinement-types) for the rules and [constraints belong in types](../../natlang-authoring/references/refinements.md) for authoring.
 
 ## What the host does
 
 - The judge runs on the call's own model when its driver can score replies (`decide`: the same readout as `readout: decision`). `refinements.judge` names another entry of `models`. A driver that cannot score judges with an ordinary boolean call on the default model (traced as `judge: "call"`), which costs a model call per distinct value; prefer a scoring driver or a crisp checker.
 - Verdicts are cached by content: in the call store's `refinement_verdicts` table when the runtime has a call store, else in memory. Pass `refinements: { cache }` to the runtime to keep them elsewhere (`get(key)`, `set(key, { probability, judge })`, both may be async); the key already includes the judge id, so one cache can serve several judges.
 - Thresholds apply after the cache, so changing them never needs a new cache.
-- Crisp checkers of a program: export `refinements` from a `refinements.ts` beside the entry module (`export const refinements = { "one line of at most 60 characters": value => typeof value === "string" && value.length <= 60 }`); the `natlang run` launcher loads it. Embedded runtimes: `refinements: { crisp: { "<normalized predicate>": value => boolean | undefined } }` in the runtime options, or entries of the `refinements` table exported by the package.
+- Crisp checkers of a program: export `refinements` from a `refinements.ts` in the package, above its `.nl` files (`export const refinements = { "one line of at most 60 characters": value => typeof value === "string" && value.length <= 60 }`); every compiled `.nl` module below it registers it when imported, so a launcher, an embedder or a test needs nothing more. A host can also pass `refinements: { crisp: { "<normalized predicate>": value => boolean | undefined } }` in the runtime options, or entries of the `refinements` table exported by the package.
 
 ## `natlang.json`
 
@@ -41,7 +41,7 @@ Each check emits `refinement_check` (`phase`: `return`, `argument`, `service`, `
 
 ## `Untrusted<T>`: provenance and the compile error
 
-`Untrusted<T>` marks text from outside the program; the runtime shows it to models as a fenced data block labelled `untrusted data from <source>` and the compiler rejects it in instruction text. See the [spec](../../../spec/SPEC.md) ("Untrusted<T>").
+`Untrusted<T>` marks text from outside the program; the runtime shows it to models as a fenced data block labelled `untrusted data from <source>` and the compiler rejects it in instruction text. See the [refinements extension](../../../spec/ext/refinements.md#untrustedt).
 
 - Where it enters: declare a service result in `natlang.json` `refinements.services` with the type text, for example `"index.search": "{ total: number, evidence: { id: string, message: Untrusted<string> }[] }"` (the label is `index.search`; named types from `types.ts` are not resolved there, so write the structure); type a parameter or `types.ts` field `Untrusted<string>` (the label is `argument <name> of <function>`); or call `untrusted(value, "label")` from `@natlang/node` in host code, which returns an `Untrusted<T>` and is the way to hand a plain string to an untrusted slot. In `types.ts`, import the type: `import type { Untrusted } from "@natlang/node"`.
 - Provenance is by content, in a per-task registry with a host-level one behind it; the first label for a text wins, and a derived string (a slice) is not tracked. Mark exact fields, not whole records, or common trusted values (`"api"`) turn into data blocks.

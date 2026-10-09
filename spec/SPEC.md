@@ -12,6 +12,25 @@ TypeScript. The design rationale is in
 [`docs/inline-natlang-lambdas.md`](../docs/inline-natlang-lambdas.md), and
 [`docs/ITERATE_ON_PLAN.md`](../docs/ITERATE_ON_PLAN.md).
 
+## Extensions
+
+This document is the stable core. The research surface lives in versioned
+extensions under [`spec/ext/`](ext/neuralese.md); each states its version and
+scope, and the core does not depend on any of them.
+
+| Extension | Version | Covers |
+| --- | --- | --- |
+| [Neuralese](ext/neuralese.md) | 0.5-draft | `Neuralese<T, D>` soft values, literals, combinators, `.nz` files, backends |
+| [Learning](ext/learning.md) | 0.5-draft | `natlang:learning`: `grad`, objectives, optimisers, adapters |
+| [Refinements and trust](ext/refinements.md) | 0.5-draft | `Is<T, P>`, `refine`/`assume`, `Untrusted<T>`, `refinements` settings |
+| [Call records](ext/call-records.md) | 0.5-draft | recording, compilations, specialization |
+| [Directory reducers](ext/directory-reducers.md) | 0.5-draft | `Folder` reducers, `folder.apply`, context revisions |
+| [Continuations](ext/continuations.md) | 0.5-draft | continuing a long invocation in a fresh conversation |
+| [Instruction adaptation](ext/instruction-adaptation.md) | pointer | adaptation APIs, defined in `docs/ADAPTATION.md` |
+
+Error codes, the rule behind each, and when it fires are indexed in
+[ERRORS.md](ERRORS.md).
+
 ## Natural-language functions
 
 A natural-language function has ordered typed parameters and one return type.
@@ -55,7 +74,9 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `types`, `kind`
-(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `uses` lists package
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `model: NAME` runs every
+call of the function on the runtime's model of that name (the `models` runtime option), and on the default model
+when the runtime has none. `uses` lists package
 items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
 joins its context under its base name, with its own companion folder. `args`, `returns` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
@@ -99,7 +120,7 @@ candidate values of items, supplies fixtures to tests, and promotes revisions.
 **Executable nodes come from files.** `.nl` functions and TypeScript functions are
 executable nodes; everything else in a context is data. The executable nodes of
 any bound context are selected from contexts loaded from files (the program's
-tree, imported libraries, and staged trees written by a directory reducer and
+tree, imported libraries, and staged trees written by a [directory reducer](ext/directory-reducers.md) and
 compiled), with subsets and unions allowed. Rebinding never adds an executable
 node (`context-new-executable`). An executable node may be replaced by an edited
 definition that compiles against its signature and context interface. Data
@@ -125,7 +146,7 @@ eval and is version-checked, so a concurrent change fails that eval with
 compile error. Property writes on live objects take effect immediately.
 
 `nl.with(captures)` lists captures explicitly. It is required for soft bodies,
-which cannot be scanned for names (see Neuralese), and allowed for text bodies.
+which cannot be scanned for names (see [Neuralese](ext/neuralese.md)), and allowed for text bodies.
 Explicit captures are snapshots taken when the function value is created;
 `live(x)` marks a `let` capture that is read at each call and may be written
 back as above. A function value with live captures belongs to its running scope
@@ -244,7 +265,7 @@ it; a call that failed may run again. The service object's lifetime is the scope
 so a host hands a fresh object to each unit of work that may repeat the effect on
 purpose. Reads are not listed: they must see the current state.
 
-A service may come with a declaration: the TypeScript declaration of its members,
+A service may come with a declaration (the `serviceDeclarations` runtime option): the TypeScript declaration of its members,
 with their doc comments, as a declaration file would give them. The model is
 shown it as `declare namespace name { … }` and can read it with `read_code`,
 but the implementation runs in the host and is neither readable nor editable. A
@@ -253,7 +274,7 @@ way, so that only code the program owns can be changed. Importable packages are
 external in the same way: `read_code("pkg")` lists a package's exports from
 its type declarations, and `read_code("pkg.name")` shows one with its docs.
 
-A service can be scoped to functions: it is then usable only in their calls and
+A service can be scoped to functions (`serviceScopes`): it is then usable only in their calls and
 the calls they make, as a specialist can reach systems its caller cannot. Its
 declaration stays readable everywhere, and a call that cannot use it is told
 which functions can.
@@ -274,7 +295,7 @@ A natural-language invocation offers the model these tools:
   importable package, which cannot be edited, and the documentation of eval's
   built-ins (`nl`, `iterateOn`, `transcript`). It is offered on every call.
 
-A directory reducer additionally receives `list_files`, `search_files`,
+A [directory reducer](ext/directory-reducers.md) additionally receives `list_files`, `search_files`,
 `read_file`, `write_file`, `edit_file`, and `diff_files`, and the conversation
 opens with the folder's file listing.
 
@@ -289,7 +310,9 @@ system prompt) and returns the most probable one. The normalised distribution
 is the call's trace event `decision_readout` and its note, so a decision is a
 probability vector that proper scoring rules (Brier, ranked probability score,
 log loss) can grade and, on a Neuralese server, differentiate
-(`objectives.decision` in `natlang:learning`). A model config with
+(`objectives.decision` in `natlang:learning`, [learning.md](ext/learning.md)). Host code reads it with
+`runtime.decide(fn, ...args)` and eval code with `decide(fn, ...args)`, which return
+`{ value, probabilities: [{ value, probability }], confidence, scored }`. A model config with
 `decisionReadout: 'finite-returns'` applies the readout to every finite-typed
 call. A backend that cannot score replies falls back to the ordinary tool loop;
 the loader rejects `readout: decision` on a type that is not finite.
@@ -399,7 +422,7 @@ records, arrays, `Record<string, T>` (also written `{ [key: string]: T }`),
 intersections of object types (`A & { extra: string }`, merged into one record),
 indexed access with a literal key (`State['status']`), literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
-`Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
+`Neuralese<T, D>` for soft values (see [Neuralese](ext/neuralese.md)). Values are checked at call
 boundaries, after each eval, and at completion. Simple scalar mistakes may be
 coerced when the declared type is unambiguous. A value eval computed and returns
 (`return value;`, a final expression with `finish: true`) is assignable as in
@@ -408,232 +431,9 @@ callee's result is returned as it is; a literal written into `return_result` is
 checked exactly. A value that misses a union of records is reported at the field
 of the variant it matches (`checkpoint/cutoff: expected number`), not as the
 whole union. Recursive function types are
-rejected (see Iteration and termination).
-
-## Is<T, P> refinement types
-
-`Is<T, "predicate">` is `T` plus a natural-language predicate that its values satisfy:
-`type Reply = Is<string, "a reply to the customer that is polite and does not blame them">`. `T` is any natlang
-type; `P` is one nonempty string literal that describes the wanted values positively (a conjunction is one
-sentence). `Is<Is<T, "a">, "b">` means both. Whitespace in `P` is normalized. An empty or non-literal `P` is
-`refinement-predicate-invalid`, reported when the type is read.
-
-Structure is unchanged: a value is checked against `T` as before, and a refined value is a `T` everywhere. The
-predicate is an obligation checked where a value enters a refined slot:
-
-- the return of an `nl` call or a `.nl` function, after the structural check (a failure goes back to the executing
-  model as a tool error on `return_result` or its reply, and the model repairs it within the repair budget:
-  `maxFailureRepairs`, else `refinements.repairs`, default 3; past it the call fails with the refinement's code);
-- an argument into a refined parameter, checked at the caller (a failure throws and the callee does not start);
-- a service result whose type is declared in `refinements.services`;
-- `refine(value, predicate)`, which checks and returns an `Is<T, P>`, and `assume(value, predicate)`, which
-  returns one without checking and records the assumption in the trace.
-
-Records, arrays and dictionaries check each refined position; the checks of one value are issued together.
-
-Fit: `Is<B, P>` fits `T` when `B` fits `T`; `T` fits `Is<B, P>` when `T` fits `B`, with the check as the
-obligation of that site; `Is<B, P>` fits `Is<B', P'>` without a check when `B` fits `B'` and the predicates
-are equal after whitespace normalization (for nested types, every predicate of the target is present).
-
-**The check.** The judge is one `readout: decision` scoring pass on the call's model (or `refinements.judge`):
-the value is shown as data, the predicate as the question, and P(true) is read from the scores of `true` and
-`false`. A verdict is cached by `(sha256 of the canonical value, normalized predicate, judge id)`, so the same value
-is not judged twice. The value passes at P(true) at or above `threshold` (default 0.5). Inside an optional
-uncertainty `band` the `policy` applies: `accept`, `reject` (fail with `refinement-undecided`), or `escalate`
-to the model named by `escalate`. A model that cannot score replies judges with an ordinary natural-language
-call returning a boolean (traced as `judge: "call"`). A result eval returns or finishes, and a refined local, are
-judged before they are kept, so a failure is repaired like any rejected eval. `refine<Is<T, "p">>(value)` and
-`assume<R>(value)` read the predicate from the type.
-
-**Errors.** `refinement-unsatisfied`: the predicate was judged false. `refinement-undecided`: the probability fell
-inside the band under the `reject` policy, or no judge was available. `refinement-predicate-invalid`: `P` is empty
-or not a string literal. Each message is one sentence that names the predicate and the fix. A call that ends on a
-refinement rejects with `RefinementCallError` (a `NatlangCallError` with `code`); a rejected argument, service
-result or `refine` throws `RefinementError`.
-
-**Settings** (`natlang.json`, `refinements`): `threshold`, `band: { low, high }`, `policy`, `mode`, `judge`,
-`escalate`, `repairs`, `predicates` (the same fields per normalized predicate) and `services`
-(`"service.method": "Is<string, \"…\">"`). `mode` is `crisp` (default: a crisp checker that returns a boolean
-decides, `undefined` defers to the judge), `nl` (judge only), or `shadow` (the judge decides; every crisp/judge
-disagreement is traced as `refinement_shadow`). Crisp checkers come from the runtime option
-`refinements.crisp` the `refinements` table exported by `native/types.ts`, or a `refinements.ts` module of the program that exports `refinements` (loaded by the launcher), keyed by the normalized predicate. With a call store, verdicts are kept in its `refinement_verdicts` table.
-
-**Trace.** Every check is a `refinement_check` event: path, predicate, value, outcome, probability, judge and where
-the verdict came from (`crisp`, `judge`, `cache`, `escalation`). `refinement_assumed` records an `assume`.
-
-## Untrusted<T>
-
-`Untrusted<T>` is `T` that came from outside the program: a file, an HTTP body, user text, a tool or service result.
-It is structurally `T`; what it adds is how a model sees it and where it may go.
-
-- **Entry.** A service method whose result type is declared in `refinements.services` as `Untrusted<...>` (or a type
-  containing it, such as `{ evidence: { message: Untrusted<string> }[] }`), a parameter or captured variable typed
-  `Untrusted<...>`, and `untrusted(value, source)` (exported by the runtime module; it returns the value typed
-  `Untrusted<T>`). Only the strings at `Untrusted` positions are marked, so a record keeps its trusted fields as
-  ordinary literals.
-- **Rendering.** The one value renderer (arguments, scope, eval results, staged results) shows a marked string as a
-  fenced data block with an info line naming the source, never as a bare literal and never inside instruction text:
-  a line "```untrusted data from index.search", the text verbatim, and a closing fence. The fence is three backticks,
-  or one more than the longest run of backticks in the text, so no text can close it. A long text is cut at the
-  usual budget with the usual cut-off note. Ordinary values render as before.
-- **Provenance.** The label is the origin: `service.method` for a declared service result, the label given to
-  `untrusted(value, source)`, else `argument <name> of <function>` or `variable <name>`. The first source that marked a
-  text is kept. Like refinement evidence it is kept by content (a string has no hidden tag): a registry per task, with a
-  host-level registry behind it for text marked before any task runs, bounded in entries and characters. A string the
-  program derives from an untrusted one (a slice, a concatenation) is a new string and is not tracked at run time; a
-  trusted string equal to a marked one is shown as data too. Mark the exact fields that are outside text, not whole
-  records.
-- **Fit.** `Untrusted<B>` fits `T` when `B` fits `T`; `T` fits `Untrusted<B>` when `T` fits `B` (a plain value only
-  loses trust). In TypeScript `Untrusted<T>` is `T & brand`, so it is a `T` everywhere, and a plain `T` is not an
-  `Untrusted<T>` until `untrusted(value, source)` returns one. `Untrusted<Is<T, P>>` and `Is<Untrusted<T>, P>`
-  carry both.
-- **Instruction positions.** The text of a natlang function is the author's. In a `.nl` file the body is fixed text
-  that refers to arguments by name; a value is never spliced into it, so a `.nl` body cannot receive untrusted text as
-  instructions and the model reads each argument from the rendered scope. The one splice is the template literal of an
-  inline `nl` call, where `${expression}` is evaluated at call time and becomes part of the instructions. There the
-  compiler reports `untrusted-instruction` when the interpolated expression is `Untrusted<T>`, or is text built from
-  an untrusted expression (`${message.slice(0, 20)}`, `${"[" + message + "]"}`); a number or boolean computed from one
-  (`${message.length}`) is not text and passes. Names an instruction mentions (captured by mention or `nl.with`) and
-  arguments of the call are not splices: they are rendered as data. The message is one sentence with the fix: pass the
-  value as an argument instead, as in ``nl`Summarize the message.`(message)``. Interpolation inside eval code (a
-  one-shot ``nl(`... ${x}`)``) is not typed by the project compiler and is not checked.
-
-## Directory reducers
-
-A directory reducer's first parameter is a `Folder` (or a handle from
-`folder.dir(path)`), available as `folder` in eval. It works on an isolated
-writable copy; paths are relative to the folder. `await reducer(folder, ...args)`
-returns the typed result and discards file changes.
-`await folder.apply(reducer, ...args)` retains the committed changes. A typed
-result selects every change; `commit` selects changes by glob. Folder writers
-serialize.
-
-A reducer over a context folder is the way to compute a new context: its staged
-tree, once compiled, is a file context from which new executable nodes may be
-bound (see Contexts). Self-improvement is a function from a context and evidence
-to a new context revision; promotion binds a program to that revision, or
-`folder.apply` commits it to a real directory.
-
-## Neuralese
-
-`Neuralese<T, D = DefaultDialect>` is a soft value of type `T`: an immutable,
-ordered block of vectors in dialect `D` that a model reads through its read
-port. The model contract is in [NEURALESE_PORT.md](NEURALESE_PORT.md), the
-declarations in [neuralese.d.ts](neuralese.d.ts).
-
-**Type rules.**
-
-- `Neuralese<T>` is not a `T` and a `T` is not a `Neuralese<T>`; moving between
-  them is a computation (writing, or `read`).
-- Host code may store, pass, and return soft values, but may not access fields
-  or indices, compute with them, compare them, use them as conditions, spread
-  them (`neuralese-opaque-access`, `neuralese-condition`). A JavaScript string
-  conversion (`String(value)`, an untagged template interpolation, `+` with a
-  string operand, or a direct `JSON.stringify(value)`) performs the existing typed
-  `read<T>` computation first and then applies ordinary JavaScript formatting.
-  For `JSON.stringify`, only its first argument is read; replacer and spacing
-  arguments keep normal JavaScript behavior. The conversion is awaited
-  at that expression, so it must be inside async code; synchronous functions
-  and callbacks receive `neuralese-readout-sync` rather than silently returning
-  promises. Tagged templates keep soft arguments as soft values.
-- `T` is any natlang type. `Neuralese<Neuralese<T>>` is rejected
-  (`neuralese-nested`). Records and arrays may hold soft fields.
-- A `Neuralese<F>` with a function type `F` is callable with `F`'s parameters
-  and result.
-- Values of different dialects do not unify (`neuralese-dialect-mismatch`);
-  `convert` moves between them. `DefaultDialect` is bound by configuration.
-  Dialects are version tags ([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)).
-
-**Literal.** At the model-token level a soft value is written
-`<|neuralese|>⟦z1⟧…⟦zL⟧<|/neuralese|>`: two control tokens around the vectors and
-nothing else. Its type comes from the contextual type (an annotation, a
-parameter, a return position, `nl<F>`); a literal without one is a compile error
-(`neuralese-untyped-literal`). When the model emits the opening token in eval
-code or a tool argument, the server writes the block until its stop head closes
-it. When the runtime shows the model a soft value (a parameter, a local, a
-result, a soft body, a context item), it renders the literal and the server
-splices the stored vectors in. The text `<|neuralese|>` in ordinary content is
-text, never a literal.
-
-**Reference form.** Everywhere outside the model (JSON, traces, logs, training
-records, interfaces) a soft value is
-`{ "$neuralese": { "type": "Neuralese<T>", "id": "nz1_…" } }`, referring to an
-immutable, content-addressed store entry tagged with its dialect. Before type
-checking eval code, the runtime replaces each emitted literal with a reference
-expression. `gloss(v)` gives a diagnostic text rendering for people; it is not a
-value form.
-
-**Neuralese functions.** A function literal is `nl` with a soft body and explicit
-captures:
-
-```ts
-const triage: Neuralese<(t: Ticket) => Promise<Label>> =
-  nl.with({ rubric, history })`<|neuralese|>⟦…⟧<|/neuralese|>`;
-```
-
-Its signature comes from the contextual type, as for inline `nl`. Its calls go
-only to its definition site's context and its captures; the vectors grant no
-authority. A call renders the soft body as the instructions and lists the
-captures in the opening scope. Text functions may take and return soft values;
-soft arguments appear as literals in the opening declarations.
-
-**Combinators.** `natlang:neuralese` exports `map`, `zip`, `ap`, `combine`,
-`empty`, `split`, `splitList`, `read`, `convert`, and `gloss`. `read` is the only
-way from a soft value to a `T`; it is validated like a call result and fails with
-`NatlangCallError`. Implicit string conversions use this same `read` body and
-require the task to provide a loaded standard library; a text provider may use an
-explicit, digest checked implementation of the declared read source, recorded as
-non-learned provenance. Without a configured read body they fail with
-the structured `neuralese-readout-unavailable` capability error. The runtime
-never reads vector payloads as text. `split` and `splitList` are the only way to soft parts of a
-structured value. Each combinator except `empty` is a system natural-language
-function with a soft body, trainable like any other; a program may bind its own
-tuned bodies in its context. None takes a purpose argument: a value encodes what
-its write site (the producing function's instructions, declared result, and
-context) wrote it for.
-
-**Laws and rewrites.** The combinators approximately satisfy map identity, map
-fusion, read/map commutation, combine associativity and identity, and split of
-zip. The compiler may rewrite programs with these laws when a rule is enabled
-for the current model and dialect version
-([NEURALESE_REWRITES.md](NEURALESE_REWRITES.md)); every applied rewrite is
-traced.
-
-**Files.** `.nz` files store typed named exports, exact and soft, in a
-safetensors container ([NEURALESE_FILES.md](NEURALESE_FILES.md)). They are
-imported like modules and are context items in callable folders.
-
-**Learning.** `natlang:learning` exports `grad`, `valueAndGrad`, `stopGradient`,
-objectives (`crossEntropy`, `selfDistill`, `conditionedDistill`, `logLikelihood`, `law`, `klPrior`, `decision`), optimisers,
-`withAdapters`, `adapters.create`, and `save`, to callers given the `natlang:learning` service. `grad(f, a)`
-differentiates a loss with respect to soft arguments by recording `f(a)` and
-replaying it ([NEURALESE_GRAPH.md](NEURALESE_GRAPH.md)); discrete choices are
-held fixed and trained through `logLikelihood`. Nested `grad` is first-order
-unless `{ order: 2 }` is given. Training steps are ordinary step functions run
-with `iterateOn`; learning produces new values, never mutates model weights, and
-is promoted by binding a context that contains them.
-
-**Adapters.** An `Adapter` is a soft value holding the coefficients of a tiny
-weight adapter of the serving model. Its block's dialect states its structure
-(kind, rank, layers, targets, base-weight hash; `model/tiny_adapters.py`), and it
-runs only on that base. `withAdapters(adapters, fn)` makes adapters active for
-every model turn inside `fn`: generation and decision readouts run the adapted
-model, and recorded turns replay with the same adapters, so `valueAndGrad(f,
-adapter)` trains an adapter like any soft value. A zero adapter is the base model.
-An adapter is a value, not a change to the model: binding it is how it is
-promoted, and it ships with the program that uses it
-([LEARNING_CONTINUUM.md](../plans/neuralese/LEARNING_CONTINUUM.md) §6).
-
-Writing a Neuralese value is stochastic, gated by a Neuralese temperature `τ`
-separate from the text temperature: the payload is `μ + τ·σ⊙ε`, deterministic at
-`τ = 0` (the inference default). `logLikelihood` includes the log-density of
-sampled payloads, so encodings can be trained by sampling-based objectives as well
-as by gradients through the payload; `klPrior` is the VAE-style regulariser. Stored
-blocks may be Gaussian distributions ([NEURALESE_PORT.md](NEURALESE_PORT.md),
-[NEURALESE_FILES.md](NEURALESE_FILES.md)).
-
-**Backends.** A call that needs Neuralese on a backend without support fails with
-`neuralese-unsupported-backend`. There is no text fallback.
+rejected (see Iteration and termination). The refinement and trust types
+`Is<T, P>` and `Untrusted<T>` belong to the
+[refinements extension](ext/refinements.md).
 
 ## Runtime and tasks
 
@@ -643,34 +443,26 @@ restores the task across `await`, and `runtime.bind` wraps callbacks from
 uncompiled code). A call with no task fails. Tasks run concurrently. Each
 invocation produces a trace of messages, tools, actions, observations, effects,
 and its outcome.
+Recording and compilation of calls are the [call records extension](ext/call-records.md); resuming a long
+invocation is [continuations](ext/continuations.md).
 
-## Call records and compilations
+## Known discrepancies
 
-The runtime records every call: the definition and its revision, the parent call
-and the eval that started it, exact inputs and captures, the result, each service
-call with its arguments and result, folder changes, the eval programs run, and
-cost. Values beyond a bound are recorded by hash and type; a program may exclude
-definitions or arguments, which are then recorded by type only.
+Places where this document, the skills and the code disagree. They are recorded here, not resolved; each
+needs an owner decision. Found while splitting the specification (2026-10-09).
 
-A call may be served by a compilation of its definition's revision: an ordered
-list of crisp cases, each a guard over the call's arguments and a body with the
-function's signature, run with the function's context and services. The first
-active case whose guard admits the arguments serves the call. A case that fails
-or returns a value of the wrong type does not fail the call: the agent runs it,
-told which effects the case already performed. A compilation never changes the
-program's source, applies only while the definition's context interface is the
-one it was compiled against, and is promoted or demoted by measured comparison
-with the agent (plans/TRACE_SPECIALIZATION.md).
-
-## Continuations
-
-A long invocation may continue in a fresh model conversation. The runtime
-carries the scope, staged result, child state, and folder overlay; earlier
-conversation text is not copied. A short working note may carry unresolved
-reasoning.
-# Instruction adaptation
-
-See [ADAPTATION.md](../docs/ADAPTATION.md) for the current TypeScript adaptation
-APIs, portable artifacts, evaluation workflow, and implementation status. The
-full acceptance contract and remaining gates are tracked in
-[ADAPTATION_SYSTEM_IMPLEMENTATION.md](../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md).
+1. **Quoting of frontmatter types.** The code (`ts-host/src/runtime/loader.ts`) and the frontmatter paragraph above
+   read `args`, `returns` and `types` as TypeScript type text, so types need no YAML quoting. The authoring skill
+   (`skills/natlang-authoring/references/language.md`, "Named functions and callable folders") says to quote YAML
+   type strings that contain record syntax or YAML punctuation. Quoting is harmless (a fully quoted value is its
+   contents) but the skill states it as a requirement.
+2. **Reserved child names.** The list above names `constructor`, `in` and `with`; the skill's list omits them.
+3. **`neuralese-dialect-mismatch`.** The Neuralese extension says values of different dialects do not unify, with
+   this code. The only place that raises the code is the `.nz` file loader (`native/nz-file.ts`, when a file entry's
+   dialect differs from its declared type). The compiler has no check of that name.
+4. **`readout: decision` arity.** The text says a finite result type; the loader (`runtime/loader.ts`) also
+   requires at least two values, so a single-literal or `null`-only return is rejected.
+5. **`iteration-unbounded` and `iteration-measure-exhausted`.** Both are carried by `IterationLimitError` (the text
+   says so only for the second); `iteration-unbounded` is thrown at run time, after the initial state fails the predicate and before the first step (a loop whose initial state already satisfies it returns without error), not when a limit is reached.
+6. **Code comments cite the old layout.** `ts-host/src/neuralese/*.ts` and `ts-host/src/runtime/contexts.ts` cite
+   "spec/SPEC.md, Neuralese chapter"; that text is now `spec/ext/neuralese.md` and `spec/ext/learning.md`.

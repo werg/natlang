@@ -3,7 +3,7 @@ description: Recover an operation whose outcome is unknown. Look for its receipt
 args:
   snapshot: Snapshot
   limits: Limits
-returns: Decision
+returns: CheckedDecision
 ---
 snapshot.state.pending is the key of an operation that was started and not acknowledged. snapshot.receipt is the remote's
 receipt for that key, or null. snapshot.state.checks counts the looks that found no receipt. Choose by the first rule

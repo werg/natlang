@@ -4,7 +4,7 @@ args:
   goal: string
   tasks: Task[]
   files?: Folder
-returns: BuildReport
+returns: CheckedReport
 ---
 Build goal from tasks with the stages in your folder. The build service is the workspace that runs commands and keeps
 the ledger of earlier runs; the stages decide. files, when given, is the folder the scheduling policy may read a

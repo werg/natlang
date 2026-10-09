@@ -2,12 +2,13 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 const root = fileURLToPath(new URL('../../applications/program-improver/', import.meta.url));
+// Documents (README, DECOMPOSITION) are not part of the program and stay out of its identity.
 const files = {};
 function walk(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) walk(path);
-    else if (entry.name !== 'main.ts' && !entry.name.endsWith('.d.ts') && !entry.name.endsWith('.d.nl.ts')) files[relative(root, path)] = readFileSync(path, 'utf8');
+    else if (entry.name !== 'main.ts' && !entry.name.endsWith('.md') && !entry.name.endsWith('.d.ts') && !entry.name.endsWith('.d.nl.ts')) files[relative(root, path)] = readFileSync(path, 'utf8');
   }
 }
 walk(root);

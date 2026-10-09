@@ -4,7 +4,7 @@ cases:
     title: 'A soft value used as a condition is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: |
       declare const urgent: Neuralese<boolean>;
       if (urgent) { /* … */ }
@@ -14,7 +14,7 @@ cases:
     title: 'Comparing soft values is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: |
       declare const a: Neuralese<string>, b: Neuralese<string>;
       const same = a === b;
@@ -24,7 +24,7 @@ cases:
     title: 'Interpolating a soft value into text is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: |
       declare const note: Neuralese<string>;
       const text = `Note: ${note}`;
@@ -34,7 +34,7 @@ cases:
     title: 'Spreading a soft value is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: |
       declare const s: Neuralese<{ a: string }>;
       const copy = { ...s };
@@ -44,7 +44,7 @@ cases:
     title: 'A model-written literal without a contextual type is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given:
       eval: "const x = <|neuralese|>⟦…⟧<|/neuralese|>;"
     expect: { diagnostic: neuralese-untyped-literal }
@@ -53,7 +53,7 @@ cases:
     title: 'Neuralese<Neuralese<T>> in frontmatter is rejected'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given:
       frontmatter: { returns: "Neuralese<Neuralese<string>>" }
     expect: { diagnostic: neuralese-nested }

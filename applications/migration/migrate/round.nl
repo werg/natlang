@@ -4,7 +4,7 @@ args:
   state: RepairState
   intent: Intent
 uses: [loop/triage, loop/repair]
-returns: RepairState
+returns: CheckedRepairState
 ---
 Run one round on state and return the next state. Work in eval. The repository service applies and validates.
 

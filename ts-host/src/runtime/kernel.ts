@@ -17,8 +17,10 @@ import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
-import { admit, handoffNote, isDeopt } from '../calls/dispatch.js';
+import { Deopt, admit, handoffNote, isDeopt } from '../calls/dispatch.js';
 import type { LoadedCase } from '../calls/compilations.js';
+import { runTiered, type TierAttempt } from '../calls/tiers.js';
+import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
@@ -62,6 +64,8 @@ export type InvokeOptions = {
   manifest?: Record<string, unknown>;
   /** Files of the context's `skills/` data entries, by path (`skills/<name>/SKILL.md`, ...): the call's bound skills. */
   skillFiles?: Readonly<Record<string, string | Uint8Array>>;
+  /** Set by the tiered engine (calls/tiers.ts): this call is one attempt at one tier. */
+  tierAttempt?: TierAttempt;
 };
 
 type ScopedHandle = Folder | FolderHandle | FileHandle;
@@ -303,12 +307,35 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   // preflight or setup error.
   const transactions = new Set<FolderTransaction>();
   if (options.folder) transactions.add(options.folder.transaction);
+  const tiered = tieredCall(frame, definition, positional, options);
+  if (tiered) return tiered;
   try {
     return await runDefinitionBody(frame, definition, positional, options, transactions);
   } catch (error) {
     for (const transaction of transactions) if (transaction.open) transaction.abort();
     throw error;
   }
+}
+
+/** The tiered engine (calls/tiers.ts) serves a configured function: one attempt per tier through this same dispatch. */
+function tieredCall(frame: Frame, definition: CallableDefinition, positional: unknown[], options: InvokeOptions): Promise<unknown> | undefined {
+  const task = frame.task, engine = task.runtime.options.tiers;
+  if (!engine || options.tierAttempt || options.folder || options.manifest?.internal || task.auditOf || definition.subtype !== 'function') return;
+  const settings = engine.settingsFor(definition.name);
+  if (!settings) return;
+  const args = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, positional[index]]).filter(([, value]) => value !== undefined));
+  let recorded = 0;
+  const store = task.runtime.callStore();
+  return runTiered(engine, settings, { name: definition.name, args, store,
+    ...(store ? { specialized: () => specializerOutput(store, definitionKey({ ...definition, body: options.instructions ?? definition.body }),
+      interfaceHash(definition.codebase)) } : {}),
+    hasModel: name => !!task.runtime.options.models?.[name],
+    run: plan => runDefinition(frame, plan.model ? { ...definition, model: plan.model } : definition, positional, { ...options, tierAttempt: plan }),
+    emit: events => {
+      const id = `${task.id}/tiers-${definition.name}-${++recorded}`;
+      task.record({ callId: id, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: `tiers:${definition.name}`,
+        name: `tiers ${definition.name}`, outcome: 'done', detail: '', events: events.map(event => ({ call_id: null, ...event })) } as never);
+    } });
 }
 
 async function runDefinitionBody(frame: Frame, definition: CallableDefinition, positional: unknown[],
@@ -479,7 +506,16 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const capture = store ? openCapture(store, task, frame, callId, definition, options, inputs, folder, model) : undefined;
   let handoff: string | undefined;
   let shadows: LoadedCase[] = [];
-  const mode = capture && !options.manifest?.internal && !task.auditOf ? task.specializationMode() : 'off';
+  const attempt = options.tierAttempt;
+  if (capture && attempt) attempt.capture = capture;
+  const mode = capture && !options.manifest?.internal && !task.auditOf && attempt?.compiled !== false ? task.specializationMode() : 'off';
+  // A tier's own crisp case (calls/tiers.ts) was admitted by the tier's guard; it runs whatever the specialization mode.
+  if (capture && attempt?.cases?.[0]) {
+    const crisp = await runCrispCase({ task, frame, childFrame, callId, definition, options, inputs, folder, extraTransactions,
+      capture, store: store!, item: attempt.cases[0] });
+    if (crisp.served) return crisp.value;
+    handoff = crisp.note;
+  }
   if (capture && mode !== 'off') {
     const compilation = task.runtime.compilations()?.get(capture.base.definition.key, capture.base.definition.interface,
       definition.codebase, definition.types);
@@ -495,6 +531,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       }
     }
   }
+  // A strict tier attempt serves from crisp cases only: with none, the engine goes on to the next tier and no model runs.
+  if (attempt?.strict && !handoff) { capture?.discard(); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => (capture?.effect({ ...event, exact }, 'agent'), event.phase === 'requested' ?
@@ -502,7 +540,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
       [{ node: invocationNodeId(callId), port: 'caller' }])));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
-  const addendum = frame.systemAddendum;
+  const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const agent = model ? new NativeToolAgent(model.driver, {
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
     neuralese: task.runtime.options.neuralese,
@@ -703,7 +741,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: [] });
     try {
       store.caseServed(item.hash, callId, false);
-      if (Math.random() < capture.settings.auditRate) store.enqueue('audit', item.hash, callId);
+      if (!item.hash.startsWith('tier:') && Math.random() < capture.settings.auditRate) store.enqueue('audit', item.hash, callId);
     } catch { /* recording never fails a call */ }
     return { served: true, value };
   } catch (caught) { error = caught; }

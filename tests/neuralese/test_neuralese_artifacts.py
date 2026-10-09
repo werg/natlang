@@ -70,3 +70,56 @@ def test_trained_artifacts_need_registered_corpora_parent_and_commit(tmp_path):
                   training={"corpora": [], "trainer": "t", "commit": "c"})
     with pytest.raises(artifacts.ArtifactError, match="unknown artifact"):
         artifacts.register(repo, orphan, {"bank.nz": nz(tmp_path / "o.nz")})
+
+
+def test_bundles_declare_adapter_dialects(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    path = tmp_path / "bundle.nz"
+    header = {"exports": {}, "blocks": {"a": {"dialect": "nd:test@1"}, "b": {"dialect": "adapter/1;base=x;kind=xs"}}}
+    save_file({"a": torch.zeros(2, 8), "b": torch.zeros(2, 4)}, str(path), metadata={"natlang": json.dumps(header)})
+    with pytest.raises(artifacts.ArtifactError, match="differ from"):
+        artifacts.register(repo, item("bundle-test-v1", kind="bundle"), {"a.nz": path})
+    manifest = artifacts.register(repo, item("bundle-test-v2", kind="bundle", extra_dialects=["adapter/1;base=x;kind=xs"]),
+                                  {"a.nz": path})
+    assert manifest["extra_dialects"] == ["adapter/1;base=x;kind=xs"]
+    with pytest.raises(artifacts.ArtifactError, match="adapter dialects"):
+        artifacts.register(repo, item("bundle-test-v3", kind="bundle", extra_dialects=["nd:other@1"]), {"a.nz": path})
+
+
+def test_trainer_outputs_register_with_their_parent_found_by_content(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    source = nz(tmp_path / "src.nz")
+    artifacts.register(repo, item(), {"bank.nz": source})
+    assert artifacts.find_by_sha(artifacts.digest(source), repo) == ("bank-test-v1", "bank.nz")
+    trained = nz(tmp_path / "system-prompts.nz", width=6)
+    manifest = artifacts.register_output(trained, identity="bank-test-trained-v1", kind="prompt-bank",
+                                         dialect="nd:test@1", backbone={"model": "test/model", "revision": "abc"},
+                                         trainer="natlang_neuralese.train.decision", commit="c0ffee",
+                                         corpora=["corpus-a"], parent="bank-test-v1", repo=repo)
+    entry = artifacts.entry(artifacts.load_registry(repo), "bank-test-trained-v1")
+    assert entry["init"] == {"method": "trained", "parent": "bank-test-v1"} and manifest["files"][0]["nz"]["widths"] == [6]
+    snapshot = tmp_path / "hub/models--x/snapshots/0123abcd"
+    assert artifacts.backbone_identity(str(snapshot)) == {"model": str(snapshot), "revision": "0123abcd"}
+    with pytest.raises(artifacts.ArtifactError, match="cannot pin"):
+        artifacts.backbone_identity(str(tmp_path / "unpinned-model"))
+
+
+def test_a_finished_run_registers_its_bank_with_parent_and_corpora(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    source = nz(tmp_path / "src.nz")
+    artifacts.register(repo, item(), {"bank.nz": source})
+    records = tmp_path / "records.jsonl"
+    records.write_text('{"r": 1}\n')
+    manifests = repo / "training/corpus-manifests"
+    manifests.mkdir(parents=True)
+    (manifests / "corpus-a.json").write_text(json.dumps({"id": "corpus-a", "files": [
+        {"path": "records.jsonl", "sha256": artifacts.digest(records)}]}))
+    run = tmp_path / "run"
+    run.mkdir()
+    nz(run / "system-prompts.nz", width=5)
+    (run / "summary.json").write_text(json.dumps({"options": {"records": str(records), "bank": str(source),
+                                                              "base": str(tmp_path / "hub/snapshots/feed01")}}))
+    artifacts.register_run(run, "bank-run-v1", commit="c0ffee", repo=repo)
+    entry = artifacts.entry(artifacts.load_registry(repo), "bank-run-v1")
+    assert entry["init"]["parent"] == "bank-test-v1" and entry["training"]["corpora"] == ["corpus-a"]
+    assert entry["backbone"]["revision"] == "feed01" and entry["qualification"]["status"] == "unqualified"

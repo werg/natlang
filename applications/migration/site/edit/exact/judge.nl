@@ -4,7 +4,7 @@ args:
   patches: Patch[]
   classified: Classified
   revision: string
-returns: Exactness
+returns: CheckedExactness
 ---
 Check patches, written for classified.site at revision. Take the first failure and stop; the problem names the path
 and says what to change in one sentence.

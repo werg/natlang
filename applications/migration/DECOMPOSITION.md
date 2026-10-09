@@ -91,24 +91,36 @@ Putting them under `migrate/` fails the load, because a function that `uses` a c
 | `exact` | `repository.implementation('exact')` | `site/edit/exact.ts`: counts and differences | `site/edit/exact/judge.nl` | natural-language |
 | `settled` | `repository.implementation('settled')` | `settledCrisp.ts` | `settled.nl` | natural-language |
 
-## Refinement candidates
+## Refinements
 
-| Slot | Proposed type |
-|---|---|
-| `Patch.old` | `Is<string, "text that occurs exactly once in the patch's file at the base revision, copied from the file">` |
-| `Patch.path` | `Is<string, "a path of the file manifest">` |
-| `Patch.new` | `Is<string, "differs from old, and keeps the surrounding code valid">` |
-| `Intent.queries` | `Is<string[], "exact strings that occur in the code, most specific first, none empty">` |
-| `Intent.invariants` | `Is<string[], "behaviors the checks observe, each stated as what stays true">` |
-| `Site.text` | `Is<string, "exactly lines from to of path at the revision">` |
-| `Site.from`, `Site.to` | `Is<number, "a line of the file, from at most to">` |
-| `Usage.pattern` | `Is<string, "one of the listed patterns">` |
-| `Plan.edits` | `Is<string[], "ids of sites whose usage action is edit, without duplicates">` |
-| `Plan.leave` | `Is<{site: string, reason: string}[], "ids of sites whose usage action is leave, each with a reason">` |
-| `Finding.kind` | `Is<string, "one of missed-site, wrong-edit, test-expectation, environment, unrelated">` |
-| `Finding.repairable` | `Is<boolean, "true exactly for missed-site, wrong-edit and test-expectation">` |
-| `Finding.evidence` | `Is<string, "copied from the check output or the rejection message">` |
-| `repair` return | `Is<Patch[], "each patch applies to the candidate it was written for and addresses a repairable finding">` |
-| `Exactness.problem` | `Is<string, "empty when exact; otherwise names the path and says what to change">` |
-| `Summary.summary` | `Is<string, "states whether the checks pass and how many sites changed, in at most three sentences">` |
-| `RepairState.remaining` | `Is<number, "a non-negative integer that falls every round">` |
+Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). Decisions: (a) adopted with a crisp checker in
+`refinements.ts` (no model call), (b) a natural-language judge (proposed only: awaiting live evaluation, not wired),
+(c) left to the check that already enforces it exactly (the repository service, the exact patch check), (d) not
+adopted: the value alone does not show the property. The refined result types are `Checked*` aliases in `types.ts`,
+named in the `returns` of the stage that produces the value; crisp code keeps the plain types.
+
+| Slot | Proposed type | Decision |
+|---|---|---|
+| `Patch.old` | `Is<string, "text that occurs exactly once in the patch's file at the base revision, copied from the file">` | (c) The exact check (`site/edit/exact`) counts occurrences in the file, which the value does not show. "Non-empty" is adopted with `Patch.new` below. |
+| `Patch.path` | `Is<string, "a path of the file manifest">` | (c) `repository.apply` refuses unknown paths; the manifest is not in the value. |
+| `Patch.new` | `Is<string, "differs from old, and keeps the surrounding code valid">` | (a) `CheckedPatches`, for `patch` and `repair`: each patch names a path, replaces non-empty old text and differs from it. That the code stays valid is the checks' (d). |
+| `Intent.queries` | `Is<string[], "exact strings that occur in the code, most specific first, none empty">` | (a) Weakened (`CheckedIntent`): non-empty strings, each once. That they occur in the code needs the repository (d). |
+| `Intent.invariants` | `Is<string[], "behaviors the checks observe, each stated as what stays true">` | (b) Proposed, awaiting live evaluation (not wired): one judge call per invariant, once per migration. |
+| `Site.text` | `Is<string, "exactly lines from to of path at the revision">` | (d) The file is not in the value; `repository.lines` supplies the text. |
+| `Site.from`, `Site.to` | `Is<number, "a line of the file, from at most to">` | (a) Weakened (`CheckedSite`): line numbers from 1, from at most to, hits a whole number. Being a line of the file needs the file (d). |
+| `Usage.pattern` | `Is<string, "one of the listed patterns">` | (a) `CheckedUsage`, with a non-empty reason. |
+| `Plan.edits` | `Is<string[], "ids of sites whose usage action is edit, without duplicates">` | (a) Weakened (`CheckedPlan`): each id once and none also left. That they are the sites whose action is edit needs the classified sites (d). |
+| `Plan.leave` | `Is<{site: string, reason: string}[], "ids of sites whose usage action is leave, each with a reason">` | (a) Weakened (`CheckedPlan`): each entry gives a site id and a reason. |
+| `Finding.kind` | `Is<string, "one of missed-site, wrong-edit, test-expectation, environment, unrelated">` | (a) `CheckedFinding`. |
+| `Finding.repairable` | `Is<boolean, "true exactly for missed-site, wrong-edit and test-expectation">` | (a) `CheckedFinding`. |
+| `Finding.evidence` | `Is<string, "copied from the check output or the rejection message">` | (d) The check output is not in the value. |
+| `repair` return | `Is<Patch[], "each patch applies to the candidate it was written for and addresses a repairable finding">` | (c) `repository.apply` refuses a patch that does not apply; the candidate and findings are not in the value. The shape of the patches is `CheckedPatches` (a). |
+| `Exactness.problem` | `Is<string, "empty when exact; otherwise names the path and says what to change">` | (a) Weakened (`CheckedExactness`): empty exactly when exact, a sentence otherwise. Naming the path needs the patches (d). |
+| `Summary.summary` | `Is<string, "states whether the checks pass and how many sites changed, in at most three sentences">` | (b) Proposed, awaiting live evaluation (not wired): one judge call per migration. |
+| `RepairState.remaining` | `Is<number, "a non-negative integer that falls every round">` | (a) Weakened (`CheckedRepairState`): a non-negative whole number. Falling every round needs the previous state, and the measure of `iterateOn` already enforces it. |
+
+Counts: (a) 10, (b) 2, (c) 3, (d) 2.
+
+The model-facing text added to signatures is the `Is<...>` predicate of `CheckedPatches`, `CheckedIntent`, `CheckedSite`,
+`CheckedUsage`, `CheckedPlan`, `CheckedFinding`, `CheckedExactness` and `CheckedRepairState`. No instruction sentence
+was changed.

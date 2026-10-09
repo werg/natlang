@@ -3,7 +3,7 @@
   "name": "@natlang/build",
   "version": "0.1.0",
   "description": "A build system in natural language: dependency-graph understanding, closure and order planning, ready-task scheduling and cache validity as pluggable policies, failure diagnosis and reports. The workspace runs commands without a shell, keeps paths inside the root, checks digests and keeps the ledger and cache.",
-  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "services.d.ts", "types.ts", "build.nl", "build", "tsconfig.json"],
+  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "services.d.ts", "types.ts", "refinements.ts", "build.nl", "build", "tsconfig.json"],
   "targets": { "build": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands"], "commands": ["*"],
     "description": "natlang run applications/build -- GRAPH.json [--goal ID] [--root DIR] [--ready|--choose|--validity crisp|natural-language]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

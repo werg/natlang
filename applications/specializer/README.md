@@ -22,6 +22,7 @@ natlang compilations show support            # what was stored, how its cases ar
 
 ```
 main.ts                   crisp orchestration: targets, rounds, verification, storing, offline jobs
+promote.nl                promotion policy (promotionPolicy nl|shadow): promote, keep or demote a case or tier from its evidence
 writeCase.nl              directory reducer: one group's folder in, case.ts out (or a reason to skip)
 writeCase/semanticCheck   decision: is a condition how the decision is made, or does it need meaning
 writeCase/sameApproach    decision: do two normalized programs do the same work

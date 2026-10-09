@@ -67,3 +67,32 @@ export type Migration = {
   report: MigrationReport, intent: Intent, plan: Plan, edits: SiteEdit[], findings: Finding[], rounds: number,
   summary: string, next: string[],
 };
+
+// ---------------------------------------------------------------- refined results
+// What a stage returns carries the property its value shows by itself. The repository service and the exact checks keep
+// the properties that need the files (that old occurs once, that a path exists, that text is the lines it claims), and
+// crisp code keeps the plain types. Each predicate has a crisp checker in refinements.ts.
+
+/** Patches that change something: each names a path, replaces non-empty text, and the new text differs. */
+export type CheckedPatches = Is<Patch[], "patches that each name a path, replace non-empty old text, and give new text that differs from the old">;
+
+/** The request restated: the search strings are non-empty and each is listed once. */
+export type CheckedIntent = Is<Intent, "an intent whose queries are non-empty strings, each listed once">;
+
+/** A site whose lines are a range of whole lines. */
+export type CheckedSite = Is<Site, "a site whose from and to are line numbers from 1 with from at most to, and whose hits is a whole number">;
+
+/** A usage with one of the ten patterns and a stated reason. */
+export type CheckedUsage = Is<Usage, "a usage whose pattern is declaration, call, import, export, type-position, property-access, comment-or-doc, string-literal, test or unrelated, and whose reason is not empty">;
+
+/** A plan that lists each site to edit once, leaves each with a reason, and never both edits and leaves a site. */
+export type CheckedPlan = Is<Plan, "a plan whose edits list each site id once, whose leave entries each give a site id and a reason, and in which no site id is both edited and left">;
+
+/** Findings of a known kind, repairable exactly for the first three kinds. */
+export type CheckedFinding = Is<Finding, "a finding whose kind is missed-site, wrong-edit, test-expectation, environment or unrelated, and which is repairable exactly when the kind is missed-site, wrong-edit or test-expectation">;
+
+/** An exactness verdict whose problem is empty exactly when the patches are exact. */
+export type CheckedExactness = Is<Exactness, "a verdict whose problem is empty when exact is true and is a sentence when exact is false">;
+
+/** A round's state, with a budget that is a whole number of rounds. */
+export type CheckedRepairState = Is<RepairState, "a state whose remaining budget is a non-negative whole number">;

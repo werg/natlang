@@ -94,3 +94,20 @@ export type BuildReport = {
   diagnosis?: Diagnosis, problems: Problem[], plan?: Plan,
   summary: string, next: string[],
 };
+
+// ---------------------------------------------------------------- refined results
+// What a stage returns carries the property its value shows by itself. Declarations (Task) and the state the commit
+// builds keep plain types: `declare` and `commit` enforce them exactly. Each predicate below has a crisp checker in
+// refinements.ts. (Summary.summary would take a judged predicate; it is proposed in DECOMPOSITION.md and not wired.)
+
+/** The result of `order`: needed is sorted without duplicates and holds the goal; order and cycle split it. */
+export type CheckedPlan = Is<Plan, "a plan whose needed list is sorted without duplicates and contains the goal, and whose order and cycle together hold each needed task exactly once">;
+
+/** The result of the validity judgment: valid exactly when the reason says the record is up to date. */
+export type CheckedValidity = Is<Validity, "valid exactly when the reason is up to date; an invalid verdict's reason is no record of an earlier run, declaration changed, or input changed, output missing or output modified followed by a colon, a space and a path">;
+
+/** The result of `diagnose`: a known cause, and the retry advice that follows from it. */
+export type CheckedDiagnosis = Is<Diagnosis, "a diagnosis whose cause is command-failed, missing-input, missing-tool, output-conflict, input-mutated, path-escape, declaration-error, interrupted or other, and whose retry is inspect-first for interrupted, no for other and after-fix for every other cause">;
+
+/** The build's report: done only when the goal was built or reused and every result is ok. */
+export type CheckedReport = Is<BuildReport, "a report whose status is done only when order contains the goal and every result has status ok">;

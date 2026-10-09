@@ -6,3 +6,5 @@ export type CaseResult =
 export type ConditionKind = 'structural' | 'semantic';
 /** Whether two normalized programs do the same work. */
 export type Sameness = 'same' | 'different';
+/** A promotion policy's answer about one case or tier (calls/evidence.ts). */
+export type PromotionAnswer = { decision: 'promote' | 'keep' | 'demote'; reason: string };

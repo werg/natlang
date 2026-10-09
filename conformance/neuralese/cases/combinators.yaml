@@ -4,7 +4,7 @@ cases:
     title: 'read returns a checked T'
     stage: S5
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'A Neuralese<Summary> written from a known summary.'
     expect: 'read returns a value of type Summary that passes validation.'
 
@@ -12,7 +12,7 @@ cases:
     title: 'An invalid readout fails like a call'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'A scripted readout returning a value that does not match T.'
     expect: { error: NatlangCallError, repair: "the normal repair path runs before failing" }
 
@@ -20,7 +20,7 @@ cases:
     title: 'map keeps the result soft with the step''s result type'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: "map(note: Neuralese<Summary>, async (s: Summary) => s.headline)"
     expect: 'A Neuralese<string> reference; a combinator node in the trace with the operator body revision.'
 
@@ -28,7 +28,7 @@ cases:
     title: 'split yields soft parts per field'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'split(v) with v a Neuralese<{ headline: string; points: string[] }>.'
     expect: "{ headline: Neuralese<string>, points: Neuralese<string[]> }, each a new block."
 
@@ -36,7 +36,7 @@ cases:
     title: 'empty is a zero-length block'
     stage: S4
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'empty<Summary>()'
     expect: 'A block of length 0 in the current dialect; no model call.'
 
@@ -52,7 +52,7 @@ cases:
     title: 'A context-held operator body overrides the library default'
     stage: S5
     status: pending
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'A program whose context binds its own body for map.'
     expect: 'The trace''s combinator node names the program''s body revision, not the library''s.'
 

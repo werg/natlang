@@ -653,3 +653,68 @@ and evaluations bind selected document hashes/groups and the group-order digest.
 A bounded periodic probe does not establish comprehensive capability; use broader
 source-group coverage before release qualification. Active frozen runtimes retain
 their recorded probe policy; changed selection remeasures the crisp baseline.
+
+## Recipe inheritance (`extends` / `overrides`)
+
+A multi-stage recipe may declare `"extends": "<recipe id>"` (the parent is the sibling file in the same directory with
+that id) and `"overrides": {...}`. Merge rule: objects merge recursively by key; lists, strings, numbers, booleans and
+null replace the parent value whole (lists never concatenate); `{"$delete": true}` removes a key (or, under
+`overrides.stages`, a stage). `overrides.stages` maps a stage id to an object merged into that stage of the parent
+(unknown ids and id changes are errors); other `overrides` members merge into the top level. The child's `id` and
+`description` win; `extends`/`overrides` are consumed. Resolution precedes validation, so the handler parameter
+whitelist applies to the merged result; cycles are errors. For a recipe that uses `extends`, `recipe_sha256` in plans,
+launch intents, stage reports and certificates is the canonical-JSON SHA-256 of the resolved recipe; plain recipes keep
+their file-bytes hash. A resumed lineage whose recorded recipe content equals the resolved content keeps its original
+hash. `python -m natlang_neuralese.train.recipe resolve <id>` prints the resolved recipe and hash. Experiment history of
+converted recipes lives in `training/neuralese/recipes/HISTORY.md`.
+
+## Pop matched own-history review (2026-10-09; proposal, not adoption)
+
+Two shared `eval.self_feedback` runs use the same4962 held input,16 documents,
+first/last windows,16K context,32-token prefix and up to256 generated positions.
+The weights are mapped best23936 and the immutable intermediate24448 export,
+not the latest checkpoint. Reports live beneath
+`/srv/storage/natlang-artifacts/luna-self-feedback-best23936-20261009-v1/result-parent-v3/`.
+Best report SHA: `3973703f55f818dc5dd986d240cfd3da7690e14cd90ab2440dbe5811f945e4aa`;
+intermediate report SHA: `909df9376f257bcb2f35f2af7f3fbae32a306e0c784e10345ffdfe128befe308`.
+
+These compare the channel on projection-generated histories. The quality gap
+compares ordinary-model NLL for each generated continuation on its own ordinary
+history. It is neither gold-tail accuracy nor task success.
+
+| Stratum |23936 agreement / KL / quality gap |24448 agreement / KL / quality gap |
+|---|---|---|
+|First|.9782 / .0477 / .0735|.9581 / .0886 / .1521|
+|Last|.9817 / .0377 / .0705|.9783 / .0382 / .0620|
+|Long|.9811 / .0444 / .0852|.9728 / .0546 / .0863|
+|Medium|.9695 / .0236 / -.0240|.9529 / .0696 / .1620|
+|Short|.9938 / .0042 / -.0009|1.0000 / .0013 / .0000|
+
+Short passes the predeclared proposed gate on both weights; other strata fail.
+Only5 medium windows were measured. Most windows are unchanged or move little;
+two dominate the first/medium regression: document hash `2c6ccf373f…`, offset5888,
+129positions (first paired-rollout mismatch55), and `08a8bf1ead…`, offset5888,
+122positions (mismatch29). Later quality improvements coexist with early
+divergence; they do not establish uniform alignment.
+
+Next diagnostic proposal: retain fixed-span metrics, additionally report
+position bands and metrics through the first generated close (stopping itself
+remains separately qualified). This isolates channel drift from post-close
+continuation. Add these to the shared evaluator, never a backbone-specific path.
+
+Objective proposal for owner review, not implemented: preserve gold control and
+context-valid gold-prefix semantic supervision, but investigate a separate
+channel-consistency objective on the actual generated history through its close.
+Compare ordinary token-embedding and projected consumers on the same generated
+tokens; stop-gradient the ordinary conditional-distribution target, and optimize
+projected-consumer agreement over positions beyond gold divergence too. This
+would address a supervision gap: current gold losses must mask the unrelated
+gold tail, leaving most of a divergent rollout without channel-alignment
+supervision. Measure whether this improves consistency without harming ordinary
+text quality; do not silently restore invalid gold-tail targets, relax gates, or
+qualify a checkpoint from its completed step count. Distinguish this proposal
+from training the sketch or adding a frozen teacher model.
+
+The frozen Pop run resumed from complete24704 optimizer/schedule/RNG state
+(first update24705). No objective or schedule was hot-patched. A change requires
+a declared shared recipe/implementation and exact-weight requalification.

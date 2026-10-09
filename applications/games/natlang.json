@@ -3,7 +3,7 @@
   "name": "@natlang/games",
   "version": "0.2.0",
   "description": "Game worlds whose rules are natural language: a market that settles in a seeded order, a duel arena that resolves simultaneously, and NPCs that act from their own memory. Crisp code checks what the stages produce.",
-  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "types.ts", "games.nl", "games", "tsconfig.json"],
+  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "types.ts", "refinements.ts", "games.nl", "games", "tsconfig.json"],
   "targets": { "games": { "entry": "main.ts", "authority": [],
     "description": "natlang run applications/games -- economy|combat|village [--turns N] [--crisp]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

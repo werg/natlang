@@ -4,6 +4,8 @@
   "policy": "Rewrite callers and training data directly. Do not provide compatibility modes or codecs.",
   "specification": [
     "spec/SPEC.md",
+    "spec/ext/neuralese.md",
+    "spec/ext/learning.md",
     "spec/NEURALESE_DATA.md",
     "plans/neuralese/S0_SPEC.md"
   ],

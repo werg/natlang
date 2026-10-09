@@ -56,7 +56,10 @@ admits the call's arguments serves it, with the function's own context items and
 - New cases start in shadow: the agent serves, and the call is replayed against the case offline. A case is promoted
   after `promotionComparisons` (10) comparisons with at most `acceptanceBound` of them worse, of which at least
   `promotionLiveComparisons` (3) are on calls made after the compilation; an active case is demoted when audits or
-  hand-offs exceed that bound. `auditRate` of crisp-served calls are re-run through the agent offline.
+  hand-offs exceed that bound. `auditRate` of crisp-served calls are re-run through the agent offline. Cases and
+  the tiered engine's tiers (below) are judged by the same rule and settings; `promotionPolicy=crisp|nl|shadow`
+  (default `crisp`) chooses who decides: the fixed rule as evidence arrives, the natural-language policy
+  (`applications/specializer/promote.nl`) from the specializer loop, or both with the crisp one applied.
 - A case that uses a service the calling task does not provide is not considered for that call.
 - Settings: `natlang traces config specialization=off|shadow|on auditRate=0.05 ...`, `NATLANG_SPECIALIZATION`, a
   program's `"specialization"` in `natlang.json`, and `createNatlangRuntime({ specialization })`; the lowest wins.
@@ -69,6 +72,7 @@ natlang compilations why CALL             # which case served a call, or why non
 natlang compilations export support DIR   # the compilation and its evidence as files
 natlang compilations disable CASE
 natlang compilations savings              # tokens and time saved by serving, against what specializing spent
+natlang traces tiers                      # the same evidence per function and tier (compiled cases are tier 3); plans/TIERED_ENGINE.md
 natlang compilations findings             # what compiling found about programs and their executor; acknowledge ID
 natlang compilations export-corpus --out DIR   # cases with their evidence, declines and findings as JSONL
 ```

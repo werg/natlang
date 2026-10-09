@@ -9,6 +9,7 @@ training/neuralese/natlang_neuralese/artifacts.py.
     scripts/neuralese_artifacts.py register --id ID --kind prompt-bank --dialect nd:natlang@1 \\
         --backbone-model LiquidAI/LFM2.5-350M --backbone-revision REV --init-method text \\
         --init-source ts-host/src/native/system-prompts.ts --file bank.nz=/path/to/bank.nz
+    scripts/neuralese_artifacts.py register-run --id ID --run-dir RUN [--backbone-revision REV]
     scripts/neuralese_artifacts.py verify [--id ID]
     scripts/neuralese_artifacts.py resolve --id ID [--file NAME]
     scripts/neuralese_artifacts.py list
@@ -48,6 +49,7 @@ def cmd_register(args):
     sources = parse_files(args.file)
     item = {
         "id": args.id, "kind": args.kind, "owner": args.owner, "dialect": args.dialect,
+        **({"extra_dialects": args.extra_dialect} if args.extra_dialect else {}),
         "backbone": {"model": args.backbone_model, "revision": args.backbone_revision,
                      **({"family": args.backbone_family} if args.backbone_family else {})},
         "init": {"method": args.init_method,
@@ -114,13 +116,14 @@ def transfer(args, direction):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", choices=["register", "verify", "resolve", "list", "push", "pull"])
+    parser.add_argument("action", choices=["register", "register-run", "verify", "resolve", "list", "push", "pull"])
     parser.add_argument("--repo", type=Path, default=REPO)
     parser.add_argument("--id", action="append", dest="ids")
     parser.add_argument("--file", action="append", help="register: NAME=PATH (repeatable); resolve: NAME")
     parser.add_argument("--kind", choices=sorted(artifacts.KINDS))
     parser.add_argument("--owner", choices=["dgx", "pop"], default="dgx")
     parser.add_argument("--dialect")
+    parser.add_argument("--extra-dialect", action="append", help="adapter dialect (adapter/…) of blocks in the file")
     parser.add_argument("--backbone-model")
     parser.add_argument("--backbone-revision")
     parser.add_argument("--backbone-family")
@@ -136,6 +139,7 @@ def main(argv=None):
     parser.add_argument("--qualification", choices=sorted(artifacts.QUALIFICATION), default="unqualified")
     parser.add_argument("--evidence", action="append")
     parser.add_argument("--notes")
+    parser.add_argument("--run-dir", type=Path, help="register-run: a finished trainer run (summary.json + system-prompts.nz)")
     parser.add_argument("--host", default="pop-os")
     parser.add_argument("--remote-repo", default="/home/werg/natlang")
     args = parser.parse_args(argv)
@@ -149,6 +153,13 @@ def main(argv=None):
             if missing:
                 raise SystemExit("register needs " + ", ".join("--" + m.replace("_", "-") for m in missing))
             cmd_register(args)
+        elif args.action == "register-run":
+            if not args.ids or len(args.ids) != 1 or not args.run_dir:
+                raise SystemExit("register-run needs --id and --run-dir")
+            manifest = artifacts.register_run(args.run_dir, args.ids[0], backbone_revision=args.backbone_revision,
+                                              trainer=args.trainer, commit=args.commit or git_commit(args.repo),
+                                              repo=args.repo)
+            print(json.dumps({"registered": args.ids[0], "bytes": manifest["bytes"]}))
         elif args.action == "verify":
             cmd_verify(args)
         elif args.action == "resolve":

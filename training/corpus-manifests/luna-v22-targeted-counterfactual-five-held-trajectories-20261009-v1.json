@@ -1,0 +1,229 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/campaign-closeout-v1.json",
+      "bytes": 9840,
+      "sha256": "d6d9e7356a8834692f588ff788864fd93ac9aa209d5c28875724214cead3e225"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/launch.json",
+      "bytes": 4482,
+      "sha256": "ebb0d44e9f0996e581a2eecdaf8c701ecf6b32ca4c9b26c913235bf64ab58baf"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/quality-review-v1/trajectory-quality-review-v2.json",
+      "bytes": 24626,
+      "sha256": "de0f8d5908a307d281d84349fd0b49e63a2815fc4caf6ace553557e95a0fd62e"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/root-launch-receipt-v2.json",
+      "bytes": 3807,
+      "sha256": "3ba19f90b0382ed1bf65774f8791d9605a09ce50c82107038ffc1271178ebbe6"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-01/jobs/000000-0902f25e0b417661.result.json",
+      "bytes": 4874838,
+      "sha256": "3a3428fe499ed3fead6e6280b297038e1f25877486f2c8e1fd27b778e0562588"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-01/jobs/000000-0902f25e0b417661.trace.jsonl",
+      "bytes": 1257121,
+      "sha256": "e4b59db28a28d04b755ab83e42cd4cb43cdc723079a17e878a615bc1e6725201",
+      "lines": 710
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-01/results/case-000000.results.jsonl",
+      "bytes": 4874838,
+      "sha256": "3a3428fe499ed3fead6e6280b297038e1f25877486f2c8e1fd27b778e0562588",
+      "lines": 1
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 1682,
+      "sha256": "09f6c92a3af16f853fdc8076483973cbf48d87fff95b98ec53401b0875f3f8c1"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-02/jobs/000001-8151446f05f9ecd6.result.json",
+      "bytes": 4009893,
+      "sha256": "74dba6f5fa1fcb7fdcdeb737f2f46839e0fc96296d918a2a2f68b9f85461e6cb"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-02/jobs/000001-8151446f05f9ecd6.trace.jsonl",
+      "bytes": 921429,
+      "sha256": "e9337901a281c9aba5e78f4c0816bd76d848302ec229e8440625315303d75b28",
+      "lines": 532
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-02/results/case-000001.results.jsonl",
+      "bytes": 4009893,
+      "sha256": "74dba6f5fa1fcb7fdcdeb737f2f46839e0fc96296d918a2a2f68b9f85461e6cb",
+      "lines": 1
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 1678,
+      "sha256": "44e03195697ce5baffd5c45be0b0a12e5af03ddc500fe628fb8eba7e6cf30ea5"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-03/jobs/000002-f2726c36961ae380.result.json",
+      "bytes": 4935426,
+      "sha256": "0aaab7eff335eff40db4430cb503ef35c499179d788f659d2f15eae00287e399"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-03/jobs/000002-f2726c36961ae380.trace.jsonl",
+      "bytes": 1012692,
+      "sha256": "becbbba9837c68fc6f685ca1c6f8c2fe2d6038c97887bf5e91959a92185717b5",
+      "lines": 828
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-03/results/case-000002.results.jsonl",
+      "bytes": 4935426,
+      "sha256": "0aaab7eff335eff40db4430cb503ef35c499179d788f659d2f15eae00287e399",
+      "lines": 1
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 1682,
+      "sha256": "ec271e8c2f7a469a9ae31b8eea0be4def1369ac68924058f5d29e0bae900c800"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-04/jobs/000003-af5a8095c1e55a57.result.json",
+      "bytes": 5041951,
+      "sha256": "9e51e0cb641da3022d34d5e1cdf43fbc5243f6b6c9d5eef447aaddfa6db2616f"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-04/jobs/000003-af5a8095c1e55a57.trace.jsonl",
+      "bytes": 1168211,
+      "sha256": "2a0d007932eaf5d00a1cab4017deb7a2dc2621e4cb66103d93525a7fdb39ddeb",
+      "lines": 738
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-04/results/case-000003.results.jsonl",
+      "bytes": 5041951,
+      "sha256": "9e51e0cb641da3022d34d5e1cdf43fbc5243f6b6c9d5eef447aaddfa6db2616f",
+      "lines": 1
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 1682,
+      "sha256": "241d8c881eac0fd393a1d5d9dfd663b441741201186b2c76508f94570013e215"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-05/jobs/000004-4709f15b8532b6a2.result.json",
+      "bytes": 9415919,
+      "sha256": "32c636da692c90361f8a473578ef6834b1ca92f16ed0511819ab20f8f4d5dee9"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-05/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+      "bytes": 1824740,
+      "sha256": "f3701021d7a293643214a975597ba2aa6f70495d5c2b5a0352bd5bd6da568fee",
+      "lines": 1461
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-05/results/case-000004.results.jsonl",
+      "bytes": 9415919,
+      "sha256": "32c636da692c90361f8a473578ef6834b1ca92f16ed0511819ab20f8f4d5dee9",
+      "lines": 1
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/campaign-current-main-v2/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 1687,
+      "sha256": "dcfeb840e2ec4df7bedc8caefc5dfef44e221e39891f1350ba3044df3804c699"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/dispatch-proposal-v2/dispatch-plan-approved-v2.json",
+      "bytes": 8737,
+      "sha256": "c6acf7aa69f6a3bf96892b10a6aa855bca31d1dff80bcb547491c241136a6a3f"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/dispatch-proposal-v2/root-generation-launch-approval-v3.json",
+      "bytes": 3606,
+      "sha256": "c613319fc63e4a9f24d78fc043a82d7499e481f00dbb43b05a075792082ecdbe"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/case-000.reference.json",
+      "bytes": 5078628,
+      "sha256": "f6e2a975b5ab00fe9d59c278d3eed8c787abe647c312293e8d87ae19525d2f81"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/case-001.reference.json",
+      "bytes": 5089409,
+      "sha256": "a98b38158fc45cb2e0b96a273a2814e8cb5f04f2932c7560c4a0632bde21f90d"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/case-002.reference.json",
+      "bytes": 5091470,
+      "sha256": "e44d7dbf26b4cd8c54e14f5f46591db414a3bae9bda17dd47bbfedd02d74acbe"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/case-003.reference.json",
+      "bytes": 5086243,
+      "sha256": "59b97e12500cd099d32b417bd4934ee5ff50c6ef9a96992ee03c8784b71b2950"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/case-004.reference.json",
+      "bytes": 5041462,
+      "sha256": "cb6413c581b6d85f0082d007bcf015c1b0e9eb0559a469a2c60c023962f18bd4"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 27180,
+      "sha256": "20f373e3a3592ce0a9e314f40cac18d4ce04600d659a6322666669cb288b9ab9",
+      "lines": 60
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/native-decisions.jsonl",
+      "bytes": 8098114,
+      "sha256": "211b10334910820ce2d8aec33ebae21ae900f12622228c220c9ae12dff3fa7ed",
+      "lines": 60
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/reference-trajectories.jsonl",
+      "bytes": 4881077,
+      "sha256": "3a5406fbbb7642e7b06e54fc2f5e3213bd91aa48a776db58fec98ffbb838bb08",
+      "lines": 5
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/review-artifact-manifest.json",
+      "bytes": 1964,
+      "sha256": "48c2a21d18856f39ac9e9e0e67b9ed657d4a862c73eed71b2c84ec655a3efc57"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/runtime-reference-proof.json",
+      "bytes": 132289,
+      "sha256": "f1b2324b645282563f2f180c708c8b40b1fb4076263ae0b3e04b10e368a5c414"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/reference-proof-current-main-v4/source-action-review.jsonl",
+      "bytes": 117192,
+      "sha256": "34cb0b8320b11d018423fabc799b5a839cb04e4376de959ba397140974f6a144",
+      "lines": 60
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/source-v4/derive_cases.py",
+      "bytes": 8741,
+      "sha256": "ab762061c5616d2e8b95d23e2c31b58d679aedda729e0c676d48ac6d0bb4843f"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/source-v4/source-derivation-proof.json",
+      "bytes": 6781,
+      "sha256": "b5432e142d7f269c35087e9efea8a017a89bc55f3db947decb72e7c5f9d1e3f1"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/source-v4/source-manifest.json",
+      "bytes": 2228,
+      "sha256": "58fffa86aff4cae8ee2164fbbe449151c825f39d0d1453f0824f13aa803575b3"
+    },
+    {
+      "path": "luna-v22-targeted-counterfactual-five-20261009-v1/source-v4/source.cases.jsonl",
+      "bytes": 230270,
+      "sha256": "2de1a4a78b22d5136551bc72b03924e494c4d9f845b644c66bbc379667fabc35",
+      "lines": 5
+    }
+  ],
+  "bytes": 101696804
+}

@@ -5,7 +5,7 @@ args:
   snapshot: RepoSnapshot
   validation: Validation | null
   rejected: string
-returns: Finding[]
+returns: CheckedFinding[]
 ---
 Find the causes of the failure of the candidate at snapshot.revision. validation holds its checks (null when none ran),
 rejected is the message of a patch set that could not be applied (empty when none). Work in eval over the data.

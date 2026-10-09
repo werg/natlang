@@ -1388,6 +1388,58 @@ def test_document_windows_keep_context_tokens_out_of_targets():
     for w in masked:assert w['ids'][:w['prefix']]==([1]+tokens+[2])[w['start']:w['start']+w['prefix']]
 
 
+def test_prepare_text_windows_shares_roles_mask_suffix_and_first_last_policy():
+    from types import SimpleNamespace
+    from natlang_neuralese.train.text_warmup import (
+        ROLE_CODES, document_windows, prepare_text_windows, select_held_document_windows)
+
+    class SyntheticTokenizer:
+        unk_token_id=-1
+        special={'<|im_start|>':99,'system':10,'user':11,'assistant':12,
+                 'tool':13,'<think>':14,'</think>':15}
+        def convert_tokens_to_ids(self, value):
+            return self.special.get(value,-1)
+
+    class Controls:
+        open_id=1
+        close_id=2
+
+    engine=SimpleNamespace(tokenizer=SyntheticTokenizer(),
+        backbone=SimpleNamespace(controls=Controls()),
+        _tokens=lambda _text: (_ for _ in ()).throw(AssertionError('native token IDs should be used')))
+    token_ids=[99,10,30,31,99,11,32,99,12,33,34,35,36]
+    rows=[{'text':'train body','token_ids':token_ids,'split':'train','source_groups':['train-group'],
+           'supervised_suffix_start':9},
+          {'text':'held body','token_ids':token_ids,'split':'test','source_groups':['held-group'],
+           'supervised_suffix_start':9}]
+
+    windows,receipt=prepare_text_windows(engine,rows,tokens=8,prefix_tokens=3,
+        target_tokens=3,mask_system_prompt=True)
+    assert receipt=={'enabled':True,'requested':True,'role_start_id':99,
+                     'masked_system_tokens':8,'documents':2}
+    expected=document_windows(token_ids,open_id=1,close_id=2,tokens=8,prefix_tokens=3,
+                              target_tokens=3,context_tokens=4,supervised_suffix_start=9)
+    for split in ('train','test'):
+        assert [(list(w['ids']),w['prefix'],w['offset'],w['start'],w['supervised_suffix_start'])
+                for w in windows[split]]==[
+                    (list(w['ids']),w['prefix'],w['offset'],w['start'],w['supervised_suffix_start'])
+                    for w in expected]
+        # Initial system-prompt tokens stay in context and never become targets.
+        assert all(w['start']+w['prefix']>=5 for w in windows[split])
+    assert all('roles' not in w for w in windows['train'])
+    assert all(len(w['roles'])==len(w['ids']) for w in windows['test'])
+    assert any(ROLE_CODES[w['roles'][i]]=='assistant_reply'
+               for w in windows['test'] for i in range(len(w['roles'])))
+    selected,metadata=select_held_document_windows(windows['test'],limit=1)
+    assert len(selected)==2
+    assert metadata['selected_documents'][0]['selected_window_offsets']==[
+        windows['test'][0]['offset'],windows['test'][-1]['offset']]
+
+    unmasked,_=prepare_text_windows(engine,rows[1:],tokens=8,prefix_tokens=3,
+        target_tokens=3,mask_system_prompt=False)
+    assert unmasked['test'][0]['start']+unmasked['test'][0]['prefix']<5
+
+
 def test_mapped_completions_fit_the_map_to_the_projection_and_read_it_detached():
     from natlang_neuralese.model.input_map import NeuraleseInputMap
     from natlang_neuralese.train.text_warmup import mapped_completions

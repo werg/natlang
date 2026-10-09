@@ -77,7 +77,7 @@ cases:
     stage: S4
     status: implemented
     implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
-    spec: SPEC.md#neuralese
+    spec: ext/neuralese.md
     given: 'A soft function whose definition-site context has no service `mail`; its body was trained on mail-sending trajectories.'
     expect: 'Any attempt to use mail fails as an unavailable service.'
 

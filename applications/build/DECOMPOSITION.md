@@ -98,27 +98,37 @@ string`. `validity(task, evidence) -> Validity`. The `.ts` file selects. A host 
 the workspace (`new BuildWorkspace(root, { policy: { choose: 'crisp' } })`) or on the command line
 (`--choose crisp`).
 
-## Refinement candidates
+## Refinements
 
-Constraints that are checked in code or prose today and should become `Is<T, "predicate">` once refinement types
-exist. Each lists the slot.
+Refinement types (`Is<T, "predicate">`, plans/REFINEMENT_TYPES.md). Decisions: (a) adopted with a crisp checker in
+`refinements.ts` (no model call), (b) a natural-language judge (proposed only: awaiting live evaluation, not wired),
+(c) left to the check that already enforces it exactly (`declare`'s problems, the workspace, `commit`), (d) not
+adopted: the value alone does not show the property. The declarations (`Task`) and the state the commit builds keep
+plain types. The refined result types are declared as `Checked*` aliases in `types.ts` and named in the `returns` of
+the stage that produces the value (`order`, `step/validity/judge`, `step/diagnose`, `build`), so crisp code that
+builds the plain `Plan`, `Validity` and `Diagnosis` values is untouched.
 
-| Slot | Proposed type |
-|---|---|
-| `Task.id` | `Is<string, "non-empty, and different from every other task's id">` |
-| `Task.needs` | `Is<string[], "ids of other tasks, without duplicates">` |
-| `Task.argv` | `Is<string[], "a command: an executable name or path followed by its arguments, or @builtin followed by copy, concat or uppercase">` |
-| `Task.inputs`, `Task.outputs` | `Is<string[], "paths relative to the build root that stay inside it">` |
-| `Task.outputs` | `Is<string[], "not empty, and not also among the task's inputs">` |
-| `TaskResult.input_sha256`, `TaskResult.output_sha256` | `Is<string, "64 lowercase hex digits, or empty when the task did not finish">` |
-| `Plan.needed` | `Is<string[], "the goal and every task any of them depends on, sorted, nothing else">` |
-| `Plan.order` | `Is<string[], "a permutation of needed in which every task comes after all of its deps">` |
-| `Plan.cycle` | `Is<string[], "tasks that wait on each other, directly or through others">` |
-| `choose` return (and `Decision.task` for run and reuse) | `Is<string, "the id of one of the supplied ready tasks">` |
-| `Validity.reason` | `Is<string, "one short phrase naming the first mismatch: declaration, input, output, or no record">` |
-| `Diagnosis.culprit` | `Is<string, "a path, executable or task id that appears in the task's declaration or its result">` |
-| `Diagnosis.retry` | `Is<'no' \| 'after-fix' \| 'inspect-first', "inspect-first exactly when the result's status is unknown">` |
-| `BuildState.order` | `Is<string[], "tasks of needed, each after its deps, without duplicates">` |
-| `BuildReport` | `Is<BuildReport, "status is done only when the goal is in order and every result is ok">` |
-| `Summary.summary` | `Is<string, "states the status and names the failed or blocked task, if any, in at most three sentences">` |
-| `Summary.next` | `Is<string[], "concrete actions a person can take; empty when the build is done">` |
+| Slot | Proposed type | Decision |
+|---|---|---|
+| `Task.id` | `Is<string, "non-empty, and different from every other task's id">` | (c) `declare` reports `empty-id` and `duplicate-id`; the declarations are the user's input, not a model's output. |
+| `Task.needs` | `Is<string[], "ids of other tasks, without duplicates">` | (c) `declare` (`unknown-need`, `self-dependency`, `duplicate-need`). |
+| `Task.argv` | `Is<string[], "a command: ...">` | (c) The workspace refuses an invalid declaration. |
+| `Task.inputs`, `Task.outputs` | `Is<string[], "paths relative to the build root that stay inside it">` | (c) The workspace (`path-escape`). |
+| `Task.outputs` | `Is<string[], "not empty, and not also among the task's inputs">` | (c) `declare` (`no-output`, `self-read`). |
+| `TaskResult.input_sha256`, `.output_sha256` | `Is<string, "64 lowercase hex digits, or empty when the task did not finish">` | (c) Built by the workspace, not by a model. |
+| `Plan.needed` | `Is<string[], "the goal and every task any of them depends on, sorted, nothing else">` | (a) Weakened to what the plan shows: sorted without duplicates and containing the goal (`CheckedPlan`). That it is the exact closure needs the graph. |
+| `Plan.order` | `Is<string[], "a permutation of needed in which every task comes after all of its deps">` | (a) Weakened to: `order` and `cycle` together hold each needed task exactly once (`CheckedPlan`). The dependency order needs the graph; the ready filter and the commit enforce it. |
+| `Plan.cycle` | `Is<string[], "tasks that wait on each other, directly or through others">` | (d) Needs the graph; the partition of `needed` above is the part the value shows. |
+| `choose` return (and `Decision.task`) | `Is<string, "the id of one of the supplied ready tasks">` | (c) `commit.admit` refuses it and the round rejects with the ready tasks; the supplied tasks are not in the value. |
+| `Validity.reason` | `Is<string, "one short phrase naming the first mismatch: ...">` | (a) `CheckedValidity`: valid exactly when the reason is `up to date`, an invalid reason is one of the four mismatch phrases with a path. |
+| `Diagnosis.culprit` | `Is<string, "a path, executable or task id that appears in the task's declaration or its result">` | (d) The declaration and the result are not in the value. |
+| `Diagnosis.retry` | `Is<'no' \| 'after-fix' \| 'inspect-first', "inspect-first exactly when the result's status is unknown">` | (a) `CheckedDiagnosis`: the cause is a known one and the retry follows it (inspect-first for interrupted, no for other, after-fix for the rest). The cause is in the value, the status is not. |
+| `BuildState.order` | `Is<string[], "tasks of needed, each after its deps, without duplicates">` | (c) Built by `commit.settle`. |
+| `BuildReport` | `Is<BuildReport, "status is done only when the goal is in order and every result is ok">` | (a) `CheckedReport`. |
+| `Summary.summary` | `Is<string, "states the status and names the failed or blocked task, if any, in at most three sentences">` | (b) Proposed, awaiting live evaluation (not wired): judged once per build, small, with a crisp check of the blank case. |
+| `Summary.next` | `Is<string[], "concrete actions a person can take; empty when the build is done">` | (d) "Empty when done" needs the status; concreteness is a preference. |
+
+Counts: (a) 5, (b) 1, (c) 8, (d) 3.
+
+The model-facing text added to signatures is the `Is<...>` predicate of `CheckedPlan`, `CheckedValidity`,
+`CheckedDiagnosis` and `CheckedReport`. No instruction sentence was changed.

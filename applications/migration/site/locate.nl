@@ -4,7 +4,7 @@ args:
   intent: Intent
   hit: SearchHit
   revision: string
-returns: Site
+returns: CheckedSite
 ---
 Locate the site of hit at revision. A site is the smallest run of whole lines that holds a complete statement,
 declaration or import around the hit, and it spans several lines when the statement does (a call with its arguments

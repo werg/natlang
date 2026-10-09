@@ -50,7 +50,8 @@ import * as ts from 'typescript';
 import { canonical } from '../adaptation/identity.js';
 import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
-import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
+import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
+import { DIGEST_PROMPT } from '../builtin/index.js';
 
 export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/14';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';

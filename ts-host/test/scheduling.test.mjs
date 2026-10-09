@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime } from '../dist/index.js';
 import { ScheduleWorkspace, plan } from '../../applications/dist/scheduling/index.js';
-import { scriptedModel } from './support/natlang.mjs';
+import { readFileSync } from 'node:fs';
+import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+
+const CRISP = await appCrisp('scheduling');
+/** A runtime whose refinements are decided by the application's crisp checkers; the judge, if asked, accepts. */
+function refined(driver, extra = {}) {
+  withJudge(driver);
+  return createNatlangRuntime({ model: driver, calls: false, ...extra });
+}
 
 const day = {
   windows: [{ start: '2026-09-21T09:00:00+02:00', end: '2026-09-21T12:00:00+02:00' }],
@@ -163,7 +171,7 @@ function plannerModel({ construct = null, corrupt = false } = {}) {
 test('the scheduler reads the request, builds candidates, ranks them by the wish and the workspace commits', async () => {
   const workspace = new ScheduleWorkspace(day);
   const model = plannerModel();
-  const result = await plan(workspace, 'Draft early, then review', { run: run(createNatlangRuntime({ model: model.driver })) });
+  const result = await plan(workspace, 'Draft early, then review', { run: run(refined(model.driver)) });
   assert.equal(result.status, 'committed', result.detail);
   assert.equal(result.plan.length, 2);
   const draft = result.plan.find(row => row.id === 'draft'), review = result.plan.find(row => row.id === 'review');
@@ -175,7 +183,7 @@ test('the scheduler reads the request, builds candidates, ranks them by the wish
 
 test('the request adds a task, a hard limit and a commitment, which the verifier enforces', async () => {
   const workspace = new ScheduleWorkspace(day);
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const first = await plan(workspace, 'Add a workout, review not before 11', { run: run(runtime) });
   assert.equal(first.status, 'committed', first.detail);
   assert.equal(first.plan.length, 3);
@@ -190,11 +198,11 @@ test('the request adds a task, a hard limit and a commitment, which the verifier
 });
 
 test('the natural-language enumeration is selected by a setting and gives the same plan as the exact one', async () => {
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const exact = await plan(new ScheduleWorkspace(day), 'Draft early', { run: run(runtime), enumeration: 'crisp' });
   const model = plannerModel();
   const natural = await plan(new ScheduleWorkspace(day), 'Draft early',
-    { run: run(createNatlangRuntime({ model: model.driver })), enumeration: 'natural-language' });
+    { run: run(refined(model.driver)), enumeration: 'natural-language' });
   assert.ok(model.seen.includes('construct'));
   assert.equal(natural.status, 'committed', natural.detail);
   assert.deepEqual(natural.plan, exact.plan);
@@ -205,7 +213,7 @@ test('a near-miss from natural-language construction is repaired, and the verifi
   // A construction that puts review on top of the meeting and draft; repair moves it.
   const wrong = `return { options: [{ id: 'c1', placements: [{ id: 'draft', start: 0, end: 30 }, { id: 'review', start: 60, end: 90 }] }], truncated: false, detail: '' };`;
   const model = plannerModel({ construct: wrong, corrupt: true });
-  const result = await plan(workspace, 'Draft early', { run: run(createNatlangRuntime({ model: model.driver })), enumeration: 'natural-language' });
+  const result = await plan(workspace, 'Draft early', { run: run(refined(model.driver)), enumeration: 'natural-language' });
   assert.equal(result.status, 'committed', result.detail);
   assert.ok(model.seen.includes('repair'));
   const verdict = workspace.problem().check([{ id: 'draft', start: 0, end: 30 }, { id: 'review', start: 20, end: 50 }]);
@@ -216,7 +224,7 @@ test('a near-miss from natural-language construction is repaired, and the verifi
 
 test('unclear requests return questions, impossible ones are diagnosed, and nothing is committed', async () => {
   const workspace = new ScheduleWorkspace(day);
-  const runtime = createNatlangRuntime({ model: plannerModel().driver });
+  const runtime = refined(plannerModel().driver);
   const unclear = await plan(workspace, 'Fit in something', { run: run(runtime) });
   assert.equal(unclear.status, 'unclear');
   assert.match(unclear.detail, /How long/);
@@ -265,7 +273,97 @@ test('a calendar block observed during planning makes the plan stale', async () 
     if (!observed) { observed = true; workspace.observe({ kind: 'block', id: 'urgent', start: '2026-09-21T11:00:00+02:00', end: '2026-09-21T11:30:00+02:00' }); }
     return inner(request);
   };
-  const result = await plan(workspace, 'Draft early', { run: run(createNatlangRuntime({ model: driver })) });
+  const result = await plan(workspace, 'Draft early', { run: run(refined(driver)) });
   assert.equal(result.status, 'stale');
   assert.equal(workspace.revision, 1);
+});
+
+// ---------------------------------------------------------------- refinements
+
+test('every predicate of types.ts has a crisp checker', () => {
+  const types = readFileSync(new URL('../../applications/scheduling/types.ts', import.meta.url), 'utf8');
+  const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
+  assert.deepEqual([...declared].filter(key => !(key in CRISP)), []);
+  assert.deepEqual(Object.keys(CRISP).filter(key => !declared.has(key)), []);
+});
+
+test('the crisp checkers decide task ids, limits, wishes, domains, placements and the proposal', () => {
+  const check = (needle, value) => CRISP[Object.keys(CRISP).find(key => key.includes(needle))](value);
+  const task = (id, minutes = 30) => ({ id, minutes, earliest: 0, latest: 180, after: [] });
+  assert.equal(check('a reading whose tasks', { tasks: [task('call-sam'), task('t_2')], questions: [] }), true);
+  assert.equal(check('a reading whose tasks', { tasks: [task('1st')], questions: [] }), false, 'an id starts with a letter');
+  assert.equal(check('a reading whose tasks', { tasks: [task('call sam')], questions: [] }), false);
+  assert.equal(check('a reading whose tasks', { tasks: [task('a', 0)], questions: [] }), false);
+  assert.equal(check('a reading whose tasks', { tasks: [task('a', 2.5)], questions: [] }), false);
+  assert.equal(check('a reading whose tasks', { tasks: [task('a'), task('a')], questions: [] }), false);
+  assert.equal(check('a reading whose limits', { limits: [{ task: 'a', notBefore: 60, reason: 'r' }], blocks: [{ id: 'b', start: 0, end: 30, reason: 'r' }], questions: [] }), true);
+  assert.equal(check('a reading whose limits', { limits: [{ task: 'a', reason: 'r' }], blocks: [], questions: [] }), false, 'a limit narrows something');
+  assert.equal(check('a reading whose limits', { limits: [], blocks: [{ id: 'b', start: 30, end: 30, reason: 'r' }], questions: [] }), false);
+  assert.equal(check('a reading whose preferences', { preferences: [{ id: 'p1', text: 't', tasks: [], weight: 3 }], questions: [] }), true);
+  assert.equal(check('a reading whose preferences', { preferences: [{ id: 'p1', text: 't', tasks: [], weight: 4 }], questions: [] }), false);
+  assert.equal(check('a reading whose preferences', { preferences: [{ id: 'p2', text: 't', tasks: [], weight: 1 }], questions: [] }), false);
+  const domain = spans => [{ task: 'a', minutes: 30, after: [], spans }];
+  assert.equal(check('domains whose spans', domain([{ start: 0, end: 60 }, { start: 90, end: 120 }])), true);
+  assert.equal(check('domains whose spans', domain([{ start: 90, end: 120 }, { start: 0, end: 60 }])), false, 'ascending');
+  assert.equal(check('domains whose spans', domain([{ start: 0, end: 60 }, { start: 50, end: 120 }])), false, 'disjoint');
+  assert.equal(check('domains whose spans', domain([{ start: 0, end: 20 }])), false, 'long enough for the task');
+  assert.equal(check('placements that each', [{ id: 'a', start: 0, end: 30 }, { id: 'a', start: 30, end: 60 }]), false);
+  assert.equal(check('placements that each', [{ id: 'a', start: 0, end: 30 }, { id: 'b', start: 30, end: 60 }]), true);
+  const base = { hard: { tasks: [], limits: [], blocks: [] }, explanation: '', ranking: [], considered: 0, truncated: false };
+  const placed = [{ id: 'a', start: 0, end: 30 }];
+  assert.equal(check('a proposal that', { ...base, status: 'chosen', placements: placed, questions: [] }), true);
+  assert.equal(check('a proposal that', { ...base, status: 'chosen', placements: [], questions: [] }), false);
+  assert.equal(check('a proposal that', { ...base, status: 'unclear', placements: placed, questions: ['q?'] }), false);
+  assert.equal(check('a proposal that', { ...base, status: 'unclear', placements: [], questions: [] }), false);
+  assert.equal(check('a proposal that', { ...base, status: 'infeasible', placements: [], questions: [] }), true);
+});
+
+/** A model that answers a stage with each of `codes` in turn (the last repeats); the feedback it was sent is kept. */
+function answering(codes) {
+  const feedback = [];
+  let turn = 0;
+  const driver = async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last.role === 'tool' && /refinement-unsatisfied/.test(String(last.content))) feedback.push(String(last.content));
+    return { calls: [['eval', { code: codes[Math.min(turn++, codes.length - 1)], finish: true }]] };
+  };
+  return { driver, feedback, judged: withJudge(driver) };
+}
+const stageView = () => new ScheduleWorkspace(day).view();
+
+test('a task read with an id that is not a name is sent back with the refinement error and repaired, without the judge', async () => {
+  const planner = (await import('../../applications/dist/scheduling/scheduler.nl.js')).default;
+  const bad = `return { tasks: [{ id: '45 minute workout', minutes: 45, earliest: 0, latest: 180, after: [] }], questions: [] };`;
+  const good = `return { tasks: [{ id: 'workout', minutes: 45, earliest: 0, latest: 180, after: [] }], questions: [] };`;
+  const model = answering([bad, good]);
+  const runtime = refined(model.driver);
+  const reading = await runtime.run(() => planner.readTasks('add a 45 minute workout', stageView()));
+  assert.deepEqual(reading.tasks.map(item => item.id), ['workout']);
+  assert.equal(model.feedback.length, 1);
+  assert.match(model.feedback[0], /an id that starts with a letter and has only letters, digits, underscores and hyphens/);
+  assert.deepEqual(model.judged, [], 'the crisp checker decided both answers');
+});
+
+test('a limit that narrows nothing and a block that ends before it starts are sent back to readLimits', async () => {
+  const planner = (await import('../../applications/dist/scheduling/scheduler.nl.js')).default;
+  const bad = `return { limits: [{ task: 'review', reason: 'later' }], blocks: [{ id: 'dentist', start: 30, end: 0, reason: 'dentist' }], questions: [] };`;
+  const good = `return { limits: [{ task: 'review', notBefore: 120, reason: 'later' }], blocks: [{ id: 'dentist', start: 0, end: 30, reason: 'dentist' }], questions: [] };`;
+  const model = answering([bad, good]);
+  const view = stageView();
+  const reading = await refined(model.driver).run(() => planner.readLimits('review later, dentist at nine', view, view.tasks));
+  assert.equal(reading.limits[0].notBefore, 120);
+  assert.match(model.feedback[0], /set at least one of notBefore, endBy or after/);
+  assert.deepEqual(model.judged, []);
+});
+
+test('domains with overlapping spans are repaired before the construction stages use them', async () => {
+  const planner = (await import('../../applications/dist/scheduling/scheduler.nl.js')).default;
+  const bad = `return [{ task: 'draft', minutes: 30, after: [], spans: [{ start: 0, end: 60 }, { start: 30, end: 90 }] }];`;
+  const good = `return [{ task: 'draft', minutes: 30, after: [], spans: [{ start: 0, end: 90 }] }];`;
+  const model = answering([bad, good]);
+  const view = stageView();
+  const hard = { tasks: [], limits: [], blocks: [] };
+  const domains = await refined(model.driver).run(() => planner.domains(view, hard));
+  assert.deepEqual(domains[0].spans, [{ start: 0, end: 90 }]);
+  assert.match(model.feedback[0], /ascending and disjoint/);
 });

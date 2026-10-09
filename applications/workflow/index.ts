@@ -6,7 +6,7 @@
  * effect, keeps idempotent receipts and commits atomically. `step` decides on a snapshot and applies the decision to
  * the revision it read.
  */
-import { KeyedEventLoop } from '@natlang/node';
+import { KeyedEventLoop, pluggable, pluggableMode } from '@natlang/node';
 import handle from './handle.nl';
 import inform from './inform.nl';
 import { ledgerDeclaration, ledgerService } from './ledger.js';
@@ -38,13 +38,15 @@ export type Stepped = { state: WorkflowState, decision: Decision, message: Outbo
  * only if the order is still at that revision.
  */
 export async function stepFull(service: WorkflowService, orderId: string, event: WorkflowEvent, options: StepOptions): Promise<Stepped> {
-  const policy = options.policy ?? 'natural-language';
+  const policy = pluggableMode(options.policy);
   const limits = { ...DEFAULT_LIMITS, ...options.limits };
   const run = <T>(fn: () => Promise<T>) => options.run(fn, { services: { ledger: ledgerService() }, serviceDeclarations: { ledger: ledgerDeclaration } });
   const before = await service.read(orderId);
   const snapshot: Snapshot = { state: before, event, receipt: before.pending ? await service.receipt(before.pending) : null };
   // Pluggable hot path: the same Decision from the crisp table or from the natural-language policy.
-  const decision = policy === 'crisp' ? handle.crisp(snapshot, limits) : await run(() => handle(snapshot, limits));
+  const choose = pluggable({ crisp: () => handle.crisp(snapshot, limits), nl: () => handle(snapshot, limits) }, policy,
+    { name: 'workflow.handle', same: (exact, judged) => exact.action === judged.action });
+  const decision = policy === 'crisp' ? await choose() : await run(choose);
   const after = await service.apply(orderId, before.revision, event, decision);
   if (after.revision === before.revision) return { state: after, decision, message: null };
   const outgoing = await run(() => inform({ before, after, decision, event }));

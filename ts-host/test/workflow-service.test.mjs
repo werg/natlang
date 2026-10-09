@@ -5,7 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime } from '../dist/index.js';
 import { WorkflowDesk, WorkflowService, checkMessage, stepFull, validate } from '../../applications/dist/workflow/index.js';
-import { scriptedModel } from './support/natlang.mjs';
+import { readFileSync } from 'node:fs';
+import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+
+const CRISP = await appCrisp('workflow');
+/** A runtime whose refinements are decided by the application's crisp checkers; the judge, if asked, accepts. */
+function refined(driver, extra = {}) {
+  withJudge(driver);
+  return createNatlangRuntime({ model: driver, calls: false, ...extra });
+}
 
 const run = runtime => (fn, options) => runtime.run(fn, options);
 
@@ -112,7 +120,7 @@ async function scenario(events, options = {}) {
     const service = new WorkflowService(root);
     await service.open('order1', 1200);
     const model = workflowModel(options.model);
-    const runtime = createNatlangRuntime({ model: model.driver });
+    const runtime = refined(model.driver);
     const decisions = [], states = [];
     for (const event of events) {
       const stepped = await stepFull(service, 'order1', event, { run: run(runtime), policy: options.policy, limits: options.limits });
@@ -230,7 +238,7 @@ test('the desk decides orders side by side and looks at an unacknowledged charge
     if (stage === 'handle' && opening.includes('"order_id": "slow"')) await gate;
     return undefined;
   } });
-  const runtime = createNatlangRuntime({ model: model.driver });
+  const runtime = refined(model.driver);
   const failures = [];
   const desk = new WorkflowDesk(new WorkflowService(root), { run: run(runtime), reconcileAfterMs: 50, limits: { recheckMs: 50 },
     onFailure: (order, error) => failures.push([order, String(error)]) });
@@ -248,4 +256,81 @@ test('the desk decides orders side by side and looks at an unacknowledged charge
     assert.equal((await desk.service.remoteEffects()).filter(row => row.action === 'charge').length, 1);
     assert.deepEqual(failures, []);
   } finally { await desk.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------- refinements
+
+test('every predicate of types.ts has a crisp checker', () => {
+  const types = readFileSync(new URL('../../applications/workflow/types.ts', import.meta.url), 'utf8');
+  const declared = new Set([...types.matchAll(/Is<[^"]*"([^"]*)"/g)].map(match => match[1].replace(/\s+/g, ' ').trim()));
+  assert.deepEqual([...declared].filter(key => !(key in CRISP)), []);
+  assert.deepEqual(Object.keys(CRISP).filter(key => !declared.has(key)), []);
+});
+
+test('the crisp checkers decide waits, compensation order and message subjects', () => {
+  const check = (needle, value) => CRISP[Object.keys(CRISP).find(key => key.includes(needle))](value);
+  assert.equal(check('a decision whose', { action: 'wait', reason: 'r' }), true);
+  assert.equal(check('a decision whose', { action: 'wait', reason: 'r', waitMs: 500 }), true);
+  assert.equal(check('a decision whose', { action: 'wait', reason: 'r', waitMs: 0 }), false);
+  assert.equal(check('a decision whose', { action: 'wait', reason: 'r', waitMs: 1.5 }), false);
+  const step = action => ({ action, reason: 'because' });
+  assert.equal(check('steps that list', { steps: [step('refund'), step('release')] }), true);
+  assert.equal(check('steps that list', { steps: [step('release'), step('refund')] }), false);
+  assert.equal(check('steps that list', { steps: [step('refund'), step('refund')] }), false);
+  assert.equal(check('steps that list', { steps: [] }), true);
+  const message = subject => ({ kind: 'paid', subject, body: 'Hello.' });
+  assert.equal(check('a message whose', message('Order order1: paid')), true);
+  assert.equal(check('a message whose', message('Order order1: paid.')), false);
+  assert.equal(check('a message whose', message('x'.repeat(61))), false);
+  assert.equal(check('a message whose', message('two\nlines')), false);
+  assert.equal(check('a message whose', { ...message('ok'), body: '  ' }), false);
+});
+
+/** A model that answers a stage with each of `codes` in turn (the last repeats); the feedback it was sent is kept. */
+function answering(codes) {
+  const feedback = [];
+  let turn = 0;
+  const driver = async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last.role === 'tool' && /refinement-unsatisfied/.test(String(last.content))) feedback.push(String(last.content));
+    return { calls: [['eval', { code: codes[Math.min(turn++, codes.length - 1)], finish: true }]] };
+  };
+  return { driver, feedback, judged: withJudge(driver) };
+}
+const ORDER = { order_id: 'order1', amount: 1200, revision: 3, phase: 'charged', pending: '', checks: 0, obligations: [], outbox: [],
+  history: [{ key: 'order1:reserve', action: 'reserve', status: 'done', detail: '' }, { key: 'order1:charge', action: 'charge', status: 'done', detail: '' }] };
+
+test('compensation steps in the wrong order are sent back and repaired, without the judge', async () => {
+  const handle = (await import('../../applications/dist/workflow/handle.nl.js')).default;
+  const step = (action, reason) => `{ action: '${action}', reason: '${reason}' }`;
+  const wrong = `return { steps: [${step('release', 'the stock is being returned')}, ${step('refund', 'the charge is being returned')}] };`;
+  const right = `return { steps: [${step('refund', 'the charge is being returned')}, ${step('release', 'the stock is being returned')}] };`;
+  const model = answering([wrong, right]);
+  const plan = await refined(model.driver).run(() => handle.choose.compensate(ORDER));
+  assert.deepEqual(plan.steps.map(item => item.action), ['refund', 'release']);
+  assert.equal(model.feedback.length, 1);
+  assert.match(model.feedback[0], /steps that list refund before release, each at most once/);
+  assert.deepEqual(model.judged, []);
+});
+
+test('a customer message whose subject runs past a line is sent back to compose and repaired', async () => {
+  const inform = (await import('../../applications/dist/workflow/inform.nl.js')).default;
+  const told = { order: 'order1', amount: 1200, summary: 'Your payment arrived.', next: 'We will ship it.' };
+  const long = `return { kind: 'paid', subject: 'Order order1: your payment of 12.00 has arrived and the order is being prepared.', body: 'Hello. Your payment arrived.' };`;
+  const short = `return { kind: 'paid', subject: 'Order order1: payment received', body: 'Hello. Your payment arrived.' };`;
+  const model = answering([long, short]);
+  const message = await refined(model.driver).run(() => inform.compose('paid', told));
+  assert.equal(message.subject, 'Order order1: payment received');
+  assert.match(model.feedback[0], /one line of at most 60 characters without a trailing period/);
+  assert.deepEqual(model.judged, []);
+});
+
+test('a wait of zero milliseconds is sent back to the recovery stage', async () => {
+  const handle = (await import('../../applications/dist/workflow/handle.nl.js')).default;
+  const limits = { transientRetries: 2, checksBeforeRetry: 2, recheckMs: 50 };
+  const snapshot = { state: { ...ORDER, pending: 'order1:charge', checks: 0 }, event: { kind: 'reconcile' }, receipt: null };
+  const model = answering([`return { action: 'reconcile', reason: 'no receipt yet', waitMs: 0 };`, `return { action: 'reconcile', reason: 'no receipt yet', waitMs: 50 };`]);
+  const decision = await refined(model.driver).run(() => handle.choose.recover(snapshot, limits));
+  assert.equal(decision.waitMs, 50);
+  assert.match(model.feedback[0], /positive whole number of milliseconds/);
 });

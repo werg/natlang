@@ -1,0 +1,42 @@
+# Waiting for owner review
+
+Decisions and documents that the owner rules say need the owner's review. Agents add entries. The owner, or an agent
+acting on the owner's recorded answer, moves an entry to "Done" with the date and outcome.
+
+## Open
+
+| Since | Item | What to review | Status meanwhile |
+| --- | --- | --- | --- |
+| 2026-10-09 | applications/games/DECOMPOSITION.md | Per-part decisions (function / instruction / implicit / crisp), crisp verifiers, pluggable points | Rebuilt app is on main; the review was skipped before restructuring, contrary to the porting rule |
+| 2026-10-09 | applications/scheduling/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | applications/workflow/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | applications/wiki/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | applications/logs/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | applications/build/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | applications/migration/DECOMPOSITION.md | The same | The same |
+| 2026-10-09 | Crisp share of the rebuilt apps | Crisp lines exceed natural-language lines in games, scheduling, workflow, build and logs. Audit pending: which crisp files are services, commit or verifiers (allowed) and which hold policy | Audit queued |
+| 2026-10-09 | Pop's proposed self-feedback gate thresholds (.99 argmax, .02 KL, .05 own-output CE gap) | Thresholds before they bind | Reported only |
+| 2026-10-09 | plans/NATLANG_NATIVE_REVIEW.md | Ranking and order of the natlang-native work (enablers N1–N5 proceed now; P1–P11 wait for their decompositions to be reviewed) | Enablers N1–N5 on main |
+| 2026-10-09 | Scheduling task order (N4) | `scheduler/order.ts` (model-visible) and `Problem.order` (verifier) give different valid orders (tasks a after c, b, c: c,a,b against b,c,a). Unifying either way changes the candidate order models see. Which one stays? | Both kept |
+| 2026-10-09 | Mode vocabulary in model-facing text (N3) | Stage signatures still say `'crisp' \| 'natural-language'` and the wiki, logs and games settings types default to `'natlang'`; `migration/migrate.nl:29` selects `settled` inside its instruction text. Moving these to `crisp\|nl\|shadow` changes prompt bytes and needs live measurement | Old values accepted as aliases at run time |
+| 2026-10-09 | `stoppingCondition.nl` placeholder (N2) | The stopping-predicate note is a built-in with a `{progress}` placeholder filled by `predicatePrompt`, rather than a typed argument | Byte-identical to before |
+| 2026-10-09 | applications/helpdesk/DECOMPOSITION.md | Per-part decisions (triage split, pluggable deadline and inbox order, escalation plan as data), refinement candidates, model-facing changes | Draft only; app unchanged |
+| 2026-10-09 | applications/terminal/DECOMPOSITION.md | `readNote` and `chooseRecipe` split, recipe and message tables as data, cancel fact on the event | Draft only; app unchanged |
+| 2026-10-09 | applications/media/DECOMPOSITION.md | `choose.nl` split per operation, crisp plan assembly and retry, `assess` skipped on technical failure; transcode has no codec field (question 1) | Draft only; app unchanged |
+| 2026-10-09 | applications/notebook/DECOMPOSITION.md | Ready-cell order as pluggable (crisp default), crisp evidence facts for the explanation, structural loop measure | Draft only; app unchanged |
+| 2026-10-09 | applications/evidence/DECOMPOSITION.md | Host-filled revisions and truncation, `compose` split, one repair attempt, `select` ids as a type | Draft only; app unchanged |
+| 2026-10-09 | applications/publisher/DECOMPOSITION.md | Per-section outline and compose in parallel, number scan, host-filled revisions | Draft only; app unchanged |
+| 2026-10-09 | applications/ide/DECOMPOSITION.md | Anchor edits with crisp `locate` instead of model-counted offsets, `describe` split | Draft only; app unchanged |
+| 2026-10-09 | applications/specializer/DECOMPOSITION.md | Pluggable `worthLooking` and decline summary, `writeCase` split into condition and body, rounds as a resource limit | Draft only; app unchanged |
+| 2026-10-09 | applications/program-improver/DECOMPOSITION.md | `rewriteProgram` split into diagnose, hypothesize, edit, finish; search policy as pluggable NL; one shared GEPA module; reducers as a data table | Draft only; app unchanged |
+| 2026-10-09 | applications/refine-data/DECOMPOSITION.md | Short note: three stages stay functions; app decompositions feed `authoring.json` | Draft only |
+| 2026-10-09 | plans/HEARTBEAT_PROGRAM.md (P1) | `diagnoseRun`, `planNext`, `triageInbox`; crisp read-only collectors; action allowlist and auto-apply rule; advisory first and comparison with agent decisions; systemd timer; traces to specializer and training | Draft only; agents keep the hourly check-in |
+| 2026-10-09 | plans/SOURCE_REVIEW_PROGRAM.md (P2, P10) | Exact migration of 184 verdicts to a data file (fingerprints pinned), `reviewSourceItem` and `reviewSourceRow`, receipt with reviewer hash and explicit decision | Draft only; `source-review.ts` unchanged |
+| 2026-10-09 | plans/FAILURE_EXPLANATION_PROGRAM.md (P5, P11) | `explainFailure`, `triageRejections`, `explainGateFailure`: advisory, unclassified bucket only; gates never change | Draft only; scripts unchanged |
+| 2026-10-09 | plans/TIERED_ENGINE.md, plans/FUSED_PIPELINES.md | Tier numbering, natural-language promotion policy, natural-language fusion planner | In progress |
+
+## Done
+
+| Date | Item | Outcome |
+| --- | --- | --- |
+| 2026-10-09 | Self-feedback (AR) qualification criterion | Channel faithfulness on the model's own history (plans/neuralese/DECISIONS.md) |

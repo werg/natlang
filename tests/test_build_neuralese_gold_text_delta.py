@@ -596,6 +596,41 @@ def test_tokenizers_backend_fallback_requires_exact_class_and_serialized_backend
         raise AssertionError("missing serialized backend must fail instead of falling back loosely")
 
 
+def test_pinned_tokenizer_class_and_backend_are_checked_after_auto_load_success(tmp_path, monkeypatch):
+    from tokenizers import Tokenizer, models
+    from transformers import AutoTokenizer, PreTrainedTokenizerFast
+
+    backend = Tokenizer(models.WordLevel({"[UNK]": 0, "hello": 1}, unk_token="[UNK]"))
+    loaded = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]")
+    loaded.save_pretrained(tmp_path)
+    config_path = tmp_path / "tokenizer_config.json"
+    config = json.loads(config_path.read_text())
+    config["tokenizer_class"] = "OtherBackend"
+    config_path.write_text(json.dumps(config))
+    monkeypatch.setattr(AutoTokenizer, "from_pretrained",
+                        staticmethod(lambda *_args, **_kwargs: loaded))
+    try:
+        MODULE.load_pinned_tokenizer(tmp_path)
+    except ValueError as exc:
+        assert "OtherBackend" in str(exc)
+        assert "class mismatch" in str(exc)
+    else:
+        raise AssertionError("AutoTokenizer success must not bypass the exact configured class")
+
+    config["tokenizer_class"] = "TokenizersBackend"
+    config_path.write_text(json.dumps(config))
+    other_backend = Tokenizer(models.WordLevel({"[UNK]": 0, "different": 1}, unk_token="[UNK]"))
+    tmp_backend = tmp_path / "other-tokenizer.json"
+    other_backend.save(str(tmp_backend))
+    (tmp_path / "tokenizer.json").write_bytes(tmp_backend.read_bytes())
+    try:
+        MODULE.load_pinned_tokenizer(tmp_path)
+    except ValueError as exc:
+        assert "differs from pinned tokenizer.json" in str(exc)
+    else:
+        raise AssertionError("matching wrapper class must not bypass a changed serialized backend")
+
+
 def test_root_integration_adoption_rejects_mismatched_artifact(tmp_path):
     adoption, artifacts = _integration_adoption_fixture(tmp_path)
     artifacts["cumulative_text"]["sha256"] = "0" * 64

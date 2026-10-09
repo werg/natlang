@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import type { NatlangRuntime } from '@natlang/node';
+import type { NatlangRuntime, PluggableSetting } from '@natlang/node';
 import migrateFlow from './migrate.nl';
 import type { Check, ChangedFile, Migration, MigrationReport, Patch, RepoSnapshot, SearchHit, SearchResult, Validation } from './types.js';
 
@@ -20,7 +20,8 @@ export type CheckCommand = { id: string, argv: string[], timeoutMs?: number };
 
 /** The pluggable policy points, and the implementation each runs when the host does not choose. */
 export type PolicyPoint = 'exact' | 'settled';
-export type Implementation = 'crisp' | 'natural-language';
+/** A pluggable part's mode: 'crisp', 'nl' or 'shadow' (runs both and records agreement); 'natural-language' is the deprecated spelling of 'nl'. */
+export type Implementation = Exclude<PluggableSetting, undefined>;
 export const DEFAULT_POLICY: Record<PolicyPoint, Implementation> = { exact: 'natural-language', settled: 'natural-language' };
 
 /** What the natural-language stages see of the `repository` service. Types are those of types.ts. */

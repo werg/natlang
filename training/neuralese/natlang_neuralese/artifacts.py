@@ -27,7 +27,8 @@ MANIFESTS = "training/artifact-manifests"
 STORE = "data/neuralese/artifacts"
 SCHEMA = "natlang.neuralese-artifacts/1"
 SNAPSHOT_SCHEMA = "natlang.neuralese-artifact-snapshot/1"
-KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "projection"}
+# "bundle": one file holding several kinds, e.g. a method-arm or memetic run's soft skills and adapters.
+KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "projection", "bundle"}
 INIT_METHODS = {"text", "trained", "converted", "written"}
 QUALIFICATION = {"unqualified", "qualified", "failed", "superseded"}
 ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,127}")
@@ -135,6 +136,9 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
         unknown = set(training.get("corpora", [])) - (corpora_ids or set())
         if corpora_ids is not None and unknown:
             raise ArtifactError(f"training corpora are not registered: {sorted(unknown)}")
+    extra = item.get("extra_dialects", [])
+    if not isinstance(extra, list) or any(not isinstance(d, str) or not d.startswith("adapter/") for d in extra):
+        raise ArtifactError("extra_dialects lists adapter dialects (adapter/…) only")
     qualification = item.get("qualification")
     if not isinstance(qualification, dict) or qualification.get("status") not in QUALIFICATION:
         raise ArtifactError(f"artifact qualification.status must be one of {sorted(QUALIFICATION)}")
@@ -166,11 +170,14 @@ def snapshot(repo: Path, item: dict) -> dict:
         row = {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
         if path.suffix == ".nz":
             row["nz"] = nz_summary(path)
-            wrong = [d for d in row["nz"]["dialects"] if d != item["dialect"]]
+            # Adapter blocks carry their own dialect (adapter/1;base=…), declared in extra_dialects.
+            allowed = {item["dialect"], *item.get("extra_dialects", [])}
+            wrong = [d for d in row["nz"]["dialects"] if d not in allowed]
             if wrong or not row["nz"]["dialects"]:
                 raise ArtifactError(f"{name}: block dialects {row['nz']['dialects']} differ from {item['dialect']}")
         rows.append(row)
     return {"schema": SNAPSHOT_SCHEMA, "id": item["id"], "kind": item["kind"], "dialect": item["dialect"],
+            **({"extra_dialects": item["extra_dialects"]} if item.get("extra_dialects") else {}),
             "backbone": item["backbone"], "path": item["path"], "files": rows,
             "bytes": sum(r["bytes"] for r in rows)}
 
@@ -219,10 +226,11 @@ def verify(repo: Path, identity: str) -> dict:
     return manifest
 
 
-def resolve(identity: str, file: str | None = None, repo: Path = REPO, *, dialect: str | None = None,
+def resolve(identity: str, file: str | None = None, repo: Path | None = None, *, dialect: str | None = None,
             backbone_model: str | None = None) -> tuple[Path, str]:
     """(path, sha256) of a registered artifact's file after checking its bytes against the manifest. ``dialect`` and
     ``backbone_model``, when given, must match the entry: a value from another space is refused, not converted."""
+    repo = repo or REPO
     registry = load_registry(repo)
     item = entry(registry, identity)
     if dialect and item["dialect"] != dialect:
@@ -242,3 +250,93 @@ def resolve(identity: str, file: str | None = None, repo: Path = REPO, *, dialec
     if actual != rows[file]["sha256"]:
         raise ArtifactError(f"artifact {identity}/{file} content hash mismatch")
     return path, actual
+
+
+def find_by_sha(sha256: str, repo: Path | None = None) -> tuple[str, str] | None:
+    """The registered (artifact id, file) whose manifest pins these bytes, if any."""
+    repo = repo or REPO
+    for item in load_registry(repo)["artifacts"]:
+        path = manifest_path(repo, item["id"])
+        if path.exists():
+            for row in json.loads(path.read_text())["files"]:
+                if row["sha256"] == sha256:
+                    return item["id"], row["path"]
+    return None
+
+
+def backbone_identity(model: str, revision: str | None = None) -> dict:
+    """{"model", "revision"} of a backbone: an explicit revision, a hub snapshot directory's revision, or the revision a
+    local weights directory recorded when its files were verified (weights-verified.json). Refuses to guess."""
+    if revision:
+        return {"model": model, "revision": revision}
+    parts = Path(model).parts
+    if "snapshots" in parts and parts.index("snapshots") + 1 < len(parts):
+        return {"model": model, "revision": parts[parts.index("snapshots") + 1]}
+    verified = Path(model) / "weights-verified.json"
+    if verified.exists():
+        recorded = json.loads(verified.read_text()).get("revision")
+        if recorded:
+            return {"model": model, "revision": recorded}
+    raise ArtifactError(f"cannot pin the revision of backbone {model}; pass it explicitly")
+
+
+def register_output(path: Path, *, identity: str, kind: str, dialect: str, backbone: dict, trainer: str, commit: str,
+                    corpora: list[str] | None = None, parent: str | None = None, run: str | None = None,
+                    notes: str | None = None, repo: Path | None = None) -> dict:
+    """Register a file a trainer produced (init method "trained"), unqualified until a gate says otherwise."""
+    import datetime
+
+    repo = repo or REPO
+    item = {"id": identity, "kind": kind, "owner": "dgx", "dialect": dialect, "backbone": backbone,
+            "init": {"method": "trained", **({"parent": parent} if parent else {"source": run or str(path)})},
+            "training": {"corpora": corpora or [], "trainer": trainer, "commit": commit, **({"run": run} if run else {})},
+            "qualification": {"status": "unqualified", "evidence": []}, "origin": {Path(path).name: str(path)},
+            "registered": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            **({"notes": notes} if notes else {})}
+    return register(repo, item, {Path(path).name: Path(path)})
+
+
+def corpora_by_sha(shas: set[str], repo: Path | None = None) -> dict[str, str]:
+    """sha256 → registered corpus id, for files a run read (scans training/corpus-manifests)."""
+    repo = repo or REPO
+    found = {}
+    for manifest in sorted((repo / "training/corpus-manifests").glob("*.json")):
+        try:
+            value = json.loads(manifest.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        for row in value.get("files", []):
+            if row.get("sha256") in shas:
+                found.setdefault(row["sha256"], value.get("id", manifest.stem))
+    return found
+
+
+def register_run(run: Path, identity: str, *, backbone_revision: str | None = None, trainer: str | None = None,
+                 commit: str, repo: Path | None = None, file: str = "system-prompts.nz") -> dict:
+    """Register the bank a finished trainer run wrote (``summary.json`` + ``system-prompts.nz``): dialect from the file,
+    parent found by content among registered artifacts, training corpora found by the content of the run's inputs."""
+    repo = repo or REPO
+    run = Path(run)
+    summary = json.loads((run / "summary.json").read_text())
+    options = summary.get("options", {})
+    path = run / file
+    if not path.exists():
+        raise ArtifactError(f"{run} has no {file} (the run trained no bank)")
+    dialects = nz_summary(path)["dialects"]
+    if len(dialects) != 1:
+        raise ArtifactError(f"{path} mixes dialects {dialects}")
+    inputs = {options[k] for k in ("records", "pieces", "prompts", "text_data") if options.get(k)}
+    shas = {digest(Path(p)) for p in inputs if Path(p).exists()}
+    corpora = sorted(set(corpora_by_sha(shas, repo).values()))
+    bank = options.get("bank") or options.get("soft_prompts")
+    parent = find_by_sha(digest(Path(bank)), repo) if bank and Path(bank).exists() else None
+    backbone = summary.get("backbone") or {}
+    model = backbone.get("model") or backbone.get("base") or options.get("base")
+    if not model:
+        raise ArtifactError(f"{run} does not record its backbone; register it with the CLI")
+    return register_output(path, identity=identity, kind="prompt-bank", dialect=dialects[0],
+                           backbone=backbone_identity(model, backbone_revision or backbone.get("revision")),
+                           trainer=trainer or summary.get("trainer") or "natlang_neuralese.train.trajectories",
+                           commit=commit, corpora=corpora, parent=parent[0] if parent else None,
+                           run=str(run.resolve()), notes=f"inputs not registered as corpora: "
+                           f"{len(shas) - len(corpora_by_sha(shas, repo))} of {len(shas)}", repo=repo)

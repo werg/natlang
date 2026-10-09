@@ -148,7 +148,7 @@ def member_step(model, members, x, y, *, phase, normaliser, ce_member, kl_weight
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cache", default=resolve_str("models", "maple-preview-converted"))
+    ap.add_argument("--cache", default="default", help="converted-weights cache; default: Maple's, for published Maple only")
     ap.add_argument("--order", help="expert-order.pt from natlang_neuralese.maple.routing (N0)")
     ap.add_argument("--members", default="24x32,24x64,8x16")
     ap.add_argument("--phase", choices=["bootstrap", "joint", "eval"], default="bootstrap",
@@ -211,7 +211,10 @@ def main(argv=None):
         members = model.members
         adapters, scales, private = [], [], []
     else:
-        model = load_maple(args.model, device="cuda", ternary_attention=False, cache=args.cache or None)
+        from .student import default_cache
+
+        cache = default_cache(args.model) if args.cache == "default" else (args.cache or None)
+        model = load_maple(args.model, device="cuda", ternary_attention=False, cache=cache)
         if args.order:
             model.order_experts(torch.load(args.order)["orders"])
         total_layers = model.config.num_hidden_layers

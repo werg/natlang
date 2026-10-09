@@ -11,11 +11,11 @@
   },
   "scripts": {
     "build": "node scripts/clean-dist.mjs && npm run build:node && node scripts/build-browser.mjs",
-    "build:node": "node scripts/bundle-improver.mjs && tsc -p tsconfig.json && node ../scripts/stage-npm-package.mjs node",
+    "build:node": "node scripts/generate-builtin.mjs && node scripts/bundle-improver.mjs && tsc -p tsconfig.json && node ../scripts/stage-npm-package.mjs node",
     "build:browser": "node scripts/build-browser.mjs",
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check:layering": "node scripts/check-layering.mjs",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "check": "node scripts/generate-builtin.mjs --check && tsc -p tsconfig.json --noEmit",
     "test:browser": "node scripts/browser-pilot.mjs",
     "test:browser-call-store": "node scripts/browser-call-store-smoke.mjs",
     "test:files": "node scripts/test-files.mjs",

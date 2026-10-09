@@ -3,6 +3,6 @@
   "name": "@natlang/workflow",
   "version": "0.2.0",
   "description": "A durable single-writer order workflow whose policy is natural language: next action, recovery of unknown outcomes, compensation and customer messages, over a crisp mechanism (intent before effect, idempotent receipts, transition validity, atomic commit).",
-  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "service.ts", "ledger.ts", "types.ts", "handle.nl", "handle", "inform.nl", "inform", "tsconfig.json"],
+  "include": ["README.md", "DECOMPOSITION.md", "index.ts", "service.ts", "ledger.ts", "types.ts", "refinements.ts", "handle.nl", "handle", "inform.nl", "inform", "tsconfig.json"],
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

@@ -96,6 +96,6 @@ Constraints now written as instructions or checked by hand that should become ty
 | `CellPlan.batches` | `Is<CellRun[][], "no run reads the result of a run in the same or a later batch">` | open |
 | `Dependency.cells` | `Is<string[], "IDs of cell blocks of this page">` | open |
 
-Prompt guards removed from the old `reconcile.nl`: "return runnable source only if the combined meaning is clear;
+Prompt guards removed when the former single `reconcile.nl` (no longer in the tree; its work is now `merge.nl`, `merge/block.nl` and the stages under `merge/block/`) was split: "return runnable source only if the combined meaning is clear;
 otherwise keep the old source and record a conflict" is now the `clear` flag of `Merged` (refinement above), and
 "account for every update ID exactly once" is the `accounted` refinement; the host still checks both.

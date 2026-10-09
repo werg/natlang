@@ -4,7 +4,9 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildProject, checkProject, parsePackageManifest, parseRefinementSettings } from '../dist/index.js';
+import { buildProject, checkProject, parsePackageManifest, parseRefinementSettings, __natlang } from '../dist/index.js';
+import { refinements as crispTable } from '../dist/native/types.js';
+import { pathToFileURL } from 'node:url';
 
 const RUNTIME = { url: new URL('../dist/index.js', import.meta.url).href,
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
@@ -78,4 +80,38 @@ export async function run(text: string): Promise<string> {
   const emitted = readFileSync(join(root, 'dist/app.js'), 'utf8');
   assert.match(emitted, /refine\(text, "a reply that is polite"\)/);
   assert.match(emitted, /assume\(text, "short; and lowercase"\)/);
+});
+
+test('a refined alias in types.ts is the same type as the one in the generated declaration, with no import of Is', () => {
+  const root = project({ ...FILES,
+    'src/reply.nl': '---\nargs:\n  complaint: string\nreturns: Polite\n---\nAnswer the complaint.\n',
+    'src/types.ts': 'export type Polite = Is<string, "a reply that is polite">;\nexport type Pair = { first: Polite, second: Is<number, "a whole number"> };\n',
+    'src/app.ts': `import reply from './reply.nl';
+import type { Polite, Pair } from './types.js';
+export async function run(complaint: string): Promise<Pair['first']> {
+  const answer: Polite = await reply(complaint);
+  return answer;
+}
+` });
+  const result = buildProject({ project: root, runtimeModule: RUNTIME });
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
+});
+
+test('the compiled .nl modules register the nearest refinements.ts, whatever hosts them', async () => {
+  const predicate = 'a reply that is polite';
+  const root = project({ ...FILES,
+    'src/refinements.ts': `export const refinements = { "a  reply that is polite": (value: unknown) => typeof value === "string" && !/fault/.test(value) };\n`,
+    'src/app.ts': "import reply from './reply.nl';\nexport default reply;\n" });
+  const result = buildProject({ project: root, runtimeModule: RUNTIME });
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
+  assert.match(readFileSync(join(root, 'dist/reply.nl.js'), 'utf8'), /registerCrisp\(__crisp, "\.\/refinements\.js"\)/);
+  assert.equal(crispTable[predicate], undefined);
+  await import(pathToFileURL(join(root, 'dist/reply.nl.js')).href);
+  assert.equal(crispTable[predicate]('Sorry for the delay.'), true);
+  assert.equal(crispTable[predicate]('your fault'), false);
+  assert.throws(() => __natlang.registerCrisp({ [predicate]: value => value === 'something else' }, 'other/refinements.js'), /already registered with different code/);
+  __natlang.registerCrisp({ [predicate]: crispTable[predicate] }, 'again');
+  assert.throws(() => __natlang.registerCrisp({ p: 3 }, 'bad.js'), /must be a function/);
+  assert.throws(() => __natlang.registerCrisp(undefined, 'bad.js'), /must export `refinements`/);
+  delete crispTable[predicate];
 });

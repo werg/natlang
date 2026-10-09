@@ -720,6 +720,66 @@ def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None):
     return codes
 
 
+def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
+                         mask_system_prompt=True):
+    """Build split-preserving text windows with the shared chat-role policy.
+
+    System prompt tokens remain in the crisp context but can be excluded from
+    supervised targets. Held windows retain per-token role labels for role
+    diagnostics; training windows preserve the existing unannotated layout.
+    """
+    tokenizer=engine.tokenizer
+    backbone=engine.backbone
+
+    def token_id(text):
+        try:
+            value=tokenizer.convert_tokens_to_ids(text)
+            return value if isinstance(value,int) and value!=tokenizer.unk_token_id else None
+        except Exception:
+            return None
+
+    role_start=token_id('<|im_start|>')
+    role_ids=({i:name for name in ('system','user','assistant','tool')
+               for i in [token_id(name)] if i is not None} if role_start is not None else {})
+    system_code=ROLE_CODES.index('system')
+    windows={'train':[],'test':[]}
+    masked_system_tokens=0
+    for row in rows:
+        split=row.get('split')
+        if split not in windows:
+            raise ValueError('text rows require train/test split')
+        row_tokens=row['token_ids'] if 'token_ids' in row else engine._tokens(row['text'])
+        labels=None
+        context=0
+        if role_start is not None:
+            labels=chat_roles([backbone.controls.open_id]+list(row_tokens)+[backbone.controls.close_id],
+                start_id=role_start,role_ids=role_ids,
+                think_open=token_id('<think>'),think_close=token_id('</think>'))
+            if mask_system_prompt:
+                index=1
+                while index<len(labels) and labels[index]==0:index+=1
+                while index<len(labels) and labels[index]==system_code:index+=1
+                context=index-1 if any(c==system_code for c in labels[1:index]) else 0
+                masked_system_tokens+=context
+        for window in document_windows(row_tokens,
+                open_id=backbone.controls.open_id,close_id=backbone.controls.close_id,
+                tokens=tokens,prefix_tokens=prefix_tokens,
+                supervised_suffix_start=row.get('supervised_suffix_start'),
+                context_tokens=context,target_tokens=target_tokens):
+            if labels is not None and split=='test':
+                if target_tokens is not None:
+                    window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
+                else:
+                    window['roles']=labels[window['start']:window['start']+len(window['ids'])]
+            windows[split].append({**window,
+                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'groups':row['source_groups']})
+    receipt={'enabled':bool(mask_system_prompt and role_start is not None),
+             'requested':bool(mask_system_prompt),'role_start_id':role_start,
+             'masked_system_tokens':masked_system_tokens,'documents':len(rows)}
+    return windows,receipt
+
+
 def evaluation_batches(windows, limit, max_tokens=None):
     """Batch equal geometry within one held stratum; retain every held window.
 
@@ -1172,50 +1232,11 @@ def main(argv=None):
         optimizer=torch.optim.AdamW([{'params':[q for n,q in named if n.startswith('backbone.')],'lr':a.lr},
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
     rows,receipt=load_text_rows(a.records,a.pieces,a.text_data,tokenizer=engine.tokenizer)
-    # Chat roles per document (system, user, tool, assistant reasoning/reply): the leading system prompt is
-    # context only (owner 2026-10-08: memorized boilerplate, masked from loss and held metrics), and held windows
-    # carry per-token roles for role_strata.
-    role_tokenizer=engine.tokenizer
-    def token_id(text):
-        try:
-            value=role_tokenizer.convert_tokens_to_ids(text)
-            return value if isinstance(value,int) and value!=role_tokenizer.unk_token_id else None
-        except Exception:return None
-    role_start=token_id('<|im_start|>')
-    role_ids=({i:name for name in ('system','user','assistant','tool') for i in [token_id(name)] if i is not None}
-              if role_start is not None else {})
-    system_code=ROLE_CODES.index('system')
-    windows={'train':[],'test':[]};masked_system_tokens=0
-    for row in rows:
-        tokens=row['token_ids'] if 'token_ids' in row else engine._tokens(row['text'])
-        labels=None;context=0
-        if role_start is not None:
-            labels=chat_roles([backbone.controls.open_id]+list(tokens)+[backbone.controls.close_id],start_id=role_start,
-                              role_ids=role_ids,think_open=token_id('<think>'),think_close=token_id('</think>'))
-            if a.mask_system_prompt:
-                index=1  # labels[0] is the window's open token
-                while index<len(labels) and labels[index]==0:index+=1
-                while index<len(labels) and labels[index]==system_code:index+=1
-                context=index-1 if any(c==system_code for c in labels[1:index]) else 0
-                masked_system_tokens+=context
-        for window in document_windows(tokens,
-                open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
-                tokens=a.tokens, prefix_tokens=a.prefix_tokens,
-                supervised_suffix_start=row.get('supervised_suffix_start'),context_tokens=context,
-                target_tokens=a.target_tokens):
-            if labels is not None and row['split']=='test':
-                if a.target_tokens is not None:
-                    window['roles']=_TokenWindow(labels,window['start'],
-                                                 window['start']+len(window['ids']))
-                else:
-                    window['roles']=labels[window['start']:window['start']+len(window['ids'])]
-            windows[row['split']].append({**window,
-                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
-                'groups':row['source_groups']})
+    windows,mask_receipt=prepare_text_windows(engine,rows,tokens=a.tokens,
+        prefix_tokens=a.prefix_tokens,target_tokens=a.target_tokens,
+        mask_system_prompt=a.mask_system_prompt)
     if not all(windows.values()):raise ValueError('no token windows for a split')
-    print(json.dumps({'event':'system_prompt_masking','enabled':bool(a.mask_system_prompt and role_start is not None),
-                      'masked_system_tokens':masked_system_tokens,
-                      'documents':len(rows)}),flush=True)
+    print(json.dumps({'event':'system_prompt_masking',**mask_receipt}),flush=True)
     held,held_selection=select_held_document_windows(windows['test'],a.held_documents)
     group_order_sha256=hashlib.sha256(json.dumps(held_selection['group_order'],ensure_ascii=False,
         sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -1617,7 +1638,7 @@ def main(argv=None):
                         for path in (a.records,a.pieces,a.text_data) if path is not None and
                         str(path.resolve()) in identity['inputs']},
                     'system_prompt_mask_requested':bool(a.mask_system_prompt),
-                    'system_prompt_mask_effective':bool(a.mask_system_prompt and role_start is not None),
+                    'system_prompt_mask_effective':mask_receipt['enabled'],
                     'held_selection':held_selection_eval,
                     'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
                     'evaluation_passes':evaluation_passes},
