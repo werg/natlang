@@ -4,10 +4,8 @@
   "status": "canonical-input-map-warmup",
   "implementation": "natlang_neuralese.train.text_warmup",
   "inherits": "gold-text-warmup-v1",
-  "decision": "2026-10-08 shared Maple/LFM owner course correction: replace repeated sketch passes in text warm-up with a causal token-to-Neuralese training input map. Runtime/self-generated recurrence still requires separate qualification.",
+  "decision": "Shared Maple/LFM active text training uses causal token-to-neuralese mapped drift adaptation followed by the canonical full-depth autoregressive feedback fixup, then exact-weight runtime and recurrence qualification. There is no active sketch text-training variant.",
   "cli": {
-    "neuralese_input": "map",
-    "rollout_passes": 0,
     "input_map_kernel": 4,
     "input_map_rank": 64
   },
@@ -26,11 +24,12 @@
   "continuation": {
     "weights": "restore full backbone and all heads, including newly frozen feedback weights",
     "rng": "restore parent Python/Torch/CUDA RNG",
-    "optimizer": "sketch-to-map changes trainable parameter groups: explicit fresh Muon/AdamW state; subsequent same-map resume restores complete state",
+    "optimizer": "Restore full optimizer state when trainable groups match; fresh map initialization adds parameter groups and requires an explicitly recorded fresh optimizer. Subsequent map and AR-feedback resumes preserve complete compatible optimizer state.",
     "qualification": "new objective remeasures baseline and resets projection plateau and qualification evidence"
   },
   "supervision": "shared TEXT_SUPERVISION_POLICY; real open/close boundaries; system prompt stays context-only",
   "qualification": "Full projection remains measured against raw gold embeddings; mapped-history alignment is only text qualification. Actual autoregressive blocks, stopping, transport, gradient replay and function recurrence require exact-weight independent qualification.",
   "residual_caveat": "A token-derived map cannot carry information beyond tokens. Measure projection-versus-map residual and qualify self-generated block exposure before functional recurrence training.",
-  "serving": "omit the training-only input map from serving heads; preserve it separately in exports and full resumable checkpoints"
+  "serving": "omit the training-only input map from serving heads; preserve it separately in exports and full resumable checkpoints",
+  "canonical_pipeline": "raw-recurrence-v1"
 }
