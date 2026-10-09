@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/fusion-planner",
+  "version": "0.1.0",
+  "description": "Decides which function-to-function hand-offs of a program keep their value as a Neuralese block instead of text (plans/FUSED_PIPELINES.md). Loaded by the runtime when fusion.planner is nl or shadow.",
+  "include": ["README.md", "types.ts", "planner.nl", "planner", "tsconfig.json"],
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
