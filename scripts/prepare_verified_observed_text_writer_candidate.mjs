@@ -29,13 +29,6 @@ const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const bytes = value => Buffer.from(JSON.stringify(value));
 const digest = value => sha(bytes(value));
 const allowedObservedWriterSources = new Set(['eval-finish', 'eval-return', 'return_result']);
-function graphHasAuthenticatedWriter(graph, receipt) {
-  return Array.isArray(graph) && graph.some(event => event.kind === 'block_write' &&
-    event.call_id === receipt.invocation_id && event.block === receipt.block_id &&
-    event.source === receipt.source && event.source_kind === receipt.source_kind &&
-    event.result_type === receipt.result_type && event.text_body_sha256 === receipt.body_sha256 &&
-    event.truncated === false);
-}
 const resultPath = resolve(options.result), outputPath = resolve(options.output);
 const modulePath = pathToFileURL(resolve(options.materializer));
 const manifestPath = resolve(options['code-manifest']);
@@ -57,28 +50,34 @@ const writerLedgerEntries = (raw.outcome?.invocation_ledger ?? []).filter(item =
   item.invocation_id === source.source_ref.invocation_id);
 if (writerLedgerEntries.length !== 1) throw new Error('writer invocation ledger entry is not unique');
 const writerLedger = writerLedgerEntries[0];
-// A direct/staged typed-result receipt on the originating action is already
-// the native writer supervision. Check this before the derived-body path tries
-// to locate a terminal model action: staged eval-return deliberately links to
-// a later status-only completion on another native row.
-const existingTypedWriter = (source.decision?.assistant?.calls ?? []).flatMap(call =>
-  call.outcome?.typed_result_writes ?? []).some(receipt => {
-  if (receipt.schema !== 'natlang.typed-result-write/1' ||
-      receipt.invocation_id !== source.source_ref.invocation_id ||
-      receipt.writer_call_id !== source.source_ref.invocation_id ||
-      receipt.result_type !== 'Neuralese<string>' ||
-      receipt.source_kind !== 'typed-text-result' ||
-      !allowedObservedWriterSources.has(receipt.source) ||
-      typeof receipt.block_id !== 'string' || typeof receipt.body_sha256 !== 'string') return false;
-  return graphHasAuthenticatedWriter(raw.outcome?.execution_graph, receipt);
-});
-if (existingTypedWriter)
-  throw new Error('original sampled action already has an authenticated typed-result writer receipt for this exact block/body; do not add a duplicate derived target');
-const capture = source.source_ref?.host_result_capture?.capture;
-const blockRef = capture?.value?.$neuralese;
 const invocationEntries = (raw.outcome?.invocation_ledger ?? []).filter(item =>
   item.invocation_id === source.source_ref.invocation_id);
 const hostCapture = invocationEntries[0]?.host_result;
+const stagedReceipt = (source.decision?.assistant?.calls ?? []).flatMap(call =>
+  call.outcome?.typed_result_writes ?? []).find(receipt =>
+    receipt.schema === 'natlang.typed-result-write/1' &&
+    receipt.invocation_id === source.source_ref.invocation_id &&
+    receipt.writer_call_id === source.source_ref.invocation_id &&
+    receipt.result_type === 'Neuralese<string>' &&
+    receipt.source_kind === 'typed-text-result' &&
+    typeof receipt.block_id === 'string' && typeof receipt.body_sha256 === 'string');
+const sourceCapture = source.source_ref?.host_result_capture?.capture;
+const terminalSeq = sourceCapture?.terminal_action_seq ?? stagedReceipt?.staged_success_completion?.terminal_action_seq ??
+  hostCapture?.terminal_action_seq;
+const terminalCandidates = rows.flatMap(row => {
+  if (row.source_ref?.invocation_id !== source.source_ref.invocation_id) return [];
+  return (row.decision?.assistant?.calls ?? [])
+    .filter(call => call.outcome?.trace_seq === terminalSeq)
+    .map(call => ({ row, call }));
+});
+const terminalActionMatches = Number.isInteger(terminalSeq) && terminalCandidates.length === 1;
+const terminalRow = terminalActionMatches ? terminalCandidates[0].row : undefined;
+const terminalAction = terminalActionMatches ? terminalCandidates[0].call : undefined;
+// A staged eval-return can be completed by a later status-only success action.
+// In that case the checked host capture is attached to the terminal native row,
+// not the earlier row containing the sampled eval-return writer action.
+const capture = sourceCapture ?? terminalRow?.source_ref?.host_result_capture?.capture;
+const blockRef = capture?.value?.$neuralese;
 if (!capture || capture.kind !== 'host_capture' || capture.complete !== true ||
     capture.call_id !== source.source_ref.invocation_id || capture.result_type !== 'Neuralese<string>' ||
     blockRef?.type !== 'Neuralese<string>' || typeof blockRef.id !== 'string' ||
@@ -86,9 +85,6 @@ if (!capture || capture.kind !== 'host_capture' || capture.complete !== true ||
     hostCapture.call_id !== capture.call_id || hostCapture.value_sha256 !== capture.value_sha256 ||
     hostCapture.terminal_action_seq !== capture.terminal_action_seq)
   throw new Error('writer host capture does not bind a completed Neuralese<string> block');
-const terminal = source.decision?.assistant?.calls?.filter(call =>
-  call.outcome?.trace_seq === capture.terminal_action_seq);
-const terminalActionMatches = Array.isArray(terminal) && terminal.length === 1;
 const graph = Array.isArray(raw.outcome?.execution_graph) ? raw.outcome.execution_graph : [];
 const writerEvents = graph.filter(event => event.kind === 'block_write' &&
   event.call_id === source.source_ref.invocation_id && event.block === blockRef.id &&
@@ -119,18 +115,43 @@ for (const row of rows) {
 if (readerRows.length === 0) throw new Error('no authenticated downstream provider read found');
 const body = readerRows[0].receipt.block.body;
 if (readerRows.some(({ receipt }) => receipt.block.body !== body)) throw new Error('read receipts disagree on body');
+// A typed-result receipt and a block_write prove output provenance, but they do
+// not mean the original sampled assistant target supervised the returned body.
+// Refuse only when the original target itself already carries that exact body
+// as a direct result/message value; eval-finish/eval-return metadata alone is
+// deliberately insufficient to classify a body target as duplicated.
 const directBodyTarget = (source.target?.tool_calls ?? []).some(call => {
   if (call.function?.name !== 'return_result') return false;
   try { return JSON.parse(call.function.arguments).value === body; } catch { return false; }
 }) || source.target?.content === body;
 if (directBodyTarget)
   throw new Error('original sampled native target already contains this exact writer body; do not create a duplicate derived target');
-if (!terminalActionMatches) throw new Error('native terminal action does not match host capture');
+const terminalTool = terminalAction?.source_tool ?? terminalAction?.tool;
+const terminalSuccess = (terminalTool === 'return_result' &&
+  terminalAction?.outcome?.status === 'completed' && terminalAction?.outcome?.arguments?.status === 'success') ||
+  (terminalTool === 'eval' && terminalAction?.outcome?.status === 'completed');
+if (!terminalActionMatches || capture.terminal_action_seq !== terminalSeq || !terminalSuccess)
+  throw new Error('native terminal action does not match host capture');
 const turns = raw.trajectory.map((turn, index) => ({ turn, index })).filter(({ turn }) =>
   turn.invocation_id === source.source_ref.invocation_id &&
   turn.raw_response_sha256 === source.decision.source_raw_response_sha256);
 if (turns.length !== 1) throw new Error(`expected one raw sampled writer response; found ${turns.length}`);
 const { turn, index } = turns[0];
+const typedWriterReceipts = (source.decision?.assistant?.calls ?? []).flatMap(call =>
+  call.outcome?.typed_result_writes ?? []).filter(receipt =>
+    receipt.schema === 'natlang.typed-result-write/1' &&
+    receipt.invocation_id === source.source_ref.invocation_id &&
+    receipt.writer_call_id === source.source_ref.invocation_id &&
+    receipt.writer_node === event.node && receipt.block_id === blockRef.id &&
+    receipt.source === event.source && receipt.source_kind === event.source_kind &&
+    receipt.result_type === event.result_type && receipt.body_sha256 === event.text_body_sha256 &&
+    receipt.request_sha256 === turn.request_sha256 && receipt.raw_response_sha256 === turn.raw_response_sha256);
+if (typedWriterReceipts.length !== 1)
+  throw new Error(`expected one exact typed-result receipt binding the sampled action and writer graph; found ${typedWriterReceipts.length}`);
+const typedWriterReceipt = typedWriterReceipts[0];
+if (typedWriterReceipt.staged_success_completion &&
+    typedWriterReceipt.staged_success_completion.terminal_action_seq !== capture.terminal_action_seq)
+  throw new Error('staged completion proof does not bind the selected terminal host capture');
 const sameRunScoreFacts = (raw.outcome.invocation_ledger ?? []).filter(item =>
   item.parent_invocation_id === source.source_ref.parent_invocation_id &&
   item.inline_instruction_site?.returns?.natlang === 'ScoreFact' &&
@@ -172,9 +193,20 @@ const candidate = {
     source_ids: source.source_ids, source_groups: source.source_groups,
     inline_instruction_site: writerLedger.inline_instruction_site,
     raw_sampled_context: turn.context, raw_sampled_context_sha256: digest(turn.context),
-    terminal_host_capture: capture, terminal_native_action: terminal[0] },
+    terminal_host_capture: capture, terminal_native_record_id: terminalRow.id,
+    terminal_native_action: terminalAction },
   delegated_typed_score_fact_returns: sameRunScoreFacts,
   writer_graph_event: event,
+  typed_result_write_receipt: typedWriterReceipt,
+  body_origin: {
+    kind: 'authenticated-observed-Neuralese-string-host-result',
+    result_type: 'Neuralese<string>', block_id: blockRef.id,
+    body_sha256: event.text_body_sha256, writer_source: event.source,
+    body_source_basis: typedWriterReceipt.body_source_basis,
+    sampled_model_action_target_sha256: digest(source.target),
+    body_is_direct_raw_assistant_text: false,
+    note: 'This exact body is recovered from a typed result and authenticated runtime graph/read receipt. The sampled assistant target remains the separate original eval/action target; this derived direct-return target is not asserted to be a raw assistant message, an equivalent executed program, a trajectory, or a qualified learned writer.'
+  },
   exact_body: body,
   exact_body_sha256: sha(Buffer.from(body)),
   downstream_reader_bindings: readerRows.map(({ row, receipt }) => ({
