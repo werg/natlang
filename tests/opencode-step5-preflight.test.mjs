@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { verifyStep5ModelPair } from '../scripts/opencode-step5-preflight.mjs';
+import { verifyStep5ModelPair, verifyStep5SourceBinding } from '../scripts/opencode-step5-preflight.mjs';
 
 const alias = 'opencode/step-5-preview-free';
 const bootstrapConfig = { model_alias: alias, main_model: alias, small_model: alias };
@@ -120,4 +120,62 @@ test('Step 5 preflight binds a post-readiness bridge port without weakening mode
     bootstrapConfigText: exactNewlineConfig, bootstrapConfigPath: 'runs/fresh/bridge/bootstrap-config.json', collectorArgv: argv });
   assert.equal(newlineBound.bootstrap_config_sha256_bound,
     createHash('sha256').update(exactNewlineConfig).digest('hex'));
+});
+
+function authoredSourceBindingFixture() {
+  const code = 'const file = folder.file("evidence.json"); return await nl<Fact>`Read it`(file);';
+  const record = { id: 'source:microgrid:row1', split: 'train', source_groups: ['world:microgrid:2'],
+    curriculum: { reference: { root: [[ 'eval', { code } ]] } } };
+  const sourceCasesText = `${JSON.stringify(record)}\n`;
+  const sourceRowSha256 = createHash('sha256').update(JSON.stringify(record)).digest('hex');
+  const sourceSha256 = createHash('sha256').update(sourceCasesText).digest('hex');
+  const source = { path: 'runs/source.cases.jsonl', sha256: sourceSha256, index: 0,
+    row_sha256: sourceRowSha256, id: record.id, source_group: record.source_groups[0], split: record.split,
+    authored_target_code_sha256: createHash('sha256').update(code).digest('hex') };
+  const proof = { schema: 'test.exact-source-fake-proof/1', source_path: source.path,
+    source_sha256: sourceSha256, source_row_index: 0, source_row_sha256: sourceRowSha256,
+    source_id: record.id, source_groups: record.source_groups, split: record.split };
+  const sourceProofText = JSON.stringify(proof);
+  const plan = { schema: 'natlang.step5_authored_root_source_case_launch_plan/1', source,
+    reference_protocol: { exact_source_fake_proof: { path: 'runs/fake-proof.json',
+      bytes: Buffer.byteLength(sourceProofText),
+      sha256: createHash('sha256').update(sourceProofText).digest('hex') } } };
+  return { plan, sourceCasesText, sourceProofText, source, record, sourceSha256, sourceRowSha256 };
+}
+
+test('authored-root preflight binds the exact physical source row to its fake proof', () => {
+  const fixture = authoredSourceBindingFixture();
+  const result = verifyStep5SourceBinding(fixture);
+  assert.deepEqual(result, { ok: true, source_path: fixture.source.path, source_index: 0,
+    source_id: fixture.source.id, source_group: fixture.source.source_group, split: 'train',
+    source_row_sha256: fixture.sourceRowSha256, exact_source_fake_proof_path: 'runs/fake-proof.json',
+    exact_source_fake_proof_sha256: fixture.plan.reference_protocol.exact_source_fake_proof.sha256 });
+});
+
+test('authored-root preflight rejects an exact-source proof copied from another row', () => {
+  const fixture = authoredSourceBindingFixture();
+  const other = { ...fixture.record, id: 'source:clinic:row0', source_groups: ['world:clinic:2'] };
+  const otherLine = JSON.stringify(other);
+  const proof = { schema: 'test.exact-source-fake-proof/1', source_path: fixture.source.path,
+    source_sha256: fixture.sourceSha256, source_row_index: 0,
+    source_row_sha256: createHash('sha256').update(otherLine).digest('hex'), source_id: other.id,
+    source_groups: other.source_groups, split: 'train' };
+  const sourceProofText = JSON.stringify(proof);
+  const plan = { ...fixture.plan, reference_protocol: { exact_source_fake_proof: {
+    path: 'runs/other-row-proof.json', bytes: Buffer.byteLength(sourceProofText),
+    sha256: createHash('sha256').update(sourceProofText).digest('hex') } } };
+  assert.throws(() => verifyStep5SourceBinding({ ...fixture, plan, sourceProofText }),
+    /fake proof does not bind the selected source file\/row\/ID\/group\/split/);
+});
+
+test('authored-root preflight rejects source-byte, group, split and target-code drift', () => {
+  const fixture = authoredSourceBindingFixture();
+  assert.throws(() => verifyStep5SourceBinding({ ...fixture, sourceCasesText: `${fixture.sourceCasesText} ` }),
+    /source-cases bytes do not match/);
+  for (const [field, value] of [['source_group', 'world:other'], ['split', 'test'],
+    ['authored_target_code_sha256', 'wrong']]) {
+    const plan = { ...fixture.plan, source: { ...fixture.source, [field]: value } };
+    assert.throws(() => verifyStep5SourceBinding({ ...fixture, plan }),
+      field === 'authored_target_code_sha256' ? /controller code does not match/ : /ID\/group\/split/);
+  }
 });
