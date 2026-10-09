@@ -52,9 +52,13 @@ spelled as numbered steps over named data, and exact arithmetic is done in eval.
   - *Determinism*: the order is recomputed from seed and tick; a rejected trade is re-derived as infeasible at that
     point of the settlement, a traded one as feasible at the offer's price. Two runs from the same state and
     intents give the same settlement whatever order the intents arrived in.
-  - *Combat*: every fighter keeps its cell range, steps at most one cell, only the living move or lose health,
-    health equals before minus the hits, each eligible attacker landed exactly one hit and no one else did,
-    cooldown follows its timer rule.
+  - *Combat*: every fighter stays in the arena, steps at most one cell, only the living with a tactic move, health
+    equals before minus the hits, every hit is legal on the state it was judged on (attacker alive and off cooldown,
+    target named by the tactic and alive, within one cell after movement, damage 2 or 1 against a guard, one hit per
+    attacker), and a cooldown starts at a strike and otherwise only counts down.
+  - *Soundness, not completeness.* The checks bound what a stage may do, not what it must do. A policy may reject
+    a trade or miss a hit that the physics allows; it cannot create money, goods, health or reach. Rules that
+    tighten the game in natural language stay possible without touching the checks.
   - *NPCs*: an event is acted on once (`basis`, `applied`, `event-N`), and a give removes a unit that exists.
 - **Pluggable hot paths.** Policy is natural language also where it runs for every actor of every turn. Each such
   part has one interface and two implementations, crisp and natural language, selected by `Settings`
@@ -165,10 +169,25 @@ written in the code, which carries them as doc comments and crisp checks; each i
 | `NpcPlan.say` | `Is<string, "a reply in the NPC's voice that claims no knowledge outside its memory">` |
 | `Settings` entries | `Is<Engine, "an implementation that exists for the part">` |
 
-## Limitations met
-
-See the end of this file.
-
 ## Limitations met while porting
 
-- (filled in as encountered)
+- **Callable-folder TypeScript cannot import node modules**, so the SHA-256 of the seeded order is written out in
+  `games/economy/order.ts` (about 40 lines, checked against `node:crypto` in the tests). A `random` service would
+  replace it.
+- **`natlang check` does not apply the finite-iteration policy to callable-folder TypeScript**: `for (... of
+  array.entries())` passed `check` and was rejected only when the turn ran (ts-host/src/native/runtime.ts, the eval
+  policy message "iterates an array, string, Map or Set"). The commits use counted loops.
+- **Local type inference from an initializer can pick the wrong type.** `const picks = await Promise.all(ids.map(async
+  id => ({ actor: id, intent: await choose(...) })))` was given the type `TradeIntent[]` (the callee's return) and the
+  binding was rejected with `type-mismatch`; an annotation (`const picks: Submission[]`) fixes it
+  (ts-host/src/native/runtime.ts:1982, `scopeInitializerType`). The stage instructions name their data types, but a
+  small model that does not annotate hits this.
+- **Types: no intersections or index signatures** in `types.ts` (`A & B` and `{ [k: string]: unknown }` fail
+  `callable-scope` parsing), so `TurnReport` repeats the fields of `Turn` and `GameEvent` is `Record<string, unknown>`.
+- **Names that collide with function properties** (`apply`) are rejected in callable folders; the ledger uses `post`.
+- **A helper two items need** (`economy/ledger.ts`) is both a child of `economy` (so `economy` sees it as a callable)
+  and reached by `settle/policy` through `uses`. It cannot be hidden from the economy's eval scope.
+- **No refinement types yet**, so all constraints in "Refinements" are doc comments plus the commit checks.
+- **No shadow comparison** (NL against crisp on the same input, disagreements recorded) between the two
+  implementations of a pluggable part; plans/REFINEMENT_TYPES.md describes it for refinements and it would apply
+  here. The tests compare them on fixed scenarios.
