@@ -20394,6 +20394,40 @@
       "license": "Inherited exact original decision train roles/groups/licenses; see pinned source manifests",
       "independent_new_worlds": 0,
       "notes": "3.1Lite128 typed-valid, existinggraderquality .86953/allgates .765625. Robotics25rawrows22uniqueIDs18unique typed-valid; dedup hash selection in V7, all attempts retained. DailyRetryInfo6645s, no evidence reset elapsed. Availability2.5Pro404 vsRobotics200; catalog does not imply availability. Active pools excluded; all held/no automatic corpus admission."
+    },
+    {
+      "id": "free-provider-google-pool-v1-closed-held-20261009-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-google-model-pool-mixed-decisions-v1/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v1/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-model-pool-mixed-decisions-v1/frozen-adapter-v1/run_gemini_decision_pool.py",
+        "provider-google-model-pool-mixed-decisions-v1/labels.jsonl",
+        "provider-google-model-pool-mixed-decisions-v1/labels.jsonl.attempts.jsonl",
+        "provider-google-model-pool-mixed-decisions-v1/labels.jsonl.manifest.json",
+        "provider-google-model-pool-mixed-decisions-v1/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v1/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v1/worker.log",
+        "quality-review-v8/gemini-3.5-flash-lite-labels-subset.jsonl",
+        "quality-review-v8/gemini-3.5-flash-lite-scorer-output.json",
+        "quality-review-v8/gemma-4-26b-a4b-it-labels-subset.jsonl",
+        "quality-review-v8/gemma-4-26b-a4b-it-scorer-output.json",
+        "quality-review-v8/gemma-4-31b-it-labels-subset.jsonl",
+        "quality-review-v8/gemma-4-31b-it-scorer-output.json",
+        "quality-review-v8/google-model-pool-v1-quality-review-v8.json"
+      ],
+      "split": null,
+      "source_class": "typed-decision-labels-with-shared-quota-pool-provenance",
+      "admission": "held-pending-source-quality-and-current-IR-conversion",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-lite-robotics-closed-held-20261009-v1"
+      ],
+      "license": "Inherited original decision source train roles/groups/licenses; source-manifest pins full upstream dataset",
+      "independent_new_worlds": 0,
+      "notes": "256unique inherited train IDs,233typed-valid. Nonpaired allocations:3.5Lite120/120, Gemma26B109/131,Gemma31B4/5; V8 pins exact scorer results/usage/raw errors/all rowhashes. Invalid probability sums preserved, not normalized. Frozen exact adapter/runtime files included. V2 ownership transfer observed no overlap, active V2 outputs excluded. No admission/new-world credit."
     }
   ],
   "coverage_backlog": [
