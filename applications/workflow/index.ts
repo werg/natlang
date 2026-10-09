@@ -16,6 +16,8 @@ import type { Decision, Limits, OutboxEntry, Snapshot, WorkflowEvent, WorkflowSt
 export * from './service.js';
 export * from './ledger.js';
 export type * from './types.js';
+// The crisp checkers of the refined results (refinements.ts), for a host that runs the policy in its own runtime.
+export { refinements } from './refinements.js';
 
 /** What a run of natural-language work needs: the services its stages call. */
 export type RunServices = { services: Record<string, unknown>, serviceDeclarations: Record<string, string> };

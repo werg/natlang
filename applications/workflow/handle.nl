@@ -3,7 +3,7 @@ description: Decide what the order workflow does next for one event, and check t
 args:
   snapshot: Snapshot
   limits: Limits
-returns: Decision
+returns: CheckedDecision
 ---
 Choose the next action for the order in snapshot.state, given snapshot.event. snapshot.receipt is the remote's receipt
 for snapshot.state.pending, or null. limits are the policy's numbers. The mechanism applies the decision only if

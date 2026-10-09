@@ -2,7 +2,7 @@
 description: Decide whether the customer should hear about what just happened to their order, and write the message.
 args:
   report: Report
-returns: Outgoing | null
+returns: CheckedOutgoing | null
 ---
 report says what happened: report.before and report.after are the order before and after the event, report.decision is
 what was done. Write the customer's message with the stages in your folder; ledger checks it.
