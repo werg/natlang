@@ -9,6 +9,7 @@ import { Random, curriculumCase, evalCall, literal, nlFile, returnCall } from '.
 import { READ_ALL, factStore } from './logic.mjs';
 import { SOURCES, cachePath } from './acquire.mjs';
 import { anliReviewText } from '../../dist/teacher/source-review.js';
+import { noteSourceItem } from './source-review-intake.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 const loaded = new Map();
@@ -184,6 +185,8 @@ export function anliBatch(seed, index) {
     return [`N${i + 1}`, row.label === '1' ? 'a' : 'b'];
   }));
   void rng;
+  for (const item of items) noteSourceItem({ dataset: 'anli', id: createHash('sha256').update(anliReviewText(item)).digest('hex'), visible: anliReviewText(item),
+    annotated_label: expected[item.id], contract: 'Which hypothesis, a or b, better explains how the beginning led to the ending?', answer_format: 'a | b' });
   return [curriculumCase({ family: 'anli_batch', familyVersion: 2, shape: `stories${index}`, variant: 'a', splitGroup: `anli:${stories[0].story}`, split,
     slice: 'inline_placement', domain: 'logic', mode: 'single_call', inline: 'required', worldSemantics: 'defeasible',
     evidence: { world: stories.map(row => `${row.story}: ${row.label}`), retrieved: [], background: [`source: αNLI ${SOURCES.anli.revision}`] },

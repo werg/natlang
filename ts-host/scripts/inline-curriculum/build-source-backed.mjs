@@ -12,6 +12,7 @@ import { admitRow, validateCurriculum, renderOpening } from '../../dist/teacher/
 import { defaultToolSurfaceHash, recordDigest } from '../../dist/teacher/collector.js';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { SOURCE_REVIEW_OPTIONS, configureSourceReview, writeIntakeReviews } from './source-review-intake.mjs';
 import { loadWorkflowSources } from './workflow-sources.mjs';
 import { sourceConversionDigest, retiredWorkflowEvaluationReleased, workflowReferenceVisibility } from '../../dist/teacher/source-conversion.js';
 
@@ -144,14 +145,16 @@ async function main() {
   const { values } = parseArgs({ options: { cache: { type: 'string', default: '../vendor/directory-sources' },
     out: { type: 'string', default: '../data/teacher/source-backed' }, limit: { type: 'string', default: '12' },
     'workflow-cache': { type: 'string' }, 'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true },
-    'progress-every': { type: 'string', default:'0' } } });
+    'progress-every': { type: 'string', default:'0' }, ...SOURCE_REVIEW_OPTIONS } });
+  configureSourceReview(values);
   const limit = Number(values.limit), trajectoryLimit = Number(values['trajectory-limit']);
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(trajectoryLimit) || trajectoryLimit < 0) throw new Error('invalid_limits');
   const progressEvery = Number(values['progress-every']);
   if (!Number.isInteger(progressEvery) || progressEvery < 0) throw new Error('invalid_progress_interval');
   const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit, progressEvery, workflowCache: values['workflow-cache'] ? resolve(values['workflow-cache']) : null,
     excludeManifests: (values['exclude-manifest'] ?? []).map(path => resolve(path)) });
-  console.log(JSON.stringify(report, null, 2));
+  const reviewed = await writeIntakeReviews(resolve(values.out, 'source-review.jsonl'));
+  console.log(JSON.stringify(reviewed ? { ...report, source_review: reviewed } : report, null, 2));
   if (!report.cases) throw new Error('no_source_cases_admitted');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

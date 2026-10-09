@@ -10,6 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { SOURCE_REVIEW_OPTIONS, configureSourceReview, writeIntakeReviews } from './source-review-intake.mjs';
 import { datasetQualityReport } from './folder-data.mjs';
 import { FAMILIES, buildRecords } from './families.mjs';
 
@@ -17,7 +18,9 @@ const { values } = parseArgs({ allowNegative: true, options: { seed: { type: 'st
   start: { type: 'string', default: '0' },
   families: { type: 'string' }, track: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
   // Held-out generated problems: --split test marks this build's synthetic cases as test (use a seed no training build uses).
-  split: { type: 'string', default: 'train' }, hints: { type: 'boolean', default: true } } });
+  split: { type: 'string', default: 'train' }, hints: { type: 'boolean', default: true }, ...SOURCE_REVIEW_OPTIONS } });
+// Advice beside the shard (--source-review-mode nl|shadow); the default `crisp` changes nothing.
+configureSourceReview(values);
 if (!values.out) throw new Error('--out FILE is required');
 const seed = Number(values.seed), shapes = Number(values.shapes), start = Number(values.start);
 if ([102,900].includes(seed) && values.split !== 'test')
@@ -47,4 +50,6 @@ if (failures.length && !values['allow-failures']) {
 }
 const kept = records.filter(record => !failures.some(item => item.id === record.id));
 await writeFile(out, kept.map(record => JSON.stringify(record)).join('\n') + '\n');
+const reviewed = await writeIntakeReviews(`${out}.source-review.jsonl`);
+if (reviewed) console.log(`source review ${JSON.stringify(reviewed)}`);
 console.log(`${kept.length} verified cases across ${Object.keys(byFamily).length} families -> ${out}`);

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
 import { pendingSourceReview } from '../../dist/teacher/source-review.js';
+import { noteSourceItem } from './source-review-intake.mjs';
 import { normalizeSourceText, sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 export { sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 
@@ -46,6 +47,9 @@ export function labeledRows(dataset, split = 'train') {
       unique.set(id, { id, text, label });
     }
     loaded.set(dataset, [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)));
+    // Advice only: in crisp mode (the default) this notes nothing.
+    for (const row of loaded.get(dataset)) noteSourceItem({ dataset, id: row.id, visible: row.text, annotated_label: row.label,
+      contract: fields.question, answer_format: fields.labels ? fields.labels.join(' | ') : null });
   }
   return loaded.get(dataset).filter(row => sourceRecordSplit(row.id) === split);
 }
