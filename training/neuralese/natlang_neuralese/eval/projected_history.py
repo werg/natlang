@@ -345,9 +345,11 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
                 tokens.append(token)
                 if return_token_diagnostics:
                     top_values = scores.topk(min(2, scores.shape[-1]), dim=-1).values
-                    gold_score = scores.gather(-1, gold_tokens[:, position:position+1])
-                    diagnostics.append((gold_score, top_values[..., :1],
-                                        top_values[..., :1] - top_values[..., -1:]))
+                    gold_index = gold_tokens[:, position:position+1, None]
+                    gold_score = scores.gather(-1, gold_index).squeeze(-1)
+                    top_score = top_values[..., :1].squeeze(-1)
+                    diagnostics.append((gold_score, top_score,
+                                        top_score - top_values[..., -1]))
             values.append(value)
             if position == steps - 1:
                 break

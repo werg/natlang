@@ -800,7 +800,8 @@ def test_autoregressive_sketch_rollout_matches_parallel_passes_on_early_position
 
 def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_trainable():
     from natlang_neuralese.train.text_warmup import (
-        autoregressive_feedback_completion, text_history_completions)
+        autoregressive_feedback_completion, text_history_completions,
+        text_history_pass_count)
 
     backbone,heads=tiny_feedback_fixture()
     prefix=torch.tensor([[1,4,7]])
@@ -811,6 +812,7 @@ def test_full_depth_autoregressive_feedback_fixup_is_self_fed_shifted_and_traina
     second=autoregressive_feedback_completion(backbone,heads,prefix,changed)
     controls=list(text_history_completions(backbone,heads,prefix,span,passes=2,
         input_map=True,ar_feedback_fixup=True))
+    assert text_history_pass_count(1,input_map=True,ar_feedback_fixup=True)==2
     assert [row['pass_index'] for row in controls]==[0,1]
     gold_ids=torch.cat((prefix,span[:,:-1]),dim=1)
     gold_states=backbone.forward_embeds(backbone.embed(gold_ids),cutoff=heads.cutoff)['h_final']
@@ -850,6 +852,21 @@ def test_full_depth_feedback_transition_matches_projection_evaluator():
                 value=heads.content(torch.zeros_like(top),top)
             projected.append(value)
         torch.testing.assert_close(torch.stack(projected,1),payloads,atol=0,rtol=0)
+
+
+def test_autoregressive_projection_token_diagnostics_gather_aligned_gold_ids():
+    from natlang_neuralese.eval.projected_history import autoregressive_payloads
+    backbone,heads=tiny_feedback_fixture()
+    prefix=torch.tensor([[1,4,7]])
+    gold=torch.tensor([[8,5,11,19]])
+    with torch.no_grad():
+        payloads,generated,diagnostics=autoregressive_payloads(
+            backbone,heads,prefix,gold.shape[1],kinds=('ar_projection',),
+            return_generated_tokens=True,return_token_diagnostics=True,gold_tokens=gold)
+    assert payloads['ar_projection'].shape[:2]==gold.shape
+    assert generated['ar_projection'].shape==gold.shape
+    gold_score,top_score,margin=diagnostics['ar_projection']
+    assert gold_score.shape==top_score.shape==margin.shape==gold.shape
 
 
 def tiny_feedback_fixture():
