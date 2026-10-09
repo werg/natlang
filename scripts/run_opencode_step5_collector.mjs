@@ -35,7 +35,7 @@ async function main(argv) {
   let receiptWrite = Promise.resolve();
   const persistReceipt = () => {
     const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
-    receiptWrite = receiptWrite.then(() => writeFile(receiptPath, serialized, { mode: 0o600 }));
+    receiptWrite = receiptWrite.catch(() => {}).then(() => writeFile(receiptPath, serialized, { mode: 0o600 }));
     return receiptWrite;
   };
   let child;
@@ -56,7 +56,8 @@ async function main(argv) {
   const stopChild = (cause, signal) => {
     if (stopCause) return;
     stopCause = cause;
-    receipt.status = cause === 'timeout' ? 'stopping_timeout' : 'stopping_signal';
+    receipt.status = cause === 'timeout' ? 'stopping_timeout'
+      : (cause === 'receipt_write_failure' ? 'stopping_receipt_error' : 'stopping_signal');
     if (cause === 'signal') receipt.stop_signal = signal;
     receipt.stop_requested_at = new Date().toISOString();
     child.kill(signal);
@@ -74,7 +75,14 @@ async function main(argv) {
     child.once('close', (code, signal) => resolve({ code, signal }));
   });
   const runningReceiptWrite = persistReceipt();
-  await runningReceiptWrite;
+  let runningReceiptError = null;
+  try {
+    await runningReceiptWrite;
+  } catch (error) {
+    runningReceiptError = { name: error?.name ?? 'Error', code: error?.code ?? null };
+    receipt.launcher_error = { stage: 'running_receipt_persist', ...runningReceiptError };
+    stopChild('receipt_write_failure', 'SIGINT');
+  }
   const result = await resultPromise.finally(() => {
     clearTimeout(timer); clearTimeout(escalation);
     process.off('SIGINT', onSigint); process.off('SIGTERM', onSigterm);
@@ -83,6 +91,8 @@ async function main(argv) {
     receipt.status = 'spawn_error';
     receipt.spawn_error = { name: result.error?.name ?? 'Error', code: result.error?.code ?? null,
       message: String(result.error?.message ?? result.error) };
+  } else if (runningReceiptError) {
+    receipt.status = 'receipt_write_error_stopped';
   } else if (stopCause === 'timeout') {
     receipt.status = 'timed_out';
   } else if (stopCause === 'signal') {
@@ -92,9 +102,15 @@ async function main(argv) {
   }
   receipt.exit_code = result.code ?? (result.error ? 1 : null); receipt.signal = result.signal ?? null;
   receipt.finished_at = new Date().toISOString();
-  await persistReceipt();
-  process.exitCode = stopCause === 'timeout' ? 124
-    : (stopCause === 'signal' ? (receipt.stop_signal === 'SIGINT' ? 130 : 143) : (result.code ?? 1));
+  try {
+    await persistReceipt();
+  } catch (error) {
+    process.stderr.write(`Could not finalize Step 5 collector receipt: ${error?.name ?? 'Error'}${error?.code ? ` (${error.code})` : ''}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  process.exitCode = runningReceiptError ? 1 : (stopCause === 'timeout' ? 124
+    : (stopCause === 'signal' ? (receipt.stop_signal === 'SIGINT' ? 130 : 143) : (result.code ?? 1)));
 }
 
 if (process.argv[1]?.endsWith('/run_opencode_step5_collector.mjs'))
