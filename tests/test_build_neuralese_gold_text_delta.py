@@ -72,6 +72,104 @@ def test_configured_read_context_must_exactly_match_frozen_combinator_source():
         raise AssertionError("internally rehashed truncated instructions must not be accepted")
 
 
+def _runtime_pin_fixture(tmp_path):
+    runtime_dir = tmp_path / "runtime-v1"
+    runtime_dir.mkdir()
+    runtime_path = runtime_dir / "frozen-runtime.json"
+    runtime_path.write_text('{"schema":"test-runtime"}\n')
+    return runtime_path, _sha(runtime_path)
+
+
+def test_runtime_manifest_can_be_bound_directly_from_approval_pin(tmp_path):
+    runtime_path, runtime_sha = _runtime_pin_fixture(tmp_path)
+    approval = {"input_pins": {"runtime-v1/frozen-runtime.json": {"sha256": runtime_sha}}}
+    assert MODULE.pinned_runtime_manifest(approval, tmp_path) == runtime_path.resolve()
+
+
+def test_runtime_manifest_can_be_bound_through_pinned_materialization_receipt(tmp_path):
+    runtime_path, runtime_sha = _runtime_pin_fixture(tmp_path)
+    receipt = tmp_path / "materialization" / "receipt.json"
+    receipt.parent.mkdir()
+    receipt.write_text(json.dumps({
+        "converter": {
+            "runtime_manifest_path": "runtime-v1/frozen-runtime.json",
+            "runtime_manifest_sha256": runtime_sha,
+        }
+    }) + "\n")
+    approval = {"input_pins": {"materialization/receipt.json": {"sha256": _sha(receipt)}}}
+    assert MODULE.pinned_runtime_manifest(approval, tmp_path) == runtime_path.resolve()
+
+
+def test_runtime_manifest_provenance_rejects_changed_receipt_or_runtime(tmp_path):
+    runtime_path, runtime_sha = _runtime_pin_fixture(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({"converter": {
+        "runtime_manifest_path": "runtime-v1/frozen-runtime.json",
+        "runtime_manifest_sha256": runtime_sha,
+    }}) + "\n")
+    pin = {"sha256": _sha(receipt)}
+    approval = {"input_pins": {"receipt.json": pin}}
+    receipt.write_text(receipt.read_text() + " ")
+    try:
+        MODULE.pinned_runtime_manifest(approval, tmp_path)
+    except ValueError as exc:
+        assert "input pin changed" in str(exc)
+    else:
+        raise AssertionError("a changed intermediate receipt must not be trusted")
+
+    receipt.write_text(json.dumps({"converter": {
+        "runtime_manifest_path": "runtime-v1/frozen-runtime.json",
+        "runtime_manifest_sha256": runtime_sha,
+    }}) + "\n")
+    approval["input_pins"]["receipt.json"]["sha256"] = _sha(receipt)
+    runtime_path.write_text('{"schema":"changed-runtime"}\n')
+    try:
+        MODULE.pinned_runtime_manifest(approval, tmp_path)
+    except ValueError as exc:
+        assert "runtime manifest hash mismatch" in str(exc)
+    else:
+        raise AssertionError("a changed runtime manifest must not be trusted")
+
+
+def test_runtime_manifest_provenance_rejects_ambiguous_chains(tmp_path):
+    first_path, first_sha = _runtime_pin_fixture(tmp_path)
+    second_dir = tmp_path / "runtime-v2"
+    second_dir.mkdir()
+    second_path = second_dir / "frozen-runtime.json"
+    second_path.write_text('{"schema":"second-runtime"}\n')
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({"converters": [
+        {"runtime_manifest_path": "runtime-v1/frozen-runtime.json",
+         "runtime_manifest_sha256": first_sha},
+        {"runtime_manifest_path": "runtime-v2/frozen-runtime.json",
+         "runtime_manifest_sha256": _sha(second_path)},
+    ]}) + "\n")
+    approval = {"input_pins": {"receipt.json": {"sha256": _sha(receipt)}}}
+    try:
+        MODULE.pinned_runtime_manifest(approval, tmp_path)
+    except ValueError as exc:
+        assert "more than one runtime manifest" in str(exc)
+    else:
+        raise AssertionError("conflicting runtime provenance must fail closed")
+
+
+def test_runtime_hash_without_a_path_is_not_treated_as_a_manifest_binding(tmp_path):
+    runtime_path, runtime_sha = _runtime_pin_fixture(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({"collector": {"runtime_manifest_sha256": runtime_sha}}) + "\n")
+    approval = {"input_pins": {"receipt.json": {"sha256": _sha(receipt)}}}
+    assert MODULE.pinned_runtime_manifest(approval, tmp_path) is None
+
+    receipt.write_text(json.dumps({"collector": {"runtime_manifest_path": "runtime-v1/frozen-runtime.json"}}) + "\n")
+    approval["input_pins"]["receipt.json"]["sha256"] = _sha(receipt)
+    try:
+        MODULE.pinned_runtime_manifest(approval, tmp_path)
+    except ValueError as exc:
+        assert "malformed runtime-manifest provenance" in str(exc)
+    else:
+        raise AssertionError("a path without its manifest digest must fail closed")
+
+
 def _sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
