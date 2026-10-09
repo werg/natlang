@@ -22,9 +22,9 @@ natlang compilations show support            # what was stored, how its cases ar
 
 ```
 main.ts                   crisp orchestration: targets, rounds, verification, storing, offline jobs
-specialize.nl             directory reducer: reads the evidence, writes cases.ts or declines
-specialize/semanticCheck  decision: is a condition how the decision is made, or does it need meaning
-specialize/sameApproach   decision: do two normalized programs do the same work
+writeCase.nl              directory reducer: one group's folder in, case.ts out (or a reason to skip)
+writeCase/semanticCheck   decision: is a condition how the decision is made, or does it need meaning
+writeCase/sameApproach    decision: do two normalized programs do the same work
 ```
 
 The crisp half lives in the runtime package (`ts-host/src/calls/`): `study` (examples, approaches with anti-unified
@@ -49,3 +49,12 @@ examples, conditions, unclassified calls, history, last round's report) and `cas
 verified and the report goes back into `evidence/report.md`. Accepted cases are stored; cases that never pass are
 dropped. When no case passes, or the reducer declines, the decline is recorded and the function is not looked at again
 until its call volume doubles or its revision changes.
+
+## Groups, spend, findings (2026-10-09)
+
+The host splits a function's calls by what they did; each group (at least three training calls, at most eight groups)
+gets one `writeCase` call over a small folder (group.md, examples, others.md, report.md) with an exact `group.measure`
+service. The cases are assembled, verified together, and a rejected case goes back to its group. Promotion also needs
+`promotionLiveComparisons` (3) comparisons on live calls. `natlang compilations savings|findings|acknowledge|export-corpus`
+show what serving saved against what specializing spent, what compiling found, and export cases and declines as a corpus.
+`--max-busy` and `--idle-wait` make the specializer wait for an idle executor.
