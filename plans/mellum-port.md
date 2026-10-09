@@ -174,3 +174,20 @@ enter the Neuralese stages before either backbone's long runs.
   The fully ternary model beats the BF16 original on this held set from step 800. The KL stays high: it is learning
   our text, not copying the original. Not yet evidence of general/agentic quality — the harness eval (24-case packet)
   on the exported λ=1 model decides qualification. Steps 1000–2000 continue at λ=1.
+
+## 2026-10-10 — Qualification of the ternary conversion (criterion fixed before the run)
+
+Pipeline: `runs/mellum-qualify-20261010/pipeline.sh` (armed while conversion v2 runs). Stages: merge the qat_convert
+checkpoint-policy branch → `qat_export --order` (N0) to `/home/werg/data/models/mellum21-ternary-convert-v2`, held-CE
+check against the trainer's final deployed CE (≤ 0.01), packed copy → the protected 24-case harness packet on vLLM,
+served exactly as the BF16 eval (same packet, runtime, runner, template, 1024-token budget, greedy, thinking on/off) →
+artifact registration with the verdict → N1 with members 28x16,28x24,28x32,21x32,14x16,14x32 → foundation heads
+(cutoff 27), step profile, recipe smoke through core_text_warmup.
+
+Qualification criterion (paired against BF16 Mellum, runs/mellum-evaluation-20261008), all must hold:
+- thinking on: complete successes ≥ BF16 − 2 (BF16 13/23), semantic accuracy ≥ BF16 − 0.10 (BF16 0.867), paired
+  regressions (BF16 success, ternary not) minus paired gains ≤ 2;
+- thinking off: complete successes ≥ BF16 − 2 (BF16 9/23);
+- either mode: contract failures ≤ BF16 + 2 (protocol regression guard).
+The 23-case packet resolves only large differences (±2 cases is within run-to-run noise at temperature 0 across
+stacks); passing it means "not detectably worse", not "equal".
