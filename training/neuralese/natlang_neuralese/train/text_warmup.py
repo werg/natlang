@@ -554,6 +554,13 @@ def text_history_completions(backbone, heads, prefix_ids, span_ids, *, passes,
                                         passes=passes, group_size=group_size)
 
 
+def text_history_pass_count(schedule_passes, *, input_map, ar_feedback_fixup=False):
+    """Resolve schedule depth to the exact passes required by the history objective."""
+    if ar_feedback_fixup:
+        return 2  # gold-context control plus self-fed consumer, even during pass-1 bootstrap
+    return min(schedule_passes, 2) if input_map else schedule_passes
+
+
 def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_completion, *, input_map):
     """Use the serving shallow feedback projection for matched-history diagnostics.
 
@@ -998,7 +1005,7 @@ def main(argv=None):
                               'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'
                               if a.neuralese_input=='map' else
                               'gold seed; repeated shared shallow sequence passes with aligned predictions'),
-              'ar_feedback_handoff_optimizer':'fresh optimizer at objective handoff; full optimizer state is saved/resumed thereafter'
+              'ar_feedback_handoff_optimizer':'restore when parameter groups match; otherwise record a fresh optimizer with its reason'
                   if a.ar_feedback_fixup else None,
               'sketch_gradient':'detached_consumer' if a.neuralese_input=='map' else 'local_stage',
               'sketch_target_backbone_scale':0. if a.neuralese_input=='map' else .05,
@@ -1047,8 +1054,9 @@ def main(argv=None):
         old=continuation['identity']['options']
         if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
             raise ValueError('continuation optimizer/parameter policy differs')
-        if a.ar_feedback_fixup and (old.get('neuralese_input')!='map' or old.get('ar_feedback_fixup',False)):
-            raise ValueError('AR feedback fixup must continue a mapped-input checkpoint, not another fixup')
+        if a.ar_feedback_fixup and (old.get('neuralese_input')!='map' or
+                not any(str(key).startswith('input_map.') for key in continuation.get('heads',{}))):
+            raise ValueError('AR feedback fixup requires structurally present mapped-input heads')
     a.out.mkdir(parents=True,exist_ok=True)
     if a.cuda_reserved_cap_gb and a.device.startswith('cuda'):
         index=torch.device(a.device).index
@@ -1343,22 +1351,15 @@ def main(argv=None):
             print(json.dumps({'event':'input_map_initialized','optimizer_state':'fresh'}),flush=True)
         else:
             heads.load_state_dict(restored['heads'])
-            if continuation and a.ar_feedback_fixup:
-                # This is a declared objective handoff: preserve model weights,
-                # start fresh moments/schedule for the changed history distribution.
-                print(json.dumps({'event':'optimizer_state_fresh',
-                                  'reason':'declared full-depth AR-feedback objective handoff',
-                                  'source_step':continuation['step']}),flush=True)
-            else:
-                try:
-                    optimizer.load_state_dict(restored['optimizer'])
-                    if continuation:
-                        print(json.dumps({'event':'optimizer_state_restored',
-                                          'source_step':continuation['step'],
-                                          'parameter_groups':len(optimizer.param_groups)}),flush=True)
-                except ValueError as error:
-                    # The trainable set grew (members' private parts joined): the optimizer starts fresh.
-                    print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
+            try:
+                optimizer.load_state_dict(restored['optimizer'])
+                if continuation:
+                    print(json.dumps({'event':'optimizer_state_restored',
+                                      'source_step':continuation['step'],
+                                      'parameter_groups':len(optimizer.param_groups)}),flush=True)
+            except ValueError as error:
+                # The trainable set grew (members' private parts joined): the optimizer starts fresh.
+                print(json.dumps({'event':'optimizer_state_fresh','reason':str(error)[:200]}),flush=True)
         step=restored['step'];updates=restored['updates']
         updates.setdefault('full_projection',False)
         if resumed:
@@ -1366,8 +1367,9 @@ def main(argv=None):
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
         elif continuation:
-            same_foundation=(not a.ar_feedback_fixup and
-                             same_foundation_context(continuation['identity'],identity))
+            same_foundation=(same_foundation_context(continuation['identity'],identity) or
+                             (a.ar_feedback_fixup and
+                              continuation['identity'].get('options',{}).get('neuralese_input')=='map'))
             if same_foundation and continuation.get('schedule'):
                 # An unchanged objective may continue its plateau/ramp phase.
                 schedule.load_state_dict(continuation['schedule'])
@@ -1383,7 +1385,7 @@ def main(argv=None):
                 print(json.dumps({'event':'foundation_schedule_reinitialized',
                                   'source_step':continuation['step'],
                                   'same_foundation_context':same_foundation}),flush=True)
-            if same_alignment_data(continuation['identity'],identity):
+            if same_alignment_data(continuation['identity'],identity) and not a.ar_feedback_fixup:
                 initial_text_ce=continuation['initial_text_ce']
             else:
                 remeasure_text_baseline=True
@@ -1430,7 +1432,9 @@ def main(argv=None):
     last_report=None
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
-        evaluation_passes=2 if input_map else max(3,a.rollout_passes,a.max_sequence_passes)
+        evaluation_passes=text_history_pass_count(
+            max(3,a.rollout_passes,a.max_sequence_passes),input_map=input_map,
+            ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         ar_batch=None;ar_fallback=None;role_strata={}
         with torch.no_grad():
@@ -2097,7 +2101,8 @@ def main(argv=None):
             return
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
         passes=controls['sequence_passes'];sketch_only=False
-        if input_map:passes=min(passes,2)
+        passes=text_history_pass_count(passes,input_map=input_map,
+                                       ar_feedback_fixup=a.ar_feedback_fixup)
         if rollout is not None and not bootstrap:
             stage=rollout.controls();passes=stage['passes'];sketch_only=stage['sketch_only']
             # Sketch-only: the backbone and full projection are frozen (no gradients, so no optimizer update).

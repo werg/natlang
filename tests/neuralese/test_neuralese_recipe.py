@@ -72,9 +72,25 @@ def test_ar_feedback_fixup_is_a_declared_map_continuation_mode(tmp_path):
     })
     path=tmp_path/'recipe.json'
     path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError,match='continuation checkpoint'):
+    with pytest.raises(ValueError,match='preceding mapped-input warm-up'):
         load_recipe(path)
     assert stage_parameter_args({'ar_feedback_fixup':True})==['--ar-feedback-fixup']
+
+
+def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
+    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
+    by_id={stage['id']:stage for stage in recipe['stages']}
+    assert by_id['autoregressive_text_fixup']['requires']==['core_text_warmup']
+    assert by_id['autoregressive_text_fixup']['parameters']['ar_feedback_fixup'] is True
+    assert by_id['adapted_runtime']['requires']==['autoregressive_text_fixup']
+    assert 'autoregressive_text_fixup' in by_id['recurrence_warmup']['requires']
+    from natlang_neuralese.train.recipe import mapped_fixup_continuation, effective_stage_parameters
+    predecessor={'id':'core_text_warmup','kind':'core_text_warmup','artifact':'/run/core/heads.pt',
+                 'gate':{'step':22272}}
+    checkpoint,heads=mapped_fixup_continuation(by_id['autoregressive_text_fixup'],[predecessor])
+    assert str(checkpoint)=='/run/core/checkpoint.pt'
+    assert str(heads)=='/run/core/heads.pt'
+    assert effective_stage_parameters(by_id['autoregressive_text_fixup'],[predecessor])['steps']==23296
 
 
 def test_stage_specific_named_input_bindings_are_hash_pinned_and_role_scoped(tmp_path):

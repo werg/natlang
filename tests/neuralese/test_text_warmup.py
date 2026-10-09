@@ -559,8 +559,8 @@ def test_raw_recurrence_recipe_requires_text_warmup_and_runtime(tmp_path):
     recipe_path = Path(__file__).resolve().parents[2] / 'training' / 'neuralese' / 'recipes' / 'raw-recurrence-v1.json'
     recipe = json.loads(recipe_path.read_text())
     stages = {stage['id']: stage for stage in recipe['stages']}
-    assert 'core_text_warmup' in stages['adapted_runtime']['requires']
-    assert {'core_text_warmup', 'adapted_runtime'} <= set(stages['recurrence_warmup']['requires'])
+    assert 'autoregressive_text_fixup' in stages['adapted_runtime']['requires']
+    assert {'autoregressive_text_fixup', 'adapted_runtime'} <= set(stages['recurrence_warmup']['requires'])
     assert load_recipe(recipe_path)['id'] == 'raw-recurrence-v1'
 
     recipe['stages'] = [stage for stage in recipe['stages'] if stage['id'] != 'core_text_warmup']

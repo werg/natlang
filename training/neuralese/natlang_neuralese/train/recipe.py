@@ -145,6 +145,35 @@ def stage_input_args(resolved, kind):
     return args
 
 
+def mapped_fixup_continuation(stage, reports):
+    """Resolve the immediately declared mapped warm-up's full-state and heads outputs."""
+    predecessors = [report for report in reports
+                    if report['id'] in stage['requires'] and
+                    report['kind'] == 'core_text_warmup']
+    if len(predecessors) != 1:
+        raise ValueError('AR feedback fixup requires exactly one completed mapped warm-up')
+    heads = Path(predecessors[0]['artifact'])
+    checkpoint = heads.parent / 'checkpoint.pt'
+    return checkpoint, heads
+
+
+def effective_stage_parameters(stage, reports):
+    """Resolve fixup ``steps`` as new updates above its exact predecessor step."""
+    parameters = dict(stage['parameters'])
+    if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup',False):
+        predecessors = [report for report in reports
+                        if report['id'] in stage['requires'] and
+                        report['kind'] == 'core_text_warmup']
+        if len(predecessors) != 1:
+            raise ValueError('AR feedback fixup requires exactly one completed mapped warm-up')
+        start_step = predecessors[0].get('gate',{}).get('step')
+        updates = parameters.get('steps')
+        if type(start_step) is not int or type(updates) is not int or updates < 1:
+            raise ValueError('AR fixup requires a predecessor step and positive update count')
+        parameters['steps'] = start_step + updates
+    return parameters
+
+
 def load_recipe(path):
     recipe = json.loads(Path(path).read_text())
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
@@ -185,13 +214,11 @@ def load_recipe(path):
             if type(ar_feedback_fixup) is not bool:
                 raise ValueError('ar_feedback_fixup must be boolean')
             if ar_feedback_fixup and (neuralese_input != 'map' or
-                    not isinstance(stage.get('inputs'), dict) or
-                    'continue_from' not in stage['inputs']):
-                raise ValueError('AR feedback fixup requires map input and a declared continuation checkpoint')
+                    not isinstance(stage.get('inputs', {}), dict)):
+                raise ValueError('AR feedback fixup requires map input')
             if ar_feedback_fixup and not any(
                     prior['id'] in required and prior['kind']=='core_text_warmup' and
-                    prior.get('parameters',{}).get('neuralese_input')=='map' and
-                    not prior.get('parameters',{}).get('ar_feedback_fixup',False)
+                    prior.get('parameters',{}).get('neuralese_input')=='map'
                     for prior in recipe['stages']):
                 raise ValueError('AR feedback fixup requires a preceding mapped-input warm-up stage')
             if rollout_passes and max_sequence_passes != 3:
@@ -217,7 +244,7 @@ def load_recipe(path):
             runtime_stages.add(name)
         if kind == 'verified_heads_handoff' and not set(required) & runtime_stages:
             raise ValueError('verified heads handoff requires the raw runtime qualification stage')
-        if kind == 'core_text_warmup' and 'continue_from' in stage.get('inputs', {}):
+        if kind == 'core_text_warmup' and 'continue_from' in stage.get('inputs', {}) and not stage.get('parameters',{}).get('ar_feedback_fixup',False):
             handoffs = [s for s in recipe['stages'] if s['id'] in required and s['kind']=='verified_heads_handoff']
             if (len(handoffs) != 1 or
                     handoffs[0].get('inputs', {}).get('warmup_checkpoint') != stage['inputs']['continue_from'] or
@@ -225,6 +252,12 @@ def load_recipe(path):
                 raise ValueError('continuation checkpoint and heads must be the exact files validated by a required verified_heads_handoff')
         if kind == 'core_text_warmup' and 'heads' in stage.get('inputs', {}) and 'continue_from' not in stage.get('inputs', {}):
             raise ValueError('stage-specific heads input requires a verified full-state continuation checkpoint')
+        if kind == 'core_text_warmup' and stage.get('parameters',{}).get('ar_feedback_fixup',False):
+            predecessors = [s for s in recipe['stages'] if s['id'] in required and
+                           s['kind']=='core_text_warmup' and
+                           s.get('parameters',{}).get('neuralese_input')=='map']
+            if len(predecessors) != 1:
+                raise ValueError('AR feedback fixup requires exactly one mapped warm-up predecessor')
         if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
             if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
                 raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
@@ -653,17 +686,24 @@ def main(argv=None):
                     require_gate(predecessor['gate'], predecessor['kind'])
                 output = directory / HANDLERS[kind]['result']
                 stage_heads = args.heads
+                continuation_checkpoint = None
                 if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
                     stage_heads = stage_inputs[stage['id']]['heads']['path']
+                if (kind == 'core_text_warmup' and
+                        stage['parameters'].get('ar_feedback_fixup',False) and
+                        'heads' not in stage_inputs[stage['id']]):
+                    continuation_checkpoint, stage_heads = mapped_fixup_continuation(stage,reports)
+                    continuation_checkpoint = str(continuation_checkpoint)
                 if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
                     has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
                     if has_exact_stage_heads:
                         stage_heads = stage_inputs[stage['id']]['heads']['path']
                     elif kind == 'core_text_warmup':
-                        predecessor_kind = 'raw_runtime_qualification'
-                        predecessor = next(r for r in reversed(reports)
-                                           if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
-                        stage_heads = predecessor['artifact']
+                        if not stage['parameters'].get('ar_feedback_fixup',False):
+                            predecessor_kind = 'raw_runtime_qualification'
+                            predecessor = next(r for r in reversed(reports)
+                                               if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
+                            stage_heads = predecessor['artifact']
                     else:
                         predecessor_kind = 'core_text_warmup'
                         predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
@@ -671,12 +711,14 @@ def main(argv=None):
                 command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
                            str(stage_heads)] + stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
+                if continuation_checkpoint:
+                    command += ['--continue-from', continuation_checkpoint]
                 if kind == 'raw_runtime_qualification':
                     command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
                 if kind == 'verified_heads_handoff':
                     raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
                     command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
-                stage_parameters = stage['parameters']
+                stage_parameters = effective_stage_parameters(stage,reports)
                 if 'text_data' in stage_inputs[stage['id']]:
                     stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
                 command += stage_parameter_args(stage_parameters)
