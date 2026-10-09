@@ -152,6 +152,8 @@ Harness records are ordinary native records, so they enter the existing stages:
 1. **Text warm-up** (`core_text_warmup`, `ar_feedback_fixup`). The shared renderer renders the records per tokenizer
    (LFM and Mellum twins) with views as previews, giving whole-trajectory supervision with tool output at lower
    weight (owner decision). Render only with the fixed renderer (Pop's 2026-10-09 history-boundary correction).
+   Rendered 2026-10-10 (§7); the builder is `scripts/build_neuralese_text_packet.py` (gold_text_rows,
+   `natlang.native_gold_chat/3`, serving-boundary fix 9e504615, tokenizer through the pinned-provenance guard).
 2. **Recurrence / trajectory training** (`raw_recurrence_training`, `train.trajectories`) with `--view written
    --distill`. This consumes the exact runtime-qualified weights of each student, as the recipe requires. For Mellum,
    every nested member is an objective.
@@ -167,14 +169,35 @@ Harness records are ordinary native records, so they enter the existing stages:
 
    Report task success, steps, context tokens, wall time and offer usefulness.
 
-Recipe entries for both students are declared once the slice is reviewed: a `harness_bench` cohort in the recipe's
-cohort map, mixed into the existing native cohorts, never replacing them.
+**Declared 2026-10-10 (held, not admitted):** the `harness_bench` cohort in `raw-recurrence-v3` (LFM) and
+`raw-recurrence-mellum-v2` (Mellum; mellum-v1's overrides on v3), one shared declaration under `cohorts`, `admitted:
+false`. raw-recurrence-v2 and raw-recurrence-mellum-v1 are unchanged (Mellum's planned recipe keeps its identity);
+`tests/neuralese/test_recipe_inheritance.py` proves the new versions are their predecessors plus the cohort.
+
+| Item | Declaration |
+| --- | --- |
+| Text stages | `core_text_warmup` and `autoregressive_text_fixup`, the line's tokenizer twin, views as previews |
+| Mix | added to the line's native text cohort at weight 0.25 of training windows, never replacing it; the twin's 112 held documents are their own reported stratum |
+| Supervision | whole trajectory: the text warm-up's half all-positions / half target-suffix weighting; context_weight 1.0, feedback_weight 0.25 (tool results and other mechanical feedback, the trajectory trainer's semantics) |
+| Recurrence | `recurrence_warmup` with the v3 records, `--view written --distill 1.0 --view-window 4096 --context-weight 1.0 --feedback-weight 0.25`, after each student's runtime qualification for its exact weights and the view operator gate; Mellum: every nested member an objective |
+
+Before admission (owner and both recipe owners):
+
+1. text_warmup has no per-role context weight. Roles are labelled (`chat_roles`) for reporting only, so tool output in
+   the text stages would carry the same weight as other context, not the declared 0.25.
+2. text_warmup reads one `text_data`. Mixing at a weight needs an assembled text input (native + twin) or per-cohort
+   sampling in the trainer, and the window sampler should draw per document: each record repeats its trajectory's
+   prefix (up to 8 records per trajectory), and about 1% of a twin's tokens are target suffix.
+3. The `raw_recurrence_training` handler whitelist lacks `view`, `view_window`, `context_weight` and `feedback_weight`.
+4. Pop's LFM continuations run frozen direct-stage recipes (`luna-*`); the cohort enters the LFM line at its next
+   declared handoff, through a new recipe.
 
 ## 7. Order of work
 
 1. Slice: 20, then 200 trajectories through build.sh; review the replay divergence reasons and the records; register as
    a derived corpus with a manifest.
-2. Render text twins for LFM and Mellum; declare the cohort in both recipes' text warm-up.
+2. Render text twins for LFM and Mellum; declare the cohort in both recipes' text warm-up. (Done 2026-10-10, held;
+   below and §6.)
 3. View training in the recurrence stage, once each student's raw port is qualified (the declared `view` operator
    stage, TRAINING_RECIPE.md).
 4. Offline companion offers (§4) on replayed states; text offers first, then Neuralese.
@@ -208,6 +231,23 @@ hung call instead of at the `C-c`), one two steps earlier, and one (`task_tracke
 70 verified steps fewer. In v1:
 `task_tracker` 113, `execute_bash` interactive input 31. Tool calls lost after a divergence (v1 counts): 1,487 of 6,089
 in the 113 `task_tracker` trajectories, 1,151 of 1,895 in the 31 interactive-input ones (§8).
+
+**Text twins (step 2), 2026-10-10:** both rendered from v3 at code commit 974b0492 with
+`scripts/build_neuralese_text_packet.py` (the shared `gold_text_rows` renderer, `natlang.native_gold_chat/3`: serving
+generation prompt and assistant reply rendered separately, Pop's 9e504615; tokenizer loaded by
+`load_pinned_tokenizer`, which now also accepts transformers 5's `PreTrainedTokenizerFast` = `TokenizersBackend`
+alias, still held to the exact pinned `tokenizer.json`). Views render as their previews (all 297 view parts of a
+50-record trial found verbatim). The records' own admission (`harness-bench-criteria/2`) is what the renderer reads;
+nothing was approved for rendering. Registered, published with manifests (`training/corpus-manifests/`), stored on
+/mnt/external like the other corpora, `training_admission: false`:
+
+| Twin | Tokenizer | Documents | Tokens (train / test) | Target-suffix tokens | Max document |
+| --- | --- | --- | --- | --- | --- |
+| `harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1` | LFM2.5-350M (e52de346…) | 3,843 (3,731 / 112), 0 omitted | 72,442,697 / 2,110,256 | 791,583 (1.1%) | 102,005 |
+| `harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1` | Mellum2.1-12B-A2.5B-Thinking (1abe5e63…) | 3,843 (3,731 / 112), 0 omitted | 92,621,371 / 2,789,628 | 821,583 (0.9%) | 105,093 |
+
+Mellum's template renders the teacher's reasoning (`<think>`); LFM's drops it, a template difference. Step 2's cohort
+declaration is in §6; admission is the owner's and both recipe owners' decision.
 
 ## 8. Open questions
 

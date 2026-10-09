@@ -73,3 +73,19 @@ recurrence trainer; maple/family.leading_system_tokens). raw-recurrence-v2 decla
 core_text_warmup too, so the adapter trains from the first stage that reads Neuralese and carries into the recurrence;
 raw-recurrence-mellum-v1 declares both for its text warm-up stages. foundation-mellum-v1 has only the token-foundation
 stages (no text warm-up handler), so the options live in raw-recurrence-mellum-v1.
+
+## raw-recurrence-v3 and raw-recurrence-mellum-v2 (2026-10-10)
+
+raw-recurrence-v2 and raw-recurrence-mellum-v1 (unchanged; the Mellum line's planned recipe keeps its identity) plus one
+declaration shared by both lines: the `harness_bench` cohort (plans/neuralese/HARNESS_BENCH.md §6), **held**
+(`admitted: false`) until the owner and both recipe owners admit it. raw-recurrence-mellum-v2 repeats mellum-v1's
+backbone-inherent overrides on top of v3; a test proves both resolve to their predecessors plus the cohort.
+- Text stages (core_text_warmup, autoregressive_text_fixup): the tokenizer twins
+  `harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1` and `...-text-mellum21-12b-20261010-v1` of
+  `harness-bench-swe-rebench-openhands-pi-records-20261010-v3` (gold_text_rows, natlang.native_gold_chat/3, views as
+  previews), mixed into the line's native text cohort at weight 0.25 of training windows, never replacing it.
+- Whole-trajectory supervision: the text warm-up's all-positions/suffix halves; context_weight 1.0 and
+  feedback_weight 0.25 declared. text_warmup has no per-role feedback weight yet; that is a precondition for admission.
+- Recurrence (recurrence_warmup), after each student's runtime qualification for its exact weights and the view operator
+  gate: the v3 records with `--view written --distill 1.0 --view-window 4096 --context-weight 1.0 --feedback-weight
+  0.25`. The raw_recurrence_training handler whitelist does not carry these options yet; declared for its owner.

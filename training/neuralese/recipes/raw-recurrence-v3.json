@@ -1,0 +1,93 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v3",
+  "extends": "raw-recurrence-v2",
+  "description": "raw-recurrence-v2 plus the declared, held harness_bench cohort (pi harness trajectories; text twins per tokenizer; recurrence with written views after runtime qualification). Shared by every line. History: recipes/HISTORY.md.",
+  "overrides": {
+    "cohorts": {
+      "harness_bench": {
+        "admitted": false,
+        "admission": "held: the owner and both recipe owners (Pop for the LFM line, the DGX Mellum session) must admit the cohort before any stage reads it (HARNESS_BENCH.md §6/§7). Declaring it here admits nothing.",
+        "source": {
+          "corpus": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+          "records": "records.jsonl",
+          "pieces": "pieces.jsonl",
+          "per_record_admission": "harness-bench-criteria/2 (each record's training_admission.approved: resolved, pi-replayed-verified, exact-mapping)"
+        },
+        "twins": {
+          "lfm2.5-350m": {
+            "corpus": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1",
+            "file": "text.jsonl",
+            "text_jsonl_sha256": "1bdad40488a30bde20fff87b33be08f947972bb71d4680f5c64df565c3fb9886",
+            "tokenizer_sha256": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+            "rendering": "natlang.native_gold_chat/3",
+            "tokens": {
+              "train": 72442697,
+              "test": 2110256
+            },
+            "suffix_tokens": {
+              "train": 771218,
+              "test": 20365
+            }
+          },
+          "mellum2.1-12b-a2.5b-thinking": {
+            "corpus": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
+            "file": "text.jsonl",
+            "text_jsonl_sha256": "fce4d6fb6167be213079008012d46063688ee7137cd5681b45448dd4163a2f44",
+            "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+            "rendering": "natlang.native_gold_chat/3",
+            "tokens": {
+              "train": 92621371,
+              "test": 2789628
+            },
+            "suffix_tokens": {
+              "train": 800422,
+              "test": 21161
+            }
+          }
+        },
+        "backbone_inherent_differences": "tokenizer and chat template only (one twin per tokenizer from the same records and renderer); Mellum's nested members train on the same rows through the line's member_* parameters",
+        "mix": {
+          "policy": "added to the line's existing native text cohort of each listed stage, never replacing it",
+          "weight": 0.25,
+          "weight_unit": "fraction of the stage's training text windows drawn from this cohort (the native cohort keeps the rest)",
+          "held_documents": "the twin's test split (112 documents, held repositories) is reported as its own stratum, not merged into the native held set"
+        },
+        "text_stages": {
+          "core_text_warmup": {
+            "view": "preview"
+          },
+          "autoregressive_text_fixup": {
+            "view": "preview"
+          }
+        },
+        "supervision": {
+          "whole_trajectory": true,
+          "text_warmup_policy": "TEXT_POSITION_WEIGHT_POLICY: half of each annotated window's loss uniform over all positions (task, earlier turns, tool outputs and view previews; the system prompt masked as for every cohort), half on the record's assistant target suffix",
+          "context_weight": 1.0,
+          "feedback_weight": 0.25,
+          "feedback_weight_meaning": "relative weight, inside the context term, of tool results and other mechanical feedback (the trajectory trainer's --feedback-weight semantics)",
+          "feedback_weight_status": "text_warmup has no per-role context weight yet (roles are labelled by chat_roles for reporting only); until it does, tool output in the text stages carries the same all-positions weight as other context. Implementing it is a precondition for admission in the text stages."
+        },
+        "recurrence": {
+          "stage": "recurrence_warmup",
+          "admitted": false,
+          "after": "each student's runtime qualification for its exact weights (adapted_runtime) and the view operator stage gate (TRAINING_RECIPE.md 'The view operator stage'); for Mellum every nested member is an objective",
+          "inputs": {
+            "records": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+            "pieces": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+          },
+          "trajectory_trainer": {
+            "view": "written",
+            "distill": 1.0,
+            "view_window": 4096,
+            "context_weight": 1.0,
+            "feedback_weight": 0.25
+          },
+          "status": "declared, not admitted; the raw_recurrence_training handler whitelist does not carry view, view_window, context_weight or feedback_weight yet, so these are declared here for its owner to add"
+        },
+        "notes": "Each document is one record (task, whole earlier trajectory, one target turn); a trajectory contributes up to 8 records, so its prefix recurs in each, and about 1% of a twin's tokens are target suffix. The window sampler should therefore draw windows per document, not per token."
+      }
+    }
+  }
+}

@@ -147,3 +147,24 @@ def test_history_keeps_every_original_description():
     for name in CONVERTED:
         original = json.loads((ORIGINALS / f'foundation-maple-{name}.json').read_text())
         assert original['description'] in history and original['id'] in history
+
+
+def test_harness_bench_cohort_is_declared_held_and_shared_by_both_lines():
+    """raw-recurrence-v3 / raw-recurrence-mellum-v2 add only the held harness_bench cohort to v2 / mellum-v1."""
+    ignore = {'id', 'description', 'cohorts'}
+    for new, old in (('raw-recurrence-v3', 'raw-recurrence-v2'), ('raw-recurrence-mellum-v2', 'raw-recurrence-mellum-v1')):
+        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
+        assert {k: v for k, v in resolved.items() if k not in ignore} == \
+            {k: v for k, v in previous.items() if k not in ignore}
+        assert 'cohorts' not in previous
+    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v3.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v2.json')
+    cohort = lfm['cohorts']['harness_bench']
+    assert mellum['cohorts'] == lfm['cohorts']
+    assert cohort['admitted'] is False and cohort['recurrence']['admitted'] is False
+    assert cohort['recurrence']['trajectory_trainer']['view'] == 'written'
+    registry = {c['id']: c for c in json.loads((ROOT / 'training/neuralese_corpora.json').read_text())['corpora']}
+    for twin in cohort['twins'].values():
+        entry = registry[twin['corpus']]
+        assert entry['training_admission'] is False
+        assert entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
+        assert cohort['source']['corpus'] in entry['derived_from']
