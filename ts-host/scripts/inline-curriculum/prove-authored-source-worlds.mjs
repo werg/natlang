@@ -304,6 +304,11 @@ for (const [index, record] of rows.entries()) {
     }
     // Some typed children initialize a genuinely empty carried value and therefore have no source file binding.
     // Keep those references explicit; every item-reading child above still requires its exact file binding.
+    if (!childTarget) {
+      const scopedSourcePath = /source:\s*FileHandle\s*=\s*folder\.file\(["']([^"']+)["']\)/.exec(childOpening)?.[1];
+      if (scopedSourcePath !== undefined) childTarget = candidates.find(candidate =>
+        candidate.expected_reads?.length === 1 && candidate.expected_reads[0] === scopedSourcePath);
+    }
     if (!childTarget) childTarget = candidates.filter(candidate => !candidate.source_binding).find(candidate =>
       (Array.isArray(candidate.match) ? candidate.match : [candidate.match]).every(fragment => childOpening.includes(fragment)));
     if (!childTarget) throw new Error(`${record.id}: no exact source-reference child for ${child.invocation_id}`);

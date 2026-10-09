@@ -20,13 +20,13 @@ const world = (input) => {
     throw new Error(`V22 authored ${slug} is missing its eligibility or evidence renderer`);
   return ({
   slug, sourceGroup: `v22:${slug}:world`, domain, owner: `${domain} operations desk`, requestId, direction,
-  requestText: request, ruleText: `${rule} Rank eligible items by the stated measure; ${tieRule}. Decision mapping: if no item qualifies, use ${noAction}; if a nonempty selection has the required recorded authority, use ${action}; otherwise use hold. Authority never changes the selected item or measure.`,
+  requestText: request, ruleText: `${rule} Selection cardinality: select exactly one eligible item when at least one qualifies; otherwise select none. Rank eligible items by the stated measure, ${direction === 'asc' ? 'lowest' : 'greatest'} first; resolve equal measures by ascending complete item ID. Do not add tied items. Decision mapping: if no item qualifies, use ${noAction}; if a nonempty selection has the required recorded authority, use ${action}; otherwise use hold. Authority never changes the selected item or measure.`,
   instruction, registerHeading: heading.register, auditHeading: heading.audit, authorityHeading: heading.authority,
   candidates, compare: (a, b) => (direction === 'asc' ? a[metric] - b[metric] : b[metric] - a[metric]) || idOrder(a, b),
   provisional: rows => [...rows].sort((a,b)=>(direction === 'asc' ? a[metric]-b[metric] : b[metric]-a[metric])||idOrder(a,b)).slice(0, select(candidates).length),
   eligible, select, format: rows => rows.length ? rows.map(x => x.id).join('; ') : 'none',
   measure: metricValue, registerLine, auditLine, exceptionText: exception, authorityText, authorized,
-  selectionFormat: `Complete item identifier(s), ordered by ${metric}; ties by complete ID; none if empty.`,
+  selectionFormat: `Exactly one complete item ID when any item qualifies, ranked by ${metric}, ${direction === 'asc' ? 'lowest' : 'greatest'} first; resolve equal measures by ascending complete item ID. Return none if no item qualifies. Do not include additional tied items.`,
   measureFormat: metricFormat, decisionFormat: `Use ${action} only for a nonempty eligible selection when the recorded authority is present. Use hold for a nonempty selection without authority. Use ${noAction} only when no item qualifies. Return one bare literal: ${[action,'hold',noAction].join(', ')}.`,
   finalDecisions: [action, 'hold', noAction], approvedAction: action, noAction,
   });

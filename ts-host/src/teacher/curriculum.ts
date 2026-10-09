@@ -69,7 +69,7 @@ export type Curriculum = {
   // A child answer with `call` answers with that tool call (such as `return_result` with status `blocked`) instead of a value; `calls` plays
   // several turns in order (for example an eval that acts, then return_result).
   /** failures: how many of the reference's actions meet the obstacle the case is about (a closed road, a locked card). */
-  reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[];
+  reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[]; expected_reads?: string[]; expected_soft_input?: string;
     /** Evidence shown by the scripted reference; task evidence contracts are checked separately. */
     evidence?: string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
@@ -363,6 +363,30 @@ export async function renderOpening(record: ProgramRecord, systemPrompt: string)
  * action note. */
 export type ReasoningHook = (context: Message[], calls: [string, Record<string, unknown>][]) => string | undefined;
 
+/** Extract a FileHandle input from the structured, prefilled scope tool response. */
+function scopedFileHandleSource(context: Message[]): { kind: 'none' } | { kind: 'ambiguous' } | { kind: 'bound'; path: string } {
+  const paths = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      for (const match of value.matchAll(/(?:^|\n)source:\s*FileHandle\s*=\s*folder\.file\(["']([^"']+)["']\)/g)) paths.add(match[1]!);
+    } else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === 'object') Object.values(value).forEach(visit);
+  };
+  for (const message of context)
+    if (message.role === 'tool' && message.tool_call_id === 'scope_0') visit(message.content);
+  if (paths.size > 1) return { kind: 'ambiguous' };
+  const path = [...paths][0];
+  return path === undefined ? { kind: 'none' } : { kind: 'bound', path };
+}
+
+function scopedArgumentNames(context: Message[]): Set<string> {
+  const firstUserMessage = String(context[1]?.content ?? '');
+  const signature = /^You are inside this call: [^(]+\(([^)]*)\)/.exec(firstUserMessage)?.[1];
+  if (signature === undefined) return new Set();
+  return new Set(signature.split(',').map(parameter => /^\s*([A-Za-z_$][\w$]*)\s*:/.exec(parameter)?.[1])
+    .filter((name): name is string => name !== undefined));
+}
+
 export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   let step = 0, seeded = !record.semantics.failure_seed;
@@ -383,8 +407,21 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
         ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
     } else {
       const opening = openingText(context);
-      const answer = record.curriculum.reference.children?.find(child =>
-        (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => opening.includes(fragment)));
+      const children = record.curriculum.reference.children ?? [];
+      const source = scopedFileHandleSource(context);
+      let answer: (typeof children)[number] | undefined;
+      if (source.kind === 'bound') {
+        const exact = children.filter(child => child.expected_reads?.length === 1 && child.expected_reads[0] === source.path);
+        // The scoped argument is authoritative; do not fall back to a carried
+        // filename or pick the first of conflicting reference bindings.
+        if (exact.length === 1) answer = exact[0];
+      } else if (source.kind === 'none') {
+        const names = scopedArgumentNames(context);
+        const exactInputs = children.filter(child => child.expected_soft_input && names.has(child.expected_soft_input));
+        if (exactInputs.length === 1) answer = exactInputs[0];
+        else if (exactInputs.length === 0) answer = children.find(child =>
+          (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => opening.includes(fragment)));
+      }
       const turn = childTurns.get(opening) ?? 0;
       childTurns.set(opening, turn + 1);
       const scripted = answer?.calls?.[turn];

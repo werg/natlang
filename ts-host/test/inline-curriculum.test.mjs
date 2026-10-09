@@ -1,11 +1,32 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { admitRow, coverage, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
+import { admitRow, coverage, referenceDriver, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
 import { missingDataError } from './support/datasets.mjs';
 
 const synthetic = Object.entries(FAMILIES).filter(([, family]) => !family.source && !family.externalData);
+
+test('reference child selection follows the current scoped FileHandle, not a carried prior filename', async () => {
+  const child = (path, result) => ({ match: path, expected_reads: [path],
+    calls: [['read_file', { path }], ['return_result', { status: 'success', value: result }]] });
+  const record = { semantics: { root: 'root.nl', failure_seed: null }, curriculum: { reference: { root: [], children: [
+    child('pass-01.md', 'old'), child('pass-02.md', 'current'),
+  ] } } };
+  const context = [
+    { role: 'system', content: 'system' },
+    { role: 'user', content: 'You are inside this call: nl@eval:18(source: FileHandle): string' },
+    { role: 'tool', tool_call_id: 'scope_0', content: [{ type: 'text', text:
+      'source: FileHandle = folder.file("pass-02.md")\npriorNotes contains pass-01.md from an earlier step.' }] },
+  ];
+  const response = await referenceDriver(record)({ messages: context });
+  assert.equal(response.calls[0][1].path, 'pass-02.md');
+  assert.equal(response.calls[1][1].value, 'current');
+
+  record.curriculum.reference.children.push(child('pass-02.md', 'conflict'));
+  const ambiguous = await referenceDriver(record)({ messages: context });
+  assert.equal(ambiguous.calls[0][1].status, 'failed', 'duplicate scoped bindings fail closed');
+});
 
 test('every synthetic curriculum family builds cases that verify', async t => {
   // A family drawn from data this machine lacks is named, not verified; every other family still is.

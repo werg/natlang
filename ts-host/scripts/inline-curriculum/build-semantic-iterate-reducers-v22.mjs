@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { worlds, sourceDomains } from './semantic-iterate-reducers-v22-novel-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v22/4-quoted-template-prose';
+export const REVISION = 'authored-semantic-iterate-reducers-v22/5-single-winner-readonly-evidence-snapshot';
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
   throw new Error('usage: node build-semantic-iterate-reducers-v22.mjs --out FRESH_DIRECTORY');
@@ -32,6 +32,14 @@ const rows = worlds.map((world, index) => {
   row.curriculum.source_group_lineage = { source_revision: REVISION, factual_group: world.group };
 
   const task = JSON.parse(row.semantics.folder_files['task.json']);
+  const sourceProgram = row.semantics.files['reconcile_scoped_evidence.nl'];
+  if (!sourceProgram.includes('folder.snapshot().file(current.evidence_path)') ||
+      sourceProgram.includes('folder.file(current.evidence_path)') ||
+      !sourceProgram.includes('folder.file(task.output_path).writeText'))
+    throw new Error(`${world.slug}: evidence must be passed from an immutable FolderSnapshot while only the declared output remains writable`);
+  if (!task.instruction.includes('Preserve their complete contents exactly') ||
+      !task.instruction.includes('write only decision.json'))
+    throw new Error(`${world.slug}: read-only evidence/output boundary missing from task instruction`);
   if (JSON.stringify(task).includes('undefined')) throw new Error(`${world.slug}: undefined task contract field`);
   if (!task.output_contract.fields || !task.output_contract.decision_rule.includes('Decision mapping:'))
     throw new Error(`${world.slug}: missing field formats or full decision mapping`);
