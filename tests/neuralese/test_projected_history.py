@@ -150,14 +150,21 @@ def test_first_divergence_details_bind_tokens_logits_and_payload_without_extra_f
         EmbeddingBackbone(),'ar_projection',survival,generated,
         torch.tensor([[1,0,3]]),
         {'ar_projection':(torch.tensor([[0.,2.,0.]]),torch.tensor([[3.,4.,2.]]),torch.tensor([[1.,1.5,1.]]))},
-        {'ar_projection':torch.tensor([[[0.,1.,0.,0.],[0.,0.,0.,2.],[0.,0.,1.,0.]]])},span)
+        {'ar_projection':torch.tensor([[[0.,1.,0.,0.],[0.,0.,0.,2.],[0.,0.,1.,0.]]])},span,[2])
     row=details[0]
     assert row['target_index']==1
     assert (row['gold_token_id'],row['generated_token_id'],row['rescored_token_id'])==(2,0,0)
     assert row['ar_greedy_control_token_id']==2
     assert row['generated_logit_minus_gold_logit']==pytest.approx(2)
     assert row['top1_logit_margin']==pytest.approx(1.5)
-    assert row['payload_l2_norm']==pytest.approx(2)
+    assert row['emitted_payload_l2_norm']==pytest.approx(2)
     assert row['gold_embedding_l2_norm']==pytest.approx(1)
-    assert row['payload_minus_gold_embedding_l2_norm']==pytest.approx(5**.5)
-    assert row['payload_gold_embedding_cosine']==pytest.approx(0)
+    assert row['emitted_payload_minus_gold_embedding_l2_norm']==pytest.approx(5**.5)
+    assert row['emitted_payload_gold_embedding_cosine']==pytest.approx(0)
+    assert row['preceding_feedback_index']==0
+    assert row['preceding_feedback_l2_norm']==pytest.approx(1)
+    assert row['preceding_feedback_minus_gold_embedding_l2_norm']==pytest.approx(0)
+    assert row['preceding_feedback_gold_embedding_cosine']==pytest.approx(1)
+    assert row['ar_greedy_control_first_divergence_index']==2
+    assert row['ar_greedy_control_gold_prefix_valid_at_target'] is True
+    assert 'through prior targets' in row['ar_greedy_control_comparability_scope']

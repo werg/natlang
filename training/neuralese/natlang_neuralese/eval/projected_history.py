@@ -216,7 +216,7 @@ def _gold_reference_survival(prediction, losses, span):
 
 
 def _first_divergence_details(backbone, name, survival, generated_tokens, predictions,
-                             token_diagnostics, payloads, span):
+                             token_diagnostics, payloads, span, control_divergences):
     """Compact evidence at the first bad emitted token, without another model pass."""
     rows = []
     for row_index, divergence in enumerate(survival['first_divergence_index_by_window']):
@@ -224,25 +224,50 @@ def _first_divergence_details(backbone, name, survival, generated_tokens, predic
             rows.append(None)
             continue
         gold_embedding = backbone.embed(span[row_index:row_index+1, divergence]).float().reshape(-1)
-        payload = payloads[name][row_index:row_index+1, divergence].float().reshape(-1)
+        emitted_payload = payloads[name][row_index:row_index+1, divergence].float().reshape(-1)
         gold_score, top_score, top_margin = (value[row_index, divergence] for value in token_diagnostics[name])
         greedy_token = (generated_tokens['ar_greedy'][row_index, divergence]
                         if 'ar_greedy' in generated_tokens else span.new_tensor(-1))
+        greedy_divergence = control_divergences[row_index] if row_index < len(control_divergences) else None
+        control_gold_prefix_valid = greedy_divergence is None or divergence <= greedy_divergence
+        if divergence > 0:
+            feedback_payload = payloads[name][row_index:row_index+1, divergence-1].float().reshape(-1)
+            gold_feedback_embedding = backbone.embed(span[row_index:row_index+1, divergence-1]).float().reshape(-1)
+            feedback_values = (
+                feedback_payload.norm(), gold_feedback_embedding.norm(),
+                (feedback_payload-gold_feedback_embedding).norm(),
+                torch.nn.functional.cosine_similarity(feedback_payload[None, :],
+                                                       gold_feedback_embedding[None, :]).reshape(()),
+            )
+        else:
+            feedback_payload = gold_feedback_embedding = None
+            feedback_values = (span.new_zeros((), dtype=torch.float32),) * 4
         values = torch.stack((
             span[row_index, divergence].float(), generated_tokens[name][row_index, divergence].float(),
             predictions[row_index, divergence].float(), greedy_token.float(),
-            (top_score-gold_score).float(), top_margin.float(), payload.norm(), gold_embedding.norm(),
-            (payload-gold_embedding).norm(),
-            torch.nn.functional.cosine_similarity(payload[None, :], gold_embedding[None, :]).reshape(()),
+            (top_score-gold_score).float(), top_margin.float(), emitted_payload.norm(), gold_embedding.norm(),
+            (emitted_payload-gold_embedding).norm(),
+            torch.nn.functional.cosine_similarity(emitted_payload[None, :], gold_embedding[None, :]).reshape(()),
+            *feedback_values,
         )).detach().cpu().tolist()
         rows.append({
             'target_index': divergence,
             'gold_token_id': int(values[0]), 'generated_token_id': int(values[1]),
             'rescored_token_id': int(values[2]),
             'ar_greedy_control_token_id': int(values[3]) if values[3] >= 0 else None,
+            'ar_greedy_control_first_divergence_index': greedy_divergence,
+            'ar_greedy_control_gold_prefix_valid_at_target': control_gold_prefix_valid,
+            'ar_greedy_control_comparability_scope': 'greedy token history still matches gold through prior targets'
+                if control_gold_prefix_valid else 'greedy token history had already diverged before this target',
             'generated_logit_minus_gold_logit': values[4], 'top1_logit_margin': values[5],
-            'payload_l2_norm': values[6], 'gold_embedding_l2_norm': values[7],
-            'payload_minus_gold_embedding_l2_norm': values[8], 'payload_gold_embedding_cosine': values[9],
+            'emitted_payload_index': divergence,
+            'emitted_payload_l2_norm': values[6], 'gold_embedding_l2_norm': values[7],
+            'emitted_payload_minus_gold_embedding_l2_norm': values[8], 'emitted_payload_gold_embedding_cosine': values[9],
+            'preceding_feedback_index': divergence-1 if divergence > 0 else None,
+            'preceding_feedback_l2_norm': values[10] if divergence > 0 else None,
+            'gold_preceding_embedding_l2_norm': values[11] if divergence > 0 else None,
+            'preceding_feedback_minus_gold_embedding_l2_norm': values[12] if divergence > 0 else None,
+            'preceding_feedback_gold_embedding_cosine': values[13] if divergence > 0 else None,
         })
     return rows
 
@@ -344,6 +369,8 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
         del out, states
     gold_prediction, gold_losses = scores['gold']
     crisp_prediction, crisp_losses = scores.get('ar_greedy', (None, None))
+    crisp_divergences = (_gold_reference_survival(generated_tokens['ar_greedy'], crisp_losses, span)
+                         ['first_divergence_index_by_window'] if crisp_losses is not None else [])
     rows = {}
     for name, (prediction, losses) in scores.items():
         row = {'tokens': losses.numel(), 'ce': float(losses.mean()),
@@ -358,7 +385,8 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
             survival=_gold_reference_survival(actual_tokens, losses, span)
             survival['generated_vs_rescored_prediction_agreement']=float((actual_tokens==prediction).float().mean())
             survival['first_divergence_details_by_window'] = _first_divergence_details(
-                backbone, name, survival, generated_tokens, prediction, token_diagnostics, payloads, span)
+                backbone, name, survival, generated_tokens, prediction, token_diagnostics, payloads, span,
+                crisp_divergences)
             row['gold_reference_after_divergence'] = survival
         rows[name] = row
     return {'schema': 'natlang.autoregressive-history-controls/2', 'steps': steps, 'windows': span.shape[0],
