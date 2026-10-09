@@ -106,3 +106,17 @@ enter the Neuralese stages before either backbone's long runs.
       phase.
 - Distill from the BF16 original (KL on logits) during QAT. Same recipe, data and Neuralese stages as Maple; only
   backbone-inherent differences are declared.
+
+## 2026-10-09 — CE smell test and first QAT conversion trials
+
+- Teacher dump (v7 text, 512+32 windows of 2048, top-64): CE 3.93 train / 4.19 held. Not a port bug:
+  transformers BF16 4.49, FP32 4.58 and our port 4.54 on the same corpus window, while the model README scores 1.00
+  and a Python file 1.89 in all three. As with base Maple (CE 5.07, DECISIONS.md 2026-10-08), ~86% of corpus tokens
+  are the shared system prompt, which chat models do not predict; 15.6% of reference tokens fall outside the
+  teacher's top-64 (20-30 nat outliers), median top-1 probability 0.64.
+- Naive full ternarization (λ=1): held CE 11.35, KL 9.9. λ=0 reproduces the teacher exactly.
+- Trials at Lion lr 3e-3·α and 3e-4·α (α = per-latent ternary scale) both lost the teacher within a few updates at
+  λ≈0 (KL 0.02 → ~1): one lr 3e-4·α stochastic-rounding step alone raises held KL to 0.97. Under diagnosis.
+- Speed: fused compiled ramp (24x eager) brings the forward to 1.3 s per 2048 tokens; backward is 63 s (next target).
+- Implication: conversion recovery data should be text the teacher models well (assistant turns, code, prose),
+  not system-prompt-dominated windows.
