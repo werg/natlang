@@ -3,6 +3,46 @@
   "policy": "Directly trained Neuralese artifacts by id. Bytes are pinned by immutable manifests in training/artifact-manifests; a changed artifact gets a new id. Dialect and backbone are part of identity; registration is not qualification.",
   "artifacts": [
     {
+      "id": "learned-updater-v0-lfm2.5-350m-20261009",
+      "kind": "operator",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "trained",
+        "source": "identity start (random-small U, near-zero D output); trained on method-arm soft-gold deltas of /mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/arms-8step",
+        "builder": "training/neuralese/natlang_neuralese/train/learned_updater.py"
+      },
+      "training": {
+        "corpora": [],
+        "trainer": "natlang_neuralese.train.learned_updater",
+        "commit": "064ef6bc4f6bdbe2413e4ac28f9f84dd4438caf2",
+        "run": "/mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/updater-v0"
+      },
+      "qualification": {
+        "status": "unqualified",
+        "evidence": [
+          "/mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/updater-v0/summary.json",
+          "/mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/updater-v0/heldout-query.jsonl"
+        ]
+      },
+      "origin": {
+        "updater.pt": "/mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/updater-v0/updater.pt",
+        "summary.json": "/mnt/external/natlang-development-data/runs/s6-learned-updater-v0-20261009/updater-v0/summary.json"
+      },
+      "registered": "2026-10-09T21:01:29+00:00",
+      "notes": "S6 learned updater v0 (U block + delta projection D), imitation of 8-step soft-gold deltas on 10 decision families; held-out query mean 0.601 vs soft-init 0.607, 1 gradient step 0.633, 8 steps 0.802 (does not beat gradient at matched compute)",
+      "path": "data/neuralese/artifacts/learned-updater-v0-lfm2.5-350m-20261009",
+      "files": [
+        "summary.json",
+        "updater.pt"
+      ]
+    },
+    {
       "id": "memetic-decision-lfm2.5-350m-20261004-v1",
       "kind": "bundle",
       "owner": "dgx",
