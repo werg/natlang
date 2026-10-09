@@ -141,4 +141,17 @@ See "Language and runtime limitations" at the end of this file (filled in as the
 
 ## Language and runtime limitations
 
-(filled in during implementation)
+- **Intersection types in `types.ts` are rejected** by the type parser used for `.nl` frontmatter (`bad character at 412:
+  " & { id: str"`), so `DayView.fixed` uses a named `Commitment` record instead of `Span & { id: string }`.
+- **A function name cannot contain a hyphen** (`"read-limits" is not a valid callable name`), so stages are camelCase.
+- **The type of an eval binding is inferred from the nested awaited call.** `const x = await Promise.all(a.flatMap(o =>
+  b.map(async w => ({ ..., fit: await assess(o, w) }))))` was refused with `let/x/0: type-mismatch, expected Fit, got
+  {...}` (`ts-host/src/native/runtime.ts:1990`, staging of `let` bindings). Instructions spell the form that is accepted:
+  build the pairs, `await Promise.all(pairs.map(pair => assess(...)))`, then assemble the records.
+- **A for loop must compare its counter with a bound.** `for (...; !found && s + n <= end; ...)` is a `forbidden-loop`
+  (`ts-host/src/compiler/policy.ts:247`); `construct.nl` and `repair.nl` therefore state counted loops with a computed
+  count.
+- **Recursion in eval is limited to a smaller argument**, so `construct.nl` recurses on `remaining` counting down, which
+  is harder for a small model to read than an index counting up.
+- **A TypeScript dispatcher inside the callable folder works for a pluggable part that is called from natural language**
+  (`scheduler/enumerate.ts`, as in `applications/pi`), but not for the entry itself; see the workflow limitations.
