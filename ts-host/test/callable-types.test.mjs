@@ -45,3 +45,11 @@ export function open(): Counter { return shared; }
   assert.match(results[0], /^2\b/);
   assert.equal(value, 3);
 });
+
+test('a function of the folder named transcript takes the name from the eval built-in', async () => {
+  const { results, value } = await script({ 'root/transcript.ts': 'export function answer(): number { return 42; }\n' },
+    [['eval', { code: 'const n = transcript.answer();\nn' }], ['return_result', { status: 'success', value: 42 }]]);
+  assert.match(results[0], /42/);
+  assert.doesNotMatch(results[0], /duplicated/);
+  assert.equal(value, 42);
+});

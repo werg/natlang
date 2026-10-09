@@ -298,7 +298,7 @@ applications/pi/
   compaction.nl
   compaction/
     select.nl
-    summarize.nl  summarize/transcript.ts
+    summarize.nl  summarize/summaryRequest.ts
   admit.nl
   extensions/
     coding-tools/  index.ts (declarations), read.nl, read/{selection,image}.ts, write.nl,
@@ -402,8 +402,8 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| Records; `TOOL_RESULT_MAX_CHARS`; the summary prefix and suffix | crisp | `types.ts`, `compaction/summarize/transcript.ts` | Data. |
-| The summarization prompts, verbatim | crisp | `compaction/summarize/transcript.ts` | Model-visible text. |
+| Records; `TOOL_RESULT_MAX_CHARS`; the summary prefix and suffix | crisp | `types.ts`, `compaction/summarize/summaryRequest.ts` | Data. |
+| The summarization prompts, verbatim | crisp | `compaction/summarize/summaryRequest.ts` | Model-visible text. |
 | Registration: `pi.compaction`, version 1 | host | `index.ts` | A registration record. |
 | Phase routing. Model resolution. `no_model` removes the status. | fn | `compaction` | — |
 | `select`: the cut, `beforeCompact`, pinning the summary request | fn | `compaction/select` | A decision chain with a hook (§8.7). |
@@ -415,7 +415,7 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | `estimateContext` | fn | `harness/estimate` | Override: crisp → fn. |
 | `summarizedMessages` | inline | `compaction/select`, `compaction/summarize` | The view's ordered messages from entries before the cut. A cut never separates a call from its result, so this equals pi's reordering of that prefix. |
 | `summaryText`, `summaryFailure` | inline | `compaction/summarize` | A few sentences. |
-| `summaryPrompt`, `serializeConversation` | crisp | `compaction/summarize/transcript.ts` | Exact formats. |
+| `summaryPrompt`, `serializeConversation` | crisp | `compaction/summarize/summaryRequest.ts` | Exact formats. |
 | `place`, `placeSummary` | op + host | Blocking: `appendEntry` in the completing commit. Conversation-owned: `durable.submit` as a write with request ID `compaction:<taskId>`, then the completing commit. | Override: pi does this in one commit. Here admission is a function outside the commit line, and the request ID makes the pair idempotent. |
 | `complete`, `failNoModel` | op | `compactionStatus`, `next` | Writes. |
 
