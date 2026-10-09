@@ -212,9 +212,12 @@ def candidates(roots, *, min_bytes, min_age, excludes, held, now=None, busy=(), 
                 yield path, st.st_size, reason
 
 
-def sha256(path: Path, chunk=8 << 20) -> str:
+def sha256(path: Path, chunk=8 << 20, from_disk=False) -> str:
+    """``from_disk``: drop the file's cached pages first, so the hash reads what reached the disk."""
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
+        if from_disk and hasattr(os, 'posix_fadvise'):
+            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
         while block := handle.read(chunk):
             digest.update(block)
     return digest.hexdigest()
@@ -245,7 +248,7 @@ def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
         partial.unlink()
         raise RuntimeError(f'{path} changed during the copy')
     digest = source_hash.hexdigest()
-    if partial.stat().st_size != before.st_size or sha256(partial) != digest:
+    if partial.stat().st_size != before.st_size or sha256(partial, from_disk=True) != digest:
         partial.unlink()
         raise RuntimeError(f'verification failed for {path}')
     os.replace(partial, dest)
