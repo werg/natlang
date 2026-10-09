@@ -247,6 +247,22 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                 "read_node": read.get("node"), "model_turn_node": turn.get("node"),
                 "producer_write_node": write.get("node"),
             }
+            host_result = source_ref.get("host_result_capture") or {}
+            host_capture = host_result.get("capture") or {}
+            # A missing parent is meaningful for a top-level invocation, but
+            # only accept it when the materializer's independent terminal
+            # host capture proves this exact call was complete and parentless.
+            # This does not infer a parent for nested calls or relax any of the
+            # request, response, target, trace, or graph bindings below.
+            verified_root_invocation = (
+                required["parent_invocation_id"] is None
+                and source_ref.get("parent_invocation_id") is None
+                and host_capture.get("call_id") == required["invocation_id"]
+                and host_capture.get("capture_kind") == "invocation_output"
+                and host_capture.get("parent_call_id") is None
+                and host_capture.get("complete") is True
+                and host_result.get("validation", {}).get("valid") is True
+            )
             configured_definition = receipt.get("origin") == "configured-function-definition"
             expected_schema = ("natlang.provider-expanded-read-context/1" if configured_definition
                                else "natlang.provider-expanded-read-context/2")
@@ -261,8 +277,9 @@ def bind_exact_provider_contexts(records, source_approval, repo_root):
                            for v in required_hashes)
                     or receipt.get("source_row_sha256") != required["source_row_sha256"]
                     or receipt.get("invocation_id") != required["invocation_id"]
+                    or (required["parent_invocation_id"] is None and not verified_root_invocation)
                     or any(not isinstance(v, str) or not v for k, v in required.items()
-                           if k != "source_trajectory_index"
+                           if k not in {"source_trajectory_index", "parent_invocation_id"}
                            and not (configured_definition and k == "producer_write_node"))
                     or not isinstance(required["source_trajectory_index"], int)
                     or receipt.get("source_action_target_sha256") != target_hash

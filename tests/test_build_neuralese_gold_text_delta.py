@@ -208,6 +208,56 @@ def test_missing_same_run_writer_witness_omits_only_its_record():
                          "omissions": affected["_text_context_omissions"]}]
 
 
+def test_top_level_provider_read_accepts_only_matching_complete_root_capture():
+    block_id = "nz1_" + "c" * 52
+    body = "Authenticated top-level read context."
+    invocation = "root-call/9"
+    target = {"tool_calls": []}
+    target_hash = hashlib.sha256(json.dumps(target, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    response_hash = "d" * 64
+    receipt = {
+        "schema": "natlang.provider-expanded-read-context/2", "origin": "same-run-producer",
+        "invocation_id": invocation, "parent_invocation_id": None,
+        "source_row_sha256": "a" * 64, "trace_sha256": "e" * 64,
+        "transport_provenance_sha256": "f" * 64, "raw_request_sha256": "1" * 64,
+        "rendered_request_sha256": "2" * 64, "source_request_sha256": "3" * 64,
+        "source_response_sha256": response_hash, "source_action_target_sha256": target_hash,
+        "source_trajectory_index": 4, "context_occurrences": 1,
+        "learned_vectors": False, "qualification_certificate": False, "training_admission": False,
+        "writer_target_selected": False, "writer_witness": {"schema": "test-witness"},
+        "block": {"id": block_id, "type": "Neuralese<string>", "body": body,
+                  "body_sha256": hashlib.sha256(body.encode()).hexdigest()},
+        "block_read": {"version": "reduction-trace/1", "kind": "block_read", "call_id": invocation,
+                       "node": "read-node", "block": block_id},
+        "model_turn": {"version": "reduction-trace/1", "kind": "model_turn", "call_id": invocation,
+                       "node": "turn-node", "inputs": [{"node": "read-node", "block": block_id}]},
+        "producer_write": {"call_id": "producer-call/2", "node": "write-node"},
+    }
+    record = {
+        "id": "root-read", "target": target, "messages": [{"type": "neuralese", "id": block_id}],
+        "decision": {"source_raw_response_sha256": response_hash},
+        "source_ref": {
+            "invocation_id": invocation, "source_row_sha256": "a" * 64,
+            "provider_expanded_read_contexts": [receipt],
+            "host_result_capture": {"capture": {
+                "call_id": invocation, "capture_kind": "invocation_output", "complete": True,
+                "parent_call_id": None}, "validation": {"valid": True}},
+        },
+    }
+    bindings = MODULE.bind_exact_provider_contexts([record], {}, Path.cwd())
+    assert bindings[0]["record_id"] == "root-read"
+    assert record["neuralese_conversion"]["external_context_inputs"][0]["parent_invocation_id"] is None
+
+    forged = json.loads(json.dumps(record))
+    forged["source_ref"]["host_result_capture"]["capture"]["parent_call_id"] = "unbound-child"
+    try:
+        MODULE.bind_exact_provider_contexts([forged], {}, Path.cwd())
+    except ValueError as exc:
+        assert "malformed or mismatched exact provider context receipt" in str(exc)
+    else:
+        raise AssertionError("a parentless receipt without a matching root capture must remain held")
+
+
 def _sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
