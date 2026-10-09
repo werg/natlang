@@ -269,8 +269,21 @@ Private blank credential templates were prepared at
 `GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY`,
 `NVIDIA_API_KEY`. Kilo needs no key for anonymous
 free access. Keys remain outside Git/logs/chat. Existing shared external HTTP
-transport should be reused; do not clone a launcher per provider. Integration
-planning is read-only so far: no provider inference or worker launch yet.
+transport should be reused; do not clone a launcher per provider. The user saved Groq/Z.AI/Gemini/NVIDIA keys; private format/permissions were
+verified without printing values. Gemini3.8Flash and NVIDIA Nemotron3Super
+completed tiny authentication probes; Groq metadata worked after specifying a
+User-Agent (urllib default returned403). Z.AI GLM4.7Flash first returned429/1305,
+then accepted a request. Probe receipt: `runs/free-provider-auth-preflight-20261009-v1/`.
+No training admission from these probes. Mistral is not configured.
+
+Shared external HTTP plumbing now supports an exact completion URL and
+environment-only key forwarding through profiles, collector and existing queue.
+This avoids forced `/v1` paths and localhost8081 health polling for external
+APIs. It also omits llama-specific wire defaults and local KV budgets when an
+explicit full HTTP target is declared. Current TypeScript sources compiled in
+isolation and froze to `runs/free-provider-generation-20261009-v1/runtime`;
+CLI help was exercised; no unit tests added/run in this change. Initial held
+case probes are being prepared; no case workers launched yet.
 
 Sources: https://kilo.ai/docs/gateway/authentication ;
 https://console.groq.com/docs/rate-limits ;

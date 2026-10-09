@@ -357,6 +357,8 @@ async function* serverSentChunks(body: ReadableStream<Uint8Array>): AsyncIterabl
 }
 
 export type HttpChatOptions = { endpoint: string; model: string; apiKey?: string; headers?: Record<string, string>;
+  /** Exact chat-completions URL for APIs whose route is not `{endpoint}/v1/chat/completions`. */
+  chatCompletionsUrl?: string;
   /** Stream responses (default). Streaming sends headers at once, so no idle timeout on the way can fire. */
   stream?: boolean };
 
@@ -368,7 +370,7 @@ export function openAIEndpointRoot(endpoint: string): string {
 /** Chat completions over HTTP, in Node and in browsers. */
 export function httpChatTransport(options: HttpChatOptions): ChatTransport {
   if (!options.endpoint || !options.model) throw new Error('model endpoint and ID are required');
-  const url = openAIEndpointRoot(options.endpoint) + '/v1/chat/completions';
+  const url = options.chatCompletionsUrl ?? openAIEndpointRoot(options.endpoint) + '/v1/chat/completions';
   const stream = options.stream ?? true;
   return async (body, signal) => {
     let response: Response;

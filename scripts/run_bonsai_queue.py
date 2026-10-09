@@ -432,9 +432,22 @@ def failure_cooldown(streak):
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
-              no_observation_seconds=0, max_batch_cases=5, provider_request_config=None):
+              no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
+              server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None):
+    if provider and (server or chat_completions_url or api_key_env):
+        raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
+    if (chat_completions_url or api_key_env) and not server:
+        raise ValueError('external HTTP controls require an explicit server')
+    external = bool(server)
+    remote = bool(provider or external)
+    if chat_request_config is not None:
+        if not external:
+            raise ValueError('chat request config requires an explicit external server')
+        chat_request_config = Path(chat_request_config).resolve()
+        if not isinstance(json.loads(chat_request_config.read_text()), dict):
+            raise ValueError('chat request config must be a JSON object')
     if model_concurrency is None:
-        model_concurrency = 1 if provider else 4
+        model_concurrency = 1 if remote else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     if provider_request_config is not None:
         if not provider:
@@ -449,13 +462,13 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         count = entry.get('count', 1)
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
             raise ValueError(f'entry count exceeds reviewed batch ceiling: {entry.get("key")}')
-        if count > 1 and provider:
+        if count > 1 and remote:
             raise ValueError('provider queues remain single-case')
         if 'context_tokens' in entry:
             context_tokens = entry['context_tokens']
             if type(context_tokens) is not int or context_tokens < 1:
                 raise ValueError(f'entry context_tokens must be a positive integer: {entry.get("key")}')
-            if not provider:
+            if not remote:
                 raise ValueError('entry context_tokens is only supported by provider queues')
     attempted = set()
     failure_streak, next_allowed_at = 0, 0
@@ -484,7 +497,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                             free_mib=free_mib, minimum_free_mib=min_free_mib,
                             disposition='stopped_before_case; restart same queue/journal after freeing space'))
                 return
-        if not provider:
+        if not remote:
             # An offline server must not consume every remaining queue key.
             # Waiting happens before the attempt starts or its case budget begins.
             while True:
@@ -510,7 +523,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         count = entry.get('count', 1)
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
             raise ValueError(f'entry count must be between one and {max_batch_cases}')
-        if count > 1 and provider:
+        if count > 1 and remote:
             raise ValueError('provider queues remain single-case; batching is only enabled for local Bonsai')
         if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
             raise ValueError('entry max_turns must be a positive integer')
@@ -521,8 +534,18 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
-            '--server', 'http://127.0.0.1:8081', '--kv-tokens', '40000']
-        if provider:
+            '--server', server or 'http://127.0.0.1:8081']
+        if external:
+            command += ['--context-tokens', str(entry.get('context_tokens', 16384)), '--kv-tokens', '0']
+            if chat_completions_url:
+                command += ['--chat-completions-url', chat_completions_url]
+            if api_key_env:
+                command += ['--api-key-env', api_key_env]
+            if chat_request_config is not None:
+                command += ['--chat-request-config', str(chat_request_config)]
+        elif not provider:
+            command += ['--kv-tokens', '40000']
+        if remote:
             command += ['--retry-delay-ms', '15000']
             if provider_request_config is not None:
                 command += ['--provider-request-config', str(provider_request_config)]
@@ -566,11 +589,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         break
                     except subprocess.TimeoutExpired:
                         current = partial_metrics(entry)
-                        decode = local_decode_progress() if not provider else None
+                        decode = local_decode_progress() if not remote else None
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
                         previous_decode = decode
                         stream_delta, observation = observer.poll() if observer else (False, {'pending_requests': []})
-                        waiting = bool(provider and retry_waiting(entry))
+                        waiting = bool(remote and retry_waiting(entry))
                         now = time.monotonic()
                         observations = []
                         if current['saved_turns'] > previous['saved_turns']:
@@ -665,6 +688,10 @@ if __name__ == '__main__':
     parser.add_argument('--case-seconds', type=int, default=600)
     parser.add_argument('--model-id', default='Ternary-Bonsai-2-27B')
     parser.add_argument('--provider')
+    parser.add_argument('--server', help='explicit external HTTP server; skips local Bonsai health polling')
+    parser.add_argument('--chat-completions-url', help='exact external completion URL, including its API path')
+    parser.add_argument('--api-key-env', help='environment variable name only; never pass a key value')
+    parser.add_argument('--chat-request-config', type=Path, help='external HTTP sampling controls passed unchanged to the collector')
     parser.add_argument('--provider-request-config', type=Path, help='explicit provider request controls passed unchanged to the collector')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
     parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
@@ -689,4 +716,5 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, stop)
     run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
-              args.no_observation_seconds, args.max_batch_cases, args.provider_request_config)
+              args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
+              args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config)

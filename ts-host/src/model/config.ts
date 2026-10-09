@@ -18,7 +18,7 @@ export type BatchingSettings = {
 };
 
 export type ModelProfile = {
-  endpoint?: string; provider?: string; model?: string; apiKeyEnv?: string;
+  endpoint?: string; chatCompletionsUrl?: string; provider?: string; model?: string; apiKeyEnv?: string;
   headers?: Record<string, string>; request?: Record<string, unknown>;
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
@@ -39,7 +39,7 @@ export type ModelProfile = {
 type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
-  | (Common & { kind: 'external'; endpoint: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
+  | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
   | (Common & { kind: 'pi-provider'; provider: string; model: string; apiKeyEnv?: string;
     piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
     piMode: 'native' | 'simple'; modelOptions?: Record<string, unknown> });
@@ -53,6 +53,15 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.runtime?.review && 'driver' in profile.runtime.review)
     throw new Error('profile.runtime.review.driver is programmatic only');
   if (profile.provider && profile.endpoint) throw new Error('model profile cannot set both provider and endpoint');
+  if (profile.chatCompletionsUrl !== undefined && !profile.endpoint)
+    throw new Error('chatCompletionsUrl requires an external endpoint metadata root');
+  if (profile.chatCompletionsUrl !== undefined) {
+    let target: URL;
+    try { target = new URL(profile.chatCompletionsUrl); }
+    catch { throw new Error('chatCompletionsUrl must be an absolute HTTP(S) URL'); }
+    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.hash || target.search)
+      throw new Error('chatCompletionsUrl must be an absolute HTTP(S) URL without credentials or query parameters');
+  }
   if (profile.provider && !profile.model) throw new Error('Pi provider profile needs a model ID');
   if (profile.provider && profile.request && Object.keys(profile.request).length)
     throw new Error('Pi provider profiles do not support raw request fields; use an endpoint profile for guided wire controls');
@@ -63,7 +72,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     throw new Error('piMode, piOptions, piPayload and modelOptions require a Pi provider profile');
   if (profile.piMode && !['native', 'simple'].includes(profile.piMode))
     throw new Error('piMode must be native or simple');
-  if (profile.local && (profile.provider || profile.endpoint))
+  if (profile.local && (profile.provider || profile.endpoint || profile.chatCompletionsUrl))
     throw new Error('local server options require a managed-local profile');
   if (profile.local) {
     for (const [key, minimum] of [['contextTokens', 1024], ['gpuLayers', 0], ['parallel', 1], ['cacheRamMiB', 0],
@@ -101,6 +110,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     apiKeyEnv: profile.apiKeyEnv, piOptions: profile.piOptions, piPayload: profile.piPayload,
     piMode: profile.piMode ?? 'native', modelOptions: profile.modelOptions };
   if (profile.endpoint) return { ...common, kind: 'external', endpoint: profile.endpoint,
+    ...(profile.chatCompletionsUrl ? { chatCompletionsUrl: profile.chatCompletionsUrl } : {}),
     model: profile.model ?? DEFAULT_MODEL_RELEASE.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
     request: profile.request };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
@@ -118,9 +128,9 @@ export function loadModelConfiguration(name?: string, overrides: ModelSelectionO
   const provider = overrides.provider ?? environment.NATLANG_PROVIDER;
   const endpoint = environment.NATLANG_SERVER;
   const profile: ModelProfile = { ...configured,
-    ...(provider ? { provider, endpoint: undefined, local: undefined, request: undefined } : {}),
+    ...(provider ? { provider, endpoint: undefined, chatCompletionsUrl: undefined, local: undefined, request: undefined } : {}),
     ...(endpoint && !provider ? { endpoint, provider: undefined, piOptions: undefined,
-      piPayload: undefined, piMode: undefined, modelOptions: undefined, local: undefined } : {}),
+      chatCompletionsUrl: undefined, piPayload: undefined, piMode: undefined, modelOptions: undefined, local: undefined } : {}),
     ...(overrides.model ?? environment.NATLANG_MODEL ? { model: overrides.model ?? environment.NATLANG_MODEL } : {}),
     ...(environment.NATLANG_CONCURRENCY ? { concurrency: Number(environment.NATLANG_CONCURRENCY) } : {}) };
   return { name: selected, configPath, profile, choice: resolveModelChoice(profile) };
