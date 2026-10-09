@@ -1136,3 +1136,37 @@ V20 launch review also found the dispatcher/queue hardcoded retry allowance1 whi
   d7bd584e + 10ecee9b: eager norm inside checkpointed readout/projection chunks).
 - Next: `text_warmup_runtime` on the exact exported heads (`runs/maple-text-warmup-runtime-20261008-v10`), then raw
   recurrence per `raw-recurrence-v1`.
+
+## 2026-10-09 — Maple recurrence debugging (owner: "debug it", "improve our system")
+
+Fixed-window diagnostic: 8 held records, crisp whole trajectories, CE split into system+tools vs trajectory positions.
+
+| Weights | full traj | full sys | 24x32 traj | 24x64 traj | 8x16 traj |
+|---|---|---|---|---|---|
+| v1 @ step 89 (before the member term) | 0.225 | 0.088 | 3.86 | 3.45 | 7.30 |
+| v3 @ 299 (member weight 0.25, unmasked) | 0.277 | 0.173 | 2.74 | 2.19 | 5.49 |
+| ablation @ 299 (member weight 0, same start) | 0.308 | 0.154 | 3.84 | 3.42 | 7.28 |
+
+Held Neuralese soft CE at step 256: v3 0.203; ablation 0.164 (step 128: 0.153).
+
+Findings:
+- Members' private parts do not leak into the full model: resetting them leaves the full output unchanged.
+- Recurrence alone degrades the full model's crisp whole-trajectory CE (+37%). The trajectory objective supervises
+  only Neuralese renderings, of targets and new context. Nothing trains crisp context positions.
+- The unmasked member term trained those positions indirectly, through shared weights. This partly offset the crisp
+  regression, but hurt the Neuralese objective (0.203 vs 0.164).
+- About 89% of member windows were system-prompt/tool 16-grams that other records share. The member evaluation
+  mostly measured memorization.
+- A held-selection change at step ~223 swapped the member evaluation records. Member evaluation records are now
+  pinned per run.
+- QAT codes never flipped. Dense latents moved ~6e-6 per Muon step, while flip gaps are 0.013–0.09. Over v10 and
+  the recurrence, 2.5–3.6e-6 of codes flipped.
+
+Changes (01166d32, 8ce3583c):
+- `--qat-latent-lr`: AdamW groups per latent, at lr × the matrix's ternary scale.
+- `--member-mask-system`, on by default.
+- `--member-full-weight`: the full model's crisp CE on the member window, as an anchor.
+- Default-aware resume and continuation.
+
+Next launch: from v1@89 with the member term masked and anchored and the QAT latent rate checked by smoke. Pop's
+full-projection anchor joins when it lands; Pop found the same recurrence drift on LFM.
