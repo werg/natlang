@@ -32,7 +32,7 @@
  * `natlang run applications/pi -- eval [NAME...] [--out DIR] [--minutes N] [options]`: the tasks in tasks/, each on a
  * fresh git copy of its repository, judged by its check command.
  * `natlang run applications/pi -- replay --in PREPARED.jsonl --out REPLAYED.jsonl [--repos DIR]`: teacher trajectories
- * replayed in pi's own tools over their base commits (bench/replay.ts), for training records.
+ * replayed in pi's own tools over their base commits (bench/replay.ts), for training records; resumes an existing output.
  * `natlang run applications/pi -- surface [--cwd DIR] [--companion]`: the agent's system prompt and tool schemas as JSON
  * (surface.ts), for training records built from other agents' trajectories.
  */

@@ -18,7 +18,7 @@
  * steps before it are verified.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
@@ -202,15 +202,32 @@ export async function replay(prepared: Prepared, root: string): Promise<{ messag
   return { messages, report };
 }
 
-/** Replay every prepared trajectory of `input` (JSON lines) into `output`, each in a fresh checkout. */
+/**
+ * The trajectory ids `output` already holds, one complete (newline-terminated) line each. A kill can leave the last
+ * line unfinished: that tail is cut off, so its trajectory is replayed again.
+ */
+export function replayedIds(output: string): Set<string> {
+  const ids = new Set<string>();
+  if (!existsSync(output)) return ids;
+  const content = readFileSync(output, 'utf8');
+  const complete = content.lastIndexOf('\n') + 1;
+  if (complete < content.length) truncateSync(output, Buffer.byteLength(content.slice(0, complete)));
+  for (const line of content.slice(0, complete).split('\n')) if (line.trim()) ids.add((JSON.parse(line) as Prepared).id);
+  return ids;
+}
+
+/**
+ * Replay every prepared trajectory of `input` (JSON lines) into `output`, each in a fresh checkout. Resumable: the
+ * trajectories `output` already holds are kept and skipped, the others are appended.
+ */
 export async function replayFile(input: string, output: string, repos: string, log: (line: string) => void): Promise<void> {
-  const { appendFileSync } = await import('node:fs');
-  writeFileSync(output, '');
-  const totals = { trajectories: 0, fullyVerified: 0, diverged: 0, failed: 0 };
+  const done = replayedIds(output);
+  const totals = { trajectories: 0, resumed: 0, fullyVerified: 0, diverged: 0, failed: 0 };
   for (const line of readFileSync(input, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     const prepared = JSON.parse(line) as Prepared;
     totals.trajectories++;
+    if (done.has(prepared.id)) { totals.resumed++; continue; }
     const root = mkdtempSync(join(tmpdir(), 'pi-replay-'));
     try {
       checkout(prepared.repo, prepared.base_commit, repos, root);
