@@ -291,6 +291,8 @@ def main(argv=None):
     parser.add_argument('--input-binding', action='append', default=[], metavar='NAME=PATH',
                         help='relocate a declared named input while preserving its recipe-pinned SHA-256')
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--launch-metadata', type=Path,
+                        help='write an immutable launch-intent receipt outside --out before running')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--until', help='run through a declared stage, retaining resumable state')
     parser.add_argument('--inspect', action='store_true')
@@ -339,6 +341,24 @@ def main(argv=None):
         shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         plan['code'] = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
         write_json(plan_path, plan)
+    if args.launch_metadata is not None:
+        metadata = args.launch_metadata.resolve()
+        if metadata == args.out or args.out in metadata.parents:
+            raise ValueError('--launch-metadata must be outside the recipe output directory')
+        if metadata.exists():
+            raise ValueError('launch metadata path already exists; choose a fresh immutable sidecar')
+        write_json(metadata, {'schema': 'natlang.neuralese-recipe-launch-intent/1',
+                              'recipe_path': str(args.recipe.resolve()),
+                              'recipe_sha256': sha(args.recipe),
+                              'output_path': str(args.out),
+                              'heads_path': str(args.heads),
+                              'heads_sha256': sha(args.heads),
+                              'device': args.device,
+                              'until': args.until,
+                              'recipe_plan_path': str(plan_path),
+                              'recipe_plan_sha256': sha(plan_path),
+                              'frozen_runtime_sha256': plan.get('code', {}),
+                              'stage_inputs': stage_inputs})
     stopped = [False]
     child = [None]
     def interrupt(*_):
