@@ -70,3 +70,17 @@ def test_trained_artifacts_need_registered_corpora_parent_and_commit(tmp_path):
                   training={"corpora": [], "trainer": "t", "commit": "c"})
     with pytest.raises(artifacts.ArtifactError, match="unknown artifact"):
         artifacts.register(repo, orphan, {"bank.nz": nz(tmp_path / "o.nz")})
+
+
+def test_bundles_declare_adapter_dialects(tmp_path):
+    repo = repo_with_corpus(tmp_path)
+    path = tmp_path / "bundle.nz"
+    header = {"exports": {}, "blocks": {"a": {"dialect": "nd:test@1"}, "b": {"dialect": "adapter/1;base=x;kind=xs"}}}
+    save_file({"a": torch.zeros(2, 8), "b": torch.zeros(2, 4)}, str(path), metadata={"natlang": json.dumps(header)})
+    with pytest.raises(artifacts.ArtifactError, match="differ from"):
+        artifacts.register(repo, item("bundle-test-v1", kind="bundle"), {"a.nz": path})
+    manifest = artifacts.register(repo, item("bundle-test-v2", kind="bundle", extra_dialects=["adapter/1;base=x;kind=xs"]),
+                                  {"a.nz": path})
+    assert manifest["extra_dialects"] == ["adapter/1;base=x;kind=xs"]
+    with pytest.raises(artifacts.ArtifactError, match="adapter dialects"):
+        artifacts.register(repo, item("bundle-test-v3", kind="bundle", extra_dialects=["nd:other@1"]), {"a.nz": path})

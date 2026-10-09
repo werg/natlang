@@ -27,7 +27,8 @@ MANIFESTS = "training/artifact-manifests"
 STORE = "data/neuralese/artifacts"
 SCHEMA = "natlang.neuralese-artifacts/1"
 SNAPSHOT_SCHEMA = "natlang.neuralese-artifact-snapshot/1"
-KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "projection"}
+# "bundle": one file holding several kinds, e.g. a method-arm or memetic run's soft skills and adapters.
+KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "projection", "bundle"}
 INIT_METHODS = {"text", "trained", "converted", "written"}
 QUALIFICATION = {"unqualified", "qualified", "failed", "superseded"}
 ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,127}")
@@ -135,6 +136,9 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
         unknown = set(training.get("corpora", [])) - (corpora_ids or set())
         if corpora_ids is not None and unknown:
             raise ArtifactError(f"training corpora are not registered: {sorted(unknown)}")
+    extra = item.get("extra_dialects", [])
+    if not isinstance(extra, list) or any(not isinstance(d, str) or not d.startswith("adapter/") for d in extra):
+        raise ArtifactError("extra_dialects lists adapter dialects (adapter/…) only")
     qualification = item.get("qualification")
     if not isinstance(qualification, dict) or qualification.get("status") not in QUALIFICATION:
         raise ArtifactError(f"artifact qualification.status must be one of {sorted(QUALIFICATION)}")
@@ -166,11 +170,14 @@ def snapshot(repo: Path, item: dict) -> dict:
         row = {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
         if path.suffix == ".nz":
             row["nz"] = nz_summary(path)
-            wrong = [d for d in row["nz"]["dialects"] if d != item["dialect"]]
+            # Adapter blocks carry their own dialect (adapter/1;base=…), declared in extra_dialects.
+            allowed = {item["dialect"], *item.get("extra_dialects", [])}
+            wrong = [d for d in row["nz"]["dialects"] if d not in allowed]
             if wrong or not row["nz"]["dialects"]:
                 raise ArtifactError(f"{name}: block dialects {row['nz']['dialects']} differ from {item['dialect']}")
         rows.append(row)
     return {"schema": SNAPSHOT_SCHEMA, "id": item["id"], "kind": item["kind"], "dialect": item["dialect"],
+            **({"extra_dialects": item["extra_dialects"]} if item.get("extra_dialects") else {}),
             "backbone": item["backbone"], "path": item["path"], "files": rows,
             "bytes": sum(r["bytes"] for r in rows)}
 

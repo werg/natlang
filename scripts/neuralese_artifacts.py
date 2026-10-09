@@ -48,6 +48,7 @@ def cmd_register(args):
     sources = parse_files(args.file)
     item = {
         "id": args.id, "kind": args.kind, "owner": args.owner, "dialect": args.dialect,
+        **({"extra_dialects": args.extra_dialect} if args.extra_dialect else {}),
         "backbone": {"model": args.backbone_model, "revision": args.backbone_revision,
                      **({"family": args.backbone_family} if args.backbone_family else {})},
         "init": {"method": args.init_method,
@@ -121,6 +122,7 @@ def main(argv=None):
     parser.add_argument("--kind", choices=sorted(artifacts.KINDS))
     parser.add_argument("--owner", choices=["dgx", "pop"], default="dgx")
     parser.add_argument("--dialect")
+    parser.add_argument("--extra-dialect", action="append", help="adapter dialect (adapter/…) of blocks in the file")
     parser.add_argument("--backbone-model")
     parser.add_argument("--backbone-revision")
     parser.add_argument("--backbone-family")
