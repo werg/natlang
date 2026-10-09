@@ -1150,20 +1150,48 @@ def native_gold_document(tokenizer, messages, target, tools):
 
 
 def native_gold_packet(tokenizer, messages, target, tools):
-    """Bind the observed assistant suffix to exact native token coordinates.
+    """Render the exact serving prompt followed by the target assistant reply.
 
-    The prefix divergence includes any template boundary tokens affected by
-    appending the target. No decode/re-encode or character-to-token guess is used.
+    The target boundary is the prompt's token length, not a longest-common-
+    prefix between two independently rendered conversations. Appending a new
+    target can change how earlier assistant turns render, so LCP is not a
+    reliable task-target mask.
     """
-    text,ids=native_gold_document(tokenizer,messages,target,tools)
-    _,prefix=_native_gold_render(tokenizer,messages,tools)
-    boundary=0
-    for original,complete in zip(prefix,ids):
-        if original!=complete:break
-        boundary+=1
-    if boundary>=len(ids):
-        raise ValueError('gold target adds no native token suffix')
-    return text,ids,boundary
+    from ..serve.chat import assistant_reply_segments, render_messages, split_escaped
+    if list(_message_neuralese_ids(target)):
+        raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
+
+    def apply_template(turns, schemas, *, generation):
+        return tokenizer.apply_chat_template(
+            turns, tools=schemas or None, tokenize=False,
+            add_generation_prompt=generation)
+
+    prompt = render_messages(
+        messages, tools,
+        lambda turns, schemas: apply_template(turns, schemas, generation=True),
+        specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+    if prompt.blocks:
+        raise ValueError("ordinary gold text prompt contains unresolved neuralese blocks")
+    reply_runs = assistant_reply_segments(
+        lambda turns, generation: apply_template(turns, tools, generation=generation),
+        target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+    if reply_runs is None:
+        raise ValueError("assistant target does not continue the serving generation prompt")
+
+    text, ids = [], []
+    for segment in prompt.segments:
+        for run, escaped in split_escaped(segment, prompt.escape_nonce):
+            text.append(run)
+            ids.extend(tokenizer(run, add_special_tokens=False,
+                                 split_special_tokens=escaped)["input_ids"])
+    boundary = len(ids)
+    for run, escaped in reply_runs:
+        text.append(run)
+        ids.extend(tokenizer(run, add_special_tokens=False,
+                             split_special_tokens=escaped)["input_ids"])
+    if boundary >= len(ids):
+        raise ValueError("gold assistant target adds no native token suffix")
+    return "".join(text), ids, boundary
 
 
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
@@ -1300,9 +1328,9 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         "sft_eligible": not preview_only,
         "policy": ("explicitly held review records only; output is a non-trainable preview with no admission effect; "
                    if preview_only else "approved SFT records only; ") +
-                  "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
-        "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
-        "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
+                  "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; serving generation prompt and assistant reply rendered separately with native chat content escaping; no tools executed",
+        "rendering": "natlang.native_gold_chat/3", "tokenizer_sha256": fingerprint,
+        "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
         "training_admission_granted": False,
         "documents": len(rows), "train_documents": sum(row["split"] == "train" for row in rows),

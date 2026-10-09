@@ -231,6 +231,60 @@ def assistant_reply(apply_template, message: dict) -> str | None:
     return full[len(prompt):] if full.startswith(prompt) else None
 
 
+def assistant_reply_segments(apply_template, message: dict, specials=()) -> list[tuple[str, bool]] | None:
+    """Render an assistant reply after its serving generation prompt.
+
+    Special-token spellings in assistant-authored content are escaped before
+    applying the template, then returned as ``(text, escaped)`` runs so callers
+    can tokenize structure and quoted content with their respective policies.
+    ``apply_template(messages, add_generation_prompt)`` is the same contract as
+    :func:`assistant_reply`.
+    """
+    if not specials:
+        reply = assistant_reply(apply_template, message)
+        return None if reply is None else [(reply, False)]
+
+    supplied = json.dumps(message, ensure_ascii=False)
+    nonce = secrets.token_hex(16)
+    while nonce in supplied:
+        nonce = secrets.token_hex(16)
+
+    def escape_value(value):
+        if isinstance(value, str):
+            return escape_specials(value, specials, nonce)
+        if isinstance(value, list):
+            return [escape_value(child) for child in value]
+        if isinstance(value, dict):
+            return {key: escape_value(child) for key, child in value.items()}
+        return value
+
+    prepared = dict(message)
+    content = prepared.get("content")
+    if isinstance(content, str):
+        prepared["content"] = escape_specials(content, specials, nonce)
+    elif _is_parts(content):
+        prepared["content"] = [dict(part, **({"text": escape_specials(part.get("text") or "", specials, nonce)}
+                                              if part.get("type") == "text" else {}))
+                                for part in content]
+    calls = []
+    for call in prepared.get("tool_calls") or []:
+        copied = json.loads(json.dumps(call))
+        fn = copied.get("function", copied)
+        arguments = fn.get("arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments) if arguments.strip() else {}
+            except json.JSONDecodeError as error:
+                raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
+        fn["arguments"] = escape_value(arguments)
+        calls.append(copied)
+    if calls:
+        prepared["tool_calls"] = calls
+
+    reply = assistant_reply(apply_template, prepared)
+    return None if reply is None else split_escaped(reply, nonce)
+
+
 def _at_value_path(value, path):
     for key in path:
         if isinstance(value, dict) and isinstance(key, str) and key in value:

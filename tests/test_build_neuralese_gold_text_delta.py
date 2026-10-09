@@ -170,6 +170,44 @@ def test_runtime_hash_without_a_path_is_not_treated_as_a_manifest_binding(tmp_pa
         raise AssertionError("a path without its manifest digest must fail closed")
 
 
+def test_missing_same_run_writer_witness_omits_only_its_record():
+    block_id = "nz1_" + "b" * 52
+    body = "Authenticated read context body."
+    body_hash = hashlib.sha256(body.encode()).hexdigest()
+    invocation = "sampled-call/4"
+    target = {"tool_calls": []}
+    target_hash = hashlib.sha256(json.dumps(target, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    response_hash = "d" * 64
+    read = {"version": "reduction-trace/1", "kind": "block_read", "call_id": invocation,
+            "node": "read-node", "block": block_id}
+    turn = {"version": "reduction-trace/1", "kind": "model_turn", "call_id": invocation,
+            "node": "turn-node", "inputs": [{"node": "read-node", "block": block_id}]}
+    receipt = {
+        "schema": "natlang.provider-expanded-read-context/2", "origin": "same-run-producer",
+        "invocation_id": invocation, "parent_invocation_id": "parent-call/2",
+        "source_row_sha256": "a" * 64, "trace_sha256": "e" * 64,
+        "transport_provenance_sha256": "f" * 64, "raw_request_sha256": "1" * 64,
+        "rendered_request_sha256": "2" * 64, "source_request_sha256": "3" * 64,
+        "source_response_sha256": response_hash, "source_action_target_sha256": target_hash,
+        "source_trajectory_index": 4, "context_occurrences": 1,
+        "learned_vectors": False, "qualification_certificate": False, "training_admission": False,
+        "writer_target_selected": False, "writer_witness": None,
+        "block": {"id": block_id, "type": "Neuralese<string>", "body": body, "body_sha256": body_hash},
+        "block_read": read, "model_turn": turn,
+        "producer_write": {"call_id": "producer-call/2", "node": "write-node"},
+    }
+    affected = {"id": "affected", "target": target, "messages": [{"type": "neuralese", "id": block_id}],
+                "decision": {"source_raw_response_sha256": response_hash},
+                "source_ref": {"invocation_id": invocation, "source_row_sha256": "a" * 64,
+                                "provider_expanded_read_contexts": [receipt]}}
+    unrelated = {"id": "unrelated", "target": {}, "messages": [], "source_ref": {}}
+    bindings = MODULE.bind_exact_provider_contexts([affected, unrelated], {}, Path.cwd())
+    assert affected["_text_context_omissions"][0]["reason"] == "missing_authenticated_writer_witness"
+    assert not unrelated.get("_text_context_omissions")
+    assert bindings == [{"record_id": "affected", "status": "omitted_unbound_provider_context",
+                         "omissions": affected["_text_context_omissions"]}]
+
+
 def _sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

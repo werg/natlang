@@ -177,7 +177,8 @@ export function verifyStep5SourceBinding({ plan, sourceCasesText, sourceProofTex
   catch { throw new Error('exact-source fake proof is not valid JSON'); }
   const proofSourceHash = proof?.source_sha256 ?? proof?.source_file_sha256;
   const proofRowIndex = Number.isSafeInteger(proof?.source_row_index) ? proof.source_row_index :
-    (Number.isSafeInteger(proof?.case_index) ? proof.case_index - 1 : null);
+    (Number.isSafeInteger(proof?.source_index) ? proof.source_index :
+      (Number.isSafeInteger(proof?.case_index) ? proof.case_index - 1 : null));
   const proofSourceId = proof?.source_id ?? proof?.case_id;
   const proofGroups = proof?.source_groups ?? (proof?.source_group ? [proof.source_group] : null);
   if (proofSourceHash !== source.sha256 || proofRowIndex !== source.index ||

@@ -7,7 +7,16 @@ import pytest
 from natlang_neuralese.data.text_corpus import (
     gold_text_preview_rows, gold_text_rows, native_gold_document, native_gold_packet, tokenizer_fingerprint,
 )
+from natlang_neuralese.serve.chat import render_messages, split_escaped
 from natlang_neuralese.train.text_warmup import load_text_rows
+
+
+def serving_prompt_ids(tokenizer, messages, tools):
+    rendered=render_messages(messages,tools,lambda turns,schemas:tokenizer.apply_chat_template(
+        turns,tools=schemas or None,tokenize=False,add_generation_prompt=True),
+        specials=(*tokenizer.all_special_tokens,'<|neuralese|>','<|/neuralese|>'))
+    return [token for segment in rendered.segments for run,escaped in split_escaped(segment,rendered.escape_nonce)
+            for token in tokenizer(run,add_special_tokens=False,split_special_tokens=escaped)['input_ids']]
 
 
 class Tokenizer:
@@ -34,10 +43,11 @@ class Tokenizer:
         return {'input_ids': ids}
 
     def apply_chat_template(self, messages, *, tools=None, tokenize=False, add_generation_prompt=False):
-        assert not tokenize and not add_generation_prompt
-        return json.dumps(tools or [], sort_keys=True) + ''.join(
+        assert not tokenize
+        rendered = json.dumps(tools or [], sort_keys=True) + ''.join(
             '<role>' + m['role'] + '\n' + (m.get('content') or '') +
             json.dumps(m.get('tool_calls') or [], sort_keys=True) + '</role>' for m in messages)
+        return rendered + ('<role>assistant\n' if add_generation_prompt else '')
 
 
 def record(rid, split):
@@ -64,7 +74,7 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     tokenizer=Tokenizer()
     rows, receipt, omissions, provenance=gold_text_rows([record('train-world','train'),record('test-world','test')],{},tokenizer=tokenizer)
     assert not omissions
-    assert receipt['rendering']=='natlang.native_gold_chat/2'
+    assert receipt['rendering']=='natlang.native_gold_chat/3'
     assert all(r['tokenizer_sha256']==tokenizer_fingerprint(tokenizer) for r in rows)
     assert all(p['token_ids_sha256'] for p in provenance)
     path=tmp_path/'text.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
@@ -176,14 +186,62 @@ def test_legacy_identity_without_baseline_policy_remeasures_only_baseline():
     assert not same_alignment_data(legacy,current)
 
 
-def test_suffix_is_exact_native_prefix_divergence_for_tool_target():
+def test_suffix_is_serving_generation_prompt_boundary_for_tool_target():
     tokenizer=Tokenizer()
     messages=[{'role':'user','content':'quoted <|neuralese|>'}]
     target={'role':'assistant','content':'','tool_calls':[{'type':'function','function':{'name':'eval','arguments':'{"code":"2+2"}'}}]}
     text,ids,start=native_gold_packet(tokenizer,messages,target,[])
-    assert (text,ids)==native_gold_document(tokenizer,messages,target,[])
+    assert text.startswith(tokenizer.apply_chat_template(messages,tools=None,tokenize=False,
+                                                         add_generation_prompt=True))
     assert start>0 and start<len(ids)
-    assert ''.join(chr(i) for i in ids[start:] if i<10000).startswith('assistant')
+    assert start == len(serving_prompt_ids(tokenizer,messages,[]))
+
+
+def test_target_mask_starts_after_serving_prompt_with_history_and_quoted_role_markers():
+    tokenizer=Tokenizer()
+    messages=[{'role':'user','content':'Quoted <role>assistant\\n is ordinary.'},
+              {'role':'assistant','content':'historical reasoning'},
+              {'role':'tool','content':'historical tool result'}]
+    target={'role':'assistant','content':'answer quotes <role>tool\\n literally'}
+    text,ids,start=native_gold_packet(tokenizer,messages,target,[])
+    prompt=tokenizer.apply_chat_template(messages,tools=None,tokenize=False,add_generation_prompt=True)
+    assert text.startswith(prompt)
+    assert start==len(serving_prompt_ids(tokenizer,messages,[]))
+    assert 'historical tool result' in text[:len(prompt)]
+    assert 'answer quotes <role>tool\\n literally' in text[len(prompt):]
+    # Escaped content spellings are tokenized as ordinary characters; only the
+    # generated prompt/reply structure becomes the fixture's role token ID.
+    assert ids.count(10000)==len(messages)+1
+    quoted=tokenizer('<role>tool\\n',add_special_tokens=False,split_special_tokens=True)['input_ids']
+    suffix=ids[start:]
+    assert any(suffix[i:i+len(quoted)]==quoted for i in range(len(suffix)-len(quoted)+1))
+    assert suffix.count(10000)==0 and suffix.count(10001)==1
+
+
+def test_target_bound_packet_survives_history_reasoning_template_rewrite():
+    class RewritingHistoryTokenizer(Tokenizer):
+        def apply_chat_template(self, messages, *, tools=None, tokenize=False, add_generation_prompt=False):
+            copied=[dict(message) for message in messages]
+            if not add_generation_prompt and len(copied)>1:
+                for message in copied[:-1]:
+                    if message.get('role')=='assistant':
+                        message['content']='template-rewritten historical reasoning'
+            return super().apply_chat_template(copied,tools=tools,tokenize=tokenize,
+                                               add_generation_prompt=add_generation_prompt)
+
+    tokenizer=RewritingHistoryTokenizer()
+    messages=[{'role':'user','content':'Question'},
+              {'role':'assistant','content':'original reasoning'},
+              {'role':'tool','content':'result'}]
+    target={'role':'assistant','content':'final answer'}
+    full_text,_=native_gold_document(tokenizer,messages,target,[])
+    packet_text,packet_ids,boundary=native_gold_packet(tokenizer,messages,target,[])
+    prompt=tokenizer.apply_chat_template(messages,tools=None,tokenize=False,add_generation_prompt=True)
+    assert 'template-rewritten historical reasoning' in full_text
+    assert 'original reasoning' in packet_text[:len(prompt)]
+    assert 'template-rewritten historical reasoning' not in packet_text
+    assert boundary==len(serving_prompt_ids(tokenizer,messages,[]))
+    assert boundary<len(packet_ids)
 
 def test_invalid_suffix_coordinate_fails_admission(tmp_path):
     tokenizer=Tokenizer()
