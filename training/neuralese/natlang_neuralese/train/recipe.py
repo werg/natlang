@@ -25,9 +25,9 @@ HANDLERS = {
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates','neuralese_input',
                           'input_map_kernel','input_map_rank','rollout_passes'},'result':'heads.pt'},
-    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':set(),
+    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
                             'parameters':set(),'result':'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':set(),
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads'},
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
@@ -193,6 +193,17 @@ def load_recipe(path):
                 raise ValueError('continuation checkpoint and heads must be the exact files validated by a required verified_heads_handoff')
         if kind == 'core_text_warmup' and 'heads' in stage.get('inputs', {}) and 'continue_from' not in stage.get('inputs', {}):
             raise ValueError('stage-specific heads input requires a verified full-state continuation checkpoint')
+        if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
+            if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
+                raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
+        if kind == 'raw_recurrence_training':
+            runtime_dependencies = [s for s in recipe['stages']
+                                    if s['id'] in required and s['kind'] == 'text_warmup_runtime']
+            if not runtime_dependencies:
+                raise ValueError('recurrence training requires an adapted warm-up runtime gate')
+            if 'heads' not in stage.get('inputs', {}) and not any(
+                    s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
+                raise ValueError('recurrence requires a core warm-up predecessor or exact stage heads binding')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -358,8 +369,16 @@ def main(argv=None):
             if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
                 stage_heads = stage_inputs[stage['id']]['heads']['path']
             if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
-                predecessor_kind='raw_runtime_qualification' if kind=='core_text_warmup' else 'core_text_warmup'
-                if not (kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]):
+                has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
+                if has_exact_stage_heads:
+                    stage_heads = stage_inputs[stage['id']]['heads']['path']
+                elif kind == 'core_text_warmup':
+                    predecessor_kind = 'raw_runtime_qualification'
+                    predecessor = next(r for r in reversed(reports)
+                                       if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
+                    stage_heads = predecessor['artifact']
+                else:
+                    predecessor_kind = 'core_text_warmup'
                     predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
                     stage_heads=predecessor['artifact']
             command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
