@@ -86,19 +86,24 @@ export type CallStoreSettings = {
   acceptanceBound: number;
   /** Comparisons a case needs (held-out replays plus shadow checks) before it is promoted to active. */
   promotionComparisons: number;
+  /**
+   * Of those, comparisons on live calls (shadow replays and audits of calls made after the compilation): replays of the
+   * calls a case was written from share their context, so a case also has to hold on calls it has not seen.
+   */
+  promotionLiveComparisons: number;
   /** Calls of one definition revision before the specializer looks at it. */
   minCalls: number;
 };
 
 export const DEFAULT_SETTINGS: CallStoreSettings = { maxValueBytes: 1 << 20, maxStoreBytes: 50 * 2 ** 30, minFreeBytes: 20 * 2 ** 30, specialization: 'on',
-  auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, minCalls: 20 };
+  auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, promotionLiveComparisons: 3, minCalls: 20 };
 
 export type CaseTier = 'shadow' | 'active' | 'demoted' | 'disabled';
 export type CaseRole = 'group' | 'training' | 'held-out' | 'counterexample' | 'shadow' | 'audit' | 'served' | 'handed-off';
 export type Verdict = 'equal' | 'better' | 'equivalent' | 'worse' | 'diverged';
 
 export type CaseStats = { hash: string; compilation_id: string; position: number; tier: CaseTier; served: number; handed_off: number;
-  compared: number; worse: number; better: number; audited: number; audit_worse: number; created_at: string;
+  compared: number; worse: number; better: number; audited: number; audit_worse: number; live_compared: number; live_worse: number; created_at: string;
   promoted_at: string | null; demoted_at: string | null; note: string | null };
 
 export type CompilationRow = { id: string; definition_key: string; definition_id: string; definition_name: string; definition_source: string | null;

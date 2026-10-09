@@ -73,13 +73,19 @@ const fence = (text: string, language = '') => `\`\`\`${language}\n${text}\n\`\`
 
 /** The evidence folder's files (§7.6). `report` is the previous verification round, `history` earlier outcomes. */
 export function renderEvidence(store: CallStore, subject: Study, extra: { report?: string; history?: string; previousCases?: string } = {}): Record<string, string> {
-  const files: Record<string, string> = {};
+  const files: Record<string, string> = { 'function.md': renderFunction(subject) };
+  renderApproaches(store, subject, files);
+  return renderRest(store, subject, files, extra);
+}
+
+/** function.md: the function's instructions, signature, what a case may call, and its volume. */
+export function renderFunction(subject: Study): string {
   const { definition } = subject;
   const callees = Object.keys(definition.codebase);
   const cost = [...subject.records.values()].reduce((sum, record) => ({ tokens: sum.tokens + record.cost.tokens_in + record.cost.tokens_out,
     wall: sum.wall + record.cost.wall_ms }), { tokens: 0, wall: 0 });
   const count = subject.examples.length;
-  files['function.md'] = [`# ${definition.name}`, '', `Signature: \`${signatureOf(definition)}\``, '',
+  return [`# ${definition.name}`, '', `Signature: \`${signatureOf(definition)}\``, '',
     `Source: ${definition.source ?? '(inline)'}${subject.loaded ? '' : ' (rebuilt from the record; its context is not available)'}`, '',
     '## Instructions', '', definition.body.trim(), '',
     ...(Object.keys(definition.types).length ? ['## Types', '', fence(Object.entries(definition.types).map(([name, text]) => `type ${name} = ${text};`).join('\n'), 'ts'), ''] : []),
@@ -90,6 +96,9 @@ export function renderEvidence(store: CallStore, subject: Study, extra: { report
     `${Math.round(cost.tokens / Math.max(1, count))} tokens and ${Math.round(cost.wall / Math.max(1, count))} ms per call on average.`, '',
     `Split: ${subject.examples.filter(example => example.split === 'training').length} training, ` +
     `${subject.examples.filter(example => example.split === 'held-out').length} held out (used only to check your cases).`, ''].join('\n');
+}
+
+function renderApproaches(store: CallStore, subject: Study, files: Record<string, string>): void {
   // An approach taken once cannot make a case; it gets its line here but no folder, so the evidence fits the executor's
   // context (traces.call(id) shows such a call in full).
   const overview = ['# Approaches', '', 'Each approach is a group of calls whose code was the same after normalization. One line each.',
@@ -122,6 +131,9 @@ export function renderEvidence(store: CallStore, subject: Study, extra: { report
     for (const record of calls.filter(record => splitOf(record.call_id) === 'training').slice(0, 5))
       files[`${dir}/examples/${record.call_id.replace(/[^\w.-]/g, '_')}.json`] = json(exampleOf(store, record));
   }
+}
+
+function renderRest(store: CallStore, subject: Study, files: Record<string, string>, extra: { report?: string; history?: string; previousCases?: string }): Record<string, string> {
   const behaviors = new Map<string, Example[]>();
   for (const example of subject.examples) behaviors.set(example.behavior ?? 'none', [...(behaviors.get(example.behavior ?? 'none') ?? []), example]);
   files['conditions.md'] = ['# Conditions', '',
@@ -167,7 +179,7 @@ export function renderHistory(store: CallStore, key: string): { history: string;
     lines.push(`Current compilation ${current.id} (${current.created_at}); its cases.ts is in previous-cases.ts.`, '');
     for (const item of current.cases) {
       lines.push(`- case ${item.position + 1} (${item.hash}): ${item.tier}; served ${item.served}, handed back ${item.handed_off}, ` +
-        `compared ${item.compared} (${item.worse} worse, ${item.better} better), audited ${item.audited} (${item.audit_worse} worse)`);
+        `compared ${item.compared} (${item.worse} worse, ${item.better} better; ${item.live_compared ?? 0} live, ${item.live_worse ?? 0} worse), audited ${item.audited} (${item.audit_worse} worse)`);
       for (const link of store.caseCalls(item.hash, 'handed-off', 5)) {
         const record = store.call(link.call_id);
         if (record?.executor.case_error) lines.push(`  - handed back on ${link.call_id}: ${record.executor.case_error.slice(0, 300)}`);

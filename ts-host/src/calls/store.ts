@@ -12,7 +12,7 @@ import { CallStore, type StoreMedium } from './store-core.js';
 import type { CallStoreSettings } from './types.js';
 
 export { CallStore } from './store-core.js';
-export type { AuditJob, CallFilter, CallSummary, HotDefinition, SqlDatabase, StoreMedium } from './store-core.js';
+export type { AuditJob, CallFilter, CallSummary, FindingInput, FindingRow, HotDefinition, SavingsRow, SqlDatabase, StoreMedium } from './store-core.js';
 
 /** This process's boot and PID namespace (`boot:namespace`), so a PID is only checked where it means something. */
 const PROCESS_SCOPE = (() => {

@@ -46,6 +46,13 @@ export type CallFilter = { definition?: string; key?: string; source?: string; o
   caseHash?: string; since?: string; program?: string; limit?: number; after?: string; audits?: boolean };
 export type HotDefinition = { definition_key: string; definition_id: string; definition_name: string; definition_source: string | null;
   program_root: string | null; calls: number; agent_calls: number; crisp_calls: number; tokens: number; wall_ms: number; last_at: string };
+export type FindingInput = { definitionKey: string; definitionId: string; definitionName: string; definitionSource: string | null;
+  kind: string; summary: string; detail?: unknown };
+export type FindingRow = { id: number; fingerprint: string; definition_key: string; definition_id: string; definition_name: string;
+  definition_source: string | null; kind: string; summary: string; detail: unknown; seen: number; status: string; created_at: string; updated_at: string };
+export type SavingsRow = { definition_key: string; definition_name: string; definition_source: string | null; agent_calls: number; served: number;
+  agent_tokens_per_call: number; agent_ms_per_call: number; crisp_ms_per_call: number; saved_tokens: number; saved_ms: number;
+  spent_tokens: number; spent_ms: number };
 export type AuditJob = { id: number; kind: 'audit' | 'shadow'; case_hash: string; call_id: string; enqueued_at: string };
 
 const SCHEMA = `
@@ -84,6 +91,13 @@ CREATE TABLE IF NOT EXISTS declines (definition_key TEXT PRIMARY KEY, definition
 CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, case_hash TEXT NOT NULL, call_id TEXT NOT NULL,
   status TEXT NOT NULL, enqueued_at TEXT NOT NULL, done_at TEXT, verdict TEXT, detail TEXT, UNIQUE (kind, case_hash, call_id));
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS findings (id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint TEXT NOT NULL UNIQUE, definition_key TEXT NOT NULL,
+  definition_id TEXT NOT NULL, definition_name TEXT NOT NULL, definition_source TEXT, kind TEXT NOT NULL, summary TEXT NOT NULL, detail TEXT NOT NULL,
+  seen INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS findings_definition ON findings(definition_key, status);
+CREATE TABLE IF NOT EXISTS spend (id INTEGER PRIMARY KEY AUTOINCREMENT, definition_key TEXT NOT NULL, activity TEXT NOT NULL,
+  tokens INTEGER NOT NULL, wall_ms INTEGER NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS spend_definition ON spend(definition_key);
 CREATE TABLE IF NOT EXISTS iteration_statistics (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
 `;
 
@@ -112,6 +126,9 @@ export class CallStore {
     const columns = (this.db.prepare('PRAGMA table_info(calls)').all() as { name: string }[]).map(column => column.name);
     if (!columns.includes('pid')) this.db.exec('ALTER TABLE calls ADD COLUMN pid INTEGER');
     if (!columns.includes('process_scope')) this.db.exec('ALTER TABLE calls ADD COLUMN process_scope TEXT');
+    const caseColumns = (this.db.prepare('PRAGMA table_info(cases)').all() as { name: string }[]).map(column => column.name);
+    if (!caseColumns.includes('live_compared')) this.db.exec('ALTER TABLE cases ADD COLUMN live_compared INTEGER NOT NULL DEFAULT 0');
+    if (!caseColumns.includes('live_worse')) this.db.exec('ALTER TABLE cases ADD COLUMN live_worse INTEGER NOT NULL DEFAULT 0');
     this.markInterrupted();
   }
 
@@ -417,10 +434,10 @@ export class CallStore {
       input.caseHashes.forEach((hash, position) => {
         const old = kept.get(hash);
         this.db.prepare(`INSERT INTO cases (hash, compilation_id, position, tier, served, handed_off, compared, worse, better, audited,
-          audit_worse, created_at, promoted_at, demoted_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+          audit_worse, live_compared, live_worse, created_at, promoted_at, demoted_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           hash, id, position, old?.tier ?? 'shadow', old?.served ?? 0, old?.handed_off ?? 0, old?.compared ?? 0, old?.worse ?? 0,
-          old?.better ?? 0, old?.audited ?? 0, old?.audit_worse ?? 0, old?.created_at ?? created, old?.promoted_at ?? null,
-          old?.demoted_at ?? null, old?.note ?? null);
+          old?.better ?? 0, old?.audited ?? 0, old?.audit_worse ?? 0, old?.live_compared ?? 0, old?.live_worse ?? 0, old?.created_at ?? created,
+          old?.promoted_at ?? null, old?.demoted_at ?? null, old?.note ?? null);
       });
       for (const link of input.links ?? []) this.linkCase(link.caseHash, link.callId, link.role, link.verdict ?? null);
       this.db.prepare('DELETE FROM declines WHERE definition_key = ?').run(input.definitionKey);
@@ -459,10 +476,11 @@ export class CallStore {
   /** Record a comparison of a case against the agent (held-out replay, shadow, audit) and review its tier. */
   caseVerdict(caseHash: string, callId: string, role: 'held-out' | 'shadow' | 'audit', verdict: Verdict): void {
     const worse = verdict === 'worse' || verdict === 'diverged' ? 1 : 0, better = verdict === 'better' ? 1 : 0;
-    const audit = role === 'audit' ? 1 : 0;
+    const audit = role === 'audit' ? 1 : 0, live = role === 'held-out' ? 0 : 1;
     this.db.prepare(`UPDATE cases SET compared = compared + 1, worse = worse + ?, better = better + ?, audited = audited + ?,
-      audit_worse = audit_worse + ? WHERE hash = ? AND compilation_id IN (SELECT id FROM compilations WHERE status = 'current')`)
-      .run(worse, better, audit, audit * worse, caseHash);
+      audit_worse = audit_worse + ?, live_compared = live_compared + ?, live_worse = live_worse + ?
+      WHERE hash = ? AND compilation_id IN (SELECT id FROM compilations WHERE status = 'current')`)
+      .run(worse, better, audit, audit * worse, live, live * worse, caseHash);
     this.linkCase(caseHash, callId, role, verdict);
     this.reviewTier(caseHash);
   }
@@ -473,9 +491,10 @@ export class CallStore {
   reviewTier(caseHash: string): CaseTier | undefined {
     const stats = this.caseStats(caseHash);
     if (!stats) return;
-    const { acceptanceBound: bound, promotionComparisons: needed } = this.settings();
+    const { acceptanceBound: bound, promotionComparisons: needed, promotionLiveComparisons: live } = this.settings();
     let tier = stats.tier;
-    if (tier === 'shadow' && stats.compared >= needed && stats.worse <= bound * stats.compared) tier = 'active';
+    if (tier === 'shadow' && stats.compared >= needed && stats.worse <= bound * stats.compared &&
+        (stats.live_compared ?? 0) >= (live ?? 0) && (stats.live_worse ?? 0) <= bound * (stats.live_compared ?? 0)) tier = 'active';
     else if (tier === 'active' && ((stats.audited >= 5 && stats.audit_worse > bound * stats.audited) ||
       (stats.served + stats.handed_off >= 10 && stats.handed_off > bound * (stats.served + stats.handed_off)) ||
       (stats.compared >= needed && stats.worse > bound * stats.compared))) tier = 'demoted';
@@ -500,6 +519,65 @@ export class CallStore {
   }
   declines(limit = 100): DeclineRow[] {
     return this.db.prepare('SELECT * FROM declines ORDER BY created_at DESC LIMIT ?').all(limit) as DeclineRow[];
+  }
+
+  // --- Findings: what compiling learned about the program or its executor (§5.3) ----------------------------------
+
+  /** Record a finding; the same finding again (definition, kind, summary) updates it and counts it. */
+  finding(input: FindingInput): void {
+    const fingerprint = hexDigest(JSON.stringify([input.definitionKey, input.kind, input.summary])).slice(0, 32);
+    const at = now();
+    this.db.prepare(`INSERT INTO findings (fingerprint, definition_key, definition_id, definition_name, definition_source, kind, summary, detail,
+      created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET detail = excluded.detail,
+      seen = seen + 1, updated_at = excluded.updated_at`).run(fingerprint, input.definitionKey, input.definitionId, input.definitionName,
+      input.definitionSource, input.kind, input.summary, JSON.stringify(input.detail ?? {}), at, at);
+  }
+  /** Findings, newest first: open ones unless `all`. */
+  findings(filter: { definition?: string; all?: boolean; limit?: number } = {}): FindingRow[] {
+    const where: string[] = [], params: (string | number)[] = [];
+    if (!filter.all) where.push("status = 'open'");
+    if (filter.definition) { where.push('(definition_key = ? OR definition_id = ? OR definition_name = ? OR definition_source = ?)'); params.push(...Array(4).fill(filter.definition)); }
+    return (this.db.prepare(`SELECT * FROM findings ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY updated_at DESC LIMIT ?`)
+      .all(...params, filter.limit ?? 100) as (Omit<FindingRow, 'detail'> & { detail: string })[]).map(row => ({ ...row, detail: JSON.parse(row.detail) }));
+  }
+  /** Mark a finding acknowledged (it stays, and comes back open only if it is found again with a new summary). */
+  acknowledgeFinding(id: number): boolean {
+    const row = this.db.prepare("UPDATE findings SET status = 'acknowledged' WHERE id = ? RETURNING id").get(id);
+    return !!row;
+  }
+
+  // --- Spend and savings (what specializing costs, what serving saves) --------------------------------------------
+
+  /** Tokens and time the specializer spent on a definition revision (writing, verifying, shadow replays, audits). */
+  spent(definitionKey: string, activity: string, tokens: number, wallMs: number): void {
+    if (tokens <= 0 && wallMs <= 0) return;
+    this.db.prepare('INSERT INTO spend (definition_key, activity, tokens, wall_ms, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(definitionKey, activity, Math.round(tokens), Math.round(wallMs), now());
+  }
+  /**
+   * Per definition revision with a compilation or spend: calls served by cases, what the agent costs per call (the
+   * average of its successful calls), the tokens and time saved by serving, and what specializing has cost.
+   */
+  savings(filter: { definition?: string } = {}): SavingsRow[] {
+    const keys = this.db.prepare(`SELECT DISTINCT definition_key FROM compilations UNION SELECT DISTINCT definition_key FROM spend`).all() as { definition_key: string }[];
+    const rows: SavingsRow[] = [];
+    for (const { definition_key: key } of keys) {
+      const agent = this.db.prepare(`SELECT definition_name, definition_source, COUNT(*) AS n, AVG(COALESCE(tokens_in, 0) + COALESCE(tokens_out, 0)) AS tokens,
+        AVG(COALESCE(wall_ms, 0)) AS wall FROM calls WHERE definition_key = ? AND executor = 'agent' AND outcome = 'done' AND audit_of IS NULL`).get(key) as
+        { definition_name: string | null; definition_source: string | null; n: number; tokens: number | null; wall: number | null };
+      const crisp = this.db.prepare(`SELECT COUNT(*) AS n, AVG(COALESCE(wall_ms, 0)) AS wall FROM calls WHERE definition_key = ? AND executor = 'crisp'`)
+        .get(key) as { n: number; wall: number | null };
+      const spend = this.db.prepare('SELECT COALESCE(SUM(tokens), 0) AS tokens, COALESCE(SUM(wall_ms), 0) AS wall FROM spend WHERE definition_key = ?')
+        .get(key) as { tokens: number; wall: number };
+      const name = agent.definition_name ?? (this.db.prepare('SELECT definition_name FROM compilations WHERE definition_key = ? LIMIT 1').get(key) as { definition_name: string } | undefined)?.definition_name ?? key;
+      if (filter.definition && ![key, name, agent.definition_source].includes(filter.definition)) continue;
+      const tokensPerCall = Number(agent.tokens ?? 0), wallPerCall = Number(agent.wall ?? 0);
+      rows.push({ definition_key: key, definition_name: name, definition_source: agent.definition_source, agent_calls: Number(agent.n),
+        served: Number(crisp.n), agent_tokens_per_call: Math.round(tokensPerCall), agent_ms_per_call: Math.round(wallPerCall),
+        crisp_ms_per_call: Math.round(Number(crisp.wall ?? 0)), saved_tokens: Math.round(Number(crisp.n) * tokensPerCall),
+        saved_ms: Math.round(Number(crisp.n) * Math.max(0, wallPerCall - Number(crisp.wall ?? 0))), spent_tokens: Number(spend.tokens), spent_ms: Number(spend.wall) });
+    }
+    return rows.sort((a, b) => (b.saved_tokens - b.spent_tokens) - (a.saved_tokens - a.spent_tokens));
   }
 
   // --- Offline jobs (shadow replays and audits) -------------------------------------------------------------------

@@ -91,6 +91,8 @@ const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&
 /** An atomic condition: its TypeScript text and how it is evaluated. */
 export type Predicate = { text: string; test: (args: Record<string, unknown>) => boolean };
 
+/** A guard expression over `args`, compiled once; a guard that throws answers false. */
+export function compileGuard(text: string): Predicate | undefined { return predicate(text); }
 function predicate(text: string): Predicate | undefined {
   try {
     const fn = new Function('args', `"use strict"; return (${text});`) as (args: Record<string, unknown>) => unknown;

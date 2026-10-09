@@ -1,7 +1,7 @@
-/** What one specializer run returns for a definition. */
-export type SpecializeResult =
-  | { kind: 'specialized'; cases: number; unclassified: number }
-  | { kind: 'declined'; reason: 'no-clusters' | 'semantic' | 'unstable' | 'effects' | 'not-worth-it'; why: string };
+/** What one group's writer returns. */
+export type CaseResult =
+  | { kind: 'case'; admits: number }
+  | { kind: 'skip'; reason: 'semantic' | 'unstable' | 'effects' | 'no-condition'; why: string };
 /** Whether a condition is how a decision is made, or only agrees with the meaning in the examples. */
 export type ConditionKind = 'structural' | 'semantic';
 /** Whether two normalized programs do the same work. */

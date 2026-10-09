@@ -97,6 +97,9 @@ export async function runJob(runtime: NatlangRuntime, store: CallStore, job: Aud
     if ('skipped' in crisp) return { status: 'skipped', detail: crisp.skipped };
     const { verdict, differences } = await verdictFor(runtime, store, definition, record, recordedBehavior(store, record), crisp);
     store.caseVerdict(job.case_hash, record.call_id, 'shadow', verdict);
+    if (verdict === 'better') store.finding({ definitionKey: record.definition.key, definitionId: record.definition.id, definitionName: record.definition.name,
+      definitionSource: record.definition.source, kind: 'executor-worse', summary: `live calls where case ${job.case_hash} did better than the executor`,
+      detail: { case: job.case_hash, call: record.call_id, differences } });
     return { status: 'done', verdict, detail: differences.join('; ') };
   }
   const agent = await rerunAgent(runtime, store, definition, record);

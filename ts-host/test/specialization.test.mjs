@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang, CallStore, ReplayServices, approaches, induceRules, measureGuard, inputFeatures,
-  splitOf, study, crispDecline, approachHash, normalizeProgram, renderEvidence, verifyCases, saveAccepted, keepCases, runJobs, caseHashes, Folder } from '../dist/index.js';
+  splitOf, study, crispDecline, approachHash, normalizeProgram, renderEvidence, verifyCases, saveAccepted, keepCases, runJobs, caseHashes, Folder,
+  groupsOf, measure, assembleCases, renderGroup, renderFunction, detectFindings } from '../dist/index.js';
 
 const freshStore = () => CallStore.open(mkdtempSync(join(tmpdir(), 'natlang-spec-')));
 const done = store => { const root = store.root; store.close(); rmSync(root, { recursive: true, force: true }); };
@@ -129,7 +130,7 @@ test('calls of a scripted executor that declares no model are recorded but are n
 test('study, verify and save: recorded calls become a compilation whose cases are promoted by held-out evidence', async () => {
   const store = freshStore();
   try {
-    store.writeSettings({ promotionComparisons: 1 });
+    store.writeSettings({ promotionComparisons: 1, promotionLiveComparisons: 0 });
     const handle = await recordCalls(store, 30);
     const key = store.hot()[0].definition_key;
     const subject = study(store, key);
@@ -223,4 +224,102 @@ test('the evidence folder renders as files a reducer can read', () => {
   const folder = Folder.fromFiles({ 'evidence/function.md': '# f' });
   assert.deepEqual(folder.filePaths(), ['evidence/function.md']);
   assert.equal(splitOf('x'), splitOf('x'));
+});
+
+test('groups split calls by what they did, and a proposed guard is measured exactly', async () => {
+  const store = freshStore();
+  try {
+    await recordCalls(store, 30);
+    const subject = study(store, store.hot()[0].definition_key);
+    const groups = groupsOf(subject);
+    assert.deepEqual(groups.map(group => group.label).sort(), ['orders.lookup', 'orders.refund']);
+    const refunds = groups.find(group => group.label === 'orders.refund');
+    const exact = measure(subject, refunds, '/^refund \\d+$/.test(args.request)');
+    assert.deepEqual([exact.valid, exact.ofGroup, exact.groupSize, exact.others], [true, refunds.training.length, refunds.training.length, 0]);
+    const loose = measure(subject, refunds, '/\\d/.test(args.request)');
+    assert.ok(loose.others > 0 && loose.counterexamples.every(item => item.did === 'orders.lookup'));
+    assert.equal(measure(subject, refunds, 'args.request ===').valid, false);
+    const files = renderGroup(store, subject, refunds, renderFunction(subject));
+    assert.match(files['group.md'], /orders\.refund/);
+    assert.match(files['group.md'], /0 of other groups/);
+    assert.match(files['others.md'], /did orders\.lookup/);
+    assert.ok(Object.keys(files).some(path => path.startsWith('examples/')));
+  } finally { done(store); }
+});
+
+test('per-group case files assemble into one cases file with merged imports and private helpers', () => {
+  const refund = "import { orders } from 'natlang:services';\nconst numberOf = (text: string) => text.split(' ')[1];\n" +
+    "export const when = (args: { request: string }) => /^refund \\d+$/.test(args.request);\n" +
+    "export const run = async (args: { request: string }) => { await orders.refund(numberOf(args.request)); return 'refunded ' + numberOf(args.request); };\n";
+  const status = "import { orders } from 'natlang:services';\nconst numberOf = (text: string) => text.split(' ')[1];\n" +
+    "export function when(args: { request: string }) { return /^status \\d+$/.test(args.request); }\n" +
+    "export async function run(args: { request: string }) { return orders.lookup(numberOf(args.request)).status; }\n";
+  const { text, included, errors } = assembleCases([{ id: 'g1', text: refund }, { id: 'g2', text: status }, { id: 'g3', text: 'export const when = () => true;' }]);
+  assert.deepEqual(included, ['g1', 'g2']);
+  assert.deepEqual(errors.map(error => error.id), ['g3']);
+  assert.equal((text.match(/import \{ orders \} from "natlang:services"/g) ?? []).length, 1);
+  assert.equal(caseHashes(text).length, 2, 'two cases, each with its own numberOf');
+});
+
+test('findings: identical inputs handled differently, and service arguments whose type varies', async () => {
+  const store = freshStore();
+  try {
+    const typed = executor();
+    let flip = 0;
+    const mixed = Object.assign(async request => {
+      const turn = await typed(request);
+      // Every other refund passes its number as a number instead of a string.
+      const code = turn.calls?.[0]?.[1]?.code;
+      if (typeof code === 'string' && code.includes('await orders.refund(id)') && flip++ % 2)
+        return { ...turn, calls: [['eval', { code: code.replace('await orders.refund(id)', 'await orders.refund(Number(id))') }]] };
+      return turn;
+    }, { model: typed.model });
+    await recordCalls(store, 30, mixed);
+    const subject = study(store, store.hot()[0].definition_key);
+    const kinds = detectFindings(store, subject).map(finding => `${finding.kind}: ${finding.summary}`);
+    assert.ok(kinds.some(kind => /argument-types: orders\.refund argument 1 is passed as (string or number|number or string)/.test(kind)), kinds.join('\n'));
+    store.finding(detectFindings(store, subject)[0]);
+    store.finding(detectFindings(store, subject)[0]);
+    const [row] = store.findings();
+    assert.equal(row.seen, 2);
+    assert.ok(store.acknowledgeFinding(row.id));
+    assert.equal(store.findings().length, 0);
+  } finally { done(store); }
+});
+
+test('promotion needs comparisons on live calls, not only replays of the recorded ones', async () => {
+  const store = freshStore();
+  try {
+    store.writeSettings({ promotionComparisons: 1 });
+    await recordCalls(store, 30);
+    const key = store.hot()[0].definition_key;
+    const subject = study(store, key);
+    const verifier = createNatlangRuntime({ model: executor(), calls: false });
+    const { checks } = await verifyCases(verifier, store, subject, CASES);
+    saveAccepted(store, subject, CASES, checks, 'report');
+    const [first] = store.currentCompilation(key).cases;
+    assert.equal(first.tier, 'shadow', 'held-out replays alone do not promote');
+    for (const id of ['live-1', 'live-2', 'live-3']) store.caseVerdict(first.hash, id, 'shadow', 'equal');
+    const after = store.caseStats(first.hash);
+    assert.deepEqual([after.tier, after.live_compared], ['active', 3]);
+  } finally { done(store); }
+});
+
+test('spend and savings: what specializing cost against what serving saved', async () => {
+  const store = freshStore();
+  try {
+    store.writeSettings({ promotionComparisons: 1, promotionLiveComparisons: 0 });
+    const handle = await recordCalls(store, 30);
+    const key = store.hot()[0].definition_key;
+    const subject = study(store, key);
+    const { checks } = await verifyCases(createNatlangRuntime({ model: executor(), calls: false }), store, subject, CASES);
+    saveAccepted(store, subject, CASES, checks, 'report');
+    store.spent(key, 'specialize', 500, 1000);
+    const service = orderService();
+    await createNatlangRuntime({ model: async () => { throw new Error('not asked'); }, calls: store, services: { orders: service.orders } }).run(() => handle('refund 5'));
+    const [row] = store.savings();
+    assert.equal(row.served, 1);
+    assert.equal(row.spent_tokens, 500);
+    assert.equal(row.saved_tokens, row.agent_tokens_per_call);
+  } finally { done(store); }
 });

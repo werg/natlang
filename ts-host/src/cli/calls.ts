@@ -80,9 +80,9 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     const settings = store.settings();
     const count = (store.db.prepare('SELECT COUNT(*) AS n FROM calls').get() as { n: number }).n;
     const status = { root: store.root, calls: count, bytes: store.diskBytes(), settings, pendingJobs: store.pendingJobs(1000).length,
-      compilations: store.compilations({ status: 'current' }).length };
+      compilations: store.compilations({ status: 'current' }).length, findings: store.findings({ limit: 1000 }).length };
     print(json ? status : [`store ${status.root}`, `${status.calls} calls, ${(status.bytes / 2 ** 20).toFixed(1)} MiB`,
-      `${status.compilations} current compilations, ${status.pendingJobs} pending shadow/audit jobs`,
+      `${status.compilations} current compilations, ${status.pendingJobs} pending shadow/audit jobs, ${status.findings} open findings (natlang compilations findings)`,
       `settings: ${JSON.stringify(settings)}`].join('\n'), json);
     return 0;
   }
@@ -184,7 +184,7 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     print([`compilation ${compilation.id} of ${compilation.definition_name} (${compilation.definition_source ?? 'inline'}), ${compilation.status}, ${compilation.created_at}`,
       `definition key ${compilation.definition_key}, interface ${compilation.interface_hash}${compilation.parent_id ? `, follows ${compilation.parent_id}` : ''}`, '',
       ...compilation.cases.map(item => `case ${item.position + 1} ${item.hash}: ${item.tier}; served ${item.served}, handed back ${item.handed_off}, ` +
-        `compared ${item.compared} (${item.worse} worse, ${item.better} better), audited ${item.audited} (${item.audit_worse} worse)` +
+        `compared ${item.compared} (${item.worse} worse, ${item.better} better; ${item.live_compared ?? 0} live, ${item.live_worse ?? 0} worse), audited ${item.audited} (${item.audit_worse} worse)` +
         `${item.note ? `; ${item.note}` : ''}\n  examples: ${store.caseCalls(item.hash, undefined, 5).map(link => `${link.call_id} (${link.role}${link.verdict ? ` ${link.verdict}` : ''})`).join(', ') || 'none'}`),
       '', '--- cases.ts', compilation.files['cases.ts'] ?? '', '--- report.md', compilation.files['report.md'] ?? ''].join('\n'), false);
     return 0;
@@ -249,7 +249,27 @@ export async function compilationsCommand(argv: string[]): Promise<number> {
     print(`${action}d ${word}`, false);
     return 0;
   }
-  throw new Error('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines');
+  if (action === 'savings') {
+    const rows = store.savings({ definition: words[0] });
+    const shown = rows.map(row => ({ ...row, net_tokens: row.saved_tokens - row.spent_tokens,
+      saved_time: `${(row.saved_ms / 60_000).toFixed(1)} min`, spent_time: `${(row.spent_ms / 60_000).toFixed(1)} min` }));
+    print(json ? shown : table(shown, ['definition_name', 'served', 'agent_tokens_per_call', 'agent_ms_per_call', 'crisp_ms_per_call', 'saved_tokens',
+      'spent_tokens', 'net_tokens', 'saved_time', 'spent_time', 'definition_source']), json);
+    return 0;
+  }
+  if (action === 'findings') {
+    const rows = store.findings({ definition: words[0], all: args.options.has('--all'), limit: number(args, '--limit', 100) });
+    print(json ? rows : rows.map(row => `#${row.id} ${row.definition_name} (${row.definition_source ?? row.definition_key}) ${row.kind}${row.status === 'open' ? '' : ` [${row.status}]`}: ` +
+      `${row.summary} (seen ${row.seen}×, ${row.updated_at})\n  ${JSON.stringify(row.detail).slice(0, 600)}`).join('\n') || 'no open findings', json);
+    return 0;
+  }
+  if (action === 'acknowledge') {
+    const id = Number(words[0]);
+    if (!Number.isInteger(id)) throw new Error('usage: natlang compilations acknowledge FINDING-ID');
+    print(store.acknowledgeFinding(id) ? `acknowledged #${id}` : `no finding #${id}`, false);
+    return 0;
+  }
+  throw new Error('usage: natlang compilations list|show|why|calls|history|export|disable|enable|declines|savings|findings|acknowledge');
 }
 
 /** The specializer application in this checkout. */
