@@ -159,6 +159,27 @@ test('zero audited actions keep the strict JSON envelope protocol', () => {
   assert.equal(result.finalTextStatus, 'strict_json_envelope_no_actions');
 });
 
+test('official SDK direct JSON typed-result fallback is preserved as content only', () => {
+  const raw = '{"candidateId":"ABD-1A","score":82}';
+  const result = buildAuditedCompletion({ responseText: raw, names: ['eval'], recordedActions: [] });
+  assert.equal(result.content, raw);
+  assert.deepEqual(result.calls, []);
+  assert.equal(result.finalTextStatus, 'direct_json_content');
+  assert.equal(result.actionRoute, 'direct_json_content');
+  assert.equal(result.actionFidelity, 'none');
+});
+
+test('direct JSON content cannot satisfy required tool choice or malformed intended envelopes', () => {
+  const raw = '{"candidateId":"ABD-1A","score":82}';
+  assert.throws(() => buildAuditedCompletion({ responseText: raw, names: ['eval'], recordedActions: [],
+    toolChoice: 'required' }), /exactly content and toolCalls/);
+  for (const responseText of [
+    '{"content":"typed result"}',
+    '{"toolCalls":[]}',
+    '{bad json'
+  ]) assert.throws(() => buildAuditedCompletion({ responseText, names: ['eval'], recordedActions: [] }));
+});
+
 const exactV8Text = readFileSync(fileURLToPath(new URL('./fixtures/opencode-step5-v8-text-envelope.json', import.meta.url)), 'utf8');
 const exactV12Retry2Text = readFileSync(fileURLToPath(new URL('./fixtures/opencode-step5-v12-retry2-text-envelope.json', import.meta.url)), 'utf8');
 

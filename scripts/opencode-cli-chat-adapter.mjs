@@ -180,7 +180,8 @@ export function parseOpenCodeEnvelope(text, names) {
  * OpenCode's post-tool assistant text is not authoritative for those calls;
  * with no audited actions, accept validated prompt-directed text-envelope calls.
  */
-export function buildAuditedCompletion({ responseText, names, recordedActions, cliExitCode = 0, nonBridgeToolUses = 0 }) {
+export function buildAuditedCompletion({ responseText, names, recordedActions, cliExitCode = 0, nonBridgeToolUses = 0,
+  toolChoice }) {
   if (cliExitCode !== 0) throw new Error(`OpenCode CLI exited ${cliExitCode}`);
   if (nonBridgeToolUses > 0) throw new Error('OpenCode CLI emitted non-bridge tool-use event(s)');
   if (!Array.isArray(recordedActions)) throw new Error('audited MCP actions must be an array');
@@ -191,6 +192,20 @@ export function buildAuditedCompletion({ responseText, names, recordedActions, c
     return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
   });
   if (!calls.length) {
+    // Some official-client SDK fallbacks (session.messages) expose a direct
+    // JSON typed result rather than the adapter's {content, toolCalls}
+    // envelope. Preserve that body verbatim as assistant content. This is
+    // content only: the normal Natlang compiler/effect checks still decide
+    // whether it is a valid result, and required-tool turns cannot use it.
+    if (toolChoice !== 'required') {
+      let direct;
+      try { direct = JSON.parse(responseText); }
+      catch { direct = undefined; }
+      if (isObject(direct) && !Object.hasOwn(direct, 'content') && !Object.hasOwn(direct, 'toolCalls')) {
+        return { content: responseText, calls: [], responseNormalization: 'strict_json',
+          finalTextStatus: 'direct_json_content', actionRoute: 'direct_json_content', actionFidelity: 'none' };
+      }
+    }
     const envelope = parseOpenCodeEnvelope(responseText, names);
     const textCalls = envelope.calls.map(row => ({ id: `call_${randomUUID()}`, type: 'function',
       function: { name: row.name, arguments: JSON.stringify(row.arguments) } }));
@@ -609,7 +624,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       diagnostics.final_text_sha256 = sha256(responseText);
       diagnostics.final_text_bytes = Buffer.byteLength(responseText);
       const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
-        cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
+        cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length, toolChoice: body.tool_choice });
       if (body.tool_choice === 'required' && completion.calls.length === 0)
         throw Object.assign(new Error('Natlang required a tool call, but no audited action was recorded'), {
           code: 'MISSING_REQUIRED_ACTION' });
