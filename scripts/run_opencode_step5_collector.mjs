@@ -21,7 +21,7 @@ async function main(argv) {
     readFile(options.get('--collector-argv-json'), 'utf8')
   ]);
   const plan = JSON.parse(planText), bootstrapConfig = JSON.parse(bridgeText), collectorArgv = JSON.parse(argvText);
-  const pairing = verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv });
+  const pairing = verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, bootstrapConfigText: bridgeText });
   const timeoutMs = Number(plan.bounds?.outer_wall_clock_seconds) * 1000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new Error('plan has no valid outer wall-clock bound');
   const receiptPath = options.get('--receipt');

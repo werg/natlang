@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { verifyStep5ModelPair } from '../scripts/opencode-step5-preflight.mjs';
 
 const alias = 'opencode/step-5-preview-free';
@@ -57,4 +58,21 @@ test('Step 5 preflight binds and verifies the effective Natlang-only agent tool 
     bootstrapConfig: { ...surfaceConfig, effective_agent_tool_surface: { agent: 'build',
       tools: { '*': false, natlang_action_bridge_submit_action: true, bash: true } } },
     collectorArgv: ['cli.js', '--model-id', alias] }), /do not match the Natlang-only/);
+});
+
+test('Step 5 preflight verifies exact bridge receipt bytes and official client pins', () => {
+  const bridgeText = JSON.stringify({ model_alias: alias, main_model: alias, small_model: alias,
+    official_cli: '/pinned/opencode', official_cli_sha256: 'cli-hash',
+    official_sdk_module: '/pinned/sdk.mjs', official_sdk_module_sha256: 'sdk-hash' });
+  const pinnedPlan = { ...plan, provider: { bootstrap_config_sha256: createHash('sha256').update(bridgeText).digest('hex'),
+    official_cli: '/pinned/opencode', official_cli_sha256: 'cli-hash',
+    official_sdk_module: '/pinned/sdk.mjs', official_sdk_module_sha256: 'sdk-hash' } };
+  const pinnedConfig = JSON.parse(bridgeText);
+  assert.equal(verifyStep5ModelPair({ plan: pinnedPlan, bootstrapConfig: pinnedConfig,
+    bootstrapConfigText: bridgeText, collectorArgv: ['cli.js', '--model-id', alias] }).ok, true);
+  assert.throws(() => verifyStep5ModelPair({ plan: pinnedPlan, bootstrapConfig: pinnedConfig,
+    bootstrapConfigText: `${bridgeText}\n`, collectorArgv: ['cli.js', '--model-id', alias] }), /bytes do not match/);
+  assert.throws(() => verifyStep5ModelPair({ plan: { ...pinnedPlan,
+    provider: { ...pinnedPlan.provider, official_cli_sha256: 'wrong' } }, bootstrapConfig: pinnedConfig,
+    bootstrapConfigText: bridgeText, collectorArgv: ['cli.js', '--model-id', alias] }), /official_cli_sha256/);
 });

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Verify the collector's requested model matches the official isolated OpenCode bridge. */
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 function modelIdFromArgv(argv) {
   if (!Array.isArray(argv) || argv.some(value => typeof value !== 'string'))
@@ -11,7 +12,7 @@ function modelIdFromArgv(argv) {
   return argv[positions[0] + 1];
 }
 
-export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }) {
+export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv, bootstrapConfigText }) {
   const bridgeAlias = bootstrapConfig?.model_alias;
   if (typeof bridgeAlias !== 'string' || !bridgeAlias)
     throw new Error('bootstrap config lacks immutable model_alias');
@@ -28,6 +29,15 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }) {
     throw new Error('collector command template --model-id does not match immutable bridge model_alias');
   if (bootstrapConfig.main_model !== bridgeAlias || bootstrapConfig.small_model !== bridgeAlias)
     throw new Error('immutable bridge main/small model do not match model_alias');
+  const providerPins = plan?.provider ?? {};
+  if (providerPins.bootstrap_config_sha256 !== undefined &&
+      (typeof bootstrapConfigText !== 'string' || createHash('sha256').update(bootstrapConfigText).digest('hex') !== providerPins.bootstrap_config_sha256))
+    throw new Error('bootstrap config bytes do not match the pinned plan hash');
+  for (const [pin, field] of [['official_cli_sha256', 'official_cli_sha256'],
+    ['official_sdk_module_sha256', 'official_sdk_module_sha256'], ['official_cli', 'official_cli'],
+    ['official_sdk_module', 'official_sdk_module']])
+    if (providerPins[pin] !== undefined && providerPins[pin] !== bootstrapConfig[field])
+      throw new Error(`bootstrap ${field} does not match its provider pin`);
   const plannedVariant = plan.model.variant ?? 'catalog_default';
   if ((bootstrapConfig.model_variant ?? 'catalog_default') !== plannedVariant)
     throw new Error('plan model variant does not match immutable bridge variant');
@@ -36,7 +46,7 @@ export function verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }) {
   if ((plannedVariant === 'catalog_default' && variantFlag) ||
       (plannedVariant !== 'catalog_default' && variantFlag?.[1] !== plannedVariant))
     throw new Error('bridge command template variant does not match pinned model variant');
-  const expectedToolSurface = plan?.provider?.tool_surface_mode;
+  const expectedToolSurface = providerPins.tool_surface_mode;
   if (expectedToolSurface !== undefined) {
     if (!['standard', 'natlang-only'].includes(expectedToolSurface) ||
         bootstrapConfig.tool_surface_mode !== expectedToolSurface)
@@ -68,12 +78,12 @@ async function main(argv) {
   }
   for (const key of ['--plan', '--bootstrap-config', '--collector-argv-json'])
     if (!args.has(key)) throw new Error(`${key} is required`);
-  const [plan, bootstrapConfig, collectorArgv] = await Promise.all([
-    readFile(args.get('--plan'), 'utf8').then(JSON.parse),
-    readFile(args.get('--bootstrap-config'), 'utf8').then(JSON.parse),
-    readFile(args.get('--collector-argv-json'), 'utf8').then(JSON.parse)
+  const [planText, bootstrapConfigText, collectorArgvText] = await Promise.all([
+    readFile(args.get('--plan'), 'utf8'), readFile(args.get('--bootstrap-config'), 'utf8'),
+    readFile(args.get('--collector-argv-json'), 'utf8')
   ]);
-  process.stdout.write(`${JSON.stringify(verifyStep5ModelPair({ plan, bootstrapConfig, collectorArgv }))}\n`);
+  process.stdout.write(`${JSON.stringify(verifyStep5ModelPair({ plan: JSON.parse(planText),
+    bootstrapConfig: JSON.parse(bootstrapConfigText), collectorArgv: JSON.parse(collectorArgvText), bootstrapConfigText }))}\n`);
 }
 
 if (process.argv[1]?.endsWith('/opencode-step5-preflight.mjs'))
