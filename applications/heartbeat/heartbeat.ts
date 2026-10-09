@@ -1,7 +1,7 @@
 // One heartbeat cycle: collect (crisp, read-only), decide (diagnoseRun per run, triageInbox, planNext - each pluggable
 // crisp|nl|shadow, each answer checked by an exact verifier), apply (only what the allowlist lets run by itself at this
 // stage), record. When no executor answers, the crisp ladder produces the report and says so.
-import { pluggable, untrusted, type Untrusted } from '@natlang/node';
+import { pluggable, untrusted, waitForExecutorIdle, type Untrusted } from '@natlang/node';
 import diagnoseRun from './diagnoseRun.nl';
 import planNext from './planNext.nl';
 import triageInbox from './triageInbox.nl';
@@ -9,7 +9,6 @@ import { loadActions, loadWatch, lowerStage, summarize, type ActionDef, type Kno
 import { applyPlan, type Disposition } from './apply.js';
 import { deriveAgentActions } from './compare.js';
 import { collect, resolveIn, type Snapshot } from './collect/index.js';
-import { vllmLoad } from './collect/system.js';
 import type { Host } from './host.js';
 import { crispDiagnose, crispPlan, crispTriage, idleResource, type PlanArgs } from './ladder.js';
 import { appendRecord, dayOf, memoryOf, readRecords, writeLatest, type CycleRecord, type StageNote } from './record.js';
@@ -49,13 +48,8 @@ export async function executorUp(host: Host, endpoint: string): Promise<boolean>
  * compete with the programs it serves; goes ahead after `idle_wait_seconds`. An endpoint without metrics is never waited for.
  */
 export async function waitForIdle(host: Host, endpoint: string, settings: Settings, log: (line: string) => void, sleep: (ms: number) => Promise<void>): Promise<void> {
-  const busy = async () => { const text = await host.fetchText(new URL('/metrics', endpoint).href, 5000); const load = text === null ? null : vllmLoad(text); return load ? load.running + load.waiting : undefined; };
-  const started = host.now().getTime();
-  for (let load = await busy(); load !== undefined && load > settings.max_busy; load = await busy()) {
-    if (host.now().getTime() - started > settings.idle_wait_seconds * 1000) { log(`the executor is still busy (${load} requests); going ahead`); return; }
-    log(`waiting for the executor to be idle (${load} requests, at most ${settings.max_busy})`);
-    await sleep(30_000);
-  }
+  await waitForExecutorIdle({ readMetrics: () => host.fetchText(new URL('/metrics', endpoint).href, 5000), maxBusy: settings.max_busy,
+    idleWaitSeconds: settings.idle_wait_seconds, log, now: () => host.now().getTime(), sleep });
 }
 
 const compactTime = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');

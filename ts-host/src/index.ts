@@ -1,6 +1,8 @@
 /** @natlang/node: natural-language functions in TypeScript applications on Node. */
 export * from './runtime/node.js';
 export { builtin } from './runtime/builtin.js';
+export { vllmLoad, waitForExecutorIdle } from './runtime/executor-load.js';
+export type { ExecutorIdleWait } from './runtime/executor-load.js';
 export { compileProject, formatDiagnostics, natlangDeclaration } from './compiler/project.js';
 export { buildProject, checkProject, nodeProjectFiles } from './compiler/node-project.js';
 export type { BuildOptions, BuildResult, DefinitionManifest, ProjectFiles } from './compiler/project.js';
