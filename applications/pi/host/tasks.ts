@@ -83,7 +83,7 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
     task.kind === 'pi.generation' ? () => (checkpoint as { attempt?: number }).attempt ?? 1 : undefined, phaseState) };
   const serviceDeclarations: Record<string, string> = { durable: DURABLE_DECLARATION, ai: AI_DECLARATION };
   if (task.kind === 'pi.tool') {
-    services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId);
+    services.tools = toolsService(runtime, context, agent, (task.input as { callId: string }).callId, phaseState);
     serviceDeclarations.tools = TOOLS_DECLARATION;
   }
   if (task.kind === 'pi.tool' && mode === 'abort') await awaitEarlierSlots(task, runtime, context);
