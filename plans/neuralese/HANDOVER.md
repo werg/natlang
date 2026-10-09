@@ -1656,3 +1656,19 @@ via arguments or captures. Frozen ongoing campaigns remain unchanged.
   reproved. Launch it only after source review, keeping <=5 actual Luna workers.
 - Closed V8/V9/V10r2 large ancestor weights are offloaded after fresh exact DGX
   checks; manifests/restoration receipts remain. Active V12 uses local V11 parent.
+
+
+### Pop mapped-input continuation (2026-10-09)
+
+The attempted sketch-consumer repair was stopped after course correction; it is
+not a qualified foundation source. Pop resumed the qualified same-map full
+checkpoint at step22272 (`9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f`)
+with optimizer groups, schedule and RNG restored, on the adopted4880-row
+target-bound text input (`b10da15de2510b55635b5aaa85301204e559669ac239bc94e4393d08e0572`).
+This is a new data-bound baseline; no gate transfers from prior data. The active
+recipe is `training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json`
+(SHA `2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84`),
+runtime commit `d915133f695ced59fde70d71100735cc9ccd2ca7`, container
+`98c449e7ef60`. At latest verified monitoring, training had reached step22296 after24 updates;
+early values are diagnostic and no new qualification is claimed. Do not append
+the87 already included target-bound documents again.

@@ -1,6 +1,6 @@
 # Pop current work
 
-Last reviewed: 2026-10-09 11:56 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Last reviewed: 2026-10-09 13:11 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 
 ## Ownership and coordination
 
@@ -8,24 +8,35 @@ Last reviewed: 2026-10-09 11:56 UTC. This page is a navigation aid; inspect live
 - Run `python3 scripts/coordination_inbox.py check --ack` at session start, before resource changes and each monitoring cycle. Use Git for code and the corpus registry/manifests plus `sync_training_corpora.py` for selected data artifacts.
 - The user wants autonomous work and monitoring, including waiting/sleeping when jobs are in progress. Keep five authorized Luna slots supplied where appropriate. Do not report planned workers as actual provider activity.
 
-## GPU: correcting the foundation training path
+## GPU: mapped-input foundation continuation
 
-The sketch run `neuralese-foundation-text-4880-continuation-20261009-v1`
-was signalled to checkpoint and stop on 2026-10-09 after the user caught a
-regression to the superseded approach. Best saved step3328 remains unqualified;
-matching best checkpoint SHA `1c134d95729a5c68ccabe4a162ac4376fee23484cb3ca8325e2db73883073c91`.
-The signal saved full resumable step3391, checkpoint SHA
-`32e77b2b3a579ef7ca0e918a4ab06af724537b01b1bc3aa663bdd74d556d2a9f`;
-the older heads export remains step3328. This run's raw gold-embedding anchor
-repair is useful work, but its repeated
-sketch consumer objective is not the agreed training path.
+The superseded sketch-consumer repair was stopped; its best step3328 is not a
+qualified source. The active Pop job is the mapped-input continuation
+`luna-map-refresh-step22272-v5` (container `98c449e7ef60`), launched from the
+shared runtime at commit `d915133f695ced59fde70d71100735cc9ccd2ca7` using the
+pinned image `sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de`.
+Its declared recipe is
+`training/neuralese/recipes/luna-map-text-4880-from-qualified-22272-20261009-v5.json`
+(SHA `2043c442d5f740c183031203dc9a218424ee9ab6bc131b3f2843a1376cb66a84`).
 
-Next: restore the shared `gold-text-input-map-v1` mapped-input path from the
-qualified same-map22272 full checkpoint with preserved optimizer/map/backbone/RNG
-and a fresh baseline on the corrected4880 admitted target-bound text, then train
-against actual full-depth autoregressive feedback. Verify the saved shutdown
-checkpoint before selecting a source. Neither mapped alignment nor AR controls
-alone qualify autonomous feedback, runtime transport, stopping or recurrence.
+The authoritative same-map source is the full checkpoint at step22272, SHA
+`9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f`. Restore
+logs confirm all four optimizer groups and the foundation schedule/RNG restored;
+no fresh-optimizer fallback occurred. The source was previously qualified only
+for its earlier data and gates; this changed corpus has a fresh baseline and
+must earn new gates. Input is the adopted4880-row text file, 3176 train / 1704
+heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239bc94e4393d08e0572`;
+the admitted87 target-bound documents are already in it and must not be appended
+again. Native records/pieces are source bindings, not extra text rows.
+
+At latest verified monitoring, training had reached step22296 (24 updates). Fresh baseline
+at22272 was unqualified as expected. Early updates are diagnostic only; no
+mapped-alignment, autoregressive, runtime transport, stopping or recurrence
+gate is claimed yet. Driver output is under
+`/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-from-qualified-22272-20261009-v5/preflight-v1/`.
+The recipe launch preflight binds code, input, image, cache/token mounts and
+resource floor. Continue monitoring exact current/best checkpoint metadata and
+fresh evaluation results; do not reuse results from the old data or sketch run.
 
 ### Shutdown and storage
 
