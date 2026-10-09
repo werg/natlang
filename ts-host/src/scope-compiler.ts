@@ -1133,8 +1133,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [
-    // The inputs as eval code reads them: values of a declared record type behind field guards, when the host has them.
-    inputNames.length ? `const { ${inputNames.join(', ')} } = (__live.guardInputs ?? ((inputs: any) => inputs))(__natlang_frozen(__natlang_copy(__inputs)));` : '',
+    inputNames.length ? `const { ${inputNames.join(', ')} } = __natlang_frozen(__natlang_copy(__inputs));` : '',
     // Your own locals come back as mutable copies (only parameters are frozen); the eval commits them when it succeeds.
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name});`),
