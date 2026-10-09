@@ -2,6 +2,7 @@
 
 Status: implemented on main 2026-10-09 (plans/OWNER_REVIEW.md, review after the fact). What differs from the draft below:
 
+- Owner decision 2026-10-10: the tool-economy sentences of the old `rewriteProgram.nl` (use the given source files directly, inspect only clipped parts, finish once the edit is supported, write each replacement once) stay out, both here and in the shared system prompt. Measure in the teacher window whether the split stages waste tool calls without them (actions per experiment, repeated reads, reprinted evidence) before adding any of it back.
 - `improveStep.nl` still asks the model to run `lifecycle.step` in eval (question 1): `iterateOn` loads a `.nl` step, so a
   crisp pipeline step waits for runtime support. The step now receives the `plans` journal service as well as `evaluator`.
 - The stages are `diagnose`, `hypothesize`, `editSource` (instruction) and `editSourceStructural` (structural). The doc's
