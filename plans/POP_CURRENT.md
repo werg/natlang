@@ -1,6 +1,6 @@
 # Pop current work
 
-Last reviewed: 2026-10-09 14:24 UTC. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+Last reviewed: 2026-10-09, checkpoint handoff review. This page is a navigation aid; inspect live processes and receipts before acting. Historical evidence and course changes remain in [HANDOVER.md](HANDOVER.md) and [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 
 ## Ownership and coordination
 
@@ -30,24 +30,23 @@ heldout, SHA `b10da15de2510b55635b5aaa85301204e559669ac239bc94e4393d08e0572`;
 the admitted87 target-bound documents are already in it and must not be appended
 again. Native records/pieces are source bindings, not extra text rows.
 
-At the latest verified monitoring (14:24 UTC), the serialized current checkpoint
-is step23680, the best checkpoint remains step23040, and training had reached
-step23754 in the log.
-The latest gate is false with zero consecutive passes; this continuation has not
-inherited qualification from its source checkpoint. At step23680, held input-map
-and full-depth embedding errors were 0.11274 and 0.11679, with pass-1 CE delta
-0.000584. The map/full error gap has narrowed from 0.02555 at step22272 to
-0.00405, but strict alignment still fails. At step23680, pass-1 token agreement
-was 0.97802 for assistant reasoning, 0.98779 for tool content, 0.99688 for user
-content, and 0.99759 for assistant replies. These measurements support moving
-toward real autoregressive exposure after the warm-in rather than waiting for
-exact map/full parity; they do not qualify autoregressive behavior, transport,
-stopping, or task execution. GPU was 100% at 4729 MiB; free space was 8.5 GiB
-on `/` and 5.1 GiB on `/srv/storage`. Driver output is under
-`/srv/storage/natlang-artifacts/neuralese-map-refresh-4880-from-qualified-22272-20261009-v5/preflight-v1/`.
-The recipe launch preflight binds code, input, image, cache/token mounts and
-resource floor. Continue monitoring exact current/best checkpoint metadata and
-fresh evaluation results; do not reuse results from the old data or sketch run.
+At the latest handoff, the mapped run was safely stopped by signaling its
+ancestry-verified trainer child; emergency checkpoint step24843 is preserved.
+Best step23936 is immutably pinned for AR exposure, checkpoint SHA
+`adc6bfd59a5e0e67fa243270035f32da4688d25a73cdbb5a0da83276c11ecb1d`
+and heads SHA `c73d46511451ded3e6d304bce489765e0c08be458c44fe47500e022bf6834f48`.
+Its original strict .995 gate remains failed. Six saved evaluations pass a .99
+CPU advisory with the other original clauses; this is not qualification.
+
+The declared AR fixup v1 launch restored all four optimizer groups but failed
+before updates when the shared schedule rejected its predecessor configuration.
+It is stopped. Preserve its output and preflight evidence under
+`runs/neuralese-map-refresh-4880-ar-feedback-preflight-20261009-v1/`.
+Repair the shared handoff without discarding schedule/history/moments/RNG, then
+use a new pinned recipe and fresh output path. No transport or recurrence
+qualification has been issued. The intended AR binding has16K total context,
+256 generated target positions, unchanged gold targets,1024 additional updates,
+new .99/.05/.025 gates and two consecutive passes.
 
 The DGX owner direction is to phase the raw-token-embedding projection anchor
 out after warm-in using a declared decay, then adapt the read port to learned
@@ -66,7 +65,7 @@ active training route. Its earlier Docker shutdown failed to save 73 updates
 (serialized step1920 versus final log step1993); preserve that failure receipt,
 current/best checkpoints, and the earlier recurrence checkpoint separately.
 
-Latest storage check: 8.5 GiB free on `/` and 5.1 GiB free on `/srv/storage`; the active run keeps its checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
+Latest storage check: about9.3 GiB free on `/` and5.7 GiB free on `/srv/storage`; the active run keeps its checkpoint reserve. Its current and best full checkpoints are distinct. Avoid redundant checkpoint/model copies. Historical Step5 process state and unused grouped Ling base weights were handled with verified local offload/duplicate eviction; private process/browser caches are not training corpora.
 
 ## Generation and review
 
@@ -74,13 +73,13 @@ Latest storage check: 8.5 GiB free on `/` and 5.1 GiB free on `/srv/storage`; th
 
 Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
-- The recent held packet has been reduced from199 proposals to22 after two definite visibility holds. All22 remaining proposals are held and unadmitted; runtime outcomes or packet-level acceptance do not grant training admission.
+- The recent held packet has been reduced from199 proposals to22 after two definite visibility holds. The22 selected native actions and19 derived text documents were independently replayed and explicitly adopted;177 other actions remain held. Task acceptance does not grant whole-trajectory or recurrence admission.
 - Earlier wave3 plan and its source/runtime proofs remain preserved under this campaign. Treat them as historical evidence; do not use their previous “latest wave” wording as current status.
 - Review every observed action and skill disclosure before admission. No global v6 activation, new-world credit or blanket task-level admission.
 
 ### Step5 Preview Free
 
-`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Token-suffix audit passed and root composition adopted17native/17text; curated publication/sync remain pending; no recurrence or hidden-state admission. Step5 Microgrid terminated on repeated endpoint-unavailable503 errors, with captures sealed under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
+`runs/step5-preview-free-clinic-row0-corrected-20261009-v1` completed the correct Clinic source0/scenario2 and passed its oracle. It has18 actions,15 children and6 iterations. Owned idle bridge stopped; captures sealed. One malformed `return_result({code:...})` attempt is held separately; subsequent valid typed output is independently reviewed. Current shared adapters produced17 reviewed native actions and17 exact-serving-boundary text documents; root native and text replays are byte-identical. One action is an authored static root and16 are model samples; actor provenance is now mandatory in shared conversion. Token-suffix audit passed and root composition adopted17native/17text; curated publication/sync are verified on both machines; no recurrence or hidden-state admission. Step5 Microgrid terminated on repeated endpoint-unavailable503 errors, with captures sealed under `runs/step5-microgrid-concurrent-luna-wave2-20261009-v1`. No paid fallback or text-distillation flag.
 
 ### Failure repairs and skills
 
@@ -90,7 +89,7 @@ Root: `runs/luna-v6-criterion-fivecase-diagnostic-20261009-v1`.
 
 ## Corpus inventory
 
-Current admitted facets:5701 native (3666train/2035test),4897 text (3193/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets are excluded until explicit adoption.
+Current admitted facets:5723 native (3688train/2035test),4916 text (3212/1704),5004R (3115/1889). Counts are overlapping facets, not independent task/world counts. Fresh generation/review packets are excluded until explicit adoption.
 
 - Full4793 historical text documents were rebuilt from exact serving request/assistant boundaries;87 newly adopted documents complete4880. Split/group and tokenizer checks are preserved.
 - Registered target-bound refresh and convenience input are verified on Pop and DGX. Convenience corpus: `luna-v17-foundation-text-input-4880-20261009-v1`; inputSHA `b10da15de2510b55635b5aaa85301204e559669ac239968bc94e4393d08e0572`.
