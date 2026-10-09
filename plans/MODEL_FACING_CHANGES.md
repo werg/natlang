@@ -20,4 +20,5 @@ Columns:
 | 2026-10-09 | a9a3a68f, 30d56f1a | Refinement repair feedback text and `refinement-*` error messages; `refine`/`assume` bound in eval | unmeasured | Repair success after a failed refinement; frequency of the model using refine/assume unprompted |
 | 2026-10-09 | d68069fe, 88d29090 and others | Reworded errors: invalid callable names, variable named like a function, iteration measure, loop sources, uses cycles | unmeasured | Recovery rate on the first retry after each error |
 | 2026-10-09 | 3df747d2 | Batching: prompt layout unchanged (fixture test); `cache_prompt` on | measured: keep (no text change) | test/prompt-layout.test.mjs |
+| 2026-10-09 | tier/specializer unification | New `applications/specializer/promote.nl` promotion policy (default setting `promotionPolicy: crisp`, so it runs only when selected) | unmeasured | Shadow mode against `crispPolicy` on recorded evidence: decision agreement, and wrong promotions or demotions |
 | pending | refinement adoption branch | `Is<T, "...">` type text in app signatures (crisp-checked predicates only) | unmeasured | Listed when the branch lands |
