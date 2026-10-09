@@ -28,6 +28,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -95,6 +96,8 @@ def category(path: Path, policy: dict, registered: set[str]) -> str:
     ckpt = policy['checkpoint']
     if str(path) in registered:
         return 'artifact-registered' if path.suffix == '.nz' or '/artifacts/' in text else 'corpus-registered'
+    if '/.sync-history/' in text or '/pull-revisions/' in text:
+        return 'sync-revision'  # rsync --backup copies of mirror files a later sync replaced
     if '/.cache/' in text or '/cache/' in text:
         return 'cache'
     if path.suffix == '.gguf' or '/export' in text or '/hf/' in text:
@@ -250,6 +253,8 @@ def classify(entries: list[dict], policy: dict, *, registered: set[str], text: s
             protected = any(fnmatch.fnmatch(name, p) for p in ckpt['best_patterns'] + ckpt['final_patterns'])
             if step is not None and len(group) > 1 and step < latest[str(logical.parent)] and not protected:
                 tier, reason = 'PRUNE-AUTO', f'intermediate checkpoint (step {step} < latest {latest[str(logical.parent)]})'
+        if tier is None and e['category'] == 'sync-revision':
+            tier, reason = 'PRUNE-ASK', f'superseded sync revision ({age:.0f} d old); approve its revision directory'
         if tier is None:
             tier, reason = 'PRUNE-ASK', f'large {e["category"]} file without a keep rule'
         out.append(dict(e, tier=tier, reason=reason))
@@ -292,7 +297,17 @@ def active_reason(e: dict, active: dict) -> str | None:
     return None
 
 
-def scan(policy: dict, roots=None, registered: set[str] | None = None) -> tuple[list[dict], dict]:
+def revision_dir(path: Path) -> str | None:
+    """The revision directory (one sync run's backups) a sync-history file belongs to."""
+    parts = path.parts
+    for marker in ('.sync-history', 'pull-revisions'):
+        if marker in parts and parts.index(marker) + 1 < len(parts):
+            return str(Path(*parts[:parts.index(marker) + 2]))
+    return None
+
+
+def scan(policy: dict, roots=None, registered: set[str] | None = None,
+         revisions: dict | None = None) -> tuple[list[dict], dict]:
     """Every file under the roots: per-category totals and the entries worth classifying (≥ 64 MiB or leftovers)."""
     roots = [Path(r) for r in (roots or policy['roots']['scan'])]
     archive_root = Path(policy['archive']['root'])
@@ -314,6 +329,10 @@ def scan(policy: dict, roots=None, registered: set[str] | None = None) -> tuple[
             bucket = totals[str(root)][cat]
             bucket[0] += 1
             bucket[1] += st.st_size
+            if cat == 'sync-revision' and revisions is not None:
+                key = revision_dir(path)
+                if key:
+                    revisions[key] = revisions.get(key, 0) + st.st_size
             if st.st_size >= (64 << 20) or any(fnmatch.fnmatch(path.name, p) for p in policy['leftover_patterns']):
                 entries.append({'path': str(path), 'logical': str(logical), 'bytes': st.st_size,
                                 'mtime': st.st_mtime, 'category': cat, 'run': str(run_key(logical))})
@@ -374,13 +393,15 @@ def docker_prune(apply: bool) -> dict:
 def run(args) -> dict:
     policy = load_policy(args.policy)
     registered = registered_files(policy)
-    entries, totals = scan(policy, args.roots, registered)
+    revisions: dict = {}
+    entries, totals = scan(policy, args.roots, registered, revisions)
     text = reference_text(policy)
     active = active_state(policy['roots']['scan'])
     classified = classify(entries, policy, registered=registered, text=text, active=active)
     approved = approved_paths(Path(args.approvals))
     for e in classified:
-        if e['tier'] == 'PRUNE-ASK' and (e['path'] in approved or e['logical'] in approved):
+        if e['tier'] == 'PRUNE-ASK' and any(e[k] == a or e[k].startswith(a.rstrip('/') + '/')
+                                            for a in approved for k in ('path', 'logical')):
             e['approved'] = True
     deleted = []
     if args.apply:
@@ -391,6 +412,15 @@ def run(args) -> dict:
                 record = delete(e, manifest, held)
                 if record:
                     deleted.append(record)
+        # Approved whole revision directories (sync backups): removed as a unit; rmtree never follows symlinks.
+        for directory, size in sorted(revisions.items()):
+            if directory in approved and not any(h == directory or h.startswith(directory + '/') for h in held):
+                shutil.rmtree(directory, ignore_errors=True)
+                record = {'path': directory, 'bytes': size, 'category': 'sync-revision', 'tier': 'PRUNE-ASK',
+                          'reason': 'owner-approved sync revision directory', 'time': time.time()}
+                with open(manifest, 'a') as handle:
+                    handle.write(json.dumps(record) + '\n')
+                deleted.append(record)
     docker = docker_prune(args.apply and not args.no_docker)
     tiers: dict = defaultdict(lambda: {'files': 0, 'bytes': 0})
     for e in classified:
@@ -398,7 +428,8 @@ def run(args) -> dict:
         tiers[e['tier']]['bytes'] += e['bytes']
     return {'schema': 'natlang.storage-retention/1', 'time': time.time(), 'applied': args.apply,
             'totals': totals, 'tiers': dict(tiers), 'entries': classified, 'deleted': deleted,
-            'deleted_bytes': sum(r['bytes'] for r in deleted), 'docker': docker}
+            'deleted_bytes': sum(r['bytes'] for r in deleted), 'docker': docker,
+            'sync_revisions': dict(sorted(revisions.items()))}
 
 
 def main(argv=None):

@@ -22,7 +22,7 @@ import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neura
 import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
 import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
@@ -463,14 +463,8 @@ async function post(service: LearningService, path: string, body: unknown): Prom
 }
 
 async function ensureOnServer(service: LearningService, ids: readonly string[]): Promise<void> {
-  const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
-  for (const id of ids) {
-    if (await remote.has(id)) continue;
-    const block = (service.store && await service.store.get(id)) ?? constantBlock(id);
-    if (!block) throw new LearningError('neuralese-unknown-block', `${id} is neither on the server nor in the runtime's store`);
-    const { id: _, ...rest } = block.meta;
-    await remote.put({ ...rest, data: block.data });
-  }
+  const missing = await restoreBlocks(new HttpNeuraleseStore(service.endpoint, service.headers), service.store, ids);
+  if (missing.length) throw new LearningError('neuralese-unknown-block', `${missing[0]} is neither on the server nor in the runtime's store`);
 }
 
 /**

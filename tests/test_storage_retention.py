@@ -101,3 +101,22 @@ def test_scan_never_follows_symlinks_and_maps_archived_files_to_their_source(tmp
     entries, totals = retention.scan(p, [tmp_path], registered=set())
     assert [e['logical'] for e in entries] == [str(retention.LOGICAL_ROOTS['runs'] / 'r1' / 'step_5.pt')]
     assert totals[str(tmp_path)]['symlink']['files'] == 1
+
+
+def test_sync_revisions_are_ask_tier_and_an_approved_revision_directory_is_removed_whole(tmp_path):
+    import argparse
+    revision = tmp_path / '.sync-history' / '2026-10-03T15-30-16'
+    (revision / 'runs' / 'x').mkdir(parents=True)
+    (revision / 'runs' / 'x' / 'old.jsonl').write_bytes(b'z' * 1000)
+    p = policy(tmp_path)
+    revisions = {}
+    entries, totals = retention.scan(p, [tmp_path], registered=set(), revisions=revisions)
+    assert revisions == {str(revision): 1000} and totals[str(tmp_path)]['sync-revision']['bytes'] == 1000
+    approvals = tmp_path / 'approved.txt'
+    approvals.write_text(str(revision) + '\n')
+    pol = tmp_path / 'policy.json'
+    pol.write_text(json.dumps(p))
+    args = argparse.Namespace(apply=True, policy=str(pol), roots=[str(tmp_path)], approvals=str(approvals),
+                              manifest=str(tmp_path / 'deletions.jsonl'), no_docker=True)
+    report = retention.run(args)
+    assert not revision.exists() and report['deleted'][0]['bytes'] == 1000

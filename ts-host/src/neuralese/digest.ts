@@ -15,7 +15,7 @@ import { neuraleseRef, textToParts, type NeuraleseRef } from '../native/neurales
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { activeSystemPrompts, softenText, type SystemPromptBank } from '../native/system-prompts.js';
 import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, withRestoredBlocks } from '../model/neuralese-server.js';
 
 export const DIGEST_TYPE = 'Neuralese<Digest>';
 
@@ -34,17 +34,14 @@ export function serverDigester(options: { endpoint: string; headers?: Record<str
     const bank = activeSystemPrompts(options.bank);
     const softened = bank?.size ? softenText(DIGEST_PROMPT, bank) : DIGEST_PROMPT;
     const system = softened === DIGEST_PROMPT ? DIGEST_PROMPT : textToParts(softened);
-    if (Array.isArray(system)) for (const part of system) if (part.type === 'neuralese' && !(await remote.has(part.id))) {
-      const block = await options.store?.get(part.id);
-      if (!block) throw new Error(`neuralese-unknown-block: ${part.id} is neither on the server nor in the store`);
-      const { id: _, ...rest } = block.meta;
-      await remote.put({ ...rest, data: block.data });
-    }
-    const response = await fetchModel(`${base}/v1/neuralese/digest`, { method: 'POST',
-      headers: { 'content-type': 'application/json', ...options.headers },
-      body: JSON.stringify({ ...site, system, ...(options.window ? { window: options.window } : {}) }) });
-    if (!response.ok) throw new Error(`digest failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
-    const meta = await response.json() as { id: string };
+    const ids = Array.isArray(system) ? system.flatMap(part => part.type === 'neuralese' ? [part.id] : []) : [];
+    const meta = await withRestoredBlocks(remote, options.store, ids, async () => {
+      const response = await fetchModel(`${base}/v1/neuralese/digest`, { method: 'POST',
+        headers: { 'content-type': 'application/json', ...options.headers },
+        body: JSON.stringify({ ...site, system, ...(options.window ? { window: options.window } : {}) }) });
+      if (!response.ok) throw new Error(`digest failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+      return await response.json() as { id: string };
+    });
     if (options.store && !(await options.store.has(meta.id))) {
       const block = await remote.get(meta.id);
       if (!block) throw new Error(`neuralese-unknown-block: the server wrote ${meta.id} but does not have it`);
