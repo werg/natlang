@@ -14,6 +14,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from root_derived_writer_admission import admitted_root_derived_writer_rows
 sys.path.insert(0, str(ROOT / "scripts"))
 from root_integration_adoption import root_integration_adoption_bindings
 
@@ -336,6 +338,7 @@ def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT)
         "admit-ordinary-native-action": "admitted_native_count",
         "hold-source-required-neuralese-reader-contract": "held_source_contract_final_count",
         "hold-ambiguous-source-read-scope": "held_ambiguous_source_read_scope_count",
+        "hold-unrecorded-action": "held_unrecorded_action_count",
         "reject-action-failed": "failed_count",
         "exclude-already-admitted-case01-duplicate": "already_adopted_count",
     }
@@ -359,7 +362,7 @@ def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT)
             admitted.append(row)
     if receipt.get("admitted_native_count") != len(admitted):
         raise ValueError("root per-action admitted_native_count conflicts with decision rows")
-    if any(receipt.get(field) != count for field, count in observed.items()):
+    if any(receipt.get(field, 0) != count for field, count in observed.items()):
         raise ValueError("root per-action disposition counts conflict with decision rows")
     if sum(observed.values()) != len(rows):
         raise ValueError("root per-action disposition counts do not cover every decision row")
@@ -372,47 +375,6 @@ def admitted_root_per_action_rows(receipt, *, delta_ids=None, root: Path = ROOT)
     if delta_ids is not None and (not isinstance(delta_ids, set) or delta_ids != set(approved_ids)):
         raise ValueError("delta records do not equal root-admitted per-action IDs")
     return admitted
-
-def admitted_root_derived_writer_row(receipt, *, delta_records, root: Path = ROOT):
-    """Validate one root-admitted derived writer target, separate from its original action."""
-    if (receipt.get("schema") != "natlang.root-derived-observed-text-writer-admission/1"
-            or receipt.get("decision") != "admit-derived-observed-text-writer-body"
-            or receipt.get("training_admission") is not True
-            or receipt.get("original_action_admission") is not False
-            or receipt.get("limits", {}).get("whole_trajectory_admission") is not False
-            or receipt.get("limits", {}).get("runtime_gradient_qualification") is not False
-            or receipt.get("limits", {}).get("active_training_inputs_changed") is not False):
-        raise ValueError("root receipt does not admit only the derived writer body")
-    pins = receipt.get("input_pins")
-    if not isinstance(pins, dict) or not pins:
-        raise ValueError("root derived-writer admission lacks input pins")
-    root = root.resolve()
-    for rel, pin in pins.items():
-        path = Path(rel)
-        if path.is_absolute() or not isinstance(pin, dict):
-            raise ValueError("root derived-writer input pin is malformed")
-        path = (root / path).resolve()
-        if (not path.is_relative_to(root) or not path.is_file()
-                or sha_file(path) != pin.get("sha256") or path.stat().st_size != pin.get("bytes")):
-            raise ValueError(f"root derived-writer input pin is missing or mismatched: {rel}")
-    proposal_id = receipt.get("proposal_id")
-    if not isinstance(proposal_id, str) or len(delta_records) != 1 or delta_records[0].get("id") != proposal_id:
-        raise ValueError("derived-writer delta must contain exactly the approved proposal ID")
-    row = delta_records[0]
-    derived = row.get("derived_target")
-    if (not isinstance(derived, dict)
-            or derived.get("schema") != "natlang.root-admitted-derived-text-writer-target/1"
-            or derived.get("proposal_id") != proposal_id
-            or derived.get("original_native_record_id") != receipt.get("source_native_record_id")
-            or derived.get("exact_body_sha256") != receipt.get("exact_body_sha256")
-            or derived.get("target_sha256") != receipt.get("derived_target_sha256")
-            or sha(json.dumps(row.get("target"), ensure_ascii=False, separators=(",", ":")).encode())
-                != receipt.get("derived_target_sha256")
-            or row.get("split") != receipt.get("split")
-            or receipt.get("source_group") not in row.get("source_groups", [])):
-        raise ValueError("derived-writer row does not match root body/target/source/split admission")
-    return [{"native_id": proposal_id, "target_sha256": receipt["derived_target_sha256"],
-             "split": receipt["split"], "source_group": receipt["source_group"]}]
 
 def append_prefix(prefix: Path, output: Path, additions: list[dict]):
     with output.open("xb") as f:
@@ -546,7 +508,8 @@ def main():
     source_approval = json.loads(args.source_approval.read_text())
     root_action_admission = source_approval.get("schema") == "natlang.root-selected-action-admission/1"
     root_per_action_admission = source_approval.get("schema") == "natlang.root-per-action-training-admission/1"
-    root_derived_writer_admission = source_approval.get("schema") == "natlang.root-derived-observed-text-writer-admission/1"
+    root_derived_writer_admission = source_approval.get("schema") in {
+        "natlang.root-derived-observed-text-writer-admission/1", "natlang.root-derived-body-admission-index/1"}
     admission_rows = source_approval.get("rows", []) if root_action_admission else []
     if root_action_admission:
         approved_ids = [item.get("native_id") for item in admission_rows]
@@ -572,8 +535,8 @@ def main():
             source_approval, delta_ids={row.get("id") for row in delta_records}, root=repo_root)
         approved_ids = [item["native_id"] for item in admission_rows]
     elif root_derived_writer_admission:
-        admission_rows = admitted_root_derived_writer_row(source_approval, delta_records=delta_records,
-                                                           root=repo_root)
+        admission_rows = admitted_root_derived_writer_rows(source_approval, args.source_approval,
+                                                            delta_records=delta_records, root=repo_root)
         approved_ids = [item["native_id"] for item in admission_rows]
     else:
         approved_ids = source_approval.get("approved_row_ids")
@@ -608,7 +571,9 @@ def main():
                 "kind": ("root-derived-text-writer-body-admission" if root_derived_writer_admission
                          else "root-selected-action-admission"),
                 "approved": True,
-                "receipt_sha256": sha_file(args.source_approval),
+                "receipt_sha256": admission.get("receipt_sha256", sha_file(args.source_approval)),
+                **({"admission_index_sha256": admission["admission_index_sha256"]}
+                   if root_derived_writer_admission else {}),
             }
     for rel, expected in source_approval.get("artifact_hashes", {}).items():
         bound = (repo_root / rel).resolve()

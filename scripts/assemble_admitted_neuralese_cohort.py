@@ -21,6 +21,7 @@ import os
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from root_integration_adoption import root_integration_adoption_bindings
+from root_derived_writer_admission import admitted_root_derived_writer_rows
 
 
 def sha(path: Path) -> str:
@@ -80,6 +81,7 @@ def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
         'admit-ordinary-native-action': 'admitted_native_count',
         'hold-source-required-neuralese-reader-contract': 'held_source_contract_final_count',
         'hold-ambiguous-source-read-scope': 'held_ambiguous_source_read_scope_count',
+        'hold-unrecorded-action': 'held_unrecorded_action_count',
         'reject-action-failed': 'failed_count',
         'exclude-already-admitted-case01-duplicate': 'already_adopted_count',
     }
@@ -104,7 +106,7 @@ def validate_root_per_action_approval(approval, delta_rows, *, root=ROOT):
     if approval.get('admitted_native_count') != len(admitted):
         raise ValueError('root per-action admitted count conflicts with rows')
     for decision, field in dispositions.items():
-        if approval.get(field) != counts[decision]:
+        if approval.get(field, 0) != counts[decision]:
             raise ValueError(f'root per-action disposition count conflicts: {field}')
     if (approval.get('whole_trajectory_admission') is not False
             or approval.get('runtime_qualification') is not False
@@ -257,7 +259,8 @@ def main():
     if not approvals:
         raise ValueError('at least one root approval receipt is required')
     approved_schemas = {'natlang.root-per-action-training-admission/1',
-                        'natlang.root-selected-action-admission/1'}
+                        'natlang.root-selected-action-admission/1',
+                        'natlang.root-derived-body-admission-index/1'}
     if len(approvals) > 1 and any(approval.get('schema') not in approved_schemas for _, approval in approvals):
         raise ValueError('multiple approvals require independently validated root action admission receipts')
     base_receipt = json.loads(paths['base-receipt'].read_text())
@@ -308,10 +311,14 @@ def main():
     approval_ids_by_receipt = []
     root_action_admission = False
     root_per_action_admission = False
+    root_derived_writer_admission = False
     for approval_path, approval in approvals:
         receipt_hash = sha(approval_path)
         this_root_action = approval.get('schema') == 'natlang.root-selected-action-admission/1'
         this_root_per_action = approval.get('schema') == 'natlang.root-per-action-training-admission/1'
+        this_root_derived = approval.get('schema') in {
+            'natlang.root-derived-observed-text-writer-admission/1',
+            'natlang.root-derived-body-admission-index/1'}
         if this_root_action:
             root_action_admission = True
             if args.approval_id_field != 'approved_row_ids':
@@ -351,6 +358,10 @@ def main():
                                 and row.get('training_admission') is True}
             current_delta_rows = [row for row in all_delta_rows if row.get('id') in approval_row_ids]
             current_by_id = validate_root_per_action_approval(approval, current_delta_rows)
+        elif this_root_derived:
+            root_derived_writer_admission = True
+            current_by_id = {row['native_id']: row for row in admitted_root_derived_writer_rows(
+                approval, approval_path, delta_records=list(rows(paths['delta-native'])), root=ROOT)}
         else:
             current_ids = approval.get(args.approval_id_field)
             if not isinstance(current_ids, list) or not current_ids or any(not isinstance(x, str) for x in current_ids):
@@ -383,7 +394,7 @@ def main():
                        {f'approval-{i+1}': path for i, (path, _) in enumerate(approvals)})
     if not approved:
         raise ValueError('approval receipts contain no approved IDs')
-    native_only = root_action_admission or root_per_action_admission
+    native_only = root_action_admission or root_per_action_admission or root_derived_writer_admission
     base_n = list(rows(paths['base-native'])); base_r = list(rows(paths['base-recurrence']))
     delta_n = list(rows(paths['delta-native']))
     delta_recs = [] if native_only and args.delta_recurrence is None else list(rows(delta_r))
@@ -401,7 +412,24 @@ def main():
     admitted_delta = []
     for row in delta_n:
         row = dict(row)
-        if root_action_admission or root_per_action_admission:
+        if root_derived_writer_admission:
+            decision = approval_by_id[row['id']]
+            target_sha = hashlib.sha256(json.dumps(row.get('target'), ensure_ascii=False,
+                separators=(',', ':')).encode()).hexdigest()
+            if (target_sha != decision.get('target_sha256') or row.get('split') != decision.get('split') or
+                    decision.get('source_group') not in (row.get('source_groups') or [])):
+                raise ValueError(f'root derived-writer source/target/split/group mismatch: {row["id"]}')
+            row['training_admission'] = {
+                **(row.get('training_admission') or {}),
+                'approved': True,
+                'kind': 'root-derived-text-writer-body-admission',
+                'root_admission_sha256': decision['receipt_sha256'],
+                'root_admission_index_sha256': decision['admission_index_sha256'],
+                'source_group': decision['source_group'], 'split': decision['split']}
+            row['derived_target'] = {**(row.get('derived_target') or {}),
+                'root_admission_index_sha256': decision['admission_index_sha256'],
+                'root_admission_sha256': decision['receipt_sha256']}
+        elif root_action_admission or root_per_action_admission:
             decision = approval_by_id[row['id']]
             row_schema = approval_schema_by_id[row['id']]
             row_is_root_action = row_schema == 'natlang.root-selected-action-admission/1'
