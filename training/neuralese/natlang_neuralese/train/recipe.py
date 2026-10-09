@@ -43,6 +43,7 @@ HANDLERS = {
                                                'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
                                                'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
                                                'projection_anchor_weight', 'projection_anchor_backbone_scale',
+                                               'projection_anchor_decay_steps', 'read_adapter',
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib',
                                                'qat_latent_lr', 'member_weight', 'member_tokens', 'member_eval',
                                                'member_mask_system', 'member_full_weight',

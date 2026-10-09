@@ -313,3 +313,10 @@ def test_exported_conversion_loads_as_deployed_ternary_and_matches_the_qat_model
         expected = model.eval()(ids).logits  # QUANT_MIX 1: the conversion's deployed forward
         actual = exported(ids).logits
     assert torch.allclose(actual, expected, atol=1e-4), float((actual - expected).abs().max())
+
+
+def test_maples_converted_cache_is_never_used_for_another_family_member(tmp_path):
+    from natlang_neuralese.maple import student
+
+    assert student.default_cache(student.DEFAULT_MODEL) == student.DEFAULT_CACHE
+    assert student.default_cache(str(tmp_path)) is None
