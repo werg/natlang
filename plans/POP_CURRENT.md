@@ -269,8 +269,21 @@ Private blank credential templates were prepared at
 `GROQ_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY`,
 `NVIDIA_API_KEY`. Kilo needs no key for anonymous
 free access. Keys remain outside Git/logs/chat. Existing shared external HTTP
-transport should be reused; do not clone a launcher per provider. Integration
-planning is read-only so far: no provider inference or worker launch yet.
+transport should be reused; do not clone a launcher per provider. The user saved Groq/Z.AI/Gemini/NVIDIA keys; private format/permissions were
+verified without printing values. Gemini3.8Flash and NVIDIA Nemotron3Super
+completed tiny authentication probes; Groq metadata worked after specifying a
+User-Agent (urllib default returned403). Z.AI GLM4.7Flash first returned429/1305,
+then accepted a request. Probe receipt: `runs/free-provider-auth-preflight-20261009-v1/`.
+No training admission from these probes. Mistral is not configured.
+
+Shared external HTTP plumbing now supports an exact completion URL and
+environment-only key forwarding through profiles, collector and existing queue.
+This avoids forced `/v1` paths and localhost8081 health polling for external
+APIs. It also omits llama-specific wire defaults and local KV budgets when an
+explicit full HTTP target is declared. Current TypeScript sources compiled in
+isolation and froze to `runs/free-provider-generation-20261009-v1/runtime`;
+CLI help was exercised; no unit tests added/run in this change. Initial held
+case probes are being prepared; no case workers launched yet.
 
 Sources: https://kilo.ai/docs/gateway/authentication ;
 https://console.groq.com/docs/rate-limits ;
@@ -282,3 +295,24 @@ Additional setup sources: https://aistudio.google.com/apikey ;
 https://ai.google.dev/gemini-api/docs/rate-limits ;
 https://build.nvidia.com ;
 https://docs.nvidia.com/nemo/retriever/26.5.0/extraction/api-keys/ .
+
+## Free-provider expansion — 2026-10-09
+
+User configured Groq, Z.AI, Gemini and NVIDIA keys; Mistral is excluded.
+Private environment files remain outside Git. Shared external HTTP target and
+credential-environment support landed in `248d7c94`; native Pi handles Google,
+NVIDIA and Groq. Ordinary Z.AI and anonymous Kilo use the shared HTTP transport.
+
+Current-runtime reference replay passed all five V22 cases without provider
+calls. Launch evidence lives in `runs/free-provider-generation-20261009-v1/`.
+Initial NVIDIA v1 failed before an SDK call because its proposed model ID omitted
+the namespace; independent v2 uses `nvidia/nemotron-3-super-120b-a12b` and has
+completed real tool calls. Gemini v1 failed with Google's missing thought-signature
+error during tool history; investigate the shared adapter before relaunch.
+Kilo, ordinary Z.AI and a smaller Groq task are being prepared. These are held
+teacher samples of existing source groups, not new worlds or admitted training
+data. Inspect actual requests and terminal accounting before reporting success.
+
+Shared evaluator `b189b0e1` adds generated-position bands and common first-close
+prefix metrics without extra rollouts or changes to the existing fixed-span gate.
+No active frozen GPU runtime is hot-patched.

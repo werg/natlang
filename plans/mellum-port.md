@@ -134,3 +134,28 @@ enter the Neuralese stages before either backbone's long runs.
   per layer and unbind, instead of per-expert indexing that zero-filled a full-size gradient 64x per tensor.
 - v2 trial (runs/mellum-qat-convert-20261009-v2.sh): teacher-v7-nosys-code, lr 3e-4·α_row, ramp 1000, constant KL,
   CE 0.25, 2000 steps; queued for admission (queue script retries every 5 min).
+
+## 2026-10-09 — Pipeline handoff, recipes and N0 (Mellum-pipeline sub-agent)
+
+- Handoff (97667c90, ordered export 2026-10-09): `python -m natlang_neuralese.maple.qat_export --model BF16_DIR
+  --checkpoint CONVERT/checkpoint.pt --out EXPORT [--order runs/mellum-nested-20261009/n0-v1/expert-order.pt]` writes
+  the conversion's λ=1 ternary values in the source HF layout (config flag `natlang_deployed_ternary`); `load_maple`
+  loads it as ternary codes, so Maple's QAT policy, foundation heads, N0 and the fused ternary MoE (trainable block
+  scales, unclamped SwiGLU) apply unchanged. Tested: identical λ=1 logits on the tiny Mellum; ordered export equals
+  ordering after load.
+- Fix: `load_student`, `routing.py` and `nested_train.py` defaulted to Maple's converted-weights cache for any model
+  path, so Mellum heads/engines/N0 would have silently loaded Maple. The cache now applies to published Maple only.
+- Recipes (5dfff36b): `raw-recurrence-v2` (v1 + read adapter + projection-anchor decay 256 for every line; the
+  recurrence handler whitelist now accepts both), `raw-recurrence-mellum-v1` (backbone-inherent differences only:
+  cutoff 27 / 512 contexts, ternary QAT with qat_latent_lr 0.003, member terms with system masking and full-model
+  anchor), `foundation-mellum-v1` (cutoff 27). Rationale in recipes/HISTORY.md.
+- N0 on BF16 Mellum (runs/mellum-nested-20261009/n0-v1/expert-order.pt; 327 rendered rows of
+  maple-joint-20261005/qwen3-render-v1, 4096 tokens): routing mass covered by the first k ordered experts per layer,
+  mean (worst layer): 8: .50 (.35), 16: .71 (.56), 24: .83 (.70), 32: .91 (.81), 48: .98 (.94); no unused experts.
+  Mellum routes broadly. Proposed members: 28x32 (half width, 91% of mass), 28x24, 28x16 (aggressive), plus a depth
+  member (14x16 or 21x32) pending N1. N1 (held NLL/KL/agreement per prefix and per LxE member, `routing.py
+  --members`) was stopped to keep the GPU for the conversion; rerun after it with
+  `--members 28x16,28x24,28x32,21x32,14x16,14x32`.
+- Launch sequence once the conversion qualifies: qat_export --order → maple/foundation_heads --model EXPORT
+  --cutoff 27 → recipe raw-recurrence-mellum-v1 (or foundation-mellum-v1 first) via natlang_neuralese.train.recipe.
+  Not yet done: a GPU smoke of the warm-up path on an export, and the step profile (#46).

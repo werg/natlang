@@ -42,6 +42,7 @@ async function main(): Promise<void> {
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
       'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +
+      '         --chat-completions-url URL --api-key-env NAME  explicit external HTTP transport\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --request-retries N (default 1) repeats the same request; --transport-retries N (default 0) retries the whole case\n' +
@@ -76,6 +77,8 @@ async function main(): Promise<void> {
     throw new Error('--text-neuralese-emulation is available only for teacher collection');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
+  if (provider && (flags.has('--chat-completions-url') || flags.has('--api-key-env')))
+    throw new Error('external HTTP controls cannot be used with --provider');
   if (flags.has('--provider-request-config') && !provider) throw new Error('--provider-request-config requires --provider');
   const controls = flags.has('--provider-request-config') ? providerRequestControls(JSON.parse(
     await readFile(resolve(flags.get('--provider-request-config')!), 'utf8'))) : undefined;
@@ -128,15 +131,16 @@ async function main(): Promise<void> {
         { endpoint: flags.get('--judge-server') }) } } : {}),
     toolSurfaceSha256: await defaultToolSurfaceHash(),
     ...(provider ? { provider, ...(controls ? { providerRequestControls: controls } : {}), piOptions: { reasoningEffort: flags.get('--reasoning-effort') ?? 'low' } } :
-      { endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081' }),
+      { endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081',
+        chatCompletionsUrl: flags.get('--chat-completions-url'), apiKeyEnv: flags.get('--api-key-env') }),
     // The thinking budget is the server's (serve_bonsai.sh --reasoning-budget) unless given: a server that enforces a
     // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
     request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
-      top_p: 0.95, top_k: 20,
-      chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' }, ...chatControls } };
+      ...(flags.has('--chat-completions-url') ? {} : { top_p: 0.95, top_k: 20,
+        chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } }), ...chatControls } };
   // A call is compacted as it nears its context budget, so the server must accept a request of that size; a server
   // with a smaller context would reject the call's later requests. llama.cpp reports its per-request context in /props.
-  if (config.endpoint) {
+  if (config.endpoint && !config.chatCompletionsUrl) {
     const served = await fetch(new URL('/props', config.endpoint)).then(response => response.ok ? response.json() : undefined, () => undefined)
       .then(props => (props as { default_generation_settings?: { n_ctx?: number } } | undefined)?.default_generation_settings?.n_ctx);
     if (typeof served === 'number' && served < config.contextTokens)

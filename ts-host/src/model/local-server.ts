@@ -162,7 +162,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
-    if (external) return { endpoint: external.endpoint, model: external.model, headers: external.headers,
+    if (external) return { endpoint: external.endpoint, chatCompletionsUrl: external.chatCompletionsUrl,
+      model: external.model, headers: external.headers,
       request: external.request, apiKey: environment[external.apiKeyEnv] };
     if (local) return local;
     if (starting) return starting;

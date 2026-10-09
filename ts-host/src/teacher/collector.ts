@@ -7,6 +7,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
+import { resolveModelChoice } from '../model/config.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
@@ -75,7 +76,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** Sampling temperature; greedy unless set. Reasoning models are tuned for sampling (Ling: 1.0) and, decoded
    * greedily, can skip their thinking. */
   temperature?: number;
-  endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
+  endpoint?: string; chatCompletionsUrl?: string; apiKeyEnv?: string;
+  provider?: string; piOptions?: Record<string, unknown>;
   providerRequestControls?: ProviderRequestControls;
   chatRequestControls?: Record<string, unknown>;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
@@ -797,6 +799,13 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
+  if (config.chatCompletionsUrl || config.apiKeyEnv) {
+    if (!config.endpoint || config.provider) throw new Error('external HTTP controls require an endpoint');
+    resolveModelChoice({ endpoint: config.endpoint, model: config.modelId,
+      chatCompletionsUrl: config.chatCompletionsUrl, apiKeyEnv: config.apiKeyEnv });
+    if (config.apiKeyEnv && !process.env[config.apiKeyEnv])
+      throw new Error(`teacher API key environment variable ${config.apiKeyEnv} is unset`);
+  }
   if (config.textNeuraleseEmulation && (config.collectionRole ?? 'teacher') !== 'teacher')
     throw new Error('text Neuralese emulation is available only for explicit teacher collection');
   if (config.judgeModel && (!config.judgeModel.modelId ||
@@ -917,6 +926,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
               sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress));
         } });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
+      chatCompletionsUrl: config.chatCompletionsUrl,
+      ...(config.apiKeyEnv ? { apiKey: process.env[config.apiKeyEnv] } : {}),
       request: config.request, onRequestStart: recordHttpTransportStart });
     const send = textNeuralese ? textNeuralese.wrap(rawSend as (request: ModelTurnRequest) => Promise<ModelTurn>) : rawSend;
     let evidenceHandle: Awaited<ReturnType<typeof open>> | undefined;
