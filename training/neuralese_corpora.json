@@ -20302,6 +20302,48 @@
       "license": "Inherited exact decision source roles/groups/licenses and authored V22 source",
       "independent_new_worlds": 0,
       "notes": "Closed3.5Lite128 typed-valid, scorerquality .86808/allgates .74219. Four-row Kilo/OR/minimal screens are availability evidence, not rankings. 3FlashPreview partial quota closure preserved. Error/invalid probability rows retained diagnostically; no automatic label normalization, admission, or new-world credit. V6 receipt authoritative; active3.1Lite/pool excluded."
+    },
+    {
+      "id": "neuralese-operator-cases-20261009-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-operator-cases-20261009-v1",
+      "include": [
+        "cases.jsonl"
+      ],
+      "split": "per-row (source record split)",
+      "source_class": "derived-operator-cases-with-code-computed-targets",
+      "admission": "s5-operator-training-source;exact-code-targets;not-task-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "neuralese-maple-native-gold-text-corpus-20261008-v7"
+      ],
+      "license": "internal: derived from the registered v7 gold text corpus",
+      "notes": "natlang_neuralese.data.operator_cases (b94a2d49): 2000 spans (1166 train / 834 test by source record) from chat turns of the v7 corpus, system prompt and spans repeated in >2 records excluded; each with a partner span and a map transform (upper, first_word, last_word, word_count, reverse_words, initials) whose result is computed in code."
+    },
+    {
+      "id": "neuralese-s5-operator-replay-records-20261009-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-s5-operator-smoke-20261009-v1",
+      "include": [
+        "records-train.jsonl",
+        "records-test.jsonl",
+        "records-train.blocks/*",
+        "records-test.blocks/*",
+        "stdlib-text-init.nz",
+        "collect-train.err",
+        "collect-test.err"
+      ],
+      "split": "explicit (records-train / records-test, from the cases' source split)",
+      "source_class": "replay-records-of-operator-programs",
+      "admission": "s5-operator-smoke;backbone-specific-blocks-lfm2.5-350m-pilot-v4-heads;not-task-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "neuralese-operator-cases-20261009-v1"
+      ],
+      "license": "internal",
+      "notes": "natlang.replay-record/1 (a78372fc): 216 records (144 train from 24 cases, 72 held from 12 cases), 0 failures; programs read(v), read(map(v,f)), read(split(zip(a,b))[i]), laws combineIdentity and splitZip, collected on the reference server with LFM2.5-350M + runs/neuralese-s3-pilot-20261005-v4 heads and the text-init standard library in the same directory. Blocks are only meaningful for that backbone and those heads."
     }
   ],
   "coverage_backlog": [
