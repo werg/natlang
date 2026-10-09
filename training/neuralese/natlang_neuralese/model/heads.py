@@ -383,17 +383,18 @@ class PortHeads(nn.Module):
         config = {"stop_source": self.stop_source, "stop_position": self.stop.use_position}
         if getattr(self, "read_adapter", None) is not None:
             config["read_adapter"] = "full-residual-v1"
+            config["read_adapter_norm_eps"] = float(self.read_adapter.norm.eps)
         if not self.read_markers:
             config["profile"] = self.profile
             config["content_transport"] = self.content.transport
         return config
 
-    def add_read_adapter(self) -> "NeuraleseReadAdapter":
+    def add_read_adapter(self, *, eps: float = 1e-5) -> "NeuraleseReadAdapter":
         """Attach the reader-side Neuralese input adaptation (identity at creation)."""
         if getattr(self, "read_adapter", None) is None:
             dim = self.interface.weight.shape[0] if hasattr(self.interface, "weight") else self.content.proj.in_features
             reference = next(self.content.parameters())
-            self.read_adapter = NeuraleseReadAdapter(dim).to(device=reference.device)
+            self.read_adapter = NeuraleseReadAdapter(dim, eps=eps).to(device=reference.device)
         return self.read_adapter
 
     def read_in(self, payload: torch.Tensor) -> torch.Tensor:

@@ -15,6 +15,7 @@ The fork's location comes from `NATLANG_LLAMA_NEURALESE`, else the pin file
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -50,6 +51,11 @@ def _gguf_module():
 def merged_state_dict(model) -> dict | None:
     """The model's weights with every active LoRA merged (base weight plus delta, adapter tensors dropped), or None
     when it has no adapter layers. The model itself is not changed."""
+    # Avoid importing PEFT for a plain model. Its optional runtime stack can require CUDA libraries even for
+    # CPU-only exports, while ordinary HF models have no tuner layers to merge.
+    if not any(hasattr(module, "base_layer") and hasattr(module, "lora_A")
+               for _, module in model.named_modules()):
+        return None
     try:
         from peft.tuners.tuners_utils import BaseTunerLayer
     except ImportError:
@@ -140,6 +146,15 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
     # count is one of its inputs; the fork's writer follows both (tools/neuralese/neuralese.cpp, nz_write).
     writer.add_string("neuralese.stop_source", heads.stop_source)
     writer.add_uint32("neuralese.stop_position", int(heads.stop.use_position))
+    read_adapter = getattr(heads, "read_adapter", None)
+    if read_adapter is not None:
+        if not all(hasattr(read_adapter, name) for name in ("norm", "proj")):
+            raise ValueError("unsupported reader adapter structure")
+        adapter_eps = float(read_adapter.norm.eps)
+        if not math.isfinite(adapter_eps) or adapter_eps <= 0:
+            raise ValueError("reader adapter norm epsilon must be finite and positive")
+        writer.add_string("neuralese.read_adapter", "full-residual-v1")
+        writer.add_float32("neuralese.read_adapter.norm_eps", adapter_eps)
     for module, eps_module in [(heads.interface, heads.interface.eps), (heads.feedback.readout_norm, heads.feedback.readout_norm.eps),
                                (heads.feedback.mlp_norm, heads.feedback.mlp_norm.eps), (heads.stop.norm, heads.stop.norm.eps),
                                (heads.content.norm, heads.content.norm.eps)]:
@@ -170,6 +185,16 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
         "nz.content.log_sigma.weight": ct.log_sigma.weight,
         "nz.content.log_sigma.bias": ct.log_sigma.bias,
     }
+    if read_adapter is not None:
+        if (read_adapter.norm.weight.shape != (backbone.embedding_weight.shape[1],) or
+                read_adapter.proj.weight.shape != (backbone.embedding_weight.shape[1], backbone.embedding_weight.shape[1]) or
+                read_adapter.proj.bias.shape != (backbone.embedding_weight.shape[1],)):
+            raise ValueError("reader adapter dimensions differ from the backbone embedding width")
+        tensors.update({
+            "nz.read_adapter.norm.weight": read_adapter.norm.weight,
+            "nz.read_adapter.proj.weight": read_adapter.proj.weight,
+            "nz.read_adapter.proj.bias": read_adapter.proj.bias,
+        })
     for name, tensor in tensors.items():
         data = _np(tensor)
         if name in MATMUL_WEIGHTS and matrix_type == "f16":

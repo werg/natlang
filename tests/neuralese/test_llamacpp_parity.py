@@ -77,6 +77,24 @@ def port(loaded, tmp_path_factory):
             "tokenizer": tokenizer, "dir": out}
 
 
+@pytest.fixture
+def read_adapter_port(port):
+    """Export a nonzero reader adapter, then restore the shared reference heads."""
+    from natlang_neuralese.export import export_heads_gguf
+
+    heads = port["heads_module"]
+    adapter = heads.add_read_adapter()
+    torch.manual_seed(19)
+    with torch.no_grad():
+        adapter.proj.weight.normal_(mean=0.0, std=0.01)
+        adapter.proj.bias.normal_(mean=0.0, std=0.01)
+    heads_path = export_heads_gguf(heads, port["backbone"], port["dir"] / "neuralese-read-adapter-f32.gguf")
+    try:
+        yield {**port, "heads": heads_path}
+    finally:
+        del heads.read_adapter
+
+
 def _run(port, case: dict, name: str, backend: str) -> dict:
     binary = _binary(backend)
     case_path, out_path = port["dir"] / f"{name}-{backend}.case", port["dir"] / f"{name}-{backend}.out"
@@ -121,6 +139,31 @@ def test_read_port_matches_reference(port, backend):
     scale = BACKENDS[backend][2]
     _close(got["logits"], ref_logits, 2e-2 * scale, "read-port logits")
     assert got["logits"].argmax().item() == ref_logits.argmax().item()
+    assert got["greedy"].tolist() == tokens
+
+
+@pytest.mark.parametrize("backend", list(BACKENDS))
+def test_read_port_with_full_residual_adapter_matches_reference(read_adapter_port, backend):
+    from natlang_neuralese.write import greedy_continue
+
+    port = read_adapter_port
+    backbone, heads, tok = port["backbone"], port["heads_module"], port["tokenizer"]
+    prefix = _prefix(port, "Remember this note:")
+    suffix = [backbone.controls.close_id] + tok(" The note says", add_special_tokens=False)["input_ids"]
+    torch.manual_seed(23)
+    source = tok(" the meeting moved to Thursday at noon", add_special_tokens=False)["input_ids"]
+    payload = backbone.embed(torch.tensor([source])).detach()[0] + 0.01 * torch.randn(
+        len(source), backbone.embedding_weight.shape[1])
+    with torch.no_grad():
+        embeds = torch.cat([backbone.embed(torch.tensor([prefix])), heads.read_in(payload)[None],
+                            backbone.embed(torch.tensor([suffix]))], dim=1)
+        out = backbone.forward_embeds(embeds)
+        tokens, _ = greedy_continue(backbone, out["cache"], out["logits"][:, -1], STEPS)
+    got = _run(port, {"mode": (0, [0]), "prefix": (0, prefix),
+                      "payload": (1, payload.flatten().tolist()), "suffix": (0, suffix),
+                      "steps": (0, [STEPS])}, "read-adapter", backend)
+    scale = BACKENDS[backend][2]
+    _close(got["logits"], out["logits"][0, -1], 2e-2 * scale, "adapted read-port logits")
     assert got["greedy"].tolist() == tokens
 
 

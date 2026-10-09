@@ -15,7 +15,15 @@ def test_read_adapter_starts_as_identity_and_learns(loaded):
     heads.read_in(payload).square().sum().backward()
     assert adapter.proj.weight.grad is not None and adapter.proj.weight.grad.abs().sum() > 0
     assert heads.port_config()["read_adapter"] == "full-residual-v1"
+    assert heads.port_config()["read_adapter_norm_eps"] == adapter.norm.eps
     assert any(k.startswith("read_adapter.") for k in heads.state_dict())
+
+
+def test_read_adapter_eps_is_restorable():
+    from natlang_neuralese.model.heads import NeuraleseReadAdapter
+
+    adapter = NeuraleseReadAdapter(4, eps=2e-6)
+    assert adapter.norm.eps == 2e-6
 
 
 def test_projection_anchor_schedule_decays_from_the_stage_origin():

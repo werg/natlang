@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -111,8 +112,25 @@ def main(argv=None):
     checkpoint_identity = _file_identity(checkpoint_path) if checkpoint_path else None
     state = torch.load(args.heads, map_location="cpu", weights_only=False, mmap=True) if args.heads else None
     metadata = (state or {}).get("port_config", {})
-    if metadata.get('profile', 'legacy-rms-v1') != 'legacy-rms-v1':
-        raise ValueError('raw-token-v1 requires its qualified PyTorch handoff; the legacy projector exporter is not compatible')
+    profile = metadata.get('profile', 'legacy-rms-v1')
+    if profile != 'legacy-rms-v1':
+        raise ValueError(f'GGUF projector export supports legacy-rms-v1 only; {profile} needs its qualified PyTorch handoff')
+    adapter_type = metadata.get('read_adapter')
+    adapter_eps = metadata.get('read_adapter_norm_eps')
+    adapter_keys = {name for name in (state or {}).get('heads', {}) if name.startswith('read_adapter.')}
+    expected_adapter_keys = {'read_adapter.norm.weight', 'read_adapter.proj.weight', 'read_adapter.proj.bias'}
+    if adapter_type not in (None, 'full-residual-v1'):
+        raise ValueError(f'unsupported reader adapter {adapter_type!r}')
+    if adapter_type == 'full-residual-v1' and adapter_keys != expected_adapter_keys:
+        raise ValueError('full-residual-v1 checkpoint has an incomplete adapter state')
+    if adapter_type == 'full-residual-v1' and (
+            not isinstance(adapter_eps, (int, float)) or isinstance(adapter_eps, bool) or
+            not math.isfinite(float(adapter_eps)) or float(adapter_eps) <= 0):
+        raise ValueError('full-residual-v1 checkpoint needs a finite positive read_adapter_norm_eps')
+    if adapter_type is None and adapter_keys:
+        raise ValueError('checkpoint has reader adapter weights without read_adapter metadata')
+    if adapter_type is None and adapter_eps is not None:
+        raise ValueError('checkpoint has read_adapter_norm_eps without read_adapter metadata')
     cutoff = args.cutoff if args.cutoff is not None else metadata.get("cutoff")
     if state is not None and cutoff is None:
         raise ValueError("Legacy checkpoint has no cutoff metadata; supply its actual --cutoff")
@@ -132,6 +150,8 @@ def main(argv=None):
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer))
     heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block).eval()
     if state is not None:
+        if adapter_type == 'full-residual-v1':
+            heads.add_read_adapter(eps=float(adapter_eps))
         heads.load_state_dict(state["heads"])
         with torch.no_grad():
             backbone.control_rows.copy_(state["control_rows"].to(backbone.control_rows))
@@ -209,6 +229,7 @@ def main(argv=None):
             "cutoff": heads.cutoff,
             "max_block": heads.max_length,
             "dialect": args.dialect or DIALECT,
+            "read_adapter": adapter_type,
         },
         "converter": {
             "fork_root": str(fork),
