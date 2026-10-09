@@ -1,0 +1,70 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v22-current-pass-pending-facts-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v22-targeted-counterfactual-five-20261009-v1/source-v5-current-pass-boundary",
+  "files": [
+    {
+      "path": "frozen-prompt-builder-v1/semantic-iterate-worlds-v15-soft-guided-builder.mjs",
+      "bytes": 25060,
+      "sha256": "5a4293dba1ebaf2d91712e85578c5088bbf0b54c2fd3442201ec3fbe44157c3c"
+    },
+    {
+      "path": "reference-case-index-003-current-runtime.json",
+      "bytes": 210152,
+      "sha256": "24b1ceea6d45820fbe02d0c9309c9be4b6ba75e8bd388769e678b129a73afbaa"
+    },
+    {
+      "path": "reference-case-index-003-text-emulation.json",
+      "bytes": 178170,
+      "sha256": "c1feb21a2dc7aa15d5b781c6e2451c668c042d5917198954ccc6b19028695790"
+    },
+    {
+      "path": "reference-case-index-003-wrapped-text-emulation.json",
+      "bytes": 767286,
+      "sha256": "45c781efc40aa22460701c3168b138cae40132c1e29a0d6cf2f3733efd63055d"
+    },
+    {
+      "path": "reference-case-index-003.json",
+      "bytes": 177879,
+      "sha256": "5c44266ed77cb8ea27f79c8f29b253886634b4da29b89a5ff996f0c0e8a4860d"
+    },
+    {
+      "path": "reference-replay-review-current-runtime.json",
+      "bytes": 5214,
+      "sha256": "309fbba453220c9b1d48c1199b44965c751dfde0b1b1b902f25c3536b9520ece"
+    },
+    {
+      "path": "reference-replay-review-text-emulation.json",
+      "bytes": 3265,
+      "sha256": "e985a967c20995c5742f102803cbf0bccc79f46b819e43e23f851d5301ed00e1"
+    },
+    {
+      "path": "reference-replay-review-wrapped-text-emulation.json",
+      "bytes": 7588,
+      "sha256": "ae59cbc3ad0dd3bb87cf33a34d0f0de1ee42747047f334f9fbaa45de6bc2e07b"
+    },
+    {
+      "path": "reference-replay-review.json",
+      "bytes": 3330,
+      "sha256": "433b5bfa2f3fb34fe41efc63be8d4e6c1fbbfcb2028d1f22db3cc3bbdc832e1a"
+    },
+    {
+      "path": "source-derivation-proof.json",
+      "bytes": 7771,
+      "sha256": "c4097681a6f1d4ef21b2265cf9145fd67e47c2de668d734cf4fac939210b9ea3"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 3225,
+      "sha256": "8a9794729c509c4851793bded26f8bc27023351bfcfee1192af7262b09bd2b2c"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 240850,
+      "sha256": "9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a",
+      "lines": 5
+    }
+  ],
+  "bytes": 1629790
+}

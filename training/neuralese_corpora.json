@@ -20560,11 +20560,42 @@
       "training_admission": false,
       "corpus_publication_for_training": false,
       "derived_from": [
-        "free-provider-v22-followups-and-kilo-held-20261009-v1"
+        "free-provider-v22-followups-and-kilo-held-20261009-v1",
+        "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1"
       ],
       "independent_new_worlds": 0,
       "license": "Inherited authored V22 same-world counterfactual source provenance",
       "notes": "Closed ZAI4.5Flash cases1-3 only; case4live excluded. Two exact runtime accepted final decisions, third1800.7s resource-budget incomplete/61savedreplies48kcompletiontokens, not semanticnegative. Twenty-four repeatedempty authoritysearches occur in correctlyscoped pass3conditions child; authorityfactintentionallylaterpass4. Root shared prompt fixes pendingfactreturn boundary, no widenedscope/sourcefactmutation. Provider transport causes/physicalrequesttotals unknown. Frozenruntime/source receipts preserved throughparent/sourcehash. No admission/newworldcredit."
+    },
+    {
+      "id": "luna-v22-current-pass-pending-facts-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-v22-targeted-counterfactual-five-20261009-v1/source-v5-current-pass-boundary",
+      "include": [
+        "frozen-prompt-builder-v1/semantic-iterate-worlds-v15-soft-guided-builder.mjs",
+        "reference-case-index-003-current-runtime.json",
+        "reference-case-index-003-text-emulation.json",
+        "reference-case-index-003-wrapped-text-emulation.json",
+        "reference-case-index-003.json",
+        "reference-replay-review-current-runtime.json",
+        "reference-replay-review-text-emulation.json",
+        "reference-replay-review-wrapped-text-emulation.json",
+        "reference-replay-review.json",
+        "source-derivation-proof.json",
+        "source-manifest.json",
+        "source.cases.jsonl"
+      ],
+      "split": "inherited-train",
+      "source_class": "prompt-only-derivative-of-held-staged-evidence-source",
+      "admission": "held-pending-source-quality-and-actual-recovery-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "luna-v22-targeted-counterfactual-five-held-trajectories-20261009-v1"
+      ],
+      "independent_new_worlds": 0,
+      "license": "Inherited authored operational source provenance",
+      "notes": "Same five sourcev4cases/fourgroups/golds/evidence/files/scopes;10literalpromptoccurrences add currentpass pendingfactreturn boundary. Source SHA9808161dafb1a3218071feee83fe9c3b3a4280becccafdc21678993d63ef1d7a. DOC-954 scripted currentruntime text-marker-emulation reference accepted/exactsixfilechecks/four scopedreads. Earlier failed wrapperdiagnostics explicitly superseded and retained. No provider/modelcalls in reference, no learnedchannelcertificate/admission. One separate actualZAI recovery fromfreshsource launched; activeoutputsexcluded."
     }
   ],
   "coverage_backlog": [
@@ -20591,6 +20622,7 @@
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
     "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
-    "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission."
+    "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission.",
+    "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission."
   ]
 }
