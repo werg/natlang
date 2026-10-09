@@ -91,11 +91,10 @@ In `runtime/iterate.ts`:
 
 ## 3. Model-turn protocol and block endpoints
 
-- **Content parts.** Message content and tool-call arguments may contain `{ "type": "neuralese", "id": "nz1_…" }` parts, in requests and in responses. In a response, a part marks a block the server wrote; its entry is already in the server store.
+The protocol both servers serve (content parts, chat-completion extensions, block store, write/encode/embed/digest, decisions, render, learning, adapters, info) is specified in `spec/NEURALESE_PORT.md`, "Wire protocol", including which endpoints only one server serves. Runtime-side notes:
+
 - **Tool-call arguments.** LFM2.5 uses Pythonic tool calls in `<|tool_call_start|>[…]<|tool_call_end|>`. A literal inside a string argument (for example `eval(code="const p: Neuralese<Plan> = <block>;")`) is returned as a structured argument: an array of text and Neuralese parts. `chat-completion.ts` reassembles it, and the runtime treats it as source text with an embedded literal.
-- **Endpoints.** `PUT /v1/neuralese/blocks/{id}`, `GET /v1/neuralese/blocks/{id}`, `POST /v1/neuralese/blocks/{id}/pin`, and `GET /v1/neuralese/dialects` (dialect versions spoken and the rewrite rules enabled for them).
-- **Learning sessions.** `POST /v1/neuralese/grad` (graph record, argument references, objective, order) returns loss, gradient and optimiser-state references; `POST /v1/neuralese/optimize` applies an optimiser step server-side.
-- **No fallback.** A transport whose backend lacks a dialect fails with `neuralese-unsupported-backend`. Capability is probed once per runtime through `/v1/neuralese/dialects`.
+- **No fallback.** A transport whose backend lacks a dialect fails with `neuralese-unsupported-backend`. The runtime reads the dialects a server speaks from `GET /v1/neuralese/info`.
 - **Collector.** `ts-host/scripts/teacher-collector.mjs` and the materializers record Neuralese parts as references; teacher models without Neuralese cannot run Neuralese programs, which is the intended failure.
 
 ## 4. Python reference server

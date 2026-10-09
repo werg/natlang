@@ -2,22 +2,24 @@
 
 | Endpoint | Meaning |
 | --- | --- |
-| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true`, answers server-sent `chat.completion.chunk` events: text deltas, a `[{"type": "neuralese", "id": …}]` content delta per written block, and a final chunk whose `x_natlang_message` is the complete parsed message. |
-| `GET /v1/models`, `GET /health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | Dialect, width, dtype, maximum block length, `grad` availability. |
+| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (this server only; the fork answers `stream-unsupported`), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens, a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage` and `neuralese`). |
+| `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
+| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly) and `projections` (adapter-code decoders). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
 | `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through collection. |
 | `POST /v1/neuralese/collect` | Drop unpinned blocks not in `{"referenced": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options"}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. |
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
 | `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
-| `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
+| `GET /v1/neuralese/adapters/{id}/lora` | A stored adapter exported as a GGUF LoRA, for the fork (which loads it with `PUT …/lora`). |
+| `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"?}` → block metadata. |
 | `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
-| `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
+| `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type"?, "context"?}` → block metadata. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
 | `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
 
@@ -31,8 +33,9 @@ call; "write" makes the argument a written block and closes the call, "decode" d
 `guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
 tool call, call names are checked, eval code is checked line by line for repetition and TypeScript syntax, and a
 rejected line is rolled back and resampled; the response reports `x_natlang_guidance.rejections`), and the test hook
-`x_natlang_forced`. `decide` and
-`grad` bodies take `adapters` in the same form.
+`x_natlang_forced`. `neuralese_template` also takes `value_type` (`"string"` or `"unknown"`: the written value sits
+unquoted, in native value syntax) and `argument_path` (keys into nested arguments); the fork serves neither. `decide`,
+`decide_many` and `grad` bodies take `adapters` in the same form.
 """
 
 from __future__ import annotations

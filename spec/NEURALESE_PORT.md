@@ -108,26 +108,153 @@ template), so the TypeScript checker sees ordinary code.
 
 ## Wire protocol
 
-The model-turn request and response (`ts-host/src/contracts.ts`) gain a content
-part, in both directions:
+Two servers implement this protocol: the reference server
+(`training/neuralese/natlang_neuralese/serve/`, PyTorch) and the llama.cpp fork
+(`tools/neuralese/neuralese-service.cpp`, also built to WebAssembly for the browser
+runtime). Rows marked **both** must agree; `tests/neuralese/test_server_conformance.py`
+checks them on identical weights. Rows marked **reference only** or **fork only** are
+served by one server; the other answers as stated, never by silently ignoring the
+request.
+
+### Conventions
+
+- Bodies are JSON unless stated. An error answers
+  `{"error": {"code": "…", "message": "…"}}`.
+- Status codes: 400 for a request error, including a block the request names that the
+  store lacks (`neuralese-unknown-block`) or that is in another dialect
+  (`neuralese-dialect-mismatch`); 404 `not-found` for an unknown path and 404
+  `neuralese-unknown-block` when fetching or pinning an absent block; 500 for a write
+  or decode that failed in the server.
+- **Block metadata** ("meta" below) is
+  `{"id", "dialect", "length", "width", "dtype", "type"?, "producer"?, "truncated"?}`.
+  An endpoint that creates a block stores it before answering; the ID is the content
+  ID (`nz1_…`, as `ts-host/src/native/neuralese-store.ts`).
+- **Block body**: a safetensors file with one rank-2 `payload` tensor (`F32`, `F16` or
+  `BF16`) and the metadata as a JSON string under the `natlang.block` metadata key.
+
+### Content parts
+
+The model-turn request and response (`ts-host/src/contracts.ts`) carry blocks as
+content parts, in both directions:
 
 ```json
-{ "type": "neuralese", "id": "nz1_…" }
+{ "type": "neuralese", "id": "nz1_…", "value_type": "string" }
 ```
 
-It may appear in message content arrays and in tool-call argument strings, which
-are then sent as arrays of text and neuralese parts. A response reports, per
-written block, its ID, length, `truncated`, and the stop decisions when tracing is
-on.
+They may appear in message `content` arrays and in tool-call arguments (an argument
+string sent as an array of text and neuralese parts, or a JSON argument value that is
+such an array). In a response, a part marks a block the server wrote; it is already in
+the server's store.
 
-A Neuralese-capable server exposes:
+| Field | Meaning | Servers |
+| --- | --- | --- |
+| `id` | The block. Must start with `nz1_`, else `neuralese-bad-part`. | both |
+| `value_type` | `"string"` (default): the block sits inside the quoted string. `"unknown"`: a tool-call argument value that is exactly this block renders unquoted, in native value syntax. A stored block of type `Neuralese<unknown>` defaults to `"unknown"`. | reference only; the fork ignores it and renders `"string"` |
 
-| Endpoint | Meaning |
-| --- | --- |
-| `GET /v1/neuralese/info` | Dialects spoken, width, dtype, maximum block length, whether `grad` sessions are available. |
-| `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body). The server verifies the ID against the content. |
-| `GET /v1/neuralese/blocks/{id}` | Fetch a block. |
-| `POST /v1/neuralese/blocks/{id}/pin` | Keep a block through garbage collection while a reference is live. |
+### Chat completions: `POST /v1/chat/completions`
+
+OpenAI-style chat completion. Request fields beyond OpenAI's:
+
+| Field | Meaning | Servers |
+| --- | --- | --- |
+| `neuralese_temperature` | `τ` for every block written (see Temperature). Default 0. | both |
+| `neuralese_max_length` | Per-request maximum block length, capped by the server's (`max_block_length`). | both |
+| `neuralese_length` | Optional size hint: write exactly that many vectors, no stop decision. | both |
+| `neuralese_passes` | With a length hint, write the block in that many parallel passes (exact when ≥ the length). | both |
+| `neuralese_template` | Template readout: `{"call", "arguments"?, "argument"? (default "value"), "value": "write" \| "decode"}`. The reply is forced to the model's own rendering of that call, cut at the argument; `write` makes it a written block and closes the call, `decode` decodes the value and the rest. Errors: `neuralese-template`. | both |
+| `neuralese_template.value_type` | `"string"` (default) or `"unknown"`: the written value sits unquoted; the block is typed `Neuralese<unknown>` and its parts carry `value_type: "unknown"`. | reference only; the fork ignores it |
+| `neuralese_template.argument_path` | A list of string or integer keys addressing the value inside nested arguments. | reference only; the fork ignores it |
+| `x_natlang_adapters` | `[{"id", "scale"}]`: adapter blocks active for the whole request. | both; the fork needs a loaded LoRA per ID, else 409 `neuralese-adapter-not-loaded` |
+| `x_natlang_adapters` with `{"code", "projection", "scale"}` | A Neuralese block decoded into an adapter by a served projection (`info.projections`). Errors: `neuralese-projection`. | reference only; the fork answers 501 `neuralese-adapters-unavailable` |
+| `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?, "run"?}`: the reply opens a tool call (`require_call` defaults to `tool_choice == "required"`), call names are checked against `tools` (default: the offered tools), eval code is checked line by line for repetition and TypeScript syntax, and a rejected line is rolled back and resampled. | both; the reference may also apply a server default (`--guidance`) |
+| `seed` | Also seeds the payload noise of each written block (with the block's index). | both; the noise generators differ, so payloads at `τ > 0` differ between servers |
+| `x_natlang_forced` | Test hook: a plan of text strings and `{"neuralese": "write"}` items that replaces sampling. Errors: `forced-plan`. | both |
+| `stream` | Server-sent `chat.completion.chunk` events (below). | reference only; the fork answers 400 `stream-unsupported` |
+
+Response fields beyond OpenAI's:
+
+| Field | Meaning | Servers |
+| --- | --- | --- |
+| `choices[0].message` | `content` is an array of text and neuralese parts when the reply wrote a block; tool-call `arguments` is a JSON string whose string values that hold a block are part arrays. `reasoning_content` holds thinking. | both; the fork parses only Pythonic tool calls (`<\|tool_call_start\|>`) and a complete `<think>…</think>`, the reference also `<tool_call>` JSON calls and a reply that only closes `</think>` |
+| `neuralese` | `{"dialect", "blocks": [meta…]}`, one entry per written block, in order. A written block's `producer` is its write record: `{"kind": "write", "request", "index", "cutoff", "temperature", "seed", "stop_logits", "mean"?, "log_sigma"?, "length_hint"?, "passes"?}`, where `mean` and `log_sigma` are stored blocks holding `μ` and `log σ`. A block that hit the hard maximum has `truncated: true`. | both; the fork adds `"rng": "mt19937-normal"` |
+| `x_natlang_guidance` | `{"rejections": […]}` when guidance was on. | both |
+
+**Streaming** (reference only). Events are `chat.completion.chunk` objects: a role
+delta; text `content` deltas until a tool call opens (call markup is held back); per
+written block, a delta `{"content": [{"type": "neuralese", "id"}]}` with
+`neuralese.block` set to the block's meta; parsed calls as one `tool_calls` delta; a
+final chunk with `finish_reason`, `usage`, `neuralese`, and `x_natlang_message`, the
+complete parsed message as a non-streaming response would return it. An error after
+the headers is sent as an `{"error": …}` event; `[DONE]` ends the stream.
+
+### Block store
+
+| Endpoint | Meaning | Servers |
+| --- | --- | --- |
+| `PUT /v1/neuralese/blocks/{id}` | Store a block (block body). 400 `neuralese-bad-block` for a malformed body, 400 `neuralese-id-mismatch` when the content hashes to another ID. The first block of an ID is kept (a later upload may add a missing `type`). Answers 201 with its meta. | both |
+| `GET /v1/neuralese/blocks/{id}` | The block body. | both |
+| `GET /v1/neuralese/blocks/{id}/meta` | The block's meta. | both |
+| `POST /v1/neuralese/blocks/{id}/pin` | Count one pin on the block: a pinned block survives every collection. 404 `neuralese-unknown-block` for an absent block. Answers `{"ok": true}`. | both |
+| `POST /v1/neuralese/blocks/{id}/unpin` | Release one pin. Answers `{"ok": true}`. | both |
+| `POST /v1/neuralese/collect` | `{"referenced": [id…]}`: drop every stored block that is neither referenced nor pinned. Answers `{"removed": [id…]}`. | both |
+
+### Writing blocks
+
+Each answers 201 with the new block's meta.
+
+| Endpoint | Meaning | Servers |
+| --- | --- | --- |
+| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}`. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes` as `neuralese_passes`). 500 `neuralese-write` if no block was written. | both |
+| `POST /v1/neuralese/encode` | Text into a block in one forward pass through the port (supplied-input write, one vector per token, no stop decision): `{"text", "type"?, "context"?}`, where `context` is chat messages without blocks rendered as the write site. Errors: `neuralese-encode`. Producer `{"kind": "text-encode", "text"}`. | both |
+| `POST /v1/neuralese/embed` | A block initialised from the token embeddings of `{"text", "type"?}`. Errors: `neuralese-embed`. | reference only; the fork answers 404 `not-found` |
+| `POST /v1/neuralese/digest` | The digest operator (`natlang_neuralese/digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}`. Answers the digest block's meta plus `parts` (1 unless the value exceeds the write site's window and is digested in chunks, then combined) and `window` (default: the model's context less the site's text, the block and a margin; a request `window` can only lower it). `system` is the digest instructions, as text or parts. | both |
+
+### Readouts
+
+| Endpoint | Meaning | Servers |
+| --- | --- | --- |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Errors: `neuralese-decision`. `adapters` as `x_natlang_adapters`. | both |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions (plans/BATCHED_EXECUTION.md): `{"items": [{"messages", "options" \| "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} \| {"error"}]}`, one per item in order. Each result equals `decide` on that item alone; items with the same prompt and adapters share one prefill; a failing item fails alone. Top-level `adapters` is the default for items. | both; the `error` strings differ |
+| `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` with each block as `<block>` → `{"prompt"}` (201). For conformance. | both |
+| `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}` (201). For conformance. | both |
+
+### Learning
+
+| Endpoint | Meaning | Servers |
+| --- | --- | --- |
+| `POST /v1/neuralese/grad` | Gradient replay session: `{"arguments": [id…], "terms": [term…], "producers"?, "adapters"?, "order"? (1 or 2), "derived"?}` → `{"loss", "terms": [loss…], "gradients": {argument id: gradient id}}`. Term kinds: `crossEntropy`, `logLikelihood`, `decision`, `selfDistill`, `klPrior`. Gradient blocks are in dialect `{dialect}#grad`. Errors: `neuralese-grad-term`, `neuralese-grad-target`, `neuralese-grad-derived`, `neuralese-grad-unavailable`. | reference only; the fork answers 501 `neuralese-grad-unavailable` |
+| `POST /v1/neuralese/optim` | One optimiser step: `{"optimizer": "sgd" \| "adam", "hyper", "params": [id…], "grads": [id…], "state"?: {"step", "m"?, "v"?}}` → `{"params": [id…], "state": {"step", "m"?, "v"?}}`. State blocks are in dialect `{dialect}#opt`. Errors: `neuralese-optim`. | reference only; the fork answers 404 `not-found` |
+
+### Weight adapters
+
+Adapter blocks (`model/tiny_adapters.py`) bind through `x_natlang_adapters` and
+`adapters`. The reference applies them directly; the fork applies each as a GGUF LoRA
+that a client loads first.
+
+| Endpoint | Meaning | Servers |
+| --- | --- | --- |
+| `POST /v1/neuralese/adapters` | A zero adapter for this backbone: `{"kind", "rank", "u", "layers", "targets", "seed", "type"?}` → meta (201). | reference only; the fork answers 404 `not-found` |
+| `GET /v1/neuralese/adapters/{id}/lora` | A stored adapter exported as a GGUF LoRA (octet stream). 404 for a block that is not a stored adapter. | reference only |
+| `PUT /v1/neuralese/adapters/{id}/lora` | Load a GGUF LoRA body as adapter `{id}` → `{"id", "loaded": true}` (201). 400 `neuralese-adapter-lora` if it is not a LoRA for this model. | fork only |
+
+### Info and health
+
+`GET /v1/neuralese/info`:
+
+| Field | Meaning | Servers |
+| --- | --- | --- |
+| `dialects` | Dialects spoken (one per server today). | both |
+| `width`, `dtype`, `max_block_length`, `cutoff` | Payload width, payload dtype (`f32`), hard maximum block length, shallow cutoff layer. | both |
+| `grad` | Whether `grad` sessions are served: `true` (reference), `false` (fork). | both |
+| `grad_order` | Highest gradient order (2). | reference only |
+| `adapters` | Adapter kinds applied directly (`["xs", "tiny"]`, reference) or `"lora"` (fork: adapters need `PUT …/lora`). | both, different types |
+| `projections` | `{name: {"source", "target", "identity"}}`: projections that decode adapter codes. | reference only |
+| `server` | `"llama.cpp"`. | fork only |
+
+`GET /health`, `GET /v1/health` (`{"status": "ok"}`) and `GET /v1/models` are served
+by both.
+
+### No text fallback
 
 A request containing neuralese parts sent to a server that does not declare a
 matching dialect fails; the runtime reports `neuralese-unsupported-backend` or
