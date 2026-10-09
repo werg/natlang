@@ -367,9 +367,16 @@ function messageChanges(viewOps: readonly Op[], message: AssistantMessage): Mess
 		if (rest.length === 1) {
 			if (op[0] !== "p" || op[3] !== 0) return [{ type: "message", message }];
 			for (const [offset, block] of (op[4] as unknown as Block[]).entries()) {
+				const contentIndex = op[2] + offset;
+				// A block of a kind with no start (a host's own part type, such as a Neuralese block) arrives whole.
+				if (block.type !== "text" && block.type !== "thinking" && block.type !== "toolCall") {
+					whole.add(contentIndex);
+					changes.push({ type: "block", contentIndex, block });
+					continue;
+				}
 				const type =
 					block.type === "text" ? "text_start" : block.type === "thinking" ? "thinking_start" : "toolcall_start";
-				changes.push({ type, contentIndex: op[2] + offset, block });
+				changes.push({ type, contentIndex, block });
 			}
 			continue;
 		}

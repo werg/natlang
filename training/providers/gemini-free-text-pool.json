@@ -1,0 +1,88 @@
+{
+  "schema": "natlang.free-text-model-pool/1",
+  "verified_on": "2026-10-09",
+  "pricing_source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "policy": "Round robin over ready quota groups; use actual RetryInfo; preserve typed validity and semantic admission gates. Model aliases are not independent capacity.",
+  "models": [
+    {
+      "id": "gemini-3.5-flash-lite",
+      "quota_group": "gemini-3.5-flash-lite",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "quota_group": "gemini-3.1-flash-lite",
+      "free_text_verified": true,
+      "reasoning_effort": "minimal",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "quota_group": "gemini-3.1-flash-lite",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "quota_group": "gemini-3.8-flash",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "quota_group": "gemini-3.6-flash",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "quota_group": "gemini-3.5-flash",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "quota_group": "gemini-3-flash",
+      "free_text_verified": true,
+      "reasoning_effort": "low",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "quota_group": "gemma-4-26b-a4b-it",
+      "free_text_verified": true,
+      "reasoning_effort": "omit",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "quota_group": "gemma-4-31b-it",
+      "free_text_verified": true,
+      "reasoning_effort": "omit",
+      "interval_seconds": 7
+    },
+    {
+      "id": "gemini-robotics-er-2-preview",
+      "quota_group": "gemini-robotics-er-2-preview",
+      "free_text_verified": true,
+      "reasoning_effort": "omit",
+      "interval_seconds": 7
+    }
+  ],
+  "exclusions": {
+    "gemini-2.5-pro": "free pricing but actual authenticated404, catalog presence insufficient",
+    "gemini-2.5-flash": "actual404 retired for new users",
+    "gemini-2.5-flash-lite": "actual404 retired for new users",
+    "gemini-3.1-pro-preview": "no free text tier",
+    "gemini-omni-1.1-flash": "no free text tier",
+    "gemini-3.7-flash": "catalog entry; free pricing not established",
+    "latest aliases": "not independent quota; use verified exact model IDs",
+    "audio/image/music/embedding-only": "not eligible for current text decision generation"
+  }
+}

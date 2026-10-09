@@ -1,9 +1,10 @@
 """Shared checkpoint policy (plans/STORAGE_POLICY.md, training/storage-policy.json "checkpoint_cadence").
 
 One rolling resumable slot written on a wall-clock cadence (and when the process is asked to stop), a weights-only
-"best" snapshot on eval improvement, and at the end of a run the resumable slot (optimizer state included) gives way
-to a weights-only final file. Writes are atomic (pending file, then rename) and disk-aware: when the disk cannot hold
-the new slot next to the old one, the old one goes first, so a full disk never kills a run.
+"best" snapshot on eval improvement, and a weights-only final export alongside the
+preserved resumable slot. Writes are atomic and durable (pending, fsync, rename).
+Insufficient disk space fails the save without deleting the previous checkpoint.
+Pruning is a separate, explicitly authorized operation.
 
     policy = CheckpointPolicy(out, every_minutes=45).install_signal_handlers()
     for step in ...:
@@ -14,11 +15,12 @@ the new slot next to the old one, the old one goes first, so a full disk never k
                 break
         if improved:
             policy.save_best({"step": step, "weights": ...}, metric=held_ce)
-    policy.finalize({"step": step, "weights": ...})
+    policy.finalize({"step": step, "weights": ...}, resumable_state=latest_full_state)
 """
 from __future__ import annotations
 
 import json
+import errno
 import os
 import shutil
 import signal
@@ -62,26 +64,34 @@ class CheckpointPolicy:
         return self.signaled or self.clock() - self.last >= self.every
 
     # Writes -----------------------------------------------------------------------------------------------------
-    def _write(self, state: dict, target: Path, *, replaceable: Path | None = None) -> dict:
-        """Atomic, disk-aware ``torch.save``. ``replaceable``: an existing file this write supersedes, removed first
-        when the disk cannot hold both."""
-        expected = (replaceable.stat().st_size if replaceable and replaceable.exists() else 0) or \
-            (target.stat().st_size if target.exists() else 0)
-        dropped = None
-        if replaceable and replaceable.exists() and shutil.disk_usage(self.out).free < self.free_factor * expected:
-            replaceable.unlink()
-            dropped = str(replaceable)
+    def _write(self, state: dict, target: Path) -> dict:
+        """Preserve the previous slot until the replacement is completely written."""
+        expected = target.stat().st_size if target.exists() else 0
+        if expected and shutil.disk_usage(self.out).free < self.free_factor * expected:
+            raise OSError(errno.ENOSPC, 'insufficient space for atomic checkpoint replacement; previous file preserved', str(target))
         pending = target.with_name(target.name + ".pending")
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
-        torch.save(state, pending)
-        os.replace(pending, target)
-        event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size, "dropped_first": dropped}
+        try:
+            torch.save(state, pending)
+            with pending.open('rb') as stream:
+                os.fsync(stream.fileno())
+            os.replace(pending, target)
+            directory = os.open(self.out, os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except BaseException:
+            pending.unlink(missing_ok=True)
+            raise
+        event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
+                 "previous_preserved_until_replace": True}
         self.events.append(event)
         return event
 
     def save(self, state: dict) -> dict:
         """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes)."""
-        event = self._write(state, self.slot, replaceable=self.slot)
+        event = self._write(state, self.slot)
         self.last = self.clock()
         return event
 
@@ -90,14 +100,23 @@ class CheckpointPolicy:
         better = self.best_metric is None or (metric > self.best_metric if higher_is_better else metric < self.best_metric)
         if not better:
             return False
-        self._write(dict(weights_state, metric=metric), self.best_path, replaceable=self.best_path)
+        self._write(dict(weights_state, metric=metric), self.best_path)
         self.best_metric = metric
         (self.out / "checkpoint-policy.json").write_text(json.dumps({"best_metric": metric}) + "\n")
         return True
 
-    def finalize(self, weights_state: dict | None = None, *, drop_resumable: bool = True) -> dict:
-        """End of run: write the weights-only final file and drop the resumable slot (its optimizer state is only
-        needed to continue this exact run; a continuation starts from weights with its own optimizer)."""
+    def finalize(self, weights_state: dict | None = None, *, resumable_state: dict | None = None,
+                 drop_resumable: bool = False) -> dict:
+        """Keep optimizer continuation by default; pass the final full state to save its exact final step.
+
+        Without ``resumable_state``, the last rolling checkpoint is retained.
+        Disposal must be explicitly chosen by the owner and follows a successful
+        final weights export; it is never a disk-pressure fallback.
+        """
+        if drop_resumable and weights_state is None:
+            raise ValueError('dropping resumable state requires a successful final weights export')
+        if resumable_state is not None:
+            self.save(resumable_state)
         event = self._write(weights_state, self.final_path) if weights_state is not None else {}
         if drop_resumable and self.slot.exists():
             freed = self.slot.stat().st_size

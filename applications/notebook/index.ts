@@ -2,16 +2,17 @@
  * A notebook of explicit cells: `sqlite` queries over an in-memory, read-only database and
  * `javascript` cells that receive only their declared dependencies as `deps`. Editing a cell bumps
  * its revision and invalidates its descendants. `runNotebook` walks the goal's dependency closure with
- * `iterateOn` (natlang picks among ready cells), then explains the bounded result samples.
+ * `iterateOn` (a structural measure ends the loop; the order among ready cells is a pluggable with a crisp default),
+ * then explains the bounded result samples from host-computed evidence.
  */
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import vm from 'node:vm';
-import { iterateOn, type FolderHandle } from '@natlang/node';
+import { builtin, iterateOn, pluggable, untrusted, type FolderHandle, type PluggableSetting, type Untrusted } from '@natlang/node';
 import chooseGoal from './choose_goal.nl';
-import chooseCell from './choose_cell.nl';
-import explain from './explain.nl';
-import type { Cell, CellResult, NotebookRun } from './types.js';
+import nextCell from './nextCell.nl';
+import answerFromCells from './answerFromCells.nl';
+import type { Cell, CellEvidence, CellResult, NotebookRun } from './types.js';
 
 export type * from './types.js';
 export type CellSource = { id: string, engine: Cell['engine'], needs: string[], source: string, description?: string };
@@ -20,7 +21,10 @@ export type NotebookConfig = { cells: CellSource[], tables?: Record<string, Row[
 
 const idPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const CELL_TIMEOUT_MS = 2000;
+/** Default sandbox bound for one JavaScript cell, milliseconds; settable per workspace (`cellTimeoutMs`). */
+export const CELL_TIMEOUT_MS = 2000;
+/** The length of the sample kept with a cell result. */
+const SAMPLE_CHARS = 1000;
 
 export class NotebookWorkspace {
   readonly outputs = new Map<string, CellResult & { value: unknown }>();
@@ -31,7 +35,10 @@ export class NotebookWorkspace {
   private revision = 0;
   private ready = false;
 
-  constructor(cells: CellSource[], tables: Record<string, Row[]> = {}) {
+  private readonly cellTimeoutMs: number;
+
+  constructor(cells: CellSource[], tables: Record<string, Row[]> = {}, { cellTimeoutMs = CELL_TIMEOUT_MS } = {}) {
+    this.cellTimeoutMs = cellTimeoutMs;
     for (const cell of cells) this.putCell(cell, false);
     for (const [name, rows] of Object.entries(tables)) this.loadTable(name, rows);
     this.db.exec('PRAGMA query_only=ON');
@@ -105,11 +112,11 @@ export class NotebookWorkspace {
     }
     try {
       const raw = cell.engine === 'sqlite' ? this.query(cell.source) :
-        await vm.runInNewContext(`(async function (deps) {\n${cell.source}\n})(deps)`, { deps }, { timeout: CELL_TIMEOUT_MS });
+        await vm.runInNewContext(`(async function (deps) {\n${cell.source}\n})(deps)`, { deps }, { timeout: this.cellTimeoutMs });
       const value: unknown = JSON.parse(JSON.stringify(raw));
       if (cell.revision !== revision) return this.failed(cell, 'cell source changed during execution', 'stale');
       const output_sha256 = hash(value);
-      const summary: CellResult = { id, status: 'ok', revision, output_sha256, sample: JSON.stringify(value).slice(0, 1000), detail: '' };
+      const summary: CellResult = { id, status: 'ok', revision, output_sha256, sample: JSON.stringify(value).slice(0, SAMPLE_CHARS), detail: '' };
       this.outputs.set(id, { ...summary, value });
       this.events.push({ operation: 'notebook.cell', id, engine: cell.engine, revision, status: 'ok', output_sha256 });
       return summary;
@@ -142,25 +149,69 @@ export class NotebookWorkspace {
   close(): void { this.db.close(); }
 }
 
-/** Cells of the goal's dependency closure that have not run and whose dependencies have. */
-function readyCells(run: NotebookRun): Cell[] {
+/** The cells the goal needs: the goal and, transitively, everything it depends on. Ids that name no cell are included. */
+function requiredIds(run: NotebookRun): Set<string> {
   const byId = new Map(run.cells.map(cell => [cell.id, cell]));
   const needed = new Set<string>();
   const pending = [run.goal];
   for (const id of pending) if (!needed.has(id)) { needed.add(id); pending.push(...byId.get(id)?.needs ?? []); }
-  const done = new Set(run.order);
+  return needed;
+}
+
+/** Cells of the goal's dependency closure that have not run and whose dependencies have. */
+export function readyCells(run: NotebookRun): Cell[] {
+  const needed = requiredIds(run), done = new Set(run.order);
   return run.cells.filter(cell => needed.has(cell.id) && !done.has(cell.id) && cell.needs.every(parent => done.has(parent)));
 }
 
-/** Run one ready cell chosen by natlang. */
-async function advance(notebook: NotebookWorkspace, run: NotebookRun, files?: FolderHandle): Promise<NotebookRun> {
+/** The loop's measure: required cells not yet run. Each ok step runs one of them, so it falls by one; it is 0 once the run has stopped. */
+export function remainingCells(run: NotebookRun): number {
+  if (run.status !== 'running') return 0;
+  const done = new Set(run.order);
+  return [...requiredIds(run)].filter(id => !done.has(id)).length;
+}
+
+/** Ids of the cells that no other cell needs: the candidates for the goal. */
+export function finalCells(cells: Cell[]): string[] {
+  const needed = new Set(cells.flatMap(cell => cell.needs));
+  return cells.filter(cell => !needed.has(cell.id)).map(cell => cell.id);
+}
+
+/** Which cell of `ready` runs first, with the pluggable's crisp default: the lowest id. */
+export const lowestId = (ready: Cell[]): string => ready.map(cell => cell.id).reduce((low, id) => id < low ? id : low);
+
+export type NotebookOptions = {
+  /** How the next ready cell is chosen: `crisp` (lowest id, the default), `nl` (the model) or `shadow` (both run; the crisp choice is served and agreement is traced). */
+  nextCellMode?: PluggableSetting;
+};
+
+/** An answer that is an id of `ids`, or the reason it is not. */
+const idProblem = (answer: unknown, ids: string[], what: string): string | null =>
+  typeof answer === 'string' && ids.includes(answer) ? null : `${JSON.stringify(answer)} is not one of the ${what}: ${ids.join(', ')}`;
+
+/** Ask `choose` for an id of `ids`; on a wrong answer ask once more with the problem. Returns the answer and any problem left. */
+async function chooseId(choose: (problem?: string) => Promise<string>, ids: string[], what: string): Promise<{ id: string, problem: string | null }> {
+  const first = await choose();
+  const problem = idProblem(first, ids, what);
+  if (!problem) return { id: first, problem };
+  const second = await choose(problem);
+  return { id: second, problem: idProblem(second, ids, what) };
+}
+
+/** Run one ready cell. The choice among ready cells does not change the answer, so it is a pluggable with a crisp default. */
+async function advance(notebook: NotebookWorkspace, run: NotebookRun, options: NotebookOptions): Promise<NotebookRun> {
   const ready = readyCells(run);
   const done = new Set(run.order);
   if (!ready.length) return { ...run, status: 'blocked', blocked: run.cells.filter(cell => !done.has(cell.id)).map(cell => cell.id).sort(),
     detail: 'No required cell is ready; check missing dependencies or a cycle.' };
-  const chosen = await chooseCell(ready, run.goal, files);
+  const ids = ready.map(cell => cell.id);
+  const pick = pluggable({
+    crisp: async (): Promise<string> => lowestId(ready),
+    nl: async (): Promise<string> => (await chooseId(problem => (nextCell as (...args: unknown[]) => Promise<string>)(ready, run.goal, ...(problem === undefined ? [] : [problem])), ids, 'ready cells')).id,
+  }, options.nextCellMode, { default: 'crisp', name: 'notebook.nextCell', serve: 'crisp' });
+  const chosen = await pick();
   const cell = ready.find(row => row.id === chosen);
-  if (!cell) return { ...run, status: 'invalid', detail: `cell is not ready: ${chosen}` };
+  if (!cell) return { ...run, status: 'invalid', detail: `${idProblem(chosen, ids, 'ready cells')}` };
   const result = await notebook.execute(cell.id);
   const results = [...run.results, result];
   if (result.revision !== cell.revision) return { ...run, results, status: 'stale', detail: `${cell.id}: source revision changed during this run` };
@@ -168,20 +219,69 @@ async function advance(notebook: NotebookWorkspace, run: NotebookRun, files?: Fo
   return { ...run, order: [...run.order, cell.id], results, status: cell.id === run.goal ? 'done' : 'running', detail: '' };
 }
 
-/** Execute the goal's dependency graph, one natlang-chosen ready cell per step, and explain the result. */
-export async function runNotebook(notebook: NotebookWorkspace, goal: string, question: string, files?: FolderHandle): Promise<NotebookRun> {
+const containsNull = (value: unknown): boolean => value === null || (typeof value === 'object' && Object.values(value as object).some(containsNull));
+const isEmpty = (value: unknown): boolean => value === '' || Array.isArray(value) && value.length === 0 ||
+  typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+
+/** The facts the explanation reads about each cell that ran: computed from the stored results, not by the model. */
+export function evidenceOf(notebook: NotebookWorkspace, run: NotebookRun): CellEvidence[] {
+  return run.results.map(result => {
+    const stored = notebook.outputs.get(result.id);
+    const known = stored !== undefined && stored.status === 'ok' && stored.revision === result.revision;
+    return { id: result.id, revision: result.revision, status: result.status, sample: untrusted(result.sample, `cell ${result.id}`),
+      has_null: known && containsNull(stored.value), empty: known && isEmpty(stored.value),
+      truncated: known && JSON.stringify(stored.value).length > SAMPLE_CHARS, detail: result.detail };
+  });
+}
+
+/** What keeps the answer from being complete, in words the explanation states: failed, stale, blocked or invalid parts of the run. */
+export function limitsOf(run: NotebookRun): string[] {
+  const limits = run.results.filter(result => result.status !== 'ok')
+    .map(result => `cell ${result.id} ${result.status === 'stale' ? 'became stale' : 'failed'}${result.detail ? ` (${result.detail})` : ''}`);
+  if (run.status === 'blocked') limits.push(`cells ${run.blocked.join(', ')} did not run (${run.detail})`);
+  else if (run.status === 'invalid') limits.push(run.detail);
+  else if (run.status !== 'done' && !limits.length) limits.push(`the run stopped as ${run.status}${run.detail ? ` (${run.detail})` : ''}`);
+  return limits;
+}
+
+/** The citation rule: every `id@revision` in the answer names a cell of the evidence at its revision, and an answer built on an ok cell cites one. */
+export function checkCitations(answer: string, evidence: CellEvidence[]): string | null {
+  const cited = [...answer.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)@(\d+)\b/g)];
+  const wrong = cited.filter(([, id, revision]) => !evidence.some(row => row.id === id && row.revision === Number(revision)));
+  if (wrong.length) return `${wrong.map(match => match[0]).join(', ')} ${wrong.length === 1 ? 'does' : 'do'} not name a cell and revision that ran; the cells that ran are ${evidence.map(row => `${row.id}@${row.revision}`).join(', ')}`;
+  if (!cited.length && evidence.some(row => row.status === 'ok')) return `the answer cites no cell; cite the cells it uses as id@revision, from ${evidence.map(row => `${row.id}@${row.revision}`).join(', ')}`;
+  return null;
+}
+
+/** Explain the run: the host computes the evidence and the limits, natlang answers, the host checks the citations (one retry with the problem). */
+async function explain(notebook: NotebookWorkspace, question: string, run: NotebookRun, files?: FolderHandle): Promise<{ answer: string, problem: string | null }> {
+  const evidence = evidenceOf(notebook, run), limits = limitsOf(run);
+  const note = files ? await builtin('readNote')(question, files) as Untrusted<string> : untrusted('', 'note');
+  const ask = (problem?: string) => (answerFromCells as (...args: unknown[]) => Promise<string>)(question, evidence, note, limits, ...(problem === undefined ? [] : [problem]));
+  let answer = await ask();
+  let problem = checkCitations(answer, evidence);
+  if (problem) { answer = await ask(problem); problem = checkCitations(answer, evidence); }
+  return { answer, problem };
+}
+
+/** Execute the goal's dependency graph one ready cell per step, until the required cells have run or a step stops the run, and explain the result. */
+export async function runNotebook(notebook: NotebookWorkspace, goal: string, question: string, files?: FolderHandle, options: NotebookOptions = {}): Promise<NotebookRun> {
   const cells = notebook.catalog();
   const initial: NotebookRun = { goal, cells, order: [], results: [], blocked: [], answer: '', detail: '',
     status: cells.some(cell => cell.id === goal) ? 'running' : 'invalid' };
   if (initial.status === 'invalid') return { ...initial, detail: `unknown cell: ${goal}` };
-  const finished = await iterateOn((run: NotebookRun) => advance(notebook, run, files), initial)
-    .withLimit({ maxSteps: cells.length + 1 }).until(run => run.status !== 'running');
-  return { ...finished, answer: await explain(question, finished, files) };
+  const finished = await iterateOn((run: NotebookRun) => advance(notebook, run, options), initial)
+    .withMeasure(remainingCells).until(run => run.status !== 'running');
+  const { answer, problem } = await explain(notebook, question, finished, files);
+  return { ...finished, answer, detail: [finished.detail, problem && `citation check: ${problem}`].filter(Boolean).join('; ') };
 }
 
 /** Answer a free-text request: pick the goal cell, then run and explain it. */
-export async function answerRequest(notebook: NotebookWorkspace, request: string, files?: FolderHandle): Promise<NotebookRun> {
-  return runNotebook(notebook, await chooseGoal(request, notebook.catalog()), request, files);
+export async function answerRequest(notebook: NotebookWorkspace, request: string, files?: FolderHandle, options: NotebookOptions = {}): Promise<NotebookRun> {
+  const cells = notebook.catalog(), finals = finalCells(cells);
+  const goal = await chooseId(problem => (chooseGoal as (...args: unknown[]) => Promise<string>)(request, cells, finals, ...(problem === undefined ? [] : [problem])),
+    cells.map(cell => cell.id), 'cells');
+  return runNotebook(notebook, goal.id, request, files, options);
 }
 
 export const STARTER_NOTEBOOK: NotebookConfig = {

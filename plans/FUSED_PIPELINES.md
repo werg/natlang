@@ -1,9 +1,11 @@
 # Fused natural-language pipelines
 
-Status: built up to the point where only a qualified model is missing (2026-10-09). Implements
+Status: built up to the point where only a qualified model is missing (2026-10-09); follow-ups done the same day
+(observed readers, explicit chains in the compilers and nldb, call-site marks for crisp TypeScript). Implements
 [ARCHITECTURE_IMPROVEMENT.md](ARCHITECTURE_IMPROVEMENT.md) E2. Code: `ts-host/src/fusion/` (analysis, planners,
-verifier, settings, report), `ts-host/src/runtime/fusion.ts` (hand-off at run time), `applications/fusion-planner/`
-(the natural-language planner), `ts-host/scripts/fusion-bench.mjs` (measurement), `ts-host/test/fusion.test.mjs`.
+verifier, settings, report, observed readers), `ts-host/src/compiler/call-flow.ts` (the data-flow analysis the fact service
+and the compiler share), `ts-host/src/runtime/fusion.ts` (hand-off at run time), `applications/fusion-planner/` (the
+natural-language planner), `ts-host/scripts/fusion-bench.mjs` (measurement), `ts-host/test/fusion.test.mjs`.
 
 ## The idea
 
@@ -31,7 +33,7 @@ through `pluggable()` ([runtime/pluggable.ts](../ts-host/src/runtime/pluggable.t
    overrides).
 3. **Crisp verifier** (`fusion/plan.ts`, `verifyPlan`). It checks any plan against the facts: no fused edge has an
    outside reader, both sides share model and dialect, the consumer parameter is known and its type is the
-   producer's. A rejected plan goes back to the planner once with the problems; edges still rejected, and a planner
+   producer's, and a reader set that was only observed has at least the configured number of supporting runs. A rejected plan goes back to the planner once with the problems; edges still rejected, and a planner
    that fails, fall back to text for those edges (`repairedPlan`). The natural-language planner can only make a plan
    more conservative than the facts allow, never less safe.
 
@@ -78,33 +80,89 @@ block is immutable and shareable, so the mechanics allow it, but the equivalence
 
 ### Observations from the corpus
 
-Prose orchestrators rarely say precisely who reads a value, so most candidate edges are not provable. Counts of
-candidate edges found by `fusionFacts` and the crisp plan, over the applications of this checkout (fusion-planner
-excluded):
+Prose orchestrators rarely say precisely who reads a value, so most candidate edges are not provable from the source. Counts
+of candidate edges found by `fusionFacts` and the crisp plan, as `natlang check --fusion` reports them over the applications
+of this checkout (fusion-planner excluded). "Before" is the first measurement; "now" is after the explicit chains below
+(the first table gave migration nine edges, which was its scope count; the check lists six).
 
-| Application | Orchestrator scopes | Candidate edges | Fusible | Kept as text (why) |
-| --- | --- | --- | --- | --- |
-| compilers | 1 | 6 | 0 | 6 typed-only (parse to analyze to declare in C, Python, Rust: prose does not name the variable) |
-| nldb | 4 | 8 | 0 | 8 typed-only (the query pipeline stages) |
-| pi | 18 | 4 | 0 | 3 fan-out (`request` goes to classify, answer, startToolRound), 1 implicit with field reads |
-| wiki | 5 | 2 | 0 | 2 typed-only |
-| logs | 3 | 3 | **1** | `runbook -> hypothesize`; `hypothesize -> queries` stored into `inc.hypotheses`; `escalate -> summarize` field reads and 5 more readers |
-| build | 2 | 3 | 0 | field reads (`graph.…`), host return |
-| migration | 9 | 9 | 0 | fan-out of `understand` to five stages; `plan -> summarize` field reads; 3 typed-only |
-| scheduling | 1 | 3 | 0 | `order` is crisp code; field reads |
-| workflow | 3 | 3 | 0 | values are logged and shown; fan-out |
-| games | 4 | 0 | 0 | no stage-to-stage hand-offs in prose |
-| Total | | 41 | **1** | |
+| Application | Orchestrator scopes | Candidate edges | Fusible before | Fusible now | Kept as text (why) |
+| --- | --- | --- | --- | --- | --- |
+| compilers | 1 | 6 | 0 | **3** | `parse -> analyze` in C, Python and Rust now fuse; `analyze -> declare` (3) is read by the orchestrator (`checked.diagnostics`) |
+| nldb | 4 | 8 | 0 | **1** | `parse -> plan` fuses; `plan -> execute` is read for its columns and explanation; the executor's 6 operator hand-offs follow whatever plan the optimizer wrote, so no static chain exists |
+| pi | 18 | 4 | 0 | 0 | 3 fan-out (`request` goes to classify, answer, startToolRound), 1 implicit with field reads |
+| wiki | 5 | 2 | 0 | 0 | 2 typed-only |
+| logs | 3 | 3 | 1 | 1 | `runbook -> hypothesize` fuses; `hypothesize -> queries` is stored into `inc.hypotheses`; `escalate -> summarize` has field reads and 5 more readers |
+| build | 2 | 3 | 0 | 0 | field reads (`graph.…`), host return |
+| migration | 9 | 6 | 0 | 0 | fan-out of `understand` to five stages; `plan -> summarize` field reads; typed-only |
+| scheduling | 1 | 3 | 0 | 0 | `order` is crisp code; field reads |
+| workflow | 3 | 3 | 0 | 0 | values are logged and shown; fan-out |
+| games | 4 | 0 | 0 | 0 | no stage-to-stage hand-offs in prose |
+| Total | | 38 | **1** | **5** | |
 
 No crisp TypeScript orchestrator in these applications chains two natural-language calls; their hosts call one function
-per request. The test project covers the TypeScript analysis.
+per request. The test project (`fusion.test.mjs`) covers the TypeScript analysis, the call-site marks and the run time.
 
-Reading the result: the rule is sound but the corpus is written for text. The typed-only edges (compilers, nldb) are the
-real opportunity (`parse -> analyze -> declare`, `scan -> filter -> join -> aggregate`): the declared types connect them
-and nothing visible reads the middle values, but prose does not prove it. Two ways to make them fusible without
-changing any declared type: an author writes the chain explicitly (`checked = analyze(parse(source))`), or an
-`observed` fact source reads the orchestrator's recorded eval code from the call store (exact TypeScript, so exact
-readers). The second is the planned follow-up; the fact service already has the reader vocabulary for it.
+Reading the result: the rule is sound but the corpus was written for text. Two ways out of the typed-only edges, both
+without changing a declared type, and both done:
+
+1. **An author writes the chain explicitly.** The language already has the form: a call inside a call
+   (`checked = analyze(parse(source))`), or a name used only as the next stage's argument. The analysis proves both. No new
+   syntax was added; [references/fusion.md](../skills/natlang-authoring/references/fusion.md) of the authoring skill says how
+   to write a chain and how to make the next stage carry what the orchestrator needs from the middle value (the
+   compilers' `analyze` now starts its diagnostics with the parser's, so the orchestrator reads only `checked`). Faithfulness
+   is the author's call, edge by edge: where the orchestrator needs the middle value or a plan decides the chain at run time
+   (nldb's executor), the edge stays text.
+2. **Observed readers** (next section).
+
+## Observed readers
+
+The fact service can read readers from the eval code orchestrating models actually ran, as the call store recorded it
+(`approach.evals` of the orchestrator's calls). That code is exact TypeScript, so its readers are exact.
+
+- Switch: `fusion.observed` in natlang.json (`true`, or `{ "minRuns": 20, "store": "path" }`); absent means off, and
+  `fusionFacts(root, files)` alone never looks at a store. `natlang check`, `natlang run` and `analyzeFusion` pass the machine
+  store (`NATLANG_CALL_STORE`) unless `store` names another.
+- Which runs: calls of the orchestrator at its source path, executor `agent`, with `isModelEvidence` (a declared model that
+  spent tokens; scripted drivers do not count), whose recorded instructions equal the instructions now (an edit starts the
+  count again). The newest 500 are read.
+- What is observed: for edges whose only unknown is the prose (`typed` and `implicit` flows), each run's eval programs are
+  analyzed as one program with the same data-flow analysis the crisp TypeScript scopes use. A run **supports** an edge when
+  every call of the producer in it passes its value to the consumer's parameter and to nothing else (a name used only as that
+  argument, or a nested call); it **contradicts** when some call is read by anything else: a field access, a condition, a
+  service or `console.log`, the orchestrator's result, a destructuring, a second consumer, a producer whose value is never
+  handed on. Variables span the evals of one run. The reader set is replaced by the observed one only for edges with no
+  certain outside reader already.
+- Evidence: the edge carries `observed: { runs, contradicted, minRuns, revision }`; the revision is the number of runs read
+  and a digest of their call IDs. The plan records `evidence` for every observed edge (readers: observed, runs, contradicted,
+  minimum, revision), `natlang check --fusion` prints `[readers observed: N runs, store R]`, and the planner program sees
+  `edge.observed` and keeps text below the minimum.
+- Verifier: `unfusableBecause`, `crispPlan` and `verifyPlan` take `observedMinRuns` (default 20, from `fusion.observed.minRuns`).
+  An observed edge with fewer supporting runs is kept as text with the count in the reason; a contradicting run lists its
+  readers on the edge, so the edge is not fusible whatever the count. An NL planner that fuses it anyway is rejected like any
+  other bad plan.
+- Observation is statistical, unlike a proof from source: a later run may read the value, and a block then reaches code that
+  expects text. Use `shadow` for observed edges before `on`, and treat a contradicting run as a reason to rewrite the prose.
+  On this machine's store the model-driven runs of the repository's orchestrators number zero (its records are scripted), so
+  the counts above are from source alone.
+
+## Call sites in crisp TypeScript
+
+Hand-offs in crisp TypeScript (`analyze(await parse(source))`, or a name used only as `analyze(tree)`) are analyzed exactly
+(the shared analysis in `compiler/call-flow.ts`) and now run fused. The soundness argument:
+
+- The analysis is syntax over the enclosing function (the whole file for a top-level name). A name counts as read at every
+  mention that is not exactly an argument of the consumer, including `export`; a shadowing name only adds readers. Nothing
+  sits between the two calls, so no TypeScript code sees the block.
+- The project build (`buildProject`, and the same lowering as runtime module loading) wraps each call of a candidate hand-off
+  as `__natlang.fuseSite(id, (...a) => f(...a), ...args)`. The arguments are evaluated where they stand. With fusion off the
+  wrapper calls the function and nothing else. The mark is the call's file and text offset (`file@offset`), the same value
+  the facts carry in `edge.sites`.
+- The plan is made at run time (settings, certificate); the mark is only a place. `fusedEdges` returns a TypeScript edge with
+  its `sites`; `engageFusion` matches the call by the frame's site and the edge's function, retypes the producer's result or
+  the consumer's parameter as for any edge, and falls back to text with the same events when the certificate does not hold.
+  Events of calls the host made have no calling function's trace; `fusionHostEvents(task)` lists them.
+- Unchanged risk: a block left unconsumed (the consumer is on a branch that did not run) is reported by
+  `unconsumedFusedBlocks`. Calls in code that never went through the project build are not marked, so they stay text.
 
 ## How the type changes
 
@@ -124,9 +182,9 @@ trace manifest, matches the call against the planned edges of that scope, retype
 consumer's parameter, and emits trace events. Everything else is existing soft-value machinery: store, port, typed
 result writes, soft argument rendering.
 
-Scope of the runtime today: fused hand-offs inside natural-language orchestrators (a call's parent is a natural-language
-call, so the runtime sees both sides). Fusible hand-offs in crisp TypeScript are analyzed, planned and reported but kept
-as text at run time; engaging them needs the compile step to rewrite the call site, which is the next piece.
+Scope of the runtime: fused hand-offs inside natural-language orchestrators (a call's parent is a natural-language call,
+so the runtime sees both sides), and inside crisp TypeScript orchestrators whose calls the project build marked (see "Call
+sites in crisp TypeScript").
 
 ## Qualification: when fusion may turn on
 
@@ -219,12 +277,19 @@ orchestrators); the verifier rejects a bad plan, the retry carries the problems,
 failing planner falls back; the natural-language planner program runs on a scripted model and its verified plan equals
 the crisp one; fusion off changes nothing; fused end to end under the emulation (the consumer is shown a block, traces
 mark the emulation); fallback without certificate, without Neuralese backend, with a mismatched certificate;
-shadow agreement and disagreement; `natlang check` text and `--json`; the benchmark harness.
+shadow agreement and disagreement; `natlang check` text and `--json`; the benchmark harness. Observed readers: supporting and
+contradicting runs, the minimum in the crisp planner and the verifier, the evidence in plan and report, reads the analysis
+must see (field, return, display, fan-out, destructuring, evals sharing a name), the call store adapter (model evidence only,
+same instructions, revision), the settings. Explicit chains: nested and bound forms proven in prose, a field read not. TypeScript
+call sites: the facts' site IDs, an exported name, a project built with the marks, and the emulated run (the planned
+hand-offs pass a block, a re-read or shared value and fusion off stay text).
 
 ## Open items
 
-- Observed facts: readers from recorded eval code in the call store, to make typed-only edges (compilers, nldb)
-  provable.
-- Compile-time call-site rewrite to engage fusion in crisp TypeScript orchestrators.
+- Observed facts have no real input yet: the repository's own store holds scripted runs only. They need live orchestrator runs
+  (the teacher window) before any edge can pass `minRuns` on evidence.
+- More explicit chains: wiki and migration still have typed-only edges; the compilers' `analyze -> declare` would fuse if
+  `declare` carried the checked diagnostics forward (`declare(analyze(parse(source)))`); that moves the stop condition into
+  `declare`, an author's decision when the compilers are measured.
 - Consumer-side shadow for consumers declared pure.
 - A real certificate, a qualified server and a benchmark run (training side).

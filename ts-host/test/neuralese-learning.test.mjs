@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -449,4 +449,30 @@ test('second order: an outer loss after an inner update differentiates through t
   const step = await sgd.step({ value: hint0, opt: sgd.init(hint0) }, second.grad);
   assert.notEqual(step.value.$neuralese.id, hint0.$neuralese.id, 'order 2: the gradient reaches hint0 through the inner update');
   assert.ok(+(await valueAndGrad(meta, step.value)).loss < +second.loss, 'a step on the second-order gradient lowers the meta loss');
+});
+
+test('replay records: a function output keeps its calls as producers, and the record carries its blocks', { skip, timeout: 900_000 }, async () => {
+  const { replayRecordSink } = await import('../dist/index.js');
+  const store = new MemoryNeuraleseStore();
+  const path = join(mkdtempSync(join(tmpdir(), 'natlang-stdlib-')), 'stdlib.nz');
+  const { library } = await buildStandardLibrary({ endpoint, store, path });
+  const lib = createNeuraleseLibrary(library);
+  const runtime = createNatlangRuntime({ model: neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store }), neuralese: { store } });
+  const out = join(mkdtempSync(join(tmpdir(), 'natlang-replay-')), 'records.jsonl');
+  const sink = replayRecordSink({ path: out, endpoint, annotate: () => ({ operator: 'map' }) });
+  const { valueAndGrad, objectives } = createLearning(learningService({ endpoint, store, replayRecords: sink }), { library });
+  const v = { $neuralese: { type: 'Neuralese<string>', id: await embed('Lyon is a city in France.') } };
+  const f = softFunction({ type: '(text: string) => string', body: await embed('Return only the first word of the text.', 'Neuralese<(text: string) => string>') });
+  const bodies = { map: { $neuralese: { type: 'Neuralese<map>', id: library.bodies.map } }, read: { $neuralese: { type: 'Neuralese<read>', id: library.bodies.read } } };
+  // The output is a function, so its turns run under their own recorder; map's write must still be a producer.
+  await valueAndGrad(() => objectives.crossEntropy(() => runtime.run(async () => lib.read(await lib.map(v, f))), 'Lyon'), bodies);
+  const [record] = readFileSync(out, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(record.schema, 'natlang.replay-record/1');
+  assert.equal(record.operator, 'map');
+  assert.deepEqual(new Set(record.arguments), new Set([library.bodies.map, library.bodies.read]));
+  assert.ok(record.producers?.length >= 1, 'map wrote the block read consumed');
+  const written = JSON.stringify(record.producers).match(/nz1_[a-z2-7]+/g);
+  const blocks = readdirSync(out.replace(/\.jsonl$/, '.blocks'));
+  for (const id of new Set(JSON.stringify(record).match(/nz1_[a-z2-7]+/g))) assert.ok(blocks.includes(`${id}.safetensors`), id);
+  assert.ok(written.length > 0 && Number.isFinite(record.loss));
 });

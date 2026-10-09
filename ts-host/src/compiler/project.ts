@@ -16,6 +16,7 @@ import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types
 import { declarationNamespace } from '../native/external.js';
 import { analyzeInlineLambdas, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { checkConstrainedSource } from './policy.js';
+import { fusionCallSites } from './call-flow.js';
 import { natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
 import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
@@ -491,6 +492,16 @@ export function compileProject(options: BuildOptions): BuildResult {
       }
       return found;
     };
+    // Calls of named functions that make up a possible hand-off (compiler/call-flow.ts): the runtime matches them to planned edges.
+    const fusionSitesOf = (file: ts.SourceFile): Map<string, string> => {
+      const names = new Map<string, ItemRecord>();
+      for (const statement of file.statements) {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.endsWith('.nl')) continue;
+        const record = namedRecords.get(resolve(dirname(file.fileName), statement.moduleSpecifier.text));
+        if (record && statement.importClause?.name) names.set(statement.importClause.name.text, record);
+      }
+      return fusionCallSites(file, rel(file.fileName), names);
+    };
     const specifierFor = (commonjs: boolean) => bound ? (commonjs && bound.path ? bound.path : bound.url) : runtimeSpecifier;
     const byFile = new Map(sources.map(file => [file.fileName, file]));
     const transformer: ts.TransformerFactory<ts.SourceFile> = context => file => {
@@ -511,13 +522,13 @@ export function compileProject(options: BuildOptions): BuildResult {
             ...(item.conditional ? { conditional: true as const } : {}) }])),
         stringReplaces: new Map(fileReadouts.filter(item => item.kind === 'string-replace')
           .map(item => [`${item.start}:${item.end}`, { ...(item.conditional ? { conditional: true as const } : {}) }])),
-        checker: program.getTypeChecker(), runtime: '__natlang',
+        fusionSites: fusionSitesOf(source), checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
         module: { natlangImports: natlangImports(source), rewrite: rewriteFor } })(context)(file);
     };
     const emit = (fileName: string, text: string) => {
-      if (options.constrained && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
+      if ((options.constrained || /\b__natlang\.fuseSite\(/.test(text)) && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
         const commonjs = compilerOptions.module === ts.ModuleKind.CommonJS || /Object\.defineProperty\(exports/.test(text);
         text = (commonjs ? `const __natlang = require(${JSON.stringify(specifierFor(true))}).__natlang;\n` :
           `import { __natlang } from ${JSON.stringify(specifierFor(false))};\n`) + text;

@@ -1,7 +1,16 @@
 # The hourly check-in as a natlang program (review item P1)
 
-Status: draft for owner review (plans/OWNER_REVIEW.md). Nothing is built until the owner has reviewed it. No code
-changes accompany this document.
+Status: implemented in `applications/heartbeat/` (2026-10-09, shipped in advisory mode; implemented before the owner's
+review, which is now an after-the-fact review in plans/OWNER_REVIEW.md). Where the build differs from the draft below:
+
+- The "Is<T, ...>" checks of section 10 that need the run's own readings, the allowlist or the machine's resource numbers
+  (quote occurs in the reading, proposal valid against the allowlist, `idle_resources` against thresholds) are exact
+  host verifiers (`verify.ts`, `actions.ts`) whose problems go back to the function through a `feedback` argument;
+  the one-sentence and at-most-three-sentences predicates are checked the same way, not by the judge.
+- `actions.json` also holds the settings (stage, modes, thresholds, repairs); the stage lives there so only the owner changes it.
+- The inbox is read with `coord.py inbox --json` (new, read-only, no cursor) rather than by importing `Store`; question 6 is
+  answered by using `scripts/coord.py`.
+- Each part is `pluggable` (`crisp|nl|shadow`); the crisp side is `ladder.ts` and is also the degraded mode.
 
 Source: plans/NATLANG_NATIVE_REVIEW.md, row P1. The hourly check-in is done today by agents in Claude sessions. It
 decides run health, cause, resume, replace or wait, and the next step. That judgment leaves no trace that the

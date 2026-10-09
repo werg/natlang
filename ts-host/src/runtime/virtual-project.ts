@@ -6,6 +6,7 @@
 import { compileProject, type BuildResult, type ProjectFiles } from '../compiler/project.js';
 import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
+import { builtinModule, hasBuiltinModule } from './modules.js';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 
 export type VirtualProject = { files: Record<string, string>; root?: string };
@@ -81,6 +82,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     const require = (specifier: string): unknown => {
       if (specifiers.includes(specifier)) return runtime;
       if (options.modules && Object.hasOwn(options.modules, specifier)) return options.modules[specifier];
+      if (hasBuiltinModule(specifier)) return builtinModule(specifier);
       if (!specifier.startsWith('.')) throw new Error(`module ${specifier} is not available in this virtual project`);
       const base = path.slice(0, path.lastIndexOf('/'));
       const joined = `${base}/${specifier}`.split('/').reduce<string[]>((parts, part) =>

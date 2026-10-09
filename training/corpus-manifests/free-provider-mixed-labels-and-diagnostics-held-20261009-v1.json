@@ -1,0 +1,285 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-mixed-labels-and-diagnostics-held-20261009-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "gemini-quota-cooldowns-v1.json",
+      "bytes": 1584,
+      "sha256": "9a739a014249520d865f6c27867b3998f31db74b24df5233cf651e9545601509"
+    },
+    {
+      "path": "mixed-provider-closeouts-v1.json",
+      "bytes": 2895,
+      "sha256": "e56f8ad15b841236f202641ac1b1a732b81de164642320eccccd6e68cbfd3ebf"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1/closeout-v1.json",
+      "bytes": 319,
+      "sha256": "cec991ab82058f5fec4132104c97060f87a38464d845241a520813562b5db478"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1/labels.jsonl",
+      "bytes": 107409,
+      "sha256": "95dc81f1c01fc541ce0946bef7e499663eb53273c1641fec37ef1b885564568f",
+      "lines": 128
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 784,
+      "sha256": "50bd973d9adffbfbbe4b3e0afd1cd208ee772e0525acfc41f8a8158fe1c2d8d2"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1111,
+      "sha256": "0c3b26e00844def3704295be4959130b174ca280cc905fbd23fff32de797dd73"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1/worker.log",
+      "bytes": 6014,
+      "sha256": "53286751ddaa7d9c451a203a3103275dc8c04a61c47dfbdb16692c85eed1d576"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/cases.jsonl",
+      "bytes": 2971,
+      "sha256": "66e0b2d8936f6e7e04c00d2e6a566bb0a95e8ba36443a99d8fbf2ab1d7f970e4",
+      "lines": 6
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/closeout-v1.json",
+      "bytes": 315,
+      "sha256": "883d445f04759f3e92a49465b132486b6bc80cba293d17d2fba3658ae17ffd9e"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/labels.jsonl",
+      "bytes": 7202,
+      "sha256": "432523e8eb20a84bf9c3f9fecc5d5d8eb181e72262a4cac4fefba43aa3a32855",
+      "lines": 6
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/labels.jsonl.manifest.json",
+      "bytes": 779,
+      "sha256": "9a813661419f4eca7a2187d6c5fcfbf704f19ecef8c75531d2608ddbdbcf8fa7"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/launch-receipt-v1.json",
+      "bytes": 920,
+      "sha256": "75d37ab6b2f2cafd1d98317c6d25d8b3b000764be913828d88aed2345e4da96b"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/source-manifest.json",
+      "bytes": 682,
+      "sha256": "e6099c518f0ecac0175ef52f1d3a99e9a810e1c739138cda771726b450c8ec03"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v1/worker.log",
+      "bytes": 307,
+      "sha256": "e303b1aa5cd852eb30b08abbaa8c1b2b25b7af8a0cb1f52eb4a1d2ee427944f5"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v2/closeout-v1.json",
+      "bytes": 315,
+      "sha256": "d1bafcace825c498d48dc2446ac69bc1b0e142468f1bb3a43d130f8594d0221c"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v2/labels.jsonl",
+      "bytes": 16239,
+      "sha256": "ab8696c906a798f77a8357d74025eddca0be7a8709bee3b1dc30bde9e4195485",
+      "lines": 6
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v2/labels.jsonl.manifest.json",
+      "bytes": 772,
+      "sha256": "b640fe1249a4e480c56b644fb42150bd74aa1948181adee8f24f85da8b18425d"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v2/launch-receipt-v1.json",
+      "bytes": 1099,
+      "sha256": "4aabc824addaca6badff162d03aeee1bd205422c2e2f0f55335e288a6d43cef0"
+    },
+    {
+      "path": "provider-google-gemma-4-26b-a4b-it-typed-error-diagnostic-v2/worker.log",
+      "bytes": 308,
+      "sha256": "a2f894f0a78d57a74f4b4405d60e540653febf5e851d19b002efb8f10c31cce9"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-mixed-decisions-v1/closeout-v1.json",
+      "bytes": 319,
+      "sha256": "f5df22bed262fd50ab8bef8077d22d82a4ba98fd0f939a83076e7e67ec6bc07b"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-mixed-decisions-v1/labels.jsonl",
+      "bytes": 105433,
+      "sha256": "8042d9bae47e502fc5c3d648b6c2f365f8a98082bdfa223b281aaf1645afe322",
+      "lines": 128
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 756,
+      "sha256": "2a86fe3c121d7f74e662904ae6afedbd03453c0d6d132522cd81acb2d0603a67"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1079,
+      "sha256": "6254b47239ef6b3bb475db10a654b2f25345a848058460e04c98bd87916e72a5"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-mixed-decisions-v1/worker.log",
+      "bytes": 5938,
+      "sha256": "69f6df677a6fb319ff9f1adf57fda7edecbf0ee4cb987cf037933be454d8d4ab"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/cases.jsonl",
+      "bytes": 1528,
+      "sha256": "6cab049dbef6ef35069a82d10a511cc283e7b71666876a5affa288857755a035",
+      "lines": 3
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/closeout-v1.json",
+      "bytes": 315,
+      "sha256": "55bdf90fa1c582fa27b233949301bdaaf702dac4a99e25f5b7064383ee0310fc"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/labels.jsonl",
+      "bytes": 3651,
+      "sha256": "110f630663d8499b026d869b7c36a3a661a310cc3cce8b2a897a9dca79c0178d",
+      "lines": 3
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/labels.jsonl.manifest.json",
+      "bytes": 751,
+      "sha256": "35803e7b94d6d9ed0c8971d4ad0c52cf1a06944be7a320bb7d4383c5a0288c1e"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/launch-receipt-v1.json",
+      "bytes": 886,
+      "sha256": "fd5480db59b3a63f2dfd2cb51895f86f779632dd30cdccc9da0a0fa20c131d25"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/source-manifest.json",
+      "bytes": 587,
+      "sha256": "4b92521148bca2aecfab454b2f75aa0cdfaf370baf9b421e42bb245382900bb0"
+    },
+    {
+      "path": "provider-groq-openai-gpt-oss-20b-typed-error-diagnostic-v1/worker.log",
+      "bytes": 175,
+      "sha256": "b3554035524e4aff9b640f264b375903010280315e1e9caf3dd6fce755ae3154"
+    },
+    {
+      "path": "provider-groq-short-decisions-v1/cases.jsonl",
+      "bytes": 7359,
+      "sha256": "863781e0f461202b9c29bbcba72f858270a7355bf184853bbf2b06b4db4f56d7",
+      "lines": 16
+    },
+    {
+      "path": "provider-nvidia-glm53-flash-low-short-decisions-v1/closeout-v1.json",
+      "bytes": 315,
+      "sha256": "add802065063a775662896dccaf579941b461fba0ed801326f940ce89b92be7e"
+    },
+    {
+      "path": "provider-nvidia-glm53-flash-low-short-decisions-v1/labels.jsonl",
+      "bytes": 3824,
+      "sha256": "ca2cb69ba88158d6e5b38822f8306271cc87713676cb6dddbc18f30a9c78a0c4",
+      "lines": 4
+    },
+    {
+      "path": "provider-nvidia-glm53-flash-low-short-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 757,
+      "sha256": "c565b4b5bb77844c9855e2d34c3ba41cca49804efb2d724315dab24521498360"
+    },
+    {
+      "path": "provider-nvidia-glm53-flash-low-short-decisions-v1/launch-receipt-v1.json",
+      "bytes": 990,
+      "sha256": "779da0f6b92a2c3a73869b5cf646f7e606cdc9f8693a9c37fe34a0eca2cf0c67"
+    },
+    {
+      "path": "provider-nvidia-glm53-flash-low-short-decisions-v1/worker.log",
+      "bytes": 224,
+      "sha256": "5ebbe1de1206a1d6a48c4df7693c06aee9695d7c086c00e6802600261565af8e"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1/closeout-v1.json",
+      "bytes": 317,
+      "sha256": "510bf57aeb1f4582a24a14dd01e5e2a227a0d1cbf96ccc0ab48c6d3280b952ba"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1/labels.jsonl",
+      "bytes": 14185,
+      "sha256": "a7e4472d70d8b7c8a503fa862db6a48f3a2dcd77ed53b9f94aec8c37da53dda7",
+      "lines": 16
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1/labels.jsonl.manifest.json",
+      "bytes": 769,
+      "sha256": "8f2bdadb5d7e642fcf2a88a267401019ddd29698b902161ef097c8941228dc9d"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1/launch-receipt-v1.json",
+      "bytes": 1112,
+      "sha256": "846330dee04e4fe5e01752e279e8a38a59cd0962e020be58abbbea7e29ce610a"
+    },
+    {
+      "path": "provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1/worker.log",
+      "bytes": 773,
+      "sha256": "ff9eb9e3c75cada199066b28e998e5e1b42acc880bb49e486e4297c28c032d55"
+    },
+    {
+      "path": "quality-review-v3/mixed-provider-diagnostic-snapshot-v1.json",
+      "bytes": 69988,
+      "sha256": "3f7129c6a34b4b9f1c6fc14f1a004f8a0726062ea967b3cc7619d6568ce77e14"
+    },
+    {
+      "path": "quality-review-v3/mixed-provider-diagnostic-snapshot-v2.json",
+      "bytes": 75907,
+      "sha256": "502d217dcad7c13f558e47ad1b54bb5a9e8ff3325f12290481e90bb7515cc1be"
+    },
+    {
+      "path": "quality-review-v4/v22-gemini-nvidia-saved-results-snapshot-v1.json",
+      "bytes": 68869,
+      "sha256": "3d7ed535358d5515193a82f2b3400539d5bcc620ab178f34a79fa964b89dc1ad"
+    },
+    {
+      "path": "quality-review-v4/v22-gemini-nvidia-saved-results-snapshot-v2.json",
+      "bytes": 69318,
+      "sha256": "110d7542e955d033e1a90942f22f612cc332164026b405dbca9aea660450486d"
+    },
+    {
+      "path": "quality-review-v5/provider-google-gemma-4-26b-a4b-it-mixed-decisions-v1-scorer-output.json",
+      "bytes": 3774,
+      "sha256": "835c097d8f4621f79ddec3a36053bcb123fe118831dd283a87c6646e1e577cc0"
+    },
+    {
+      "path": "quality-review-v5/provider-groq-openai-gpt-oss-20b-mixed-decisions-v1-scorer-output.json",
+      "bytes": 3821,
+      "sha256": "8d615b566c11a81ade5fcbdf2417b734e6cc26d1b00035267d880359f90af5c3"
+    },
+    {
+      "path": "quality-review-v5/provider-mixed-decisions-quality-review-v1.json",
+      "bytes": 113792,
+      "sha256": "178ec94f972e13d8c62fd6016cf46eba9d0fe48749b4af7984f9cbdb55abf435"
+    },
+    {
+      "path": "quality-review-v5/provider-mixed-decisions-quality-review-v2.json",
+      "bytes": 114738,
+      "sha256": "0d8c55a9b342ad2d213e6dc2444148c833440011c4f8ed23765c13d8520f1de9"
+    },
+    {
+      "path": "quality-review-v5/provider-openrouter-inclusionai-ling-3.1-flash-mixed-decisions-v1-scorer-output.json",
+      "bytes": 2936,
+      "sha256": "5ce5ac8320c1e301b0e9eb65aac186fc062bd90e4f9bb9efb2bfd8023af76ae8"
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/cases.jsonl",
+      "bytes": 70600,
+      "sha256": "84bae10bb04f573e5b9e37c56cb7039d8fe545d6381fa816065089279f10b78a",
+      "lines": 128
+    },
+    {
+      "path": "throughput-mixed-decisions-source-v1/source-manifest.json",
+      "bytes": 1050,
+      "sha256": "8a461e15c97506c50e22268592ac997e2541d92c85c80d43136ccfe466ac325d"
+    }
+  ],
+  "bytes": 898861
+}

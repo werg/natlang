@@ -12,11 +12,16 @@ under the `natlang.block` metadata key.
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import json
+import os
+import sqlite3
 import struct
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import torch
 
@@ -153,47 +158,195 @@ def _decode_block(body: bytes) -> Block:
 
 
 class TensorStore:
-    """Content-addressed, thread-safe, in memory, with pinning and collection."""
+    """Content-addressed, thread-safe block store with owner-scoped holds and pins, optionally spilled to disk.
 
-    def __init__(self):
-        self._blocks: dict[str, Block] = {}
-        self._pins: dict[str, int] = {}
+    Owners are clients (a session or runtime ID, `x-natlang-owner` on the wire). An owner *holds* the blocks it
+    uploads, the blocks the server names to it, the blocks it pins and the blocks it lists as referenced; it releases
+    them by collecting. A block is dropped only when no owner holds or pins it, so one session's collection never
+    removes another's blocks. A collection without an owner drops only blocks that no owner holds or pins.
+
+    With a `directory`, every block is written there content-addressed (`blocks/<xx>/<id>.safetensors`, the wire
+    format) when it is first stored, holds and pins live in `store.sqlite` beside them, and only the most recently
+    used `resident_bytes` of payloads stay in memory: evicted blocks are reloaded on lookup, and all of it survives a
+    restart. One server process owns a directory at a time (an exclusive lock). Without a directory the store is
+    purely in memory and nothing is evicted.
+    """
+
+    def __init__(self, directory: str | os.PathLike | None = None, resident_bytes: int | None = None):
+        self.directory = Path(directory) if directory is not None else None
+        self.resident_bytes = resident_bytes
+        self._resident: OrderedDict[str, Block] = OrderedDict()
+        self._resident_size = 0
         self._lock = threading.Lock()
+        if self.directory is not None:
+            (self.directory / "blocks").mkdir(parents=True, exist_ok=True)
+            self._lockfile = open(self.directory / "store.lock", "a")
+            try:
+                fcntl.flock(self._lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                self._lockfile.close()
+                raise RuntimeError(f"another process owns the block store at {self.directory}") from None
+        self._db = sqlite3.connect(":memory:" if self.directory is None else str(self.directory / "store.sqlite"),
+                                   check_same_thread=False, isolation_level=None)
+        self._db.executescript("""
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            CREATE TABLE IF NOT EXISTS blocks (id TEXT PRIMARY KEY, bytes INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS holds (id TEXT NOT NULL, owner TEXT NOT NULL, PRIMARY KEY (id, owner));
+            CREATE INDEX IF NOT EXISTS holds_by_owner ON holds (owner);
+            CREATE TABLE IF NOT EXISTS pins (id TEXT NOT NULL, owner TEXT NOT NULL, count INTEGER NOT NULL,
+                                             PRIMARY KEY (id, owner));
+        """)
 
-    def put(self, block: Block) -> Block:
+    # Files and residency ------------------------------------------------------------------------------
+    def _path(self, block_id: str) -> Path:
+        return self.directory / "blocks" / block_id[4:6] / f"{block_id}.safetensors"
+
+    def _write(self, block: Block) -> None:
+        path = self._path(block.id)
+        path.parent.mkdir(exist_ok=True)
+        partial = path.with_suffix(f".{os.getpid()}.partial")
+        partial.write_bytes(encode_block(block))
+        os.replace(partial, path)
+
+    @staticmethod
+    def _size(block: Block) -> int:
+        return block.payload.numel() * block.payload.element_size() + len(block.wire_payload or b"")
+
+    def _keep(self, block: Block) -> None:
+        self._resident[block.id] = block
+        self._resident_size += self._size(block)
+        if self.directory is None or self.resident_bytes is None:
+            return
+        while self._resident_size > self.resident_bytes and len(self._resident) > 1:
+            _, evicted = self._resident.popitem(last=False)
+            self._resident_size -= self._size(evicted)
+
+    def _forget(self, block_id: str) -> None:
+        block = self._resident.pop(block_id, None)
+        if block is not None:
+            self._resident_size -= self._size(block)
+
+    def _known(self, block_id: str) -> bool:
+        return self._db.execute("SELECT 1 FROM blocks WHERE id = ?", (block_id,)).fetchone() is not None
+
+    def _load(self, block_id: str) -> Block | None:
+        found = self._resident.get(block_id)
+        if found is not None:
+            self._resident.move_to_end(block_id)
+            return found
+        if self.directory is None or not self._known(block_id):
+            return None
+        try:
+            block = decode_block(self._path(block_id).read_bytes())
+        except FileNotFoundError:
+            self._db.execute("DELETE FROM blocks WHERE id = ?", (block_id,))
+            return None
+        if block.id != block_id:
+            raise ValueError(f"{self._path(block_id)} holds {block.id}")
+        self._keep(block)
+        return block
+
+    # Blocks --------------------------------------------------------------------------------------------
+    def put(self, block: Block, owner: str | None = None) -> Block:
+        """Store `block` (the first block of an ID is kept; a later one may add a missing type); `owner` holds it."""
         with self._lock:
-            found = self._blocks.get(block.id)
+            found = self._load(block.id)
             if found is not None:
                 if not found.type and block.type:
                     found.type = block.type
-                return found
-            self._blocks[block.id] = block
-            return block
+                    if self.directory is not None:
+                        self._write(found)
+                stored = found
+            else:
+                if self.directory is not None:
+                    self._write(block)
+                self._db.execute("INSERT INTO blocks (id, bytes) VALUES (?, ?)", (block.id, self._size(block)))
+                self._keep(block)
+                stored = block
+            if owner is not None:
+                self._db.execute("INSERT OR IGNORE INTO holds (id, owner) VALUES (?, ?)", (block.id, owner))
+            return stored
 
     def get(self, block_id: str) -> Block | None:
         with self._lock:
-            return self._blocks.get(block_id)
+            return self._load(block_id)
 
-    def pin(self, block_id: str) -> None:
+    # Holds, pins, collection ---------------------------------------------------------------------------
+    def hold(self, owner: str, block_ids) -> None:
+        """`owner` holds every stored block among `block_ids` (unknown IDs are ignored)."""
         with self._lock:
-            if block_id not in self._blocks:
+            self._db.executemany("INSERT OR IGNORE INTO holds (id, owner) SELECT id, ? FROM blocks WHERE id = ?",
+                                 [(owner, block_id) for block_id in set(block_ids)])
+
+    def pin(self, block_id: str, owner: str | None = None) -> None:
+        """Keep a block through every collection until it is unpinned as often as it was pinned. An owner's pin also
+        holds the block, so that owner's collection releases it once unpinned; an anonymous pin is the owner ``""``."""
+        with self._lock:
+            if not self._known(block_id):
                 raise KeyError(block_id)
-            self._pins[block_id] = self._pins.get(block_id, 0) + 1
+            self._db.execute("INSERT INTO pins (id, owner, count) VALUES (?, ?, 1) "
+                             "ON CONFLICT (id, owner) DO UPDATE SET count = count + 1", (block_id, owner or ""))
+            if owner is not None:
+                self._db.execute("INSERT OR IGNORE INTO holds (id, owner) VALUES (?, ?)", (block_id, owner))
 
-    def unpin(self, block_id: str) -> None:
+    def unpin(self, block_id: str, owner: str | None = None) -> None:
         with self._lock:
-            count = self._pins.get(block_id, 0) - 1
-            if count > 0:
-                self._pins[block_id] = count
-            else:
-                self._pins.pop(block_id, None)
+            self._db.execute("UPDATE pins SET count = count - 1 WHERE id = ? AND owner = ?", (block_id, owner or ""))
+            self._db.execute("DELETE FROM pins WHERE count <= 0")
 
-    def collect(self, referenced: set[str]) -> list[str]:
+    def collect(self, referenced: set[str], owner: str | None = None) -> list[str]:
+        """Drop what is no longer needed and return the removed IDs.
+
+        With an `owner`: the owner holds exactly the stored blocks in `referenced` afterwards (and the blocks it pins);
+        the blocks it released are dropped unless another owner holds or pins them. Without one: every block that no
+        owner holds or pins and `referenced` does not name is dropped."""
         with self._lock:
-            removed = [i for i in self._blocks if i not in referenced and i not in self._pins]
+            db = self._db
+            db.execute("BEGIN")
+            try:
+                db.execute("CREATE TEMP TABLE IF NOT EXISTS keep (id TEXT PRIMARY KEY)")
+                db.execute("DELETE FROM keep")
+                db.executemany("INSERT OR IGNORE INTO keep (id) VALUES (?)", [(i,) for i in referenced])
+                if owner is None:
+                    removed = [row[0] for row in db.execute(
+                        "SELECT id FROM blocks WHERE id NOT IN (SELECT id FROM keep) "
+                        "AND id NOT IN (SELECT id FROM holds) AND id NOT IN (SELECT id FROM pins) ORDER BY id")]
+                else:
+                    released = [row[0] for row in db.execute(
+                        "SELECT id FROM holds WHERE owner = ? AND id NOT IN (SELECT id FROM keep) "
+                        "AND id NOT IN (SELECT id FROM pins WHERE owner = ?) ORDER BY id", (owner, owner))]
+                    db.execute("INSERT OR IGNORE INTO holds (id, owner) SELECT id, ? FROM blocks "
+                               "WHERE id IN (SELECT id FROM keep)", (owner,))
+                    db.executemany("DELETE FROM holds WHERE id = ? AND owner = ?", [(i, owner) for i in released])
+                    removed = [i for i in released if db.execute(
+                        "SELECT 1 FROM holds WHERE id = ? UNION ALL SELECT 1 FROM pins WHERE id = ?", (i, i)).fetchone() is None]
+                db.executemany("DELETE FROM blocks WHERE id = ?", [(i,) for i in removed])
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
             for block_id in removed:
-                del self._blocks[block_id]
+                self._forget(block_id)
+                if self.directory is not None:
+                    self._path(block_id).unlink(missing_ok=True)
             return removed
 
+    def holders(self, block_id: str) -> set[str]:
+        with self._lock:
+            return {row[0] for row in self._db.execute("SELECT owner FROM holds WHERE id = ?", (block_id,))}
+
+    @property
+    def resident(self) -> int:
+        """Blocks currently in memory."""
+        return len(self._resident)
+
+    def close(self) -> None:
+        with self._lock:
+            self._db.close()
+            if self.directory is not None:
+                self._lockfile.close()
+
     def __len__(self) -> int:
-        return len(self._blocks)
+        with self._lock:
+            return self._db.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]

@@ -39,7 +39,7 @@ enforces, when it fires and the `ts-host/src` file that raises it. Each code was
 | `neuralese-condition` | A soft value used as a condition | plan time | `compiler/neuralese.ts` |
 | `neuralese-readout-sync` | Implicit string conversion of a soft value in a synchronous function or callback | plan time | `compiler/neuralese.ts` |
 | `neuralese-nested` | `Neuralese<Neuralese<T>>` | plan time (type read) | `compiler/neuralese.ts`, `native/types.ts` |
-| `neuralese-dialect-mismatch` | A `.nz` entry's block dialect differs from its declared type (see mismatch 1) | load time | `native/nz-file.ts` |
+| `neuralese-dialect-mismatch` | A `.nz` entry's block dialect differs from its declared type; a block coerced to a `Neuralese` type (argument, result, `let`, `read`) was stored in another dialect than the type names (`DefaultDialect`: the runtime's reader dialect); text at a slot of another dialect than the port's; a runtime whose declared dialect differs from its port's | load time, call time, runtime creation | `native/nz-file.ts`, `native/values.ts`, `native/runtime.ts`, `neuralese/combinators.ts`, `native/neuralese.ts` |
 | `neuralese-block-integrity` | A `.nz` block does not hash to its ID | load time | `native/nz-file.ts` |
 | `neuralese-live-capture-save` | A Neuralese function with live captures cannot be saved to a file ([SPEC](SPEC.md#captures)) | save time | `native/nz-file.ts`, `runtime/contexts.ts` |
 | `neuralese-readout-unavailable` | Implicit string conversion with no configured read body | call time | `neuralese/combinators.ts` |
@@ -57,9 +57,9 @@ and `IterationLimitError` (call time) carry `lastState` and the trajectory; `NzF
 
 ## Mismatches found by the grep
 
-1. `neuralese-dialect-mismatch`: the extension says values of different dialects do not unify with this code, but only
-   `native/nz-file.ts` raises it (a `.nz` entry whose block dialect differs from its declared type). The compiler has
-   no check of that name.
+1. `neuralese-dialect-mismatch`: resolved 2026-10-09 for the runtime (stored block dialects are checked at every
+   coercion to a `Neuralese` type, DECISIONS.md "representation chosen by use"). The compiler still has no check of
+   that name: it sees `DefaultDialect` as its own literal, not the configured dialect.
 2. `TypeSyntaxError` and `EvaluationInfrastructureError` are named in the skills but carry no code.
 3. Backticked kebab-case words in the docs that are not error codes and have no source in `ts-host/src` as errors:
    `value-not-printed`, `crisp-value`, `single-use`, `full-value-unavailable`, `producer-missing`, `dynamic-text`

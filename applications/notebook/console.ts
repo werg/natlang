@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EventLoop, TerminalSessionStore, openFolder, runTerminalShell, type TargetContext, type TerminalView } from '@natlang/node';
-import { NotebookWorkspace, STARTER_NOTEBOOK, answerRequest, type NotebookConfig, type NotebookRun } from './index.js';
+import { NotebookWorkspace, STARTER_NOTEBOOK, answerRequest, type NotebookConfig, type NotebookOptions, type NotebookRun } from './index.js';
 
 export type ConsoleState = { requests: string[], runs: NotebookRun[], status: string };
 type Request = { id: string, kind: 'request', value: string };
@@ -26,12 +26,14 @@ export async function main(context: TargetContext): Promise<number> {
   const at = context.args.indexOf('--notebook');
   const config: NotebookConfig = at >= 0 ? JSON.parse(readFileSync(resolve(context.workspace, context.args[at + 1]!), 'utf8')) : STARTER_NOTEBOOK;
   const notebook = new NotebookWorkspace(config.cells, config.tables ?? {});
+  const mode = context.args.indexOf('--next-cell');
+  const options: NotebookOptions = mode >= 0 ? { nextCellMode: context.args[mode + 1] as NotebookOptions['nextCellMode'] } : {};
   const store = new TerminalSessionStore<ConsoleState, Request>(join(context.stateDirectory, 'session.json'));
   const checkpoint = store.load({ requests: [], runs: [], status: 'idle' });
   const loop: EventLoop<ConsoleState, TerminalView, Request> = new EventLoop({
     initialState: checkpoint.state, initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
     reduce: async (state, event) => {
-      const run = await answerRequest(notebook, event.value, openFolder(context.workspace).root());
+      const run = await answerRequest(notebook, event.value, openFolder(context.workspace).root(), options);
       return { requests: [...state.requests, event.value], runs: [...state.runs, run], status: run.status };
     },
     view, step: fn => context.runtime.run(fn), onCommit: commit => store.commit(commit, loop.seenEventIds) });

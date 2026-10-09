@@ -104,6 +104,54 @@ def _retry_after_seconds(value):
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
+def _google_retry_metadata(decoded):
+    """Read Google's quota identity and RetryInfo, including compatibility envelopes."""
+    delays, quotas = [], []
+    def visit(value):
+        if isinstance(value, dict):
+            if str(value.get('@type', '')).endswith('RetryInfo'):
+                delay = _retry_after_seconds(str(value.get('retryDelay', '')).removesuffix('s'))
+                if delay is not None:
+                    delays.append(delay)
+            if value.get('quotaId'):
+                quotas.append(str(value['quotaId']))
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+        elif isinstance(value, str) and value.lstrip().startswith(('{', '[')):
+            try:
+                visit(json.loads(value))
+            except json.JSONDecodeError:
+                pass
+    visit(decoded)
+    return max(delays, default=None), sorted(set(quotas))
+
+
+def _decode_http_answer(content):
+    """Accept one JSON value with an optional Markdown wrapper, never arbitrary suffix prose."""
+    if not isinstance(content, str):
+        raise ValueError('response content must be text')
+    text = content.strip()
+    wrapper = None
+    if text.startswith('```'):
+        first, separator, remainder = text.partition('\n')
+        if not separator or first.lower() not in {'```', '```json'}:
+            raise ValueError('unsupported JSON fence')
+        if not remainder.rstrip().endswith('```'):
+            raise ValueError('unterminated JSON fence')
+        text = remainder.rstrip()[:-3].strip()
+        wrapper = 'markdown_json_fence'
+    parsed, end = json.JSONDecoder().raw_decode(text)
+    suffix = text[end:].strip()
+    if suffix == '```' and wrapper is None:
+        wrapper = 'trailing_markdown_fence'
+    elif suffix:
+        raise ValueError('extra content after JSON answer')
+    return parsed, wrapper
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Do not forward a bearer credential to a redirected endpoint."""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -111,15 +159,20 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_backoff,
-                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema'):
+                  max_backoff, reasoning_effort, max_output_tokens, response_format='json_schema',
+                  openrouter_free_only=False):
     payload = _http_payload(case, model, reasoning_effort, max_output_tokens, response_format)
+    if openrouter_free_only:
+        payload['provider'] = {'sort': 'throughput', 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}
     body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     request_hash = hashlib.sha256(body).hexdigest()
-    request = urllib.request.Request(endpoint, data=body, method='POST', headers={
-        'Authorization': f'Bearer {api_key}',
+    headers = {
         'Content-Type': 'application/json', 'Accept': 'application/json',
         'User-Agent': 'natlang-decision-labeler/1',
-    })
+    }
+    if api_key is not None:
+        headers['Authorization'] = f'Bearer {api_key}'
+    request = urllib.request.Request(endpoint, data=body, method='POST', headers=headers)
     opener = urllib.request.build_opener(_NoRedirect())
     history = []
     response_body = None
@@ -160,7 +213,19 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
             decoded = None
         history_entry = {'attempt': attempt + 1, 'status': response_status,
                          'response_sha256': response_hash}
+        if response_status != 200 and isinstance(decoded, dict):
+            provider_error = decoded.get('error', {})
+            if isinstance(provider_error, dict):
+                history_entry['provider_error'] = {
+                    'code': provider_error.get('code'), 'status': provider_error.get('status'),
+                    'message': str(provider_error.get('message', '')).replace(api_key or '\0', '[REDACTED]')[:2000],
+                }
         retry_after = _retry_after_seconds(headers.get('retry-after'))
+        google_delay, quota_ids = _google_retry_metadata(decoded)
+        if google_delay is not None:
+            retry_after = max(retry_after or 0, google_delay)
+        if quota_ids:
+            history_entry['quota_ids'] = quota_ids
         if retry_after is not None:
             history_entry['retry_after_seconds'] = retry_after
         history.append(history_entry)
@@ -177,25 +242,35 @@ def _http_teacher(case, *, endpoint, model, api_key, timeout, retries, initial_b
         history_entry['sleep_seconds'] = delay
         time.sleep(delay)
 
-    answer, error = None, None
+    answer, error, validation_detail = None, None, None
+    response_content, finish_reason, response_wrapper = None, None, None
     if response_status != 200:
         error = f'http_{response_status}' if response_status else 'network_error'
     else:
         try:
-            content = response_body['choices'][0]['message']['content']
-            parsed = json.loads(content)
+            choice = response_body['choices'][0]
+            finish_reason = choice.get('finish_reason')
+            response_content = choice['message']['content']
+            parsed, response_wrapper = _decode_http_answer(response_content)
             answer = _validate_http_answer(case, parsed)
-        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             error = 'invalid_typed_response'
+            validation_detail = {'type': type(exc).__name__, 'message': str(exc)[:300]}
     if error:
         answer = {'error': error}
     provenance = {
         'backend': 'openai-compatible', 'model': model, 'endpoint': endpoint,
         'request_sha256': request_hash, 'response_sha256': response_hash,
         'http_status': response_status, 'attempts': len(history), 'retry_history': history,
+        'finish_reason': finish_reason, 'validation_error': validation_detail,
+        'response_wrapper_removed': response_wrapper,
         'usage': {k: v for k, v in (response_body.get('usage', {}) if isinstance(response_body, dict) else {}).items()
                   if k in {'prompt_tokens', 'completion_tokens', 'total_tokens'} and isinstance(v, int) and not isinstance(v, bool)},
     }
+    if isinstance(response_content, str):
+        provenance['response_content'] = response_content[:65536]
+        provenance['response_content_truncated'] = len(response_content) > 65536
+        provenance['response_content_sha256'] = hashlib.sha256(response_content.encode('utf-8')).hexdigest()
     return answer, provenance
 
 
@@ -238,24 +313,31 @@ def main():
     parser.add_argument('--retries', type=int, default=3, help='bounded retries for HTTP 429/5xx or network errors')
     parser.add_argument('--initial-backoff', type=float, default=30)
     parser.add_argument('--max-backoff', type=float, default=300)
-    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'low', 'medium', 'high'], default='low')
+    parser.add_argument('--reasoning-effort', choices=['omit', 'none', 'minimal', 'low', 'medium', 'high'], default='low')
     parser.add_argument('--response-format', choices=['json_schema', 'json_object', 'text'], default='json_schema',
                         help='provider wire format; all responses still undergo identical strict JSON validation')
     parser.add_argument('--max-output-tokens', type=int, default=256)
     parser.add_argument('--request-interval-seconds', type=float, default=0,
                         help='minimum interval between case request starts; HTTP backend only')
+    parser.add_argument('--anonymous', action='store_true', help='explicitly use an HTTP endpoint without credentials')
+    parser.add_argument('--openrouter-free-only', action='store_true',
+                        help='OpenRouter only: enforce zero token/request price and sort providers by throughput')
     args = parser.parse_args()
 
     if args.backend == 'openai-compatible':
         if args.checkpoint:
             parser.error('--checkpoint is not used by openai-compatible backend')
-        if not args.endpoint or not args.model or not args.api_key_env:
-            parser.error('openai-compatible requires --endpoint, --model and --api-key-env')
+        if not args.endpoint or not args.model or (not args.api_key_env and not args.anonymous):
+            parser.error('openai-compatible requires --endpoint, --model and either --api-key-env or --anonymous')
+        if args.anonymous and args.api_key_env:
+            parser.error('--anonymous cannot be combined with --api-key-env')
         parts = urlsplit(args.endpoint)
         if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.query or parts.fragment:
             parser.error('--endpoint must be an HTTPS URL without userinfo, query or fragment')
-        api_key = os.environ.get(args.api_key_env)
-        if not api_key:
+        if args.openrouter_free_only and parts.hostname != 'openrouter.ai':
+            parser.error('--openrouter-free-only requires an openrouter.ai endpoint')
+        api_key = None if args.anonymous else os.environ.get(args.api_key_env)
+        if not args.anonymous and not api_key:
             parser.error(f'API key environment variable {args.api_key_env!r} is unset or empty')
         teacher = args.teacher or f'{args.backend}/{args.model}'
         identity = {
@@ -265,6 +347,8 @@ def main():
             'selection': {'families': sorted(set(args.family)), 'limit': args.limit},
             'adapter_sha256': hashlib.sha256(open(__file__, 'rb').read()).hexdigest(),
             'request_settings': {'reasoning_effort': args.reasoning_effort,
+                                 'anonymous': args.anonymous,
+                                 'openrouter_free_only': args.openrouter_free_only,
                                  'response_format': args.response_format,
                                  'max_output_tokens': args.max_output_tokens,
                                  'request_interval_seconds': args.request_interval_seconds},
@@ -277,8 +361,8 @@ def main():
             parser.error('--checkpoint is required for decider and clef')
         if not args.teacher:
             parser.error('--teacher is required for decider and clef')
-        if args.endpoint or args.model or args.api_key_env:
-            parser.error('--endpoint, --model and --api-key-env are only for openai-compatible')
+        if args.endpoint or args.model or args.api_key_env or args.anonymous or args.openrouter_free_only:
+            parser.error('HTTP endpoint/auth/routing options are only for openai-compatible')
         teacher = args.teacher
         checkpoint_files = sorted(os.path.join(root, f) for root, _, files in os.walk(args.checkpoint) for f in files
                                   if f.endswith(('.safetensors', '.json')))
@@ -344,7 +428,8 @@ def main():
                                  initial_backoff=args.initial_backoff, max_backoff=args.max_backoff,
                                  reasoning_effort=args.reasoning_effort,
                                  max_output_tokens=args.max_output_tokens,
-                                 response_format=args.response_format)
+                                 response_format=args.response_format,
+                                 openrouter_free_only=args.openrouter_free_only)
 
     started, count, errors = time.time(), 0, 0
     last_request_start = None
@@ -379,6 +464,15 @@ def main():
             done.add(case['id'])
             print(json.dumps({'labelled': count, 'errors': errors,
                               'seconds': round(time.time() - started)}), flush=True)
+            if provider is not None and provider.get('http_status') == 429:
+                # Once bounded retries are exhausted, a standalone worker has
+                # no alternate quota group. Do not burn the rest of the queue
+                # recording the same exhausted model as a new case failure.
+                delays = [h.get('retry_after_seconds', 0) for h in provider['retry_history']]
+                print(json.dumps({'event': 'rate_limit_paused', 'model': args.model,
+                                  'retry_not_before': time.time() + max(delays, default=args.initial_backoff),
+                                  'unfinished_source': args.cases}), flush=True)
+                break
             if args.limit and count >= args.limit:
                 break
     print(json.dumps({'labelled': count, 'errors': errors,

@@ -2,7 +2,8 @@
  * The natlang transport for the agent model (host/natlang-provider.ts) against a local fake model server: pi-ai's
  * context reaches the wire as natlang's model-turn request (system prompt, thinking, tool calls and results, tools), the
  * reply comes back as pi-ai's events and message, a Neuralese part reaches a Neuralese server unchanged, a text reader
- * refuses one loudly, and the declared reader is checked against the server at startup.
+ * refuses one loudly, and the declared reader is checked against the server at startup. A streamed reply's deltas
+ * become pi-ai's events as they arrive, and the final turn decides the message (plans/STREAMING.md §1.4).
  *
  * Run: node --test applications/pi/test/natlang-provider.test.mjs (builds the app into .natlang/test-build-provider first).
  */
@@ -41,7 +42,19 @@ before(async () => {
       if (request.url === '/v1/neuralese/info') return send(info);
       if (request.url.startsWith('/v1/neuralese/blocks/') && request.url.endsWith('/meta'))
         return send({ status: 200, body: { id: request.url.split('/')[4], dialect: 'd1', length: 4, width: 8, dtype: 'f32' } });
-      if (request.url === '/v1/chat/completions') return send(reply(body));
+      if (request.url === '/v1/chat/completions') {
+        const answer = reply(body);
+        if (!answer.chunks) return send(answer);
+        // A streamed reply: its chunks as server-sent events, the ones from `hold` on only once `release` resolves.
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        const write = chunks => { for (const item of chunks) response.write(`data: ${JSON.stringify(item)}\n\n`); };
+        const hold = answer.hold ?? answer.chunks.length;
+        write(answer.chunks.slice(0, hold));
+        return void Promise.resolve(answer.release).then(() => {
+          write(answer.chunks.slice(hold));
+          response.end('data: [DONE]\n\n');
+        });
+      }
       send({ status: 404, body: { error: { message: 'not found' } } });
     });
   });
@@ -168,4 +181,132 @@ test('the declared reader is checked against the server at startup', async () =>
   } finally { info = { status: 200, body: { dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 } }; }
   await assert.rejects(m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-reader', 'd1']),
     /--agent-reader needs --agent-transport natlang/);
+});
+
+const chunk = (delta, finish = null, extra = {}) => ({ id: 'r2', object: 'chat.completion.chunk', created: 1, model: 'fake',
+  choices: [{ index: 0, delta, finish_reason: finish }], ...extra });
+const readTool = [{ name: 'read', description: 'Read a file', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } }];
+/** A stream's events, each with a copy of the partial message as it stood when the event was taken. */
+async function collect(stream, onEvent = () => {}) {
+  const events = [];
+  for await (const event of stream) {
+    events.push({ ...event, partial: event.partial && structuredClone(event.partial) });
+    onEvent(event);
+  }
+  return { events, types: events.map(event => event.type), message: await stream.result() };
+}
+/** What the final message holds that the provider decides (its timestamp is the request's). */
+const settled = message => ({ content: message.content, stopReason: message.stopReason, usage: message.usage,
+  responseId: message.responseId, errorMessage: message.errorMessage });
+
+test('a streamed reply reaches pi-ai as it arrives, and its message equals the reply sent whole', async () => {
+  seen.length = 0;
+  const { models, ref } = await agent();
+  const model = models.getModel(ref.provider, ref.modelId);
+  const context = { systemPrompt: 'You are pi.', tools: readTool, messages: [{ role: 'user', content: 'Fix it', timestamp: 1 }] };
+  let release, timedOut = false;
+  const released = new Promise(resolve => { release = resolve; });
+  const timer = setTimeout(() => { timedOut = true; release(); }, 5000);
+  reply = () => ({ hold: 6, release: released, chunks: [chunk({ role: 'assistant', reasoning_content: 'Let me ' }),
+    chunk({ reasoning_content: 'look.' }), chunk({ content: 'Reading ' }), chunk({ content: 'it.' }),
+    chunk({ tool_calls: [{ index: 0, id: 'call_s', type: 'function', function: { name: 'read', arguments: '{"pa' } }] }),
+    chunk({ tool_calls: [{ index: 0, function: { arguments: 'th":"a.txt"}' } }] }),
+    chunk({}, 'tool_calls'), { id: 'r2', choices: [], usage: { prompt_tokens: 40, completion_tokens: 9 } }] });
+  // The server holds the end of the reply until the call's arguments have reached the consumer as deltas.
+  let held;
+  const streamed = await collect(models.streamSimple(model, context, { reasoning: 'high' }), event => {
+    if (event.type === 'toolcall_delta' && event.delta.endsWith('}')) { held = structuredClone(event.partial.content); release(); }
+  });
+  clearTimeout(timer);
+  assert.equal(timedOut, false, 'the deltas did not arrive before the reply ended');
+  // While the reply is held, the partial already holds every part, the call's arguments parsed from its deltas.
+  assert.deepEqual(held, [{ type: 'thinking', thinking: 'Let me look.' }, { type: 'text', text: 'Reading it.' },
+    { type: 'toolCall', id: 'call_s', name: 'read', arguments: { path: 'a.txt' } }]);
+  assert.equal(chats()[0].body.stream, true);
+  assert.deepEqual(streamed.types, ['start', 'thinking_start', 'thinking_delta', 'thinking_delta', 'thinking_end',
+    'text_start', 'text_delta', 'text_delta', 'text_end', 'toolcall_start', 'toolcall_delta', 'toolcall_delta', 'toolcall_end', 'done']);
+  assert.deepEqual(streamed.events.filter(event => event.type.endsWith('_delta')).map(event => [event.contentIndex, event.delta]),
+    [[0, 'Let me '], [0, 'look.'], [1, 'Reading '], [1, 'it.'], [2, '{"pa'], [2, 'th":"a.txt"}']]);
+  assert.deepEqual(streamed.events.find(event => event.type === 'toolcall_end').toolCall,
+    { type: 'toolCall', id: 'call_s', name: 'read', arguments: { path: 'a.txt' } });
+
+  reply = () => ({ status: 200, body: { id: 'r2', choices: [{ finish_reason: 'tool_calls', message: { content: 'Reading it.',
+    reasoning_content: 'Let me look.', tool_calls: [{ id: 'call_s', type: 'function', function: { name: 'read', arguments: '{"path":"a.txt"}' } }] } }],
+    usage: { prompt_tokens: 40, completion_tokens: 9 } } });
+  const whole = await collect(models.streamSimple(model, context, { reasoning: 'high' }));
+  assert.deepEqual(settled(streamed.message), settled(whole.message));
+  assert.deepEqual(streamed.message.content, [{ type: 'thinking', thinking: 'Let me look.' }, { type: 'text', text: 'Reading it.' },
+    { type: 'toolCall', id: 'call_s', name: 'read', arguments: { path: 'a.txt' } }]);
+  // A whole reply's parts follow each other in the same order: start, one delta, end.
+  assert.deepEqual(whole.types, ['start', 'thinking_start', 'thinking_delta', 'thinking_end', 'text_start', 'text_delta', 'text_end',
+    'toolcall_start', 'toolcall_delta', 'toolcall_end', 'done']);
+});
+
+test('a written Neuralese block streams as one block-reference event, and the final message decides', async () => {
+  info = { status: 200, body: { ...info.body, stream: true } };
+  try {
+    seen.length = 0;
+    const { models, ref } = await agent('--agent-reader', 'd1');
+    const model = models.getModel(ref.provider, ref.modelId);
+    const context = { messages: [{ role: 'user', content: 'Note it.', timestamp: 1 }] };
+    const final = { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }] };
+    reply = () => ({ chunks: [chunk({ role: 'assistant', content: 'Noted: ' }),
+      chunk({ content: [{ type: 'neuralese', id: BLOCK }] }, null, { neuralese: { block: { id: BLOCK, dialect: 'd1', length: 4 } } }),
+      chunk({}, 'stop', { x_natlang_message: final })] });
+    const streamed = await collect(models.streamSimple(model, context));
+    assert.equal(chats()[0].body.stream, true);
+    assert.deepEqual(streamed.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'done']);
+    const block = streamed.events.find(event => event.type === 'neuralese');
+    assert.equal(block.contentIndex, 1);
+    assert.deepEqual(block.content, { type: 'neuralese', id: BLOCK });
+    assert.deepEqual(block.partial.content[1], { type: 'neuralese', id: BLOCK });
+    // The same reply sent whole gives the same message.
+    info = { status: 200, body: { ...info.body, stream: false } };
+    reply = () => ({ status: 200, body: { id: 'r2', choices: [{ finish_reason: 'stop', message: final }] } });
+    const whole = await collect((await agent('--agent-reader', 'd1')).models.streamSimple(model, context));
+    assert.deepEqual(whole.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'done']);
+    assert.deepEqual(settled(streamed.message), settled(whole.message));
+    assert.deepEqual(streamed.message.content, [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }]);
+
+    // The final message wins where the stream said otherwise: an open part it extends is finished with the rest, a
+    // part it contradicts ends as streamed, and the final parts follow whole.
+    info = { status: 200, body: { ...info.body, stream: true } };
+    const streamedModel = (await agent('--agent-reader', 'd1')).models;
+    reply = () => ({ chunks: [chunk({ content: 'Fin' }), chunk({}, 'stop', { x_natlang_message: { role: 'assistant', content: 'Final.' } })] });
+    const extended = await collect(streamedModel.streamSimple(model, context));
+    assert.deepEqual(extended.events.filter(event => event.type === 'text_delta').map(event => event.delta), ['Fin', 'al.']);
+    assert.deepEqual(extended.types, ['start', 'text_start', 'text_delta', 'text_delta', 'text_end', 'done']);
+    assert.deepEqual(extended.message.content, [{ type: 'text', text: 'Final.' }]);
+    reply = () => ({ chunks: [chunk({ content: 'Draft' }), chunk({ content: [{ type: 'neuralese', id: BLOCK }] }),
+      chunk({}, 'stop', { x_natlang_message: { role: 'assistant', content: 'Answer.' } })] });
+    const replaced = await collect(streamedModel.streamSimple(model, context));
+    assert.deepEqual(replaced.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'text_start', 'text_delta', 'text_end', 'done']);
+    assert.deepEqual(replaced.events.filter(event => event.type === 'text_start').map(event => event.contentIndex), [0, 0]);
+    assert.deepEqual(replaced.events.at(-2).content, 'Answer.');
+    assert.deepEqual(replaced.message.content, [{ type: 'text', text: 'Answer.' }]);
+  } finally { info = { status: 200, body: { dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 } }; }
+});
+
+test('a re-sent request replaces the abandoned attempt in the partial; only the final reply is the message', async () => {
+  seen.length = 0;
+  const { models, ref } = await agent();
+  const model = models.getModel(ref.provider, ref.modelId);
+  let sent = 0;
+  // The first reply's call has malformed arguments, so the driver sends the request again (its malformed-call retry).
+  reply = () => ++sent === 1 ? { chunks: [chunk({ content: 'Calling.' }),
+    chunk({ tool_calls: [{ index: 0, id: 'call_x', type: 'function', function: { name: 'read', arguments: '{bad' } }] }),
+    chunk({}, 'tool_calls')] } : { chunks: [chunk({ content: 'Done.' }), chunk({}, 'stop')] };
+  const { events, types, message } = await collect(models.streamSimple(model, { tools: readTool,
+    messages: [{ role: 'user', content: 'Read a.txt', timestamp: 1 }] }));
+  assert.equal(chats().length, 2);
+  // The abandoned attempt's parts end as they stood; the re-sent request's parts start again at index 0.
+  assert.deepEqual(types, ['start', 'text_start', 'text_delta', 'text_end', 'toolcall_start', 'toolcall_delta', 'toolcall_end',
+    'text_start', 'text_delta', 'text_end', 'done']);
+  const restart = types.indexOf('text_start', 2);
+  assert.equal(events[restart].contentIndex, 0);
+  assert.deepEqual(events[restart - 1].toolCall, { type: 'toolCall', id: 'call_x', name: 'read', arguments: {} });
+  // The partial pi-durable publishes no longer holds the abandoned parts.
+  assert.deepEqual(events[restart].partial.content.map(part => part.type), ['text']);
+  assert.equal(message.stopReason, 'stop');
+  assert.deepEqual(message.content, [{ type: 'text', text: 'Done.' }]);
 });

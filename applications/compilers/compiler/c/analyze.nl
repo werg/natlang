@@ -4,6 +4,9 @@ args:
   syntax: Syntax
 returns: Checked
 ---
+First look at syntax's diagnostics, which the parser filled in. When it has any, return them unchanged as the
+diagnostics, with no declarations, and analyze nothing. Otherwise analyze syntax as follows.
+
 Analyze syntax, a parsed C99 translation unit for AArch64 Linux, where int is 32 bits, long and pointers 64, and
 char is signed. Return its declarations with every node analyzed, and its errors.
 

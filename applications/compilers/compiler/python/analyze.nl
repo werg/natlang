@@ -4,6 +4,9 @@ args:
   syntax: Syntax
 returns: Checked
 ---
+First look at syntax's diagnostics, which the parser filled in. When it has any, return them unchanged as the
+diagnostics, with no declarations, and analyze nothing. Otherwise analyze syntax as follows.
+
 Analyze syntax, a parsed Python program in the subset this compiler takes:
 - functions annotated with int, float, bool, str, list[int] and list[float];
 - module-level statements;

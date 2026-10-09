@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FusionFacts, EdgeFacts } from './facts.js';
-import { FUSION_PLAN_SCHEMA, crispPlan, repairedPlan, verifyPlan, type EdgeDecision, type FusionPlan, type PlanProblem } from './plan.js';
+import { FUSION_PLAN_SCHEMA, crispPlan, repairedPlan, verifyPlan, type EdgeDecision, type FusionPlan, type PlanOptions, type PlanProblem } from './plan.js';
 import { pluggable, type PluggableMode } from '../runtime/pluggable.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import type { NatlangRuntime } from '../runtime/runtime.js';
@@ -32,7 +32,7 @@ export function nlPlannerFrom(directory = fusionPlannerDirectory()): NlPlanner {
 }
 
 /** Natural-language plan, verified; one retry with the verifier's problems; problem edges fall back to text. */
-export async function nlPlan(facts: FusionFacts, nl: NlPlanner): Promise<FusionPlan> {
+export async function nlPlan(facts: FusionFacts, nl: NlPlanner, options: PlanOptions = {}): Promise<FusionPlan> {
   if (!facts.edges.length) return { schema: FUSION_PLAN_SCHEMA, planner: 'nl', edges: [] };
   const attempt = async (problems: PlanProblem[]): Promise<FusionPlan | Error> => {
     try { return { schema: FUSION_PLAN_SCHEMA, planner: 'nl', edges: await nl(facts.edges, problems) }; }
@@ -41,14 +41,14 @@ export async function nlPlan(facts: FusionFacts, nl: NlPlanner): Promise<FusionP
   const first = await attempt([]);
   if (first instanceof Error) {
     const problems = facts.edges.map(edge => ({ edge: edge.id, problem: `the planner failed: ${first.message.split('\n')[0]}` }));
-    return repairedPlan(facts, undefined, problems, 'crisp-fallback');
+    return repairedPlan(facts, undefined, problems, 'crisp-fallback', options);
   }
-  const checked = verifyPlan(facts, first);
-  if (checked.ok) return first;
+  const checked = verifyPlan(facts, first, options);
+  if (checked.ok) return checked.plan!;
   const second = await attempt(checked.problems);
-  if (second instanceof Error) return repairedPlan(facts, first, checked.problems, 'nl');
-  const again = verifyPlan(facts, second);
-  return again.ok ? second : repairedPlan(facts, second, again.problems, 'nl');
+  if (second instanceof Error) return repairedPlan(facts, first, checked.problems, 'nl', options);
+  const again = verifyPlan(facts, second, options);
+  return again.ok ? again.plan! : repairedPlan(facts, second, again.problems, 'nl', options);
 }
 
 const sameDecisions = (a: FusionPlan, b: FusionPlan): boolean =>
@@ -58,15 +58,16 @@ const sameDecisions = (a: FusionPlan, b: FusionPlan): boolean =>
  * The plan of the selected planner. `nl` is needed for `nl` and `shadow` (build it with `nlPlannerFrom` and call this
  * inside `runtime.run`); `crisp` needs nothing.
  */
-export async function planFusion(facts: FusionFacts, options: { planner?: FusionPlannerMode; nl?: NlPlanner } = {}): Promise<FusionPlan> {
+export async function planFusion(facts: FusionFacts, options: PlanOptions & { planner?: FusionPlannerMode; nl?: NlPlanner } = {}): Promise<FusionPlan> {
   const mode = options.planner ?? 'crisp';
   if (mode !== 'crisp' && !options.nl) throw new Error(`fusion.planner "${mode}" needs the natural-language planner and a model`);
-  return pluggable<[], FusionPlan>({ crisp: () => crispPlan(facts), nl: () => nlPlan(facts, options.nl!) }, mode,
+  return pluggable<[], FusionPlan>({ crisp: () => crispPlan(facts, options), nl: () => nlPlan(facts, options.nl!, options) }, mode,
     { name: 'fusion-plan', serve: 'crisp', same: sameDecisions })();
 }
 
 /** Run `planFusion` with a runtime for the natural-language planner. */
-export async function planFusionWith(runtime: NatlangRuntime, facts: FusionFacts, planner: FusionPlannerMode, directory?: string): Promise<FusionPlan> {
-  if (planner === 'crisp') return crispPlan(facts);
-  return runtime.run(() => planFusion(facts, { planner, nl: nlPlannerFrom(directory) }));
+export async function planFusionWith(runtime: NatlangRuntime, facts: FusionFacts, planner: FusionPlannerMode, directory?: string,
+    options: PlanOptions = {}): Promise<FusionPlan> {
+  if (planner === 'crisp') return crispPlan(facts, options);
+  return runtime.run(() => planFusion(facts, { ...options, planner, nl: nlPlannerFrom(directory) }));
 }

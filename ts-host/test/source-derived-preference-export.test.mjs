@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,6 +11,7 @@ import { renderPreferencePair } from '../scripts/export-preference-pairs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const proposalPath = path.join(root, 'runs/luna-authored-root-return-guidance-fivecase-20261009-v1/evidence/leaf-eligibility-repair-audit-v1/causal-boundary-repairs-v5.json');
+const skipUnless = file => existsSync(file) ? false : `requires the gitignored run artifact ${path.relative(root, file)} (not present in a clean checkout)`;
 
 const cpuTemplate = async (messages, tools) => {
   const rendered = [`<|tools|>${JSON.stringify(tools)}<|messages|>`];
@@ -21,7 +23,7 @@ const cpuTemplate = async (messages, tools) => {
   return rendered.join('') + '<|assistant|>';
 };
 
-test('shared preference exporter renders held diagnostics with exact program/group and assistant target boundaries', async () => {
+test('shared preference exporter renders held diagnostics with exact program/group and assistant target boundaries', { skip: skipUnless(proposalPath) }, async () => {
   const { items } = await loadSourceDerivedRepairCandidates(proposalPath);
   const reviews = items.map(sourceDerivedRepairReviewPair);
   for (const review of reviews) {
@@ -50,7 +52,7 @@ test('shared preference exporter renders held diagnostics with exact program/gro
   }
 });
 
-test('trainable exporter CLI continues to reject the held diagnostic pair', async () => {
+test('trainable exporter CLI continues to reject the held diagnostic pair', { skip: skipUnless(proposalPath) }, async () => {
   const { items } = await loadSourceDerivedRepairCandidates(proposalPath);
   const review = sourceDerivedRepairReviewPair(items[0]);
   const directory = await mkdtemp(path.join(tmpdir(), 'held-preference-export-'));

@@ -289,7 +289,7 @@ Four applications in `applications/` ship as packages:
 
 - `@natlang/evidence-console` (`applications/evidence/`): citation-checked answers over local documents;
 - `@natlang/log-console` (`applications/logs/`): a JSONL event stream folded into incident state;
-- `@natlang/notebook-console` (`applications/notebook/`): natlang-chosen cell execution over SQLite and JavaScript cells;
+- `@natlang/notebook-console` (`applications/notebook/`): dependency-ordered cell execution over SQLite and JavaScript cells (the order among ready cells is a pluggable, crisp by default);
 - `@natlang/semantic-terminal` (`applications/terminal/`): natural-language requests mapped to exact workspace recipes.
 
 Each opens with useful starter state; `/help` lists its commands, and file flags

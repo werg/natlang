@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly storage report and retention dry run
+
+[Timer]
+OnCalendar=Sun 04:00
+Persistent=true
+AccuracySec=30min
+Unit=natlang-storage-retention.service
+
+[Install]
+WantedBy=timers.target

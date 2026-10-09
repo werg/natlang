@@ -48,10 +48,11 @@ cannot know:
 
 - Tier 3 (stored cases) appears when the compilation has an active case; a function with only shadow cases, or none,
   has no tier 3 and so no deopt noise. Case states stay in the store (`cases.tier`); the ledger does not duplicate them.
-- Tier 2 appears when the compilation carries `instructions.md`. **The specializer does not write that file today**:
-  it writes cases, reports and declines. The tier, the guidance hook and the ladder slot exist so that a future
-  specializer pass (trace-specialized instructions, few-shot examples chosen from the groups) only has to store one
-  more compilation file. Until then nothing produces tier 2 and it is absent from every ladder. It starts in `shadow`.
+- Tier 2 appears when the compilation carries `instructions.md`. The specializer writes it: `writeGuidance.nl` distils the
+  accepted groups' recorded calls into short guidance (every point an action, at most 1500 characters; the crisp check
+  rejects longer text and sentences written as prohibitions, with one repair attempt), stored beside `cases.ts` in the
+  same compilation. A compilation without guidance (check failed, `--no-guidance`) has no tier 2. It starts in `shadow` and
+  earns promotion through the shared evidence rule like any tier.
 - Thresholds are not configuration here. They are the store's settings (next section).
 
 The `Tier` interface is `id`, `level`, `canServe(input)`, `serve(input)`, `verify(input, output)`, optional
@@ -147,13 +148,12 @@ folded without the configuration); no schema change.
 - Tier 3 needs a call store (it is served through its records). Without one the ladder is tiers 0 and 1.
 - Directory reducers and calls with a caller-supplied folder bypass the engine.
 - Shadow of model tiers duplicates effects; enable only for pure functions.
-- The specializer writes no tier 2 artifact yet; hand-registered implementations are not synthesized.
+- The tier 2 guidance is not yet verified by replay against the teacher before it is stored; it is judged by shadow evidence.
 - Ladder order is by level, not cost.
 
 ## Next steps
 
-1. Tier 2 synthesis: have `natlang-specializer` store `instructions.md` per compilation (instructions sharpened by the
-   groups, a few verified examples), verify it by replay against the teacher like cases, and let `promote.nl` judge it.
+1. Tier 2 verification: guidance is stored by `writeGuidance.nl` (done); verify it by replay against the teacher like cases.
 2. Persist the tier config next to `natlang.json` and load engines in the CLI.
 3. Decision-readout confidence as the tier 1 guard (E1's table), and cost-aware ordering from `traces tiers`.
 4. Tier 4: a `Tier` over an adapter or soft program, guard = held-out agreement; blocked on the learning continuum.

@@ -34,7 +34,7 @@ export { TypeEnv, TypeSyntaxError, parseType, formatType, fitsType } from './nat
 export { ONCE_EFFECTS } from './native/effects.js';
 export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
-export type { ModelTurn, ModelTurnRequest, ModelContentPart } from './contracts.js';
+export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, ModelContentPart } from './contracts.js';
 export { neuraleseServerModelTurn } from './model/neuralese-server.js';
 export type { NeuraleseServerOptions } from './model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
@@ -67,8 +67,11 @@ export { learningService, isLearningService, createLearning, objectives, stopGra
 export { promptPieces, systemPromptBank, softenText, softenMessages, findPieces, SYSTEM_PROMPT_TYPE, type PromptPiece, type SystemPromptBank } from './native/system-prompts.js';
 export { serverDigester, DIGEST_TYPE, type Digester, type DigestSite } from './neuralese/digest.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
-export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from './neuralese/combinators.js';
+export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js';
+export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
 export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
 export { registerBuiltinModule } from './runtime/modules.js';
+export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';
+export type { ReplayRecordSink, ReplaySession } from './neuralese/replay-records.js';

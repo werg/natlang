@@ -11,7 +11,7 @@ import { coerce, isPlainRecord } from '../native/values.js';
 import { parseType, refinements as crispTable, TypeEnv } from '../native/types.js';
 import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
-import { bindAwait, guard } from './context.js';
+import { bindAwait, currentFrame, guard, runInFrame } from './context.js';
 import { callableMeta, callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
@@ -23,6 +23,17 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { isNeuraleseRef } from '../native/neuralese.js';
 
 export { bindAwait, guard };
+
+/**
+ * Compiler target for a call the compiler marked as part of a possible hand-off between named functions (compiler/call-flow.ts
+ * `fusionCallSites`). The arguments are already evaluated. With fusion off (no `fusion` runtime option) this is the call.
+ * With it on, the one call made here carries its site ID, so `engageFusion` can match it to a planned edge.
+ */
+export function fuseSite<A extends unknown[], R>(site: string, call: (...args: A) => R, ...args: A): R {
+  const frame = currentFrame();
+  if (!frame?.task.runtime.options.fusion) return call(...args);
+  return runInFrame({ ...frame, fusionSite: site }, () => call(...args));
+}
 
 /** Rebind only a compiler-created inline nl value; named and opaque callables have no recipe. */
 export function rebindInlineCallable(value: unknown, captures: Record<string, unknown>, origin?: InlineInstructionOrigin,

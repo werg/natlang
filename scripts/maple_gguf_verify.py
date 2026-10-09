@@ -6,7 +6,7 @@ For each checked tensor: dequantize the GGUF tensor (TQ2_0 / F16 / F32) and comp
 BF16 alpha in FP16); F16 tensors must equal the BF16 values rounded to FP16.
 
     python scripts/maple_gguf_verify.py --gguf .../maple-preview-TQ2_0-head-F16.gguf \
-        --checkpoint /home/werg/data/models/maple-preview-bf16 --layers 0,11,23 --out runs/.../m0.2.json
+        --checkpoint MAPLE_PREVIEW_DIR --layers 0,11,23 --out runs/.../m0.2.json
 """
 
 import argparse

@@ -8,7 +8,7 @@
  */
 import { createServer } from 'node:http';
 import { parseArgs } from 'node:util';
-import { startNodeNeuralese } from '../dist/browser/neuralese-wasm.js';
+import { startNodeNeuralese } from '../dist/browser/neuralese-wasm-node.js';
 
 const { values } = parseArgs({ options: { m: { type: 'string' }, nz: { type: 'string' }, port: { type: 'string', default: '0' },
   'max-block': { type: 'string' }, c: { type: 'string' }, module: { type: 'string' }, t: { type: 'string' }, ngl: { type: 'string' } } });

@@ -73,7 +73,7 @@ test('CLI adapter rejects a native permission request and stops the child', asyn
   const client = {
     mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }), connect: async () => ({ data: true }) },
     tool: { ids: async () => ({ data: ['read', 'bash'] }) },
-    permission: { reply: async args => { permissionReplies.push(args); return { error: { message: 'reply transport failed' } }; } },
+    postSessionIdPermissionsPermissionId: async args => { permissionReplies.push({ reply: args.body.response }); return { error: { message: 'reply transport failed' } }; },
     session: { permission: { reply: async args => { permissionReplies.push(args); return {}; } }, abort: async () => ({ data: true }) }
   };
   const eventServer = createServer((req, res) => {
@@ -134,7 +134,7 @@ process.stdout.write(JSON.stringify({type:'text',part:{text:JSON.stringify({cont
     assert.equal(response.status, 502);
     assert.equal((await response.json()).error.code, 'NON_BRIDGE_TOOL_USE');
     const attempt = JSON.parse((await readFile(join(output, 'cli-invocations.jsonl'), 'utf8')).trim());
-    assert.deepEqual(attempt.cli_tool_use_audit, [{ event_type: 'tool_use', part_type: 'tool', name: 'bash', call_id: 'call-native', bridge: false }]);
+    assert.deepEqual(attempt.cli_tool_use_audit, [{ event_type: 'tool_use', part_type: 'tool', name: 'bash', call_id: 'call-native', bridge: false, rejected_natlang_attempt: false }]);
   } finally {
     await adapter.close(); eventServer.closeAllConnections();
     await new Promise(resolveClose => eventServer.close(resolveClose));

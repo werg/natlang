@@ -3,9 +3,9 @@
 
 Scans the policy's roots with scripts/storage_retention.py (dry run, nothing deleted), adds `docker system df`,
 ~/.cache by top-level directory and the other /mnt/external top directories (report only), and writes JSON +
-Markdown. The HDD walk takes long: run it at idle I/O priority.
+Markdown. The HDD walk takes long: run it at the lowest best-effort I/O priority (idle class starves behind the archiver and syncs).
 
-    ionice -c3 nice python3 scripts/storage_report.py [--out-dir DIR]
+    ionice -c2 -n7 nice python3 scripts/storage_report.py [--out-dir DIR]
 """
 from __future__ import annotations
 
@@ -76,6 +76,10 @@ def markdown(report: dict, top: int = 25) -> str:
         if items:
             lines += ['', f'### {tier}: largest', '', '| GB | Path | Reason |', '|---|---|---|']
             lines += [f'| {gb(e["bytes"])} | `{e["path"]}` | {e["reason"]} |' for e in items]
+    revisions = report.get('sync_revisions', {})
+    lines += ['', f'## Sync revisions (rsync --backup copies): {len(revisions)} directories, '
+                  f'{gb(sum(revisions.values()))} GB', '', '| Directory | GB |', '|---|---|']
+    lines += [f'| `{d}` | {gb(b)} |' for d, b in sorted(revisions.items(), key=lambda kv: -kv[1])[:15]]
     lines += ['', '## ~/.cache', '', '| Dir | GB |', '|---|---|']
     lines += [f'| {name} | {gb(size)} |' for name, size in report['extras']['cache'][:15]]
     lines += ['', '## Other /mnt/external top directories (report only)', '', '| Dir | GB |', '|---|---|']

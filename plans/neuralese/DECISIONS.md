@@ -1277,3 +1277,30 @@ degraded to another.
 - **Blocks outlive server restarts.** A durable session archives the bytes of each block it references
   (content-addressed export/import) and restores them on `neuralese-unknown-block`; sessions pin what they reference
   and never collect other sessions' blocks.
+
+## 2026-10-09 — Deleted the local Maple-Preview BF16 checkpoint (owner)
+
+- Owner approved deleting `/home/werg/data/models/maple-preview-bf16` (38 GB, DeepGrove Maple-Preview, Hugging Face
+  revision `ac1ddd79d2b5cb4406f5d2bebdf95406ce505a07`) after the student backbone moved to Mellum.
+- Re-download from Hugging Face at that revision if Maple work resumes. `maple/student.py` DEFAULT_MODEL and
+  `scripts/maple_mixed_data.py --model` still default to the path and now fail with a missing-file error.
+- Trained Maple checkpoints and the converted-weights cache are separate and were not deleted.
+
+### 2026-10-09 — one summarizer family: `view` and `ask`
+
+Owner decision. The promptable summarizer is not a new operator; existing pieces are unified, by rewrite (no aliases):
+
+- **`view(value, instructions?)`** replaces `digest` everywhere (builtin function, server endpoint, trainer options,
+  record part types, conversion format, docs). Its result is representation-generic (section above). Without
+  instructions it is faithful compression, trained so that `read(view(x))` reproduces `x`; with instructions it keeps
+  what the purpose needs. Its `string` instance is the crisp view; pi's companion shaping (`shape.nl`) is rewritten as
+  that instance.
+- **`ask(block, question)`** is the query operator, defined as `read(map(block, q))` in the standard library; the
+  combinator laws define its target (answering from the block matches answering from the full text).
+- **Corpus**: an artifact-diverse mix (prose, code, HTML, JSON/YAML, tables, logs and tool outputs) with static
+  targets (reconstruction, code-computed extraction, identifier retention) and questions and summaries taken from
+  existing public datasets, not generated. Registered with manifests; admission explicit.
+- **Training**: a declared `view` operator stage in both students' recipes, admitted only after each student's
+  identity, distillation and runtime qualification (TRAINING_RECIPE.md). Gate: reconstruction fidelity per artifact
+  type against compression ratio, QA with block vs full text vs none, correct vs shuffled block, purpose sensitivity,
+  and pi's next-action loss with view blocks vs crisp views vs full outputs.

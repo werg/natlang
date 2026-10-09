@@ -16,7 +16,9 @@ from .nested_train import Member, setup
 from ..common.hashing import sha256_file_hex as _sha256
 from ..common.paths import resolve_str
 
-DEFAULT_MODEL = resolve_str("models", "maple-preview-bf16")
+# Published Maple-Preview: only the identity its converted-weights cache belongs to. The local BF16 copy was deleted
+# on 2026-10-09 (owner; Mellum is the student backbone), so callers name their model explicitly.
+MAPLE_PREVIEW_MODEL = resolve_str("models", "maple-preview-bf16")
 DEFAULT_CACHE = resolve_str("models", "maple-preview-converted")
 
 
@@ -31,10 +33,10 @@ def student_identity(model: str, state: str | None) -> dict:
 def default_cache(model: str) -> str | None:
     """The converted-weights cache belongs to published Maple only: another family member (Mellum, an exported QAT
     conversion) loaded with it would silently get Maple's weights."""
-    return DEFAULT_CACHE if Path(model).resolve() == Path(DEFAULT_MODEL).resolve() else None
+    return DEFAULT_CACHE if Path(model).resolve() == Path(MAPLE_PREVIEW_MODEL).resolve() else None
 
 
-def load_student(model: str = DEFAULT_MODEL, state: str | None = None, device: str = "cuda",
+def load_student(model: str, state: str | None = None, device: str = "cuda",
                  cache: str | None = "default", order: str | None = None):
     """Returns (MapleForCausalLM, tokenizer). Without ``state``: published Maple (or another family member's
     deployed checkpoint) with attention ternarized once. With it: the adapters, scales and member parts of the state,

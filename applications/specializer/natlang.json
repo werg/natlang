@@ -3,7 +3,7 @@
   "name": "@natlang/specializer",
   "version": "0.1.0",
   "description": "Compiles recorded executions of natural-language functions into guarded crisp cases (plans/TRACE_SPECIALIZATION.md).",
-  "include": ["README.md", "main.ts", "types.ts", "writeCase.nl", "promote.nl", "writeCase", "tsconfig.json"],
+  "include": ["README.md", "main.ts", "types.ts", "policy.ts", "chooseCondition.nl", "writeBody.nl", "writeGuidance.nl", "worthLooking.nl", "summarizeDecline.nl", "promote.nl", "chooseCondition", "tsconfig.json"],
   "targets": { "specializer": { "entry": "main.ts", "authority": ["filesystem:workspace"],
     "description": "natlang run applications/specializer -- [--definition NAME|KEY] [--program DIR] [--loop] [--interval SECONDS]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

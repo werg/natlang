@@ -5,7 +5,7 @@
  * Each combinator except `empty` is a system natural-language function whose instructions are a soft body: a block
  * initialised from a text description (encoded in one pass through the port, or token embeddings on a server without
  * `encode`) and trained later like any other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
- * `loadStandardLibrary` reads it). Every combinator call and readout is recorded as an execution-graph node.
+ * `loadStandardLibrary` reads its bytes). Every combinator call and readout is recorded as an execution-graph node.
  *
  * Combinators answer by template readout, not free decoding: the call's opening is rendered as for any call, and its
  * first reply is forced to `return_result(status="success", value=…)`. A Neuralese result (`map`, `zip`, `ap`,
@@ -16,7 +16,7 @@
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
-import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
+import { isNeuraleseRef, NeuraleseDialectError, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import { emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
@@ -61,8 +61,11 @@ async function postJson(endpoint: string, path: string, body: unknown, headers: 
   return await response.json() as Json;
 }
 
-/** Initialise every combinator body from its description on a Neuralese server and write the library as a `.nz` file. */
-export async function buildStandardLibrary(options: { endpoint: string; headers?: Record<string, string>; path?: string;
+/**
+ * Initialise every combinator body from its description on a Neuralese server and return the library and its `.nz`
+ * bytes. On Node, `buildStandardLibrary` from `@natlang/node` (neuralese/node-files.ts) also writes them to `path`.
+ */
+export async function buildStandardLibrary(options: { endpoint: string; headers?: Record<string, string>;
   store?: NeuraleseStore; textProviderRead?: boolean }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
   const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
   const info = await (await fetchModel(options.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: options.headers })).json() as
@@ -86,22 +89,16 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   } : undefined;
   const bytes = await saveNz(exports, { store, dialect: info.dialects[0]!, provenance: { kind: 'natlang-standard-library',
     initialisation: 'text-embeddings', ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
-  if (options.path) {
-    const { default: fs } = await import('node:fs');
-    if (typeof fs.writeFileSync !== 'function') throw new Error('Writing a standard-library file requires Node; use the returned bytes in a browser.');
-    fs.writeFileSync(options.path, bytes);
-  }
   return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(textReadSource ? { textReadSource } : {}) }, bytes };
 }
 
-/** Read a standard-library `.nz` file, registering its blocks in `store`. */
-export async function loadStandardLibrary(source: string | Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
-  let bytes: Uint8Array;
-  if (typeof source === 'string') {
-    const { default: fs } = await import('node:fs');
-    if (typeof fs.readFileSync !== 'function') throw new Error('Loading a standard-library path requires Node; pass its bytes in a browser.');
-    bytes = new Uint8Array(fs.readFileSync(source));
-  } else bytes = source;
+/**
+ * Read a standard-library `.nz` file from its bytes, registering its blocks in `store`. On Node, `loadStandardLibrary`
+ * from `@natlang/node` (neuralese/node-files.ts) also takes a path.
+ */
+export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
+  if (typeof bytes === 'string')
+    throw new TypeError('loadStandardLibrary takes the .nz file\'s bytes here; read the file first (fetch(url).then(r => r.arrayBuffer())), or use @natlang/node, which also takes a path');
   const { header, blocks } = decodeNz(bytes);
   if (store) for (const block of blocks.values()) if (!(await store.has(block.meta.id))) {
     const { id: _, ...rest } = block.meta;
@@ -197,6 +194,13 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
   const store = task?.runtime.options.neuralese?.store;
   if (!store || !await store.has(library.bodies.read))
     throw new NeuraleseReadoutCapabilityError(`read body ${library.bodies.read} is unavailable in the task block store`);
+  // The read body reads its library's dialect only. As at coercion (native/values.ts), a block whose dialect the
+  // task's store cannot tell without I/O is not checked here.
+  const written = store.peek?.(value.$neuralese.id)?.dialect;
+  if (library.dialect && written !== undefined && written !== library.dialect)
+    throw new NeuraleseDialectError(`read(value) reads dialect ${JSON.stringify(library.dialect)}, but block ` +
+      `${value.$neuralese.id} was written in ${JSON.stringify(written)}; convert it first with ` +
+      `\`convert(value, ${JSON.stringify(library.dialect)})\`, or read it with a standard library of its dialect`);
   return createNeuraleseLibrary(library).read(value);
 }
 

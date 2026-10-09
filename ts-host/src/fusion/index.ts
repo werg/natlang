@@ -6,3 +6,4 @@ export { FUSION_CERTIFICATE_SCHEMA, engageFusion, fusionStatus, unconsumedFusedB
 export type { FusionCertificate, FusionEdgeSpec, FusionMode, FusionOptions, FusionStatus } from '../runtime/fusion.js';
 export * from './prepare.js';
 export * from './report.js';
+export * from './observed.js';

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-typed-quality-review-held-20261009-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v2",
+  "files": [
+    {
+      "path": "provider-short-decisions-quality-v2.json",
+      "bytes": 24611,
+      "sha256": "e5e18a960ea1f3c2658821da91990185cbd6d46fe90d6bc41371cdbc14bbf071"
+    }
+  ],
+  "bytes": 24611
+}

@@ -12,13 +12,14 @@
  * - bash keeps the output the teacher's environment recorded (only that environment could produce it), in pi's
  *   format: the command's output, and pi's error diagnostic when it exited non-zero, bounded as pi bounds bash.
  *
- * Each step is checked against the recording: a read must show the text the teacher saw, and an edit or write must
- * succeed or fail as the teacher's did. The first disagreement means the checkout no longer matches the teacher's
+ * Each step is checked against the recording: a read must show the text the teacher saw, an edit or write must
+ * succeed or fail as the teacher's did, and a bash observation must not be OpenHands' notice that the command is still
+ * running (pi's bash waits for it, and the interaction that notice offers is OpenHands' own). The first disagreement means the checkout no longer matches the teacher's
  * workspace (a command changed files, or a tool's semantics differ), so replay stops there and reports the step; the
  * steps before it are verified.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
@@ -118,6 +119,20 @@ export function recordedBash(recorded: string): { output: string; exitCode: numb
   return { output, exitCode };
 }
 
+/**
+ * OpenHands' notice that a command is still running, appended to its bash observation: after its soft timeout
+ * (`has no new output after N seconds`) or the call's own timeout (`timed out after N seconds`). It offers interactions
+ * only OpenHands has (send keys or input to the running process, execute_bash's timeout parameter), so pi would never
+ * show it, and the teacher's next turns answer it.
+ */
+const OPENHANDS_TIMEOUT = /\[The command (has no new output|timed out) after \d+(?:\.\d+)? seconds\. You may wait longer to see additional output by sending empty command '', send other commands to interact with the current process, send keys \("C-c", "C-z", "C-d"\) to interrupt\/kill the previous command before sending your new command, or use the timeout parameter in execute_bash for future commands\.\]/;
+
+/** The reason a recorded bash observation is OpenHands' timeout notice, or null when it is not one. */
+export function openHandsTimeout(recorded: string): string | null {
+  const notice = OPENHANDS_TIMEOUT.exec(recorded);
+  return notice ? `bash ${notice[1] === 'timed out' ? 'timeout' : 'soft timeout'} (OpenHands-only interaction)` : null;
+}
+
 /** bash's result in pi for a recorded output: the output (bounded to its tail) and pi's diagnostic for a failure. */
 function bashResult(output: string, exitCode: number | null): ToolExecutionResult {
   const failed = exitCode !== null && exitCode !== 0;
@@ -191,6 +206,10 @@ export async function replay(prepared: Prepared, root: string): Promise<{ messag
       result = listing(String(LISTING.exec(String(call.arguments?.command))?.[1] ?? '.').replace(/^'|'$/g, ''));
       report.listings++;
     } else if (call.name === 'bash') {
+      // The command was still running when OpenHands returned: pi's bash waits for it, so the observation and the
+      // interaction after it are OpenHands' own. Replay stops before this step.
+      const timeout = openHandsTimeout(recorded);
+      if (timeout) { diverge(timeout); break; }
       const { output, exitCode } = recordedBash(recorded);
       result = bashResult(output, exitCode);
       report.recordedBash++;
@@ -202,15 +221,32 @@ export async function replay(prepared: Prepared, root: string): Promise<{ messag
   return { messages, report };
 }
 
-/** Replay every prepared trajectory of `input` (JSON lines) into `output`, each in a fresh checkout. */
+/**
+ * The trajectory ids `output` already holds, one complete (newline-terminated) line each. A kill can leave the last
+ * line unfinished: that tail is cut off, so its trajectory is replayed again.
+ */
+export function replayedIds(output: string): Set<string> {
+  const ids = new Set<string>();
+  if (!existsSync(output)) return ids;
+  const content = readFileSync(output, 'utf8');
+  const complete = content.lastIndexOf('\n') + 1;
+  if (complete < content.length) truncateSync(output, Buffer.byteLength(content.slice(0, complete)));
+  for (const line of content.slice(0, complete).split('\n')) if (line.trim()) ids.add((JSON.parse(line) as Prepared).id);
+  return ids;
+}
+
+/**
+ * Replay every prepared trajectory of `input` (JSON lines) into `output`, each in a fresh checkout. Resumable: the
+ * trajectories `output` already holds are kept and skipped, the others are appended.
+ */
 export async function replayFile(input: string, output: string, repos: string, log: (line: string) => void): Promise<void> {
-  const { appendFileSync } = await import('node:fs');
-  writeFileSync(output, '');
-  const totals = { trajectories: 0, fullyVerified: 0, diverged: 0, failed: 0 };
+  const done = replayedIds(output);
+  const totals = { trajectories: 0, resumed: 0, fullyVerified: 0, diverged: 0, failed: 0 };
   for (const line of readFileSync(input, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     const prepared = JSON.parse(line) as Prepared;
     totals.trajectories++;
+    if (done.has(prepared.id)) { totals.resumed++; continue; }
     const root = mkdtempSync(join(tmpdir(), 'pi-replay-'));
     try {
       checkout(prepared.repo, prepared.base_commit, repos, root);

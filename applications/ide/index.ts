@@ -5,11 +5,13 @@
  */
 import { createHash } from 'node:crypto';
 import * as natlang from '@natlang/node';
-import { newPlaygroundProject, runPlaygroundProject, traceFrame, validatePlaygroundProject,
+import { canonicalValue, newPlaygroundProject, runPlaygroundProject, traceFrame, untrusted, validatePlaygroundProject,
   type NatlangRuntime, type PlaygroundProject, type PlaygroundRun } from '@natlang/node';
-import interpret from './interpret.nl';
-import describe from './describe.nl';
-import type { CheckReport, EditorSnapshot, EditorView, EditPatch, TraceView } from './types.js';
+import chooseFile from './edit/chooseFile.nl';
+import proposeEdit from './edit/proposeEdit.nl';
+import summarizeDiagnostics from './view/summarizeDiagnostics.nl';
+import explainEvent from './view/explainEvent.nl';
+import type { CheckReport, EditorSnapshot, EditorView, EditPatch, EditProposal, TraceView } from './types.js';
 
 export type * from './types.js';
 export type EditReport = { status: 'edited' | 'stale' | 'rejected', revision: string, detail: string };
@@ -79,7 +81,7 @@ export class IdeWorkbench {
     const run = this.runs.get(runId);
     if (!run || !Number.isSafeInteger(index) || index < 0 || index >= run.trace.length) throw new Error('unknown run or trace index');
     return { run_id: runId, revision: run.sourceRevision, index, total: run.trace.length,
-      event_json: JSON.stringify(traceFrame(run.trace, index).event) };
+      event_json: untrusted(JSON.stringify(traceFrame(run.trace, index).event), `trace event ${index} of run ${runId}`) };
   }
 
   addScenario({ id, revision = this.current, inputs, expected }: { id: string, revision?: string, inputs: Record<string, unknown>, expected: unknown }) {
@@ -98,7 +100,7 @@ export class IdeWorkbench {
       if (!scenario) throw new Error(`unknown scenario: ${id}`);
       const run = await this.run(scenario.inputs, scenario.revision);
       results.push({ id, run_id: run.run_id, revision: run.revision, status: run.status,
-        matches: run.status === 'done' && run.value_text === JSON.stringify(scenario.expected) });
+        matches: run.status === 'done' && canonicalValue(JSON.parse(run.value_text)) === canonicalValue(scenario.expected) });
     }
     return { dataset_identity: hash(ids.map(id => this.datasets.get(id))), results, passed: results.every(row => row.matches) };
   }
@@ -113,13 +115,70 @@ export class IdeWorkbench {
   drainEvents(): Record<string, unknown>[] { return this.events.splice(0); }
 }
 
-/** Interpret one editor request as an exact patch against the current revision. */
-export async function requestEdit(ide: IdeWorkbench, request: string): Promise<EditReport> {
-  return ide.edit(await interpret(request, ide.snapshot()));
+/** The result of locating a proposal: the exact patch, or how many times the anchor occurs (never 1 here). */
+export type Located = { ok: true, patch: EditPatch } | { ok: false, occurrences: number };
+
+/**
+ * Crisp: turn the model's quoted anchor into character offsets and the snapshot's revision. The anchor must occur
+ * exactly once in the file; occurrences may overlap, so an anchor that repeats inside itself counts as repeated.
+ */
+export function locate(snapshot: EditorSnapshot, name: string, proposal: EditProposal): Located {
+  const source = snapshot.files.find(file => file.name === name)?.source ?? '';
+  const anchor = typeof proposal?.anchor === 'string' ? proposal.anchor : '';
+  let occurrences = 0, index = -1;
+  if (anchor.length) {
+    for (let at = source.indexOf(anchor); at >= 0; at = source.indexOf(anchor, at + 1)) { occurrences++; if (occurrences === 1) index = at; }
+  }
+  if (occurrences !== 1) return { ok: false, occurrences };
+  const text = typeof proposal.text === 'string' ? proposal.text : '';
+  const after = index + anchor.length;
+  const [start, end] = proposal.placement === 'insert-before' ? [index, index] :
+    proposal.placement === 'insert-after' ? [after, after] : [index, after];
+  return { ok: true, patch: { name, start, end, text, expected_revision: snapshot.revision } };
 }
 
-/** Compose and render an editor view around one recorded trace event. */
+/** The retry text for an anchor that did not identify one place. */
+export function anchorFeedback(occurrences: number): string {
+  return occurrences === 0 ?
+    'The anchor does not occur in the source. Copy the span from the source exactly, with its whitespace and line breaks.' :
+    `The anchor occurs ${occurrences} times. Extend it with the neighbouring text until it occurs once.`;
+}
+
+/**
+ * Edit from one editor request: the model chooses the file (when there are several) and proposes an anchored edit;
+ * `locate` measures it against the snapshot; `edit` commits it against the revision the snapshot read. An anchor that
+ * does not identify one place goes back to the model once with the count; a second miss is a rejected edit.
+ */
+export async function requestEdit(ide: IdeWorkbench, request: string): Promise<EditReport> {
+  const snapshot = ide.snapshot();
+  const names = snapshot.files.map(file => file.name);
+  const name = names.length === 1 ? names[0]! : await chooseFile(request, names);
+  const file = snapshot.files.find(item => item.name === name);
+  if (!file) return { status: 'rejected', revision: snapshot.revision, detail: `no file named ${JSON.stringify(name)}` };
+  let feedback = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const located = locate(snapshot, name, await proposeEdit(request, name, file.source, feedback));
+    if (located.ok) return ide.edit(located.patch);
+    feedback = anchorFeedback(located.occurrences);
+  }
+  return { status: 'rejected', revision: snapshot.revision, detail: feedback };
+}
+
+/**
+ * Compose and render an editor view around one recorded trace event. The panels that copy host values (the source and
+ * the raw diagnostics) are built here; the model writes the two readings.
+ */
 export async function viewTrace(ide: IdeWorkbench, runId: string, index: number): Promise<string> {
   const snapshot = ide.snapshot();
-  return ide.render(await describe(snapshot, ide.check(snapshot.revision), ide.inspect(runId, index)));
+  const checked = ide.check(snapshot.revision), event = ide.inspect(runId, index);
+  const [summary, explanation] = await Promise.all([summarizeDiagnostics(checked), explainEvent(event)]);
+  return ide.render(assembleView(snapshot, checked, summary, explanation, event));
+}
+
+/** Crisp: the view's fixed layout, with the readings in place. */
+export function assembleView(snapshot: EditorSnapshot, checked: CheckReport, summary: string, explanation: string, event: TraceView): EditorView {
+  return { title: `Editor view of revision ${snapshot.revision.slice(0, 12)}`, panels: [
+    { heading: 'Source', body: snapshot.files.map(file => `// ${file.name}\n${file.source}`).join('\n') },
+    { heading: 'Diagnostics', body: checked.detail ? `${summary}\n\n${checked.detail}` : summary },
+    { heading: `Trace event ${event.index + 1} of ${event.total}`, body: explanation }] };
 }
