@@ -90,17 +90,21 @@ export function renderEvidence(store: CallStore, subject: Study, extra: { report
     `${Math.round(cost.tokens / Math.max(1, count))} tokens and ${Math.round(cost.wall / Math.max(1, count))} ms per call on average.`, '',
     `Split: ${subject.examples.filter(example => example.split === 'training').length} training, ` +
     `${subject.examples.filter(example => example.split === 'held-out').length} held out (used only to check your cases).`, ''].join('\n');
-  const overview = ['# Approaches', '', 'Each approach is a group of calls whose code was the same after normalization. One line each:', '',
+  // An approach taken once cannot make a case; it gets its line here but no folder, so the evidence fits the executor's
+  // context (traces.call(id) shows such a call in full).
+  const overview = ['# Approaches', '', 'Each approach is a group of calls whose code was the same after normalization. One line each.',
+    'Approaches with one call have no folder: one call is not a pattern. traces.call(id) shows such a call in full.', '',
     '| approach | calls | what they did | a call | its result | code |', '| --- | --- | --- | --- | --- | --- |'];
   for (const approach of subject.approaches) {
     const first = subject.records.get(approach.calls[0]!);
     const example = subject.examples.find(item => item.callId === approach.calls[0]);
     const cell = (value: unknown, limit: number) => (JSON.stringify(value) ?? '').replace(/\|/g, '\\|').slice(0, limit);
-    overview.push(`| ${approach.id} | ${approach.calls.length} | ${example?.behavior ?? ''} | ${cell(example?.args, 80)} | ` +
+    overview.push(`| ${approach.calls.length > 1 ? approach.id : `${approach.id} (${approach.calls[0]})`} | ${approach.calls.length} | ${example?.behavior ?? ''} | ${cell(example?.args, 80)} | ` +
       `${cell(first ? store.value(first.output) : null, 60)} | ${(approach.template[0] ?? '(no code)').replace(/\|/g, '\\|').slice(0, 100)} |`);
   }
   files['approaches/README.md'] = overview.join('\n') + '\n';
   for (const approach of subject.approaches) {
+    if (approach.calls.length < 2) continue;
     const dir = `approaches/${approach.id}`;
     const calls = approach.calls.map(id => subject.records.get(id)!).filter(Boolean);
     files[`${dir}/approach.ts`] = approach.answerOnly ? '// The agent answered without running any code.\n' :
