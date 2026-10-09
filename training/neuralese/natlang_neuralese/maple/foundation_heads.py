@@ -14,12 +14,12 @@ import torch
 from ..model.heads import PortHeads
 from ..model.hf_port import family_controls
 from .maple_port import MaplePortBackbone
-from .student import DEFAULT_MODEL, load_student, student_identity
+from .student import load_student, student_identity
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--model', default=DEFAULT_MODEL)
+    parser.add_argument('--model', required=True, help='student checkpoint dir (e.g. a qat_export of Mellum)')
     parser.add_argument('--state', help='nested-family student state (nested-state.pt); omit for published Maple')
     parser.add_argument('--cutoff', type=int, required=True)
     parser.add_argument('--max-length', type=int, default=64)

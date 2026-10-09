@@ -318,7 +318,7 @@ def test_exported_conversion_loads_as_deployed_ternary_and_matches_the_qat_model
 def test_maples_converted_cache_is_never_used_for_another_family_member(tmp_path):
     from natlang_neuralese.maple import student
 
-    assert student.default_cache(student.DEFAULT_MODEL) == student.DEFAULT_CACHE
+    assert student.default_cache(student.MAPLE_PREVIEW_MODEL) == student.DEFAULT_CACHE
     assert student.default_cache(str(tmp_path)) is None
 
 
