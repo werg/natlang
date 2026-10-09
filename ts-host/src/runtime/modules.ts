@@ -22,11 +22,23 @@ let moduleTarget: 'node' | 'browser' = 'node';
 let packageLoader: ((specifier: string) => unknown) | undefined;
 /** Installed by the platform: how callable-folder modules load packages. */
 const builtinModules = new Map<string, () => unknown>();
-/** Platform modules such as `natlang:learning` (registered by the Node wiring) and `natlang:neuralese`. */
+/**
+ * Platform modules such as `natlang:neuralese` and `natlang:learning`, registered by the platform wiring
+ * (runtime/node.ts, browser/index.ts); a platform that cannot provide one registers a factory that throws why.
+ */
 export function registerBuiltinModule(specifier: string, factory: () => unknown): void { builtinModules.set(specifier, factory); }
+/** Importing a platform module this platform cannot provide (code `module-unavailable`); `reason` teaches what to do. */
+export class ModuleUnavailableError extends Error {
+  readonly code = 'module-unavailable';
+  constructor(readonly specifier: string, reason: string) {
+    super(`${specifier} is not available on this platform: ${reason}`);
+    this.name = 'ModuleUnavailableError';
+  }
+}
+export function hasBuiltinModule(specifier: string): boolean { return builtinModules.has(specifier); }
 export function builtinModule(specifier: string): unknown {
   const factory = builtinModules.get(specifier);
-  if (!factory) throw new Error(`${specifier} is not available on this platform`);
+  if (!factory) throw new ModuleUnavailableError(specifier, 'this platform registers no such module');
   return factory();
 }
 

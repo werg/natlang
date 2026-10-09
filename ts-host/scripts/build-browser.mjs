@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { browserNodeImports } from './browser-node-imports.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 // Library declarations for the in-browser TypeScript checker (eval `nl` analysis, virtual projects).
@@ -13,12 +14,7 @@ await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts') }, b
   outdir: resolve(root, 'dist/browser'), chunkNames: 'chunks/[name]-[hash]',
   // undici is only loaded under Node (fetchModel); browsers use plain fetch.
   external: ['undici'],
-  plugins: [{ name: 'browser-node-stubs', setup(build) {
-    build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
-    build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, args => ({ contents: args.path === 'zlib' ?
-      'import { gunzipSync, gzipSync } from "fflate"; export { gunzipSync, gzipSync }; export const constants = {}; export default { gunzipSync, gzipSync, constants };' :
-      'export default {}; export const fileURLToPath = () => { throw new Error("Node path API unavailable in browser"); };', loader: 'js', resolveDir: root }));
-  } }],
+  plugins: [browserNodeImports()],
   define: { __NATLANG_PRELUDE__: JSON.stringify(readFileSync(resolve(root, 'prelude.js'), 'utf8')),
     __NATLANG_TS_LIBS__: JSON.stringify(libs) },
   legalComments: 'none' });
@@ -26,17 +22,11 @@ await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts') }, b
 // it (startBrowserNeuralese).
 await build({ entryPoints: { 'neuralese-worker': resolve(root, 'src/browser/neuralese-worker.ts') }, bundle: true,
   platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
-  plugins: [{ name: 'browser-node-stubs', setup(build) {
-    build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
-    build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
-  } }], legalComments: 'none' });
+  plugins: [browserNodeImports()], legalComments: 'none' });
 // The call store's worker (src/browser/call-store-worker.ts) and SQLite's WebAssembly, which it loads from beside itself.
 await build({ entryPoints: { 'call-store-worker': resolve(root, 'src/browser/call-store-worker.ts') }, bundle: true,
   platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
-  plugins: [{ name: 'browser-node-stubs', setup(build) {
-    build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
-    build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
-  } }], legalComments: 'none' });
+  plugins: [browserNodeImports()], legalComments: 'none' });
 copyFileSync(fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')), resolve(root, 'dist/browser/sqlite3.wasm'));
 for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm',
   'neuralese-wasm-gpu.mjs', 'neuralese-wasm-gpu.wasm'])

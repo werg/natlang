@@ -2,7 +2,8 @@
 import { SlotContextStore, bindAwait, markRaces, propagateSlotFrames, setContextStore } from '../runtime/context.js';
 import { setDefaultCallStoreFactory, setDefaultEnvironmentFactory } from '../runtime/runtime.js';
 import { BrowserCallStore, browserCallStoreAvailable } from './call-store.js';
-import { setModuleRealm, setModuleTarget } from '../runtime/modules.js';
+import { ModuleUnavailableError, registerBuiltinModule, setModuleRealm, setModuleTarget } from '../runtime/modules.js';
+import { neuraleseModule } from '../neuralese/combinators.js';
 import { setDefaultLibProvider } from '../compiler/host.js';
 import { TypeScriptEnvironment } from './environment.js';
 
@@ -20,6 +21,14 @@ setDefaultCallStoreFactory(() => browserCallStoreAvailable() ? originStore ??= n
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 setModuleTarget('browser');
 setDefaultLibProvider(name => __NATLANG_TS_LIBS__[name]);
+// The combinators run against the task's Neuralese service (a server, or startBrowserNeuralese) as on Node.
+registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
+// Learning (grad, optimizers, adapter and system-prompt training) needs Node: per-task scopes on AsyncLocalStorage
+// and content hashing on node:crypto.
+registerBuiltinModule('natlang:learning', () => { throw new ModuleUnavailableError('natlang:learning', 'gradients, optimizers and ' +
+  'adapter training run on Node (@natlang/node) against a learning service. Train there and give this program the ' +
+  'trained blocks or adapters (a .nz file through loadStandardLibrary, or a Neuralese block store); natlang:neuralese ' +
+  'combinators and Neuralese calls do work in the browser.'); });
 // Compiled browser code restores the natlang task after each await through this hook.
 Object.defineProperty(globalThis, '__natlang_bindAwait', { value: bindAwait, configurable: true });
 
@@ -51,6 +60,15 @@ export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type Neuralese
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
+export { encodeBlockBody, decodeBlockBody } from '../model/neuralese-server.js';
+export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
+export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from '../model/neuralese-info.js';
+export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from '../native/neuralese.js';
+export { serverDigester, DIGEST_TYPE, type Digester, type DigestSite } from '../neuralese/digest.js';
+// The standard library from and to bytes (Node's variants also take a path).
+export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from '../neuralese/combinators.js';
+export type { StandardLibrary, CombinatorName } from '../neuralese/combinators.js';
+export { registerBuiltinModule, ModuleUnavailableError } from '../runtime/modules.js';
 export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from '../native/neuralese-store.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validatePlaygroundProject,

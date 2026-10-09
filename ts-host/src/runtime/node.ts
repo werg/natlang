@@ -1,5 +1,6 @@
 /** Node wiring: AsyncLocalStorage context propagation, the vm evaluator, and module package loading. */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { Worker } from 'node:worker_threads';
 import { TypeScriptEnvironment } from '../environment.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
 import { currentFrame, setContextStore, type Frame } from './context.js';
@@ -8,6 +9,7 @@ import { CallStore, machineStoreRoot } from '../calls/store.js';
 import { registerBuiltinModule, setModuleRealm, setPackageLoader } from './modules.js';
 import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
+import { setPythonWatchdog, WATCHDOG_SCRIPT } from '../native/folder-python.js';
 
 const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
@@ -15,6 +17,10 @@ setDefaultEnvironmentFactory(options => new TypeScriptEnvironment({ workspace: o
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
 setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
+
+// Python cells time out through a worker thread that sets Pyodide's interrupt flag.
+setPythonWatchdog((buffer, ms) => new Worker(`const { workerData } = require('worker_threads'); const buffer = workerData.buffer, ms = workerData.ms; ${WATCHDOG_SCRIPT}`,
+  { eval: true, workerData: { buffer, ms } }));
 
 registerBuiltinModule('natlang:learning', () => learningModule);
 registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
