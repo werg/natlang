@@ -307,3 +307,14 @@ training inputs, running jobs' outputs. Finished large artifacts move to the ext
   large items for manual review).
 - To bring a file back for latency-critical use, copy it from the archive over the symlink (`cp --remove-destination`)
   and add a `.keep-on-nvme` marker or an exclude line.
+
+### Manifest identities in synchronization receipts
+
+`sync_training_corpora.py` verification/offload receipts use `manifest_sha256`
+for the manifest object's identity: SHA-256 of UTF-8
+`json.dumps(manifest, sort_keys=True)` with Python's default JSON formatting.
+The receipt declares this encoding. It is distinct from `sha256sum` of the
+indented manifest file. Publication prints `manifest_file_sha256` for the latter.
+When sending a hash in coordination, identify which one is meant. Both bind the
+same selected snapshot, but their byte representations differ; do not interpret
+that difference as failed data verification.

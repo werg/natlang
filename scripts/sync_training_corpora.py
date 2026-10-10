@@ -212,7 +212,8 @@ def publish(repo, entry):
     if target.exists() and json.loads(target.read_text()) != value:
         raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
     save(target, value)
-    print(json.dumps({'published': entry['id'], 'files': len(rows), 'bytes': value['bytes']}), flush=True)
+    print(json.dumps({'published': entry['id'], 'files': len(rows), 'bytes': value['bytes'],
+                      'manifest_file_sha256': digest(target)[0]}), flush=True)
 
 
 def current_receipt(repo, manifest):
@@ -273,6 +274,7 @@ def verify(repo, manifest, receipt_group='corpus-receipts', verification_scope='
                'machine_boot_id': machine_boot_id(),
                'verified_repo': str(repo.resolve()),
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
+               'manifest_sha256_encoding': 'UTF-8 json.dumps(manifest, sort_keys=True); object identity, not file bytes',
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
     receipt['verification_id'] = receipt_key or manifest['id']
     save(repo / '.coordination' / receipt_group / (receipt['verification_id'] + '.json'), receipt)
@@ -507,6 +509,7 @@ def offload(repo, entry, manifest, args):
                'mode': 'owner-transfer' if local_owner else 'verified-local-mirror-eviction',
                'attempt_id': attempt_id,
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
+               'manifest_sha256_encoding': 'UTF-8 json.dumps(manifest, sort_keys=True); object identity, not file bytes',
                'selected_files': selected['files'], 'bytes': selected['bytes'], 'local_file_stats': final_stats,
                'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
                'local_references': final_references, 'unlink_permissions': unlink_permissions,
