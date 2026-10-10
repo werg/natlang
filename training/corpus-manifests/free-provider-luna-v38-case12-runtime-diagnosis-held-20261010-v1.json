@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v38-case12-runtime-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v38-case12-runtime-diagnosis-v1",
+  "files": [
+    {
+      "path": "report.json",
+      "bytes": 4702,
+      "sha256": "a59199cd86b7b50b61050715259eb1096f50d2dab45fd4b354909b4ff791ab63"
+    }
+  ],
+  "bytes": 4702
+}

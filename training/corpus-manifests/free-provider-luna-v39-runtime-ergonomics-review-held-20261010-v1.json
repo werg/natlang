@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v39-runtime-ergonomics-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/quality-review-v39-runtime-ergonomics-diagnostic-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 10798,
+      "sha256": "41cd701aa26c649fa4a581c359c70c13251c12c90762e0ab2294d5218d753819"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1824,
+      "sha256": "f244e5270d83bd145f9b2efec6c3c5e8c771a5d58c1d46933d8d6ade34bf2b1c"
+    }
+  ],
+  "bytes": 12622
+}

@@ -162,6 +162,8 @@ Parameters take their names from the call (nl\`Is item urgent?\`(item) names it 
 without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
 instructions also see variables in scope that they mention by exact name. The result type comes from how the result
 is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
+JavaScript template interpolation runs when you create the callable. Mention a future argument by its parameter
+name in the instructions; interpolate it only inside a callback where that variable already exists.
 In nl.with<T>, T describes the result, not the capture object. In nl.with<C, T>, C is a finite capture-record schema
 and T is the result; the callable's input is passed separately and inferred from the call (or declared with one full
 callable signature). A suffix .with(...) can apply directly to an inline

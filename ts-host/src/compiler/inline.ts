@@ -218,9 +218,13 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     try { return describeTarget(within.program, within.program.getTypeChecker(), type, { allowHost, location: within.location }); }
     catch (error) {
       if (!(error instanceof TargetError)) throw error;
+      const annotation = checker.getSignaturesOfType(type, ts.SignatureKind.Call).length ?
+        'Use an explicit Neuralese callable type, such as `Neuralese<(input: Input) => Promise<Result>>`, ' +
+        'with your declared parameter and result types, rather than the inferred callable/intersection type.' :
+        'Annotate it.';
       report(node, what === 'return' ? 'nl-unknown-return' : 'nl-unknown-parameter', what === 'return' ?
         `Return type of this \`nl\` expression is unknown (${error.message}); annotate the target or write \`nl<Verdict>\`.` :
-        `Type of ${what} for this \`nl\` expression cannot be used (${error.message}); annotate it.`);
+        `Type of ${what} for this \`nl\` expression cannot be used (${error.message}); ${annotation}`);
       return;
     }
   };
@@ -498,7 +502,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const [argument] = withCall.arguments;
     if (withCall.arguments.length !== 1 || !argument) {
       report(withCall, 'nl-explicit-captures', 'nl.with takes one finite record of captures, as in ' +
-        '`nl.with({ rubric })` or `nl.with(context)`, where context has known fields.');
+        '`nl.with({ rubric })` or `nl.with(context)`, where context has known fields. ' +
+        'Captures are fixed context; pass per-call arguments when calling the returned function.');
       return;
     }
     const captureSchemaNode = withCall === node.tag && withCall.typeArguments?.length === 2 ? withCall.typeArguments[0] : undefined;

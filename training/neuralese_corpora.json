@@ -25190,6 +25190,49 @@
       "training_admission": false,
       "admission": "held-source-quality-capture-and-native-review-required",
       "notes": "48complete324/357sourceannotations23exactmaps. Savedmapsreturnmatchedinputsunchanged;903childcalls/calleredges/outputcaptures108rejected104scopefailureevents. Exactproviderrequestbodiesnotretained; no inferred promptvisibility orautomaticadmission. RegisteronlyV4auditpreviousdraftsnotcounted."
+    },
+    {
+      "id": "free-provider-luna-v39-runtime-ergonomics-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v39-runtime-ergonomics-diagnostic-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "runtime-quality-diagnosis",
+      "training_admission": false,
+      "admission": "diagnosis-only-not-training-admission",
+      "notes": "Mosterrorsactualinvalidscope/result/API; actionableguidancecallableannotation/fixedcaptures/templateinterpolation. No evidence supportsweakerchecks."
+    },
+    {
+      "id": "free-provider-luna-v38-case12-runtime-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v38-case12-runtime-diagnosis-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "runtime-quality-diagnosis",
+      "training_admission": false,
+      "admission": "diagnosis-only-not-training-admission",
+      "notes": "384requestbudget191turns nofinal. Childmissingtypedresult, free decisionContextname,inputpropertyrequired, explicittimeout_ms1. Noestablishedbroadruntimebug; notsemanticnegative."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v13-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v13",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        "__pycache__"
+      ],
+      "split": "runtime-evidence-only",
+      "source_class": "frozen-generation-runtime",
+      "training_admission": false,
+      "admission": "runtime-only-not-training-admission",
+      "notes": "V13sharedbuiltcompiler/runtimeguidance forunsupportedinferredcallabletypes,fixedcaptures-vs-callarguments,creation-timetemplateinterpolation; nosemanticvalidationchanges. ActiveV40remainsfrozenV12."
     }
   ],
   "coverage_backlog": [
