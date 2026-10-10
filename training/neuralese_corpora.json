@@ -18617,8 +18617,69 @@
           "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
         }
       },
-      "notes": "Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md \u00a73), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
-      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2"
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md \u00a73), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
+      "superseded_by": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "summary.json",
+        "surface.json",
+        "prepared.jsonl",
+        "replayed.jsonl",
+        "replay.log"
+      ],
+      "split": "by repository, following the published cross-corpus closure: a repository S1 already places keeps S1's split (cross_corpus.place over the repository's component through cross-corpus-index-s1-full-final-20261003-v1), others by split_of(repo, 5); source groups repository and instance",
+      "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
+      "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "training/neuralese/scripts/harness_bench_build.sh (records stage)",
+        "code_commit": "621de060a13f3f3bbab6042605a9febb74986184",
+        "builder": "natlang.harness_bench.records/1",
+        "record_format": "natlang.harness-bench-conversion/2",
+        "command": "python -m natlang_neuralese.harness_bench.records --replayed <v4>/replayed.jsonl --surface <v4>/surface.json --corpus nebius-swe-rebench-openhands-trajectories-20261009-v1 --out <v4> (default --placed-by cross-corpus-index-s1-full-final-20261003-v1)",
+        "dialect": "openhands-v0.54",
+        "mapping": "pi",
+        "surface_sha256": "c8e3d62f0460046edc09a3be683445387f5a22a388b4836005bc8d9938b533cf",
+        "surface_file_sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050",
+        "criteria": "harness-bench-criteria/2",
+        "replay_outputs": "surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte from harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (no replay rerun)",
+        "placement": {
+          "indexes": [
+            {
+              "corpus_id": "s1-full-final-20261003",
+              "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+              "records": 1870591
+            }
+          ],
+          "repositories": 321,
+          "published": 321,
+          "split_of": 0,
+          "unplaceable": [],
+          "moved_from_split_of": {
+            "test->train": 8,
+            "train->test": 45
+          },
+          "by_split": {
+            "train": 275,
+            "validation": 0,
+            "test": 46
+          }
+        }
+      },
+      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md \u00a74.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1",
@@ -18680,7 +18741,79 @@
           "tokens": 72442697
         }
       },
-      "notes": "LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink)."
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the LFM line's text stages (core_text_warmup, autoregressive_text_fixup) at cohort fraction 0.25 beside the native text, via an assembled text input (scripts/assemble_neuralese_cohorts.py) and text_warmup --cohort-weights; the 874 test documents (S1-placed held repositories) are a reported stratum, never qualification evidence; enters through recipe raw-recurrence-v5",
+      "training_admission": true,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/build_neuralese_text_packet.py",
+        "code_commit": "621de060",
+        "command": "scripts/build_neuralese_text_packet.py --records data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl --pieces data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/pieces.jsonl --tokenizer /home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f --out data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+        "renderer": "natlang_neuralese.data.text_corpus.gold_text_rows",
+        "rendering": "natlang.native_gold_chat/3",
+        "renderer_code": {
+          "scripts/build_neuralese_text_packet.py": "26ac8990d9a535b79bdd217d24df79016895807357d91639ef3116403522f87e",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "ba9c3ac961e157c12bd82fba4439eb988e304b111602d4cdd0b1700bfd0f73e5",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "92d76e9a789ba12530843897cceef0b821aa8e31e0bef433dee8324b1b387282"
+        },
+        "tokenizer_sha256": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+        "tokenizer": {
+          "class": "TokenizersBackend",
+          "files": {
+            "chat_template.jinja": "ba551d58630afa3190b1be3602e28301f3d2e9bbac978dfc49d6d825171648b6",
+            "tokenizer.json": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+            "tokenizer_config.json": "3701f370c70034d06e28947ff51c1063983393319f429e3ce58f06a45fae67cc"
+          },
+          "path": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+        },
+        "source_files": {
+          "pieces.jsonl": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+          "records.jsonl": "83e1ee703d1ea4a2f7e245a13a2a84d0d4ea475ee5af40425283adcc278bbb16"
+        },
+        "text_jsonl_sha256": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+        "history_reasoning": {
+          "backbone": "lfm2",
+          "policy": "last_turn_only",
+          "probe": "drops-history",
+          "template_kwargs": {
+            "preserve_thinking": false
+          }
+        }
+      },
+      "tokens": {
+        "test": {
+          "documents": 874,
+          "max_document_tokens": 102005,
+          "suffix_tokens": 185811,
+          "tokens": 18329680
+        },
+        "train": {
+          "documents": 2969,
+          "max_document_tokens": 92606,
+          "suffix_tokens": 605772,
+          "tokens": 56223273
+        }
+      },
+      "notes": "Text twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (splits follow S1's placement), rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3) under the backbone's declared history_reasoning last_turn_only (receipt). Same documents and tokens as harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1 (74,552,953 tokens), only the splits differ: 2969 train / 874 test documents (56,223,273 / 18,329,680 tokens; suffix 605,772 / 185,811). View parts render as their preview. Per-record admission is the records' own. Admission carried from harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1.",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1"
     },
     {
       "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
@@ -18743,7 +18876,78 @@
           "tokens": 92621371
         }
       },
-      "notes": "Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink)."
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2"
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'; the pending trainer support landed: Pop's 89982d41 'Weight rendered tool-response user wrappers as feedback', text_warmup.chat_roles labels a user turn whose body begins with <tool_response> as tool): the Mellum line's text stages at cohort fraction 0.25 beside the native text, as the LFM twin; the 874 test documents are a reported stratum, never qualification evidence; enters through recipe raw-recurrence-mellum-v4",
+      "training_admission": true,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/build_neuralese_text_packet.py",
+        "code_commit": "621de060",
+        "command": "scripts/build_neuralese_text_packet.py --records data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl --pieces data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/pieces.jsonl --tokenizer /home/werg/data/models/mellum21-12b-a2.5b-thinking --out data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+        "renderer": "natlang_neuralese.data.text_corpus.gold_text_rows",
+        "rendering": "natlang.native_gold_chat/3",
+        "renderer_code": {
+          "scripts/build_neuralese_text_packet.py": "26ac8990d9a535b79bdd217d24df79016895807357d91639ef3116403522f87e",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "ba9c3ac961e157c12bd82fba4439eb988e304b111602d4cdd0b1700bfd0f73e5",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "92d76e9a789ba12530843897cceef0b821aa8e31e0bef433dee8324b1b387282"
+        },
+        "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+        "tokenizer": {
+          "class": "TokenizersBackend",
+          "files": {
+            "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+            "special_tokens_map.json": "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9",
+            "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+            "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+          },
+          "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+        },
+        "source_files": {
+          "pieces.jsonl": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9",
+          "records.jsonl": "83e1ee703d1ea4a2f7e245a13a2a84d0d4ea475ee5af40425283adcc278bbb16"
+        },
+        "text_jsonl_sha256": "6ad00112ccc402bba6f2b3455b840b8680485503aae8c0d6fbeaf2eaf500fb61",
+        "history_reasoning": {
+          "backbone": "mellum",
+          "policy": "keep",
+          "probe": "keep",
+          "template_kwargs": {}
+        }
+      },
+      "tokens": {
+        "test": {
+          "documents": 874,
+          "max_document_tokens": 95613,
+          "suffix_tokens": 192040,
+          "tokens": 22516330
+        },
+        "train": {
+          "documents": 2969,
+          "max_document_tokens": 105093,
+          "suffix_tokens": 629543,
+          "tokens": 72894669
+        }
+      },
+      "notes": "Text twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (splits follow S1's placement), rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3) under the backbone's declared history_reasoning keep (receipt). Same documents and tokens as harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1 (95,410,999 tokens), only the splits differ: 2969 train / 874 test documents (72,894,669 / 22,516,330 tokens; suffix 629,543 / 192,040). View parts render as their preview. Per-record admission is the records' own. Tool-role check of this twin (chat_roles with prepare_text_windows' tool_response prefixes, Mellum tokenizer, all 3,843 documents): turn labels system 3,843 / user 3,849 / tool 87,337 / assistant reply 96,890; tokens tool 69,984,862 vs user 1,794,079; no document with tool messages lacks a tool label. Admitted on that basis (the v1 twin was held only for this).",
+      "supersedes": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1"
     },
     {
       "id": "luna-v30-source-repairs-counterfactuals-generation-only-20261009-v1",
@@ -21158,7 +21362,40 @@
         "records": 3843,
         "groups": 769
       },
-      "notes": "index.json 'files' lists the DGX paths the index was built from (provenance only). Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py."
+      "notes": "SUPERSEDED by cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1 (2026-10-10): index of harness-bench-swe-rebench-openhands-pi-records-20261010-v3; closures against the harness bench use the index of harness-bench-swe-rebench-openhands-pi-records-20261010-v4. index.json 'files' lists the DGX paths the index was built from (provenance only). Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py.",
+      "superseded_by": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1"
+    },
+    {
+      "id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "include": [
+        "index.json",
+        "groups.json",
+        "digests.npz",
+        "sketches.npz"
+      ],
+      "kind": "cross-corpus-index",
+      "purpose": "exact digest/group/sketch matching for split closure and contamination checks against the published corpus (scripts/neuralese_data/cross_corpus.py Index); not training data",
+      "split": "none (index of harness-bench-swe-rebench-openhands-pi-records-20261010-v4's splits)",
+      "source_class": "derived-index-of-published-corpus",
+      "admission": "not-training-data",
+      "training_admission": false,
+      "training_admission_reason": "an index (hashes, MinHash sketches and group splits), never training examples",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+      ],
+      "license": "derived from harness-bench-swe-rebench-openhands-pi-records-20261010-v4; contains digests and sketches only",
+      "build": {
+        "script": "scripts/neuralese_data/cross_corpus.py index_corpus",
+        "schema": "natlang.cross-corpus-index/1",
+        "format": "turn",
+        "records": 3843,
+        "groups": 769
+      },
+      "notes": "index.json 'files' lists the DGX path the index was built from (provenance only). Built 2026-10-10 with python -m neuralese_data.cross_corpus --format turn (PYTHONHASHSEED=0); also at data_nvme natlang-corpora/cross-corpus-index/harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py.",
+      "supersedes": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1"
     },
     {
       "id": "view-ask-20261010-v2",

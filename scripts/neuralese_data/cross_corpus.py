@@ -211,13 +211,17 @@ def index_corpus(files: list[Path], out: Path, *, corpus_id: str, fmt: str = "po
 class Index:
     """A loaded published-corpus index."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, groups_only: bool = False):
+        """`groups_only` loads the group splits alone (`place`); the digest and sketch lookups are then unavailable."""
         import numpy as np
 
         self.root = Path(root)
         self.meta = json.loads((self.root / "index.json").read_text())
         self.corpus_id = self.meta["corpus_id"]
         self.groups = {g: RANK[s] for g, s in json.loads((self.root / "groups.json").read_text()).items()}
+        self.groups_only = groups_only
+        if groups_only:
+            return
         dg = np.load(self.root / "digests.npz")
 
         def hexed(keys):
@@ -450,6 +454,27 @@ def apply(records: list[dict], indexes: list[Index], *, protected: dict | None =
                    "records_out": len(kept), "by_split": dict(Counter(r["split"] for r in kept))})
     log(f"cross-corpus: {json.dumps({k: report[k] for k in ('records_in', 'records_out', 'components')})}")
     return kept, report
+
+
+def place(components: dict[str, list[str]], indexes: list[Index]) -> dict[str, dict]:
+    """Published placement of new components identified by split groups alone (a corpus whose records carry no source
+    texts to compare, such as the harness bench's trajectories, closed by its own grouping, e.g. one component per
+    repository with all its group keys). For each component the published corpora cannot move, so it takes the one
+    published split its keys touch (`split`); touching several, it cannot be placed (`split` None) and is left out.
+    A component that touches nothing is absent from the result: the new corpus's own rule decides it. `touched` lists
+    {corpus id: [splits]}."""
+    placed: dict[str, dict] = {}
+    for cid, groups in components.items():
+        touched: dict[str, set] = defaultdict(set)
+        for ix in indexes:
+            for g in groups:
+                if g in ix.groups:
+                    touched[ix.corpus_id].add(ix.groups[g])
+        ranks = set().union(*touched.values())
+        if ranks:
+            placed[cid] = {"split": NAMES[next(iter(ranks))] if len(ranks) == 1 else None,
+                           "touched": {c: [NAMES[r] for r in sorted(rs)] for c, rs in sorted(touched.items())}}
+    return placed
 
 
 def check(records: list[dict], indexes: list[Index]) -> list[str]:

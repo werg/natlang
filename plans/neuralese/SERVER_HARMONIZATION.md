@@ -122,5 +122,8 @@ Follow-ups (2026-10-10, fork 8b41aecff): `test_view_default_window_chunks_the_sa
 `test_tool_call_arguments_are_the_same_canonical_text`, `test_a_client_that_leaves_a_stream_stops_generation` (native
 pairs; skipped for the in-process wasm under Node), `test_decision_after_an_assistant_turn_with_reasoning_scores_the_generation_prompt`;
 every pair serves `-c 8192` (`CONTEXT`). `final-wasm-mt` runs by default (`NATLANG_CONFORMANCE_WASM_MT=0` leaves it out);
-`NATLANG_CONFORMANCE_WASM_DIR` checks unvendored builds. Run 1 (with test_serve*.py): 140 passed, 2 skipped (shallow,
-final, final-wasm, final-wasm-mt).
+`NATLANG_CONFORMANCE_WASM_DIR` checks unvendored builds. Five consecutive full runs on fork 8b41aecff (shallow, final,
+final-wasm, final-wasm-mt): run 1 with test_serve*.py 140 passed, 2 skipped; runs 2-5 with test_runtime_versions.py on
+the vendored builds 116 passed, 2 skipped each (the skips: the client-leaves check on the two in-process wasm params).
+`npm run test:browser-neuralese-parity` (ts-host, after `node scripts/build-browser.mjs` refreshes dist/browser): 28/29
+gates passed plus one measurement note (exit 0), and 29/29 with `--build neuralese-wasm-mt`; decision scores now agree.

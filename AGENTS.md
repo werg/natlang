@@ -15,9 +15,15 @@
   not acknowledge the owner's reader cursor (inspect `coord.py whoami`). Forward
   decisions and requests outside your task to the owner; acknowledgement is
   not implementation or acceptance of a decision.
-- Synchronize code through small commits and frequent fetch/merge/push to
-  `origin/main`; preserve the other agent's uncommitted work. Do not copy source
-  trees between machines. See `plans/MACHINE_COORDINATION.md`.
+- Synchronize code through small commits pushed often to `origin/main`. In the
+  shared checkout publish with `scripts/git_publish.py -m "Subject" --trailer
+  "..." PATH...`: it commits only your paths on top of origin/main (3-way merge
+  if upstream changed them, abort on conflict), pushes, and fast-forwards the
+  checkout without touching other sessions' dirty or staged files
+  (`--sync-only` just fast-forwards). Never run `git stash`, `--autostash`,
+  `git pull`/`git merge` or `git rebase` in the shared checkout: they sweep other
+  sessions' uncommitted work. Do not copy source trees between machines. See
+  `plans/MACHINE_COORDINATION.md`.
 - Publish data additions in `training/neuralese_corpora.json` with immutable
   SHA-256 manifests under `training/corpus-manifests/`; transfer artifacts with
   `scripts/sync_training_corpora.py`. Copies, availability, and successful schema
@@ -88,9 +94,9 @@ afterwards. The rules below are consequences of this one.
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
   Never report a merge as verified when the ledgered tests did not run.
-- In the shared checkout, stage only your paths and commit in the same command.
-  Push from a worktree when the checkout holds others' work. Never push while a
-  rebase or merge is unfinished. Never stage `node_modules` symlinks.
+- In the shared checkout, publish with `scripts/git_publish.py` (never stage
+  other sessions' paths, never stash). Never push while a rebase or merge is
+  unfinished. Never stage `node_modules` symlinks.
 - Before pushing, run `scripts/check-main.sh --quick` (ratchets, spec links,
   ts-host typecheck; about 10 s). After a change that touches tests or runtime
   code, run the full `scripts/check-main.sh` under the memory ledger (usage in

@@ -94,10 +94,26 @@ old inbox as read history (`log --legacy`) and keeps the original file under
 
 ## Code and pipeline additions
 
-1. Fetch main before work; merge frequently. Commit small coherent changes and
-   push `HEAD:main` (especially from a detached worktree). Handle conflicts rather
-   than overwriting another agent's checkout. Keep an active run's loaded source
-   pinned; synchronize code once it finishes or via a separate local worktree.
+1. Commit small coherent changes and publish them often. In the shared checkout
+   (many sessions' uncommitted and staged work in one tree) use
+   `scripts/git_publish.py -m "Subject" [-m "Body"] [--trailer "Key: value"] PATH...`:
+   it fetches, builds the commit in a temporary index seeded from origin/main
+   with only the named paths (a path upstream changed since the checkout's HEAD
+   is merged 3-way with `git merge-file`; a conflict aborts before any push),
+   pushes `<sha>:main` (rebuilding on a non-fast-forward), then fast-forwards
+   the checkout with `git read-tree -m -u` + `git update-ref`, which updates only
+   clean paths and keeps staged entries. If another session's dirty or staged
+   file changed upstream, the checkout is not advanced (exit 3, paths listed);
+   `scripts/git_publish.py --sync-only` advances it later. `--dry-run` shows the
+   plan; `scripts/check-main.sh --quick` runs first unless `--no-check`. Never
+   use `git stash`, `--autostash`, `git pull`, `git merge` or `git rebase` in
+   the shared checkout: an autostash that fails to re-apply leaves conflict
+   markers in others' files, unstages their entries and strands their work in a
+   stash (three such stashes were audited on 2026-10-10:
+   `/home/werg/data/stash-rescue/README.md`). Pop and detached worktrees may
+   still merge and push `HEAD:main` in a tree nobody else edits. Keep an active
+   run's loaded source pinned; synchronize code once it finishes or via a
+   separate local worktree.
 2. Add/modify converters, loaders, admission rules and recipes **in Git**. Use
    repo-relative paths or declared dataset roots, not private mirror paths.
 3. For every new output, register a unique immutable ID, owner (`pop` or `dgx`),

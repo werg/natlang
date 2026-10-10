@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 3241772,
+      "sha256": "cd910d671fde94553df1df57d88125943625cc0019862273ddfa77861c1def95",
+      "lines": 3843
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 3923,
+      "sha256": "814f20d878e857e6f586fcc6aff0a92bf3f10b7afea4799d6bf680ca9e392081"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 671053500,
+      "sha256": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+      "lines": 3843
+    }
+  ],
+  "bytes": 674299195
+}
