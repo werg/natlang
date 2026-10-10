@@ -86,27 +86,27 @@ export async function adaptationCommand(argv: string[]): Promise<number> {
     const abort = new AbortController(); const interrupt = () => abort.abort(new Error('optimization interrupted'));
     process.once('SIGINT', interrupt);
     try {
-      const driver: ModelDriver = (request, signal) => executor.turn(request, signal);
+      const driver: ModelDriver = (request, signal, options) => executor.turn(request, signal, options);
       if (command === 'eval') {
         const artifactPath = option('--artifact'); if (artifactPath && flags.has('--baseline')) throw new Error('--baseline and --artifact are mutually exclusive');
         const artifact = artifactPath ? loadAdaptation(artifactPath) : null;
         const candidate = artifact ? bindAdaptation(artifact, prepared.program, executorIdentity).candidate : undefined;
         const split = option('--split') ?? 'validation'; if (!['train', 'validation', 'test'].includes(split)) throw new Error('invalid evaluation split');
-        const batch = await evaluate(prepared, { split: split as 'validation', candidate, driver, judge: judge ? (request, signal) => judge!.turn(request, signal) : undefined, signal: abort.signal }); output(batch); return batch.gatesPassed ? 0 : 3;
+        const batch = await evaluate(prepared, { split: split as 'validation', candidate, driver, judge: judge ? (request, signal, options) => judge!.turn(request, signal, options) : undefined, signal: abort.signal }); output(batch); return batch.gatesPassed ? 0 : 3;
       }
       if (command === 'adapt' && words[0] === 'revalidate') {
         const old = loadAdaptation(words[1]!); const mapping = option('--mapping');
         const artifact = await revalidateAdaptation(old, prepared, driver, mapping ? JSON.parse(readFileSync(mapping, 'utf8')) : {},
-          { signal: abort.signal, judge: judge ? (request, signal) => judge!.turn(request, signal) : undefined });
+          { signal: abort.signal, judge: judge ? (request, signal, options) => judge!.turn(request, signal, options) : undefined });
         const out = resolve(option('--out') ?? 'revalidated.json'); mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, canonical(artifact)); output({ artifact: out, digest: artifact.digest }); return 0;
       }
       if (command !== 'optimize') throw new Error('unknown adaptation command');
       const reflectionConfig = loadModelConfiguration(prepared.suite.models?.reflection);
       reflection = createResolvedModelSession(reflectionConfig.choice, process.env, process.stderr);
       const strategy = option('--strategy') ?? 'gepa'; if (strategy !== 'gepa' && strategy !== 'reflection') throw new Error('unknown optimization strategy');
-      const options = { executor: driver, reflection: (request: Parameters<ModelDriver>[0], signal?: AbortSignal) => reflection!.turn(request, signal), strategy,
+      const options = { executor: driver, reflection: (request: Parameters<ModelDriver>[0], signal?: AbortSignal, options?: Parameters<ModelDriver>[2]) => reflection!.turn(request, signal, options), strategy,
         reflectionIdentity: executorIdentityForChoice(reflectionConfig.choice), judgeIdentity: judgeConfig ? executorIdentityForChoice(judgeConfig.choice) : undefined,
-        judge: judge ? (request: Parameters<ModelDriver>[0], signal?: AbortSignal) => judge!.turn(request, signal) : undefined,
+        judge: judge ? (request: Parameters<ModelDriver>[0], signal?: AbortSignal, options?: Parameters<ModelDriver>[2]) => judge!.turn(request, signal, options) : undefined,
         out: option('--out'), seed: Number(option('--seed') ?? 0), signal: abort.signal,
         progress: (event: Record<string, unknown>) => process.stderr.write(JSON.stringify(event) + '\n') } as const;
       const result = resume ? await resumeOptimization(prepared, words[1]!, options) : await optimize(prepared, options);

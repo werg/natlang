@@ -18,7 +18,7 @@ import type { AuthPrompt } from '@earendil-works/pi-ai';
 import { openFolder, saveFolder } from '../native/node-files.js';
 import { executeNatlangAsk, executeNatlangCall } from '../native/natlang-command.js';
 import { inferValueType } from '../native/runtime.js';
-import type { DecisionRequest, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { buildProject } from '../compiler/node-project.js';
 import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
@@ -439,7 +439,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
     join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
   const { choice } = modelSelection(parsed);
   const model = modelSession(choice, parsed.options.has('--yes'));
-  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal) => model.turn(request, signal),
+  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() });
   const executorIdentity = executorIdentityForChoice(choice);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
@@ -542,7 +542,7 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const program = inventory?.manifest.adaptation;
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal) => model.turn(request, signal),
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() })), program, adaptation, executorIdentity,
     ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }

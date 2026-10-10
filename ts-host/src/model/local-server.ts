@@ -11,7 +11,7 @@ import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
-import type { DecisionRequest, DecisionScores, ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
 import { resolveModelChoice, type ModelProfile, type ResolvedModelChoice } from './config.js';
@@ -22,7 +22,8 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
-  turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn>;
+  /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
+  turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
   decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
   /** The model's context window as its server reports it (undefined when it does not say). */
@@ -223,7 +224,13 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let window: Promise<number | undefined> | undefined;
   return {
     async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
-    async turn(request, signal, onProgress) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, onProgress); const options = await start(); signal?.throwIfAborted(); return driver(options)(request, signal); },
+    async turn(request, signal, turnOptions) {
+      signal?.throwIfAborted();
+      if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, turnOptions);
+      const options = await start(); signal?.throwIfAborted();
+      // The HTTP driver streams deltas; aggregate progress is a Pi backend's report.
+      return turnOptions?.onDelta ? driver(options)(request, signal, { onDelta: turnOptions.onDelta }) : driver(options)(request, signal);
+    },
     async decide(request, signal) {
       signal?.throwIfAborted();
       if (choice.kind === 'pi-provider') throw new Error('decision-unsupported: Pi provider backends cannot score replies');

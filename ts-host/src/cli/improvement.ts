@@ -10,7 +10,7 @@ import {validateBudget} from '../evaluation/suite.js';
 import {buildProject} from '../compiler/node-project.js';
 import {openAICompatibleModelTurn} from '../model/openai-compatible.js';
 import {createPiModelBackend} from '../model/pi-provider.js';
-import type {ModelTurnRequest} from '../contracts.js';
+import type {ModelTurnOptions,ModelTurnRequest} from '../contracts.js';
 const read=(path:string)=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path:string,value:unknown)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,JSON.stringify(value,null,2)+'\n');};
 export async function improvementCommand(args:string[]):Promise<number>{
@@ -63,8 +63,8 @@ export async function improvementCommand(args:string[]):Promise<number>{
  const executorBackend=executorProvider?createPiModelBackend(executorProvider,executorModel):undefined;
  try{
   await improverBackend?.prepare();await executorBackend?.prepare();
-  const improver=improverBackend?(request:ModelTurnRequest,signal?:AbortSignal)=>improverBackend.turn(request,signal):openAICompatibleModelTurn({endpoint:server!,model});
-  const executor=executorBackend?(request:ModelTurnRequest,signal?:AbortSignal)=>executorBackend.turn(request,signal):openAICompatibleModelTurn({endpoint:executorServer!,model:executorModel});
+  const improver=improverBackend?(request:ModelTurnRequest,signal?:AbortSignal,options?:ModelTurnOptions)=>improverBackend.turn(request,signal,options):openAICompatibleModelTurn({endpoint:server!,model});
+  const executor=executorBackend?(request:ModelTurnRequest,signal?:AbortSignal,options?:ModelTurnOptions)=>executorBackend.turn(request,signal,options):openAICompatibleModelTurn({endpoint:executorServer!,model:executorModel});
   if(!recorded)write(join(output,'run.json'),profile);
   const result=await improveProgram({folder:Folder.fromFiles(fixture.files),contract:fixture.contract,cases:fixture.cases,policy:fixture.policy,improver,executor,executorTimeoutMs,executorId:`${executorProvider??executorServer}/${executorModel}`,budget,signal:cancellation.signal,directory:join(output,'journal'),transformation:fixture.transformation,singleStep:command==='step',trace:trace=>write(join(output,'traces',encodeURIComponent(trace.callId)+'.json'),trace)});
   write(join(output,'source.json'),result.sourceManifest);

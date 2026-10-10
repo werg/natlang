@@ -8,7 +8,7 @@ import type { Api, AssistantMessage, Context, Credential, CredentialStore, Messa
   ModelsApiStreamOptions, ModelsSimpleStreamOptions, Tool } from '@earendil-works/pi-ai';
 import { modelTools } from './chat-completion.js';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
-import type { ModelStreamProgress, ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelStreamProgress, ModelTurn, ModelTurnDelta, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
 
 const emptyUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -289,7 +289,8 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         throw new Error(`provider ${provider} has no credentials; run natlang auth login ${provider} or set its API key environment variable`);
       await selectModel();
     },
-    async turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn> {
+    async turn(request: ModelTurnRequest, signal?: AbortSignal, turnOptions: SessionTurnOptions = {}): Promise<ModelTurn> {
+      const { onProgress, onDelta } = turnOptions;
       signal?.throwIfAborted();
       const model = await selectModel();
       const context = piContext(request, model);
@@ -335,8 +336,33 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const finalMessage = stream.result();
       void finalMessage.catch(() => undefined);
       let reply: AssistantMessage;
+      // The turn's deltas (contracts.ts ModelTurnDelta) from pi-ai's events: text, reasoning (a later thinking part
+      // after a newline, as the turn joins them), and each tool call by its order among the calls.
+      const callOrder = new Map<number, number>();
+      let thinkingParts = 0;
+      const deltaOf = (event: { type: string; contentIndex?: number; delta?: string; partial?: AssistantMessage }): ModelTurnDelta | undefined => {
+        if (event.type === 'text_delta') return { type: 'text', text: event.delta! };
+        if (event.type === 'thinking_start') return thinkingParts++ ? { type: 'reasoning', text: '\n' } : undefined;
+        if (event.type === 'thinking_delta') return { type: 'reasoning', text: event.delta! };
+        if (event.type === 'toolcall_start') {
+          const index = callOrder.size;
+          callOrder.set(event.contentIndex!, index);
+          const block = event.partial?.content[event.contentIndex!];
+          const call = block?.type === 'toolCall' ? block : undefined;
+          return { type: 'tool_call', index, ...(call?.id ? { id: call.id } : {}), ...(call?.name ? { name: call.name } : {}) };
+        }
+        if (event.type === 'toolcall_delta' && callOrder.has(event.contentIndex!))
+          return { type: 'tool_call', index: callOrder.get(event.contentIndex!)!, arguments: event.delta! };
+        return undefined;
+      };
       try {
         for await (const event of stream) {
+          if (onDelta) {
+            const delta = deltaOf(event as Parameters<typeof deltaOf>[0]);
+            if (delta && (delta.type !== 'text' && delta.type !== 'reasoning' || delta.text)) {
+              try { onDelta(delta); } catch { /* delta observers must not affect model turns */ }
+            }
+          }
           let kind: 'text' | 'thinking' | 'toolcall' | undefined;
           let delta: string | undefined;
           if (event.type === 'text_delta') { kind = 'text'; delta = event.delta; }

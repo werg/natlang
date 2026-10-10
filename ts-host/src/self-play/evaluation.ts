@@ -74,7 +74,7 @@ export async function arenaEpisodeExecutions(episode: SkillEpisode, executor: Mo
       audits[seat] = [];
       policies[seat] = natlangGamePolicy({ snapshot: seat === config.seat
         ? { files: sourceFiles(folder), entry, model: options.executorId } : config.opponents[seat]!,
-        driver: (request, signal) => gateway.request(executor, request, signal ?? options.signal),
+        driver: (request, signal, turnOptions) => gateway.request(executor, request, signal ?? options.signal, 'executor', turnOptions),
         seed: config.seed, onDecision: audit => { audits[seat]!.push(audit); } });
     }
     const match = await playMatch({ game, scenario: config.scenario, seed: config.seed, policies,

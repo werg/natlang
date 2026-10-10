@@ -939,8 +939,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const entry = entryForRequest(request);
           if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
           return session.turn(request, requestSignal,
-            progress => logProviderStreamProgress('teacher', config.provider!, config.modelId, requestOrdinal,
-              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress));
+            { onProgress: progress => logProviderStreamProgress('teacher', config.provider!, config.modelId, requestOrdinal,
+              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress) });
         } });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       chatCompletionsUrl: config.chatCompletionsUrl,
@@ -1087,8 +1087,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const entry = entryForRequest(request);
           if (entry) { entry.provider_sdk_turn_starts++; await persistTransportStart(entry, 'provider_sdk_turn', 0); }
           return judgeSession.turn(request, requestSignal,
-            progress => logProviderStreamProgress('judge', judgeConfig.provider!, judgeConfig.modelId, requestOrdinal,
-              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress));
+            { onProgress: progress => logProviderStreamProgress('judge', judgeConfig.provider!, judgeConfig.modelId, requestOrdinal,
+              sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress) });
         } });
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId,
       onRequestStart: recordHttpTransportStart }) : undefined;

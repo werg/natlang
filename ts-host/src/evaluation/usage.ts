@@ -1,5 +1,5 @@
 import type { ModelDriver } from '../runtime/runtime.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import type { BudgetLimits, Usage } from './types.js';
 export class BudgetExhausted extends Error { constructor(readonly dimension: string) { super('adaptation budget exhausted: ' + dimension); this.name = 'BudgetExhausted'; } }
 export type ModelRole = 'executor' | 'reflection' | 'judge';
@@ -46,7 +46,9 @@ export class UsageGateway {
     this.check(signal); const max = kind === 'rollouts' ? this.limits.maxRollouts : this.limits.maxProposals;
     if (this.ledger[kind] + count > max) throw new BudgetExhausted(kind); this.ledger[kind] += count; this.onUpdate?.(this.snapshot());
   }
-  async request(driver: ModelDriver, request: ModelTurnRequest, signal?: AbortSignal, role: ModelRole = 'executor'): Promise<ModelTurn> {
+  /** One metered request; `options` (the driver's turn options, such as `onDelta`) are passed to the driver. */
+  async request(driver: ModelDriver, request: ModelTurnRequest, signal?: AbortSignal, role: ModelRole = 'executor',
+    options?: ModelTurnOptions): Promise<ModelTurn> {
     this.check(signal); if (this.ledger.usage.modelCalls >= this.limits.maxModelCalls - (this.protectedCapacity.modelCalls ?? 0)) throw new BudgetExhausted('modelCalls');
     const bounds = this.limits.requestBounds;
     const inputBound = bounds?.maxInputTokens ?? 0;
@@ -72,7 +74,7 @@ export class UsageGateway {
       try {
         // Defer invoking the driver until its abort listener is installed. A driver may
         // synchronously trigger cancellation while opening a request.
-        const response = Promise.resolve().then(() => driver(request, signal));
+        const response = Promise.resolve().then(() => options ? driver(request, signal, options) : driver(request, signal));
         if (signal?.aborted) stop?.();
         result = await Promise.race([response, abort]);
       }

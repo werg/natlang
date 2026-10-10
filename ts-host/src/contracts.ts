@@ -92,3 +92,8 @@ export type ModelStreamProgress = { status: 'progress' | 'completed' | 'failed';
   thinkingDeltaEvents: number; thinkingDeltaBytes: number; toolCallDeltaEvents: number;
   toolCallDeltaBytes: number; startedAt: string; observedAt: string; elapsedMs: number };
 export type ModelStreamProgressSink = (progress: ModelStreamProgress) => void;
+/**
+ * Per-call options of a model session's turn (a managed local server, a Pi provider backend): the driver's turn
+ * options, plus `onProgress`, aggregate-only stream progress for operators (no generated content).
+ */
+export type SessionTurnOptions = ModelTurnOptions & { onProgress?: ModelStreamProgressSink };
