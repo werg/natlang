@@ -323,3 +323,10 @@ def test_mellum_v11_runs_dense_experts_as_grouped_gemms_in_every_trainer():
     assert defaults['core_text_warmup']['latent_step_in_backward'] is True  # v10 kept
     assert defaults['raw_recurrence_training']['moe_kernel'] == 'grouped'
 
+
+
+def test_mellum_v11_is_an_operational_handoff_from_v10():
+    from natlang_neuralese.train.recipe import _without_operational, resolve_recipe_data
+    v10 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v10.json')
+    v11 = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
+    assert v10 != v11 and _without_operational(v10) == _without_operational(v11)

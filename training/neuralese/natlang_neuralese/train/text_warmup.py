@@ -364,8 +364,10 @@ def process_rss_bytes():
     try:
         with open('/proc/self/statm') as handle:return int(handle.read().split()[1])*os.sysconf('SC_PAGE_SIZE')
     except (OSError,ValueError,IndexError):return None
+# moe_kernel: the dense experts' loop or grouped GEMMs compute the same math (BF16 accumulation order only).
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
-                                      'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added'})
+                                      'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added',
+                                      'moe_kernel'})
 
 
 def same_resume_identity(previous, current):

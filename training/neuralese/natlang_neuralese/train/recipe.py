@@ -13,6 +13,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 import os
 from pathlib import Path
 
@@ -625,6 +626,56 @@ def write_json(path, value):
     pending.replace(path)
 
 
+# Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
+# (``--handoff``). Each trainer also lists them among its resume-operational options.
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'moe_kernel', 'checkpoint_layers'})
+
+
+def _without_operational(recipe):
+    """The resolved recipe minus its name, description, ancestry and operational stage parameters."""
+    value = json.loads(json.dumps(recipe))
+    for key in ('id', 'description', 'extends'):
+        value.pop(key, None)
+    for defaults in value.get('stage_parameter_defaults', {}).values():
+        for key in OPERATIONAL_STAGE_PARAMETERS:
+            defaults.pop(key, None)
+    value['stage_parameter_defaults'] = {k: v for k, v in value.get('stage_parameter_defaults', {}).items() if v}
+    for stage in value.get('stages', []):
+        for key in OPERATIONAL_STAGE_PARAMETERS:
+            stage.get('parameters', {}).pop(key, None)
+    return value
+
+
+def lineage_handoff(existing, plan, frozen, package, plan_path):
+    """Resume a lineage on the newest code and an operationally changed recipe (owner: jobs switch to the newest code
+    at once). Inputs and device must be unchanged and the recipes equal apart from operational stage parameters, so
+    the lineage's identity (``recipe_sha256``, which its stage reports carry) stays; the frozen runtime is replaced,
+    the superseded one kept beside it, and the change appended to the plan's ``handoffs``. Each trainer then checks
+    its own resume identity and logs its code handoff."""
+    for key in ('inputs', 'device', 'stage_inputs'):
+        if existing.get(key) != plan.get(key):
+            raise ValueError('handoff refused: ' + key + ' changed; use a new stage lineage')
+    if _without_operational(existing['recipe']) != _without_operational(plan['recipe']):
+        raise ValueError('handoff refused: the recipe changes more than operational stage parameters')
+    old_code = existing['code']
+    previous = frozen.parent.parent / ('runtime-superseded-' + time.strftime('%Y%m%dT%H%M%S'))
+    frozen.parent.rename(previous)
+    shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    new_code = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
+    record = {'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'recipe_id': plan['recipe'].get('id'),
+              'recipe_sha256': plan['recipe_sha256'], 'superseded_runtime': previous.name,
+              'code_changed': sorted(k for k in old_code.keys() & new_code.keys() if old_code[k] != new_code[k]),
+              'code_added': sorted(new_code.keys() - old_code.keys()),
+              'code_removed': sorted(old_code.keys() - new_code.keys())}
+    updated = dict(existing, recipe=plan['recipe'], code=new_code,
+                   handoffs=list(existing.get('handoffs', [])) + [record])
+    write_json(plan_path, updated)
+    print(json.dumps({'event': 'lineage_handoff', **{k: v for k, v in record.items() if not k.startswith('code_')},
+                      'code_files_changed': len(record['code_changed']) + len(record['code_added'])
+                      + len(record['code_removed'])}), flush=True)
+    return updated
+
+
 class _ChildSignalForwarder:
     """Forward container termination signals to the active training child.
 
@@ -880,6 +931,10 @@ def main(argv=None):
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--until', help='run through a declared stage, retaining resumable state')
     parser.add_argument('--inspect', action='store_true')
+    parser.add_argument('--handoff', action='store_true',
+                        help='resume an existing lineage on the newest code (the frozen runtime is replaced) and on a '
+                             'recipe that differs from its own only in operational stage parameters '
+                             '(OPERATIONAL_STAGE_PARAMETERS); recorded in recipe-plan.json "handoffs"')
     args = parser.parse_args(argv)
     recipe = load_recipe(args.recipe)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
@@ -927,16 +982,20 @@ def main(argv=None):
         plan['stage_inputs'] = stage_inputs
     if plan_path.exists():
         existing = json.loads(plan_path.read_text())
-        if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
-                'extends' in json.loads(args.recipe.read_text())):
-            # A recipe converted to extends/overrides after this lineage began: identical resolved content keeps the
-            # lineage and its originally recorded recipe hash.
-            plan['recipe_sha256'] = existing['recipe_sha256']
-        if any(existing[key] != value for key, value in plan.items()):
-            raise ValueError('recipe or input identity changed; use a new stage lineage')
-        if {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')} != existing['code']:
-            raise ValueError('frozen recipe runtime changed')
-        plan = existing
+        if args.handoff:
+            plan = lineage_handoff(existing, plan, frozen, package, plan_path)
+        else:
+            if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
+                    'extends' in json.loads(args.recipe.read_text())):
+                # A recipe converted to extends/overrides after this lineage began: identical resolved content keeps
+                # the lineage and its originally recorded recipe hash.
+                plan['recipe_sha256'] = existing['recipe_sha256']
+            if any(existing[key] != value for key, value in plan.items()):
+                raise ValueError('recipe or input identity changed; use a new stage lineage (or --handoff for '
+                                 'newer code and operational recipe parameters)')
+            if {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')} != existing['code']:
+                raise ValueError('frozen recipe runtime changed')
+            plan = existing
     else:
         if args.out.exists():
             raise ValueError('fresh recipe directory required')

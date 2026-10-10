@@ -733,3 +733,43 @@ def test_relative_binding_paths_resolve_against_the_repository_root_not_the_work
     stage = {'id': 'warm', 'kind': 'core_text_warmup', 'inputs': {'records': 'records', 'pieces': 'records'}}
     resolved = runner.resolve_stage_inputs(declared, stage, {})
     assert resolved['records']['path'] == str(data.resolve())
+
+
+def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(tmp_path):
+    import json as _json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('old = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('new = 1\n')
+    (package / 'b.py').write_text('added = 1\n')
+    old_recipe = {'id': 'r-v10', 'description': 'v10', 'stages': [{'id': 's', 'parameters': {'lr': 1}}],
+                  'stage_parameter_defaults': {'core_text_warmup': {'latent_step_in_backward': True}}}
+    new_recipe = {'id': 'r-v11', 'description': 'v11', 'extends': 'r-v10',
+                  'stages': [{'id': 's', 'parameters': {'lr': 1}}],
+                  'stage_parameter_defaults': {'core_text_warmup': {'latent_step_in_backward': True,
+                                                                    'moe_kernel': 'grouped'},
+                                               'raw_recurrence_training': {'moe_kernel': 'grouped'}}}
+    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
+                'code': {'a.py': runner.sha(frozen / 'a.py')}}
+    plan_path = out / 'recipe-plan.json'
+    plan_path.write_text(_json.dumps(existing))
+    plan = {'recipe': new_recipe, 'recipe_sha256': 'v11', 'inputs': {'x': '1'}, 'device': 'cuda'}
+    updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
+    assert updated['recipe_sha256'] == 'lineage'  # stage reports keep matching the lineage
+    assert updated['recipe'] == new_recipe and (frozen / 'b.py').read_text() == 'added = 1\n'
+    assert set(updated['code']) == {'a.py', 'b.py'}
+    record = updated['handoffs'][-1]
+    assert record['recipe_id'] == 'r-v11' and record['code_changed'] == ['a.py'] and record['code_added'] == ['b.py']
+    assert (out / record['superseded_runtime'] / 'natlang_neuralese' / 'a.py').read_text() == 'old = 1\n'
+    assert _json.loads(plan_path.read_text()) == updated
+    changed = dict(new_recipe, stages=[{'id': 's', 'parameters': {'lr': 2}}])
+    with pytest.raises(ValueError, match='more than operational'):
+        runner.lineage_handoff(updated, dict(plan, recipe=changed), frozen, package, plan_path)
+    with pytest.raises(ValueError, match='inputs changed'):
+        runner.lineage_handoff(updated, dict(plan, inputs={'x': '2'}), frozen, package, plan_path)
