@@ -1,0 +1,525 @@
+{
+  "schema": "natlang.source-case-candidate-bindings/1",
+  "candidate_rows_sha256": "c43e33a78f4b7547483a3561cbecced00977368f28645c2a61fd0d2cdcf5d9e5",
+  "candidate_rows": 47,
+  "bindings": [
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_7f8c56b85f6af87ffbb88c7a:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-e29e5b470475d961ec6598cb",
+      "candidate_native_row_ids": [
+        "teacher-program:bd1a59b99c39d796b320:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_011c3723b074a3930eadf179:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-63894dbfd0f62fc5038d6ff7",
+      "candidate_native_row_ids": [
+        "teacher-program:d765b122280c23f64ee9:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_a8065c823ac20c1ab76f052f:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-acb2a6883e188d00df6ae6c9",
+      "candidate_native_row_ids": [
+        "teacher-program:05a0b6593e202043c6a0:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_a24a49d70dd37ba88894dd08:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-ecfa05de334ad339d51b011f",
+      "candidate_native_row_ids": [
+        "teacher-program:5d128c7e5ff2c8b820e2:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_951ef29ca9df4f873c1b5474:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-ea8af4f9ab51cdbcc04098dc",
+      "candidate_native_row_ids": [
+        "teacher-program:d9dbaeb050685df60b4b:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_5857b5c5d383297bc3844182:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-cfa724b95bc6b76afa8b2527",
+      "candidate_native_row_ids": [
+        "teacher-program:b70ea9fbe4249d04aada:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_595620d63e6785b7965ea671:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-64b7ef0567e7f90137a4c441",
+      "candidate_native_row_ids": [
+        "teacher-program:f5af267cd9102a17cd39:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_be8fd564af746a26fdb25c12:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-c63aa7da6467e7d7b8c50192",
+      "candidate_native_row_ids": [
+        "teacher-program:efaef9d7a0fc3908d886:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_3f1d9295b02778ae0d7978e9:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-4a2ef540745d0516679156e4",
+      "candidate_native_row_ids": [
+        "teacher-program:b6eb9fd9c8db3cdf30c1:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_49b608dd0f9127864e14969c:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-ea7cdb3555f0b311540653a6",
+      "candidate_native_row_ids": [
+        "teacher-program:85accf88d86468f8e714:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_ag_news_choice:source_e579b8268257_3dbd34e5116c13575004a532:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-3f375720a51a4ed7f6da0892",
+      "candidate_native_row_ids": [
+        "teacher-program:fdb07f2727e5c3e07326:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_7b7235cc124e57901e5a3aaf:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-bd476b1fa47b9b61af58e9c0",
+      "candidate_native_row_ids": [
+        "teacher-program:379c6a61d0e54910e776:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_b88481cc37991d224a32c045:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-66199ccdd2752205125c805a",
+      "candidate_native_row_ids": [
+        "teacher-program:0de4c3c5b94439fc307d:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_62a59be1fba6d4e9df2f4bf5:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-ce6c366ab618df922d0cd25f",
+      "candidate_native_row_ids": [
+        "teacher-program:63d6ccdbe1e178f503c1:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_c794bd1b834bf8bb20218cc8:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-b671bf618a01e9cec0b3265a",
+      "candidate_native_row_ids": [
+        "teacher-program:f0a1afe0d65b3f501563:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_b77ef11645577d1e47bae921:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-1e6882b4866f51524f6b490a",
+      "candidate_native_row_ids": [
+        "teacher-program:a3558052e86f96e04869:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_c6aa21477bfa67c5799f6a81:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-9fffbf1511ddbd63246ce5c7",
+      "candidate_native_row_ids": [
+        "teacher-program:032da5422d30f667c877:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_b882de19f9668c50355cf90b:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-5e83093c1d1eb4cd2d8af67f",
+      "candidate_native_row_ids": [
+        "teacher-program:830f067fe067048bfb75:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_f01e7c0e8caa2d84a31cd38c:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-f836fac9ecf6e488ae91c701",
+      "candidate_native_row_ids": [
+        "teacher-program:c9037c3c1ac4f6b8a671:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_bd00d30cdba7d5637e1a4b73:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-5f5e3255a16d34b85d71722c",
+      "candidate_native_row_ids": [
+        "teacher-program:6a6e53a6c10ee6e24bbf:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_trec_question_choice:source_e579b8268257_e827b7a4f2c2688386923674:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-f884a1077d7ac14a164dd2b5",
+      "candidate_native_row_ids": [
+        "teacher-program:c92a672c60eee7b14c88:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_c693696e6c341dec9f641d78:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-3a37b7d67b373316b8836890",
+      "candidate_native_row_ids": [
+        "teacher-program:2543a790c17af488b466:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_4454c2837f47043d0de488c5:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-c58a70ecd88ea2f99263a3ea",
+      "candidate_native_row_ids": [
+        "teacher-program:1bdf124c77f5778178b9:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_4e115d0cbdcaee8b40699c0e:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-f4477e1cf202c91f5970e5a1",
+      "candidate_native_row_ids": [
+        "teacher-program:1b84210f38c0d0886cd9:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_e093dea3300a2621fe909226:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-d98a8d1e38da82587bae4ca1",
+      "candidate_native_row_ids": [
+        "teacher-program:447a3e812587ef108241:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_3773fbf21bf7d2733e9d34d0:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-e0b9e4f8a96bb4b172dd32ab",
+      "candidate_native_row_ids": [
+        "teacher-program:742de90312c3d3843d5e:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_71e191f06ca95a287c48ea0c:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-0639a0fdf8a3b0a3b2c6d7c4",
+      "candidate_native_row_ids": [
+        "teacher-program:53887e637fba512cf596:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_e4a78c1218d4143447cf4e36:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-827f08afa149c34c13508229",
+      "candidate_native_row_ids": [
+        "teacher-program:de98adee266b90e471aa:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_945a8aeb841fe519e9eb9890:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-9ec3924743477e5f1930a466",
+      "candidate_native_row_ids": [
+        "teacher-program:4abc0f64aa8e937b9d38:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_38d7346156adaf0c9a4f4255:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-4754b6f81714d43605fa49bf",
+      "candidate_native_row_ids": [
+        "teacher-program:50133e5c1ffb63f1b63c:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_boardgame_qa_choice:source_e579b8268257_db2f9e7623e5510f10434eec:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-9421c290367ac55318e1c4dc",
+      "candidate_native_row_ids": [
+        "teacher-program:81065905a3e158c0b091:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_40afcf06a2228df8c6893b64:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-ec346b8ef0fcfc3f0657abdf",
+      "candidate_native_row_ids": [
+        "teacher-program:11d6300d61a1e9cd4c5f:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_8205292ee95dac3ba943756e:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-28170de893ef4bce31dbbca3",
+      "candidate_native_row_ids": [
+        "teacher-program:edefdebc6309e6d59b35:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_7876bcf112704d46fe09033e:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-09419891f0d7d61b37da3e46",
+      "candidate_native_row_ids": [
+        "teacher-program:2af84e79c974dab6d6f3:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_774ab43cf11cf046b4020192:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-032fa6385a1a5f1fbe1245d2",
+      "candidate_native_row_ids": [
+        "teacher-program:b8cec7a08f651d75fa10:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_6f2a9ffd9129c51c673e8ce8:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-661ec7c17cbfca3adff84088",
+      "candidate_native_row_ids": [
+        "teacher-program:031646842ebaa509d572:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_40e8589fc1df5429030a80d8:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-7676c4bbc259beded51aefe2",
+      "candidate_native_row_ids": [
+        "teacher-program:6fcccba176a5e1e76ccd:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_emotion_choice:source_e579b8268257_4c7473e4df33f8236e89b31b:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-32f7b747c7a00edbd9fc0604",
+      "candidate_native_row_ids": [
+        "teacher-program:4a02236ed451b4aad7aa:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_0c326a9e4b4f2a60bd6e06c9:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-1022a5a4265398d2a0ee24cd",
+      "candidate_native_row_ids": [
+        "teacher-program:b75a511e5e55ceecccf0:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_8ec24251dfa726eb04c0d986:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-6ed5fed71bc75e083a11bc79",
+      "candidate_native_row_ids": [
+        "teacher-program:f57e6a5d5346b35fd182:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_463e329cdd8a130d27698990:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-a4dd3c8899028f7e4bf62ec0",
+      "candidate_native_row_ids": [
+        "teacher-program:d1a4a9e5efd6dad015a4:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_8c9f64840cd4da9d40779453:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-66095f021f1b515a07d13bb3",
+      "candidate_native_row_ids": [
+        "teacher-program:a1d5011735988f48c0df:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_de6d54962413e76005f5485c:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-65335e8997c69c67f4424d5c",
+      "candidate_native_row_ids": [
+        "teacher-program:6a146990d00189db71a4:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_8f9eca7db2d41d3dac042348:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-bf5ee928fd9215491a5a12aa",
+      "candidate_native_row_ids": [
+        "teacher-program:7a380b246b10b285cf29:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_5ad75de7b3eac7ad38222cab:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-9ca4a95811cba225e39c008a",
+      "candidate_native_row_ids": [
+        "teacher-program:3ac515ce33b000b4a2d2:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_8655b632a98c63c262af776a:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-b1d98e1b2a892427bce47d29",
+      "candidate_native_row_ids": [
+        "teacher-program:506340a14690f7d44542:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    },
+    {
+      "source_case_id": "inline-curriculum:teacher_decision_labels_decision_vitaminc_choice:source_e579b8268257_f7c3ac3ec7634a05159b16af:exact-choice-with-held-confidence-receipt-v1",
+      "projection_id": "natlang:source-case-cfb30bb410df94ff47fa96ef",
+      "candidate_native_row_ids": [
+        "teacher-program:b59593c7717df9e9fba1:decision:0000"
+      ],
+      "candidate_native_row_count": 1,
+      "semantic_target_origin": "source_case.semantics.expected",
+      "candidate_actions_used_as_semantic_target": false,
+      "split_before": "train"
+    }
+  ],
+  "unbound_candidates": []
+}

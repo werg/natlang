@@ -1,0 +1,16 @@
+{
+  "schema": "natlang.v14-raw-source-key-precheck/1",
+  "source_cases_path": "/home/werg/natlang/runs/quality-review-v14-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+  "source_cases_sha256": "015a674ccc67e229112d34b65bfd253463fe644e1737bd08340771d24eebd205",
+  "source_cases_rows": 47,
+  "groups_json_path": "/mnt/external/natlang-development-data/data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1/groups.json",
+  "groups_json_sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc",
+  "index_json_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+  "index_group_keys": 769,
+  "unique_original_source_row_ids": 368,
+  "unique_original_source_group_ids": 368,
+  "original_source_row_id_hits": [],
+  "original_source_group_id_hits": [],
+  "namespace_alias_hits": [],
+  "scope": "Exact key membership only against the supplied groups.json; no text, near-duplicate, answer, or full-S1 check."
+}
