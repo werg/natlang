@@ -7,7 +7,7 @@
 #
 # Every step runs even after a failure; the summary lists each step and the exit code is 1 if any failed.
 # On the DGX the full run loads models and node workers, so run it under the memory ledger:
-#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 18 --reserve-gb 0 \
+#   python3 scripts/memory_ledger.py run --unit natlang-check-main-$(date +%H%M%S) --budget-gb 28 --reserve-gb 0 \
 #     --oom-policy continue --class experiment --wait 600 --workdir "$PWD" -- \
 #     sh -c 'scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
 # Environment: NATLANG_PYTHON (default .venv-neuralese/bin/python), CHECK_MAIN_TS_CONCURRENCY (2).
@@ -18,10 +18,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 PY=${NATLANG_PYTHON:-$( [ -x "$ROOT/.venv-neuralese/bin/python" ] && echo "$ROOT" || echo "$MAIN")/.venv-neuralese/bin/python}
 export PATH="$HOME/.local/bin:$PATH"
-# Tests must not depend on a warm Hugging Face cache.
+# Python tests must not depend on a warm Hugging Face cache (the ts-host Neuralese tests do use the local tiny model).
 HF_EMPTY=$(mktemp -d)
 trap 'rm -rf "$HF_EMPTY"' EXIT
-export HF_HOME="$HF_EMPTY"
 
 quick=0 python=1 ts=1
 for arg in "$@"; do
@@ -44,10 +43,12 @@ step() {
 
 if [ $python = 1 ]; then
   if [ $quick = 1 ]; then
-    step python-ratchets "$PY" -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py \
+    step python-ratchets env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py \
       tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py
   else
-    step python-tests "$PY" -m pytest -q -p no:cacheprovider tests
+    # Two processes: one pytest over everything grows past 18 GB.
+    step python-tests env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests --ignore=tests/neuralese
+    step python-neuralese env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests/neuralese
   fi
 fi
 if [ $ts = 1 ]; then

@@ -21098,6 +21098,21 @@
       ],
       "independent_new_worlds": 0,
       "notes": "Corrects initial scope interpretation: the FileHandle child folder contains one root-level file, but **/ glob semantics wrongly required a slash and hid that file from listing/search. Preserve valid folder tools; fix zero-component globstar directories. Reconciles 84 collector sends / 85 transport starts with one local completion retry; its original attempted response is unrecoverable, no inferred payload. No source or output mutation/admission."
+    },
+    {
+      "id": "pop-inactive-maple-gguf-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-models/maple-preview-GGUF-20261010-v1",
+      "include": [
+        "maple-preview-TQ2_0-head-F16.gguf"
+      ],
+      "split": "not-training-data",
+      "source_class": "inactive-candidate-model-preservation",
+      "admission": "retained-model-evidence-only",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "independent_new_worlds": 0,
+      "notes": "Unused Maple preview GGUF, exact retained bytes6349082144 SHA2fad7b4903781aca6b1171881f2d273989fe1735b6b3ea704bc486b472d98039. Canonical Pop registry alias resolves to /srv/storage/natlang-artifacts/models/maple-preview-GGUF. Original models/maple-preview-GGUF alias requires manifest restore before use after verified offload. No active model, training data or optimizer state removed; model bytes copied and SSH-verified before unlink."
     }
   ],
   "coverage_backlog": [

@@ -43,6 +43,76 @@
       ]
     },
     {
+      "id": "mellum21-ternary-convert-v2-20261010",
+      "kind": "bundle",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "JetBrains/Mellum2.1-12B-A2.5B-Thinking",
+        "revision": "92ddae9fc7665e9f801d141d2e5a6b2caf2460c4",
+        "family": "maple"
+      },
+      "init": {
+        "method": "converted",
+        "source": "/home/werg/data/models/mellum21-12b-a2.5b-thinking",
+        "builder": "maple/qat_export.py+maple/ternary_pack.py"
+      },
+      "training": {
+        "corpora": [],
+        "trainer": "natlang_neuralese.maple.qat_convert",
+        "commit": "8c30386ee2f72cea24b4942f68624875d3b37f47",
+        "run": "/home/werg/data/mellum-qat/convert-v2"
+      },
+      "qualification": {
+        "status": "failed",
+        "evidence": [
+          "/home/werg/natlang/runs/mellum-qualify-20261010/harness-summary.json",
+          "/home/werg/natlang/runs/mellum-qualify-20261010/results/export-held.json"
+        ]
+      },
+      "origin": {
+        "chat_template.jinja": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/chat_template.jinja",
+        "config.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/config.json",
+        "generation_config.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/generation_config.json",
+        "mellum21_summary.png": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/mellum21_summary.png",
+        "mellum-logo-dark.svg": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/mellum-logo-dark.svg",
+        "model-00001-of-00005.safetensors": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model-00001-of-00005.safetensors",
+        "model-00002-of-00005.safetensors": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model-00002-of-00005.safetensors",
+        "model-00003-of-00005.safetensors": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model-00003-of-00005.safetensors",
+        "model-00004-of-00005.safetensors": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model-00004-of-00005.safetensors",
+        "model-00005-of-00005.safetensors": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model-00005-of-00005.safetensors",
+        "model.safetensors.index.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/model.safetensors.index.json",
+        "qat-export.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/qat-export.json",
+        "README.md": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/README.md",
+        "special_tokens_map.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/special_tokens_map.json",
+        "ternary-pack.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/ternary-pack.json",
+        "tokenizer_config.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/tokenizer_config.json",
+        "tokenizer.json": "/home/werg/natlang/runs/mellum-qualify-20261010/packed/tokenizer.json"
+      },
+      "registered": "2026-10-10T02:13:28+00:00",
+      "notes": "Deployed ternary Mellum (full-latent QAT conversion v2, teacher-v7-nosys-code), N0 expert order, packed 2-bit codes + row scales (maple/ternary_pack.py unpack restores the HF export bit-exactly). Kind bundle: the registry has no model kind.",
+      "path": "data/neuralese/artifacts/mellum21-ternary-convert-v2-20261010",
+      "files": [
+        "README.md",
+        "chat_template.jinja",
+        "config.json",
+        "generation_config.json",
+        "mellum-logo-dark.svg",
+        "mellum21_summary.png",
+        "model-00001-of-00005.safetensors",
+        "model-00002-of-00005.safetensors",
+        "model-00003-of-00005.safetensors",
+        "model-00004-of-00005.safetensors",
+        "model-00005-of-00005.safetensors",
+        "model.safetensors.index.json",
+        "qat-export.json",
+        "special_tokens_map.json",
+        "ternary-pack.json",
+        "tokenizer.json",
+        "tokenizer_config.json"
+      ]
+    },
+    {
       "id": "memetic-decision-lfm2.5-350m-20261004-v1",
       "kind": "bundle",
       "owner": "dgx",
