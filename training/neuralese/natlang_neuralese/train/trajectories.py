@@ -838,11 +838,12 @@ def main(argv=None):
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     from .optim_restore import add_optimizer_restore_arguments
     add_optimizer_restore_arguments(parser)
-    parser.add_argument('--checkpoint-every', type=int, default=25)
-    parser.add_argument('--checkpoint-minutes', type=float, default=None,
-                        help='also save the full resumable state after this much wall time since the last save (with a '
-                             'large --checkpoint-every: a wall-clock cadence, e.g. 180)')
-    parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
+    parser.add_argument('--checkpoint-every', type=int, default=25,
+                        help='full-state points: every N updates, a multiple of --eval-every when that is set (the end '
+                             'and stops also write the full state)')
+    parser.add_argument('--eval-every', type=int, default=0,
+                        help='evaluation points: held-out soft and written-vs-shuffled probes every N updates; 0: none '
+                             'between the initial reference and the final report (the stage end, its gate)')
     apply_consumer_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
@@ -953,7 +954,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'eval_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -2016,7 +2017,11 @@ def main(argv=None):
     from .loop import (Cadence, StopSignal, TrainingLoop, accumulate_gradients,
                        commit_optimizer_step)
     stop = StopSignal().install()
-    eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every, args.checkpoint_minutes)
+    from .checkpoint_policy import publish_best
+    # Declared step points only (owner 2026-10-10; plans/STORAGE_POLICY.md): the initial report is the gate's reference
+    # (fresh lineages only), evaluations every --eval-every updates, full-state writes every --checkpoint-every
+    # updates (evaluation points), at the end and on stops; the final report is the stage end's evaluation.
+    eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every)
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
                            'content_transport': heads.content.transport, 'sketch_gradient': args.sketch_gradient,
@@ -2407,7 +2412,10 @@ def main(argv=None):
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:
                 print(json.dumps(entry), flush=True)
-            if eval_cadence.due(step + 1) and not stop.requested:
+            write_due = checkpoint_cadence.due(step + 1, force=stop.requested or step + 1 == args.steps)
+            candidate = None
+            # Evaluations at the declared points; the last step's is the final report below.
+            if not stop.requested and step + 1 < args.steps and eval_cadence.due(step + 1):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
@@ -2440,14 +2448,19 @@ def main(argv=None):
                 if (score is not None and paired_probe_complete(written)
                         and written.get('shuffled', score) > score
                         and (best_evaluation is None or score < best_evaluation['written'])):
-                    best_evaluation = {'step': step + 1, **written, 'semantic_channel_qualified': False,
-                                       'selection_signature': selection_signature, 'checkpoint': str(out / 'best-checkpoint.pt'),
-                                       'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
-                    save_training_state(step + 1, out / 'best-checkpoint.pt')
-                    (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
-            if checkpoint_cadence.due(step + 1, force=stop.requested or step + 1 == args.steps):
+                    candidate = {'step': step + 1, **written, 'semantic_channel_qualified': False,
+                                 'selection_signature': selection_signature, 'checkpoint': str(out / 'best-checkpoint.pt'),
+                                 'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
+            if write_due:
+                # Full state only at declared points, on a stop and at the end (owner 2026-10-10). The best is one of
+                # these writes: when this point's evaluation is the best so far, the same file is linked as
+                # best-checkpoint.pt (the end's candidate comes from the final report below).
+                if candidate is not None and not stop.requested:
+                    best_evaluation = candidate
                 save_training_state(step + 1)
-                checkpoint_cadence.mark()
+                if candidate is not None and not stop.requested:
+                    publish_best(checkpoint_path, out / 'best-checkpoint.pt')
+                    (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
     stop.restore()
     log.close()
     if stop.requested:
@@ -2471,6 +2484,18 @@ def main(argv=None):
     if args.handover == "written" or args.view == "written":
         report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
         report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
+        # The stage end's evaluation selects among the full-state writes too: the end write holds these weights.
+        written = report["written-trained"]
+        score = written.get('written')
+        from .trajectory_state import paired_probe_complete
+        if (score is not None and paired_probe_complete(written) and written.get('shuffled', score) > score
+                and (best_evaluation is None or score < best_evaluation['written']) and checkpoint_path.exists()):
+            best_evaluation = {'step': args.steps, **written, 'semantic_channel_qualified': False,
+                               'selection_signature': selection_signature,
+                               'checkpoint': str(out / 'best-checkpoint.pt'),
+                               'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
+            publish_best(checkpoint_path, out / 'best-checkpoint.pt')
+            (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
     if head_params or lora:

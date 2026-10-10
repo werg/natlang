@@ -13,6 +13,7 @@ from torch import nn
 from torch.nn import functional as F
 from ..serve import load_engine
 from .trajectories import target_write, handover_notes
+from .checkpoint_policy import publish_best
 from .trajectory_state import atomic_checkpoint
 from ..common.hashing import sha256_file_hex as sha
 
@@ -99,16 +100,18 @@ def main():
         print(json.dumps(metrics),flush=True);return metrics
     def save(step,path):
         atomic_checkpoint(path,{'schema':'natlang.output-embedding-projection/1','identity':identity,'step':step,'dim':dim,'projection':projection.state_dict(),'optimizer':optimizer.state_dict(),'generator':generator.get_state(),'best':best,'backbone_heads':str(a.heads),'backbone_heads_sha256':sha(a.heads),'target':'raw input embedding at the same token position; not next-token feedback','read_mode':'transparent; no interface normalization or port markers','qualification':'reconstruction experiment only; requires held task/logit parity before integration'})
-    if not resumed:evaluate(0)
     for step in range(start,a.steps):
         indices=torch.randint(len(x),(a.batch,),generator=generator).to(a.device);pred=projection(x[indices]);target=y[indices]
         loss=(pred-target).square().mean()/scale+0.1*(1-F.cosine_similarity(pred,target).mean())
         optimizer.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(projection.parameters(),1.0);optimizer.step()
         if (step+1)%64==0:print(json.dumps({'step':step+1,'loss':float(loss.detach())}),flush=True)
-        if (step+1)%a.eval_every==0:
-            metrics=evaluate(step+1)
-            if best is None or metrics['relative_mse']<best['relative_mse']:best=metrics;save(step+1,a.out/'best-checkpoint.pt')
-        if (step+1)%a.checkpoint_every==0 or stop[0] or step+1==a.steps:save(step+1,state_path)
+        # Declared step points only (plans/STORAGE_POLICY.md): best = the best among full-state writes, by a hard link.
+        metrics=evaluate(step+1) if (step+1)%a.eval_every==0 else None
+        if (step+1)%a.checkpoint_every==0 or stop[0] or step+1==a.steps:
+            improved=metrics is not None and (best is None or metrics['relative_mse']<best['relative_mse'])
+            if improved:best=metrics
+            save(step+1,state_path)
+            if improved:publish_best(state_path,a.out/'best-checkpoint.pt')
         if stop[0]:break
     print(json.dumps({'status':'checkpointed_on_signal' if stop[0] else 'complete','step':step+1,'best':best}),flush=True)
 if __name__=='__main__':main()

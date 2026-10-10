@@ -18,6 +18,7 @@ from ..model.causal_feedback import CausalFeedbackProjection, load_projection_st
 from ..serve import load_engine
 from .optim import PortMuonAdamW
 from .output_embedding_projection import sha, source_texts
+from .checkpoint_policy import publish_best
 from .trajectory_state import atomic_checkpoint
 from .bootstrap_data import context_ids
 
@@ -56,6 +57,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if min(args.steps, args.batch, args.tokens, args.eval_every, args.checkpoint_every) < 1:
         parser.error('positive bounds required')
+
     if (args.lr <= 0 or not 0 <= args.agreement_gate <= 1 or args.kl_gate < 0
             or not 0 <= args.source_fraction <= 1 or args.argmax_weight < 0):
         parser.error('invalid optimizer or gate controls')
@@ -74,7 +76,10 @@ def main(argv=None):
     if resumed and (resumed.get('schema') != 'natlang.causal-feedback-bootstrap/1' or resumed['identity'] != identity):
         raise ValueError('bootstrap resume identity differs')
     if args.out.exists() and not resumed:
-        raise ValueError('output exists without complete resumable checkpoint')
+        # A start that stopped before its first full-state point left no state to resume: it starts over.
+        if (args.out / 'best-checkpoint.pt').exists():
+            raise ValueError('output exists without complete resumable checkpoint')
+        (args.out / 'eval.jsonl').unlink(missing_ok=True)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / 'plan.json').write_text(json.dumps(identity, indent=2) + '\n')
     engine = load_engine(heads_checkpoint=str(args.heads), device=args.device)
@@ -138,7 +143,7 @@ def main(argv=None):
                  'cutoff': cutoff, 'selection': 'greedy-raw-next-token',
                  'qualification': 'exact full-output initialization; runtime gate still required'}
         atomic_checkpoint(state_path, state)
-        atomic_checkpoint(args.out / 'best-checkpoint.pt', state)
+        publish_best(state_path, args.out / 'best-checkpoint.pt')
         (args.out / 'eval.jsonl').write_text(json.dumps(result) + '\n')
         print(json.dumps(result), flush=True)
         print(json.dumps({'status': 'qualified_at_initialization', 'step': 0, 'optimizer_updates': 0,
@@ -246,7 +251,7 @@ def main(argv=None):
         print(json.dumps(result), flush=True)
         return result
 
-    def save(step, path):
+    def save(step, path=state_path):
         atomic_checkpoint(path, {'schema': 'natlang.causal-feedback-bootstrap/1', 'identity': identity,
                                 'projection_state_format': 2,
                                 'step': step, 'projection': projection.state_dict(), 'optimizer': optimizer.state_dict(),
@@ -255,12 +260,23 @@ def main(argv=None):
                                 'cutoff': cutoff, 'selection': 'greedy-raw-next-token',
                                 'qualification': 'isolated distillation; runtime and recurrence gates still required'})
 
-    if not resumed:
+    def write(step, result=None):
+        """The full state at a declared checkpoint point, the end or a stop (plans/STORAGE_POLICY.md). ``result``: this
+        point's evaluation; when it is the best so far, this very file is published as best-checkpoint.pt by a hard
+        link (the best is the best among full-state writes; no write or evaluation of its own)."""
+        nonlocal best
+        improved = result is not None and (best is None or result['kl'] < best['kl'])
+        if improved:
+            best = result
+        save(step)
+        if improved:
+            publish_best(state_path, args.out / 'best-checkpoint.pt')
+
+    if not resumed and args.stop_on_gate:
+        # --stop-on-gate makes step 0 a declared point: an initialization that already passes the gate qualifies there.
         initial = evaluate(start)
-        best = initial
-        save(start, state_path)
-        save(start, args.out / 'best-checkpoint.pt')
-        if args.stop_on_gate and initial['feedback_gate_passed']:
+        if initial['feedback_gate_passed']:
+            write(start, initial)
             print(json.dumps({'status': 'qualified_at_initialization', 'step': start,
                               'reason': 'copied full output head already reproduces the raw next-token embedding reference'}), flush=True)
             return
@@ -292,17 +308,16 @@ def main(argv=None):
         if last_step % 32 == 0:
             print(json.dumps({'step': last_step, 'loss': float(loss.detach()), 'kl': float(kl.detach()),
                               'gradient_norm': float(grad), 'peak_gib': torch.cuda.max_memory_allocated() / 2**30}), flush=True)
-        if last_step % args.eval_every == 0:
-            result = evaluate(last_step)
-            if best is None or result['kl'] < best['kl']:
-                best = result
-                save(last_step, args.out / 'best-checkpoint.pt')
-            if args.stop_on_gate and result['feedback_gate_passed']:
-                save(last_step, state_path)
-                print(json.dumps({'status': 'qualified', 'step': last_step, 'best': best}), flush=True)
-                return
+        # Declared step points only (owner 2026-10-10): evaluations every --eval-every updates (the last at the end),
+        # full-state writes every --checkpoint-every updates (evaluation points), at the end and on a stop.
+        # The end is always evaluated (the gate); recipes make it the last declared point.
+        result = evaluate(last_step) if last_step % args.eval_every == 0 or last_step == args.steps else None
+        if result is not None and args.stop_on_gate and result['feedback_gate_passed']:
+            write(last_step, result)
+            print(json.dumps({'status': 'qualified', 'step': last_step, 'best': best}), flush=True)
+            return
         if last_step % args.checkpoint_every == 0 or stop[0] or last_step == args.steps:
-            save(last_step, state_path)
+            write(last_step, result)
         if stop[0]:
             break
     print(json.dumps({'status': 'checkpointed_on_signal' if stop[0] else 'complete', 'step': last_step, 'best': best}), flush=True)

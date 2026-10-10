@@ -331,14 +331,14 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     assert resumed['schedule']==saved['schedule']
     # A code change (a fix) resumes in place as a logged handoff; a recipe change still refuses.
     # A code change, an option newer code added and an operational option change are one logged handoff.
-    options=dict(resumed['identity']['options']);del options['checkpoint_minutes']
+    options=dict(resumed['identity']['options']);del options['checkpoint_every']
     edited=dict(resumed);edited['identity']={**resumed['identity'],'options':options,
         'code':{**resumed['identity']['code'],'train/text_warmup.py':'0'*64,'train/retired.py':'1'*64}}
     torch.save(edited,tmp_path/'run'/'checkpoint.pt')
-    text_warmup.main(args+['--eval-every','2'])
+    text_warmup.main(args+['--eval-every','2','--checkpoint-every','2'])
     logged=[json.loads(l) for l in (tmp_path/'run'/'code-handoffs.jsonl').read_text().splitlines()]
     assert logged==[{'event':'code_handoff','step':4,'changed':['train/text_warmup.py'],'added':[],
-                     'removed':['train/retired.py'],'options_added':{'checkpoint_minutes':180.0},
+                     'removed':['train/retired.py'],'options_added':{'checkpoint_every':2},
                      'options_changed':{'eval_every':[1,2]}}]
     recipe=list(args);recipe+=['--lr','0.5']
     with pytest.raises(ValueError,match='resume identity changed'):
@@ -787,7 +787,7 @@ def tiny_feedback_fixture():
     return Backbone(),Heads()
 
 
-def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkeypatch):
+def test_full_state_writes_at_declared_points_and_the_end_each_export_heads(tmp_path,monkeypatch):
     import json
     from natlang_neuralese.train import text_warmup
     module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
@@ -809,11 +809,11 @@ def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkey
     # writes use the shared writer's helper above.
     monkeypatch.setattr(module,'atomic_checkpoint',record)
     module.main(args)
-    assert checkpoint_steps==[0,2,3]
-    assert export_steps==[0,3]
+    assert checkpoint_steps==[2,3]  # the declared point and the end; no start write
+    assert export_steps==[2,3]
     plan=json.loads((tmp_path/'run'/'plan.json').read_text())
     policy=plan['receipt']['serving_heads_export_policy']
-    assert 'non-best periodic checkpoints do not' in policy['policy']
+    assert 'every full-state write' in policy['policy']
     assert 'may represent an earlier step' in policy['lag']
 
 
@@ -1020,7 +1020,7 @@ def test_postcommit_telemetry_failure_saves_current_model_optimizer_and_rng(tmp_
     assert stopped.value.code==2
     saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert saved['step']==1
-    assert len(optimizer_snapshots)==1 and len(rng_snapshots)==3
+    assert len(optimizer_snapshots)==1 and len(rng_snapshots)==2  # the attempt and the emergency (no start write)
     _assert_nested_state_equal(saved['optimizer'],optimizer_snapshots[0])
     live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.hf.named_parameters()},
           **{'heads.'+name:value.detach().cpu() for name,value in engines[-1].heads.named_parameters()}}
@@ -1045,11 +1045,16 @@ def test_postcommit_serving_export_failure_does_not_fail_full_recovery(tmp_path,
     from pathlib import Path
     from natlang_neuralese.train import text_warmup
     module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    args[args.index('--checkpoint-every')+1]='1'  # step 1 writes (and exports heads); step 2's telemetry fails
     original_open=Path.open
+    train_writes=0
     def fail_training_log(path,*open_args,**kwargs):
+        nonlocal train_writes
         mode=(open_args[0] if open_args else kwargs.get('mode','r'))
         if path.name=='train.jsonl' and mode=='a':
-            raise OSError(errno.ENOSPC,'injected telemetry disk full')
+            train_writes+=1
+            if train_writes==2:
+                raise OSError(errno.ENOSPC,'injected telemetry disk full')
         return original_open(path,*open_args,**kwargs)
     monkeypatch.setattr(Path,'open',fail_training_log)
     atomic=module.atomic_checkpoint;head_exports=0
@@ -1066,11 +1071,11 @@ def test_postcommit_serving_export_failure_does_not_fail_full_recovery(tmp_path,
         module.main(args)
     assert stopped.value.code==2
     saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
-    assert saved['step']==1 and saved['emergency_recovery']['safe_to_resume'] is True
+    assert saved['step']==2 and saved['emergency_recovery']['safe_to_resume'] is True
     assert saved['emergency_recovery']['failure_stage']=='after_optimizer_commit'
-    assert torch.load(tmp_path/'run'/'heads.pt',weights_only=False)['warmup']['step']==0
+    assert torch.load(tmp_path/'run'/'heads.pt',weights_only=False)['warmup']['step']==1
     status=json.loads((tmp_path/'run'/'heads-export-status.json').read_text())
-    assert status['checkpoint_step']==1 and status['heads_step']==0
+    assert status['checkpoint_step']==2 and status['heads_step']==1
     assert status['heads_current'] is False
     assert status['checkpoint_authoritative_for_resume'] is True
     assert status['export_error']=={'type':'OSError','message':'[Errno 28] injected optional heads export full'}
@@ -1144,8 +1149,7 @@ def test_checkpoint_space_preflight_refuses_before_first_update(tmp_path,monkeyp
     with pytest.raises(SystemExit) as stopped:
         module.main(args)
     assert stopped.value.code==2
-    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
-    assert saved['step']==0
+    assert not (tmp_path/'run'/'checkpoint.pt').exists()  # no write before the first declared point: a rerun starts over
     assert calls==[]
     assert (tmp_path/'run'/'baseline.json').is_file()
 
@@ -1213,8 +1217,7 @@ def test_failed_postcommit_emergency_save_reports_unsafe_and_exits_nonzero(tmp_p
     assert failure['safe_to_resume'] is False
     assert failure['last_committed_step']==1
     assert failure['checkpoint_error']=='injected emergency checkpoint failure'
-    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
-    assert saved['step']==0 and 'emergency_recovery' not in saved
+    assert not (tmp_path/'run'/'checkpoint.pt').exists()  # nothing unsafe was persisted (no start write exists)
 
 
 def test_checkpoint_reserve_allocates_releases_rearms_and_cleans(tmp_path):
@@ -1673,3 +1676,37 @@ def test_read_adapter_trains_in_the_text_warmup_and_a_continuation_may_add_it(tm
     assert any(n.startswith('heads.read_adapter.') for n in saved['student_parameters'])
     # It resumes in place with the adapter.
     text_warmup.main(added)
+
+
+
+def test_warmup_evaluates_and_writes_only_at_declared_points_and_links_best_to_a_write(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup, trajectory_state
+    def load(*_args):
+        backbone,heads=tiny_student()
+        return SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,_tokens=lambda _text:[9,3,5,8]),None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    log=tmp_path/'writes.jsonl'
+    monkeypatch.setattr(trajectory_state,'CHECKPOINT_WRITES',str(log))
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':s,'split':split,'source_groups':[s]})
+                              for s,split in [('train','train'),('held','test')])+'\n')
+    out=tmp_path/'run'
+    args=['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+          '--out',str(out),'--device','cpu','--steps','8','--tokens','8','--prefix-tokens','2','--batch','1',
+          '--eval-batch','1','--held-documents','1','--eval-every','2','--checkpoint-every','4',
+          '--optimizer','adamw','--backbone-training','full']
+    text_warmup.main(args)
+    steps=[json.loads(l)['step'] for l in (out/'eval.jsonl').read_text().splitlines()]
+    end=steps[-1]
+    # The gate's step-0 reference (a fresh lineage), then the declared points only.
+    assert steps==[0]+list(range(2,end+1,2))
+    written=[l for l in log.read_text().splitlines() if l.strip() and json.loads(l)['path'].endswith('/checkpoint.pt')]
+    assert len(written)==len([s for s in range(4,end,4)])+1  # the declared write points before the end, and the end
+    best=json.loads((out/'best-checkpoint.json').read_text())['step']
+    assert best in [s for s in range(4,end,4)]+[end]
+    if best==end:
+        assert (out/'best-checkpoint.pt').stat().st_ino==(out/'checkpoint.pt').stat().st_ino

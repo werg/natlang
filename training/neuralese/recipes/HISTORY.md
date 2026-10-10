@@ -51,7 +51,8 @@ handler whitelist gained both options with this recipe.
 raw-recurrence-v2 for Mellum2.1-12B-A2.5B after the full-latent QAT conversion (maple/qat_convert.py) exported in the
 deployed ternary form (maple/qat_export.py; heads from maple/foundation_heads.py --model EXPORT, Mellum markers
 <|extra_token_7|>/<|extra_token_8|> = ids 33/34 via model/hf_port.family_controls). Backbone-inherent differences only:
-- cutoff 27 = layers - 1 with 512 context windows (Maple: depth helped most; c23 of 24 layers, recipes above). The
+- cutoff 27 = layers - 1 with 512 context windows (WITHDRAWN 2026-10-10, raw-recurrence-mellum-v6 below: not
+  backbone-inherent; Maple: depth helped most; c23 of 24 layers, recipes above). The
   agreement gate stays the shared 0.9; Maple's 0.75 calibration came from a Maple-specific gate diagnostic and is not
   inherited without a Mellum one.
 - Ternary QAT (`backbone_training: qat`, Maple's policy: attention dense latents and learned block scales, expert block
@@ -166,3 +167,32 @@ latents with a ramp floor on `ternary`, `quantization.preserve` (teacher-v3 top-
 raw-recurrence-v6 (still before any run) declares full-state checkpoints every 3 h of wall clock in the text warm-ups
 and both recurrence stages (`checkpoint_minutes` 180, `checkpoint_every` 100000; owner "checkpoint every few hours";
 stops write the full state within the memory ledger's grace). The recurrence trainer gains `--checkpoint-minutes`.
+Later the same day (owner: evaluations and checkpoints on declared STEP points, reproducible across runs, resumes and
+machines; no added evaluations) raw-recurrence-v6 replaces the wall clock with step points sized from measured step
+times (Mellum: embedding distillation 0.45 s/step measured on this lineage, the rest from conversion v3's ~5 s/step):
+
+| stage | steps | eval_every (points) | checkpoint_every (writes incl. end) |
+|---|---|---|---|
+| embedding_distillation | 8192 | 512 (16) | 8192 (end only; ~1 h stage) |
+| core_text_warmup | 4096 | 256 (16) | 2048 (2, ~2.8 h apart) |
+| autoregressive_text_fixup | 1024 | 64 (16) | 128 (8; 16k-token steps, est. ~80 s) |
+| view_operator | 4096 | 256 (16) | 2048 (2) |
+| recurrence_warmup | 2048 | 128 (16) | 2048 (end only, ~2.8 h) |
+
+`checkpoint_minutes`/`eval_minutes` are retired (a recipe declaring them is refused with the fix). The text warm-up's
+curriculum advances per evaluation (plateau, ramps, gate streak need about 13 points), so 16 points per stage is
+close to its floor; re-size from the measured step times once the stages run.
+
+## raw-recurrence-mellum-v6, token-preserving-foundation-mellum-v3 (2026-10-10): cutoff 27 withdrawn
+
+The Mellum line's `cutoff 27` (and its 512 context windows) is removed from the backbone-inherent list. It was not
+backbone-inherent: it carried the Maple c12–c23 shallow-cutoff lesson from lineages the 2026-10-06 owner decision
+("out port at the top", DECISIONS.md) had already declared to measure the wrong thing, and it broke the unify rule.
+raw-recurrence-mellum-v5's foundation failed the shared embedding-distillation gate at cutoff 27 (source agreement
+0.857, flat over the last ~1,000 of 8,192 steps; context 0.915), while the same heads and data at full depth qualify
+exactly at initialization (KL 0, agreement 1.0, 0 updates; plans/mellum-port.md "Foundation embedding_distillation
+gate failure"). The 512 contexts only enlarged the held sample and had no declared reason. raw-recurrence-mellum-v6
+(= v5 minus both overrides) and token-preserving-foundation-mellum-v3 (file foundation-mellum-v3.json; = v2 minus the ones inherited from
+token-preserving-foundation-mellum-v1) inherit the shared foundation unchanged; heads come from
+`maple/foundation_heads.py --precision bf16` at full depth. Both lines now share a full-depth foundation. A shallow
+cutoff stays possible only as a separate, optional efficiency variant with its own gate.

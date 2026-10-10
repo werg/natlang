@@ -101,11 +101,14 @@
     "docker-dangling"
   ],
   "checkpoint_cadence": {
-    "every_minutes": 180,
+    "points": "declared steps: eval_every (about 10-20 per stage, last at the stage end), checkpoint_every a multiple of eval_every sized to about 3 h at the measured step time",
+    "eval_every": "per stage (recipe)",
+    "checkpoint_every": "per stage (recipe)",
     "on_sigterm": true,
     "rolling_slots": 1,
-    "best_weights_only": true,
+    "best_weights_only": false,
     "drop_optimizer_at_end": false,
-    "disk_aware": true
+    "disk_aware": true,
+    "best": "hard link to the best full-state write"
   }
 }

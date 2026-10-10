@@ -296,3 +296,20 @@ def test_stages_added_insert_after_a_named_stage(tmp_path):
         (tmp_path / 'child.json').write_text(json.dumps(child))
         with pytest.raises(ValueError):
             resolve_recipe_data(tmp_path / 'child.json')
+
+
+def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
+    """Owner 2026-10-10: every write point is an evaluation point and the stage end is the last one (its gate)."""
+    from natlang_neuralese.train.loop import check_declared_points
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6'):
+        path = RECIPES / f'{name}.json'
+        if not path.exists():
+            continue
+        recipe = resolve_recipe_data(path)
+        defaults = recipe.get('stage_parameter_defaults', {})
+        for stage in recipe['stages']:
+            effective = {**defaults.get(stage['kind'], {}), **stage.get('parameters', {})}
+            if 'eval_every' in effective:
+                check_declared_points(effective['steps'], effective['eval_every'], effective.get('checkpoint_every'))
+                assert 'checkpoint_minutes' not in effective and 'eval_minutes' not in effective

@@ -339,7 +339,8 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
 
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
 # Activation checkpointing trades memory for recomputation with identical math, so it is operational too.
-RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device',
+# checkpoint_minutes and eval_minutes are retired (step-declared points replaced them): older states may carry them.
+RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added'})
 
 
@@ -355,7 +356,7 @@ def same_resume_identity(previous, current):
     old_recipe = {k: v for k, v in previous.items() if k not in ignored}
     new_recipe = {k: v for k, v in current.items() if k not in ignored}
     return (old_recipe == new_recipe and not (changed - RESUME_OPERATIONAL_OPTIONS)
-            and not (old_options.keys() - new_options.keys()))
+            and not (old_options.keys() - new_options.keys() - RESUME_OPERATIONAL_OPTIONS))
 
 
 def text_supervision_policy():
@@ -1223,9 +1224,10 @@ def main(argv=None):
     p.add_argument('--projection-min-improvement',type=float,default=.01)
     p.add_argument('--backbone-ramp-evals',type=int,default=4)
     p.add_argument('--pass-ramp-evals',type=int,default=2)
-    p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
-    p.add_argument('--checkpoint-minutes',type=float,default=180.,
-                   help='also save full resumable state when this much wall time passed since the last save')
+    p.add_argument('--checkpoint-every',type=int,default=0,help='full-state points: every N updates, a multiple of '
+                   '--eval-every (0: only the stage end and stops write the full state)')
+    p.add_argument('--eval-every',type=int,default=128,help='evaluation points: every N updates, and the stage end '
+                   '(its gate; recipes make --steps a multiple)')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--mask-system-prompt',action=argparse.BooleanOptionalAction,default=True,
@@ -1262,8 +1264,9 @@ def main(argv=None):
     a=p.parse_args(argv)
     if a.ar_feedback_fixup and not a.continue_from:
         p.error('--ar-feedback-fixup requires a mapped --continue-from checkpoint')
-    if min(a.steps,a.tokens,a.prefix_tokens,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
+    if min(a.steps,a.tokens,a.prefix_tokens,a.batch,a.eval_batch,a.eval_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3 or a.checkpoint_every<0:
         p.error('positive bounds and at least three tokens required')
+
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
     if not math.isfinite(a.channel_consistency_weight) or a.channel_consistency_weight <= 0:
@@ -1516,7 +1519,7 @@ def main(argv=None):
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
                    held_selection=held_selection,
                    serving_heads_export_policy={
-                       'policy':'baseline, newly selected best, and final saves export heads.pt; non-best periodic checkpoints do not; emergencies attempt export after committing full state',
+                       'policy':'every full-state write at a declared checkpoint point and the stage end exports heads.pt; stop writes do not; emergencies attempt export after committing full state',
                        'lag':'during training heads.pt may represent an earlier step than checkpoint.pt; checkpoint.pt is authoritative for resume; optional emergency export failure is recorded in heads-export-status.json and does not invalidate recovery'},
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
@@ -2154,12 +2157,12 @@ def main(argv=None):
         serving_heads_step=step
         return True
 
-    checkpoint_cadence=Cadence(a.checkpoint_every,a.checkpoint_minutes)
-    eval_cadence=Cadence(a.eval_every)
+    # Declared step points only (owner 2026-10-10; plans/STORAGE_POLICY.md): evaluations every --eval-every updates,
+    # full-state writes every --checkpoint-every updates (a subset of the evaluation points), at the end and on stops.
+    checkpoint_cadence,eval_cadence=Cadence(a.checkpoint_every),Cadence(a.eval_every)
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
              retain_best=False, wait=False):
         checkpoint_writer.drain()
-        checkpoint_cadence.mark()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
@@ -2211,7 +2214,10 @@ def main(argv=None):
         (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
         return None
-    if not was_resumed and not stop.requested:
+    # The stage gate's reference point (step 0): the forgetting check (text_ce_delta_from_initial) needs the starting
+    # weights' held text CE. It runs only when that reference is missing, i.e. a fresh lineage or a continuation whose
+    # held objective changed; a continuation that carries its reference and every resume add no evaluation.
+    if not was_resumed and not stop.requested and (not initial_text_ce or remeasure_text_baseline):
         # Honor a startup stop before launching an expensive held evaluation.
         # The restored full state can be checkpointed directly by the stop path.
         # A continued full state gets a fresh starting-weight evaluation on
@@ -2225,8 +2231,9 @@ def main(argv=None):
         finally:
             if continuation_rng is not None:restore_training_rng_state(continuation_rng,a.device)
         (a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
-        best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
-        save(baseline,wait=True);retain_best_checkpoint(a.out,baseline)
+        # No full-state write at the start (owner 2026-10-10: cadence, stop and end only); ``best`` is the best among
+        # full-state writes, so it starts empty.
+        last_report=baseline
     checkpoint_snapshot_size_bound=warmup_checkpoint_size_upper_bound(named,heads,optimizer)
     checkpoint_reserve=CheckpointDiskReserve(
         a.out/'.checkpoint-space.reserve',checkpoint_snapshot_size_bound)
@@ -2594,23 +2601,23 @@ def main(argv=None):
                 report['alignment_gate_passed'] and precisions_ok and all(updates.values())) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
-            score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,
-                max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
-            improved=best is None or score<best['score']
-            if improved:best={'step':step,'score':score,'report':report}
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-            # The full state is written for a new best (retained as best-checkpoint.pt: exact continuation from the
-            # best, verified_heads_handoff) or on the wall-clock cadence (3 h), not at every evaluation (owner
-            # 2026-10-10: "checkpoint every few hours"); stops and the end write it too.
-            if improved or checkpoint_cadence.due(step):
-                try:
-                    save(report,write_export=improved,retain_best=improved)
-                except Exception as error:
-                    recover_postcommit_persistence_failure(error)
-                    return
-        elif checkpoint_cadence.due(step):
+        # The stage end (the last step or a qualification) writes after the loop; this is a mid-stage checkpoint point.
+        if (checkpoint_cadence.due(step) and step<a.steps
+                and not (report is not None and report.get('qualified'))):
+            # Full state only at declared checkpoint points (and on stops and at the end; owner 2026-10-10), each an
+            # evaluation point. ``best`` is the best among those writes: when this point's evaluation is the best so
+            # far, the same file is published as best-checkpoint.pt / best-heads.pt by hard links
+            # (retain_best_checkpoint), never a second write.
+            # A write point without an evaluation (a CLI run off the recipe's declared points) is no best candidate.
+            improved=False
+            if report is not None:
+                score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,
+                    max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+                improved=best is None or score<best['score']
+                if improved:best={'step':step,'score':score,'report':report}
             try:
-                save(write_export=False)
+                save(report,write_export=True,retain_best=improved)
             except Exception as error:
                 recover_postcommit_persistence_failure(error)
                 return
@@ -2737,8 +2744,8 @@ def main(argv=None):
             return
         print(json.dumps({'event':'checkpointed_on_signal','step':step}),flush=True)
         return
-    # A signal during the periodic probe must not repeat the same expensive
-    # held evaluation before checkpointing exactly the same weights.
+    # The stage end: its full-state write, and the gate's evaluation. Recipes declare --steps a multiple of
+    # --eval-every (train/recipe.py), so the last declared point is this one and nothing is evaluated twice.
     try:
         report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
         report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,

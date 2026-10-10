@@ -265,23 +265,25 @@ def weighted_topk_kl(model, ids: torch.Tensor, top_ids: torch.Tensor, top_logp: 
             "response_agreement": agree[response].mean()}
 
 
-def _save_slot(a, policy, state):
+def _save_slot(a, policy, state, metric=None):
+    """The full state (a declared checkpoint point, a stop, the end); ``metric``: the evaluation of that point, which
+    publishes this very file as the best when it is the best so far (no separate best write)."""
     try:
-        policy.save(state)
+        policy.save(state, metric=metric)
     except OSError as error:
         # DGX-owned disposal (plans/STORAGE_POLICY.md §2): with --drop-slot-when-full the single rolling slot (~47 GB)
-        # gives way when the disk cannot hold two; the best weights stay a separate file.
+        # gives way when the disk cannot hold two; a best linked to it keeps that inode (and its space).
         if error.errno != errno.ENOSPC or not a.drop_slot_when_full:
             raise
         print(json.dumps({"dropped_rolling_slot_for_space": str(policy.slot), "step": state["step"]}), flush=True)
         policy.slot.unlink(missing_ok=True)
-        policy.save(state)
+        policy.save(state, metric=metric)
 
 
 def run_train_records(a, teacher_dir: Path, meta: dict):
     """Conversion v3: KL to the BF16 model only, on its own responses in its own chat template. Prompt positions are
-    weighted ``--prompt-weight``, response positions 1; records are drawn in shuffled epochs. Every ``--eval-every``
-    updates: held KL/agreement of the deployed model (λ=1, and the current mix while ramping) and the generation gate
+    weighted ``--prompt-weight``, response positions 1; records are drawn in shuffled epochs. At every ``--eval-every``
+    point: held KL/agreement of the deployed model (λ=1, and the current mix while ramping) and the generation gate
     (maple/generation_gate.py) on fixed probes. After the ramp, two consecutive gates more than ``--gate-drop`` below
     the best post-ramp gate stop the run (its last state is checkpointed)."""
     from transformers import AutoTokenizer
@@ -341,6 +343,8 @@ def run_train_records(a, teacher_dir: Path, meta: dict):
         print(json.dumps({k: v for k, v in report.items() if "checks" not in k}), flush=True)
         log.write(json.dumps(report) + "\n")
         log.flush()
+    from ..train.loop import Cadence
+    evals = Cadence(a.eval_every)  # declared step points only (plans/STORAGE_POLICY.md)
     best_gate, low_gates = None, 0
     while step < a.steps:
         started = time.perf_counter()
@@ -360,7 +364,8 @@ def run_train_records(a, teacher_dir: Path, meta: dict):
                "tokens": int(ids.shape[1]), "record": train["id"][i], "mix": QUANT_MIX["value"],
                "seconds": time.perf_counter() - started, "peak_gb": torch.cuda.max_memory_allocated() / 2**30}
         stop = None
-        if step % a.eval_every == 0 or step == a.steps:
+        write = policy.due(step, end=step == a.steps)
+        if not policy.signaled and (evals.due(step) or step == a.steps):  # the end: the gate
             mixes = (("", 1.0),) + ((("_current_mix", QUANT_MIX["value"]),) if QUANT_MIX["value"] < 1.0 else ())
             row.update(evaluate(True, mixes))
             if "gate_pass" in row and step >= a.ramp_steps:
@@ -372,17 +377,14 @@ def run_train_records(a, teacher_dir: Path, meta: dict):
         log.flush()
         if step % 10 == 0 or "held_kl" in row:
             print(json.dumps({k: v for k, v in row.items() if "checks" not in k}), flush=True)
-        if "held_kl" in row:  # best deployed weights: gate first, then held KL
-            metric = (1.0 - row.get("gate_pass", 0.0)) + row["held_kl"]
-            if policy.save_best({"step": step, "latents": {k: q.detach() for k, q in latents}}, metric=metric):
-                print(json.dumps({"best_weights": step, "metric": metric}), flush=True)
-        if stop or policy.due() or step == a.steps or (a.checkpoint_every and step % a.checkpoint_every == 0):
+        # Best deployed weights: gate first, then held KL; judged only at full-state writes.
+        metric = (1.0 - row.get("gate_pass", 0.0)) + row["held_kl"] if "held_kl" in row else None
+        if stop or write:
             _save_slot(a, policy, {"step": step, "latents": {k: q.detach() for k, q in latents},
-                                   "optimizer": optimizer.state_dict()})
+                                   "optimizer": optimizer.state_dict()}, None if policy.signaled else metric)
             if policy.signaled or stop:
                 print(json.dumps({"stopped": stop or "signal", "step": step}), flush=True)
                 return
-    policy.finalize({"step": step, "latents": {k: q.detach() for k, q in latents}})
 
 
 def _setup_training(a):
@@ -403,8 +405,7 @@ def _setup_training(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     from ..train.checkpoint_policy import CheckpointPolicy
-
-    policy = CheckpointPolicy(out, every_minutes=a.checkpoint_minutes).install_signal_handlers()
+    policy = CheckpointPolicy(out, every_steps=a.checkpoint_every).install_signal_handlers()
     state_path = policy.slot
     step = 0
     if state_path.exists():
@@ -459,10 +460,8 @@ def run_train(a):
         return {"held_ce": sum(ce) / len(ce), "held_kl": sum(kl) / len(kl)}
 
     QUANT_MIX["value"] = schedule(step)[0]
-    if step == 0:
-        report = {"step": 0, **evaluate()}
-        print(json.dumps(report), flush=True)
-        log.write(json.dumps(report) + "\n")
+    from ..train.loop import Cadence
+    evals = Cadence(a.eval_every)  # declared step points only (plans/STORAGE_POLICY.md)
     generator = torch.Generator().manual_seed(a.seed + step)
     while step < a.steps:
         started = time.perf_counter()
@@ -479,25 +478,22 @@ def run_train(a):
         step += 1
         row = {"step": step, "ce": float(ce), "kl": float(kl), "mix": QUANT_MIX["value"], "kl_weight": kl_weight, "seconds": time.perf_counter() - started,
                "peak_gb": torch.cuda.max_memory_allocated() / 2**30}
-        if step % a.eval_every == 0 or step == a.steps:
+        write = policy.due(step, end=step == a.steps)
+        if not policy.signaled and (evals.due(step) or step == a.steps):  # the end: the gate
             row.update(evaluate())
         log.write(json.dumps(row) + "\n")
         log.flush()
         if step % 10 == 0 or "held_ce" in row:
             print(json.dumps(row), flush=True)
-        # Shared checkpoint policy (train/checkpoint_policy.py, plans/STORAGE_POLICY.md): one rolling resumable
-        # slot on a wall-clock cadence or when asked to stop, a weights-only best on the deployed (λ=1) held CE, and
-        # at the end the latents alone (the ~23 GB Lion momentum only serves resuming this exact run).
-        if "held_ce" in row and policy.save_best({"step": step, "latents": {n: q.detach() for n, q in latents}},
-                                                 metric=row["held_ce"]):
-            print(json.dumps({"best_weights": step, "held_ce": row["held_ce"]}), flush=True)
-        if policy.due() or step == a.steps or (a.checkpoint_every and step % a.checkpoint_every == 0):
+        # Shared checkpoint policy (train/checkpoint_policy.py, plans/STORAGE_POLICY.md): full state at the declared
+        # checkpoint points, on a stop and at the end; the best (deployed λ=1 held CE) is one of those writes.
+        if write:
             _save_slot(a, policy, {"step": step, "latents": {n: q.detach() for n, q in latents},
-                                   "optimizer": optimizer.state_dict()})
+                                   "optimizer": optimizer.state_dict()},
+                       None if policy.signaled else row.get("held_ce"))
             if policy.signaled:
                 print(json.dumps({"stopped_on_signal": step}), flush=True)
                 return
-    policy.finalize({"step": step, "latents": {n: q.detach() for n, q in latents}})
 
 
 def main(argv=None):
@@ -525,9 +521,10 @@ def main(argv=None):
     r.add_argument("--kl-weight", type=float, default=1.0)
     r.add_argument("--ramp-steps", type=int, default=1000, help="ternarization mix ramps 0 → 1 over these updates")
     r.add_argument("--kl-decay-steps", type=int, default=0, help="KL to the BF16 original falls to 0 over these updates")
-    r.add_argument("--eval-every", type=int, default=100)
-    r.add_argument("--checkpoint-every", type=int, default=0, help="also checkpoint every N updates (0: off)")
-    r.add_argument("--checkpoint-minutes", type=float, default=180.0, help="rolling checkpoint cadence (wall clock)")
+    r.add_argument("--eval-every", type=int, default=100,
+                   help="evaluation points: every N updates, and the end (the gate; recipes make --steps a multiple)")
+    r.add_argument("--checkpoint-every", type=int, default=0,
+                   help="full-state points: every N updates, a multiple of --eval-every (0: end and stops only)")
     r.add_argument("--drop-slot-when-full", action=argparse.BooleanOptionalAction, default=True,
                    help="when the disk cannot hold a second ~47 GB slot, drop the previous one first (DGX)")
     r.add_argument("--seed", type=int, default=0)

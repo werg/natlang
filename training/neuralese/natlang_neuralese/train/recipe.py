@@ -26,7 +26,7 @@ HANDLERS = {
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
-                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
+                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
                           'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',
@@ -41,7 +41,7 @@ HANDLERS = {
                                                'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
                                                'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size',
                                                'producer_batch_memory_gb', 'ffn_chunk_tokens',
-                                               'optimizer', 'checkpoint_every', 'checkpoint_minutes', 'eval_every', 'seed', 'writer_text_weight',
+                                               'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
                                                'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
                                                'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
                                                'projection_anchor_weight', 'projection_anchor_backbone_scale',
@@ -122,6 +122,13 @@ def validate_recurrence_parameters(parameters):
             raise ValueError('qualification_cohort must be a nonempty cohort name')
         if 'cohort_weights' in parameters and cohort not in parameters['cohort_weights']:
             raise ValueError('qualification_cohort must be one of the cohort_weights cohorts')
+
+
+def refuse_retired_parameters(parameters):
+    retired = sorted({'checkpoint_minutes', 'eval_minutes'} & set(parameters if isinstance(parameters, dict) else ()))
+    if retired:
+        raise ValueError(f'{", ".join(retired)} retired (owner 2026-10-10): declare eval_every and checkpoint_every in '
+                         'steps instead (steps and checkpoint_every multiples of eval_every)')
 
 
 def validate_stage_parameters(kind, parameters):
@@ -412,6 +419,7 @@ def load_recipe(path):
     if not isinstance(parameter_defaults, dict):
         raise ValueError('stage_parameter_defaults must map handler names to parameter objects')
     for kind, defaults in parameter_defaults.items():
+        refuse_retired_parameters(defaults)
         if (kind not in HANDLERS or not isinstance(defaults, dict) or
                 not set(defaults) <= HANDLERS[kind]['parameters']):
             raise ValueError('invalid stage parameter defaults for ' + str(kind))
@@ -429,6 +437,7 @@ def load_recipe(path):
         if not isinstance(required, list) or len(set(required)) != len(required) or not set(required) <= complete:
             raise ValueError('stage dependencies must precede the stage')
         parameters = stage.get('parameters')
+        refuse_retired_parameters(parameters)
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
         validate_stage_parameters(kind, parameters)

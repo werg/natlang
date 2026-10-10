@@ -30,17 +30,28 @@ keeps path, bytes, category, tier, reason, run and time.
 The largest consumer is checkpoints: the Mellum QAT conversion writes 47 GB per checkpoint (BF16 latents 23 GB +
 Lion momentum 23 GB), every ~15 min at one per 100 updates.
 
-- **Cadence by wall clock**, not steps: one rolling resumable slot every 3 h (owner 2026-10-10: "checkpoint every
-  few hours"; configurable) and whenever the process is asked to stop (SIGTERM/SIGINT/SIGUSR1 → the full state,
-  latents and optimizer, at the next step boundary, then exit). Every stop path gives the job time to write it (the
-  memory ledger's per-unit stop grace, plans/MEMORY_ADMISSION.md), so the cadence only bounds crash loss. (Open: the
-  text warm-up still writes its full state at every evaluation; recipes space evaluations accordingly.)
+- **Declared step points**, not a wall clock (owner 2026-10-10): evaluations and full-state writes happen only at
+  step points each stage declares, so they are reproducible and comparable across runs, resumes and machines.
+  `eval_every`: about 10-20 evenly spaced evaluation points per stage, sized from the measured step time, the last at
+  the stage end (`steps` a multiple of it), where the stage gate runs; no added evaluations (no baseline, no
+  evaluation tied to a write). The one exception is a gate that compares against the starting weights (the text
+  warm-up's forgetting check, the recurrence trainer's initial report): its step-0 reference runs on a fresh lineage
+  only. `checkpoint_every`: a multiple of `eval_every` sized to about every 3 h (owner: "checkpoint every few hours"),
+  so every full-state write has its own point's evaluation. The full state is also written at the stage end and
+  whenever the process is asked to stop (SIGTERM/SIGINT/SIGUSR1 → latents and optimizer at the next step boundary,
+  without an evaluation, then exit). Every stop path gives the job time to write it (the memory ledger's per-unit stop
+  grace, plans/MEMORY_ADMISSION.md), so the points only bound crash loss. Recipes from raw-recurrence-v6 on declare
+  their points this way (`train/loop.py` `check_declared_points`, checked by tests/neuralese/test_recipe_inheritance.py;
+  older recipes are frozen records); the loader refuses the retired `checkpoint_minutes`/`eval_minutes`. Trainers
+  always evaluate the stage end (the gate), so a CLI run whose `steps` is not a multiple gets that one evaluation.
   Writes go from device tensors one storage at a time: no host copy of the model (unified memory). Measured: conversion
   v3's 46.8 GB slot took ~250 s (~190 MB/s to NVMe).
 - **One rolling slot**, written atomically and durably (pending → fsync → rename → directory fsync).
   If the disk cannot hold the replacement beside the previous slot, report insufficient space and preserve the
   previous checkpoint. Failed partial writes are removed; pruning is separate from checkpoint writing.
-- **Best = weights only** (no optimizer state), on eval improvement.
+- **Best = the best among the full-state writes**, published as `best-checkpoint.pt` by a hard link to the written
+  slot (`checkpoint_policy.publish_best`): never a write or an evaluation of its own. The rolling slot's next atomic
+  replacement leaves the linked inode, so a best costs one retained state on disk until a better write replaces it.
 - **End of run: preserve full resumability by default.** Export final weights alongside the full optimizer,
   schedule and RNG checkpoint. Call `finalize(weights, resumable_state=latest_full_state)` to preserve the exact
   final step, or save the final full state before exporting. Explicit `drop_resumable=True` is available only for

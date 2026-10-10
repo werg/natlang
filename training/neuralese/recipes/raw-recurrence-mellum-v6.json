@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v6",
+  "extends": "raw-recurrence-mellum-v5",
+  "description": "raw-recurrence-mellum-v5 without its embedding_distillation overrides (cutoff 27, 512 contexts): the shared foundation unchanged, the out port at the top (cutoff \"full\", owner decision 2026-10-06, DECISIONS.md \"out port at the top\") as on every backbone. Cutoff 27 was not backbone-inherent: it re-introduced the Maple c12-c23 shallow-cutoff lesson from lineages the 2026-10-06 decision had declared to measure the wrong thing, and v5's foundation failed the shared gate there (source agreement 0.857, plans/mellum-port.md 2026-10-10), while full depth qualifies exactly at initialization (KL 0, agreement 1.0, 0 updates). The 512 context windows only enlarged the held sample and had no declared reason, so they go too. Backbone-inherent overrides left: the latent policy, no nested-family member terms, and conversion v3's Mellum-tokenized init, preservation stream and behaviour gate. Heads: maple/foundation_heads.py --precision bf16 at full depth. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": {
+            "$delete": true
+          },
+          "contexts": {
+            "$delete": true
+          }
+        }
+      }
+    }
+  }
+}

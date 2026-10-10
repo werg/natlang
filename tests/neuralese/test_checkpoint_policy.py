@@ -1,3 +1,4 @@
+import json
 import errno
 import os
 import signal
@@ -9,36 +10,43 @@ import torch
 from natlang_neuralese.train import checkpoint_policy as cp
 
 
-class Clock:
-    def __init__(self):
-        self.now = 0.0
-
-    def __call__(self):
-        return self.now
-
-
-def test_cadence_is_wall_clock_and_a_signal_makes_a_checkpoint_due(tmp_path):
-    clock = Clock()
-    policy = cp.CheckpointPolicy(tmp_path, every_minutes=45, clock=clock).install_signal_handlers((signal.SIGUSR1,))
-    assert not policy.due()
-    clock.now = 44 * 60
-    assert not policy.due()
-    clock.now = 45 * 60
-    assert policy.due()
+def test_checkpoints_are_due_at_declared_step_points_the_end_and_a_signal(tmp_path):
+    policy = cp.CheckpointPolicy(tmp_path, every_steps=2048).install_signal_handlers((signal.SIGUSR1,))
+    assert [s for s in range(0, 8193) if policy.due(s, end=s == 6000)] == [2048, 4096, 6000, 6144, 8192]
     policy.save({"step": 1, "w": torch.ones(3)})
-    assert not policy.due()
+    assert not policy.due(1)
     os.kill(os.getpid(), signal.SIGUSR1)
-    assert policy.signaled and policy.due()
+    assert policy.signaled and policy.due(1)
     assert torch.equal(cp.CheckpointPolicy.load(tmp_path / "checkpoint.pt")["w"], torch.ones(3))
+    assert not cp.CheckpointPolicy(tmp_path / "end-only").due(4096)  # 0: the end and stops only
 
 
-def test_best_snapshot_only_on_improvement_and_survives_a_resume(tmp_path):
+def test_best_is_a_link_to_a_full_state_write_never_a_write_of_its_own(tmp_path, monkeypatch):
+    writes = []
+    real = cp.atomic_checkpoint
+    monkeypatch.setattr(cp, "atomic_checkpoint", lambda path, state: (writes.append(path.name), real(path, state)))
     policy = cp.CheckpointPolicy(tmp_path)
-    assert policy.save_best({"w": torch.zeros(2)}, metric=2.0)
-    assert not policy.save_best({"w": torch.ones(2)}, metric=2.5)
-    assert policy.save_best({"w": torch.ones(2)}, metric=1.5)
-    assert torch.equal(torch.load(tmp_path / "best-weights.pt")["w"], torch.ones(2))
-    assert cp.CheckpointPolicy(tmp_path).best_metric == 1.5
+    assert policy.save({"step": 1, "w": torch.zeros(2)}, metric=2.0)["best"]
+    assert "best" not in policy.save({"step": 2, "w": torch.ones(2)}, metric=2.5)  # worse: the slot only
+    assert (tmp_path / "best-checkpoint.pt").stat().st_ino != (tmp_path / "checkpoint.pt").stat().st_ino
+    assert torch.load(tmp_path / "best-checkpoint.pt")["step"] == 1  # the linked inode outlived the replacement
+    assert policy.save({"step": 3, "w": torch.ones(2)}, metric=1.5)["best"]
+    assert (tmp_path / "best-checkpoint.pt").stat().st_ino == (tmp_path / "checkpoint.pt").stat().st_ino
+    assert "best" not in policy.save({"step": 4, "w": torch.ones(2)})  # a stop write: no metric, never best
+    assert writes == ["checkpoint.pt"] * 4  # no extra write for best
+    assert cp.CheckpointPolicy(tmp_path).best_metric == 1.5  # survives a resume
+    assert json.loads((tmp_path / "best-checkpoint.json").read_text())["step"] == 3
+
+
+def test_evaluation_points_are_declared_steps_and_include_every_write_and_the_end():
+    from natlang_neuralese.train.loop import Cadence, check_declared_points
+    evals = Cadence(512)
+    assert [s for s in range(0, 8193) if evals.due(s)] == list(range(512, 8193, 512))  # 16 points, none at step 0
+    check_declared_points(8192, 512, 2048)
+    with pytest.raises(ValueError, match="multiple of eval_every"):
+        check_declared_points(8000, 512, 2048)  # the end would not be an evaluation point
+    with pytest.raises(ValueError, match="checkpoint_every 1000 is not a multiple"):
+        check_declared_points(8192, 512, 1000)  # a write without its own evaluation
 
 
 def test_a_short_disk_fails_the_save_and_keeps_the_only_complete_checkpoint(tmp_path, monkeypatch):

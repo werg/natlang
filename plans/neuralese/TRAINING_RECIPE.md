@@ -756,6 +756,18 @@ Atomic hard links reuse the completed latest checkpoint instead of serializing
 the GPU state again. Replacing latest checkpoint never changes the retained best
 inode. On the next latest save this costs one additional retained state on disk.
 
+Since 2026-10-10 (owner) the best is the best AMONG THE FULL-STATE WRITES, in
+every trainer: evaluations and writes happen only at the stage's declared step
+points (`eval_every`; `checkpoint_every` a multiple of it, about every 3 h; the
+stage end is the last evaluation point and its gate), and a write whose point's
+evaluation is the best so far is published by hard link. A better evaluation at
+a point without a write is reported, not retained. So `verified_heads_handoff`
+and every exact continuation from `best-checkpoint.pt` continue from a state
+that was a real full-state write (weights, heads, optimizer, RNG, schedule) at
+a declared point; between writes the best can lag the best evaluation by up to
+one checkpoint interval. The stage end always writes, so a stage whose final
+point is its best evaluation hands that state on exactly.
+
 Selection prioritizes qualified weights, then minimizes the worst normalized
 held gate ratio across all strata. Easy prompt volume cannot overwhelm a weak
 response suffix. Baseline and emergency/final evaluations are eligible as well
@@ -792,7 +804,7 @@ converted recipes lives in `training/neuralese/recipes/HISTORY.md`.
 `text_warmup` and `trajectories` run on the same pieces; a new trainer uses them instead of copying idioms.
 
 - `train/loop.py`: `StopSignal` (SIGTERM/SIGINT set a flag, observed at the next step boundary), `TrainingLoop` (the step
-  iterator; ends `complete`, `signal` or a trainer's own reason), `Cadence` (every N steps and/or wall-clock minutes),
+  iterator; ends `complete`, `signal` or a trainer's own reason), `Cadence` (declared step points: every N steps) and `check_declared_points`,
   RNG capture/restore, `accumulate_gradients`, `commit_optimizer_step`. The other trainers (delta_e2e, projection_e2e,
   joint, causal_bootstrap, decision, maple/nested_train, the QAT conversion) migrate one at a time behind a golden run.
   Golden parity: `tests/neuralese/test_training_loop_golden.py` (a tiny text warm-up through a resume, bit-exact with

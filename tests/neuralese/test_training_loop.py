@@ -89,25 +89,15 @@ def test_a_loop_names_why_it_ended():
     assert loop.reason == 'signal'
 
 
-def test_cadences_match_the_inline_expressions_of_both_trainers():
-    clock = Clock()
-    # text warm-up: step % checkpoint_every == 0 or monotonic() - last_save >= 60 * minutes
-    cadence = Cadence(4, 10., clock=clock)
-    last = clock()
-    for step in range(1, 30):
-        clock.now += 90.
-        expected = step % 4 == 0 or clock() - last >= 60 * 10.
-        assert cadence.due(step) == expected
-        if expected:
-            cadence.mark()
-            last = clock()
+def test_cadences_are_declared_step_points():
+    cadence = Cadence(4)
+    assert [step for step in range(0, 30) if cadence.due(step)] == [4, 8, 12, 16, 20, 24, 28]
     # trajectories: (step + 1) % every == 0 or stop or last step
     cadence = Cadence(5)
     for completed in range(1, 21):
         for stop in (False, True):
             assert cadence.due(completed, force=stop or completed == 20) == (completed % 5 == 0 or stop or completed == 20)
-    assert not Cadence(0).due(7) and not Cadence(None, None).due(7)
-    assert Cadence(0, 0., clock=clock).due(1)  # zero minutes means every step, as the inline expression did
+    assert not Cadence(0).due(7) and not Cadence(None).due(7)
 
 
 def test_gradient_accumulation_matches_the_inline_idiom():

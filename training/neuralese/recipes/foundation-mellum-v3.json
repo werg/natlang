@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "token-preserving-foundation-mellum-v3",
+  "extends": "token-preserving-foundation-mellum-v2",
+  "description": "token-preserving-foundation-mellum-v2 without the cutoff 27 / 512 contexts overrides it inherits from token-preserving-foundation-mellum-v1: the shared foundation at full depth (owner decision 2026-10-06, out port at the top), as raw-recurrence-mellum-v6. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": {
+            "$delete": true
+          },
+          "contexts": {
+            "$delete": true
+          }
+        }
+      }
+    }
+  }
+}

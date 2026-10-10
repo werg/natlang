@@ -1,26 +1,31 @@
 """Shared checkpoint policy (plans/STORAGE_POLICY.md, training/storage-policy.json "checkpoint_cadence").
 
-One rolling resumable slot written on a wall-clock cadence (default 3 h, owner 2026-10-10: "checkpoint every few
-hours"; it only bounds crash loss) and when the process is asked to stop (SIGTERM: the full state, within the
-stop grace the memory ledger gives every unit), a weights-only
-"best" snapshot on eval improvement, and a weights-only final export alongside the
+Evaluations and full-state writes happen ONLY at declared step points (owner 2026-10-10): a stage declares
+``eval_every`` (about 10-20 evenly spaced points per stage, the last at the stage end, where the stage gate runs) and
+``checkpoint_every`` (a multiple of it, sized from the measured step time to about every 3 h). Step points are
+reproducible and comparable across runs, resumes and machines; nothing runs on a wall clock. The rolling resumable slot
+is written at the checkpoint points, at the stage end, and when the process is asked to stop (SIGTERM: the full state,
+within the stop grace the memory ledger gives every unit; no evaluation). "Best" is the best AMONG THOSE WRITES: when the
+evaluation of a write's point is the best so far, the written file is also published as ``best-checkpoint.pt`` by a hard
+link (no second write, never an extra write or evaluation for best).
+A weights-only final export may sit alongside the
 preserved resumable slot. The slot with its optimizer state is the continuation parent: a weights-only
 final never replaces or deletes it, and nothing deletes the only complete checkpoint before a pending
 replacement is durably in place. Writes are atomic and durable (pending, fsync, rename) through the one writer
 every trainer uses (trajectory_state.atomic_checkpoint). Insufficient disk space fails the save without
 deleting the previous checkpoint. Pruning is a separate, explicitly authorized operation.
-Cadence and signals are the training-loop skeleton's (train/loop.py).
+Points and signals are the training-loop skeleton's (train/loop.py).
 
-    policy = CheckpointPolicy(out, every_minutes=180).install_signal_handlers()
+    check_declared_points(steps, eval_every, checkpoint_every)
+    policy = CheckpointPolicy(out, every_steps=checkpoint_every).install_signal_handlers()
+    evals = Cadence(eval_every)
     for step in ...:
         ...
-        if policy.due():
-            policy.save({"step": step, "weights": ..., "optimizer": ...})
+        metric = evaluate() if evals.due(step) else None
+        if policy.due(step, end=step == steps):
+            policy.save({"step": step, "weights": ..., "optimizer": ...}, metric=metric)
             if policy.signaled:
                 break
-        if improved:
-            policy.save_best({"step": step, "weights": ...}, metric=held_ce)
-    policy.finalize({"step": step, "weights": ...}, resumable_state=latest_full_state)
 """
 from __future__ import annotations
 
@@ -38,20 +43,33 @@ from .loop import Cadence, StopSignal
 from .trajectory_state import atomic_checkpoint
 
 
+def publish_best(slot: Path, best: Path, receipt: dict | None = None) -> None:
+    """``best`` becomes the same file as ``slot`` (a hard link: no copy). A later atomic replacement of the slot leaves
+    the linked inode, so the best survives the next rolling write. The receipt (if any) is written last."""
+    pending = best.with_name(best.name + '.pending-link')
+    pending.unlink(missing_ok=True)
+    os.link(slot, pending)
+    pending.replace(best)
+    if receipt is not None:
+        manifest = best.with_suffix('.json')
+        temp = manifest.with_name(manifest.name + '.pending')
+        temp.write_text(json.dumps(receipt, indent=2) + '\n')
+        temp.replace(manifest)
+
+
 class CheckpointPolicy:
-    def __init__(self, out_dir, *, every_minutes: float = 180.0, name: str = "checkpoint.pt",
-                 best_name: str = "best-weights.pt", final_name: str = "final-weights.pt",
-                 free_factor: float = 1.2, clock=time.monotonic):
+    def __init__(self, out_dir, *, every_steps: int = 0, name: str = "checkpoint.pt",
+                 best_name: str = "best-checkpoint.pt", final_name: str = "final-weights.pt",
+                 free_factor: float = 1.2):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
-        self.cadence = Cadence(every_minutes=every_minutes, clock=clock)
+        self.cadence = Cadence(every_steps)
         self.stop = StopSignal()
         self.slot, self.best_path, self.final_path = self.out / name, self.out / best_name, self.out / final_name
         if len({name, best_name, final_name}) != 3:
             raise ValueError('the rolling slot, best and final snapshots need distinct file names: a weights-only '
                              'file must never share the optimizer-bearing continuation slot')
         self.free_factor = free_factor
-        self.clock = clock
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -61,7 +79,7 @@ class CheckpointPolicy:
             except ValueError:
                 pass
 
-    # Cadence ----------------------------------------------------------------------------------------------------
+    # Points -----------------------------------------------------------------------------------------------------
     def install_signal_handlers(self, signals=(signal.SIGTERM, signal.SIGINT, signal.SIGUSR1)):
         """Ask for a checkpoint at the next ``due()`` check instead of dying mid-step."""
         self.stop.install(signals)
@@ -71,8 +89,9 @@ class CheckpointPolicy:
     def signaled(self) -> bool:
         return self.stop.requested
 
-    def due(self) -> bool:
-        return self.stop.requested or self.cadence.due(0)
+    def due(self, step: int, *, end: bool = False) -> bool:
+        """A declared checkpoint point, the stage end, or a stop request."""
+        return self.stop.requested or self.cadence.due(step, force=end)
 
     # Writes -----------------------------------------------------------------------------------------------------
     def _write(self, state: dict, target: Path) -> dict:
@@ -87,21 +106,20 @@ class CheckpointPolicy:
         self.events.append(event)
         return event
 
-    def save(self, state: dict) -> dict:
-        """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes)."""
+    def save(self, state: dict, *, metric: float | None = None, higher_is_better: bool = False) -> dict:
+        """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes). With
+        ``metric`` (the evaluation of this write's step point) better than every earlier write's, the same file is
+        also published as the best (``publish_best``); a stop write passes no metric."""
         event = self._write(state, self.slot)
-        self.cadence.mark()
+        better = metric is not None and (self.best_metric is None or (
+            metric > self.best_metric if higher_is_better else metric < self.best_metric))
+        if better:
+            publish_best(self.slot, self.best_path, {"step": state.get("step"), "metric": metric,
+                                                     "file": self.slot.name})
+            self.best_metric = metric
+            (self.out / "checkpoint-policy.json").write_text(json.dumps({"best_metric": metric}) + "\n")
+            event = dict(event, best=True)
         return event
-
-    def save_best(self, weights_state: dict, metric: float, higher_is_better: bool = False) -> bool:
-        """A weights-only snapshot when ``metric`` improves on the best so far. Returns whether it was written."""
-        better = self.best_metric is None or (metric > self.best_metric if higher_is_better else metric < self.best_metric)
-        if not better:
-            return False
-        self._write(dict(weights_state, metric=metric), self.best_path)
-        self.best_metric = metric
-        (self.out / "checkpoint-policy.json").write_text(json.dumps({"best_metric": metric}) + "\n")
-        return True
 
     def finalize(self, weights_state: dict | None = None, *, resumable_state: dict | None = None,
                  drop_resumable: bool = False) -> dict:

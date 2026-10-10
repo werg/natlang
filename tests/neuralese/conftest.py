@@ -6,6 +6,8 @@ import pytest
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# Trainer tests never append to the machine's checkpoint-write log the memory guard reads.
+os.environ.setdefault("NATLANG_CHECKPOINT_WRITES", os.path.join(os.environ.get("TMPDIR", "/tmp"), "natlang-test-checkpoint-writes.jsonl"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
 
 torch = pytest.importorskip("torch")

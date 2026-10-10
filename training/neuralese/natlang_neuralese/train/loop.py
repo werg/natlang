@@ -7,15 +7,18 @@ is built, what the loss is, what is logged and what a checkpoint holds.
 
     stop = StopSignal().install()
     loop = TrainingLoop(start_step, total_steps, stop)
-    evaluation, checkpoints = Cadence(eval_every), Cadence(checkpoint_every, minutes)
+    check_declared_points(total_steps, eval_every, checkpoint_every)
+    evaluation, checkpoints = Cadence(eval_every), Cadence(checkpoint_every)   # declared step points only
     for step in loop:
         ... build the batch, forward, backward (accumulate_gradients for partial graphs) ...
         clip_finite_gradients(parameters)
         commit_optimizer_step(optimizer, on_failure=drop_partial_state)
-        if evaluation.due(step + 1): ...
-        if checkpoints.due(step + 1, force=stop.requested or step + 1 == total_steps): save(); checkpoints.mark()
+        if evaluation.due(step + 1): metric = evaluate()        # the last point is the stage end: its gate
+        if checkpoints.due(step + 1, force=step + 1 == total_steps):
+            save(metric)   # full state; publish_best links it when this point's evaluation is the best
         if qualified: loop.finish('qualified')
-    # loop.reason is 'complete', 'signal' or the reason given to finish()
+    # loop.reason is 'complete', 'signal' or the reason given to finish(); on 'signal' the trainer saves without an
+    # evaluation
 
 Signals only set a flag: the loop ends at the next step boundary and the trainer checkpoints there. This module imports
 no model code, so every trainer and its tests can use it.
@@ -24,7 +27,6 @@ from __future__ import annotations
 
 import random
 import signal
-import time
 
 import torch
 
@@ -56,27 +58,28 @@ class StopSignal:
 
 
 class Cadence:
-    """When something recurs: every N completed steps, and/or after a wall-clock interval since the last ``mark``.
+    """Declared step points: every ``every_steps`` completed steps (falsy: none). Evaluations and full-state writes
+    happen only at such points (owner 2026-10-10), so they are reproducible and comparable across runs, resumes and
+    machines; a wall clock would depend on machine speed and contention."""
 
-    ``every_steps`` falsy disables the step trigger; ``every_minutes`` None disables the time trigger (0 is "always").
-    """
-
-    def __init__(self, every_steps=0, every_minutes=None, *, clock=time.monotonic):
+    def __init__(self, every_steps=0):
         self.every_steps = int(every_steps or 0)
-        self.every_minutes = every_minutes
-        self.clock = clock
-        self.last = clock()
-
-    def mark(self):
-        """The thing just happened: restart the wall-clock window."""
-        self.last = self.clock()
 
     def due(self, completed_steps, *, force=False):
-        if force:
-            return True
-        if self.every_steps and completed_steps % self.every_steps == 0:
-            return True
-        return self.every_minutes is not None and self.clock() - self.last >= 60 * self.every_minutes
+        return force or bool(self.every_steps and completed_steps > 0 and completed_steps % self.every_steps == 0)
+
+
+def check_declared_points(total_steps, eval_every, checkpoint_every):
+    """Every full-state write is an evaluation point (its evaluation selects the best), and the stage end is the last
+    evaluation point (the stage's gate; ``total_steps`` None: the trainer evaluates its end anyway). Refuses
+    declarations that break either."""
+    eval_every, checkpoint_every = int(eval_every or 0), int(checkpoint_every or 0)
+    if eval_every and total_steps is not None and total_steps % eval_every:
+        raise ValueError(f'steps {total_steps} is not a multiple of eval_every {eval_every}: declare evaluation '
+                         'points so that the last one falls at the stage end, where the stage gate runs')
+    if eval_every and checkpoint_every and checkpoint_every % eval_every:
+        raise ValueError(f'checkpoint_every {checkpoint_every} is not a multiple of eval_every {eval_every}: '
+                         'declare checkpoint points at evaluation points so that best selection uses that evaluation')
 
 
 class TrainingLoop:
