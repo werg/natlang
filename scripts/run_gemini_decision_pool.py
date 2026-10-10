@@ -19,7 +19,9 @@ import time
 from label_decision_cases import _http_teacher
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
-from natlang_neuralese.common.jsonio import write_json_durable as write_json  # noqa: E402
+from natlang_neuralese.common import jsonio  # noqa: E402
+
+write_json = jsonio.write_json_durable
 
 ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
 
@@ -72,7 +74,8 @@ def main():
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
                 'adapter_sha256': hashlib.sha256(Path(__file__).with_name('label_decision_cases.py').read_bytes()).hexdigest(),
-                'scheduler_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+                'scheduler_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                'persistence_sha256': hashlib.sha256(Path(jsonio.__file__).read_bytes()).hexdigest()}
     manifest = Path(str(out_path) + '.manifest.json')
     if manifest.exists() and json.loads(manifest.read_text()) != identity:
         p.error('output provenance changed; select a new output')

@@ -21784,7 +21784,45 @@
       "training_admission": false,
       "admission": "generation inputs only; repair outputs still require schema/sourcequality review",
       "independent_new_worlds": 0,
-      "notes": "Exact178failedV4inputs, sourceannotations/splits unchanged, newprompt clarifiesexclusiveprobabilitymass and noallzero. Samefree4quota-group scheduler/soleprojectlock behindV5, no extra immediate calls or paidfallback. Originalinvalidresponses preserved separately."
+      "notes": "Exact178failedV4inputs, sourceannotations/splits unchanged, newprompt clarifiesexclusiveprobabilitymass and noallzero. Samefree4quota-group scheduler/soleprojectlock behindV5, no extra immediate calls or paidfallback. Originalinvalidresponses preserved separately. Closed startup importfailure before any requests; replaced by separatelypinned V7 frozenlayout, see startupcloseout."
+    },
+    {
+      "id": "free-provider-google-mass-repair-startup-failure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+      "include": [
+        "worker.log",
+        "startup-failure-closeout-v1.json"
+      ],
+      "split": "not-applicable",
+      "source_class": "closed-provider-launch-failure-evidence",
+      "training_admission": false,
+      "admission": "startup failure, no API request or training sample",
+      "independent_new_worlds": 0,
+      "notes": "Shared persistence import missing from flatfrozenlayout. Originalreceipt/snapshot untouched; correctedV7 preserves package layout through sharedfreezehelper."
+    },
+    {
+      "id": "free-provider-google-v4-mass-repair-v7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+      "training_admission": false,
+      "admission": "generation inputs only; regeneratedlabels pending schema/sourcequalityreview",
+      "independent_new_worlds": 0,
+      "notes": "Exact178invalidV4inputs; sharedprompt/strictmassvalidation. Sharedfreezehelper preserves scheduler/sharedJSONwriter relativepackage layout; no sourcepathhardcoding. Confirmedsoleprojectlockwait, V5untouched; no paidfallback."
     }
   ],
   "coverage_backlog": [
