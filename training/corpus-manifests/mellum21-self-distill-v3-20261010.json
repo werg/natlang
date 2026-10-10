@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "mellum21-self-distill-v3-20261010",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/mellum21-self-distill-v3-20261010",
+  "files": [
+    {
+      "path": "probe.jsonl",
+      "bytes": 151920,
+      "sha256": "0fbd7d42863fddaf8faf751507e9628aa756610a33fc0bf4f7ca35d20c547cd4",
+      "lines": 24
+    },
+    {
+      "path": "prompts.jsonl",
+      "bytes": 60010511,
+      "sha256": "b29fbcd5ecfede3ddbfca379c7a6a7bc42db70fe8f6a942b311ac2fd06c85bf5",
+      "lines": 6742
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1747,
+      "sha256": "e88c065a86a930a259bf64ddbb422fcef03fd5d6ba126922d387a4a0d50eea30"
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 82295670,
+      "sha256": "c681bc425a513956804354d8498a8aad0313d234a860d92cc11dbf7ab32662b0",
+      "lines": 6536
+    }
+  ],
+  "bytes": 142459848
+}
