@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-poolv3-source-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/source-license-evidence-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 15298,
+      "sha256": "be46df24f892b43cf201903296053e4685e55c189d206f91e25b31482e8621a1"
+    },
+    {
+      "path": "review.md",
+      "bytes": 6025,
+      "sha256": "00703e12e8a784c55e311e1c578287741603be56c836c42620466fb5595ad955"
+    }
+  ],
+  "bytes": 21323
+}

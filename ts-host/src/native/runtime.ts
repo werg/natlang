@@ -32,6 +32,7 @@ import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtim
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
+import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -549,7 +550,7 @@ export class NativeRuntime {
     if(this.seedPolicy.mode==='derived'){this.seedPolicy={...this.seedPolicy,root:this.seedPolicy.root??0};if(!Number.isSafeInteger(this.seedPolicy.root))throw new RangeError('seed root must be a safe integer');}
     if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
       throw new TypeError('derived seed policy requires an integer root');
-    this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'scope-eval-v2',
+    this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: NATIVE_TOOL_SCHEMA,
       ...(options.sourceRevision ? { source_revision: options.sourceRevision } : {}),
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
@@ -1003,7 +1004,7 @@ export class NativeSession {
   refinementCheck?: (value: Value, type: Type, path: string) => Promise<{ code: string; message: string } | undefined>;
   actions = 0;
   toolCalls = 0;
-  readonly surfaceName = 'scope-eval-v2';
+  readonly surfaceName = NATIVE_TOOL_SCHEMA;
   failureSerial = 0;
   failureDebug?: ScopeFailureDebug;
   private readonly scopeLocalMutability = new Map<string, boolean>();

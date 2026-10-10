@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-quality-review-v18-and-trace-correction-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "quality-review-v18/review.json",
+      "bytes": 9700,
+      "sha256": "11aeaf5adcb241f56fda61c4f25806dc1aa8315ec7051f7592eeb001e68c5cc9"
+    },
+    {
+      "path": "quality-review-v18/review.md",
+      "bytes": 3227,
+      "sha256": "56952bb4630f5eb3b7e8562d6f4d4804b5155d4b1bafe41c020f35e86f3c970d"
+    },
+    {
+      "path": "quality-review-v18-trace-correction-v1/correction.json",
+      "bytes": 3181,
+      "sha256": "f7242f62e5b16ae566bdf7f49a6745f0866432e690cfcea3df6bc7c87aeffb5e"
+    },
+    {
+      "path": "quality-review-v18-trace-correction-v1/correction.md",
+      "bytes": 1585,
+      "sha256": "301b09fcd3a0baa0499d7ea93b6d071b6869e9ee15faa69a89aa77c456edc18b"
+    }
+  ],
+  "bytes": 17693
+}

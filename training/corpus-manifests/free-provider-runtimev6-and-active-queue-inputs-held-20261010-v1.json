@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-runtimev6-and-active-queue-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/cases.jsonl",
+      "bytes": 637883,
+      "sha256": "d2739c560cde9b87e06433cdf06a2ec103d577871b5cff277a4289c7a80a5376",
+      "lines": 1024
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 25872,
+      "sha256": "f31de7ae93ffc0abc6373b8393ec69cad49c0bbf4543ea75326a54f5ea775a65"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9403,
+      "sha256": "23e0d7c577144b4d3ad88ed2c33bd189e7e42f139c921b1cbd110eb0bacb73c3"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/launch-receipt-v1.json",
+      "bytes": 971,
+      "sha256": "e5f963c0b5b9992e4091ed4c12b008ebad74093d1023bc291b6fa940aa640178"
+    },
+    {
+      "path": "provider-google-model-pool-mixed-decisions-v4/source-manifest.json",
+      "bytes": 1132,
+      "sha256": "04f298e3374b899c6ba00fccb51f873a12bcd76d2518c10250b052f78bbf8e51"
+    },
+    {
+      "path": "runtime-small-teachers-v6/frozen-runtime.json",
+      "bytes": 185731,
+      "sha256": "f1a7e548e40529eaaff7f54190f741c63660e293ac99029549421f44b01b4c9d"
+    },
+    {
+      "path": "runtime-small-teachers-v6-freeze.log",
+      "bytes": 97,
+      "sha256": "cf0867e944e40ab7ddb7fb20ebba7f40acaaed65db327391a4ae7c0dc9737d07"
+    }
+  ],
+  "bytes": 863895
+}

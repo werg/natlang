@@ -21307,6 +21307,163 @@
       "admission": "held for native admission and teacher trace review",
       "independent_new_worlds": 0,
       "notes": "RES-832 passed six scoped checks with COHORT-C4-A34 /240/include. 20 turns,12382tokens. Exact V15 review pins source/runtime/output/trace. Old index2 storage pause remains preserved; fresh runtimev6 retry separate."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v6",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-decision-labels-google-poolv3-v2-replay72",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "held-authored-static-reference",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "All72 scripted replays accepted;1198 held native turns;527 labels. No learned/runtime qualification. Group lineage preserved; no test rows in source, future split by source groups. Source placeholders unresolved. V17 case-count wording corrected in separate source-license-evidence-v1."
+    },
+    {
+      "id": "free-provider-static-google-poolv3-quality-review-v17-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v17",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "read-only-quality-review",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Full replay and source-group review; original immutable V17 license count is per reducer case, not source-label row; correction in separate source receipt."
+    },
+    {
+      "id": "free-provider-google-poolv3-source-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/source-license-evidence-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "read-only-source-provenance",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Corrected row count276 placeholder labels; original upstream revisions unrecorded. Current HEADs are comparison references, not historical inputs. No source metadata or admission changed."
+    },
+    {
+      "id": "free-provider-zai45-sourcev5-research-index2-runtimev6-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev5-research-index2-runtimev6-v1",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "case-002/**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-native-trajectory",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Runtimev6 retry after original storage pause;28turns21975tokens completed exact result export. Gold and trace review pending; inherited authored train world, zero independent-world credit."
+    },
+    {
+      "id": "luna-v28-counterfactual-five-reviewed-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-counterfactual-next-five-v26-v24-v25-20261009-v1/source-v3",
+      "include": [
+        "source.cases.jsonl",
+        "source-proof.json",
+        "source-manifest.json",
+        "root-generation-source-review-v1.json",
+        "generation-script.snapshot.mjs"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-data-derived-semantic-iterate-worlds",
+      "training_admission": false,
+      "admission": "source-approved-for-sampled-generation-only; source-v1/v2 excluded; results require independent gold/capture/admission review",
+      "independent_new_worlds": 0,
+      "notes": "Five exact counterfactual worlds from existing V26/V24/V25 train groups. Four iterative lambda children and captured semantic notes. Root review independently checked20evidence files; task input has no gold decision. The vendor convenience symlink is excluded; this snapshot covers embedded case/source/proof bytes, not the entire dataset cache."
+    },
+    {
+      "id": "free-provider-runtimev6-and-active-queue-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "runtime-small-teachers-v6/frozen-runtime.json",
+        "runtime-small-teachers-v6-freeze.log",
+        "provider-google-model-pool-mixed-decisions-v4/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v4/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v4/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/*.py",
+        "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "frozen-generation-inputs-and-runtime-manifest",
+      "training_admission": false,
+      "admission": "generation inputs and provenance only; evolving labels/journals/results excluded from this immutable snapshot",
+      "independent_new_worlds": 0,
+      "notes": "V4 Google further1024disjoint train rows; exact V28 ZAI queue seeds/gates/budgets; runtimev6 isolated compiled manifest includes globstar zero-directory fix. Sync of manifest is not an executable Node deployment or data admission. ZAI queue is rooted at a directory alias and is intentionally published as a separate snapshot; parent traversal does not follow nested directory symlinks."
+    },
+    {
+      "id": "free-provider-zai45-sourcev28-five-runtimev6-queue-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+      "include": [
+        "queue.jsonl",
+        "launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "frozen-reviewed-generation-queue",
+      "training_admission": false,
+      "admission": "generation-only; evolving journal/results excluded",
+      "independent_new_worlds": 0,
+      "notes": "Root alias resolves to /srv output volume. Exact approved V28 train source and runtimev6 hashes pinned in launch. One case/request at a time. Separate snapshot avoids parent traversal omission of nested directory aliases."
+    },
+    {
+      "id": "free-provider-quality-review-v18-and-trace-correction-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "quality-review-v18/**",
+        "quality-review-v18-trace-correction-v1/**"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "actual-rejection-review-and-canonical-trace-proof",
+      "training_admission": false,
+      "admission": "diagnostic evidence only; no generated trajectory admission",
+      "independent_new_worlds": 0,
+      "notes": "ZAI research index2 actually lost raw evidence in pass4 by returning final decision JSON; final parser defaulted to no_action. Runtime capture was intact. Apparent trace hash mismatch is false: canonical root-only events match recorded hash; raw sidecar includes child events. Correction supplement supersedes only that diagnostic claim, old review bytes retained. Native tool schema metadata fixed centrally for future runtime, not rewritten."
+    },
+    {
+      "id": "luna-ar-native-harness-29466-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-8805-final28793-20261010-v1/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "closed-full-optimizer-checkpoint-and-failed-channel-evidence",
+      "training_admission": false,
+      "admission": "unqualified model lineage; archive/restore state only",
+      "independent_new_worlds": 0,
+      "notes": "Stopped at29466 by SIGTERM with complete model/optimizer/RNG checkpoint. Immutable closed source for new matching-history-reference continuation; no inherited qualification. Best and current checkpoint retained with reports. Alias roots exact closed /srv output; storage transfer preserves bytes before inactive best checkpoint offload."
+    },
+    {
+      "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "inactive-complete-optimizer-state",
+      "training_admission": false,
+      "admission": "archival/restore evidence only; no channel qualification inherited",
+      "independent_new_worlds": 0,
+      "notes": "Inactive prefix AR experiment complete full state retained by exact manifests. Pop active29466 matching-history lineage references other immutable source checkpoint/heads; these inactive large files are eligible for verified offload to canonical DGX artifact storage."
     }
   ],
   "coverage_backlog": [

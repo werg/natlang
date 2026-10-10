@@ -1,0 +1,691 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1/closed-output-v1",
+  "files": [
+    {
+      "path": "direct-stage-launch-intent-v1.json",
+      "bytes": 5729,
+      "sha256": "b24fa1dba2dcf9bdd9e25596a4f9aff02a345b0705e6ee4791e7973f3eda4501"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/baseline.json",
+      "bytes": 154376,
+      "sha256": "0dfc784b8404def914fea31374142db5064f9651f055dca8f1b7050ded4ad2cd"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/best-checkpoint.json",
+      "bytes": 162273,
+      "sha256": "cfc6049910f38aa8967fe31db1af01ef6cd0fa5819306f6ecf5938f340f008c0"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/best-checkpoint.pt",
+      "bytes": 1220852298,
+      "sha256": "213bbe75ec0381f2e5e515b029a233ca4e088e1fabe7816e74d8866d63b36f0c"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/best-heads.pt",
+      "bytes": 628876245,
+      "sha256": "26e261829f3332ff31bd7b32217a21fa83d61e8c4908644cf1e7ddbbab74f885"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/checkpoint.pt",
+      "bytes": 1225611141,
+      "sha256": "5e531f8266b16ed9a0280a1b8730f689bcf2f5f41461a1dd4bd7feb1d963240e"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/eval.jsonl",
+      "bytes": 3729135,
+      "sha256": "d0805986e26b72d5e9527e60948a03e04ee65cb5ead411c2791423ecd968f00b",
+      "lines": 33
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/heads-export-status.json",
+      "bytes": 253,
+      "sha256": "e5517cfc0b5e856af82b8acada9d8e90129a39d2897e4170ec6023b9286e1e4e"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/heads.pt",
+      "bytes": 628876501,
+      "sha256": "44ad2c5934a4c97a482df23d3721704cd1d1443b0ef4a64f2ce6c7189a5d38c5"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/plan.json",
+      "bytes": 117902,
+      "sha256": "b112fa7b57367a5445cbc0ebfffdeb2076c807d2ae3a297b8c931ca06b4dcdb9"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/report.json",
+      "bytes": 154678,
+      "sha256": "2bf164a613f896a54f720105308a5b106f1b326226244e3487e6879a772ef8f2"
+    },
+    {
+      "path": "direct-stage-run/autoregressive_text_fixup/train.jsonl",
+      "bytes": 35229676,
+      "sha256": "657b8b94601fcaed47933c2b3c9b813f6945fe33067bee37fe6d964ede07d65e",
+      "lines": 4096
+    },
+    {
+      "path": "direct-stage-run/direct-stage-plan.json",
+      "bytes": 29860,
+      "sha256": "006e281496dd0cdf7f6c4c176192de80c03d18ff697bd54a7494ed2010d1c898"
+    },
+    {
+      "path": "direct-stage-run/direct-stage-result.json",
+      "bytes": 164692,
+      "sha256": "9a056bb62e93a7f9354341cbffe1936f807e03a7d86979353818656476a3764e"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/common/hashing.py",
+      "bytes": 1057,
+      "sha256": "0b4541633abc0de15b6533f55b12050ce86705a2a350c92f606b7f2b293e14f7"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/common/jsonio.py",
+      "bytes": 814,
+      "sha256": "0992838965f53cd6598cd2f1ba04b13428725a15ef6d42a5379a732d5413297c"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/common/paths.py",
+      "bytes": 1797,
+      "sha256": "053fecadec6ce45236f8143fc659dce336f36dc57261ba092a19865157fed464"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/__init__.py",
+      "bytes": 324,
+      "sha256": "3f82efa809e3aded4938fe22e4019c206fce8f92d5dd25b6b11fd5b2eff81aa4"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/context_refs.py",
+      "bytes": 1867,
+      "sha256": "654d29a39f3224b1eb7c240b21aeadbe7edd8062302d0f53b52634ef74ec7cc3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/fixtures.py",
+      "bytes": 4024,
+      "sha256": "025f120373164e91ca10adac2ef09356429eef3c168320a91efe21e01fa7684b"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/records.py",
+      "bytes": 5373,
+      "sha256": "d019f2c29cc01bf49b3dd7bfc6cbff5799d83334ba600b5dd1c50e99f141b190"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/render.py",
+      "bytes": 9273,
+      "sha256": "f8424cc6f03f25b2c635032fc9624c799d44dd96449fe1aba16275580520be78"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/shortcuts.py",
+      "bytes": 4039,
+      "sha256": "739e0cd49695b1d6a2369757d903d0f4593961ad25deec0d7cd13ca6e9967766"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/stream.py",
+      "bytes": 10895,
+      "sha256": "bdbeec01055a2a77a4bb77ebba257cd98b5be57f6c9eb7162980ff8f2597d4f3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/data/text_corpus.py",
+      "bytes": 89690,
+      "sha256": "249835c69a4f9028862e682ed95f47c2af7e6aa1bd08a00144c506b2dcb67cb6"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/devices.py",
+      "bytes": 1127,
+      "sha256": "70e5c6d324168c9a1ede345e07762adde8ecace3b2f2a6c10d766985ad0ca4aa"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/digest.py",
+      "bytes": 5173,
+      "sha256": "99eadacf6a48f8e7536b5398968e79c7e78ae6fff73c53fca1362ac21a080bd7"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/__init__.py",
+      "bytes": 240,
+      "sha256": "f81525b180f7b751e1391357e6ae351634d801d0291d61eab62e907bb5aaa051"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/bench.py",
+      "bytes": 4504,
+      "sha256": "7bad3c806ac24c3c03ffb6951a0901aec551e837489bbc7514cd687228c9ae2b"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/cache_diagnostics.py",
+      "bytes": 5672,
+      "sha256": "11c070e1b78ddd3235d4ee936726c918cf05aaa73115c1f8f1eecc892b6c314b"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/ffn_dispatch.py",
+      "bytes": 5271,
+      "sha256": "ce861bf97ee1a705f162b1a35ca8e9d37c03bbe0359b27eb3957644aceed3027"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/foundation.py",
+      "bytes": 6943,
+      "sha256": "7b3e159cd02f1ed58a937c4478baab29915ec6afc1b4dbd8f0f930978ceeaab2"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/harness.py",
+      "bytes": 15707,
+      "sha256": "c0d3e742b9f4180aab03e0c2109b6de390f3c8b7e6224e8fd3e41a21a6718749"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/inference.py",
+      "bytes": 1339,
+      "sha256": "44ed81c9a861861c273695abbf1d7ec37240deaed7e81c1729b430553e0c597f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/latent_sketch.py",
+      "bytes": 16291,
+      "sha256": "d722e17a40c328c92ebddd2caa781d1576857bca711c717140c6c21073fa42f3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/local_stage.py",
+      "bytes": 6873,
+      "sha256": "9f7ffc3984e7866b892349ada10041bc15d932937d41bd508ab5b91843bb09d6"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/mtp_draft_probe.py",
+      "bytes": 14566,
+      "sha256": "a0aa74f91fae8b4a73afbfa24214e7be519fcca4d79856f7f29a15148bd711c0"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/projected_history.py",
+      "bytes": 25913,
+      "sha256": "535f1759446477efa54b8d7ce5c8e5d92fb743ee1f128b3e701a838f4a88be7a"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/raw_port_handoff.py",
+      "bytes": 10761,
+      "sha256": "fe8d45f1a1ca1fd0d166889a5cd90b012378394d4585ff18c9c4c3d7d394905b"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/raw_writer_trace.py",
+      "bytes": 1427,
+      "sha256": "2391c2b2164003f804a1666ee34e6952b3d9feb82c1171cc5d877d8dde8fb947"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/recurrence_autoregressive_history.py",
+      "bytes": 31439,
+      "sha256": "dc57f1fb02318a8e5283ded261f206ec26a37d1ec8cf81940e13b357d68ede90"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/recurrence_runtime.py",
+      "bytes": 2403,
+      "sha256": "215e747ccfda6d84605040f1f4e0bbd7b8a8709c016aa027fe7e8431d91e0054"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/residual_transition.py",
+      "bytes": 2239,
+      "sha256": "3a7cefa5387a042197cf202fdab57038fbc854558992cc2b445d13b1cee50359"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/scheduler_throughput.py",
+      "bytes": 4182,
+      "sha256": "92daf87f4ee4311de2c136cb2621290ebb172c0a999cad9300383348fa3cc064"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/sketch_cutoff_probe.py",
+      "bytes": 7582,
+      "sha256": "3a252c15a45a4e80fe522c96ad5f36e8d6aad510fe74f624dfde44cf6f15fd09"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/stopping_diagnostics.py",
+      "bytes": 3033,
+      "sha256": "76a0ce9aacb6dc641cd3d011e0d0624929c16445f72c8053ed12a1d31fc17a37"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/text_warmup_runtime.py",
+      "bytes": 1065,
+      "sha256": "ff2859a49c20054b3e9f13e846da139a9525e16312ede8472cee0e747eeae19d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/eval/trajectory_execution.py",
+      "bytes": 16637,
+      "sha256": "afab30e8cfb68864e9512b3f18f85c3524d1ccbb0cb99ab8bdacd347d0096894"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/export/__init__.py",
+      "bytes": 257,
+      "sha256": "538548d5d45ff9bda71b77a5463c0b0081f304799ba05f69e4e379c2baed9eb5"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/export/__main__.py",
+      "bytes": 11259,
+      "sha256": "1f83aed997e0fe5de3fc126f54da947fd6e408e13e64578c98484f71a9e3a2fb"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/export/adapters.py",
+      "bytes": 4839,
+      "sha256": "aa2339586fa46ef8d0b3586c2e0ede061f23e9e6b36b5e36ad89aa2089ab40af"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/export/gguf.py",
+      "bytes": 10421,
+      "sha256": "3b24512db9513b1420af7f0617e61333ce708c953a023385b740eda94a3955f4"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/harness_bench/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/harness_bench/openhands.py",
+      "bytes": 10944,
+      "sha256": "bc709f5d79f042be67515e8d090a2e67e899855e660ebe05f8e6c4beae974f6a"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/laws.py",
+      "bytes": 2377,
+      "sha256": "a854787db4d495a8a213809b36da71d8d6bf36928cc42abbfa5d4bd48c8369e2"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/export_member.py",
+      "bytes": 8328,
+      "sha256": "7a655a250c7854cc3024b99eb410da1349ac897bd2d7b611eee1eac68530e152"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/family.py",
+      "bytes": 4492,
+      "sha256": "2fd302ea00628e819f0a380e65d49598eae6439f1bad268b2737bae53ce23d86"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/foundation_heads.py",
+      "bytes": 2724,
+      "sha256": "8664ce4abf24ad649bc89082ecf6504a184b30923693cf8eba47762b5d6aa52d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/fused_moe.py",
+      "bytes": 18593,
+      "sha256": "5900f6c9f0036f52508948f5adc18139a2590229130ba05bf5a1acdfccf9d053"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/gate_diagnostic.py",
+      "bytes": 3787,
+      "sha256": "32797732070f47b2cf01e07c60bdc6ad4e5fc3db4e51b9eae15e7edf0e6e79b3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/maple_port.py",
+      "bytes": 1531,
+      "sha256": "0c703d39ccf53124f36f8e8a97cfe72a068eaac2f7071c0406c39217f46160ca"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/model.py",
+      "bytes": 32545,
+      "sha256": "598d4ba99de4766ff2817f20c1d020e6eeadb8da1f0297a0d50648fd74fa7abc"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/nested_train.py",
+      "bytes": 17300,
+      "sha256": "5bc151d5f4c2012453043bae44083f608ecae020c51acd15661300d56c152d6c"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/qat_convert.py",
+      "bytes": 11694,
+      "sha256": "28933da9ddbae1d18287aa685b461f012021a95f06ff5c6b01f93c49032ac794"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/routing.py",
+      "bytes": 6505,
+      "sha256": "5c2db4a03c8947d86a887b5c16b7e15f2d27da98e43364435fd2c0c7a66ad10a"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/student.py",
+      "bytes": 3092,
+      "sha256": "ab68cac44eccbce14594e8fcd5f89c20892b5285c37e53dff65ccc3c63e0bacf"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/maple/ternary.py",
+      "bytes": 20496,
+      "sha256": "3f5f52ca1c5d2b99f3a99f57dc54f5d42c1dde85729b90ef44588a953cbab5ca"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/__init__.py",
+      "bytes": 435,
+      "sha256": "4c75aa4c3a490969f9db9aec7f3ce82bb01dac99000a981f5d889126785b22a0"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/capacity.py",
+      "bytes": 2261,
+      "sha256": "acc56b11b70216627f84ca866dbbfe22997d720ce0f75a72a7ba4630fc817472"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/causal_feedback.py",
+      "bytes": 7044,
+      "sha256": "f6ee121957ac075d0722f1970f153ecbb9d34bd5b1418fe175c49c3fef7efdc0"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/dialect.py",
+      "bytes": 1769,
+      "sha256": "57561646624b75cfa0a0d226b4ba3b24ab212014d364d8a7f65c908cf6785186"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/heads.py",
+      "bytes": 22944,
+      "sha256": "5717f620e8f11d081d73b2703b59ab1674e2d026236ef404d2e3f5aecba64a8f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/hf_port.py",
+      "bytes": 14640,
+      "sha256": "fd068709dcad85549f18c18bbf272959ba6754a83f32e37ec00ad279342a4d3e"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/input_map.py",
+      "bytes": 1674,
+      "sha256": "bcb140edfdec87b86a47159981f251798775da132e6a24c3bdec8b15a4d4515d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/isolated_sequence.py",
+      "bytes": 10891,
+      "sha256": "7ceb6f85ca8b65d9023d999364d89c9151d2ab9daf6e81cce71ff95b7a7fb020"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/lfm2_port.py",
+      "bytes": 34184,
+      "sha256": "149aae5e139ce2c241e813a9a055c071585239946c6026f7ab1245a33dc03c57"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/projections.py",
+      "bytes": 5842,
+      "sha256": "7a2fb00067f717ddaafda36c5a016cc39e857e81c9b9e44aa04ec47a59432486"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/model/tiny_adapters.py",
+      "bytes": 14535,
+      "sha256": "dd1275937320126a2def53144eb8e7726d6a51f7b5c4474031c6056fbb52a052"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/nz.py",
+      "bytes": 1349,
+      "sha256": "da611cd1db596b1041ff1e4ab64379cc042f92802a94204b493da78762bb9ff6"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/prompt_bank.py",
+      "bytes": 5405,
+      "sha256": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/read.py",
+      "bytes": 4539,
+      "sha256": "45e3128aba58dc7eca8a26b7fe72397316df055bf508e0f168145a0971eb039f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/__init__.py",
+      "bytes": 7136,
+      "sha256": "7ab3d1048c33e4a1f6bb1c207c46b74bedba498089e2ab3f1030de9edc4e9794"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/__main__.py",
+      "bytes": 5387,
+      "sha256": "c829ba7d8e1437741a939a6893c09d1c7dc1c376cd3eeb22fe16c632565c461e"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/batch.py",
+      "bytes": 5597,
+      "sha256": "4b63539ec3fb285e317879cef0df66b253f710e0a69990054dc5cbe9f96cef68"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/chat.py",
+      "bytes": 23980,
+      "sha256": "d3b5911d81c136b0c12351f5fa7546136e7e6fc73c47027808c9197ceae0332e"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/crossing.py",
+      "bytes": 3060,
+      "sha256": "8381a010f6344fe7862ad08b22cd31c091e714675a6846f6ee9323d65f33650d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/engine.py",
+      "bytes": 44280,
+      "sha256": "efee2b44f784ce463ac8d83784678fefaf2d2e957aa16eb71beca2619fb8220c"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/grad.py",
+      "bytes": 58960,
+      "sha256": "d68877d79ccb07494f218f609fdaeaa4f652943a1b1000c4c5480ecee1ed9ed2"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/guidance.py",
+      "bytes": 10633,
+      "sha256": "071285b8208a750299e91657291a79088680a86aa10abef8aa56e62e53cdc962"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/http.py",
+      "bytes": 21641,
+      "sha256": "8d550126030e17611f3ce696987d964b696f6b51a8dd93f85803d1f78e515cd2"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/recurrence_checkpoint.py",
+      "bytes": 3230,
+      "sha256": "e9b0b485df3cd9241029135f96bf5f0a73f45e637631a3429e2658655f23e361"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/store.py",
+      "bytes": 8069,
+      "sha256": "01919dd87aa5fe955ebf673a6dfefe4375df9646762d200faab6d160b0022d6f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/token_cache.py",
+      "bytes": 1820,
+      "sha256": "9aa6faeccee1b622ee60aefe9313a0037986051e7047baa4a1f96b49dcdcd374"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/serve/vllm_rollout.py",
+      "bytes": 14181,
+      "sha256": "cce7d3d77f058f21be9eea1fc600374b28b2cc07eb2954768456d1f1db49898f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/shared_space.py",
+      "bytes": 9065,
+      "sha256": "b19573afc125780373f383f3f13a4f40b6f2768312ee8df2aed28cc78a8ed86a"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/__init__.py",
+      "bytes": 225,
+      "sha256": "10520e8a073233c3efe499e3fdd9cad1d7fe1f4c2e9727b862154c1fb9be5a9f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/adapters.py",
+      "bytes": 10031,
+      "sha256": "836e5056063d11d061d7c8e34a21817a68431788bd096ac3e39b9a8816d22a72"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/backbone_policy.py",
+      "bytes": 4750,
+      "sha256": "687662c6b2cb13d4affe7f904e0f76650b791c0a076ac628e9736824d01ddf32"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/bootstrap_data.py",
+      "bytes": 2836,
+      "sha256": "d0c81f35472498ac2319e4b922b3eb727523a0a4b0e2140fbc4e3207e0f522c1"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/causal_bootstrap.py",
+      "bytes": 19523,
+      "sha256": "55c6e1d427a3a973a6c74595a995629056ba33e2b9bf675a6dca1db7861f324b"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/checkpoint_safety.py",
+      "bytes": 8418,
+      "sha256": "13072affd2be1ad702d467135d7dd52dd590ad3b0aba6f2767a8bba466afb3b3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/decision.py",
+      "bytes": 13477,
+      "sha256": "99119e49720d29ce52172c23070f6e5a514166c2059e584c6a05835ca9a06298"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/delta_e2e.py",
+      "bytes": 12958,
+      "sha256": "54ed986bbc5db38eaa206bed331393abbe5b5bfe89f0ca911afb76a55095c745"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/delta_projection.py",
+      "bytes": 7870,
+      "sha256": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/execution.py",
+      "bytes": 40314,
+      "sha256": "391c79818d3956e26eb726f4d71e1982f268644b518469e6caa003820a46bbf9"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/export_trajectory.py",
+      "bytes": 3492,
+      "sha256": "8a661ae084782d777d1e0806a7c158b58e24eb0b3c15b17db7a07c10fe29c7ab"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/exposure_curriculum.py",
+      "bytes": 9304,
+      "sha256": "eada1d6fbd3dc06eb07bbe632fa5548bf308d1011baf28ce902769e4fe0ff5b3"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/exposure_data.py",
+      "bytes": 11889,
+      "sha256": "da28fc95bbbbecdd8787e55e6b9a8e5c8d7816b2e45cfd32f1a78393549ce639"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/foundation_schedule.py",
+      "bytes": 11219,
+      "sha256": "204dbf170830fb751f98adca659344f8a6ccb5650bd0e8c9e763bcead51dc507"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/inline_instructions.py",
+      "bytes": 27436,
+      "sha256": "cb7a32fbe46f1ac733e5038f90992ffbe112137c4f292197d9c21ee898994a7c"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/joint.py",
+      "bytes": 9887,
+      "sha256": "bdc47b1063894137bb4d1ff3938a3e10a8a109ee5f2c4cdf8ea64e3fa2d66951"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/joint_kd.py",
+      "bytes": 6239,
+      "sha256": "f4cfc8816d22037e462a9fe4e8ccc808a6e352cb0dde46ca9d98cb7c71acc3cf"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/losses.py",
+      "bytes": 21367,
+      "sha256": "c9f30f034f8d138bee7e08ab8b2c69e00caccb7a15b9230be1b6e81f7dd6d795"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/memory.py",
+      "bytes": 3689,
+      "sha256": "f7d4ed66bc9ff9963f4d9108c4a662871943f87b0c5bc4cf85cbf6f12cddb7ef"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/memory_estimator.py",
+      "bytes": 9632,
+      "sha256": "4f30940e46990d3a390ec2a86f8cc158de4c843469161091720460d6ba491e17"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/memory_policy.py",
+      "bytes": 14584,
+      "sha256": "473f1eafcac454f31cf952e6ba5b58a66496cf00270f13f852f1f72dd110c930"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/optim.py",
+      "bytes": 9899,
+      "sha256": "d53a74734022df0c015af74c2d6e390010397362e01cd0716a393f69075b84ae"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/output_embedding_projection.py",
+      "bytes": 8005,
+      "sha256": "b61b92125d40caaabf88fa344746c616d3abd65601ac2134ded87e87b0b9b23d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/port_handoff.py",
+      "bytes": 2986,
+      "sha256": "d2af160f9f0c2e93ea6b28ffb23246754640604b99ec2c9af126a91e2e292d37"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/projection.py",
+      "bytes": 7516,
+      "sha256": "f52ad0fb2ead0afac04865db3e66f460a6de235db77f0ef7125e7876fcc80194"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/projection_anchor.py",
+      "bytes": 1951,
+      "sha256": "300f993e439432faee809694ac3f71a0089cefab9e47142f0ffb4e98caae5ac8"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/projection_e2e.py",
+      "bytes": 14064,
+      "sha256": "f6832df79a4d1a251c14004cd1c51ee1e9ac051753497971e125a1d6615289be"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/recipe.py",
+      "bytes": 46573,
+      "sha256": "76584a20e0ce4ff71415455c7fdb8b6664986032e283ca8cdf11cd3f313f44e2"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/recurrence.py",
+      "bytes": 2927,
+      "sha256": "bf6152caac06fcf334e0865f952bade47a2cfdfbe4d407276f0df6b882fa109d"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/sketch_defaults.py",
+      "bytes": 1689,
+      "sha256": "237827c83d19b71a1998b78b7413051ba4dc3205b622254c19db06ae18cbde38"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/sketch_handoff.py",
+      "bytes": 2025,
+      "sha256": "43902c1f8ba7c059664f3d786fc09b23965c3e85fcfbbdc54c8a0be5a55adc2a"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/staging.py",
+      "bytes": 8902,
+      "sha256": "d826eee727aae24930ba2ebffb782da71c7d18dafc05575a345a4acbb87ebb19"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/text_warmup.py",
+      "bytes": 136730,
+      "sha256": "c833b8cd9a79a4893d2013679922d61d6805deecb55f90637d12d6211e9192e6"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/trajectories.py",
+      "bytes": 151460,
+      "sha256": "72419c9bb9ec449b4c9563c903ff31be3f98668a9a419a35f148f21b2d4533cc"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/trajectory_probe.py",
+      "bytes": 15821,
+      "sha256": "823167290de7191d169aef654945bbaf63779c138c8749241aee97c3b9bc4e79"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/trajectory_state.py",
+      "bytes": 22676,
+      "sha256": "b97f008dd8e066ddd1011f8545df7f6cd72e4d64baab0d81ea46263d7227169f"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/train/verified_heads_handoff.py",
+      "bytes": 7391,
+      "sha256": "fe61991aeebf9db005e0ffc5cdc681a4d9f79c443181318ccf01ba6905e7e0e0"
+    },
+    {
+      "path": "direct-stage-run/runtime/natlang_neuralese/write.py",
+      "bytes": 12504,
+      "sha256": "e5ed6033825e4f34f17e81c77eaded56fb3235646eb9baa151d5dd78d574bbb5"
+    }
+  ],
+  "bytes": 3745502526
+}

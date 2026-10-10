@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-sourcev5-research-index2-runtimev6-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev5-research-index2-runtimev6-v1",
+  "files": [
+    {
+      "path": "case-002/jobs/000002-751cc6dc72241078.result.json",
+      "bytes": 2822720,
+      "sha256": "b55210e144b41dea19db887220803fff674988cdac061e019fa5c2c0d073800e"
+    },
+    {
+      "path": "case-002/jobs/000002-751cc6dc72241078.trace.jsonl",
+      "bytes": 620482,
+      "sha256": "e6454f5e2dd8b98c5d0eff62668d6d8c6b8295f80fc653130a7eadf4c5ec8424",
+      "lines": 358
+    },
+    {
+      "path": "case-002/results.jsonl",
+      "bytes": 2822720,
+      "sha256": "b55210e144b41dea19db887220803fff674988cdac061e019fa5c2c0d073800e",
+      "lines": 1
+    },
+    {
+      "path": "case-002/results.jsonl.manifest.json",
+      "bytes": 1704,
+      "sha256": "ae73ff608fb9bbeecf52f9e1f6350ab664356de9860a1e81238da2cae36c23b0"
+    },
+    {
+      "path": "journal.jsonl",
+      "bytes": 25666,
+      "sha256": "6c0d7ad360d9a3be92015e83114766faeffc4dd172dd1f4cf2cea9d7ccce386c",
+      "lines": 36
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1559,
+      "sha256": "7cdc3ecbf6e14dd07e4a21912a02f1a8720389b4ca49f8cc716efedd654b7883"
+    },
+    {
+      "path": "queue.jsonl",
+      "bytes": 864,
+      "sha256": "fc1c4d7b899f1e40130015b657002b1cefa97a628e51c33515180b3982f17aad",
+      "lines": 1
+    }
+  ],
+  "bytes": 6295715
+}

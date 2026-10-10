@@ -1358,3 +1358,14 @@ The shared text warm-up implementation supplies this signal without a separate
 mode. Pop carries the complete optimizer checkpoint at step 28793 into the
 admitted 75% native / 25% harness text mixture. Native remains the qualification
 cohort; harness held-out results remain a separate diagnostic stratum.
+
+
+## 2026-10-10 — qualify AR channels against matching histories
+
+Autoregressive feedback can legitimately choose a different continuation. Comparing its later states against an untouched gold-history rollout conflated a different decision with broken channel transport. The full gold-history metrics remain diagnostic; they no longer gate positions after the first differing decision in new AR reports.
+
+Qualification and checkpoint ranking now share one declared reference: unchanged pass-0 checks, gold comparisons through the first differing decision, and ordinary-versus-projected KL/agreement on the same generated history through its first close. The existing numeric ceilings remain unchanged; KL uses the declared CE ceiling in nats. Native remains the qualification cohort. Missing counts or metrics fail; explicitly empty last-256 subsets are reported as not applicable. This does not qualify prior checkpoints or relax runtime transport qualification.
+
+Full optimizer, RNG and unchanged-objective plateau state survive a policy handoff. Old gate streaks and best-checkpoint comparisons do not. Preserve the failed old reports and launch from an exact full-state checkpoint with frozen shared code. Generated-tail projection diagnostics now disclose selected-token counts and error by cohort and semantic role without extra model forward passes.
+
+Validation: source review, AST parsing and whitespace checks; no test suite run. Actual training continuation supplies execution evidence separately.
