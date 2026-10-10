@@ -26059,6 +26059,19 @@
       "admission": "held; source consistency repair only, actual new trajectory review required",
       "independent_new_worlds": 0,
       "notes": "Root reviewed ten incorrect up-to-two base clauses in one-item worlds, corrected by shared generator. All gold values,32IDs/source groups/splits unchanged; V3 and original traces preserved. Model acceptance does not override source contract ambiguity."
+    },
+    {
+      "id": "free-provider-google-v17-source-closure-packet-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1",
+      "include": [
+        "closure-packet-v1.json"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "exact-json-leaf-source-closure-packet",
+      "training_admission": false,
+      "admission": "source closure evidence only; semantic truth and trajectory admission separate",
+      "notes": "Supplemental immutable packet produced after initial quality snapshot; original manifest remains unchanged. Exact packet SHA8c2040464d91383c1560db083778035ba43f712d59ef3f90d16a7d9b5ff24842. DGX full S1/harness4 closure retained47/47."
     }
   ],
   "coverage_backlog": [

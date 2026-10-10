@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v17-source-closure-packet-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1",
+  "files": [
+    {
+      "path": "closure-packet-v1.json",
+      "bytes": 13385,
+      "sha256": "8c2040464d91383c1560db083778035ba43f712d59ef3f90d16a7d9b5ff24842"
+    }
+  ],
+  "bytes": 13385
+}
