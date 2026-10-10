@@ -22315,7 +22315,14 @@
         "code_commit": "f4e5f3da",
         "command": "python -m natlang_neuralese.maple.distill_data prompts --out prompts.jsonl --probe probe.jsonl; generate --concurrency 128 (runs/mellum-convert-v3-20261010/generate.sh)"
       },
-      "notes": "6536 records (15.0M tokens, 3213 thinking on); 206 prompts omitted for prompts over 7168 tokens (receipt.json omissions). 'length'-truncated responses kept as BF16 behaviour."
+      "notes": "6536 records (15.0M tokens, 3213 thinking on); 206 prompts omitted for prompts over 7168 tokens (receipt.json omissions). 'length'-truncated responses kept as BF16 behaviour.",
+      "split_check": {
+        "date": "2026-10-10",
+        "after": "749cf77c harness-bench S1 re-split",
+        "result": "no overlap",
+        "evidence": "runs/mellum-convert-v3-20261010/split-check.json; plans/mellum-port.md 'Conversion v3: data, teacher, split check'",
+        "summary": "no harness-bench prompts; 3200 natlang/user-turn prompts train in source and in the 2026-10-10 Luna v9 view; S1 and harness-bench v4 indexes place none (disjoint group namespaces); no execution-eval-v3 packet group, id or long text leaf in any prompt"
+      }
     },
     {
       "id": "free-provider-luna-v32-reviewed-source-held-20261010-v1",

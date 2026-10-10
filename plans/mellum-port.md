@@ -220,3 +220,20 @@ stacks); passing it means "not detectably worse", not "equal".
 - Step profile on the v2 export, 4 layers × 8192 tokens: 2.22 s/step, 15.6 GB peak (TernaryExperts fused path).
 - Next: conversion v3 — recovery data = BF16 Mellum's own generations in Mellum's chat template (system prompts
   kept), KL-only distillation with prompt positions down-weighted, and a generation gate during training.
+
+## 2026-10-10 — Conversion v3: data, teacher, split check
+
+- Recovery data `mellum21-self-distill-v3-20261010` (registered, manifest e17b56d6): 6742 prompts → 6536 BF16
+  responses via vLLM (T 0.6, top-p 0.95; max 1024 tokens, 2048 thinking), 15.0M tokens, 3213 with thinking on. By
+  source: natlang native records 2395 (Luna v17 v9 assembled-v3, train split, tools and system prompts kept), tool
+  calls 900, code 841, math 700, general 700, user turns 600, SQL 400. 206 prompts over 7168 tokens omitted (205
+  natlang, 1 code; receipt). 681/841 code responses hit the length cap; kept as BF16 behaviour.
+- Teacher `/home/werg/data/mellum-qat/teacher-v3`: top-64 over whole sequences, 6472 train / 64 held records.
+- Split check before training (runs/mellum-convert-v3-20261010/split-check.json, after harness-bench's S1 re-split
+  749cf77c): no distill-v3 prompt comes from harness-bench. All 3200 natlang/user-turn prompts are train in the
+  source snapshot and in the newer Luna v9 view (2026-10-10). cross_corpus.place over their source groups and ids
+  against the S1 index and the harness-bench v4 index places none; the namespaces are disjoint (S1: task,
+  agenttrove-task, hotpotqa-q, …; Luna: inline-curriculum, authored-bounded-decisions-v1, luna-v2x…), so that
+  check is vacuous rather than proof. The 24-case packet (execution-eval-v3) shares no source group with the
+  used records, none of its 112 group/source ids occurs in them or in any prompt, and none of its 214 long text
+  leaves occurs in any prompt. Gate probes' natlang cases come from the test split and are never trained.
