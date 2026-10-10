@@ -5,6 +5,14 @@
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
   "merge_semantics": "Canonical holds are always applied. Optional hold receipts add exclusions. Duplicate item IDs merge their distinct receipt reasons/evidence; all entries for an ID must agree on original_source_group and split.",
+  "state_truncation_rules": [
+    {
+      "rule_id": "legacy_1500_char_truncation_signature",
+      "state_codepoints": 1504,
+      "suffix": " ...",
+      "reason": "known upstream state clipping signature; full source evidence is unavailable"
+    }
+  ],
   "parent_decision_receipt": {
     "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2/source-quality-holds.json",
     "sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"

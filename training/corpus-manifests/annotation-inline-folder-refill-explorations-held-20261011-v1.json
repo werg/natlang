@@ -1,0 +1,160 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "annotation-inline-folder-refill-explorations-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/annotation-refill-explorations-20261011-v1",
+  "files": [
+    {
+      "path": "provider-static-annotation-decision-folders-v18/cases.jsonl",
+      "bytes": 5562540,
+      "sha256": "a02b1d43be90be2cceb8a3414d579e80090310abcd627ca635bc613063921c11",
+      "lines": 169
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/exclusions.json",
+      "bytes": 9011605,
+      "sha256": "8710970895814cbd4f20846e53f7dd3719a1bf6298947dd62aa47612ed6aa63a"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/families.json",
+      "bytes": 50377,
+      "sha256": "e37e02a869956451c6636bcce0235d8caf3b242f1461eae4c7a0226886b7ecff"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/materializer.review.json",
+      "bytes": 63794,
+      "sha256": "15caf923abf99b39809ab7461a87255b2cff8657d6955f24dcead4d54e223f53"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/replay.results.jsonl",
+      "bytes": 64674225,
+      "sha256": "2947812c4132c555416f5dd536e93b304832722500ac0afb1b42220de7145f48",
+      "lines": 169
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18/summary.json",
+      "bytes": 62845,
+      "sha256": "b9c5f217a3e3865ead9e3322e22930755bb81cf90c9921bf31b58298a121eb33"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18-input/prior-google-source-exclusions.jsonl",
+      "bytes": 8472102,
+      "sha256": "81523e0c435962c1e4d006509518225fde12f5b4973b1a44f8b9fab6c5fc58ea",
+      "lines": 8796
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v18-input/prior-source-inventory.json",
+      "bytes": 7315,
+      "sha256": "251174af95d30f7f70b10cd1da0b78af47f5523c4564499e6f32d45865107531"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/cases.jsonl",
+      "bytes": 5562540,
+      "sha256": "a02b1d43be90be2cceb8a3414d579e80090310abcd627ca635bc613063921c11",
+      "lines": 169
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/exclusions.json",
+      "bytes": 9011605,
+      "sha256": "8710970895814cbd4f20846e53f7dd3719a1bf6298947dd62aa47612ed6aa63a"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/families.json",
+      "bytes": 50377,
+      "sha256": "e37e02a869956451c6636bcce0235d8caf3b242f1461eae4c7a0226886b7ecff"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/materializer.review.json",
+      "bytes": 63794,
+      "sha256": "15caf923abf99b39809ab7461a87255b2cff8657d6955f24dcead4d54e223f53"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/replay.results.jsonl",
+      "bytes": 64674112,
+      "sha256": "aac8f8ad84e4ac64965f50b5dc9c6ad8befc9515cc934b7357b63a8378581761",
+      "lines": 169
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19/summary.json",
+      "bytes": 63142,
+      "sha256": "de3c50245e18990ae7a900a7b45b398fc96a60cb1836b5716226e6ec2b20a7a0"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v19-input/source-pins.json",
+      "bytes": 1378,
+      "sha256": "dc2b69e5b15e3535aaa73ab9eb7962c6a6beda8133794457bbceb4929295ad3b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/cases.jsonl",
+      "bytes": 5191925,
+      "sha256": "329d70a0114b4c36a226a6cbbc2c7602e7592c5d5fb59672019f235b96790abe",
+      "lines": 160
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/exclusions.json",
+      "bytes": 9011605,
+      "sha256": "8710970895814cbd4f20846e53f7dd3719a1bf6298947dd62aa47612ed6aa63a"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/families.json",
+      "bytes": 47811,
+      "sha256": "14585b88fa03ddec9280975d8616bfab39b349d6c7b2852558d6145a282822b3"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/materializer.review.json",
+      "bytes": 60419,
+      "sha256": "69c19cc2821818b4b24f5926ac84874dec510cb9b1ca9cbcb67946873938038f"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/replay.results.jsonl",
+      "bytes": 60898950,
+      "sha256": "4d3126e915daefbac4a88c0a065937f860d08063e50f46ce9c370902ca86d170",
+      "lines": 160
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/source-quality-omissions.jsonl",
+      "bytes": 547152,
+      "sha256": "ece844cec2a4f3044be02dd2a3f35dd73be9672d25ccde3e87088185aa0a0425",
+      "lines": 1263
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20/summary.json",
+      "bytes": 65441,
+      "sha256": "ae5407c87adaab2bebb99a3db46915c021362f1b908a831996d23a7aa61fb0c7"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20-input/generation-components-v19-baseline.json",
+      "bytes": 2469,
+      "sha256": "83dd08ea0404589d639ef559be86c9acca938f24e5009adc08961d0cb70f81f6"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20-input/v20-execution-components-frozen.json",
+      "bytes": 2901,
+      "sha256": "1e4da784c1b307d8f19c2d92d5f4a8b8ff91f5638ec9d2ebe7384ab9f66a117f"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v20-input/v20-policy-component-freeze-supplement.json",
+      "bytes": 702,
+      "sha256": "a303d56a44cc7ed962f170fb4e31cb8ff9c6ff04d0544c9937d3606df39c9a89"
+    }
+  ],
+  "bytes": 243161126
+}

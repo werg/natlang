@@ -10527,3 +10527,11 @@ Root reviewed17 complete candidate states, adding9 forward holds (45total): two 
 DGX fullS1 closedV25(53programs402items) andV24(54programs406items), no original ID/group/protected/text links. Receipts onmain409e8e2d/7a918bdc; closure is evidence only. Additive provenance supplements preserve exact policy25/30, actual closurecode64b255e8 and previously omittedV25builder, without rewriting original manifests.
 
 Root rejected fresh annotationV19:117 selected states carry known upstream1504-character truncation. A pinned full file does not guarantee complete visible input. V18/V19 preserved unlaunched; shared annotation filter correction and fresh preparation requested. ActiveV64 source had separate complete-input review.
+
+### Shared source filter and reviewed refill, 2026-10-10 23:46 UTC
+
+Pythonproviderprep andannotationfolderadapter nowconsume the same declared state_truncation_rules in canonicalqualitypolicy, countingUnicodecodepointsconsistently. Recordexactomittedrows/hashes/families andzero/shortfamilyavailability; nopadding, norelabels. RemovedtemporarybaselineCLI; generationcomponentspreservedasartifacts. V21reference160of160,640completeitems,12families52eachandPubMedQA16,45holdsand8796priorIDs/groups excluded includingactiveV27. Exact14components frozen. V18/V19rejected andV20intermediate preserved.
+
+V65reviewedfive-worker successor waitsV64completeaccounting, supervisor974349, approvedplanSHA6143010d9f431dbf2d356ad2d54a9ece9a158e79159a4eec3e114d0807135c6d. Root independentlychecked640originalIDs/groupsunique,currentholds,V27nooverlap,knownclippingzero. Noadditionalconcurrentworkers ortrainingadmission.
+
+DGX reports stagedrecipe childcwd couldshadowfrozenPythonpath; Popdirectstagechild checkedcwdcanonicalreporootwithout package andPYTHONPATH frozenruntimefirst, soV7doesnotsharethatshadowingcondition. Noactivecodedriftchange.

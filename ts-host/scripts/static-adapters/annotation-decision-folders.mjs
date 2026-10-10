@@ -4,7 +4,7 @@
  * This path uses annotations only for hidden reference outputs; it makes no provider calls and
  * does not claim independent semantic adjudication or training admission.
  */
-import { mkdir, open, readFile, readdir } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -107,17 +107,25 @@ async function main() {
   requireValue(Number.isSafeInteger(batchSize) && batchSize >= 2, 'batch-size must be an integer >= 2');
   const casesPath = resolve(values.cases), out = resolve(values.out);
   const sourceBytes = await readFile(casesPath), sourceSha = sha(sourceBytes);
-  const sourceManifestPath = resolve(dirname(casesPath), 'source-manifest.json');
+  const adjacentSourceManifest = resolve(dirname(casesPath), 'source-manifest.json');
+  const sourceManifestPath = await stat(adjacentSourceManifest).then(() => adjacentSourceManifest,
+    () => resolve(dirname(casesPath), 'decision-data.manifest.json'));
   const sourceManifestBytes = await readFile(sourceManifestPath);
   const sourceManifest = parse(sourceManifestBytes.toString('utf8'));
-  const declaredCaseCount = sourceManifest.cases?.rows ?? sourceManifest.selected_count ?? sourceManifest.selection?.selected_count;
-  const declaredCaseHash = sourceManifest.cases?.sha256 ?? sourceManifest.selected_sha256 ?? sourceManifest.cases_sha256;
+  const declaredCaseCount = sourceManifest.cases?.rows ?? (Number.isSafeInteger(sourceManifest.cases) ? sourceManifest.cases : undefined) ??
+    sourceManifest.selected_count ?? sourceManifest.selection?.selected_count;
+  const declaredCaseHash = sourceManifest.cases?.sha256 ?? sourceManifest.selected_sha256 ?? sourceManifest.cases_sha256 ??
+    sourceManifest.sha256?.[basename(casesPath)];
   requireValue(declaredCaseHash === sourceSha && Number.isSafeInteger(declaredCaseCount),
     'source_manifest_case_pin_mismatch');
   const policyPath = resolve(repo, 'training/decision_source_quality_holds.json');
   const policyBytes = await readFile(policyPath), policy = parse(policyBytes.toString('utf8'));
   requireValue(policy.schema === 'natlang.decision-source-quality-holds/1' && Array.isArray(policy.excluded_items),
     'invalid_canonical_hold_policy');
+  requireValue(Array.isArray(policy.state_truncation_rules) && policy.state_truncation_rules.every(rule =>
+    rule && typeof rule.rule_id === 'string' && Number.isSafeInteger(rule.state_codepoints) &&
+    rule.state_codepoints > 0 && typeof rule.suffix === 'string' && rule.suffix.length > 0),
+  'invalid_canonical_state_truncation_rules');
   const holds = new Map(policy.excluded_items.map(item => [item.item_id, item]));
   const rows = sourceBytes.toString('utf8').split(/\r?\n/).filter(Boolean).map((line, index) => ({ row: parse(line), index, raw: line }));
   requireValue(rows.length === declaredCaseCount && new Set(rows.map(({row}) => row.id)).size === rows.length, 'invalid_source_rows');
@@ -135,6 +143,7 @@ async function main() {
         `invalid_or_duplicate_excluded_program:${lineIndex}`);
       priorPrograms.add(programId);
       const priorSource = prior.external_source;
+      const origins = Array.isArray(prior.exclusion_origins) ? prior.exclusion_origins : [];
       requireValue(priorSource?.snapshot_sha256 === sourceSha &&
         priorSource?.source_manifest_sha256 === sha(sourceManifestBytes), 'excluded_source_snapshot_mismatch');
       requireValue(Array.isArray(prior.source_ids) && Array.isArray(prior.source_groups) &&
@@ -157,7 +166,7 @@ async function main() {
       requireValue(equal([...new Set(rowEntries.map(entry => entry.group))], prior.source_groups),
         `excluded_program_group_mismatch:${programId}`);
       exclusionCases.push({ program_id: programId, source_ids: prior.source_ids,
-        source_groups: prior.source_groups, source_rows: rowEntries });
+        source_groups: prior.source_groups, source_rows: rowEntries, origins });
     }
   }
   const omittedHeld = rows.filter(({row}) => holds.has(row.id));
@@ -165,19 +174,56 @@ async function main() {
     const hold = holds.get(row.id);
     requireValue(hold.original_source_group === row.group && hold.split === row.role, 'hold_lineage_mismatch');
   }
-  const eligible = rows.filter(({row}) => !holds.has(row.id) && !excludedIds.has(row.id) &&
-    !excludedGroups.has(row.group) &&
-    row.role === 'train' && row.kind === 'choice');
-  const byFamily = new Map();
+  // Python's len(str) counts Unicode codepoints. Use Array.from here so this
+  // shared policy has the same meaning for astral Unicode as the source filter.
+  const truncationOmissions = rows.filter(({row}) => row.role === 'train' && row.kind === 'choice' &&
+    typeof row.state === 'string' && policy.state_truncation_rules.some(rule =>
+      Array.from(row.state).length === rule.state_codepoints && row.state.endsWith(rule.suffix)))
+    .map(({row, index, raw}) => {
+      const rule = policy.state_truncation_rules.find(candidate => Array.from(row.state).length === candidate.state_codepoints &&
+        row.state.endsWith(candidate.suffix));
+      return { id: row.id, family: row.family, group: row.group, split: row.role,
+        state_chars: Array.from(row.state).length, state_sha256: sha(row.state), row_index: index,
+        row_sha256: sha(raw), also_prior_case_or_group: excludedIds.has(row.id) || excludedGroups.has(row.group),
+        also_canonical_hold: holds.has(row.id), omission_code: rule.rule_id, rule_id: rule.rule_id };
+    });
+  const truncatedIds = new Set(truncationOmissions.map(item => item.id));
+  const eligibleBeforeTruncation = rows.filter(({row}) => !holds.has(row.id) && !excludedIds.has(row.id) &&
+    !excludedGroups.has(row.group) && row.role === 'train' && row.kind === 'choice');
+  const sourceFamilies = [...new Set(rows.filter(({row}) => row.role === 'train' && row.kind === 'choice')
+    .map(({row}) => row.family).filter(family => typeof family === 'string'))].sort();
+  const preTruncationByFamily = new Map(sourceFamilies.map(family => [family, []]));
+  for (const entry of eligibleBeforeTruncation) {
+    const list = preTruncationByFamily.get(entry.row.family) ?? [];
+    list.push(entry); preTruncationByFamily.set(entry.row.family, list);
+  }
+  const eligible = eligibleBeforeTruncation.filter(({row}) => !truncatedIds.has(row.id));
+  const byFamily = new Map(sourceFamilies.map(family => [family, []]));
   for (const entry of eligible) {
     const list = byFamily.get(entry.row.family) ?? [];
     list.push(entry); byFamily.set(entry.row.family, list);
   }
   const selected = [];
-  for (const family of [...byFamily.keys()].sort()) {
-    const familyRows = byFamily.get(family).slice(0, itemsPerFamily);
-    requireValue(familyRows.length === itemsPerFamily, `insufficient_rows:${family}`);
+  const familySelectionSummary = [];
+  for (const family of sourceFamilies) {
+    const available = byFamily.get(family);
+    const familyRows = available.slice(0, itemsPerFamily);
+    if (familyRows.length < 2) {
+      const preFilter = preTruncationByFamily.get(family) ?? [];
+      familySelectionSummary.push({ family, source_eligible_before_truncation: preFilter.length,
+        truncation_omissions_after_other_filters: truncationOmissions.filter(item => item.family === family &&
+          !item.also_prior_case_or_group && !item.also_canonical_hold).length,
+        eligible_after_truncation: available.length, requested_rows: itemsPerFamily, selected_rows: 0,
+        shortfall: itemsPerFamily, skipped: true, skip_reason: 'fewer_than_two_eligible_rows_after_all_filters' });
+      continue;
+    }
     selected.push(...familyRows);
+    const preFilter = preTruncationByFamily.get(family) ?? [];
+    familySelectionSummary.push({ family, source_eligible_before_truncation: preFilter.length,
+      truncation_omissions_after_other_filters: truncationOmissions.filter(item => item.family === family &&
+        !item.also_prior_case_or_group && !item.also_canonical_hold).length,
+      eligible_after_truncation: available.length, requested_rows: itemsPerFamily,
+      selected_rows: familyRows.length, shortfall: Math.max(0, itemsPerFamily - familyRows.length), skipped: false });
   }
   const sourceIds = new Set(), sourceGroups = new Set(), tasksByFamily = new Map();
   for (const {row, index} of selected) {
@@ -270,6 +316,8 @@ async function main() {
   const componentPaths = [
     resolve(here, 'annotation-decision-folders.mjs'), resolve(here, 'folder-decision-scaffold.mjs'),
     resolve(here, 'teacher-decision-labels.mjs'), resolve(here, '../advisory-file.mjs'),
+    resolve(repo, 'scripts/prepare_decision_provider_source.py'),
+    policyPath,
     resolve(here, 'common.mjs'), resolve(here, '../inline-curriculum/lib.mjs'),
     resolve(here, '../inline-curriculum/references.mjs'), resolve(here, '../../dist/teacher/curriculum.js'),
     resolve(here, '../../dist/teacher/collector.js'), resolve(here, '../../dist/teacher/native-materializer.js'),
@@ -311,17 +359,28 @@ async function main() {
   exclusionReceipt.receipt_sha256 = jsonSha({ ...exclusionReceipt, receipt_sha256: null });
   const exclusionText = JSON.stringify(exclusionReceipt, null, 2) + '\n';
   const failuresText = failures.map(item => JSON.stringify(item)).join('\n') + (failures.length ? '\n' : '');
+  const truncationText = truncationOmissions.map(item => JSON.stringify(item)).join('\n') +
+    (truncationOmissions.length ? '\n' : '');
+  const truncationCounts = new Map();
+  for (const item of truncationOmissions) truncationCounts.set(item.family, (truncationCounts.get(item.family) ?? 0) + 1);
   const summary = { schema: 'natlang.static-annotation-decision-folders/1', status: 'prepared_held_reference_only',
     training_admission: false, provider_calls: 0, independent_new_worlds: 0,
     source: { path: casesPath, sha256: sourceSha, source_manifest_path: sourceManifestPath,
       source_manifest_sha256: sha(sourceManifestBytes), selected_rows: declaredCaseCount },
     quality_policy: { path: policyPath, sha256: sha(policyBytes), policy_id: policy.policy_id,
-      canonical_holds_present_in_source: omittedHeld.map(({row}) => row.id) },
+      canonical_holds_present_in_source: omittedHeld.map(({row}) => row.id),
+      state_truncation_rules: policy.state_truncation_rules },
+    source_quality_omissions: { rules: policy.state_truncation_rules,
+      total_source_matches: truncationOmissions.length,
+      source_matches_by_family: Object.fromEntries([...truncationCounts].sort(([a], [b]) => a.localeCompare(b))),
+      artifact: 'source-quality-omissions.jsonl', artifact_sha256: sha(truncationText),
+      note: 'Omitted rows are listed with exact source row and state hashes plus prior-use/hold overlap flags.' },
     exclusions: { path: exclusionPath, sha256: exclusionPath ? sha(exclusionBytes) : null,
       programs: exclusionCases.length, source_ids: excludedIds.size, source_groups: excludedGroups.size,
       receipt_sha256: sha(exclusionText) },
-    selection: { families: familySummary, selected_annotations: selected.length, programs: records.length,
-      items_per_family: itemsPerFamily, batch_size_limit: batchSize,
+    selection: { families: familySummary, family_availability: familySelectionSummary,
+      selected_annotations: selected.length, programs: records.length,
+      requested_items_per_family: itemsPerFamily, batch_size_limit: batchSize,
       source_groups_preserved: sourceGroups.size,
       note: 'Annotations appear only in hidden semantics.expected/reference outputs. Visible task files and typed item inputs contain no answer/gold property. No provider-authored labels, no independent semantic adjudication, no admission.' },
     replay: { attempts: replay.length,
@@ -332,12 +391,14 @@ async function main() {
     execution_components: componentPins,
     adapter: { path: fileURLToPath(import.meta.url), sha256: sha(await readFile(fileURLToPath(import.meta.url)) ) },
     artifacts: { cases_sha256: sha(casesText), replay_sha256: sha(replayText), materializer_review_sha256: sha(materializerText),
-      families_sha256: sha(familyText), exclusions_sha256: sha(exclusionText), failures_sha256: sha(failuresText) } };
+      families_sha256: sha(familyText), exclusions_sha256: sha(exclusionText),
+      source_quality_omissions_sha256: sha(truncationText), failures_sha256: sha(failuresText) } };
   await writeExclusive(out, 'cases.jsonl', casesText);
   await writeExclusive(out, 'replay.results.jsonl', replayText);
   await writeExclusive(out, 'materializer.review.json', materializerText);
   await writeExclusive(out, 'families.json', familyText);
   await writeExclusive(out, 'exclusions.json', exclusionText);
+  await writeExclusive(out, 'source-quality-omissions.jsonl', truncationText);
   await writeExclusive(out, 'replay.failures.jsonl', failuresText);
   await writeExclusive(out, 'summary.json', JSON.stringify(summary, null, 2) + '\n');
   console.log(JSON.stringify({ out, programs: records.length, annotations: selected.length,

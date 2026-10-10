@@ -28048,6 +28048,50 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Additive exact historical policies25/30 and actual closurecode preserved; V25includes omittedbuilder. Original manifests unchanged. DGXfullS1closed, no trainingadmission."
+    },
+    {
+      "id": "annotation-inline-folder-static-held-20261011-v21",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v21",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "160 reference-accepted annotation-only folder programs640 distinct complete train rows across13families. Twelve52each/PubMedQA16; shared truncationrule/current45holds/prior8796/V27exclusions. Frozen14components, no providercalls/admission."
+    },
+    {
+      "id": "luna-annotation-folder-v65-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v65-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Popapproved160program640itemfive-worker successor waits completeV64accounting; supervisor974349. Current45holds, knownclipping andpriorIDs/groups omitted. Generationapprovaldoesnotgrantadmission.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "annotation-inline-folder-refill-explorations-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/annotation-refill-explorations-20261011-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "PreserveV18/V19rejectedclippedpreparation andV20correctedfilterbefore shareddeclaredruleV21. Inputcatalogandcomponent/policyfreezes retained. Neverlaunched; noadmission.",
+      "include": [
+        "provider-static-annotation-decision-folders-v18/**/*",
+        "provider-static-annotation-decision-folders-v19/**/*",
+        "provider-static-annotation-decision-folders-v20/**/*",
+        "provider-static-annotation-decision-folders-v18-input/**/*",
+        "provider-static-annotation-decision-folders-v19-input/**/*",
+        "provider-static-annotation-decision-folders-v20-input/**/*"
+      ]
     }
   ],
   "coverage_backlog": [

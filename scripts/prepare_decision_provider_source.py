@@ -41,8 +41,8 @@ def source_ref_summary(case):
 
 def load_quality_holds(paths):
     """Merge canonical and caller-supplied holds without allowing overrides."""
-    holds, receipts = {}, []
-    for raw_path, canonical_policy in paths:
+    holds, receipts, canonical_policy_doc = {}, [], None
+    for raw_path, is_canonical in paths:
         if not raw_path:
             continue
         hold_path = Path(raw_path).resolve()
@@ -50,17 +50,27 @@ def load_quality_holds(paths):
         doc = json.loads(raw)
         if not isinstance(doc, dict) or not isinstance(doc.get('excluded_items'), list):
             raise ValueError(f'{hold_path}: source-quality holds must contain an excluded_items array')
-        if canonical_policy and doc.get('schema') != 'natlang.decision-source-quality-holds/1':
+        if is_canonical and doc.get('schema') != 'natlang.decision-source-quality-holds/1':
             raise ValueError(f'{hold_path}: invalid canonical source-quality policy schema')
+        if is_canonical:
+            rules = doc.get('state_truncation_rules')
+            if not isinstance(rules, list):
+                raise ValueError(f'{hold_path}: canonical policy must declare state_truncation_rules')
+            for rule in rules:
+                if (not isinstance(rule, dict) or not isinstance(rule.get('rule_id'), str) or
+                        not isinstance(rule.get('state_codepoints'), int) or rule['state_codepoints'] <= 0 or
+                        not isinstance(rule.get('suffix'), str) or not rule['suffix']):
+                    raise ValueError(f'{hold_path}: malformed state truncation rule')
+            canonical_policy_doc = doc
         receipt = {'path': str(hold_path), 'sha256': sha256_bytes(raw), 'schema': doc.get('schema'),
-                   'canonical_policy': canonical_policy}
+                   'canonical_policy': is_canonical}
         receipts.append(receipt)
         for item in doc['excluded_items']:
             if not isinstance(item, dict) or not isinstance(item.get('item_id'), str) or not isinstance(item.get('reason'), str):
                 raise ValueError(f'{hold_path}: each source-quality exclusion needs item_id and reason')
             item_group = item.get('original_source_group', item.get('group'))
             item_split = item.get('split')
-            if canonical_policy and (not item_group or not item_split):
+            if is_canonical and (not item_group or not item_split):
                 raise ValueError(f"{hold_path}: canonical hold needs source group and split for {item['item_id']}")
             if item_group is not None and not isinstance(item_group, str):
                 raise ValueError(f"{hold_path}: invalid group for {item['item_id']}")
@@ -76,11 +86,11 @@ def load_quality_holds(paths):
             held = {'reason': item['reason'], 'receipt_item_id': item['item_id'],
                     'receipt_group': item_group, 'receipt_split': item_split,
                     'receipt_sha256': receipt['sha256'], 'receipt_path': receipt['path'],
-                    'canonical_policy': canonical_policy, 'evidence': item.get('evidence', {}),
+                    'canonical_policy': is_canonical, 'evidence': item.get('evidence', {}),
                     'official_row_sha256': item.get('official_row_sha256')}
             if held not in entry['holds']:
                 entry['holds'].append(held)
-    return holds, receipts
+    return holds, receipts, canonical_policy_doc
 
 
 def omission(case, source_path, source_sha, line_number, row_sha, reasons):
@@ -126,9 +136,10 @@ def build(args):
     prior_root, used_ids, used_groups, prior_files = read_prior_cases(args.prior_root)
     source_bytes_sha = sha256_file(source_path)
     canonical_policy_path = Path(__file__).resolve().parents[1] / 'training' / 'decision_source_quality_holds.json'
-    quality_holds, quality_receipts = load_quality_holds([
+    quality_holds, quality_receipts, canonical_policy = load_quality_holds([
         (canonical_policy_path, True), (args.source_quality_holds, False)
     ])
+    truncation_rules = canonical_policy['state_truncation_rules']
     preparation_code_sha = sha256_file(Path(__file__).resolve())
     destination = Path(args.out).resolve()
     if destination.exists():
@@ -186,8 +197,11 @@ def build(args):
                 seen_quality_hold_ids.add(case_id)
             state = case.get('state')
             options = case.get('options')
-            if isinstance(state, str) and len(state) == 1504 and state.endswith(' ...'):
-                reasons.append({'code': 'legacy_1500_char_truncation_signature', 'state_chars': len(state)})
+            if isinstance(state, str):
+                for rule in truncation_rules:
+                    if len(state) == rule['state_codepoints'] and state.endswith(rule['suffix']):
+                        reasons.append({'code': rule['rule_id'], 'state_chars': len(state),
+                                        'state_codepoints': len(state), 'rule_id': rule['rule_id']})
             if not isinstance(state, str) or not state.strip():
                 reasons.append({'code': 'source_quality_invalid_or_empty_state'})
             elif len(state) > args.max_state_chars:
@@ -278,6 +292,7 @@ def build(args):
         'source_quality_holds': {
             'policy_path': str(canonical_policy_path.resolve()),
             'policy_sha256': quality_receipts[0]['sha256'],
+            'state_truncation_rules': truncation_rules,
             'preparation_code_path': str(Path(__file__).resolve()),
             'preparation_code_sha256': preparation_code_sha,
             'merge_semantics': 'Canonical holds are always applied; optional receipts add holds. Duplicate IDs merge distinct reasons/evidence after group/split agreement checks.',
