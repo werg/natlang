@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-harness-text-mix-splitfixed-20261010-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-native-harness-text-mix-splitfixed-20261010-v2",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 2106,
+      "sha256": "c9500715ee0e844f11fabaf7f6b0ecca7aabd56f7f7dce8c9af9b6c7bf5a54cf"
+    },
+    {
+      "path": "root-split-review.json",
+      "bytes": 470,
+      "sha256": "5b4b36e8de65d524147a180af1b2d35526057776395deb8009c21dca0d8b0ed7"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 1025605797,
+      "sha256": "be0e85a8d442779ee0cdddd01972982d774c9bc065e219fd06184c09aae2e4c5",
+      "lines": 8805
+    }
+  ],
+  "bytes": 1025608373
+}

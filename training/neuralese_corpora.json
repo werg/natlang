@@ -22759,6 +22759,25 @@
       "training_admission": false,
       "admission": "held-quality-audit-not-training-data",
       "notes": "117failedactiontargets;100badtargets within17of19otherwiseunambiguousexactoutcomes. Turn-level targetexclusion required, no wholetrajectory automaticadmission."
+    },
+    {
+      "id": "neuralese-native-harness-text-mix-splitfixed-20261010-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-native-harness-text-mix-splitfixed-20261010-v2",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "root-split-review.json"
+      ],
+      "split": "native3258train1704test+harness2969train874test;source-group-disjoint-assembly",
+      "source_class": "assembled-existing-admitted-ordinary-text-cohorts",
+      "training_admission": true,
+      "corpus_publication_for_training": false,
+      "admission": "Existing native4962 recipe authority plus corrected admittedharnessLFMtextv2; assembled text stages only. Assembly grants no new native/recurrence/transport admission.",
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
+      ],
+      "notes": "8805documents6227train2578held; zero1835groupcross-cohort splitconflicts. Nativequalificationstratum unchanged/harnessnotqualification. Nativeparent S1duplicateclosure not independently certified; correctedharness followsS1repo placement."
     }
   ],
   "coverage_backlog": [
