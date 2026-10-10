@@ -223,10 +223,7 @@ def test_fused_ramp_and_lion_match_the_eager_rules():
             eager = (w.float() + mix * (ternary.ternarize(w).float() - w.float())).to(w.dtype)
             ternary.QUANT_MIX.update(value=mix, fused=True)
             fused = ternary.ramped_ternarize_ste(w)
-            if mix == 1.0:  # deployed codes: only threshold ties may differ
-                assert float((fused != eager).float().mean()) < 1e-3
-            else:  # ramp: at most one BF16 ulp (FMA vs separate rounding)
-                assert torch.allclose(fused.float(), eager.float(), rtol=2 ** -7, atol=1e-6)
+            assert torch.equal(fused, eager)  # eager reductions, one unfused elementwise kernel: bit-identical
         latent = torch.nn.Parameter(w.clone())
         ternary.ramped_ternarize_ste(latent).sum().backward()
         assert torch.equal(latent.grad, torch.ones_like(latent))  # straight-through

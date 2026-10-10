@@ -293,13 +293,17 @@ def test_ramp_schedule_formula_endpoints_and_monotonicity():
 
 # ---------------------------------------------------------------- fused kernels (CUDA-only in use; math tested eagerly)
 
-def test_fused_ramp_math_matches_eager_rule_at_endpoints_and_between():
+def test_shared_row_reductions_reproduce_maples_rule():
     w = _weight().to(torch.bfloat16)
-    q = T.ternarize(w)
-    assert torch.equal(T._ramped_value(w, 1.0), q)
-    assert torch.equal(T._ramped_value(w, 0.0), w)
-    half = T._ramped_value(w, 0.5)
-    assert torch.allclose(half.float(), w.float() + 0.5 * (q.float() - w.float()), atol=2 ** -7 * 4)
+    x = w.float()
+    magnitude = x.abs()
+    threshold = 0.7 * magnitude.mean(-1, keepdim=True)
+    mask = magnitude > threshold
+    alpha = (torch.where(mask, magnitude, 0).sum(-1, keepdim=True) / mask.sum(-1, keepdim=True).clamp_min(1))
+    _, _, shared_threshold, shared_mask, shared_alpha = T.ternary_row_stats(w)
+    assert torch.equal(shared_threshold, threshold) and torch.equal(shared_mask, mask)
+    assert torch.equal(shared_alpha, alpha.to(torch.bfloat16))
+    assert torch.equal(T.ternarize(w), (torch.sign(x) * mask * shared_alpha.float()).to(torch.bfloat16))
 
 
 def test_fused_lion_chunk_matches_reference_within_one_bf16_ulp_and_momentum_exact():

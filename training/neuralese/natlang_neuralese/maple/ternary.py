@@ -22,8 +22,10 @@ THRESHOLD_FACTOR = 0.7
 QK_K = 256
 
 
-def ternary_codes(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Maple's rule on ``weight`` (rows = output features): int8 codes in {-1, 0, 1} and a BF16 scale per row."""
+def ternary_row_stats(weight: torch.Tensor):
+    """The reductions of Maple's rule, per row: (BF16-rounded FP32 weight, |w|, FP32 threshold, mask, BF16 alpha). The
+    one implementation behind ``ternary_codes`` (export) and the fused training ramp (maple/precision_kernels.py), so
+    training forwards and the exported codes agree bit for bit."""
     w = weight.to(torch.bfloat16).float()
     magnitude = w.abs()
     threshold = THRESHOLD_FACTOR * magnitude.mean(dim=-1, keepdim=True)
@@ -31,8 +33,14 @@ def ternary_codes(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     count = mask.sum(dim=-1, keepdim=True)
     alpha = torch.where(mask, magnitude, torch.zeros_like(magnitude)).sum(dim=-1, keepdim=True)
     alpha = torch.where(count > 0, alpha / count.clamp_min(1), torch.zeros_like(alpha))
+    return w, magnitude, threshold, mask, alpha.to(torch.bfloat16)
+
+
+def ternary_codes(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Maple's rule on ``weight`` (rows = output features): int8 codes in {-1, 0, 1} and a BF16 scale per row."""
+    w, _, _, mask, alpha = ternary_row_stats(weight)
     codes = (torch.sign(w) * mask).to(torch.int8)
-    return codes, alpha.to(torch.bfloat16)
+    return codes, alpha
 
 
 def ternarize(weight: torch.Tensor) -> torch.Tensor:
@@ -58,46 +66,18 @@ def ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
 
 # Gradual ternarization (full-latent QAT of a BF16 model): forwards use w + mix·(Q(w) − w), straight-through, with mix
 # ramped 0 → 1 over the conversion (HF 1.58-bit fine-tuning: an abrupt switch loses most of the model). 1 = deployed.
-# ``fused``: one compiled kernel per latent (24x the eager rule on Mellum's experts); its reductions sum in another
-# order, so ~4e-5 of the codes differ at threshold ties. Training forwards only (the conversion sets it); export and
-# parity keep the eager rule.
+# ``fused``: one elementwise kernel per BF16 CUDA latent after the rule's eager row reductions (the precision points'
+# kernel, ``_FusedPrecisionRamp``): w + mix·(Q(w) − w) in FP32, cast once, bit-identical codes. Training forwards only
+# (the conversion sets it).
 QUANT_MIX = {"value": 1.0, "fused": False}
-
-
-def _ramped_value(weight, mix):
-    x = weight.float()
-    magnitude = x.abs()
-    mask = magnitude > THRESHOLD_FACTOR * magnitude.mean(-1, keepdim=True)
-    count = mask.sum(-1, keepdim=True)
-    alpha = (torch.where(mask, magnitude, 0).sum(-1, keepdim=True) / count.clamp_min(1)).to(torch.bfloat16).float()
-    quantized = (torch.sign(x) * mask * alpha).to(weight.dtype).float()
-    return (x + mix * (quantized - x)).to(weight.dtype)
-
-
-_fused_ramped_value = torch.compile(_ramped_value, dynamic=False)
-_MIX_TENSORS: dict = {}
-
-
-class _FusedRamp(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, weight, mix):
-        return _fused_ramped_value(weight, mix)
-
-    @staticmethod
-    def backward(ctx, grad):
-        return grad, None
 
 
 def ramped_ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
     mix = QUANT_MIX["value"]
     if mix <= 0.0:
         return weight
-    if QUANT_MIX["fused"] and weight.is_cuda:
-        key = (weight.device, mix)
-        if key not in _MIX_TENSORS:
-            _MIX_TENSORS.clear()
-            _MIX_TENSORS[key] = torch.tensor(mix, device=weight.device)
-        return _FusedRamp.apply(weight, _MIX_TENSORS[key])
+    if QUANT_MIX["fused"] and weight.is_cuda and weight.dtype == torch.bfloat16:
+        return _FusedPrecisionRamp.apply(weight, "ternary", {}, float(mix))
     if mix >= 1.0:
         return ternarize_ste(weight)
     return weight + mix * (ternarize(weight.detach()) - weight.detach())
@@ -107,7 +87,10 @@ def ramped_ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
 # into every training stage). While a point is active, ``PRECISION["groups"]`` maps a module group (experts, attention,
 # ...) to (format, mix, options) and every selected weight's forward value is w + mix·(Q(w) − w), straight-through
 # to the BF16 latent. ``None`` (the default, and always for the BF16 teacher) leaves weights untouched.
-PRECISION: dict = {"groups": None, "point": None}
+PRECISION: dict = {"groups": None, "point": None,
+                   # One elementwise kernel per weight on CUDA (bit-identical to the eager rule; ~20x less memory
+                   # traffic). False: the eager rule everywhere (a reference for the exactness tests).
+                   "fused": True}
 QK4_0 = 32
 
 
@@ -115,16 +98,25 @@ def q4_0(weight: torch.Tensor, group: int = QK4_0) -> torch.Tensor:
     """llama.cpp's ``quantize_row_q4_0_ref`` then dequantization, along the last dim in blocks of ``group``: per block
     ``d = max / -8`` (``max`` the signed value of largest magnitude), ``q = min(15, floor(x / d + 8.5)) - 8``, ``d``
     stored as FP16. The values a Q4_0 GGUF of this weight multiplies by (bit-exact rule, so int4 is deployable)."""
+    d = q4_scales(weight, group)
     columns = weight.shape[-1]
-    if columns % group:
-        raise ValueError(f"row length {columns} is not a multiple of the Q4_0 block {group}")
     blocks = weight.float().reshape(*weight.shape[:-1], columns // group, group)
-    index = blocks.abs().argmax(dim=-1, keepdim=True)
-    signed_max = blocks.gather(-1, index)
-    d = signed_max / -8.0
     inverse = torch.where(d != 0, 1.0 / d, torch.zeros_like(d))
     q = torch.clamp(torch.floor(blocks * inverse + 8.5), max=15.0) - 8.0
     return (q * d.to(torch.float16).float()).reshape(weight.shape)
+
+
+def q4_scales(weight: torch.Tensor, group: int = QK4_0) -> torch.Tensor:
+    """The Q4_0 reduction, per block of ``group`` along the last dim: FP32 ``d = max / -8`` with ``max`` the signed value
+    of largest magnitude (the first one on ties), shape (..., blocks, 1). Taken in ``weight``'s own dtype (abs, argmax and
+    gather are exact in any float dtype), so a BF16 latent is never widened for it. Shared by ``q4_0`` and the fused
+    training ramp (maple/precision_kernels.py)."""
+    columns = weight.shape[-1]
+    if columns % group:
+        raise ValueError(f"row length {columns} is not a multiple of the Q4_0 block {group}")
+    blocks = weight.reshape(*weight.shape[:-1], columns // group, group)
+    index = blocks.abs().argmax(dim=-1, keepdim=True)
+    return blocks.gather(-1, index).float() / -8.0
 
 
 def quantized_value(weight: torch.Tensor, fmt: str, options: dict | None = None) -> torch.Tensor:
@@ -163,7 +155,30 @@ def precision_value(weight: torch.Tensor, group: str) -> torch.Tensor:
         return weight
     if layer and options.get("layers") is not None and int(layer) not in options["layers"]:
         return weight
+    if PRECISION["fused"] and weight.is_cuda and weight.dtype == torch.bfloat16 and (
+            fmt == "int4" or (fmt == "ternary" and not options.get("nested_group"))):
+        return _FusedPrecisionRamp.apply(weight, fmt, options, float(mix))
     return _PrecisionRamp.apply(weight, quantized_value(weight, fmt, options), float(mix))
+
+
+class _FusedPrecisionRamp(torch.autograd.Function):
+    """``_PrecisionRamp(weight, quantized_value(weight))`` for a BF16 CUDA latent: the eager scales of the rule, then one
+    elementwise kernel (maple/precision_kernels.py), bit-identical; identity gradient to ``weight``."""
+
+    @staticmethod
+    def forward(ctx, weight, fmt, options, mix):
+        from .precision_kernels import q4_ramp, ternary_ramp
+
+        w = weight.detach()
+        if fmt == "int4":
+            group = int(options.get("group", QK4_0))
+            return q4_ramp(w, q4_scales(w, group), mix, group)
+        _, _, threshold, _, alpha = ternary_row_stats(w)
+        return ternary_ramp(w, threshold, alpha, mix)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad, None, None, None
 
 
 class _PrecisionRamp(torch.autograd.Function):
