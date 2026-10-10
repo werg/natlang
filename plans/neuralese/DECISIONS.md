@@ -1462,8 +1462,9 @@ instruction.
   representation-generic Neuralese results and `view`. Spec: spec/ext/neuralese.md "Combinators"; skills updated.
 - The combinator description wording is kept until measured live (plans/MODEL_FACING_CHANGES.md).
 - The S5 operator full-size run was restarted on the new library and stopped again: the Luna closed-output best-heads
-  are step 29440, after the 28793 split exposure, and map's normal call trajectory stalled. It waits for Pop's clean
-  28793 heads. Shards collected on the old bodies were discarded.
+  are step 29440, after the 28793 split exposure, and map's normal call trajectory stalled. Parked (coordinator, same day) until a
+  qualified executor exists: the unqualified 28793 executor loops in map's normal trajectory (hallucinated harness
+  names, greedy repetition); it is the first job after the Mellum foundation qualifies its text warm-up. Shards collected on the old bodies were discarded.
 - `init-body` is a reference-only capability. Open: the llama.cpp fork (native and the vendored wasm builds) still
   answers 404 rather than 501 `neuralese-init-body-unavailable` for the path; one line beside the `grad`/`optim`
   stubs in `tools/neuralese/neuralese-service.cpp`, then a conformance `lacking` entry, at the next fork rebuild.

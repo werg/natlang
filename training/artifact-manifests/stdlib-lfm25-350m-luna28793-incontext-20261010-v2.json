@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "stdlib-lfm25-350m-luna28793-incontext-20261010-v2",
+  "kind": "standard-library",
+  "dialect": "nd:natlang-latent-sketch@2",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/stdlib-lfm25-350m-luna28793-incontext-20261010-v2",
+  "files": [
+    {
+      "path": "stdlib.nz",
+      "bytes": 822888,
+      "sha256": "e6d4f4f9a9daf4372976c158eac3956df0b80d715a0db29f98b360adabd12de1",
+      "nz": {
+        "exports": [
+          "ap",
+          "combine",
+          "convert",
+          "gloss",
+          "map",
+          "read",
+          "split",
+          "splitList",
+          "zip"
+        ],
+        "blocks": 9,
+        "dialects": [
+          "nd:natlang-latent-sketch@2"
+        ],
+        "widths": [
+          1024
+        ]
+      }
+    }
+  ],
+  "bytes": 822888
+}

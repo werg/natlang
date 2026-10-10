@@ -17,7 +17,7 @@
  * the producer chain. Records go to OUT (JSONL) with their blocks in OUT-without-.jsonl + `.blocks/`.
  *
  *   node scripts/neuralese-collect-operator-records.mjs --endpoint URL --library stdlib.nz --cases cases.jsonl \
- *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N] [--gate-reply-tokens 8]
+ *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N] [--gate-reply-tokens 8] [--max-turns 24]
  */
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -29,7 +29,7 @@ import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 const { values: args } = parseArgs({ options: {
   endpoint: { type: 'string' }, library: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' },
   programs: { type: 'string', default: 'read,map,zipsplit,laws' }, limit: { type: 'string', default: '0' },
-  split: { type: 'string', default: '' }, 'gate-reply-tokens': { type: 'string', default: '8' }, model: { type: 'string', default: 'natlang-neuralese' } } });
+  split: { type: 'string', default: '' }, 'gate-reply-tokens': { type: 'string', default: '8' }, 'max-turns': { type: 'string', default: '24' }, model: { type: 'string', default: 'natlang-neuralese' } } });
 for (const key of ['endpoint', 'library', 'cases', 'out']) if (!args[key]) throw new Error(`--${key} is required`);
 
 const programs = new Set(args.programs.split(',').filter(Boolean));
@@ -38,8 +38,15 @@ const library = await loadStandardLibrary(args.library, store);
 const lib = createNeuraleseLibrary(library);
 let current = {};
 const sink = replayRecordSink({ path: args.out, endpoint: args.endpoint, annotate: () => current });
-const runtime = createNatlangRuntime({ model: neuraleseServerModelTurn({ endpoint: args.endpoint, model: args.model, store }),
-  neuralese: { store } });
+// Turn limit per program (added 2026-10-10 when the problem showed up: in the normal call trajectory an unqualified
+// executor can repeat one failing eval forever under greedy decoding). A program over the limit is a failed case.
+const turn = neuraleseServerModelTurn({ endpoint: args.endpoint, model: args.model, store });
+let turns = 0;
+const limited = Object.assign((request, signal) => {
+  if (++turns > Number(args['max-turns'])) throw new Error(`turn limit: ${args['max-turns']} model turns in one program`);
+  return turn(request, signal);
+}, turn);
+const runtime = createNatlangRuntime({ model: limited, neuralese: { store } });
 const { valueAndGrad, objectives } = createLearning(learningService({ endpoint: args.endpoint, store, replayRecords: sink }),
   { library });
 
@@ -74,6 +81,7 @@ const counts = {};
 let failures = 0;
 async function collect(meta, program) {
   current = meta;
+  turns = 0;
   try {
     await valueAndGrad(() => program(), bodies);
     counts[meta.operator] = (counts[meta.operator] ?? 0) + 1;
