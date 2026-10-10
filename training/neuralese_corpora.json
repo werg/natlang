@@ -28028,6 +28028,26 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Helper source and model-error proposals retained with no automatic exclusion. Rootv9 separately reviews full states and corrects two proposed clear-error interpretations."
+    },
+    {
+      "id": "free-provider-google-v24-closure-provenance-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/provenance-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Additive exact historical policies25/30 and actual closurecode preserved; V25includes omittedbuilder. Original manifests unchanged. DGXfullS1closed, no trainingadmission."
+    },
+    {
+      "id": "free-provider-google-v25-closure-provenance-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/provenance-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Additive exact historical policies25/30 and actual closurecode preserved; V25includes omittedbuilder. Original manifests unchanged. DGXfullS1closed, no trainingadmission."
     }
   ],
   "coverage_backlog": [

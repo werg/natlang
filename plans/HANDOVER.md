@@ -10521,3 +10521,9 @@ Additive v3 receipt resolves28 previously unbound source states through saved ch
 ### V63 root source review, 2026-10-10 23:34 UTC
 
 Root reviewed17 complete candidate states, adding9 forward holds (45total): two generic posts lacking group provenance, three mixed-affect labels without a dominance rule, unsupported exclusive bit-parts claim, golfer evidence not excluding musician status, decision to transform not proving accomplishment, and a putative causal case report lacking resolution. The latter two entailment distinctions correct helper proposals of clear model error. Eight proposed exclusions declined where topical clues or study-level observed outcomes support judgment; no blanket causal-design or certainty requirement. All source annotations and sealed artifacts preserved. New holds are V17 decisions that disagreed, so V64 source is unaffected.
+
+### Source closure and preparation correction, 2026-10-10 23:38 UTC
+
+DGX fullS1 closedV25(53programs402items) andV24(54programs406items), no original ID/group/protected/text links. Receipts onmain409e8e2d/7a918bdc; closure is evidence only. Additive provenance supplements preserve exact policy25/30, actual closurecode64b255e8 and previously omittedV25builder, without rewriting original manifests.
+
+Root rejected fresh annotationV19:117 selected states carry known upstream1504-character truncation. A pinned full file does not guarantee complete visible input. V18/V19 preserved unlaunched; shared annotation filter correction and fresh preparation requested. ActiveV64 source had separate complete-input review.

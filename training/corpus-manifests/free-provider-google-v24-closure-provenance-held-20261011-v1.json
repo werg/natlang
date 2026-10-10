@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v24-closure-provenance-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/provenance-supplement-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 877,
+      "sha256": "1a37db54f5a7158b7990bb54a62e8bee0ff752d61f3a4062e941a7e8b026c724"
+    },
+    {
+      "path": "decision_source_quality_holds-v25-policy.json",
+      "bytes": 21692,
+      "sha256": "4e7da13c791930c34f60cc2b1676d0f14a0dcfcbf42885432941caa42f71bc99"
+    },
+    {
+      "path": "decision_source_quality_holds-v30-policy.json",
+      "bytes": 25187,
+      "sha256": "7fbae8f0b338fd085fdaab1839b82971f573ccb413f8e63a27476662d865c41f"
+    },
+    {
+      "path": "provenance-supplement.json",
+      "bytes": 1676,
+      "sha256": "56606631afae681a8b6f49757a4b1ec734e3b458dc99623fe8d53e030823b059"
+    },
+    {
+      "path": "source_case_closure-64b255e8.py",
+      "bytes": 32159,
+      "sha256": "64b255e854c30fccc197d69af3a1a632068d144b5a047441a3df4c218fe7e9af"
+    }
+  ],
+  "bytes": 81591
+}

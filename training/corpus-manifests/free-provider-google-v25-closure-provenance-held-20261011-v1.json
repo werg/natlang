@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v25-closure-provenance-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/provenance-supplement-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 980,
+      "sha256": "696b0aad61d71db2cb5a22ef76867d19e41748bf116a7f7f10dc331d4153270c"
+    },
+    {
+      "path": "build_v25_closure_inputs.py",
+      "bytes": 11455,
+      "sha256": "51524abfdae8b88bfddb7e1486b68a57c248a6d9c5d04cbcfcab20dde7e963e7"
+    },
+    {
+      "path": "decision_source_quality_holds-v25-policy.json",
+      "bytes": 21692,
+      "sha256": "4e7da13c791930c34f60cc2b1676d0f14a0dcfcbf42885432941caa42f71bc99"
+    },
+    {
+      "path": "decision_source_quality_holds-v30-policy.json",
+      "bytes": 25187,
+      "sha256": "7fbae8f0b338fd085fdaab1839b82971f573ccb413f8e63a27476662d865c41f"
+    },
+    {
+      "path": "provenance-supplement.json",
+      "bytes": 2049,
+      "sha256": "39d9d0e2c3b601557334c4c35b9372a71cadb1c0443d1e9f44885b31984c3eae"
+    },
+    {
+      "path": "source_case_closure-64b255e8.py",
+      "bytes": 32159,
+      "sha256": "64b255e854c30fccc197d69af3a1a632068d144b5a047441a3df4c218fe7e9af"
+    }
+  ],
+  "bytes": 93522
+}
