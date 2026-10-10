@@ -26072,6 +26072,39 @@
       "training_admission": false,
       "admission": "source closure evidence only; semantic truth and trajectory admission separate",
       "notes": "Supplemental immutable packet produced after initial quality snapshot; original manifest remains unchanged. Exact packet SHA8c2040464d91383c1560db083778035ba43f712d59ef3f90d16a7d9b5ff24842. DGX full S1/harness4 closure retained47/47."
+    },
+    {
+      "id": "luna-ar-native-harness-v5-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-splitfixed-28793-20261010-v5/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "model-checkpoint-and-execution-evidence-not-training-data",
+      "source_class": "clean-lineage-full-state-and-frozen-runtime",
+      "training_admission": false,
+      "admission": "unqualified; exact resume and diagnostic evidence only",
+      "notes": "Clean corrected split-safe lineage completed32889; final fulloptimizer/headscurrent, final gatefails6/30. Bestfullstate31744 distinct, fails3/30. No foundation/runtime certificate."
+    },
+    {
+      "id": "luna-ar-native-harness-v6-refine-frozen-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-refine-31744-20261010-v6",
+      "include": [
+        "root-launch-receipt-v1.json",
+        "frozen-package-v1/**/*.py"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "model-checkpoint-and-execution-evidence-not-training-data",
+      "source_class": "clean-lineage-full-state-and-frozen-runtime",
+      "training_admission": false,
+      "admission": "unqualified; exact resume and diagnostic evidence only",
+      "notes": "New shared-core frozen code continuation fromV5best31744,2048updates. BackboneLR2e-6/projections3e-4, doubled full/sketch embedding weights; native strictgatesunchanged. No new admission."
     }
   ],
   "coverage_backlog": [
