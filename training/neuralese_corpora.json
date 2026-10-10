@@ -21046,6 +21046,58 @@
         }
       },
       "notes": "Port records (natlang.port-record/1) for the view/ask summarizer family (DECISIONS 2026-10-09; plans/neuralese/VIEW_CORPUS.md), built 2026-10-10: 25067 records over 7300 sources; by artifact {\"code\": 3534, \"data\": 5536, \"html\": 4468, \"log\": 3938, \"prose\": 3209, \"table\": 4382}; by task {\"compare\": 19150, \"consume\": 663, \"reconstruct\": 5254}; by family {\"view_code_extract\": 1734, \"view_code_reconstruct\": 900, \"view_code_summary\": 900, \"view_data_extract\": 3475, \"view_data_qa\": 700, \"view_data_reconstruct\": 1361, \"view_html_extract\": 968, \"view_html_qa\": 2800, \"view_html_reconstruct\": 700, \"view_log_extract\": 2850, \"view_log_reconstruct\": 1088, \"view_prose_qa\": 968, \"view_prose_reconstruct\": 755, \"view_prose_summary\": 1486, \"view_table_extract\": 1525, \"view_table_qa\": 2407, \"view_table_reconstruct\": 450}; by split {\"test\": 1411, \"train\": 22353, \"validation\": 1303}. Targets are reconstruction (identity), code-computed extraction (JSONPath, CSS selectors, table cells/counts/arg-max, Python AST, tool-output facts) and questions/summaries taken from public datasets; no teacher-generated targets. Writer instructions are the dataset's query or instruction; compare records pair purposes over one source. Sources: CNN/DM 3.0.0 and SQuAD (train only; validation is protected) and QuALITY from the local HF cache, xLAM 60k (sdkb raw), bgkit bare repositories (permissive licences detected at HEAD), SWE-rebench OpenHands bash outputs (registered corpus), and view-sources-20261009-v1. Rejections by reason and input file hashes are in manifest.json. Omissions (licence, preprocessing, generated targets, eval contamination) are recorded in VIEW_CORPUS.md section 2. Open before admission: licence review, cross-corpus split closure and near-duplicate dedup against s1-full-final-20261003 (shared wiki:/repo: groups)."
+    },
+    {
+      "id": "free-provider-zai45-sourcev5-procurement-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-zai45-sourcev5-final-case-v1/launch-failure-review-v1.json",
+        "provider-zai45-sourcev5-final-case-v1/launch-receipt-v1.json",
+        "provider-zai45-sourcev5-final-case-v1/queue.jsonl",
+        "provider-zai45-sourcev5-final-case-v1/worker.log",
+        "provider-zai45-sourcev5-index0-v2/case-000/collector.log",
+        "provider-zai45-sourcev5-index0-v2/case-000/jobs/000000-91855a57b679e74e.result.json",
+        "provider-zai45-sourcev5-index0-v2/case-000/jobs/000000-91855a57b679e74e.trace.jsonl",
+        "provider-zai45-sourcev5-index0-v2/case-000/results.jsonl",
+        "provider-zai45-sourcev5-index0-v2/case-000/results.jsonl.manifest.json",
+        "provider-zai45-sourcev5-index0-v2/journal.jsonl",
+        "provider-zai45-sourcev5-index0-v2/launch-receipt-v1.json",
+        "provider-zai45-sourcev5-index0-v2/queue.jsonl",
+        "provider-zai45-sourcev5-index0-v2/storage-resume-receipt-v1.json",
+        "provider-zai45-sourcev5-index0-v2/worker.log",
+        "quality-review-v13/review.json",
+        "quality-review-v13/review.md"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "actual-provider-native-trajectories-and-launch-review",
+      "admission": "held-pending-source-and-trajectory-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "independent_new_worlds": 0,
+      "derived_from": [
+        "luna-v22-current-pass-pending-facts-source-held-20261010-v1"
+      ],
+      "notes": "Actual ZAI GLM4.5 Flash source-v5 index0 completion: 42 turns / 23272 completion tokens / 841.6 sec, exact procurement answer and six file checks pass. Actual scoped iterateOn has seed and four ordered file passes then final draft. Luna v13 independently pins evidence. Retains before-call index5 launch rejection and storage-floor pause/resume. Eight empty listings and fifteen empty searches in register pass remain quality evidence; request accounting differs by one transport start. Held, no learned-channel qualification; same inherited world, no extra world credit."
+    },
+    {
+      "id": "free-provider-zai45-counter-and-glob-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v14",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "quality-review-correction-and-runtime-bug-evidence",
+      "admission": "evidence-only-no-training-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-zai45-sourcev5-procurement-closeout-held-20261010-v1"
+      ],
+      "independent_new_worlds": 0,
+      "notes": "Corrects initial scope interpretation: the FileHandle child folder contains one root-level file, but **/ glob semantics wrongly required a slash and hid that file from listing/search. Preserve valid folder tools; fix zero-component globstar directories. Reconciles 84 collector sends / 85 transport starts with one local completion retry; its original attempted response is unrecoverable, no inferred payload. No source or output mutation/admission."
     }
   ],
   "coverage_backlog": [

@@ -16,7 +16,7 @@ def test_value_ce_scores_body_after_exact_forced_prefix_without_boundary_merging
     session._items = lambda *args: [('tok', 5), ('block', 'leaf')]
     logp = torch.tensor([-1., -2.], requires_grad=True)
     leaves = {'leaf': torch.tensor([1.], requires_grad=True)}
-    def score(prompt, target, resolved, write_terms, collect_token_states=False):
+    def score(prompt, target, resolved, write_terms, collect_token_states=False, projection_anchor_weight=0., projection_anchor_backbone_scale=0.05):
         assert prompt == [('tok', 5), ('block', 'leaf'), ('tok', 10), ('tok', 11)]
         assert target == [('tok', 12), ('tok', 13)]
         assert resolved is leaves and not write_terms

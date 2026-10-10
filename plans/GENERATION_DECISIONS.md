@@ -3368,3 +3368,17 @@ its regex matched no candidates and also retained sentence punctuation in the
 ID. Preserve child-level attribution; this is not a parent delegation negative.
 Observed saved completion counters49142/48160 are distinct from unavailable
 full billable usage. No blanket action admission or preference-pair admission.
+
+
+### 2026-10-10 — Globstar directory prefixes include root entries
+
+`**/` matches zero or more path components in scoped folder glob patterns.
+The former matcher required a slash, causing `**/*.md` and `**/*` to omit the
+single root-level file in a FileHandle child transaction. Provider review v14
+identified eight empty listings and fifteen empty searches in an otherwise
+exact successful procurement case. Folder access and tool availability stay
+intact; the shared correction also affects include/exclude selectors. Existing
+frozen workers retain old behavior until their next controlled runtime handoff.
+No labels change or quality gates relax. `npm run build:node` succeeds; no unit
+tests were added or run. V14 also reconciles the 84/85 request counts as distinct
+collector and transport scopes, including one local completion retry.

@@ -190,6 +190,13 @@ def test_first_divergence_details_bind_tokens_logits_and_payload_without_extra_f
     assert 'through prior targets' in row['ar_greedy_control_comparability_scope']
 
 
+def _marker_tokens_only(text):
+    """Only the tool-response marker prefixes are tokenized; row text must come from native token IDs."""
+    if not text.endswith('<tool_response>'):
+        raise AssertionError('native token IDs should be used')
+    return [40,41]
+
+
 def test_projected_history_cli_uses_shared_system_masked_window_preparation(tmp_path,monkeypatch):
     from natlang_neuralese.eval import projected_history as module
     from natlang_neuralese.train.text_warmup import prepare_text_windows,select_held_document_windows
@@ -204,7 +211,7 @@ def test_projected_history_cli_uses_shared_system_masked_window_preparation(tmp_
         close_id=2
     engine=SimpleNamespace(tokenizer=Tokenizer(),backbone=SimpleNamespace(
         controls=Controls(),eval=lambda:None),heads=SimpleNamespace(eval=lambda:None),
-        _tokens=lambda _text: (_ for _ in ()).throw(AssertionError('native token IDs should be used')))
+        _tokens=_marker_tokens_only)
     row={'text':'held synthetic chat','token_ids':[99,10,30,31,99,11,32,99,12,33,34,35,36],
          'split':'test','source_groups':['held-group']}
     loader_receipt={'fixture':'exact'}

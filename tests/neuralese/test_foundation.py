@@ -45,6 +45,7 @@ def test_transparent_reader_preserves_positions_and_payload_without_markers():
     engine.backbone = SimpleNamespace(embedding_weight=table, embed=lambda ids: table[ids],
                                      controls=SimpleNamespace(open_id=4, close_id=5))
     engine.heads = SimpleNamespace(interface=InterfaceNorm(table), read_markers=True)
+    engine.heads.read_in = lambda values: PortHeads.read_in(engine.heads, values)
     engine.heads.read_embeddings = lambda base, values: PortHeads.read_embeddings(engine.heads, base, values)
     engine.device = 'cpu'
     engine._template = None

@@ -40,7 +40,18 @@ function under(path: string, parent: string): boolean {
 function pattern(pattern: string | undefined): ((path: string) => boolean) {
   if (pattern === undefined) return () => true;
   cleanPath(pattern.replaceAll('**', 'x'));
-  const source = pattern.split('**').map(part => part.split('*').map(escapeRegExp).join('[^/]*')).join('.*');
+  // A globstar directory prefix includes zero directories: **/*.md must also
+  // find root-level Markdown files in a one-file FileHandle transaction.
+  let source = '';
+  for (let index = 0; index < pattern.length; index++) {
+    if (pattern[index] !== '*') { source += escapeRegExp(pattern.charAt(index)); continue; }
+    if (pattern[index + 1] !== '*') { source += '[^/]*'; continue; }
+    index++;
+    if (pattern[index + 1] === '/' && (index === 1 || pattern[index - 2] === '/')) {
+      source += '(?:[^/]+/)*';
+      index++;
+    } else source += '.*';
+  }
   const expression = new RegExp(`^${source}$`);
   return path => expression.test(path);
 }

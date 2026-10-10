@@ -43,7 +43,7 @@ declarations in [neuralese.d.ts](../neuralese.d.ts).
   dialect.
   Dialects are version tags ([NEURALESE_DIALECTS.md](../NEURALESE_DIALECTS.md)).
 
-**Generic results.** A named function may declare a representation-generic
+<a id="generic-results"></a>**Generic results.** A named function may declare a representation-generic
 result: a type parameter constrained to a crisp type `T` and its soft form,
 
 ```yaml
