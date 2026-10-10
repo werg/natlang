@@ -1,0 +1,177 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-v5-sixteen-source-closure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1",
+  "files": [
+    {
+      "path": "DGX-RUN-INSTRUCTIONS.md",
+      "bytes": 1439,
+      "sha256": "74013ad9e694c357f94df5f5ed287389b7fd2a1429907cea4f6de8d24bf51ba5"
+    },
+    {
+      "path": "harness-only-closure/candidate-source-case-bindings.json",
+      "bytes": 38865,
+      "sha256": "1a4ad81829af516b76dce21e0d44de2c74f686453c3553323a1605572850ba65"
+    },
+    {
+      "path": "harness-only-closure/closed-source-case-port-projection.jsonl",
+      "bytes": 12603985,
+      "sha256": "5c24258ea4722ab03796f385762ca944b6e92d9ecb500f7e3ece12974e5b1d5b",
+      "lines": 16
+    },
+    {
+      "path": "harness-only-closure/closure-report.json",
+      "bytes": 9932,
+      "sha256": "bdba46dd7b58d456a9410bd47fa1a33efae2b57c96b7983e12f9270b876e16e7"
+    },
+    {
+      "path": "harness-only-closure/source-case-port-projection.jsonl",
+      "bytes": 12603985,
+      "sha256": "5c24258ea4722ab03796f385762ca944b6e92d9ecb500f7e3ece12974e5b1d5b",
+      "lines": 16
+    },
+    {
+      "path": "harness-only-closure-replay-v2/candidate-source-case-bindings.json",
+      "bytes": 38865,
+      "sha256": "1a4ad81829af516b76dce21e0d44de2c74f686453c3553323a1605572850ba65"
+    },
+    {
+      "path": "harness-only-closure-replay-v2/closed-source-case-port-projection.jsonl",
+      "bytes": 12603985,
+      "sha256": "5c24258ea4722ab03796f385762ca944b6e92d9ecb500f7e3ece12974e5b1d5b",
+      "lines": 16
+    },
+    {
+      "path": "harness-only-closure-replay-v2/closure-report.json",
+      "bytes": 10180,
+      "sha256": "b546cf0bece95c170b5d9dae8c06c6475e4f42a84ba363d90f21d5f1b615b8b4"
+    },
+    {
+      "path": "harness-only-closure-replay-v2/source-case-port-projection.jsonl",
+      "bytes": 12603985,
+      "sha256": "5c24258ea4722ab03796f385762ca944b6e92d9ecb500f7e3ece12974e5b1d5b",
+      "lines": 16
+    },
+    {
+      "path": "held-analysis/conversion-audit.json",
+      "bytes": 1795,
+      "sha256": "e6ce5057308d578d3c1b9fb1ec65544426e27f28f95f6f009b1797acae618135"
+    },
+    {
+      "path": "held-analysis/conversion-review-correction-v1.json",
+      "bytes": 938,
+      "sha256": "55acc2d863f17f08874938ebe6349486499213bd551081b1424f667c1624e02a"
+    },
+    {
+      "path": "held-analysis/conversion-review.json",
+      "bytes": 6078,
+      "sha256": "159c0a23927584b6e7aa11b125d3c5b48b13d9bf07ae97381301479cf24928c7"
+    },
+    {
+      "path": "held-analysis/conversion-summary.json",
+      "bytes": 1795,
+      "sha256": "e6ce5057308d578d3c1b9fb1ec65544426e27f28f95f6f009b1797acae618135"
+    },
+    {
+      "path": "held-analysis/staged-eval-candidate-derivation.json",
+      "bytes": 14281,
+      "sha256": "8d41e791798edb04e67968367c3e9275e5a10169460fef95d5f1b34cfc55a839"
+    },
+    {
+      "path": "inputs/candidate-manifest.json",
+      "bytes": 90900,
+      "sha256": "6df6e0769d6a07920df29c295624260b146d4a33fe7b31ffa9ef16a2d0ed324c"
+    },
+    {
+      "path": "inputs/harness-v4/digests.npz",
+      "bytes": 1570,
+      "sha256": "0678d15fe2bdb3179b5e82246cc4ecabe6c600afb1ed5279afd8b9a7d6c24e8d"
+    },
+    {
+      "path": "inputs/harness-v4/groups.json",
+      "bytes": 41889,
+      "sha256": "3d67d4c227b536a06320c6ab84defdefc95adb96196532e7b7a2e5f46e6100dc"
+    },
+    {
+      "path": "inputs/harness-v4/index.json",
+      "bytes": 802,
+      "sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f"
+    },
+    {
+      "path": "inputs/harness-v4/sketches.npz",
+      "bytes": 756,
+      "sha256": "1a0f905a83eb0bbb4728cf31eab23f5f2cb33e34ed16e7b6fcb52de2974d0ac0"
+    },
+    {
+      "path": "inputs/harness-v4-manifest.json",
+      "bytes": 889,
+      "sha256": "18bf74c8c2b599e19af99a46ede0553b0b9c91d574b6f0aaaea9498b4a8f0f1b"
+    },
+    {
+      "path": "inputs/native-turns.jsonl",
+      "bytes": 79237650,
+      "sha256": "eca9dffbb598e0afbf5bd8941b791b151ca27d057ed004a15c97b1fe907155b4",
+      "lines": 485
+    },
+    {
+      "path": "inputs/protected-bgkit.json",
+      "bytes": 6460751,
+      "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+    },
+    {
+      "path": "inputs/s1-full-local-index-meta.json",
+      "bytes": 15277,
+      "sha256": "eb78bbdfc5673a7b4e97c42881beae49a14de1a3f7db1741f80a311d15f087a4"
+    },
+    {
+      "path": "inputs/s1-full-registered-manifest.json",
+      "bytes": 839,
+      "sha256": "914893de2e0ce260e4000ca7609e51f8997b66e8d15a845064d812bc68c7514e"
+    },
+    {
+      "path": "inputs/selected-results.jsonl",
+      "bytes": 45143669,
+      "sha256": "715560912faa773276f34efa1a4a4c28c06e3f88f3bbcd6074ad81f7bb7fc54b",
+      "lines": 16
+    },
+    {
+      "path": "inputs/source-manifest.json",
+      "bytes": 1167,
+      "sha256": "f2a5b9f1977a85de5279d6bbfa6bca44f2540cbf1f51ca8433cd4186168c2989"
+    },
+    {
+      "path": "inputs/source-original-v5.cases.jsonl",
+      "bytes": 1719197,
+      "sha256": "eb33efacfe38c88c4a9f253fe0d1dc246ac73cfc137c83f17976b28c3bc1e261",
+      "lines": 32
+    },
+    {
+      "path": "inputs/source-original-v5.manifest.json",
+      "bytes": 1243,
+      "sha256": "0e48a69f7938453315d40ff1e6f5b020419929234d3c46731758a8e704c37d59"
+    },
+    {
+      "path": "inputs/source-proof.json",
+      "bytes": 68903,
+      "sha256": "ccb8a2671be84758d8edbc027f05bf9ad13bd8c3100d8bc327ad0ffa086f31e5"
+    },
+    {
+      "path": "inputs/source-selected-16.cases.jsonl",
+      "bytes": 860012,
+      "sha256": "5de1be219acbcfa63c19b74181834dd39fac7df7603a1d2901f6ad29a9aa6229",
+      "lines": 16
+    },
+    {
+      "path": "packet-files.json",
+      "bytes": 5564,
+      "sha256": "3638706c84cd99db24be00e55f83863c1cf1e9e299a6d90bb5cb53a3f1f80c7e"
+    },
+    {
+      "path": "packet.json",
+      "bytes": 5378,
+      "sha256": "03610c6cc899d4f6855cdf2375a40b07ab5d9fbe95cbe32727f1b83afcec0249"
+    }
+  ],
+  "bytes": 184196564
+}

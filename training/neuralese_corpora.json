@@ -27483,6 +27483,19 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-approval-and-recurrence-proof",
       "notes": "Shared validator now recognizes exact nonterminal model-authored eval-code marker linked to typed graph writer, host reference and downstream provider expansion. Four candidate staged writer/reader pairs; existing approval gate correctly prevents proof until reviewed. Computed host outputs without authored marker remain unsupported; no marker_outputs fabricated, no approval bypass."
+    },
+    {
+      "id": "semantic-iterate-v35-v5-sixteen-source-closure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "explicit-source-partitions-candidate-subset-train",
+      "source_class": "held-source-closure-and-native-evidence",
+      "training_admission": false,
+      "admission": "held-pending-full-s1-source-trace-review",
+      "notes": "Original32-case source with explicit train/test partitions plus exact16-train selected subset, actual results and485 native turns. Harness4 closure16/16 green; full-S1 delegatedDGX.31 pinned artifacts184MB include missing-S1-sketches receipt; do not substitute rebuilt index. Four original train families, no independent-world credit. Source/trace approval and soft-state proof remain pending."
     }
   ],
   "coverage_backlog": [
