@@ -24,10 +24,12 @@ import time
 import urllib.request
 from pathlib import Path
 
-NATIVE = Path("/home/werg/natlang/runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal/assembled-v3")
-PACKET = Path("/home/werg/natlang/runs/training-periodic-eval-20261003/execution-eval-v3/cases.ir.jsonl")
-BIRD = Path("/home/werg/data/bird-sqlite/train/train_databases")
-REPO = Path("/home/werg/natlang")
+from ..common.paths import resolve
+
+NATIVE = resolve("repo", "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal/assembled-v3")
+PACKET = resolve("repo", "runs/training-periodic-eval-20261003/execution-eval-v3/cases.ir.jsonl")
+BIRD = resolve("data_nvme", "bird-sqlite/train/train_databases")
+REPO = resolve("repo")
 NEURALESE_PARTS = {"read", "neuralese", "digest"}
 
 
