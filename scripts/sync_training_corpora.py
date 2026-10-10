@@ -107,6 +107,49 @@ def require_committed_offload_snapshot(repo, identity):
         raise ValueError(f'offload requires the immutable manifest unchanged at HEAD: {manifest_rel}')
 
 
+def compile_declared_glob(pattern):
+    """Compile fnmatch-style path globs with zero-or-more ``**/`` prefixes.
+
+    All non-``**/`` wildcard behavior remains fnmatch-compatible. Compile
+    patterns once per manifest, not once per file in the walked tree.
+    """
+    if '**/' not in pattern:
+        return re.compile(fnmatch.translate(pattern))
+    chunks = []
+    literal = []
+    cursor = 0
+    while cursor < len(pattern):
+        if pattern[cursor] == '[':
+            # Do not interpret a character class containing ``**/`` as a
+            # recursive path operator. Follow fnmatch's optional negation and
+            # literal-leading-`]` rules when finding the class boundary.
+            end = cursor + 1
+            if end < len(pattern) and pattern[end] == '!':
+                end += 1
+            if end < len(pattern) and pattern[end] == ']':
+                end += 1
+            while end < len(pattern) and pattern[end] != ']':
+                end += 1
+            if end < len(pattern):
+                literal.extend(pattern[cursor:end + 1])
+                cursor = end + 1
+                continue
+        if pattern.startswith('**/', cursor):
+            if literal:
+                translated = fnmatch.translate(''.join(literal))
+                chunks.append(translated[4:-3])
+                literal.clear()
+            chunks.append('(?:.*/)?')
+            cursor += 3
+        else:
+            literal.append(pattern[cursor])
+            cursor += 1
+    if literal:
+        translated = fnmatch.translate(''.join(literal))
+        chunks.append(translated[4:-3])
+    return re.compile('(?s:' + ''.join(chunks) + r')\Z')
+
+
 def publish(repo, entry):
     root = repo / relative(entry['path'])
     files = []
@@ -115,9 +158,9 @@ def publish(repo, entry):
     # against every entry churns fnmatch's pattern cache and recompiles them.
     exact_paths = {pattern for pattern in patterns if not any(c in pattern for c in '*?[')}
     wildcard_patterns = [pattern for pattern in patterns if pattern not in exact_paths]
+    compiled_patterns = [compile_declared_glob(pattern) for pattern in wildcard_patterns]
     def selected(name):
-        return name in exact_paths or any(fnmatch.fnmatch(name, pattern) or
-                   (pattern.startswith('**/') and fnmatch.fnmatch(name, pattern[3:])) for pattern in wildcard_patterns)
+        return name in exact_paths or any(pattern.fullmatch(name) for pattern in compiled_patterns)
     def directory_allowed(name, at_root=False):
         return ((not at_root or not entry.get('include_root_prefixes') or
                  any(name.startswith(prefix) for prefix in entry['include_root_prefixes']))
