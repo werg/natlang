@@ -2,6 +2,7 @@ import { type Context, copyJson, type Draft, type JsonValue } from "@earendil-wo
 import type {
 	Api,
 	AssistantMessage,
+	AssistantMessageEvent,
 	DeferredHandle,
 	Message,
 	Model,
@@ -398,9 +399,24 @@ export async function streamResponse(
 				if (pending !== undefined && !stopped) timer = setTimeout(flush, interval);
 			});
 	};
+	// PATCH (natlang port): stream observers (`onStream`), resolved once per attempt and called synchronously.
+	const observers: ((event: AssistantMessageEvent) => void)[] = [];
+	await runtime.hooks.each("onStream", (hook) => {
+		observers.push((event) => hook(event, attempt, runtime, context));
+	});
+	const observe = (event: AssistantMessageEvent): void => {
+		for (const observer of observers) {
+			try {
+				observer(event);
+			} catch (error) {
+				runtime.report(error);
+			}
+		}
+	};
 	try {
 		const events = runtime.models.streamSimple(model, { messages: [...messages] }, options);
 		for await (const event of events) {
+			if (observers.length > 0) observe(event);
 			// A partial without content, such as pi-ai's opening `start` event, shows nothing; a deferred response
 			// never gets past it, so it never leaves a partial.
 			if (event.type === "done" || event.type === "error" || event.partial.content.length === 0) continue;

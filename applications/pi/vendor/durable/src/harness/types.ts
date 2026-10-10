@@ -1,6 +1,7 @@
 import type { AttachedReplicatedState, Context, JsonValue } from "@earendil-works/chord";
 import type {
 	AssistantMessage,
+	AssistantMessageEvent,
 	CacheRetention,
 	Message,
 	Models,
@@ -633,6 +634,16 @@ export interface HookApi extends DocumentReader {
 	memo<T extends JsonValue>(name: string, candidate: T, context: Context): Promise<T>;
 }
 
+/**
+ * PATCH (natlang port): what a stream observer may use besides a hook's reads: the generation's abort signal, its
+ * agent, and the conversation's environment (for read-only preparation).
+ */
+export interface StreamHookApi extends HookApi {
+	readonly signal: AbortSignal;
+	agent(context: Context): Promise<Agent>;
+	env(context: Context): Promise<ExecutionEnv | undefined>;
+}
+
 export type HookResult<T> = T | undefined | Promise<T | undefined>;
 
 /** Hooks of the built-in generation task. */
@@ -643,6 +654,13 @@ export interface GenerationHooks {
 		api: HookApi,
 		context: Context,
 	): HookResult<{ readonly messages: readonly Message[] }>;
+	/**
+	 * PATCH (natlang port, plans/STREAMING.md §2): every provider event of a streamed request attempt as it arrives,
+	 * `start` through `done` or `error`, before pi.live's throttle. Synchronous and not awaited: an observer starts
+	 * background work and returns; a throw is reported. Events are hints: the terminal message (`afterResponse`)
+	 * decides, a re-sent request starts its parts again at content index 0, and `api.signal` aborts with the task.
+	 */
+	onStream(event: AssistantMessageEvent, attempt: number, api: StreamHookApi, context: Context): void;
 	/** Every terminal provider message, before classification. */
 	afterResponse(message: AssistantMessage, api: HookApi, context: Context): void | Promise<void>;
 	/** A final answer; the first `continue` appends a user message and continues the run. */

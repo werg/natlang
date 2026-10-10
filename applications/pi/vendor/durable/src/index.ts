@@ -68,6 +68,7 @@ export type {
 	HarnessOptions,
 	HarnessSettings,
 	HookApi,
+	StreamHookApi,
 	HookRegistration,
 	HookResult,
 	HooksOf,
