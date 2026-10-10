@@ -10303,3 +10303,9 @@ V38's exhausted SCHED-540 attempt has concrete model-code mistakes (free `decisi
 ### Pop 2026-10-10T13:28:03.230729+00:00 — shared campaign preparation exercised
 
 - Added scripts/prepare_luna_folder_campaign.py preparation-onlyCLI, replacing brittle/tmpcount/pathsubstitutions. Itderivescounts/physicalsourceindices, checksalltrainsplits, exactreferenceIDs/admission/capturevisibility andfrozentree, pinsactualpredecessorqueues, writesfreshcandidatequeues/plan. Rootreviewsealsplanbeforeexplicitstarter; noautomaticlaunch/admission. ActualV44preparationpassedon49cases376items; rootapprovedplanSHAedf7b2a6801c58fc54173c005aef13a0001e5e4d39cf9091aa7f7c883e7a984c, launchPID894986. Candidateoriginalpreservedseparately; max4freshworkersafterV43complete. No testsrun; --help/syntax andactualpreparation/executionexercised.
+
+### Pop 2026-10-10T14:22:17.729391+00:00 — full50-minute monitoring and initialization handoff
+
+- Full50minsleepcompleted; V5active32000/32889GPU100%sampled, V44fourworkers46/49finished, V16Google433/512V17queued. Disk40GiBroot43GiBstoragefree; no new infrastructure issue. V15fullS1ownerclosure49/49cleanreceiptf467f01e, sourcequality/admissionseparate.
+- Receivedsharedupstreamin-contexttextinit57b9ff23 (bareencode/embedbanks superseded), preserve-stream0b9be58c, v7steps-onlyARcheckpointcadence1ec53259; nextlaunchmustsharedv7/newexactrecipeversion, currentfrozenV5unchanged.
+- OwnerS5/incontextbankmentions mixedrundir8805-final28793 best-heads. Registryexcludes29466mixedcloseoutascleanancestor dueS1heldrepo exposure. Askedownerpinexactbeststep/hash: earlypre-exposurebestmightbeequivalenttoclean28793, so directoryaloneinsufficient. CleanparentcheckpointSHAa1eb48cf378f4762635b2d7178c9c947cd1a3f7ab55020cd7d25979b067d55c2/headsexport5ee2035b0d52794ac57ee075dc33c4d3cf2fe622f581672faba07b5436492586provided. Noinheritedqualification; exploratoryoperatorjobsremainDGXownercontrol. Messagespop-ecd9/pop-c613, awaitingexactbinding.
