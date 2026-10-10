@@ -157,9 +157,17 @@ function checkBashAst(tree: unknown): void {
 }
 
 export type FolderBashResult = { exitCode: number; stdout: string; stderr: string; changedPaths: string[] };
-export async function runFolderBash(folder: Folder, command: string,
-  options: { network?: boolean; python?: PythonHost; ask?: AskHost; call?: CallHost;
-    apply?: (name: string, path: string) => Promise<unknown> } = {}): Promise<FolderBashResult> {
+export type FolderBashOptions = { network?: boolean; python?: PythonHost; ask?: AskHost; call?: CallHost;
+  apply?: (name: string, path: string) => Promise<unknown>;
+  /** The directory the command starts in: absolute under /workspace, or relative to it (default /workspace). */
+  cwd?: string;
+  /** Environment variables for this command, over the shell's own. */
+  env?: Record<string, string>;
+  /** Stops the command at its next statement boundary. */
+  signal?: AbortSignal;
+  /** Arguments appended to the first command as they are, without shell parsing (an argv run as `command`, `args`). */
+  args?: string[] };
+export async function runFolderBash(folder: Folder, command: string, options: FolderBashOptions = {}): Promise<FolderBashResult> {
   const before = new Map(folder.diffSync().changes.map(change => [change.path, change.after]));
   const changes = defineCommand('changes', async () => ({ stdout: JSON.stringify(folder.diffSync().changes.map(change =>
     ({ path: change.path, kind: change.kind })), null, 2) + '\n', stderr: '', exitCode: 0 }));
@@ -243,7 +251,9 @@ export async function runFolderBash(folder: Folder, command: string,
     customCommands: [changes, pythonCommand('python'), pythonCommand('python3'), sqlite, natlang],
     executionLimits: { maxCommandCount: 1000, maxLoopIterations: 10000 } });
   checkBashAst(bash.transform(command).ast);
-  const result = await bash.exec(command);
+  const result = await bash.exec(command, { ...(options.cwd === undefined ? {} : { cwd: bash.fs.resolvePath(ROOT, options.cwd) }),
+    ...(options.env ? { env: options.env } : {}), ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.args ? { args: options.args } : {}) });
   const changedPaths = folder.diffSync().changes.filter(change => {
     const prior = before.get(change.path), after = change.after;
     return !before.has(change.path) || prior?.length !== after?.length || prior?.some((byte, i) => byte !== after?.[i]);

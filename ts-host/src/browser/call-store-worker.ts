@@ -4,9 +4,9 @@
  * it through BrowserCallStore (call-store.ts): writes are posted in order, reads are answered by message, and the
  * worker pushes the current compilations whenever they change, so dispatch on the page stays synchronous.
  */
-import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import type { CallStore } from '../calls/store-core.js';
-import { wasmCallStore, type DatabaseMedium, type WasmDb } from '../calls/store-wasm.js';
+import { wasmCallStore, type DatabaseMedium } from '../calls/store-wasm.js';
+import { openOpfsSqlite } from './opfs-sqlite.js';
 import type { SiteStatistics } from '../runtime/iterate.js';
 
 /** Store methods the page may call by name (reads and the store's own maintenance). */
@@ -56,11 +56,7 @@ async function estimate(): Promise<void> {
 }
 
 async function open(name: string, mode?: string): Promise<Snapshot> {
-  const sqlite3 = await sqlite3InitModule();
-  const pool = await sqlite3.installOpfsSAHPoolVfs({ name: `natlang-${name}`, initialCapacity: 6 });
-  const db = new pool.OpfsSAHPoolDb(`/${name}.sqlite`) as unknown as WasmDb;
-  // The SAH-pool VFS has no shared memory, so no WAL; the database is this worker's alone.
-  db.exec({ sql: 'PRAGMA journal_mode = TRUNCATE; PRAGMA synchronous = NORMAL;' });
+  const db = await openOpfsSqlite(name);
   ({ store, medium } = wasmCallStore(`opfs:${name}`, db, { mode: () => mode }));
   await estimate();
   setInterval(() => { void estimate(); }, 60_000);

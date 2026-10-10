@@ -6,6 +6,8 @@ import { ModuleUnavailableError, registerBuiltinModule, setModuleRealm, setModul
 import { neuraleseModule } from '../neuralese/combinators.js';
 import { setDefaultLibProvider } from '../compiler/host.js';
 import { TypeScriptEnvironment } from './environment.js';
+import type { OpfsSqliteOptions } from './opfs-sqlite.js';
+import { opfsAvailable } from './neuralese-opfs-store.js';
 
 declare const __NATLANG_TS_LIBS__: Record<string, string>;
 const slot = new SlotContextStore();
@@ -33,7 +35,7 @@ registerBuiltinModule('natlang:learning', () => { throw new ModuleUnavailableErr
 Object.defineProperty(globalThis, '__natlang_bindAwait', { value: bindAwait, configurable: true });
 
 export * from '../runtime/index.js';
-export { compileProject, formatDiagnostics } from '../compiler/project.js';
+export { compileProject, formatDiagnostics, NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/project.js';
 export type { BuildOptions, BuildResult, ProjectFiles, DefinitionManifest } from '../compiler/project.js';
 export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVirtualNatlang, loadVirtualCallables } from '../runtime/virtual-project.js';
 export type { VirtualProject, CompiledProject } from '../runtime/virtual-project.js';
@@ -58,7 +60,7 @@ export { probeBrowserGpu } from './gpu.js';
 export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } from './neuralese-wasm.js';
 export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
-export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras } from '../model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras, withRestoredBlocks, OWNER_HEADER } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
 export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,
   type OpfsDirectoryHandle } from './neuralese-opfs-store.js';
@@ -85,11 +87,27 @@ export type { ArchiveFormat } from '../native/archive.js';
 export async function runFolderBash(...args: Parameters<typeof import('../native/folder-shell.js').runFolderBash>) {
   return (await import('../native/folder-shell.js')).runFolderBash(...args);
 }
+export type { FolderBashResult, FolderBashOptions } from '../native/folder-shell.js';
+/**
+ * A SQLite database in the origin private file system (opfs-sqlite.ts), loaded on first use. It needs a dedicated
+ * worker: OPFS sync access handles exist only there.
+ */
+export async function openOpfsSqlite(name: string, options: Omit<OpfsSqliteOptions, 'wasmUrl'> = {}) {
+  return (await import('./opfs-sqlite.js')).openOpfsSqlite(name, { ...options, wasmUrl: new URL('./sqlite3.wasm', import.meta.url).href });
+}
+export type { OpfsSqliteOptions } from './opfs-sqlite.js';
+/** Whether `openOpfsSqlite` can open a database here: a dedicated worker of a browser with OPFS sync access handles. */
+export function opfsSqliteAvailable(scope: unknown = globalThis): boolean {
+  const global = scope as { FileSystemFileHandle?: { prototype?: { createSyncAccessHandle?: unknown } }; navigator?: { storage?: unknown } };
+  return typeof global.FileSystemFileHandle?.prototype?.createSyncAccessHandle === 'function' && opfsAvailable(global.navigator?.storage);
+}
+export type { WasmDb } from '../calls/store-wasm.js';
+export { ONCE_EFFECTS } from '../native/effects.js';
 export async function runFolderPython(...args: Parameters<typeof import('../native/folder-python.js').runFolderPython>) {
   return (await import('../native/folder-python.js')).runFolderPython(...args);
 }
 export { TypeEnv, parseType, formatType, fitsType } from '../native/types.js';
-export type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, ModelContentPart } from '../contracts.js';
 
 export * from '../adaptation/index.js';
 

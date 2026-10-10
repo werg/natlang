@@ -15,6 +15,9 @@ export const TOLERATED_NODE_IMPORTS = [
   { specifiers: ['node:zlib'], reason: 'gzip for archives and .nz files; fflate implements the two functions the shared code calls',
     contents: () => 'import { gunzipSync, gzipSync } from "fflate"; export { gunzipSync, gzipSync }; export const constants = {}; ' +
       'export default { gunzipSync, gzipSync, constants };' },
+  { specifiers: ['node:fs'], importer: /\/@earendil-works\/pi-ai\/dist\/utils\/provider-env\.js$/, kind: 'require-call',
+    reason: 'pi-ai reads /proc/self/environ only under Bun (process.versions.bun), when process.env is empty; a browser has no process, so the require never runs (if it did, it throws)',
+    contents: unavailable },
   { specifiers: ['node:child_process', 'node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:url', 'node:vm'],
     importer: /\/node_modules\/pyodide\//, kind: 'dynamic-import',
     reason: 'Pyodide imports its Node loader only after detecting Node; in a browser these imports never run (if one did, it throws)',
