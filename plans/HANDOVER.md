@@ -10009,3 +10009,37 @@ The owner authorized deleting the old candidate code. Retired: the Sharp-MiniCPM
   before new checkpoints. Monitor checkpoint storage during next 50-minute cycle.
 - Shared view-stage glue b4e1b6e1 pulled and frozen. DGX owns digest-to-view native
   conversion and DGX jobs. Shared fix and Pop handoff sent in coord pop-fa4d.
+
+### Pop 03:35 UTC monitoring follow-up
+
+- Actual 50-minute sleep completed, then inbox/fetch/jobs/storage reviewed.
+  Mixed training active at 29312 (519 updates), GPU 100%, ~6.65GiB.
+  Initial native held gold-projection error was already ~0.105 under the new
+  window selection; at29184 ~0.112. This differs from channel equivalence:
+  same-history projected read MSE ~2.35e-5 and agreement ~0.9702, still below gate.
+  Single29312 tail-projector MSE ~0.992 is not global: last100 updates' selected
+  tail-token-weighted MSE ~0.0824 over13449 positions. No indexing/gradient bug
+  found by source review. Frozen-reference/live-readout differences and missing
+  held tail metrics need explicit diagnostics, not a qualification shortcut.
+  Luna helper is adding shared next-runtime held tail MSE/count by cohort/role;
+  the running frozen package is untouched. No tests run; TS typecheck passed.
+- Gemini v4 at438/1024 atcheck-in. OpenRouter observer refreshed03:16 UTC:
+  no new/removed/changed free models. ZAI index2 completed28turns21975tokens,
+  exact output SHA b55210e144b41dea19db887220803fff674988cdac061e019fa5c2c0d073800e.
+  Independent scoped review assigned. Next ZAI queue PID795506 supplies the exact
+  root-reviewed V28 source-v3 five counterfactual train cases, source SHA
+  4a4e589db037e71041703d250e5993d5b50a329411600d810957ae57202c6ee7,
+  one request/case, runtimev6, unchanged gold/collection budgets; source review
+  grants sampled-generation scope only, no independent-world or admission claim.
+- Full static replay snapshot v2-replay72:72/72 passed,1198 held native turns.
+  V17 and separate source evidence published in eed640c5. The evidence corrects
+  V17's license-placeholder count:38 reducer cases correspond to276 source-label
+  rows. Original upstream revisions are unrecorded; current source HEADs are
+  comparison references only. Copies/reference success do not admit this data.
+- Pulled5502aa1c, including restored AGENTS.md and Mellum v3 generation gates.
+  Session's no-tests instruction overrides the local check-main pytest rule;
+  informed DGX in coord pop-734c. AST/typecheck/live execution are reported as
+  those checks, never as a test-suite verification. DGX owns all its jobs.
+- Storage check:root2.1GiB,/srv5.4GiB, new run4.2GiB including checkpoint reserve,
+  best/current full checkpoints and heads. Keep all optimizer lineage; check
+  write reserve before any new local model/download or large artifact generation.
