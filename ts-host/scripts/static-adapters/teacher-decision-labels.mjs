@@ -11,7 +11,7 @@ import { mkdir, open, readFile, readdir } from 'node:fs/promises';
 import { dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { scoreGraded } from '../../dist/skills/graded.js';
+import { scoreGraded, ordinalDistribution } from '../../dist/skills/graded.js';
 import { admitRow } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
@@ -85,7 +85,12 @@ function metricAndDecision(source, answer) {
     if (!answer || !exactSet(answer, ['probabilities']) || !validDistribution(answer.probabilities, levels))
       return { error: 'strict_probability_schema' };
     const predicted = top(answer.probabilities, levels);
-    const sourceDecision = stringLabel(source.answer);
+    // Numeric annotations are zero-based ordinal positions, not level names.
+    // Fractional positions use the scorer's split mass; argmax chooses the
+    // nearest level, with the first declared level winning an exact tie.
+    const targetDistribution = ordinalDistribution(source.answer, levels);
+    if (!targetDistribution) return { error: 'invalid_source_ordinal_answer' };
+    const sourceDecision = top(Object.fromEntries(levels.map((name, i) => [name, targetDistribution[i]])), levels);
     const score = scoreGraded({ schema: 'natlang.skill-graded/1', kind: 'ordinal-rps' },
       { probabilities: answer.probabilities }, { kind: 'ordinal', levels, answer: source.answer });
     return { predicted, sourceDecision, raw: { probabilities: answer.probabilities }, score };
@@ -190,7 +195,7 @@ return decisions;`;
   const record = curriculumCase({
     family: `teacher_decision_labels_${slug(first.family)}_${contract.kind}`,
     shape: `source_${sourceMeta.cases_sha256.slice(0, 12)}_${batchKey}`,
-    variant: 'strict-top-label-v1', split: 'train', splitGroup: `source-groups:${groupIds.join(',')}`,
+    variant: 'strict-top-label-v2-ordinal-source-mapping', split: 'train', splitGroup: `source-groups:${groupIds.join(',')}`,
     slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: 'required',
     root: { name: 'reduce_decisions', kind: 'directory-reducer', args: {}, returns: outputType,
       instructions: 'Read the task contract and every item in the directory. For each item, bind its case ID, state, question, criteria, options, and levels as separate scope values. Compose the item question into the inline natural-language instruction at runtime, and also pass question, state, criteria, options, and levels as separate arguments. Do not combine the fields into a serialized prompt variable. Save decisions.json and return that exact map.' },
@@ -453,7 +458,7 @@ async function main() {
     loaded_module: resolve(here, '../../dist/skills/graded.js'), module_sha256: sourceMeta.scorer_dist_sha256,
     strict_schema: 'exact answer object and distribution keys; finite numeric [0,1] values; total within 1e-4 of 1; no normalization by adapter',
     gates: { choice: ['distribution', 'top_correct'], noul: ['probability', 'correct_side'], score: ['distribution', 'within_half_level'] },
-    exact_top: 'argmax in source option/level order (first on ties); noul p>=0.5; must equal source answer label/side',
+    exact_top: 'argmax in source option/level order (first on ties); noul p>=0.5; choice must equal source label, ordinal must equal argmax of shared ordinalDistribution(source answer, levels), including zero-based numeric and fractional positions',
     invocation: `Imported scoreGraded directly by ${basename(fileURLToPath(import.meta.url))}; see source-manifest.json for adapter and source paths.`,
     accepted_score_details: eligible.map(entry => ({ id: entry.source.id, kind: entry.source.kind,
       quality: entry.score.quality, gates: entry.score.gates, detail: entry.score.detail })) }, null, 2) + '\n');

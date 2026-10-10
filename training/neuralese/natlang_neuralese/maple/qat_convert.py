@@ -13,6 +13,7 @@ learning afterwards).
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import shutil
@@ -172,7 +173,10 @@ def run_train(a):
     optimizer.step_in_backward()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    state_path = out / "checkpoint.pt"
+    from ..train.checkpoint_policy import CheckpointPolicy
+
+    policy = CheckpointPolicy(out, every_minutes=a.checkpoint_minutes).install_signal_handlers()
+    state_path = policy.slot
     step = 0
     if state_path.exists():
         state = torch.load(state_path, map_location="cpu", mmap=True)  # paged from the file, not a second copy
@@ -242,16 +246,28 @@ def run_train(a):
         log.flush()
         if step % 10 == 0 or "held_ce" in row:
             print(json.dumps(row), flush=True)
-        if step % a.checkpoint_every == 0 or step == a.steps:
-            # A checkpoint is ~47 GB (latents + Lion momentum): when the disk cannot hold two, the previous one goes
-            # first (a write interrupted then costs the resume point, not a full disk).
-            if state_path.exists() and shutil.disk_usage(out).free < 1.2 * state_path.stat().st_size:
-                state_path.unlink()
-            # GPU tensors: torch.save copies one storage at a time to host; ``.cpu()`` first would hold a second
-            # copy of all latents in (unified) memory at once (guard stop at the v2 trial's first checkpoint).
-            torch.save({"step": step, "latents": {n: q.detach() for n, q in latents},
-                        "optimizer": optimizer.state_dict()}, out / "checkpoint.pending")
-            (out / "checkpoint.pending").replace(state_path)
+        # Shared checkpoint policy (train/checkpoint_policy.py, plans/STORAGE_POLICY.md): one rolling resumable
+        # slot on a wall-clock cadence or when asked to stop, a weights-only best on the deployed (λ=1) held CE, and
+        # at the end the latents alone (the ~23 GB Lion momentum only serves resuming this exact run).
+        if "held_ce" in row and policy.save_best({"step": step, "latents": {n: q.detach() for n, q in latents}},
+                                                 metric=row["held_ce"]):
+            print(json.dumps({"best_weights": step, "held_ce": row["held_ce"]}), flush=True)
+        if policy.due() or step == a.steps or (a.checkpoint_every and step % a.checkpoint_every == 0):
+            state = {"step": step, "latents": {n: q.detach() for n, q in latents}, "optimizer": optimizer.state_dict()}
+            try:
+                policy.save(state)
+            except OSError as error:
+                # DGX-owned disposal (plans/STORAGE_POLICY.md §2): with --drop-slot-when-full the single rolling
+                # slot (~47 GB) gives way when the disk cannot hold two; the best weights stay a separate file.
+                if error.errno != errno.ENOSPC or not a.drop_slot_when_full:
+                    raise
+                print(json.dumps({"dropped_rolling_slot_for_space": str(policy.slot), "step": step}), flush=True)
+                policy.slot.unlink(missing_ok=True)
+                policy.save(state)
+            if policy.signaled:
+                print(json.dumps({"stopped_on_signal": step}), flush=True)
+                return
+    policy.finalize({"step": step, "latents": {n: q.detach() for n, q in latents}})
 
 
 def main(argv=None):
@@ -278,7 +294,10 @@ def main(argv=None):
     r.add_argument("--ramp-steps", type=int, default=1000, help="ternarization mix ramps 0 → 1 over these updates")
     r.add_argument("--kl-decay-steps", type=int, default=0, help="KL to the BF16 original falls to 0 over these updates")
     r.add_argument("--eval-every", type=int, default=100)
-    r.add_argument("--checkpoint-every", type=int, default=100)
+    r.add_argument("--checkpoint-every", type=int, default=0, help="also checkpoint every N updates (0: off)")
+    r.add_argument("--checkpoint-minutes", type=float, default=45.0, help="rolling checkpoint cadence (wall clock)")
+    r.add_argument("--drop-slot-when-full", action=argparse.BooleanOptionalAction, default=True,
+                   help="when the disk cannot hold a second ~47 GB slot, drop the previous one first (DGX)")
     r.add_argument("--seed", type=int, default=0)
     r.add_argument("--checkpoint-layers", action=argparse.BooleanOptionalAction, default=True,
                    help="recompute each layer in backward (its ternary values included) instead of keeping them")

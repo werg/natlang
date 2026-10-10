@@ -1329,3 +1329,18 @@ backbone's chat template as post-trained: LFM2.5 keeps only the last assistant t
 Mellum keeps every turn's. This is a declared backbone-inherent difference, applied identically in rendering and
 serving. Known cost for LFM: at each agent step the prompt diverges at the previous assistant turn, so the prefix cache
 is recomputed from there.
+
+
+### 2026-10-10 — Static ordinal label mapping uses the shared scorer
+
+The typed-label adapter compared an ordinal numeric source answer with the text
+of the selected level, although the scorer interprets numeric annotations as
+zero-based positions. This caused false rejections and could also admit a
+different category whose spelling happened to match the index. All affected
+static snapshots are held and remain immutable evidence. The adapter now shares
+`ordinalDistribution` with the scorer and reduces both distributions by argmax
+in declared level order. Integer annotations map to the indexed name; fractional
+annotations select the nearest level, with exact half ties choosing the earlier
+level. This explicitly defines the crisp target without altering annotations,
+provider probabilities, or scorer gates. Rebuild affected derivatives under the
+new variant and publish conversion obligations for the previous snapshots.
