@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "43b495c73",
-  "working_status": "43b495c73: POST /v1/neuralese/view replaces /digest (the builtin view's Neuralese instance, each write a template write of view's body; DECISIONS.md 2026-10-09 one summarizer family); CPU build only, conformance against the reference not yet re-run, and the vendored browser wasm is still built from 62639bf33 (serves /digest) until rebuilt. Batched decision readout (/v1/natlang/score, /v1/neuralese/decide_many) on top of the full-residual-v1 reader adapter in nz_read; the browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Legacy-rms-v1 GGUF projector supports optional full-residual-v1 reader adapter in nz_read; CPU parity verified with a nonzero adapter. Raw-token and latent-sketch projectors remain unsupported, and this does not qualify the new foundation C++ runtime.",
+  "working_commit": "2d6557813",
+  "working_status": "2d6557813: parity with the reference server (template value_type \"unknown\" and argument_path, parts typed unknown, POST /v1/neuralese/embed, Qwen <tool_call> JSON calls and a lone </think> parsed as the reference's chat.build_message, streamed chat completions in the reference's chunk format: native chunked transfer, wasm through nzw_handle's event hook; info fields aligned, decide_many item errors \"code: detail\", HEAD and other methods 405); only grad, optim and adapter creation/export/projection stay reference-only. The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 43b495c73 POST /v1/neuralese/view replaces /digest; batched decision readout; full-residual-v1 reader adapter in nz_read (raw-token and latent-sketch projectors remain unsupported; this does not qualify the new foundation C++ runtime).",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2",
-  "commit": "62639bf33",
+  "commit": "2d6557813",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -46,7 +46,7 @@
     },
     "server_conformance": {
       "date": "2026-10-10",
-      "fork_commit": "62639bf33",
+      "fork_commit": "2d6557813",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
@@ -62,15 +62,16 @@
         "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry",
         "weight adapters: an xs adapter (adapter/2) exported as a GGUF LoRA gives the reference's decision log-probabilities and greedy reply; unloaded adapters fail 409, projection-decoded ones 501",
         "batched decision scoring (/v1/natlang/score, /v1/neuralese/decide_many): each item equals decide alone, a bad item fails alone",
-        "one capability model: info.server and sorted info.capabilities on both; every capability the fork lacks answers 501 neuralese-<capability>-unavailable (grad, optim, embed, adapters.create, adapters.lora-export, chat.stream, template.value-type, template.argument-path, parts.value-type); the reference answers PUT \u2026/lora 501",
         "shared error behaviour: 405 method-not-allowed, 404 not-found, 400 bad-json for a non-object body and for a malformed collect",
-        "batched scoring groups same-prompt items across the request and answers in request order"
+        "batched scoring groups same-prompt items across the request and answers in request order",
+        "one capability model: info.server and sorted info.capabilities on both; every capability the fork lacks (grad, grad.order2, optim, adapters.create, adapters.direct, adapters.lora-export, adapters.projection) answers 501 neuralese-<capability>-unavailable; the reference answers PUT \u2026/lora 501",
+        "fork parity: info fields of the same shape, embed (identical content IDs), template value_type unknown and argument_path (write and decode, refused paths), parts typed unknown render unquoted (given or stored type), Qwen <tool_call> JSON calls and a lone </think>, streamed replies (role, held-back call markup, block parts, tool_calls, x_natlang_message) assembled equal to the non-streamed reply and equal across servers, stream error events, guidance {} on both, batched item errors \"code: detail\", neuralese-bad-block for a block of another width, HEAD/PATCH/OPTIONS 405, collect with a non-list referenced 400"
       ],
       "stop_sources": [
         "shallow",
         "final"
       ],
-      "result": "48 passed on DGX CPU: 16 shallow, 16 final (native build-cpu), 16 final-wasm (vendored wasm built from the same commit); test_runtime_versions passes",
+      "result": "75 passed on DGX CPU: 25 shallow, 25 final (native build-cpu), 25 final-wasm (vendored wasm built from the same commit); test_runtime_versions and test_serve.py pass; final-wasm-mt (opt-in) deadlocks intermittently under Node (open)",
       "decide_max_logprob_diff": 0.0041
     }
   },

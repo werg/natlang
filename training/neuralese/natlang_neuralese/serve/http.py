@@ -2,7 +2,7 @@
 
 | Endpoint | Meaning |
 | --- | --- |
-| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (this server only; the fork answers `stream-unsupported`), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens, a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
+| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (as the fork), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens (`<|tool_call_start|>` or `<tool_call>`; the markup is held back), a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
 | `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
 | `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `projections` (adapter-code decoders) and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
@@ -39,7 +39,7 @@ call; "write" makes the argument a written block and closes the call, "decode" d
 tool call, call names are checked, eval code is checked line by line for repetition and TypeScript syntax, and a
 rejected line is rolled back and resampled; the response reports `x_natlang_guidance.rejections`), and the test hook
 `x_natlang_forced`. `neuralese_template` also takes `value_type` (`"string"` or `"unknown"`: the written value sits
-unquoted, in native value syntax) and `argument_path` (keys into nested arguments); the fork serves neither. `decide`,
+unquoted, in native value syntax) and `argument_path` (keys into nested arguments), as the fork does. `decide`,
 `decide_many` and `grad` bodies take `adapters` in the same form.
 """
 
@@ -188,6 +188,12 @@ def make_handler(engine: Engine):
 
         do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _method_not_allowed
 
+        def __getattr__(self, name: str):
+            # Any other method (BaseHTTPRequestHandler looks up `do_<METHOD>`) answers 405 as well, not Python's 501.
+            if name.startswith("do_"):
+                return self._method_not_allowed
+            raise AttributeError(name)
+
         def _object(self) -> dict:
             """The JSON object body; anything else is 400 `bad-json`, as the fork answers."""
             body = json.loads(self._body() or b"{}")
@@ -216,7 +222,12 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
-                    referenced = set(self._object().get("referenced") or [])
+                    referenced = self._object().get("referenced")
+                    if referenced is None:
+                        referenced = []
+                    if not isinstance(referenced, list) or not all(isinstance(i, str) for i in referenced):
+                        return self._error(400, "bad-json", "referenced must be a list of block IDs")
+                    referenced = set(referenced)
                     return self._send(200, json.dumps({"removed": engine.store.collect(referenced, self._owner)}).encode())
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
@@ -289,7 +300,9 @@ def make_handler(engine: Engine):
                     from .chat import render_messages, split_escaped
 
                     body = self._object()
-                    rendered = render_messages(body.get("messages") or [], body.get("tools"), engine._template, engine.specials)
+                    # As prefill renders it: a stored block typed Neuralese<unknown> defaults to value_type "unknown".
+                    rendered = render_messages(body.get("messages") or [], body.get("tools"), engine._template, engine.specials,
+                                               block_type=engine.block_value_type)
                     prompt = "".join("<block>" if isinstance(segment, int) else
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)
@@ -365,7 +378,8 @@ def make_handler(engine: Engine):
             # Text streams as content deltas until a tool call opens; the call markup is held back and the parsed
             # calls arrive as `tool_calls` deltas at the end (OpenAI streaming), so clients that only read deltas see
             # the same message as a non-streaming request.
-            marker, streamed, pending, in_call = "<|tool_call_start|>", "", "", False
+            # Call markup is LFM2's Pythonic `<|tool_call_start|>` or the Qwen family's `<tool_call>` (chat.build_message).
+            markers, streamed, pending, in_call = ("<|tool_call_start|>", "<tool_call>"), "", "", False
             while True:
                 item = deltas.get()
                 if item is None:
@@ -374,11 +388,11 @@ def make_handler(engine: Engine):
                     continue
                 if "text" in item:
                     pending += item["text"]
-                    at = pending.find(marker)
+                    at = min((i for i in (pending.find(m) for m in markers) if i >= 0), default=-1)
                     if at >= 0:
                         out, pending, in_call = pending[:at], "", True
                     else:
-                        keep = max((n for n in range(1, len(marker)) if pending.endswith(marker[:n])), default=0)
+                        keep = max((n for m in markers for n in range(1, len(m)) if pending.endswith(m[:n])), default=0)
                         out, pending = pending[:len(pending) - keep], pending[len(pending) - keep:]
                     if out:
                         streamed += out
@@ -410,8 +424,8 @@ def make_handler(engine: Engine):
                                                                    if "x_natlang_guidance" in response else {})}))
             except RequestError as error:
                 self._event({"error": {"code": error.code, "message": str(error)}})
-            except Exception as error:  # noqa: BLE001 - reported to the client
-                self._event({"error": {"code": "server-error", "message": str(error)}})
+            except Exception as error:  # noqa: BLE001 - reported to the client, as every unexpected failure
+                self._event({"error": {"code": "internal", "message": f"{type(error).__name__}: {error}"}})
             self._event(b"[DONE]")
             self._chunk(b"")
 

@@ -77,7 +77,8 @@ class Settings:
     def of(body: dict | None, tools: list | None, tool_choice=None) -> "Settings | None":
         """The request's guidance (`{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?}`, or true), or None.
         `tools` narrows the call names allowed below the offered tools."""
-        if not body:
+        # `true` or an object turns guidance on (an empty object: every default); absent, null or false leaves it off.
+        if body is None or body is False:
             return None
         body = body if isinstance(body, dict) else {}
         names = body.get("tools") or [t.get("function", t).get("name") for t in tools or [] if isinstance(t, dict)]

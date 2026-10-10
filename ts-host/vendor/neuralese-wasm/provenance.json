@@ -1,18 +1,19 @@
 {
  "schema": "natlang.neuralese-wasm/1",
  "fork": "https://github.com/werg/llama.cpp-neuralese",
- "fork_commit": "62639bf33",
- "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, built on DGX 2026-10-10 (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
+ "fork_commit": "2d6557813",
+ "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, image sha256:db0f491cb72e01f66be890c83f1b2705926b59998c2208e6b44f65d7f0cbcb47, built on DGX 2026-10-10 from the committed fork tree (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
  "sha256": {
-  "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
-  "neuralese-wasm-gpu.wasm": "56747a6fd4fb633c5f1a81f324382d23a3f003843ecec3b19b5a2f9ed81aba10",
-  "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
-  "neuralese-wasm-mt.wasm": "00b653ec6325def03c29b29bedf78c613eb9982b8b9afd4247e7fddfd7ecab6a",
-  "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-  "neuralese-wasm.wasm": "a5660baa4cd0bc1bc6a9878468504840d06b7ce01133e4241319ee0a40881abb"
+  "neuralese-wasm-gpu.mjs": "d4087f93a46161aab0f4680c4e75ea0bd76a07a93f0852c892931be6119ad8fa",
+  "neuralese-wasm-gpu.wasm": "d7597f27881f8a48b5cf5ca8da256c75bf67b8f85f64a540ea2b9792c2d2d8e0",
+  "neuralese-wasm-mt.mjs": "95ec1af17c8af21adddc4a94c36917c543aa496bd8c6da77d3c0bace99a90cda",
+  "neuralese-wasm-mt.wasm": "1bd7197d41f3093e35b9e57036651c6d06b59f4913780163074a9f4ccf70d895",
+  "neuralese-wasm.mjs": "96a288b4d69a999d5e78969abe1236eccbf509a70a5e8186faedaa8e4fc98e69",
+  "neuralese-wasm.wasm": "5603b7b16c9d950cbe19f2a4524a78463ab4029a453ab401b4de09537f51fa79"
  },
- "serves": "the fork commit's neuralese-service.cpp: the capability model shared with the reference server (info.capabilities, 501 neuralese-<capability>-unavailable), batched decision scoring grouped across the request, owner-scoped store, full-residual-v1 reader adapter in nz_read",
- "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 16 passed against the reference server (incl. the capability model and request-order batched grouping), fork 62639bf33, 2026-10-10",
+ "serves": "the fork commit's neuralese-service.cpp: parity with the reference server (template value_type/argument_path, parts typed unknown, embed, Qwen <tool_call> and lone </think> parsing, streamed chat completions through nzw_handle's event hook: Module.nzwOnEvent), the capability model shared with the reference (info.capabilities, 501 neuralese-<capability>-unavailable for grad, optim and adapter creation/export/projection), batched decision scoring grouped across the request, owner-scoped store, full-residual-v1 reader adapter in nz_read, view (replaces digest)",
+ "verify": "python3 scripts/verify_neuralese_wasm_provenance.py --fork ../llama.cpp-neuralese --builds",
+ "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 25 passed against the reference server (incl. fork parity: embed, template value_type/argument_path, parts typed unknown, Qwen calls and lone </think>, streamed replies assembled equal to non-streamed and equal across servers, info shape, item errors, width check), fork 2d6557813, DGX CPU, 2026-10-10; test_runtime_versions passes. Threaded build under Node (final-wasm-mt, opt-in): 12 and 4 checks agreed, then an intermittent deadlock in ggml's worker threads (open). WebGPU build: not run (Node has no WebGPU).",
  "measured_on_5d999c0c5": {
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
   "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
@@ -24,5 +25,8 @@
  },
  "measured_on_24af2b603": {
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 14 passed against the reference server (2026-10-09, DGX, CPU), incl. batched decision scoring"
+ },
+ "measured_on_62639bf33": {
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 16 passed against the reference server (incl. the capability model and request-order batched grouping), fork 62639bf33, 2026-10-10"
  }
 }

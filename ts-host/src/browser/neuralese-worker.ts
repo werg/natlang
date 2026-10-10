@@ -19,7 +19,9 @@ scope.onmessage = async (event: MessageEvent) => {
       scope.postMessage({ id, ok: true, value: await service.load('/models/model.gguf', '/models/heads.gguf', data.options) });
     } else if (kind === 'request') {
       if (!service) throw new Error('neuralese worker: load first');
-      const result = await service.handle(data.method, data.path, data.body);
+      // A streamed reply's events are posted as they are produced, before the answer.
+      const result = await service.handle(data.method, data.path, data.body,
+        event => scope.postMessage({ id, event }, [event.buffer as ArrayBuffer]));
       scope.postMessage({ id, ok: true, value: result }, [result.body.buffer as ArrayBuffer]);
     } else if (kind === 'unload') {
       await service?.unload();

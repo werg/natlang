@@ -227,9 +227,6 @@ class Engine:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
                  prefill_tokens: int = 8192, prefill_padding: bool = False):
-        from .chat import bind_history_reasoning
-        # Serving renders history as the backbone's training text does (its declared chat.BACKBONE_HISTORY_REASONING).
-        tokenizer = bind_history_reasoning(tokenizer, model_type=getattr(getattr(backbone, "config", None), "model_type", None))
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
         # Padded-token budget of one batched prefill (new requests that arrive in the same round).
         self.prefill_tokens = prefill_tokens
@@ -335,6 +332,9 @@ class Engine:
         if block.dialect != self.dialect:
             raise RequestError("neuralese-dialect-mismatch",
                                f"{block_id} is in {block.dialect}, this server speaks {self.dialect}")
+        if block.width != self.width:
+            # As the fork: a block of another width cannot be read (or decoded, or differentiated) here.
+            raise RequestError("neuralese-bad-block", f"{block_id} has width {block.width}, this server reads {self.width}")
         return block
 
     # Adapters --------------------------------------------------------------------------------

@@ -810,14 +810,21 @@ def decide_many(engine, body: dict) -> dict:
     session = GradSession(engine)
     results: list = [None] * len(items)
     rendered = []
+    def item_error(error: Exception) -> dict:
+        # "code: detail" for a request error, as the fork reports it; anything else is an internal failure.
+        text = str(error) if isinstance(error, RequestError) else f"internal: {type(error).__name__}: {error}"
+        return {"error": text[:500]}
+
     for index, item in enumerate(items):
         try:
+            if not isinstance(item, dict):
+                raise RequestError("neuralese-decision", "an item is an object")
             options = item.get("continuations", item.get("options"))
             prompt, rests = session.decision_render(item.get("messages") or [], item.get("tools"), options or [])
             adapters = item.get("adapters", body.get("adapters"))
             rendered.append((json.dumps(adapters, sort_keys=True), json.dumps(prompt), index, adapters, prompt, rests))
         except Exception as error:  # noqa: BLE001 — per-item failure is part of the contract
-            results[index] = {"error": f"{type(error).__name__}: {error}"[:500]}
+            results[index] = item_error(error)
     rendered.sort(key=lambda r: (r[0], r[1], r[2]))
     current, prefill = None, None
     with torch.no_grad():
@@ -833,7 +840,7 @@ def decide_many(engine, body: dict) -> dict:
                 results[index] = {"log_probs": scores, "tokens": [len(own) for own in owns]}
             except Exception as error:  # noqa: BLE001
                 current, prefill = None, None
-                results[index] = {"error": f"{type(error).__name__}: {error}"[:500]}
+                results[index] = item_error(error)
     return {"results": results}
 
 

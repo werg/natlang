@@ -22,10 +22,20 @@ const server = createServer((req, res) => {
   req.on('data', chunk => chunks.push(chunk));
   req.on('end', () => {
     chain = chain.then(async () => {
-      const result = await started.service.handle(req.method, new URL(req.url, 'http://x').pathname, new Uint8Array(Buffer.concat(chunks)));
+      // A streamed reply: server-sent events as the service produces them.
+      const onEvent = data => {
+        if (!res.headersSent) res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+        res.write(Buffer.concat([Buffer.from('data: '), Buffer.from(data), Buffer.from('\n\n')]));
+      };
+      const result = await started.service.handle(req.method, new URL(req.url, 'http://x').pathname, new Uint8Array(Buffer.concat(chunks)), onEvent);
+      if (res.headersSent) { res.end(); return; }
       res.writeHead(result.status, { 'content-type': result.contentType });
       res.end(Buffer.from(result.body));
-    }).catch(error => { res.writeHead(500); res.end(String(error)); });
+    }).catch(error => {
+      if (res.headersSent) { res.end(); return; }
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 'internal', message: String(error) } }));
+    });
   });
 });
 server.listen(Number(values.port), '127.0.0.1', () => {

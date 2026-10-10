@@ -26,8 +26,8 @@ export async function startNodeNeuralese(options: NeuraleseWasmOptions & { facto
   const hello = await service.load(mount(options.model), mount(options.heads), options);
   const endpoint = options.endpoint ?? 'http://neuralese.local';
   let chain = Promise.resolve();  // one request at a time
-  const stop = serveLocally(endpoint, (method, path, body) => {
-    const run = chain.then(() => service.handle(method, path, body));
+  const stop = serveLocally(endpoint, (method, path, body, onEvent) => {
+    const run = chain.then(() => service.handle(method, path, body, onEvent));
     chain = run.then(() => undefined, () => undefined);
     return run;
   });

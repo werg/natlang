@@ -20,7 +20,9 @@ export type NeuraleseWasmModule = {
   FS: { mkdir(path: string): void; mount(type: unknown, options: unknown, path: string): void; writeFile(path: string, data: Uint8Array): void };
   NODEFS?: unknown; WORKERFS?: unknown; HEAPU8: Uint8Array;
   _nzw_load(options: number): number | Promise<number>; _nzw_error(): number; _nzw_hello(): number;
-  _nzw_handle(method: number, path: number, body: number, length: number): number | Promise<number>;
+  _nzw_handle(method: number, path: number, body: number, length: number, events: number): number | Promise<number>;
+  /** Set while a request runs: the data of each server-sent event of a streamed reply (neuralese-wasm.cpp). */
+  nzwOnEvent?: (data: Uint8Array) => void;
   _nzw_body(): number; _nzw_body_length(): number; _nzw_content_type(): number; _nzw_unload(): void | Promise<void>;
   _malloc(size: number): number; _free(pointer: number): void;
   UTF8ToString(pointer: number): string; stringToUTF8(text: string, pointer: number, max: number): void; lengthBytesUTF8(text: string): number;
@@ -28,6 +30,11 @@ export type NeuraleseWasmModule = {
 export type NeuraleseWasmFactory = (options?: Record<string, unknown>) => Promise<NeuraleseWasmModule>;
 export type NeuraleseWasmOptions = { nCtx?: number; maxBlock?: number; threads?: number; gpuLayers?: number; dialect?: string; alias?: string };
 export type NeuraleseWasmResponse = { status: number; body: Uint8Array; contentType: string };
+/**
+ * Receives the data of each server-sent event of a streamed reply (`"stream": true` on chat completions: JSON chunks,
+ * then `[DONE]`) while the request runs; the response then has an empty body.
+ */
+export type NeuraleseEventSink = (data: Uint8Array) => void;
 
 /** A loaded service: one request at a time. */
 export class NeuraleseWasmService {
@@ -52,15 +59,20 @@ export class NeuraleseWasmService {
     return JSON.parse(this.module.UTF8ToString(this.module._nzw_hello() >>> 0));
   }
 
-  async handle(method: string, path: string, body: Uint8Array = new Uint8Array()): Promise<NeuraleseWasmResponse> {
+  /**
+   * One request. With `onEvent`, a streamed reply's events go to it as they are produced (and the body is empty);
+   * without, a streamed reply's body is its whole event stream.
+   */
+  async handle(method: string, path: string, body: Uint8Array = new Uint8Array(), onEvent?: NeuraleseEventSink): Promise<NeuraleseWasmResponse> {
     const m = this.string(method), p = this.string(path);
     const b = this.module._malloc(Math.max(1, body.length)) >>> 0;
     this.module.HEAPU8.set(body, b);
+    this.module.nzwOnEvent = onEvent;
     try {
-      const status = await this.module._nzw_handle(m, p, b, body.length);
+      const status = await this.module._nzw_handle(m, p, b, body.length, onEvent ? 1 : 0);
       const start = this.module._nzw_body() >>> 0, length = this.module._nzw_body_length();
       return { status, body: this.module.HEAPU8.slice(start, start + length), contentType: this.module.UTF8ToString(this.module._nzw_content_type() >>> 0) };
-    } finally { this.module._free(m); this.module._free(p); this.module._free(b); }
+    } finally { this.module.nzwOnEvent = undefined; this.module._free(m); this.module._free(p); this.module._free(b); }
   }
 
   async unload(): Promise<void> { await this.module._nzw_unload(); }
@@ -74,14 +86,38 @@ async function requestBody(init: RequestInit): Promise<Uint8Array> {
   return new Uint8Array(await new Response(init.body as BodyInit).arrayBuffer());
 }
 
-/** Serve `endpoint` in process with `answer` (a service, or a worker bridge). */
-export function serveLocally(endpoint: string, answer: (method: string, path: string, body: Uint8Array) => Promise<NeuraleseWasmResponse>): () => void {
+/**
+ * Serve `endpoint` in process with `answer` (a service, or a worker bridge). A streamed reply is answered as soon as
+ * its first event arrives, with a `text/event-stream` body that carries each event (`data: …` framing, as over HTTP)
+ * as `answer` delivers it to its event sink; any other reply when `answer` settles.
+ */
+export function serveLocally(endpoint: string, answer: (method: string, path: string, body: Uint8Array, onEvent: NeuraleseEventSink) =>
+  Promise<NeuraleseWasmResponse>): () => void {
   const base = endpoint.replace(/\/$/, '');
   return registerLocalEndpoint(base, async (url, init) => {
     const path = new URL(url).pathname;
-    const result = await answer((init.method ?? 'GET').toUpperCase(), path, await requestBody(init));
-    return new Response(result.status === 204 ? null : result.body as BodyInit,
-      { status: result.status, headers: { 'content-type': result.contentType } });
+    const encoder = new TextEncoder();
+    let events: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let streaming = false;
+    return await new Promise<Response>((resolve, reject) => {
+      const onEvent = (data: Uint8Array) => {
+        if (!streaming) {
+          streaming = true;
+          resolve(new Response(new ReadableStream<Uint8Array>({ start(controller) { events = controller; } }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+        }
+        const framed = new Uint8Array(data.length + 8);
+        framed.set(encoder.encode('data: '));
+        framed.set(data, 6);
+        framed.set(encoder.encode('\n\n'), 6 + data.length);
+        events!.enqueue(framed);
+      };
+      requestBody(init).then(body => answer((init.method ?? 'GET').toUpperCase(), path, body, onEvent)).then(result => {
+        if (streaming) events!.close();
+        else resolve(new Response(result.status === 204 ? null : result.body as BodyInit,
+          { status: result.status, headers: { 'content-type': result.contentType } }));
+      }, error => { if (streaming) events!.error(error); else reject(error); });
+    });
   });
 }
 
@@ -123,23 +159,25 @@ export async function startBrowserNeuralese(options: NeuraleseWasmOptions & { wo
   endpoint?: string; store?: NeuraleseStore }): Promise<StartedNeuralese> {
   const { worker } = options;
   let next = 0;
-  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; onEvent?: NeuraleseEventSink }>();
   worker.onmessage = (event: MessageEvent) => {
-    const { id, ok, value, error } = event.data as { id: number; ok: boolean; value?: unknown; error?: string };
+    const { id, ok, value, error, event: streamed } = event.data as { id: number; ok: boolean; value?: unknown; error?: string; event?: Uint8Array };
     const entry = pending.get(id);
+    // A streamed reply's events arrive before the request's answer.
+    if (streamed) { entry?.onEvent?.(streamed); return; }
     pending.delete(id);
     if (ok) entry?.resolve(value); else entry?.reject(new Error(error));
   };
-  const call = <T>(message: Record<string, unknown>, transfer: Transferable[] = []) => new Promise<T>((resolve, reject) => {
+  const call = <T>(message: Record<string, unknown>, transfer: Transferable[] = [], onEvent?: NeuraleseEventSink) => new Promise<T>((resolve, reject) => {
     const id = next++;
-    pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+    pending.set(id, { resolve: resolve as (value: unknown) => void, reject, onEvent });
     worker.postMessage({ id, ...message }, transfer);
   });
   const { model, heads, worker: _, endpoint: __, moduleUrl, store: ___, ...rest } = options;
   const store = options.store ?? await openBrowserNeuraleseStore();
   const hello = await call<{ dialect: string; cutoff: number; devices?: NeuraleseDevice[]; gpu_layers?: number }>({ kind: 'load', moduleUrl, model, heads, options: rest });
   const endpoint = options.endpoint ?? 'http://neuralese.local';
-  const stop = serveLocally(endpoint, (method, path, body) =>
-    call<NeuraleseWasmResponse>({ kind: 'request', method, path, body }, [body.buffer as ArrayBuffer]));
+  const stop = serveLocally(endpoint, (method, path, body, onEvent) =>
+    call<NeuraleseWasmResponse>({ kind: 'request', method, path, body }, [body.buffer as ArrayBuffer], onEvent));
   return { endpoint, ...hello, store, async close() { stop(); await call({ kind: 'unload' }); worker.terminate(); } };
 }

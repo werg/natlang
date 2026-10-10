@@ -14,14 +14,18 @@ visible. Each check sends one request to both servers and compares what a client
   chunked at a small window);
 - weight adapters: an `xs` adapter exported as a GGUF LoRA (export/adapters.py) and loaded into the fork gives the
   reference's decision log-probabilities and greedy reply;
-- capabilities the fork does not serve (gradient sessions, text embedding, adapters it has no LoRA for or decoded
-  through a projection) answer with an error, not silence (an adapter request must never be answered by the base
-  model).
+- capabilities the fork does not serve (gradient sessions, optimiser steps, adapter creation and export, adapters it
+  has no LoRA for or decoded through a projection) answer with an error, not silence (an adapter request must never be
+  answered by the base model);
+- fork parity: text embedding, template value types and argument paths, parts typed "unknown", Qwen-style calls and
+  thinking, info fields, batched item errors, the width check on read, and streamed replies (each assembled equals the
+  non-streamed reply, and the two servers stream the same).
 
 Block IDs are content hashes of float payloads, so they differ whenever floats differ in the last bits; lengths
 and payload closeness are compared instead. Skipped unless the fork's CPU build exists. The fork also runs as
 WebAssembly (`final-wasm`: ts-host/vendor/neuralese-wasm through scripts/neuralese-wasm-server.mjs), the browser
-runtime's service, against the same checks.
+runtime's service, against the same checks; `final-wasm-mt` (opt-in, NATLANG_CONFORMANCE_WASM_MT=1) the threaded build
+with four threads. The WebGPU build needs a browser's WebGPU and is not run under Node.
 """
 
 from __future__ import annotations
@@ -68,16 +72,20 @@ def _json(url, method="GET", body=None):
     return status, json.loads(payload or b"{}")
 
 
-def _wasm_command(model_gguf, heads_gguf):
+def _wasm_command(model_gguf, heads_gguf, build: str = "neuralese-wasm"):
+    """The vendored WebAssembly service under Node: `neuralese-wasm` (one thread) or `neuralese-wasm-mt` (pthreads,
+    four threads). The WebGPU build needs a browser's WebGPU (Chromium, JSPI); Node has none, so it is measured with
+    scripts/browser-neuralese-pilot.mjs instead."""
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[2]
     script = repo / "ts-host" / "scripts" / "neuralese-wasm-server.mjs"
-    module = repo / "ts-host" / "vendor" / "neuralese-wasm" / "neuralese-wasm.wasm"
+    module = repo / "ts-host" / "vendor" / "neuralese-wasm" / f"{build}.wasm"
     node = shutil.which("node") or str(Path.home() / ".local" / "bin" / "node")
     if not module.exists() or not (repo / "ts-host" / "dist" / "browser" / "neuralese-wasm.js").exists():
         pytest.skip("the WebAssembly service or the ts-host build is missing")
-    return [node, str(script), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "--max-block", "6"]
+    threads = ["--module", str(module.with_suffix(".mjs")), "-t", "4"] if build == "neuralese-wasm-mt" else []
+    return [node, str(script), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "--max-block", "6", *threads]
 
 
 def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
@@ -116,6 +124,7 @@ def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
     reference = serve(engine)
     threading.Thread(target=reference.serve_forever, daemon=True).start()
     command = _wasm_command(model_gguf, heads_gguf) if impl == "wasm" else \
+        _wasm_command(model_gguf, heads_gguf, "neuralese-wasm-mt") if impl == "wasm-mt" else \
         [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", str(engine.max_block)]
     fork = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     line = fork.stdout.readline()
@@ -133,10 +142,14 @@ def heads_dialect():
 
 # NATLANG_CONFORMANCE_HEADS=checkpoint.pt adds a pair serving a trained port (S3 pilot or full run).
 _TRAINED = [("trained", "native")] if os.environ.get("NATLANG_CONFORMANCE_HEADS") else []
+# NATLANG_CONFORMANCE_WASM_MT=1 adds the threaded WebAssembly build under Node (`final-wasm-mt`). Opt-in: on DGX
+# (2026-10-10, fork 2d6557813) it deadlocks intermittently under Node (the main thread waits in a futex while a ggml
+# worker waits in another and the other workers sit idle) after 4 to 12 of these checks; every check it completed agreed.
+_WASM_MT = [("final", "wasm-mt")] if os.environ.get("NATLANG_CONFORMANCE_WASM_MT") else []
 
 
-@pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")] + _TRAINED,
-                ids=["shallow", "final", "final-wasm"] + ["trained"] * len(_TRAINED))
+@pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")] + _WASM_MT + _TRAINED,
+                ids=["shallow", "final", "final-wasm"] + ["final-wasm-mt"] * len(_WASM_MT) + ["trained"] * len(_TRAINED))
 def servers(request, loaded, tmp_path_factory):
     pair = _servers(loaded, tmp_path_factory, *request.param)
     yield pair
@@ -240,8 +253,6 @@ def test_batched_decision_scoring_agrees_and_fails_per_item(servers):
 def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/grad", "POST", {"terms": []})
     assert status == 501 and body["error"]["code"] == "neuralese-grad-unavailable"
-    status, body = _json(servers["fork"] + "/v1/neuralese/embed", "POST", {"text": "x"})
-    assert status == 501 and body["error"]["code"] == "neuralese-embed-unavailable"
     status, adapter = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
     assert status == 201
     # An adapter the fork has no LoRA for, and one decoded through a projection, fail; never the base model.
@@ -255,9 +266,8 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     assert status == 501 and body["error"]["code"] == "neuralese-adapters-projection-unavailable"
 
 
-REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat.stream",
-                  "embed", "grad", "grad.order2", "optim", "parts.value-type", "template.argument-path",
-                  "template.value-type"}
+REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "grad",
+                  "grad.order2", "optim"}
 
 
 def _error_code(response):
@@ -278,20 +288,11 @@ def test_one_capability_model_on_every_runtime(servers):
     assert set(ref["capabilities"]) - set(fork["capabilities"]) == REFERENCE_ONLY
     # store.owners: the fork has owner-scoped holds; the reference lists it once its store implements them.
     assert set(fork["capabilities"]) - set(ref["capabilities"]) - {"store.owners"} == {"adapters.lora-load"}
-    hi = [{"role": "user", "content": "hi"}]
     lacking = {  # capability -> a request needing it
         "grad": ("POST", "/v1/neuralese/grad", {"terms": []}),
         "optim": ("POST", "/v1/neuralese/optim", {"optimizer": "sgd", "params": [], "grads": []}),
-        "embed": ("POST", "/v1/neuralese/embed", {"text": "x"}),
         "adapters.create": ("POST", "/v1/neuralese/adapters", {"kind": "xs", "rank": 2}),
         "adapters.lora-export": ("GET", "/v1/neuralese/adapters/nz1_aaaa/lora", None),
-        "chat.stream": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 2, "stream": True}),
-        "template.value-type": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 4, "neuralese_template":
-                                {"call": "f", "value": "write", "value_type": "unknown"}}),
-        "template.argument-path": ("POST", "/v1/chat/completions", {"messages": hi, "max_tokens": 4, "neuralese_template":
-                                   {"call": "f", "value": "write", "argument_path": ["a"]}}),
-        "parts.value-type": ("POST", "/v1/neuralese/render", {"messages": [{"role": "user", "content": [
-            {"type": "text", "text": "x"}, {"type": "neuralese", "id": "nz1_aaaa", "value_type": "unknown"}]}]}),
     }
     for capability, (method, path, body) in lacking.items():
         assert capability not in fork["capabilities"]
@@ -301,7 +302,11 @@ def test_one_capability_model_on_every_runtime(servers):
     assert got == (501, "neuralese-adapters-lora-load-unavailable"), got
     for name in ("reference", "fork"):
         base = servers[name]
-        assert _error_code(_request(base + "/v1/neuralese/decide", "DELETE")) == (405, "method-not-allowed"), name
+        for method in ("DELETE", "PATCH", "OPTIONS"):
+            assert _error_code(_request(base + "/v1/neuralese/decide", method)) == (405, "method-not-allowed"), (name, method)
+        assert _request(base + "/v1/neuralese/info", "HEAD")[0] == 405, name  # no body to read
+        # A collect whose `referenced` is not a list of IDs is refused too.
+        assert _error_code(_request(base + "/v1/neuralese/collect", "POST", {"referenced": "nz1_aaaa"})) == (400, "bad-json"), name
         assert _error_code(_request(base + "/v1/no-such-path", "POST", {})) == (404, "not-found"), name
         assert _error_code(_request(base + "/v1/neuralese/decide", "POST", [1, 2])) == (400, "bad-json"), name
         # A malformed collect is refused, not read as "nothing referenced" (which would drop unpinned blocks).
@@ -390,10 +395,14 @@ def test_view_plans_agree(servers):
     from pathlib import Path
 
     fixture = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "view-site.json").read_text())
-    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", fixture["site"]))
+    # A view site's prompt renders identically on both servers and the stop logits agree within 2e-3, but the payload
+    # at its first position already differs by up to 2.4e-2 (f32 CPU kernels, measured 2026-10-10 on both stop sources):
+    # view writes are compared at the chunked plan's tolerance.
+    atol = 3 * ATOL_PAYLOAD
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", fixture["site"]), atol=atol)
     assert ref["parts"] == fork["parts"] == 1
     faithful = {"value": fixture["site"]["value"]}
-    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", faithful))
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", faithful), atol=atol)
     assert ref["parts"] == fork["parts"] == 1
     long = {**fixture["site"], "value": json.dumps({f"line{i}": f"fee {i} paid" for i in range(12)}), "window": 16}
     ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", long), atol=3 * ATOL_PAYLOAD)
@@ -483,3 +492,269 @@ def test_rendered_prompts_agree(servers):
         assert got["reference"][1]["prompt"] == got["fork"][1]["prompt"], (got["reference"][1]["prompt"], got["fork"][1]["prompt"])
         if "c1" in json.dumps(body):
             assert "nz1_" not in got["reference"][1]["prompt"], "the written value renders as a block, not as JSON text"
+
+
+# Parity of the fork with the reference (2026-10-10): info fields, embed, template value types and argument paths,
+# parts typed "unknown", Qwen-style calls and thinking, streaming, shared error behaviour.
+
+def test_info_fields_agree_in_shape(servers):
+    """Both report the same fields with the same types; values say what each serves."""
+    ref = _json(servers["reference"] + "/v1/neuralese/info")[1]
+    fork = _json(servers["fork"] + "/v1/neuralese/info")[1]
+    assert set(ref) == set(fork), (sorted(ref), sorted(fork))
+    assert {k: type(v) for k, v in ref.items()} == {k: type(v) for k, v in fork.items()}
+    assert ref["stream"] is fork["stream"] is True and "chat.stream" in fork["capabilities"]
+    assert ref["grad"] is True and fork["grad"] is False and ref["grad_order"] == 2 and fork["grad_order"] == 0
+    assert fork["adapters"] == [] and fork["projections"] == {} and fork["store"] == {"owners": True, "persistent": False}
+
+
+def test_embed_agrees(servers):
+    body = {"text": "count the fees", "type": "Neuralese<string>"}
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/embed", "POST", body), atol=1e-6)
+    assert ref["id"] == fork["id"], "token embeddings are exact: the same content ID"
+    assert ref["type"] == fork["type"] == "Neuralese<string>"
+    assert ref["producer"] == fork["producer"] == {"kind": "text-init", "text": "count the fees"}
+    got = _both(servers, "/v1/neuralese/embed", "POST", {"text": ""})
+    assert _codes(got) == {(400, "neuralese-embed")}
+
+
+def _codes(got):
+    return {(status, body["error"]["code"]) for status, body in got.values()}
+
+
+def _normalized(message, blocks):
+    """A reply message with block IDs replaced by their index among `blocks` and call IDs dropped, for comparing the
+    two servers (their payloads differ in the last bits, so their content IDs differ)."""
+    index = {meta["id"]: n for n, meta in enumerate(blocks)}
+
+    def walk(value):
+        if isinstance(value, dict):
+            return {k: (f"#{index.get(v, v)}" if k == "id" and isinstance(v, str) and v.startswith("nz1_") else walk(v))
+                    for k, v in value.items()}
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        return value
+
+    message = json.loads(json.dumps(message))
+    for call in message.get("tool_calls") or []:
+        call.pop("id", None)
+        call["function"]["arguments"] = json.loads(call["function"]["arguments"])
+    return walk(message)
+
+
+def _replies_agree(servers, body):
+    got = _both(servers, "/v1/chat/completions", "POST", body)
+    (rs, ref), (fs, fork) = got["reference"], got["fork"]
+    assert rs == fs == 200, (ref, fork)
+    messages = {name: _normalized(got[name][1]["choices"][0]["message"], got[name][1]["neuralese"]["blocks"]) for name in got}
+    assert messages["reference"] == messages["fork"], messages
+    rb, fb = ref["neuralese"]["blocks"], fork["neuralese"]["blocks"]
+    assert [b["length"] for b in rb] == [b["length"] for b in fb] and [b.get("type") for b in rb] == [b.get("type") for b in fb]
+    for a, b in zip(rb, fb):
+        diff = (_payload(servers["reference"], a["id"]) - _payload(servers["fork"], b["id"])).abs().max().item()
+        assert diff <= ATOL_PAYLOAD, f"payload differs by {diff:.3g}"
+    assert ref["choices"][0]["finish_reason"] == fork["choices"][0]["finish_reason"]
+    assert ref["usage"] == fork["usage"]
+    return ref, fork, messages["reference"]
+
+
+OPENING = [{"role": "user", "content": "Combine the two notes into one value."}]
+
+
+def test_template_value_type_unknown_agrees(servers):
+    """value_type "unknown": the value written unquoted (native value syntax), the block typed Neuralese<unknown>, its
+    part marked value_type "unknown"."""
+    template = {"call": "return_result", "arguments": {"status": "success"}, "value": "write", "value_type": "unknown"}
+    ref, fork, message = _replies_agree(servers, {"messages": OPENING, "max_tokens": 64, "neuralese_template": template})
+    assert ref["neuralese"]["blocks"][0]["type"] == "Neuralese<unknown>"
+    assert message["tool_calls"][0]["function"]["arguments"]["value"] == [
+        {"type": "neuralese", "id": "#0", "value_type": "unknown"}], message
+    got = _both(servers, "/v1/chat/completions", "POST", {"messages": OPENING, "max_tokens": 8, "neuralese_template": {
+        **template, "value_type": "number"}})
+    assert _codes(got) == {(400, "neuralese-template")}
+
+
+def test_template_argument_path_agrees(servers):
+    """argument_path: the value written (or decoded) inside nested arguments; a path that does not start at the
+    argument is refused."""
+    arguments = {"status": "success", "value": {"note": "x", "count": 2}}
+    template = {"call": "return_result", "arguments": arguments, "argument_path": ["value", "note"], "value": "write"}
+    _, _, message = _replies_agree(servers, {"messages": OPENING, "max_tokens": 64, "neuralese_template": template})
+    assert message["tool_calls"][0]["function"]["arguments"]["value"]["note"] == [{"type": "neuralese", "id": "#0"}], message
+    _replies_agree(servers, {"messages": OPENING, "max_tokens": 64, "neuralese_template": {**template, "value_type": "unknown"}})
+    _replies_agree(servers, {"messages": OPENING, "max_tokens": 12, "neuralese_template": {**template, "value": "decode"}})
+    for path in (["note"], ["value", "missing"], "value"):
+        got = _both(servers, "/v1/chat/completions", "POST", {"messages": OPENING, "max_tokens": 8, "neuralese_template": {
+            **template, "argument_path": path}})
+        assert _codes(got) == {(400, "neuralese-template")}, (path, got)
+
+
+def test_parts_typed_unknown_render_unquoted(servers):
+    """A tool-call argument value that is exactly a block with value_type "unknown" (given, or the stored block's type
+    Neuralese<unknown>) renders unquoted; a "string" one stays quoted."""
+    from natlang_neuralese.serve.store import encode_block, make_block
+
+    width = _both(servers, "/v1/neuralese/info")["reference"][1]["width"]
+    torch.manual_seed(13)
+    typed = make_block(0.05 * torch.randn(2, width), heads_dialect(), type="Neuralese<unknown>")
+    for name in ("reference", "fork"):
+        assert _request(f"{servers[name]}/v1/neuralese/blocks/{typed.id}", "PUT", raw=encode_block(typed))[0] == 201
+    plain = "nz1_" + "b" * 52
+
+    def turn(part):
+        return {"messages": [{"role": "user", "content": "go"}, {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "return_result", "arguments": json.dumps(
+                {"status": "success", "value": [part]})}}]}, {"role": "user", "content": "next"}]}
+
+    prompts = {}
+    for label, part in (("given", {"type": "neuralese", "id": plain, "value_type": "unknown"}),
+                        ("stored", {"type": "neuralese", "id": typed.id}),
+                        ("string", {"type": "neuralese", "id": typed.id, "value_type": "string"})):
+        got = _both(servers, "/v1/neuralese/render", "POST", turn(part))
+        assert got["reference"][0] == got["fork"][0] == 201, got
+        assert got["reference"][1]["prompt"] == got["fork"][1]["prompt"], got
+        prompts[label] = got["reference"][1]["prompt"]
+    assert "value=<block>" in prompts["given"] and prompts["given"] == prompts["stored"], prompts
+    assert "value=<block>" not in prompts["string"], prompts
+    # A reply carrying the typed part is read the same (greedy continuation).
+    body = {**turn({"type": "neuralese", "id": typed.id, "value_type": "unknown"}), "max_tokens": 6}
+    _replies_agree(servers, body)
+
+
+def test_qwen_calls_and_lone_think_close_parse_the_same(servers):
+    """Model output in the Qwen family's forms (Maple, Mellum): `<tool_call>{json}</tool_call>` and a reply that only
+    closes `</think>` (thinking templates open it in the generation prompt); markup that does not parse stays text."""
+    write = {"neuralese": "write"}
+    plans = [
+        ["Weighing the notes.</think>Answer: ", write, " done"],
+        ['<tool_call>\n{"name": "return_result", "arguments": {"status": "success", "value": "', write, '"}}\n</tool_call>'],
+        ["<think>short</think>", '<|tool_call_start|>[eval(code="1")]<|tool_call_end|><tool_call>{"name": "f", '
+         '"arguments": "{\\"a\\": [1, true, null]}"}</tool_call>'],
+        ["Before <tool_call>not json</tool_call> after"],
+    ]
+    expected = []
+    for plan in plans:
+        _, _, message = _replies_agree(servers, {"messages": OPENING, "max_tokens": 64, "x_natlang_forced": plan})
+        expected.append(message)
+    assert expected[0]["reasoning_content"] == "Weighing the notes." and expected[0]["content"][1] == {"type": "neuralese", "id": "#0"}
+    assert expected[1]["tool_calls"][0]["function"] == {"name": "return_result", "arguments": {
+        "status": "success", "value": [{"type": "neuralese", "id": "#0"}]}} and expected[1]["content"] is None
+    assert [c["function"]["name"] for c in expected[2]["tool_calls"]] == ["eval", "f"]
+    assert expected[2]["tool_calls"][1]["function"]["arguments"] == {"a": [1, True, None]}
+    assert expected[3]["content"] == "Before <tool_call>not json</tool_call> after" and "tool_calls" not in expected[3]
+
+
+def _stream(url: str, body: dict) -> tuple[int, str, list]:
+    request = urllib.request.Request(url + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode(),
+                                     method="POST", headers={"content-type": "application/json"})
+    with urllib.request.urlopen(request, timeout=600) as response:
+        kind = response.headers.get("content-type", "")
+        text = response.read().decode()
+    events = [line[len("data: "):] for line in text.split("\n") if line.startswith("data: ")]
+    return response.status, kind, events
+
+
+def _assemble(events: list) -> tuple[dict, dict]:
+    """A client's view of a stream (ts-host chat-completion.ts assembleChatCompletion): the deltas folded in order, and
+    the final chunk."""
+    assert events[-1] == "[DONE]", events[-3:]
+    chunks = [json.loads(e) for e in events[:-1]]
+    assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
+    parts, calls, blocks = [], [], []
+    for chunk in chunks[1:-1]:
+        delta = chunk["choices"][0]["delta"]
+        if isinstance(delta.get("content"), str):
+            if parts and parts[-1]["type"] == "text":
+                parts[-1]["text"] += delta["content"]
+            else:
+                parts.append({"type": "text", "text": delta["content"]})
+        elif isinstance(delta.get("content"), list):
+            assert delta["content"][0]["id"] == chunk["neuralese"]["block"]["id"]
+            parts.extend(delta["content"])
+            blocks.append(chunk["neuralese"]["block"])
+        calls.extend(delta.get("tool_calls") or [])
+    final = chunks[-1]
+    assert final["choices"][0]["delta"] == {} and final["choices"][0]["finish_reason"]
+    return {"parts": parts, "calls": calls, "blocks": blocks}, final
+
+
+STREAMED = [
+    {"messages": [{"role": "user", "content": "Name a city in France."}], "max_tokens": 10},
+    {"messages": OPENING, "max_tokens": 64, "x_natlang_forced": ["Plan: ", {"neuralese": "write"}, " done"]},
+    {"messages": OPENING, "max_tokens": 64, "neuralese_template": {"call": "return_result", "arguments": {
+        "status": "success"}, "value": "write"}},
+    {"messages": OPENING, "max_tokens": 64, "x_natlang_forced": [
+        'Sure. <tool_call>{"name": "f", "arguments": {"v": "', {"neuralese": "write"}, '"}}</tool_call>']},
+]
+
+
+def test_streamed_reply_assembled_equals_the_non_streamed_reply(servers):
+    """`"stream": true` on both servers: the role delta, text deltas held back at call markup, a part per written block
+    (with its meta), the parsed calls as one tool_calls delta, and a final chunk whose x_natlang_message is the message
+    a non-streaming request returns; the two servers stream the same."""
+    seen = {}
+    for body in STREAMED:
+        for name in ("reference", "fork"):
+            status, kind, events = _stream(servers[name], body)
+            assert status == 200 and kind.startswith("text/event-stream"), (name, kind)
+            streamed, final = _assemble(events)
+            whole = _json(servers[name] + "/v1/chat/completions", "POST", body)[1]
+            message = whole["choices"][0]["message"]
+            blocks = final["neuralese"]["blocks"]
+            # blocks written inside a call are part of the call's arguments, not content deltas
+            calls = final["x_natlang_message"].get("tool_calls")
+            assert streamed["blocks"] == (blocks[:len(streamed["blocks"])] if calls else blocks), name
+            assert _normalized(final["x_natlang_message"], blocks) == _normalized(message, whole["neuralese"]["blocks"]), name
+            assert final["usage"] == whole["usage"] and final["choices"][0]["finish_reason"] == whole["choices"][0]["finish_reason"]
+            assert [(c["index"], c["function"]["name"], json.loads(c["function"]["arguments"])) for c in streamed["calls"]] == \
+                [(i, c["function"]["name"], json.loads(c["function"]["arguments"]))
+                 for i, c in enumerate(final["x_natlang_message"].get("tool_calls") or [])], name
+            text = "".join(p["text"] for p in streamed["parts"] if p["type"] == "text")
+            assert "<|tool_call_start|>" not in text and "<tool_call>" not in text, (name, text)
+            content = final["x_natlang_message"]["content"]
+            if not final["x_natlang_message"].get("tool_calls"):
+                # without calls the deltas are the content (up to surrounding whitespace)
+                if isinstance(content, str):
+                    assert text.strip() == content, (name, text, content)
+                elif content:
+                    assert [p["type"] for p in streamed["parts"]] == [p["type"] for p in content], name
+            seen[name] = (_normalized(final["x_natlang_message"], blocks), text)
+        assert seen["reference"] == seen["fork"], seen
+
+
+def test_streaming_reports_errors_as_events_and_guidance(servers):
+    """A stream that fails after it started ends with an error event and [DONE]; guided streams carry
+    x_natlang_guidance in the final chunk; `guidance: {}` is guidance with every default on both."""
+    unknown = {"messages": [{"role": "user", "content": [{"type": "neuralese", "id": "nz1_" + "c" * 52}]}], "max_tokens": 4}
+    for name in ("reference", "fork"):
+        status, _, events = _stream(servers[name], unknown)
+        assert status == 200 and events[-1] == "[DONE]", (name, events)
+        assert json.loads(events[-2])["error"]["code"] == "neuralese-unknown-block", (name, events)
+    tools = [{"type": "function", "function": {"name": "return_result", "parameters": {}}}]
+    body = {"messages": [{"role": "user", "content": "Count the fees."}], "max_tokens": 16, "tools": tools,
+            "tool_choice": "required", "guidance": {}}
+    finals = {}
+    for name in ("reference", "fork"):
+        whole = _json(servers[name] + "/v1/chat/completions", "POST", body)[1]
+        assert "x_natlang_guidance" in whole, (name, whole)
+        _, final = _assemble(_stream(servers[name], body)[2])
+        assert final["x_natlang_guidance"] == whole["x_natlang_guidance"], name
+        finals[name] = final["x_natlang_guidance"]
+    assert finals["reference"] == finals["fork"]
+
+
+def test_batched_item_errors_and_block_width_agree(servers):
+    """Batched scoring reports a failing item's error as "code: detail" on both; reading a block of another width is
+    neuralese-bad-block on both."""
+    from natlang_neuralese.serve.store import encode_block, make_block
+
+    items = [{"messages": OPENING, "continuations": []}, "not an item"]
+    got = _both(servers, "/v1/neuralese/decide_many", "POST", {"items": items})
+    assert got["reference"][1] == got["fork"][1], got
+    assert got["reference"][1]["results"][0]["error"].startswith("neuralese-decision: ")
+    width = _both(servers, "/v1/neuralese/info")["reference"][1]["width"]
+    narrow = make_block(torch.zeros(2, width // 2), heads_dialect())
+    for name in ("reference", "fork"):
+        assert _request(f"{servers[name]}/v1/neuralese/blocks/{narrow.id}", "PUT", raw=encode_block(narrow))[0] == 201
+    body = {"messages": [{"role": "user", "content": [{"type": "neuralese", "id": narrow.id}]}], "max_tokens": 2}
+    assert _codes(_both(servers, "/v1/chat/completions", "POST", body)) == {(400, "neuralese-bad-block")}
