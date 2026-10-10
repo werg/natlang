@@ -27057,6 +27057,45 @@
       "training_admission": false,
       "admission": "held-context-visibility-and-source-quality-review",
       "notes": "Separate follow-up to101unknown invocations across64sourceitems23programs:22direct exact request literals,53request+exactcapture but literal unlocated,10item-onlybinding,16nochildrequest. Eight clipped full-object displays with full input.state retained; all state lengths<=1504. Snapshots alone not visibility. No causal/admission claim; old receipt unchanged."
+    },
+    {
+      "id": "free-provider-luna-v59-closed-iterative-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-iterative-modality-recovery-v59-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-independent-quality-review",
+      "notes": "Three original train cases accepted, all6files exact each; four typed iterateOn state transitions and final Draft each, no scope failures. Original accepted manual variants retained. No new-world or admission credit."
+    },
+    {
+      "id": "free-provider-luna-v56-semantic-disagreements-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v56-pubmedqa-disagreements-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-independent-quality-review",
+      "notes": "Nine full-visible-input annotation disagreements independently assessed. Five underdetermined/conflicting/broad-scope source questions held from future strict-label derivatives; four gold-supported interpretations remain review evidence. No labels rewritten."
+    },
+    {
+      "id": "pubmedqa-visible-answerability-quality-holds-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-independent-quality-review",
+      "notes": "Root reviewed five ambiguous V56source questions; combined with two earlier exclusions for seven exact original train ID/group/split holds. Raw labels/results preserved; no admission for remaining samples."
     }
   ],
   "coverage_backlog": [

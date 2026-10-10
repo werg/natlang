@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v56-semantic-disagreements-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v56-pubmedqa-disagreements-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 29534,
+      "sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+    }
+  ],
+  "bytes": 29534
+}
