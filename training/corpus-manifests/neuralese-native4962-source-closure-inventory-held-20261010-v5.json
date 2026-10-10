@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v5-final-rebuilt",
+  "files": [
+    {
+      "path": "candidate-file-pins.jsonl",
+      "bytes": 75229,
+      "sha256": "39c05a87dce2fb4c5b77762cb6f134318e008bca401ed9308c01d929b6c7eaf7",
+      "lines": 336
+    },
+    {
+      "path": "inventory.json",
+      "bytes": 4203,
+      "sha256": "5e1e45c34458ba0173b3e790a519f29e2b2d4fda57ad7de2839b54af70dca351"
+    },
+    {
+      "path": "inventory.md",
+      "bytes": 1903,
+      "sha256": "43e2c245322d401e214e597d44d349e77e64e39432a25cd7614843424148ca7b"
+    },
+    {
+      "path": "output-pins.json",
+      "bytes": 1131,
+      "sha256": "7a5a84d9d970dd7ad3ab0f781031731b02b56ab408643a563852ecbda19696d8"
+    },
+    {
+      "path": "program-source-case-bindings.jsonl",
+      "bytes": 5094769,
+      "sha256": "f22e49cf36319a655b37e10f51f4496198d5614b41e1f060ab7380ca84f2193b",
+      "lines": 479
+    },
+    {
+      "path": "unmatched-derived-child-source-bindings.jsonl",
+      "bytes": 26295,
+      "sha256": "37d9d81c5b3ad3e9d74e5e92e5dedc720a4982c2b78916e3c45c830f1bf542ef",
+      "lines": 7
+    }
+  ],
+  "bytes": 5203530
+}

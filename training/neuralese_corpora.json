@@ -25041,6 +25041,19 @@
       "training_admission": false,
       "admission": "held-source-split-semantic-review-required",
       "notes": "Independentexactsemantic/5stateedgeaudit3complete; 2iterateOnonefourmanualpasses. Index12partialbudgetnotnegative ornontermination. Allsource/splitclosureandadmissionheld."
+    },
+    {
+      "id": "neuralese-native4962-source-closure-inventory-held-20261010-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v5-final-rebuilt",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "native-source-closure-corrected-inventory",
+      "training_admission": false,
+      "admission": "held-source-integrity-and-quality-review-required",
+      "notes": "SupersedesV4filename-scopefalse negatives.472/479directexactprogram/source-rowpairs5573/5590refs;336filesindexed177withmatcheszero sameIDhashmismatches.7childpairs17refsdeclaredsourcecaserowSHA mismatchesactualpinnedparentrows integrityheld. Noautomaticadmission."
     }
   ],
   "coverage_backlog": [
