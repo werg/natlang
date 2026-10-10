@@ -152,3 +152,17 @@ def test_disk_reserve_holds_the_next_write_and_grows_with_optimizer_state(tmp_pa
     assert grown > now and reserve.grow_to(grown) == grown and reserve.grow_to(now) == grown  # never shrinks
     reserve.cleanup()
     assert not (tmp_path / '.checkpoint-space.reserve').exists()
+
+
+def test_weights_digest_is_a_cheap_on_device_fingerprint_that_sees_every_element():
+    from natlang_neuralese.train.trajectory_state import weights_digest
+    backbone = {'w': torch.randn(3, 5).to(torch.bfloat16), 'b': torch.zeros(4)}
+    heads = {'h': torch.arange(6, dtype=torch.int64), 'm': torch.tensor([True, False])}
+    first = weights_digest(backbone, heads)
+    assert first == weights_digest({k: v.clone() for k, v in backbone.items()}, heads)
+    for name in ('w', 'b'):
+        changed = {k: v.clone() for k, v in backbone.items()}
+        changed[name].view(-1)[-1] += 1
+        assert weights_digest(changed, heads) != first
+    swapped = {'w': backbone['w'].flip(0), 'b': backbone['b']}  # same values, other positions
+    assert weights_digest(swapped, heads) != first

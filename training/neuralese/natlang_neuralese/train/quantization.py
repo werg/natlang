@@ -100,14 +100,15 @@ def validate_spec(spec, stages=None):
     gate = spec.get('gate')
     if gate is not None:
         if (not isinstance(gate, dict) or set(gate) - {'probes', 'held_rows', 'prompt_weight', 'max_gate_drop',
-                                                       'max_held_kl', 'reference'}
+                                                       'max_held_kl', 'reference', 'column_held_documents'}
                 or not isinstance(gate.get('reference', {}), dict) or set(gate.get('reference', {})) - {'gate_pass', 'source'}
                 or not isinstance(gate.get('probes'), dict) or set(gate['probes']) != {'path', 'sha256'}
                 or not all(_number(gate.get(k, 0)) and gate.get(k, 0) >= 0
                            for k in ('max_gate_drop', 'max_held_kl', 'prompt_weight'))
-                or type(gate.get('held_rows', 48)) is not int):
+                or type(gate.get('held_rows', 48)) is not int
+                or type(gate.get('column_held_documents', 1)) is not int or gate.get('column_held_documents', 1) < 1):
             raise ValueError('quantization.gate is {probes: {path, sha256}, held_rows, prompt_weight, max_gate_drop, '
-                             'max_held_kl}')
+                             'max_held_kl, column_held_documents}')
         if 'max_held_kl' in gate and preserve is None:
             raise ValueError('quantization.gate.max_held_kl needs the preserve teacher (its held records)')
     points = spec.get('points')

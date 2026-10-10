@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v8",
+  "extends": "raw-recurrence-mellum-v7",
+  "description": "raw-recurrence-mellum-v7 with raw-recurrence-v8's evaluation sizes. Evaluations sized for the owner's budget (2026-10-10: all evaluations ~3% of a stage's wall time, 5% ceiling): the text stages evaluate 8 held documents per cohort (was 16; first and last window each) and the precision gate columns the first 8 held documents (quantization.gate.column_held_documents). Together with the on-device weights fingerprint (a host SHA-256 of 23 GB took ~3.5 of ~4.2 min per evaluation) this targets ~3%; the trainer's logged eval_share shows the real share. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "held_documents": 8
+      }
+    },
+    "quantization": {
+      "gate": {
+        "column_held_documents": 8
+      }
+    }
+  }
+}

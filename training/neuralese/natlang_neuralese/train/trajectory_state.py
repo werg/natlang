@@ -473,12 +473,35 @@ def initialize_content_residual(heads, optimizer):
     return reset
 
 
+_FINGERPRINT_CHUNK=1<<24
+_INTEGER_VIEW={1:torch.uint8,2:torch.int16,4:torch.int32,8:torch.int64}
+
+
+def _tensor_fingerprint(tensor):
+    """Two exact integer moments of the tensor's bits, reduced where the tensor lives (no host copy): the plain sum
+    and a position-weighted sum, both wrapping in int64. Deterministic across devices; any changed element changes
+    them except by deliberate construction."""
+    flat=tensor.detach().contiguous().reshape(-1)
+    if flat.dtype==torch.bool:flat=flat.view(torch.uint8)
+    flat=flat.view(_INTEGER_VIEW[flat.element_size()])
+    plain=positioned=0
+    for start in range(0,flat.numel(),_FINGERPRINT_CHUNK):
+        chunk=flat[start:start+_FINGERPRINT_CHUNK].to(torch.int64)
+        index=torch.arange(start,start+chunk.numel(),device=chunk.device,dtype=torch.int64)
+        weight=(index*2654435761)%2147483647+1
+        plain+=int(chunk.sum());positioned+=int((chunk*weight).sum())
+    return plain,positioned
+
+
 def weights_digest(backbone,heads):
+    """Provenance digest of evaluated weights: sha256 over names, shapes, dtypes and each tensor's on-device bit
+    fingerprint (``fingerprint/1``). Hashing every byte on the host took ~3.5 min per evaluation for Mellum's 23 GB
+    (run-v5/v6, 2026-10-10); exact checkpoint identity is the checkpoint file's sha256."""
     import hashlib,json
-    digest=hashlib.sha256()
-    for section,values in [('backbone',backbone),('heads',heads)]:
-        for name,value in sorted(values.items()):
-            tensor=value.detach().cpu().contiguous()
-            digest.update(json.dumps([section,name,list(tensor.shape),str(tensor.dtype)]).encode())
-            digest.update(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
+    digest=hashlib.sha256(b'natlang.weights-fingerprint/1')
+    with torch.no_grad():
+        for section,values in [('backbone',backbone),('heads',heads)]:
+            for name,value in sorted(values.items()):
+                digest.update(json.dumps([section,name,list(value.shape),str(value.dtype),
+                                          *_tensor_fingerprint(value)]).encode())
     return digest.hexdigest()

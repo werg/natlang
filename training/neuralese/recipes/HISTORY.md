@@ -208,3 +208,12 @@ initialization), core_text_warmup every 2048 of 4096 (~2.8 h at ~5 s/step), view
 recurrence_warmup end only (2048 steps, ~2.8 h at ~5 s/step), each with 16 evaluation points. raw-recurrence-mellum-v7
 = mellum-v6 plus the same override (the inheritance chain is linear). Re-size from measured step times.
 
+## raw-recurrence-v8, raw-recurrence-mellum-v8 (2026-10-10): evaluations sized for the 3% budget
+
+Owner: all evaluations together ~3% of a stage's wall time, 5% the hard ceiling. Measured on Mellum (eval-only,
+step 0): a text-warm-up evaluation took 255 s with 16 held documents per cohort, 213 s with 4, unchanged by
+ar_control_steps 256 -> 32; a py-spy trace showed ~3.5 min in `weights_digest` (a host SHA-256 of 23 GB), now an
+on-device fingerprint (shared code). v8 also halves the held sample (8 documents per cohort, first and last window
+each), evaluates the precision gate columns on the first 8 held documents; ar_control_steps (not a recipe parameter) stays 256, it cost nothing measurable. Projection
+phase 0.5 s/step; the backbone phase is to be measured; re-size from the trainers' logged eval_share.
+
