@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v32-superseded-source-v1-excluded-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-superseded-20261010-v1",
+  "files": [
+    {
+      "path": "readable-source-review.md",
+      "bytes": 118858,
+      "sha256": "2784515c48f0535df39e8bdbf0e18d32cd4ddd2f86abe3d1465ed647218b14c0"
+    },
+    {
+      "path": "root-review-plan.json",
+      "bytes": 7095,
+      "sha256": "59ee98d7d064a968048a1dad60c7a1df79a0b789b6f9a09371413198103549bd"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 921,
+      "sha256": "378f4b7e270c074440a08d5dfc7dcb617de7f5e17b6b1b71c47efd0861b61bc2"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 133655,
+      "sha256": "4c83b04e699a2d3cdfd165125da5d4249c2e89804bc1d4a9e84ddf55b39a770c"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 75815,
+      "sha256": "bcdf09f176027e0be80188b62773d14df4248e5c960d9f9b8a5b58c3be71ce3d"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1228093,
+      "sha256": "12d35b728895ab7d12b01b35f5b4cdba72fbdf896dbc26cf67237e74c76574c4",
+      "lines": 23
+    }
+  ],
+  "bytes": 1564437
+}

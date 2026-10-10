@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v32-source-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-inputs-20261010-v1",
+  "files": [
+    {
+      "path": "review-paths.json",
+      "bytes": 801,
+      "sha256": "9bd34e04b124d9e44e742fcfb7fce55dd9482dfbaee27b052188f074530df08f"
+    },
+    {
+      "path": "source-pools.json",
+      "bytes": 1513,
+      "sha256": "4b69ad688d55efcbe0d733980647ece8b852481cea872765a7095e580a164c96"
+    },
+    {
+      "path": "specs-v32.json",
+      "bytes": 17429,
+      "sha256": "726245a75a12a72bcc1426cdd258dca3e20c6a6fd2f6bf9a8997b5189fb14e14"
+    }
+  ],
+  "bytes": 19743
+}
