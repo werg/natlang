@@ -13,20 +13,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import time
 
 from label_decision_cases import _http_teacher
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import write_json_durable as write_json  # noqa: E402
+
 ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-
-
-def write_json(path, value):
-    pending = path.with_suffix(path.suffix + '.pending')
-    with pending.open('w') as stream:
-        json.dump(value, stream, indent=2, sort_keys=True)
-        stream.flush()
-        os.fsync(stream.fileno())
-    pending.replace(path)
 
 
 def main():

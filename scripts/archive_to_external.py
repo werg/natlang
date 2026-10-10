@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve  # noqa: E402
 
 GIB = 2**30
@@ -215,17 +216,6 @@ def candidates(roots, *, min_bytes, min_age, excludes, held, now=None, busy=(), 
                 yield path, st.st_size, reason
 
 
-def sha256(path: Path, chunk=8 << 20, from_disk=False) -> str:
-    """``from_disk``: drop the file's cached pages first, so the hash reads what reached the disk."""
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        if from_disk and hasattr(os, 'posix_fadvise'):
-            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-        while block := handle.read(chunk):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def destination(path: Path, roots, archive: Path) -> Path:
     for root in roots:
         if root in path.parents:
@@ -251,7 +241,7 @@ def archive_file(path: Path, dest: Path, manifest: Path) -> dict:
         partial.unlink()
         raise RuntimeError(f'{path} changed during the copy')
     digest = source_hash.hexdigest()
-    if partial.stat().st_size != before.st_size or sha256(partial, from_disk=True) != digest:
+    if partial.stat().st_size != before.st_size or sha256_file_hex(partial, 8 << 20, drop_cache=True) != digest:
         partial.unlink()
         raise RuntimeError(f'verification failed for {path}')
     os.replace(partial, dest)

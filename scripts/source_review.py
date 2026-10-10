@@ -63,8 +63,7 @@ class ReviewError(ValueError):
     """A receipt, decision or registry that does not hold; the message says what to write instead."""
 
 
-def canonical_sha256(value: Any) -> str:
-    return canonical_json_sha256_hex(value)
+canonical_sha256 = canonical_json_sha256_hex
 
 
 def reviewer_hash(definition_source_sha256: str, compiler_version: str, executor: str) -> str:

@@ -16,7 +16,6 @@ Exit status 0 when everything checks out; otherwise each problem is printed and 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import subprocess
 import sys
@@ -25,15 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "ts-host" / "vendor" / "neuralese-wasm"
 PIN = ROOT / "training" / "neuralese" / "llama-cpp-fork.json"
+sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
+
 BUILD_DIRS = {"neuralese-wasm": "build-wasm", "neuralese-wasm-mt": "build-wasm-mt", "neuralese-wasm-gpu": "build-wasm-gpu"}
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def problems(vendor: Path = VENDOR, pin_file: Path = PIN, fork: Path | None = None, builds: bool = False) -> list[str]:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ratchet: duplicate helper definitions outside natlang_neuralese/common and tests/ may only fall.
 
-Counts `def` lines named sha*/canonical*/write_json*/utc_now (sha* covers sha256*) per tracked
+Counts `def` lines named sha, sha<digits>*, sha_*, canonical*, write_json* or utc_now (not e.g. shaped_*) per tracked
 .py file and compares with scripts/duplicate-helpers-baseline.json ({"files": {path: count}}).
 A file's count growing, or a new file appearing, fails. Falling counts print "shrink the baseline".
 --update rewrites the baseline from the current tree.
@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "duplicate-helpers-baseline.json"
-DEF = re.compile(r"^\s*(?:async\s+)?def\s+(?:sha\w*|canonical\w*|write_json\w*|utc_now)\b", re.M)
+DEF = re.compile(r"^\s*(?:async\s+)?def\s+(?:sha(?:[\d_]\w*)?|canonical\w*|write_json\w*|utc_now)\b", re.M)
 EXCLUDED_PREFIXES = ("training/neuralese/natlang_neuralese/common/", "tests/")
 
 

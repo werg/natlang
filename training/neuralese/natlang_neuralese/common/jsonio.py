@@ -7,6 +7,7 @@ trailing newline, ASCII escaping) are deliberately NOT provided here.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -33,3 +34,14 @@ def write_canonical_jsonl(path, rows) -> int:
             stream.write(canonical_json_str(row) + "\n")
             count += 1
     return count
+
+
+def write_json_durable(path, value) -> None:
+    """Replace `path` with indented, key-sorted JSON (a state file, not a canonical form): write a `.pending`
+    sibling, fsync it and rename it over `path`, so a crash leaves the old or the new file, never a torn one."""
+    pending = path.with_suffix(path.suffix + ".pending")
+    with pending.open("w") as stream:
+        json.dump(value, stream, indent=2, sort_keys=True)
+        stream.flush()
+        os.fsync(stream.fileno())
+    pending.replace(path)

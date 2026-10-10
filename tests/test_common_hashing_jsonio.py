@@ -14,6 +14,7 @@ from natlang_neuralese.common.jsonio import (  # noqa: E402
     canonical_json_bytes,
     canonical_json_str,
     utc_now_iso,
+    write_json_durable,
 )
 
 NESTED = {"b": [1, {"z": 1, "a": "é☃"}], "a": None, "é": 1.5}
@@ -35,6 +36,7 @@ def test_sha256_file_hex_golden_and_chunking(tmp_path):
     assert sha256_file_hex(path) == expected
     assert sha256_file_hex(str(path)) == expected
     assert sha256_file_hex(path, chunk_size=1) == expected
+    assert sha256_file_hex(path, drop_cache=True) == expected
     big = tmp_path / "big.bin"
     big.write_bytes(b"x" * (3 * 1024 * 1024 + 7))
     assert sha256_file_hex(big) == sha256_hex(b"x" * (3 * 1024 * 1024 + 7))
@@ -56,3 +58,11 @@ def test_canonical_json_sha256_hex_golden():
 
 def test_utc_now_iso_shape():
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?\+00:00", utc_now_iso())
+
+
+def test_write_json_durable_replaces_whole_file(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text("old")
+    write_json_durable(path, {"b": 1, "a": [2]})
+    assert path.read_text() == '{\n  "a": [\n    2\n  ],\n  "b": 1\n}'
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["state.json"]

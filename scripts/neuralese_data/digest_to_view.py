@@ -23,7 +23,6 @@ Usage: digest_to_view.py --source DIR --out DIR [--copy summary.json surface.jso
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sys
@@ -31,17 +30,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256  # noqa: E402
 from natlang_neuralese.view import INSTRUCTIONS  # noqa: E402
 
 CONVERTER = "scripts/neuralese_data/digest_to_view.py@1"
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def convert_part(part: dict) -> tuple[dict, bool]:

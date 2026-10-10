@@ -19,10 +19,15 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def sha256_file_hex(path: str | os.PathLike[str], chunk_size: int = FILE_CHUNK_BYTES) -> str:
-    """Hex SHA-256 of a file's bytes, read in bounded chunks (chunk size never changes the digest)."""
+def sha256_file_hex(path: str | os.PathLike[str], chunk_size: int = FILE_CHUNK_BYTES, *, drop_cache: bool = False) -> str:
+    """Hex SHA-256 of a file's bytes, read in bounded chunks (chunk size never changes the digest).
+
+    ``drop_cache``: drop the file's cached pages first, so the hash reads what reached the disk.
+    """
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
+        if drop_cache and hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
         for chunk in iter(lambda: stream.read(chunk_size), b""):
             digest.update(chunk)
     return digest.hexdigest()
