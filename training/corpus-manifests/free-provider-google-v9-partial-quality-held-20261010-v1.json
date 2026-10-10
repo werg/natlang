@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v9-partial-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-v9-partial",
+  "files": [
+    {
+      "path": "labels-snapshot.jsonl",
+      "bytes": 49626,
+      "sha256": "29c08c40a42f45bb59eab749485573366597e7af78222872f4eacb04ef713bf1",
+      "lines": 42
+    },
+    {
+      "path": "review.json",
+      "bytes": 758,
+      "sha256": "236e20cbd7796dbcf7e9dc7434bfe3ea73621dabf551383bb1d2a28fe39399db"
+    },
+    {
+      "path": "score.json",
+      "bytes": 2636,
+      "sha256": "67f1d62502959323dc0ef28ddbc4a180f68c0ab1d7a4f429d4e16a4d0bc5dda8"
+    }
+  ],
+  "bytes": 53020
+}

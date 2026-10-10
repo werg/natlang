@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "training-corpus-publish-glob-audit-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/training-corpus-publish-glob-audit-20261010-v3",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 96147,
+      "sha256": "f8991358dde8af9ae709cc2cc2c0c90d44dec03226ca6b74e02951016b95ce9b"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 6077,
+      "sha256": "db93228dc6fb273db45aab627ec5eb8a6b204822140430c31d360c62bf0bff71"
+    }
+  ],
+  "bytes": 102224
+}

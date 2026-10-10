@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-quality-proposal-hash-correction-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v29-ordinary-text-quality-proposal-20261010-v2-hash-correction-history-v1",
+  "files": [
+    {
+      "path": "correction-history.json",
+      "bytes": 1462,
+      "sha256": "62793d49684abc5f56576505c4f11b8ea287d9dabf30726695a01f34e87f51d1"
+    }
+  ],
+  "bytes": 1462
+}
