@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-clean-28793-exact-heads-export-held-20261010-v1",
+  "owner": "pop",
+  "path": ".local/handoff-exports/luna-ar-channelkl-28793-20261010-v1",
+  "files": [
+    {
+      "path": "heads.pt",
+      "bytes": 616839720,
+      "sha256": "5ee2035b0d52794ac57ee075dc33c4d3cf2fe622f581672faba07b5436492586"
+    },
+    {
+      "path": "source.json",
+      "bytes": 356,
+      "sha256": "c7ae6dcf0f9a3746d785b6054680c01e6c48ee15a1e4e6e48d471bd9d2ca80b3"
+    }
+  ],
+  "bytes": 616840076
+}

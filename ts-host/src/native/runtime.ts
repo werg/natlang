@@ -164,6 +164,8 @@ instructions also see variables in scope that they mention by exact name. The re
 is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
 JavaScript template interpolation runs when you create the callable. Mention a future argument by its parameter
 name in the instructions; interpolate it only inside a callback where that variable already exists.
+When a child needs fields from a record, pass the full record or capture it by name with nl.with, rather than only
+passing an ID or prior decision. Reading a file in the parent does not by itself pass its contents to the child.
 In nl.with<T>, T describes the result, not the capture object. In nl.with<C, T>, C is a finite capture-record schema
 and T is the result; the callable's input is passed separately and inferred from the call (or declared with one full
 callable signature). A suffix .with(...) can apply directly to an inline

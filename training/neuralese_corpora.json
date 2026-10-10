@@ -25721,6 +25721,34 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "FourfreshtrajectoriesoriginalV35trainindices1/5/10/14, source/instructions/goldunchanged; iterative-state tracecoverage notnewworlds. Protected16..31excluded. V44closedbeforefournewworkers; sameV13runtime/medium/384budget."
+    },
+    {
+      "id": "luna-ar-clean-28793-exact-heads-export-held-20261010-v1",
+      "owner": "pop",
+      "path": ".local/handoff-exports/luna-ar-channelkl-28793-20261010-v1",
+      "include": [
+        "heads.pt",
+        "source.json"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "exact-clean-full-state-heads-export",
+      "training_admission": false,
+      "admission": "unqualified clean lineage handoff; no foundation or runtime certificate",
+      "notes": "Exact clean step 28793 heads SHA256 5ee2035b0d52794ac57ee075dc33c4d3cf2fe622f581672faba07b5436492586. Excludes the post-exposure mixed harness closeout. DGX owner requested this immutable export for new gate evidence."
+    },
+    {
+      "id": "free-provider-luna-v44-missing-output-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v44-missing-child-outputs-diagnosis-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "actual-child-trace-contract-diagnosis",
+      "training_admission": false,
+      "admission": "held diagnostic evidence; no admission or DPO decision",
+      "notes": "15 missing child captures inspected; zero successful typed returns dropped. One caller supplied only caseId and decision while child needed source fields. Other children unfinished or errored; eval success is not a declared child return."
     }
   ],
   "coverage_backlog": [

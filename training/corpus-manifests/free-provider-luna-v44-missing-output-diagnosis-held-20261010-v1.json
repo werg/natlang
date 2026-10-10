@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v44-missing-output-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v44-missing-child-outputs-diagnosis-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 9108,
+      "sha256": "74fa3b044fd9f25b9184d9787b9bfae450038d3f7f45d80a4718b2fe5ab07d46"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1510,
+      "sha256": "53c9d366d314b7a7df7a4a0c0164a583ff1520f8772170acb9da8b23af73a298"
+    }
+  ],
+  "bytes": 10618
+}
