@@ -53,6 +53,11 @@ class CheckpointDiskReserve:
             os.close(fd)
             raise
 
+    def grow_to(self, required_bytes):
+        """Raise the reservation (never lower it) as the state grows, e.g. when optimizer slots appear."""
+        self.required_bytes = max(self.required_bytes, int(required_bytes))
+        return self.ensure() if self.active else self.required_bytes
+
     def ensure(self):
         if not self.active:
             raise RuntimeError('checkpoint reserve is not acquired')
@@ -106,8 +111,9 @@ class CheckpointDiskReserve:
             os.close(fd)
 
 
-def warmup_checkpoint_size_upper_bound(named_parameters, heads, optimizer):
-    """Conservative serialized checkpoint bound, including future lazy optimizer slots."""
+def warmup_checkpoint_size_upper_bound(named_parameters, heads, optimizer, *, lazy=True, margin=1.15):
+    """Conservative serialized checkpoint bound, including future lazy optimizer slots (``lazy``); without them, the
+    bound of the state as it is now (the next write's size), for sizing the disk reserve."""
     model_bytes = sum(parameter.numel() * parameter.element_size()
                       for _, parameter in named_parameters)
     head_bytes = sum(value.numel() * value.element_size()
@@ -115,12 +121,12 @@ def warmup_checkpoint_size_upper_bound(named_parameters, heads, optimizer):
                      if hasattr(value, 'numel') and hasattr(value, 'element_size'))
     optimizer_parameters = {id(parameter): parameter
                             for group in optimizer.param_groups for parameter in group['params']}
-    optimizer_state_bytes = optimizer_state_size_upper_bound(optimizer)
+    optimizer_state_bytes = optimizer_state_size_upper_bound(optimizer, lazy=lazy)
     tensor_payload = model_bytes + head_bytes + optimizer_state_bytes
     # Pickle/zip metadata, RNG/scheduler state, and small non-tensor payloads.
     parameter_count = len(optimizer_parameters)
     overhead = max(16 * 1024 * 1024, parameter_count * 1024)
-    return int(math.ceil((tensor_payload + overhead) * 1.15))
+    return int(math.ceil((tensor_payload + overhead) * margin))
 
 
 def _state_tensor_bytes(value):
@@ -145,8 +151,8 @@ def _optimizer_family(optimizer):
         f'checkpoint reserve does not know optimizer state layout for {type(optimizer).__name__}')
 
 
-def optimizer_state_size_upper_bound(optimizer):
-    """Exact initialized slots plus layout-specific lazy state for warm-up optimizers."""
+def optimizer_state_size_upper_bound(optimizer, lazy=True):
+    """Exact initialized slots plus (``lazy``) layout-specific lazy state for warm-up optimizers."""
     children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None))
                 if hasattr(optimizer, 'muon') else (optimizer,))
     seen = set()
@@ -162,6 +168,8 @@ def optimizer_state_size_upper_bound(optimizer):
                 seen.add(id(parameter))
                 state = child.state.get(parameter, {})
                 total += _state_tensor_bytes(state)
+                if not lazy:
+                    continue
                 if family == 'muon':
                     if 'momentum_buffer' not in state:
                         total += parameter.numel() * parameter.element_size()

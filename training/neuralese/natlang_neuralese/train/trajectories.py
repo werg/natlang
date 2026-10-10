@@ -2045,6 +2045,30 @@ def main(argv=None):
     # (fresh lineages only), evaluations every --eval-every updates, full-state writes every --checkpoint-every
     # updates (evaluation points), at the end and on stops; the final report is the stage end's evaluation.
     eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every)
+    # Evaluation share of wall time (owner 2026-10-10: at most 3% of a stage), logged with every training row.
+    eval_clock = {'eval_seconds': 0.0, 'start': time.perf_counter(), 'warned': None}
+    def timed(function):
+        def run(*call_args, **call_kwargs):
+            started_eval = time.perf_counter()
+            try:
+                return function(*call_args, **call_kwargs)
+            finally:
+                eval_clock['eval_seconds'] += time.perf_counter() - started_eval
+        return run
+    evaluate, evaluate_written = timed(evaluate), timed(evaluate_written)
+    def eval_share():
+        total = time.perf_counter() - eval_clock['start']
+        share = eval_clock['eval_seconds'] / total if total > 0 else 0.0
+        record = {'eval_seconds': round(eval_clock['eval_seconds'], 1), 'total_seconds': round(total, 1),
+                  'eval_share': round(share, 4)}
+        # Target 3%, hard ceiling 5% (owner 2026-10-10): warn above the target, log an error above the ceiling.
+        level = 'error' if share > 0.05 else 'warning' if share > 0.03 else None
+        if level != eval_clock['warned']:
+            eval_clock['warned'] = level
+            if level:
+                print(json.dumps({'event': 'eval_share_over_' + ('ceiling' if level == 'error' else 'budget'),
+                                  'level': level, 'budget': 0.03, 'ceiling': 0.05, **record}), flush=True)
+        return record
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
                            'content_transport': heads.content.transport, 'sketch_gradient': args.sketch_gradient,
@@ -2431,6 +2455,7 @@ def main(argv=None):
                 entry['activation_offload_peak_gib'] = round(offload_stats['peak_offloaded_bytes'] / 2**30, 3)
             if args.token_cache_mib:
                 entry['token_cache'] = engine._token_cache.stats()
+            entry['eval_share'] = eval_share()
             log.write(json.dumps(entry) + "\n")
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:

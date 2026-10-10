@@ -131,3 +131,24 @@ def test_the_trainers_atomic_writer_leaves_the_previous_file_until_the_replaceme
     monkeypatch.undo()
     assert torch.equal(torch.load(target)["v"], torch.ones(2))
     assert not list(tmp_path.glob("*.pending"))
+
+
+def test_disk_reserve_holds_the_next_write_and_grows_with_optimizer_state(tmp_path):
+    """run-v5 left an 80 GB reserve for a 23.6 GB state: the reserve is sized to the state as it is (5% margin), not
+    to every future lazy optimizer slot, and grows when slots appear."""
+    from natlang_neuralese.train.checkpoint_safety import CheckpointDiskReserve, warmup_checkpoint_size_upper_bound
+    weight = torch.nn.Parameter(torch.zeros(1000, 100))
+    heads = torch.nn.Linear(2, 2)
+    optimizer = torch.optim.AdamW([weight])
+    now = warmup_checkpoint_size_upper_bound([('w', weight)], heads, optimizer, lazy=False, margin=1.05)
+    future = warmup_checkpoint_size_upper_bound([('w', weight)], heads, optimizer)
+    assert now < future and now < 1.1 * (weight.numel() * 4 + 16 * 1024 * 1024)
+    reserve = CheckpointDiskReserve(tmp_path / '.checkpoint-space.reserve', now)
+    reserve.acquire()
+    assert (tmp_path / '.checkpoint-space.reserve').stat().st_size == now
+    weight.grad = torch.ones_like(weight)
+    optimizer.step()  # two moments appear
+    grown = warmup_checkpoint_size_upper_bound([('w', weight)], heads, optimizer, lazy=False, margin=1.05)
+    assert grown > now and reserve.grow_to(grown) == grown and reserve.grow_to(now) == grown  # never shrinks
+    reserve.cleanup()
+    assert not (tmp_path / '.checkpoint-space.reserve').exists()

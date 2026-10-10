@@ -1706,6 +1706,9 @@ def test_warmup_evaluates_and_writes_only_at_declared_points_and_links_best_to_a
     assert steps==[0]+list(range(2,end+1,2))
     written=[l for l in log.read_text().splitlines() if l.strip() and json.loads(l)['path'].endswith('/checkpoint.pt')]
     assert len(written)==len([s for s in range(4,end,4)])+1  # the declared write points before the end, and the end
+    shares=[json.loads(l)['eval_share'] for l in (out/'train.jsonl').read_text().splitlines()]
+    assert all(0<=r['eval_share']<=1 and r['eval_seconds']<=r['total_seconds'] for r in shares)
+    assert shares[-1]['eval_seconds']>=shares[0]['eval_seconds']  # cumulative
     best=json.loads((out/'best-checkpoint.json').read_text())['step']
     assert best in [s for s in range(4,end,4)]+[end]
     if best==end:

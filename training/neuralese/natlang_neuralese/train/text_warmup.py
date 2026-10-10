@@ -340,6 +340,9 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
 # Activation checkpointing trades memory for recomputation with identical math, so it is operational too.
 # checkpoint_minutes and eval_minutes are retired (step-declared points replaced them): older states may carry them.
+# Owner 2026-10-10: all evaluations together target 3% of a stage's wall time; 5% is the hard ceiling (a bigger gate
+# sample when really needed). Above the target the trainer warns; above the ceiling it logs an error to fix.
+EVAL_SHARE_BUDGET,EVAL_SHARE_CEILING=0.03,0.05
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added'})
 
@@ -1852,7 +1855,30 @@ def main(argv=None):
         except Exception:traceback.print_exc()
     atexit.register(drain_checkpoint_writer_at_exit)
     last_report=None
-    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False,record=True,documents=None):
+    # Evaluation share of wall time (owner 2026-10-10: all evaluations at most 3% of a stage): cumulative, logged
+    # with every training row, warned above the budget.
+    eval_clock={'eval_seconds':0.,'start':time.perf_counter(),'warned':None}
+    def evaluate(**kwargs):
+        started=time.perf_counter()
+        try:
+            return evaluate_once(**kwargs)
+        finally:
+            eval_clock['eval_seconds']+=time.perf_counter()-started
+
+    def eval_share():
+        total=time.perf_counter()-eval_clock['start']
+        share=eval_clock['eval_seconds']/total if total>0 else 0.
+        record={'eval_seconds':round(eval_clock['eval_seconds'],1),'total_seconds':round(total,1),
+                'eval_share':round(share,4)}
+        level='error' if share>EVAL_SHARE_CEILING else 'warning' if share>EVAL_SHARE_BUDGET else None
+        if level!=eval_clock['warned']:
+            eval_clock['warned']=level
+            if level:print(json.dumps({'event':'eval_share_over_'+('ceiling' if level=='error' else 'budget'),
+                                       'level':level,'budget':EVAL_SHARE_BUDGET,'ceiling':EVAL_SHARE_CEILING,
+                                       **record}),flush=True)
+        return record
+
+    def evaluate_once(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False,record=True,documents=None):
         nonlocal last_schedule_step,last_report
         evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};cohort_strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
@@ -2220,7 +2246,7 @@ def main(argv=None):
     if a.eval_only:
         report=evaluate(observe_schedule=False)
         (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
-        print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
+        print(json.dumps({'event':'eval_only_done','step':step,'eval_seconds':round(eval_clock['eval_seconds'],1)}),flush=True)
         return None
     # The stage gate's reference point (step 0): the forgetting check (text_ce_delta_from_initial) needs the starting
     # weights' held text CE. It runs only when that reference is missing, i.e. a fresh lineage or a continuation whose
@@ -2243,8 +2269,12 @@ def main(argv=None):
         # full-state writes, so it starts empty.
         last_report=baseline
     checkpoint_snapshot_size_bound=warmup_checkpoint_size_upper_bound(named,heads,optimizer)
+    # The disk reserve holds the NEXT write (the state as it is, 5% margin) and grows as optimizer slots appear; the
+    # lazy upper bound above (every future slot) sizes memory for asynchronous writes only.
+    def next_write_bytes():
+        return warmup_checkpoint_size_upper_bound(named,heads,optimizer,lazy=False,margin=1.05)+Path(a.heads).stat().st_size
     checkpoint_reserve=CheckpointDiskReserve(
-        a.out/'.checkpoint-space.reserve',checkpoint_snapshot_size_bound)
+        a.out/'.checkpoint-space.reserve',next_write_bytes())
     atexit.register(checkpoint_reserve.cleanup)
     try:
         checkpoint_reserve.acquire()
@@ -2598,6 +2628,7 @@ def main(argv=None):
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])
         if memory_record is not None:m['memory']=memory_record
+        m['eval_share']=eval_share()
         log('train.jsonl',m)
         report=None
         if eval_cadence.due(step):
@@ -2636,7 +2667,7 @@ def main(argv=None):
             return 'qualified'
         try:
             if not checkpoint_writer.pending:
-                checkpoint_reserve.ensure()
+                checkpoint_reserve.grow_to(next_write_bytes())
         except CheckpointReserveError as error:
             recover_postcommit_persistence_failure(error)
         return None
