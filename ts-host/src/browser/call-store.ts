@@ -8,7 +8,7 @@ import type { CallStore } from '../calls/store-core.js';
 import type { CallRecord, CallStoreSettings, CaseStats, CompilationRow } from '../calls/types.js';
 import { DEFAULT_SETTINGS } from '../calls/types.js';
 import type { IterationStatisticsStore, SiteStatistics } from '../runtime/iterate.js';
-import type { FromWorker, QueryMethod, Snapshot, ToWorker } from './call-store-worker.js';
+import type { FromWorker, QueryMethod, Snapshot, ToWorker } from './call-store-protocol.js';
 
 export type BrowserCallStoreOptions = {
   /** The store's name in the origin's private file system (default `calls`). */
@@ -121,7 +121,7 @@ export class BrowserCallStore implements CallStoreLike {
 
   /**
    * Call a store method in the worker: `await store.query('calls', { definition: 'support', limit: 20 })`,
-   * `query('call', id)`, `query('compilation', id)`, `query('hot')`, ... (QUERY_METHODS in call-store-worker.ts).
+   * `query('call', id)`, `query('compilation', id)`, `query('hot')`, ... (QUERY_METHODS in call-store-protocol.ts).
    */
   query<M extends QueryMethod>(method: M, ...args: Parameters<CallStore[M]>): Promise<ReturnType<CallStore[M]>> {
     return this.request({ op: 'query', method, args }) as Promise<ReturnType<CallStore[M]>>;

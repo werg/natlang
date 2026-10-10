@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { statSync } from 'node:fs';
-import { test } from 'node:test';
+import { browserTest as test } from './support/natlang.mjs';
 
 async function browserApi() {
   const process = globalThis.process;

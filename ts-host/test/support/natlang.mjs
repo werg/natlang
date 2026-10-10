@@ -8,6 +8,7 @@ import { parseModule, parseNatlang, PATH_ONLY } from '../../dist/runtime/loader.
 import YAML from 'yaml';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { browserBuildProblems, staleMessage } from '../../scripts/browser-build-freshness.mjs';
 import { test as nodeTest } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -98,11 +99,17 @@ export function withJudge(driver, truth = () => true) {
 /**
  * Tests that run the browser bundle (dist/browser/natlang.js) skip with a reason when it has not been built, as the suite does for
  * other missing artifacts. `npm test` and `npm run build` build it; a checkout built with `build:node` alone does not.
+ * A bundle that is there but not the build of the current sources (scripts/browser-build-freshness.mjs) fails them.
  */
 export const browserBundleSkip = existsSync(new URL('../../dist/browser/natlang.js', import.meta.url)) ? false :
   'dist/browser/natlang.js is missing; run `npm run build:browser` (in ts-host) to build the browser bundle';
+let browserBundleStale;
 export function browserTest(name, ...rest) {
   const fn = rest.pop(), options = { ...(rest[0] ?? {}) };
   if (browserBundleSkip && options.skip === undefined) options.skip = browserBundleSkip;
-  return nodeTest(name, options, fn);
+  return nodeTest(name, options, async (...args) => {
+    browserBundleStale ??= browserBuildProblems();
+    if (browserBundleStale.length) throw new Error(staleMessage(browserBundleStale, `browser test "${name}"`));
+    return fn(...args);
+  });
 }

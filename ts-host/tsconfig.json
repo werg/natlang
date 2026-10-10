@@ -11,5 +11,8 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  // The browser worker entry points exist only as bundles (build-browser.mjs writes dist/browser/<name>.js); emitting
+  // them here would overwrite the bundled workers with unbundled tsc output. tsconfig.workers.json type-checks them.
+  "exclude": ["src/browser/neuralese-worker.ts", "src/browser/call-store-worker.ts"]
 }

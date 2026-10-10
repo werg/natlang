@@ -61,6 +61,9 @@ if [ $ts = 1 ]; then
     step ts-check sh -c 'cd ts-host && npm run --silent check'
   else
     step ts-build-node sh -c 'cd ts-host && npm run --silent build:node'
+    # A checkout with a browser build keeps it current (rebuilt only when stale: browser-build-freshness.mjs), so the
+    # browser tests run against these sources; without one they skip as before.
+    step ts-build-browser sh -c 'cd ts-host && if [ -e dist/browser/natlang.js ]; then node scripts/browser-build-freshness.mjs --rebuild; fi'
     step ts-build-apps sh -c 'cd ts-host && npm run --silent build:applications'
     step ts-browser-types sh -c 'cd ts-host && npm run --silent check:browser-types'
     step ts-layering sh -c 'cd ts-host && npm run --silent check:layering'

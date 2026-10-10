@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
+import { exitUnlessFreshBrowserBuild } from './browser-build-freshness.mjs';
+
+exitUnlessFreshBrowserBuild('scripts/playground-smoke.mjs');
 
 const server = spawn(process.execPath, [new URL('./serve-browser-local.mjs', import.meta.url).pathname,
   '--playground', '--port=0'], { stdio: ['ignore', 'pipe', 'pipe'] });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { browserTest as test } from './support/natlang.mjs';
 import { examples, exampleCategories } from '../playground/examples.mjs';
 import { crispExamples } from '../playground/examples/crisp.mjs';
 import { interfaceExamples } from '../playground/examples/interfaces.mjs';

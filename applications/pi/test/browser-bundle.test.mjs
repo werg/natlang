@@ -17,6 +17,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import { buildApplicationBrowser } from '../../../ts-host/scripts/build-application-browser.mjs';
+import { requireFreshBrowserBuild } from '../../../ts-host/scripts/browser-build-freshness.mjs';
 import { scriptedModel } from '../../../ts-host/test/support/natlang.mjs';
 import { fakeOpfs } from '../../../ts-host/test/fixtures/fake-opfs.mjs';
 
@@ -36,6 +37,7 @@ async function asInBrowser(url) {
 }
 
 before(async () => {
+  requireFreshBrowserBuild('applications/pi/test/browser-bundle.test.mjs');
   // Built against the runtime's file URL here; a page names `@natlang/browser` in its import map instead.
   built = await buildApplicationBrowser({ app: root, outdir, runtime: runtimeUrl });
   browser = await asInBrowser(runtimeUrl);

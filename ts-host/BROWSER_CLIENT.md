@@ -24,6 +24,19 @@ development, and serve GGUF files with byte-range support. Cross-origin
 isolation headers (COOP/COEP) enable multithreaded CPU inference; without them
 the loader uses one thread. Publish the model's tool-call template beside it.
 
+`npm run build:browser` (scripts/build-browser.mjs) writes the bundles, the
+worker bundles and the copied WebAssembly assets into `dist/browser/` with a
+stamp, `build-stamp.json`: the sha256 of every source esbuild read, of every
+copied asset (the vendored Neuralese wasm among them) and of every file written.
+`npm run check:browser-build` (scripts/browser-build-freshness.mjs) says
+whether `dist/browser/` is still the build of the current sources, and also
+checks the vendored Neuralese wasm against its `provenance.json`. The browser
+test scripts refuse a stale build with the reasons; their npm scripts
+(`test:browser*`, `test:playground`, `serve:browser`) rebuild a stale one
+first, and the browser tests of `node --test` fail on it. `build:node` (tsc)
+never writes into the worker bundles: the worker entry points are left out of
+tsconfig.json and type-checked by tsconfig.workers.json.
+
 ## Load a model and run natlang
 
 ```ts

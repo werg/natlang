@@ -6,7 +6,8 @@
  *
  * The runtime stays a module of its own, imported as `--runtime` (default `@natlang/browser`, which the page maps to
  * ts-host's dist/browser/natlang.js with an import map), so the application shares the page's runtime instance and the
- * runtime's own graph is checked by its build (build-browser.mjs). Run after `npm run build:node` and `build:browser`.
+ * runtime's own graph is checked by its build (build-browser.mjs). Run after `npm run build:node` and `build:browser`;
+ * the command line refuses a stale browser build (browser-build-freshness.mjs).
  *
  * Usage: node scripts/build-application-browser.mjs APP [--entry browser.ts] [--out DIR] [--runtime SPECIFIER|URL]
  */
@@ -14,6 +15,7 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { browserNodeImports } from './browser-node-imports.mjs';
+import { exitUnlessFreshBrowserBuild } from './browser-build-freshness.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -51,6 +53,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const option = name => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
   const app = args.find((arg, i) => !arg.startsWith('--') && !['--entry', '--out', '--runtime'].includes(args[i - 1] ?? ''));
   if (!app) { console.error('usage: build-application-browser.mjs APP [--entry browser.ts] [--out DIR] [--runtime SPECIFIER|URL]'); process.exit(2); }
+  // The bundle runs against the page's dist/browser/natlang.js: built against a stale runtime, it would be checked
+  // against declarations that runtime does not have.
+  exitUnlessFreshBrowserBuild(`building ${app}'s browser bundle`);
   try {
     const { entry } = await buildApplicationBrowser({ app, entry: option('--entry'), outdir: option('--out'), runtime: option('--runtime') });
     console.log(`built ${entry}`);

@@ -447,7 +447,7 @@ test('call store contract [node-file]: concurrent writer processes lose no calls
 });
 
 test('call store contract: the browser worker protocol only names methods the store has', () => {
-  const source = readFileSync(new URL('../src/browser/call-store-worker.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/browser/call-store-protocol.ts', import.meta.url), 'utf8');
   const list = /QUERY_METHODS = \[([^\]]+)\]/.exec(source)[1];
   const methods = [...list.matchAll(/'([A-Za-z]+)'/g)].map(match => match[1]);
   const writes = /method: ('[A-Za-z]+'(?: \| '[A-Za-z]+')*);/.exec(source)[1].match(/[A-Za-z]+/g);

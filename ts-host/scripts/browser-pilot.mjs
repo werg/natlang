@@ -6,6 +6,9 @@ import { stat, writeFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
+import { exitUnlessFreshBrowserBuild } from './browser-build-freshness.mjs';
+
+exitUnlessFreshBrowserBuild('scripts/browser-pilot.mjs');
 
 const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');

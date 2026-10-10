@@ -10,6 +10,9 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
+import { exitUnlessFreshBrowserBuild } from './browser-build-freshness.mjs';
+
+exitUnlessFreshBrowserBuild('scripts/browser-call-store-smoke.mjs');
 
 const root = resolve(import.meta.dirname, '..');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm' };

@@ -1,0 +1,8 @@
+{
+  // Type-checks the browser worker entry points that tsconfig.json leaves out (build:node and check run it); emits
+  // nothing: build-browser.mjs bundles them into dist/browser.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/browser/neuralese-worker.ts", "src/browser/call-store-worker.ts"],
+  "exclude": []
+}

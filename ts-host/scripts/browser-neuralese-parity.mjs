@@ -35,6 +35,9 @@ import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
 import { buildApplicationBrowser } from './build-application-browser.mjs';
 import { blockNamer, runParityProgram } from '../test/neuralese-parity/program.mjs';
+import { exitUnlessFreshBrowserBuild } from './browser-build-freshness.mjs';
+
+exitUnlessFreshBrowserBuild('scripts/browser-neuralese-parity.mjs');
 
 const ATOL_PAYLOAD = 2e-2, ATOL_LOGPROB = 5e-2, ATOL_LONG = 5e-2;
 const { values } = parseArgs({ options: { model: { type: 'string' }, heads: { type: 'string' }, build: { type: 'string', default: 'neuralese-wasm' },
