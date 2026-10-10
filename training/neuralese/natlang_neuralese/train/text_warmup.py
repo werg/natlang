@@ -343,6 +343,12 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
 # Owner 2026-10-10: all evaluations together target 3% of a stage's wall time; 5% is the hard ceiling (a bigger gate
 # sample when really needed). Above the target the trainer warns; above the ceiling it logs an error to fix.
 EVAL_SHARE_BUDGET,EVAL_SHARE_CEILING=0.03,0.05
+
+
+def process_rss_bytes():
+    try:
+        with open('/proc/self/statm') as handle:return int(handle.read().split()[1])*os.sysconf('SC_PAGE_SIZE')
+    except (OSError,ValueError,IndexError):return None
 RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','eval_minutes','device',
                                       'checkpoint_layers','cuda_reserved_cap_gb','optimizer_state','optimizer_added'})
 
@@ -1858,10 +1864,23 @@ def main(argv=None):
     # Evaluation share of wall time (owner 2026-10-10: all evaluations at most 3% of a stage): cumulative, logged
     # with every training row, warned above the budget.
     eval_clock={'eval_seconds':0.,'start':time.perf_counter(),'warned':None}
+    def phase_memory_start():
+        # Per-phase peaks (owner 2026-10-10: run near full memory, prevent spikes): training steps reset their own.
+        if a.device.startswith('cuda'):
+            torch.cuda.empty_cache();torch.cuda.reset_peak_memory_stats(a.device)
+    def phase_memory():
+        record={'rss_bytes':process_rss_bytes()}
+        if a.device.startswith('cuda'):
+            record.update(peak_allocated_bytes=int(torch.cuda.max_memory_allocated(a.device)),
+                          peak_reserved_bytes=int(torch.cuda.max_memory_reserved(a.device)))
+        return record
     def evaluate(**kwargs):
         started=time.perf_counter()
+        phase_memory_start()
         try:
-            return evaluate_once(**kwargs)
+            report=evaluate_once(**kwargs)
+            report['phase_memory']={'phase':'eval',**phase_memory()}
+            return report
         finally:
             eval_clock['eval_seconds']+=time.perf_counter()-started
 
@@ -2138,8 +2157,10 @@ def main(argv=None):
             return report
         column_documents=(quant.component.get('gate') or {}).get('column_held_documents')
         def column():
+            phase_memory_start()
             column_report=evaluate(observe_schedule=False,record=False,documents=column_documents)
             if behaviour is not None:column_report['behaviour']=behaviour.report(backbone.hf)
+            column_report['phase_memory']={'phase':'precision_column',**phase_memory()}
             return column_report
         def column_passed(column_report):
             return bool(column_report.get('alignment_gate_passed')) and (
@@ -2194,7 +2215,14 @@ def main(argv=None):
     # Declared step points only (owner 2026-10-10; plans/STORAGE_POLICY.md): evaluations every --eval-every updates,
     # full-state writes every --checkpoint-every updates (a subset of the evaluation points), at the end and on stops.
     checkpoint_cadence,eval_cadence=Cadence(a.checkpoint_every),Cadence(a.eval_every)
-    def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
+    def save(report=None, **kwargs):
+        phase_memory_start()
+        try:
+            return save_once(report,**kwargs)
+        finally:
+            print(json.dumps({'event':'phase_memory','phase':'checkpoint_submit','step':step,**phase_memory()}),flush=True)
+
+    def save_once(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
              retain_best=False, wait=False):
         checkpoint_writer.drain()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
