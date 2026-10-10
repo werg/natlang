@@ -6,7 +6,7 @@ are journaled without marking the case completed. Existing strict answer checks
 and gold-free prompts come from label_decision_cases, not a second adapter.
 """
 import argparse
-from collections import deque
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import fcntl
 import hashlib
@@ -38,11 +38,13 @@ def main():
     p.add_argument('--choice-contract', choices=['probabilities', 'label-confidence'], default='probabilities',
                    help='choice response shape; score/noul cases retain the probability contract')
     p.add_argument('--timeout', type=float, default=120)
-    p.add_argument('--workers', type=int, default=4, help='parallel quota groups; at most one in-flight call per group')
+    p.add_argument('--workers', type=int, default=4, help='total concurrent requests across paced quota groups')
+    p.add_argument('--max-inflight-per-quota-group', type=int, default=2,
+                   help='concurrent calls per quota group; request-start interval still applies')
     p.add_argument('--wait', action='store_true', help='wait for cooldowns instead of exiting with unfinished cases')
     p.add_argument('--wait-for-owner', action='store_true', help='queue this source behind the current project pool owner')
     args = p.parse_args()
-    if args.limit < 0 or args.timeout <= 0 or args.workers < 1:
+    if args.limit < 0 or args.timeout <= 0 or args.workers < 1 or args.max_inflight_per_quota_group < 1:
         p.error('limit must be nonnegative and timeout positive')
     key = os.environ.get(args.api_key_env)
     if not key:
@@ -76,6 +78,7 @@ def main():
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
                 'choice_contract': args.choice_contract,
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
+                'max_inflight_per_quota_group': args.max_inflight_per_quota_group,
                 'adapter_sha256': hashlib.sha256(Path(__file__).with_name('label_decision_cases.py').read_bytes()).hexdigest(),
                 'scheduler_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 'persistence_sha256': hashlib.sha256(Path(jsonio.__file__).read_bytes()).hexdigest()}
@@ -98,21 +101,22 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as executor, out_path.open('a') as out, open(str(out_path) + '.attempts.jsonl', 'a') as journal:
         while cases or pending:
             now = time.time()
-            busy = {model['quota_group'] for case, model in pending.values()}
+            busy = Counter(model['quota_group'] for case, model in pending.values())
             order = [(state.get('cursor', 0) + i) % len(models) for i in range(len(models))]
             for index in order:
                 if not cases or len(pending) >= args.workers:
                     break
                 model = models[index]
                 group = groups.setdefault(model['quota_group'], {})
-                if model['quota_group'] in busy or group.get('disabled') or group.get('not_before', 0) > now:
+                if (busy[model['quota_group']] >= args.max_inflight_per_quota_group or
+                        group.get('disabled') or group.get('not_before', 0) > now):
                     continue
                 case = cases.popleft()
                 state['cursor'] = (index + 1) % len(models)
                 group['not_before'] = now + model['interval_seconds']
                 write_json(state_path, state)
                 pending[executor.submit(ask, case, model)] = (case, model)
-                busy.add(model['quota_group'])
+                busy[model['quota_group']] += 1
             if not pending:
                 future = [groups.get(m['quota_group'], {}).get('not_before', 0) for m in models
                           if not groups.get(m['quota_group'], {}).get('disabled')]
