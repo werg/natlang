@@ -22198,6 +22198,19 @@
       "admission": "held-root-review-or-explicit-exclusion",
       "independent_new_worlds": 0,
       "notes": "313 native turns,17 failed-action targets excluded,15 duplicate rendered documents removed,281 held ordinary-text documents with zero document omissions. Captured expanded context and exact raw-action normalization adapters; no learned channel, recurrence edge, stopping, runtime qualification or training admission. Separate exact V28 DGX global closure receipt; root review pending."
+    },
+    {
+      "id": "luna-ar-native-harness-gateref-v2-30515-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v2/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-held-qualification",
+      "source_class": "neuralese-foundation-checkpoint-failed-gate-evidence",
+      "training_admission": false,
+      "admission": "held-training-evidence-not-new-training-data",
+      "notes": "ClosedV2 cleanSIGTERM30515. Best29696 used byV4; completeoptimizerstate, same-history gate failed, no qualification certificate. Preserve heldprobes and failedrepresentation drift."
     }
   ],
   "coverage_backlog": [
