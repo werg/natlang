@@ -25749,6 +25749,89 @@
       "training_admission": false,
       "admission": "held diagnostic evidence; no admission or DPO decision",
       "notes": "15 missing child captures inspected; zero successful typed returns dropped. One caller supplied only caseId and decision while child needed source fields. Other children unfinished or errored; eval success is not a declared child return."
+    },
+    {
+      "id": "free-provider-google-v16-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v16",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-runtime-generation-review",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-trace-review-required",
+      "notes": "Closed 512 rows; 511 schema-valid, one parsing exception preserved. Source labels are not independent semantic truth."
+    },
+    {
+      "id": "free-provider-google-v16-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v16-adapter-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-runtime-generation-review",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-trace-review-required",
+      "notes": "50 programs, 389 source-label agreements, all 50 reference replay accepted. Held native rows and mismatches preserved."
+    },
+    {
+      "id": "free-provider-google-v16-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v16-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-runtime-generation-review",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-trace-review-required",
+      "notes": "Actual raw and static replay audit; JSON-leaf source closure packet for DGX full S1. Confidence is not a calibrated target."
+    },
+    {
+      "id": "free-provider-runtime-small-teachers-v14-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v14",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-runtime-generation-review",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-trace-review-required",
+      "notes": "Frozen built runtime b8251f576f clarifies passing full child records or named captures. Active V45 retains V13."
+    },
+    {
+      "id": "free-provider-luna-v46-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v46-runtimev14-v1",
+      "include": [
+        "prepared-plan-unapproved-v1.json",
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-runtime-generation-review",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-trace-review-required",
+      "notes": "Four medium workers queued behind actual V45 predecessor PIDs and immutable queues. 50 source programs, 389 items. No admission."
     }
   ],
   "coverage_backlog": [
