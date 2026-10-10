@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-sched540-v42-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-sched540-recovery-v42-runtimev13-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 2332,
+      "sha256": "a70a4960ed62fb26e30d4b5cbd0f93f8649eb2d08b4ce760afe68b0a300f8b83"
+    },
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 452,
+      "sha256": "b3ee426fe57ad27bc32e150695c7c9b84866d5d4b9f131da1acac2ce7dc3d609"
+    },
+    {
+      "path": "root-repair-review-v1.json",
+      "bytes": 757,
+      "sha256": "08ffe109adc089e0938894bf1cfe78453ad2fac90985416783964a0be1b36c10"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 855,
+      "sha256": "18b51434692a62499b5e36c13902455326745e6e1c455bb90a55ca296d80c6b3",
+      "lines": 1
+    }
+  ],
+  "bytes": 4396
+}
