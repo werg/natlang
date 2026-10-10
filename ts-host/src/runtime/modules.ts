@@ -8,6 +8,7 @@ import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
 import { natlangTransformer } from '../compiler/lower.js';
+import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
 import { NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
@@ -113,10 +114,11 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
       if (bindings && ts.isNamedImports(bindings)) for (const element of bindings.elements) names.add((element.propertyName ?? element.name).text);
       external.set(statement.moduleSpecifier.text, names);
     }
-    files[`${FOLDER}/__external.d.ts`] = [...external].filter(([specifier]) => !/^@natlang\//.test(specifier))
+    files[`${FOLDER}/__external.d.ts`] = [...external].filter(([specifier]) => !/^@natlang\//.test(specifier) && specifier !== NEUTRAL_RUNTIME_SPECIFIER)
       .map(([specifier, names]) => `declare module ${JSON.stringify(specifier)} {\n${[...names].map(name =>
         `  export const ${name}: any;`).join('\n')}\n  const value: any;\n  export default value;\n}`).join('\n');
-    const program = createVirtualProgram(files, { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'] } });
+    const program = createVirtualProgram(files, { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'],
+      [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'] } });
     const file = program.getSourceFile(path)!;
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
       sourceRevision: record.revision, authored: true });
@@ -211,7 +213,8 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
   const require = (specifier: string): unknown => {
     if (specifier === 'natlang:services') return servicesModule;
     if (builtinModules.has(specifier)) return builtinModule(specifier);
-    if (/^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
+    // Every runtime specifier, the neutral one included, is the natlang surface in callable-folder code.
+    if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
     if (specifier.startsWith('./')) {
       const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
       let scope: Record<string, ItemRecord> = level, parent = level, item: ItemRecord | undefined;

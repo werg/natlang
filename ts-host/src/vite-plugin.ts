@@ -6,6 +6,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NEUTRAL_RUNTIME_SPECIFIER } from './compiler/runtime-specifier.js';
 
 const runtimeEntry = fileURLToPath(new URL('./index.js', import.meta.url));
 
@@ -26,6 +27,8 @@ export function natlangVitePlugin(options: { root?: string; live?: boolean } = {
   return {
     name: 'natlang-functions',
     enforce: 'pre' as const,
+    /** The neutral runtime specifier (`natlang:runtime`) is the Node runtime under Vite, as under `natlang run`. */
+    resolveId(id: string): string | null { return id === NEUTRAL_RUNTIME_SPECIFIER ? runtimeEntry : null; },
     load(id: string): string | null {
       const file = id.split('?')[0]!;
       if (!file.endsWith('.nl')) return null;

@@ -3,7 +3,7 @@ export * from './runtime/node.js';
 export { builtin } from './runtime/builtin.js';
 export { vllmLoad, waitForExecutorIdle } from './runtime/executor-load.js';
 export type { ExecutorIdleWait } from './runtime/executor-load.js';
-export { compileProject, formatDiagnostics, natlangDeclaration } from './compiler/project.js';
+export { compileProject, formatDiagnostics, natlangDeclaration, NEUTRAL_RUNTIME_SPECIFIER } from './compiler/project.js';
 export { buildProject, checkProject, nodeProjectFiles } from './compiler/node-project.js';
 export type { BuildOptions, BuildResult, DefinitionManifest, ProjectFiles } from './compiler/project.js';
 export { analyzeInlineLambdas } from './compiler/inline.js';
@@ -22,7 +22,7 @@ export type { FolderSource, FolderAccess, FileContents, EntryStat, SearchMatch, 
 export { folderFromData, folderToData } from './native/data-layout.js';
 export type { FolderDataLayout, FolderDataResult } from './native/data-layout.js';
 export { FolderFs, checkBashPolicy, runFolderBash } from './native/folder-shell.js';
-export type { FolderBashResult } from './native/folder-shell.js';
+export type { FolderBashResult, FolderBashOptions } from './native/folder-shell.js';
 export { runFolderPython } from './native/folder-python.js';
 export type { PythonHost, PythonResult } from './native/folder-python.js';
 export { openFolder, openArchiveFile, saveFolder } from './native/node-files.js';

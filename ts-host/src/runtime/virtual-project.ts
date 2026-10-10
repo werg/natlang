@@ -4,6 +4,7 @@
  * shares the calling runtime instance.
  */
 import { compileProject, type BuildResult, type ProjectFiles } from '../compiler/project.js';
+import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
 import { builtinModule, hasBuiltinModule } from './modules.js';
@@ -80,7 +81,7 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     const module = { exports: {} as Record<string, unknown> };
     cache.set(path, module);
     const require = (specifier: string): unknown => {
-      if (specifiers.includes(specifier)) return runtime;
+      if (specifiers.includes(specifier) || specifier === NEUTRAL_RUNTIME_SPECIFIER) return runtime;
       if (options.modules && Object.hasOwn(options.modules, specifier)) return options.modules[specifier];
       if (hasBuiltinModule(specifier)) return builtinModule(specifier);
       if (!specifier.startsWith('.')) throw new Error(`module ${specifier} is not available in this virtual project`);

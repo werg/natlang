@@ -26,6 +26,7 @@ import { compileModule } from '../runtime/modules.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
 import type { SourceFiles } from '../runtime/loader.js';
+import { NEUTRAL_RUNTIME_SPECIFIER } from './runtime-specifier.js';
 
 /** File access for the project compiler: the real filesystem on Node, virtual files in browsers. */
 export interface ProjectFiles {
@@ -64,6 +65,8 @@ function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
     read: path => files.read(path), list: path => files.list(path), relative: path => relative(root, path) };
 }
 
+export { NEUTRAL_RUNTIME_SPECIFIER };
+
 export type BuildOptions = {
   /** Enforce the finite generated-program profile on every editable application module. */
   constrained?: boolean;
@@ -89,10 +92,11 @@ export type BuildOptions = {
   writeDeclarations?: boolean;
   /**
    * Bind the project to a specific runtime module: these specifiers type-check against `types` and are
-   * emitted as `url`, so the compiled app shares one runtime instance with its launcher.
+   * emitted as `url`, so the compiled app shares one runtime instance with its launcher. The neutral specifier
+   * (`NEUTRAL_RUNTIME_SPECIFIER`) is always bound with them.
    */
   runtimeModule?: { specifiers: string[]; url: string; types: string; path?: string };
-  /** Type these runtime specifiers against the built-in surface declarations (virtual projects). */
+  /** Type these runtime specifiers, and the neutral one, against the built-in surface declarations (virtual projects). */
   surfaceSpecifiers?: string[];
   /** Type-check these specifiers against a runtime's declaration file when the project cannot resolve them. */
   runtimeTypes?: { specifiers: string[]; types: string };
@@ -359,7 +363,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   const inFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
   const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) &&
     !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
-  const bound = options.runtimeModule;
+  const withNeutral = (specifiers: readonly string[]) => [...new Set([...specifiers, NEUTRAL_RUNTIME_SPECIFIER])];
+  const bound = options.runtimeModule && { ...options.runtimeModule, specifiers: withNeutral(options.runtimeModule.specifiers) };
   if (options.runtimeTypeRoots?.length) {
     const resolutionHost = ts.sys ?? { fileExists: (path: string) => fs.isFile(path), readFile: (path: string) => fs.isFile(path) ? fs.read(path) : undefined };
     const missing = (compilerOptions.types ?? ['node']).some(name =>
@@ -372,7 +377,7 @@ export function compileProject(options: BuildOptions): BuildResult {
     if (!resolved.resolvedModule) compilerOptions.paths = { ...(compilerOptions.paths ?? {}), [specifier]: [options.runtimeTypes.types] };
   }
   if (options.surfaceSpecifiers?.length) compilerOptions.paths = { ...(compilerOptions.paths ?? {}),
-    ...Object.fromEntries(options.surfaceSpecifiers.map(specifier => [specifier, [SURFACE_MODULE_FILE]])) };
+    ...Object.fromEntries(withNeutral(options.surfaceSpecifiers).map(specifier => [specifier, [SURFACE_MODULE_FILE]])) };
   if (bound) compilerOptions.paths = { ...(compilerOptions.paths ?? {}),
     ...Object.fromEntries(bound.specifiers.map(specifier => [specifier, [bound.types]])) };
   const runtimeSpecifier = bound?.url ?? options.runtimeSpecifier ?? detectRuntimeSpecifier(fs, rootNames) ?? '@natlang/node';
