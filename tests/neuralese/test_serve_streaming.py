@@ -23,7 +23,7 @@ class _FakeEngine:
     def __init__(self):
         self.store, self.dialect, self.width, self.max_block, self.model_name = TensorStore(), DIALECT, 4, 8, "fake"
         self.heads = SimpleNamespace(cutoff=6)
-        self.projections = {}
+        self.projections, self.context = {}, 8192
 
     def submit(self, request):
         block = self.store.put(make_block(torch.ones((1, self.width)), DIALECT))

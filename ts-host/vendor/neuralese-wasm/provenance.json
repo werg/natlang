@@ -1,19 +1,19 @@
 {
  "schema": "natlang.neuralese-wasm/1",
  "fork": "https://github.com/werg/llama.cpp-neuralese",
- "fork_commit": "2d6557813",
- "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, image sha256:db0f491cb72e01f66be890c83f1b2705926b59998c2208e6b44f65d7f0cbcb47, built on DGX 2026-10-10 from the committed fork tree (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
+ "fork_commit": "8b41aecff",
+ "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64, image sha256:db0f491cb72e01f66be890c83f1b2705926b59998c2208e6b44f65d7f0cbcb47, built on DGX 2026-10-10 from the committed fork tree 8b41aecff (incremental build dirs); wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
  "sha256": {
-  "neuralese-wasm-gpu.mjs": "d4087f93a46161aab0f4680c4e75ea0bd76a07a93f0852c892931be6119ad8fa",
-  "neuralese-wasm-gpu.wasm": "d7597f27881f8a48b5cf5ca8da256c75bf67b8f85f64a540ea2b9792c2d2d8e0",
-  "neuralese-wasm-mt.mjs": "95ec1af17c8af21adddc4a94c36917c543aa496bd8c6da77d3c0bace99a90cda",
-  "neuralese-wasm-mt.wasm": "1bd7197d41f3093e35b9e57036651c6d06b59f4913780163074a9f4ccf70d895",
-  "neuralese-wasm.mjs": "96a288b4d69a999d5e78969abe1236eccbf509a70a5e8186faedaa8e4fc98e69",
-  "neuralese-wasm.wasm": "5603b7b16c9d950cbe19f2a4524a78463ab4029a453ab401b4de09537f51fa79"
+  "neuralese-wasm-gpu.mjs": "c89d4e4320b1ebe1cf1d1c9887ecb0a09770cb181182209820ce317898fb5ee4",
+  "neuralese-wasm-gpu.wasm": "8666bcabb6b5b88b4ea29bca321174fb53e55fb63c488b0d93e676d28c6bc680",
+  "neuralese-wasm-mt.mjs": "eae4fb8ccb217b1c23a7c42f308d0406df26a1096d4ca135544e944941acca14",
+  "neuralese-wasm-mt.wasm": "362358409fd8ee7d4e928d49f49eb3909abd7490210ab6f944c141c4c7566600",
+  "neuralese-wasm.mjs": "b5e15f29654885ab0ee73c9ea260f5085edc215649b5def48c5089acdef6aebe",
+  "neuralese-wasm.wasm": "249c2374d185b43b949fa685beba6dd26b8289c1b23054e8b0fdbb021d3a74fc"
  },
- "serves": "the fork commit's neuralese-service.cpp: parity with the reference server (template value_type/argument_path, parts typed unknown, embed, Qwen <tool_call> and lone </think> parsing, streamed chat completions through nzw_handle's event hook: Module.nzwOnEvent), the capability model shared with the reference (info.capabilities, 501 neuralese-<capability>-unavailable for grad, optim and adapter creation/export/projection), batched decision scoring grouped across the request, owner-scoped store, full-residual-v1 reader adapter in nz_read, view (replaces digest)",
+ "serves": "the fork commit's neuralese-service.cpp: as 2d6557813 plus a persistent ggml threadpool per thread count (no per-graph thread create/join: the threaded build no longer deadlocks under Node), info.context and view's default window from the served context less the site's prompt, cancellation of a streamed request when Module.nzwOnEvent returns false, decisions cut after the option's own generation prefix (templates that drop past reasoning); earlier: parity with the reference server (template value_type/argument_path, parts typed unknown, embed, Qwen <tool_call> and lone </think> parsing, streamed chat completions through nzw_handle's event hook: Module.nzwOnEvent), the capability model shared with the reference (info.capabilities, 501 neuralese-<capability>-unavailable for grad, optim and adapter creation/export/projection), batched decision scoring grouped across the request, owner-scoped store, full-residual-v1 reader adapter in nz_read, view (replaces digest)",
  "verify": "python3 scripts/verify_neuralese_wasm_provenance.py --fork ../llama.cpp-neuralese --builds",
- "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 25 passed against the reference server (incl. fork parity: embed, template value_type/argument_path, parts typed unknown, Qwen calls and lone </think>, streamed replies assembled equal to non-streamed and equal across servers, info shape, item errors, width check), fork 2d6557813, DGX CPU, 2026-10-10; test_runtime_versions passes. Threaded build under Node (final-wasm-mt, opt-in): 12 and 4 checks agreed, then an intermittent deadlock in ggml's worker threads (open). WebGPU build: not run (Node has no WebGPU).",
+ "conformance": "tests/neuralese/test_server_conformance.py [shallow, final, final-wasm, final-wasm-mt] + test_serve.py, test_serve_streaming.py, test_serve_grad.py: 140 passed, 2 skipped (client-leaves on the in-process wasm params) against the reference server, fork 8b41aecff, DGX CPU, 2026-10-10 (incl. the served-context view window, canonical tool-call arguments, stream cancellation on native, decisions after an assistant turn with reasoning). Threaded build under Node: final-wasm-mt runs by default again (persistent ggml threadpool; a replay loop that hung within 6 rounds on 2d6557813 ran 60 rounds, 420 requests). WebGPU build: not run (Node has no WebGPU).",
  "measured_on_5d999c0c5": {
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
   "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
@@ -28,5 +28,8 @@
  },
  "measured_on_62639bf33": {
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 16 passed against the reference server (incl. the capability model and request-order batched grouping), fork 62639bf33, 2026-10-10"
+ },
+ "measured_on_2d6557813": {
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 25 passed against the reference server (incl. fork parity: embed, template value_type/argument_path, parts typed unknown, Qwen calls and lone </think>, streamed replies assembled equal to non-streamed and equal across servers, info shape, item errors, width check), fork 2d6557813, DGX CPU, 2026-10-10; test_runtime_versions passes. Threaded build under Node (final-wasm-mt, opt-in): 12 and 4 checks agreed, then an intermittent deadlock in ggml's worker threads (open). WebGPU build: not run (Node has no WebGPU)."
  }
 }

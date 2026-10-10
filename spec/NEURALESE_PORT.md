@@ -199,7 +199,7 @@ Response fields beyond OpenAI's:
 
 | Field | Meaning | Servers |
 | --- | --- | --- |
-| `choices[0].message` | `content` is an array of text and neuralese parts when the reply wrote a block; tool-call `arguments` is a JSON string whose string values that hold a block are part arrays. `reasoning_content` holds thinking: a `<think>…</think>` block, or everything before a lone `</think>` (thinking templates open the block in the generation prompt). Tool calls are parsed from Pythonic `<\|tool_call_start\|>[…]<\|tool_call_end\|>` (LFM2) and then JSON `<tool_call>{"name", "arguments"}</tool_call>` markup (the Qwen family: Maple, Mellum), numbered in that order; markup that does not parse stays in `content`. | both |
+| `choices[0].message` | `content` is an array of text and neuralese parts when the reply wrote a block; tool-call `arguments` is a JSON string whose string values that hold a block are part arrays. That string is canonical, the same bytes on both servers: compact JSON (no spaces after `,` and `:`), non-ASCII characters as UTF-8 rather than `\u` escapes, keys in the order the model wrote them (`json.dumps(value, separators=(",", ":"), ensure_ascii=False)`; the fork's `ordered_json::dump()`). Clients parse it as JSON and do not depend on its spacing. `reasoning_content` holds thinking: a `<think>…</think>` block, or everything before a lone `</think>` (thinking templates open the block in the generation prompt). Tool calls are parsed from Pythonic `<\|tool_call_start\|>[…]<\|tool_call_end\|>` (LFM2) and then JSON `<tool_call>{"name", "arguments"}</tool_call>` markup (the Qwen family: Maple, Mellum), numbered in that order; markup that does not parse stays in `content`. | both |
 | `neuralese` | `{"dialect", "blocks": [meta…]}`, one entry per written block, in order. A written block's `producer` is its write record: `{"kind": "write", "request", "index", "cutoff", "temperature", "seed", "stop_logits", "mean"?, "log_sigma"?, "length_hint"?, "passes"?}`, where `mean` and `log_sigma` are stored blocks holding `μ` and `log σ`. A block that hit the hard maximum has `truncated: true`. | both; the fork adds `"rng": "mt19937-normal"` |
 | `x_natlang_guidance` | `{"rejections": […]}` when guidance was on. | both |
 
@@ -213,8 +213,12 @@ final chunk with `finish_reason`, `usage`, `neuralese`, `x_natlang_guidance` (wh
 final message from `x_natlang_message`; the deltas before it are for showing output while it is produced (text
 streamed before a guidance rollback is not retracted). An error after
 the headers is sent as an `{"error": …}` event (`code` as in a non-streaming answer, `internal` for an unexpected
-failure); `[DONE]` ends the stream. The WebAssembly service streams through its event hook (`nzw_handle(…, events)`
-calls the module's `nzwOnEvent`), and the browser's in-process endpoint answers a streamed request at its first event.
+failure); `[DONE]` ends the stream. A client that disconnects cancels the request: the server notices at its next
+event or, while it has nothing to send, between generated positions (the reference polls the connection, the fork
+asks `sink.is_writable()`), stops generating and sends nothing more. The WebAssembly service streams through its event
+hook (`nzw_handle(…, events)` calls the module's `nzwOnEvent`; a hook that returns `false` cancels the same way), and
+the browser's in-process endpoint answers a streamed request at its first event. Under Node the module runs on the
+event loop's thread, so the HTTP wrapper cannot see a client leave until the request ends.
 
 ### Block store
 
@@ -249,7 +253,7 @@ Each answers 201 with the new block's meta.
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}`. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes` as `neuralese_passes`). 500 `neuralese-write` if no block was written. | both |
 | `POST /v1/neuralese/encode` | Text into a block in one forward pass through the port (supplied-input write, one vector per token, no stop decision): `{"text", "type"?, "context"?}`, where `context` is chat messages without blocks rendered as the write site. Errors: `neuralese-encode`. Producer `{"kind": "text-encode", "text"}`. | both |
 | `POST /v1/neuralese/embed` | A block initialised from the token embeddings of `{"text", "type"?}`. Errors: `neuralese-embed`. Producer `{"kind": "text-init", "text"}`. | both (`embed`) |
-| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`natlang_neuralese/view.py`, pinned by `tests/fixtures/view-site.json`): `{"value", "instructions"?, "system"?, "window"?}`. Every write is the template write of view's body at its site: the system text is the body (`system`, as text or parts with its soft form; default the body's text), the user message gives `instructions` (if any) and the value, and the reply is forced by template readout to `return_result(status="success", value=…)` with the value written as a block (the site offers that one tool). Without `instructions` the view is faithful compression. Answers the view block's meta plus `parts` (1 unless the value exceeds the write site's window and is viewed in chunks, then combined at a combine site that reads the part views) and `window` (default: the model's context less the site's text, the block and a margin; a request `window` can only lower it). | both |
+| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`natlang_neuralese/view.py`, pinned by `tests/fixtures/view-site.json`): `{"value", "instructions"?, "system"?, "window"?}`. Every write is the template write of view's body at its site: the system text is the body (`system`, as text or parts with its soft form; default the body's text), the user message gives `instructions` (if any) and the value, and the reply is forced by template readout to `return_result(status="success", value=…)` with the value written as a block (the site offers that one tool). Without `instructions` the view is faithful compression. Answers the view block's meta plus `parts` (1 unless the value exceeds the write site's window and is viewed in chunks, then combined at a combine site that reads the part views) and `window`. The default window is what the writer attends to at the write site: the serving server's `context` (info) less the site's prompt rendered without the value (system text or parts, the user text with any instructions, the tool, the chat template), the reply (`max_block_length` + 64: the block and the forced call) and 32 tokens (a part site's longer header, retokenized chunk edges), at least 256; a request `window` can only lower it. Two servers serving the same context plan the same chunks. | both |
 
 ### Readouts
 
@@ -287,6 +291,7 @@ that a client loads first.
 | --- | --- | --- |
 | `dialects` | Dialects spoken (one per server today). | both |
 | `width`, `dtype`, `max_block_length`, `cutoff` | Payload width, payload dtype (`f32`), hard maximum block length, shallow cutoff layer. | both |
+| `context` | The served context in tokens: positions one request's prompt and reply may span. Fork: `min(n_ctx_train, -c)` (default `-c` 8192); reference: `min(max_position_embeddings, -c)` (default the model's `max_position_embeddings`). `view` plans its write sites against it. | both |
 | `grad` | Whether `grad` sessions are served: `true` (reference), `false` (fork). | both |
 | `grad_order` | Highest gradient order: 2 (reference), 0 (fork: none). | both |
 | `adapters` | Adapter kinds applied directly: `["xs", "tiny"]` (reference), `[]` (fork: adapters apply as LoRAs loaded with `PUT …/lora`, capability `adapters.lora-load`). | both |

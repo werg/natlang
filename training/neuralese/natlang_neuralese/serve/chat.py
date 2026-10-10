@@ -540,6 +540,13 @@ def _literal(node):
     raise ValueError(f"not a literal: {ast.dump(node)[:80]}")
 
 
+def arguments_text(arguments) -> str:
+    """A tool call's `function.arguments` as both servers answer it (spec "Response fields"): compact JSON text
+    (no spaces after separators), non-ASCII characters as UTF-8 rather than escapes, keys in the order the model
+    wrote them. The llama.cpp fork answers the same text (nlohmann ordered_json `dump()`)."""
+    return json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
+
+
 def build_message(text: str, block_ids: list[str], call_prefix: str = "call") -> dict:
     """Model output (with block placeholders) → an assistant message with parts where blocks are."""
     text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "")
@@ -561,7 +568,7 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call") ->
             for name, arguments in calls:
                 tool_calls.append({
                     "id": f"{call_prefix}_{len(tool_calls)}", "type": "function",
-                    "function": {"name": name, "arguments": json.dumps(_restore(arguments, block_ids))},
+                    "function": {"name": name, "arguments": arguments_text(_restore(arguments, block_ids))},
                 })
     content = _CALLS.sub(lambda m: "" if _parses(m.group(1)) else m.group(0), text)
     content = _JSON_CALLS.sub(lambda m: "" if _parses(m.group(1), parse_json_call) else m.group(0), content).strip()

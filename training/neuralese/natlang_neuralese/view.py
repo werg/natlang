@@ -8,8 +8,8 @@ compression (trained so that `read(view(x))` reproduces `x`); with instructions 
 The write site: the body is the system text (prompt piece `view`, or its soft form under a system-prompt bank), the
 user message gives the arguments, and the reply is forced by template readout to `return_result(status="success",
 value=…)` with the value written as a block (`TEMPLATE`, the cut chat.call_reply makes); the stop head decides the
-length. A value that fits the site's window (by default the model's whole context, less the site's own text and the
-block) is viewed in one write. A longer value is split into token chunks: each chunk gets a view at a part site
+length. A value that fits the site's window (by default the server's served context, less the site's prompt without
+the value, the reply and a small margin) is viewed in one write. A longer value is split into token chunks: each chunk gets a view at a part site
 ("part i of n"), and a combine site, which reads the part views as blocks, writes the final view. Every write is the
 ordinary template write, so in training each one is differentiable and the view's readers train all of them.
 
@@ -41,7 +41,12 @@ TOOLS = [{"type": "function", "function": {
     "parameters": {"type": "object", "properties": {"status": {"type": "string", "enum": ["success"]},
                                                     "value": {"type": "string"}},
                    "required": ["status", "value"]}}}]
-SITE_MARGIN = 1024  # tokens kept free beside the value: the site's own text, the tool, the forced reply, the block
+# A view write's reply budget beyond the block (its max_tokens is max_block + REPLY_TOKENS): the forced call text
+# around the block and its close.
+REPLY_TOKENS = 64
+# Tokens kept free beside a chunk: a part site's header ("value, part i of n:") over the single site's, and the edges
+# of a decoded chunk, which can retokenize a little longer.
+PART_MARGIN = 32
 
 
 def _purpose(instructions: str | None) -> str:
@@ -106,11 +111,14 @@ def plan(tokenizer, value: str, window: int) -> Plan:
     return Plan([tokenizer.decode(ids[start:start + window]) for start in range(0, len(ids), window)])
 
 
-def window_of(engine, instructions: str | None, requested: int | None = None) -> int:
-    """Value tokens one write site holds: the model's context less the site's text, tool, reply and block (or less)."""
-    context = int(getattr(engine.backbone.hf.config, "max_position_embeddings", 32768))
-    overhead = len(engine.tokenizer(instructions or "", add_special_tokens=False)["input_ids"]) + engine.max_block + SITE_MARGIN
-    available = max(256, context - overhead)
+def window_of(engine, instructions: str | None, requested: int | None = None, system=None) -> int:
+    """Value tokens one write site holds: what the writer attends to at the site, the server's served context
+    (`engine.context`), less the site's prompt without the value (system text or parts, user text, the tool, the chat
+    template: `engine.prompt_positions`), the reply (block and forced call) and `PART_MARGIN`; a request can only
+    lower it. The fork computes the same from its served context (spec: view)."""
+    site = view_site(INSTRUCTIONS if system is None else system, "", instructions)
+    overhead = engine.prompt_positions(site, TOOLS) + engine.max_block + REPLY_TOKENS + PART_MARGIN
+    available = max(256, engine.context - overhead)
     return min(available, requested) if requested else available
 
 

@@ -383,7 +383,14 @@ class GradSession:
         for option in options:
             if not isinstance(option, str):
                 raise RequestError("neuralese-decision", "options are reply texts")
-            before, rest = self._target_items(messages, tools, {"role": "assistant", "content": option})
+            try:
+                # The prompt as generation renders it; the option cut from the full rendering after its own
+                # generation prefix (earlier turns may render differently there, e.g. past reasoning dropped).
+                before, rest = self._target_items(messages, tools, {"role": "assistant", "content": option})
+            except RequestError as error:
+                if error.code != "neuralese-grad-target":
+                    raise
+                raise RequestError("neuralese-decision", str(error).split(": ", 1)[-1]) from error
             if prompt is not None and before != prompt:
                 raise RequestError("neuralese-decision", "options rendered different prompts")
             if any(kind != "tok" for kind, _ in rest):
