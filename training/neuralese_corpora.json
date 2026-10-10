@@ -27264,6 +27264,90 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "Immutable correction to V58 final v2 visibility claim.877 nested child rendered request transcripts saved with raw/request/response hashes.361/394 source items exact literal in child request;18 additional source-matching capture snapshots;15 unresolved. Saved rendered requests do not imply stored original byte wire. Original final audit preserved."
+    },
+    {
+      "id": "free-provider-luna-v58-source-differences-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-scope-and-label-differences-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Scope failures explained by submitted code; original full30 differing source decision evidence. Provisional helper categories do not confer exclusion or admission."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Root excludes13 new source items prospectively,20 total canonical holds. No relabel or mutation of sealed artifacts. Preserve prior seven-item policy and full decision evidence."
+    },
+    {
+      "id": "free-provider-luna-v58-child-request-visibility-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-child-request-visibility-supplement-v2",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Corrects raw-substring matcher via exact JSON-escaped strings.380/394 item states in saved requests,14 additional exact captures,0 uncovered by both.877 nested requests saved. Request text is not original byte-wire evidence. Supersedes only v1 visibility counts."
+    },
+    {
+      "id": "free-provider-google-v26-prepared-reviewed-inputs-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26-reviewed-v2",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "512 complete train cases,64 per eight families;20 holds and7584 prior IDs/groups excluded through canonical logical evidence root. Prepared only, not launched."
+    },
+    {
+      "id": "free-provider-google-v26-underinclusive-prior-root-rejected-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "REJECTED preparation: physical prior-root undercounted historical logical aliases (6777 vs7584 overlap exclusions). No jobs launched and not eligible for launch/admission. Corrected fresh V26 reviewed-v2 replaces candidate without overwriting history."
     }
   ],
   "coverage_backlog": [

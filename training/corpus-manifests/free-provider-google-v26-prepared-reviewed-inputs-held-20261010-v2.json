@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v26-prepared-reviewed-inputs-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26-reviewed-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 425762,
+      "sha256": "2816b5ead243cd0ad779859f6059a2a94edc620115288fa19db389e908427c2b",
+      "lines": 512
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 5117866,
+      "sha256": "72c218ca09795333133bab1f172f513f97926a7748623ee4bae6ac769cb01bc7",
+      "lines": 8121
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 12465,
+      "sha256": "7f3c238db7993ce81a75d62f00de272662cc5ecf03b9e0e2b38f1dd17c634c9a"
+    }
+  ],
+  "bytes": 5556093
+}

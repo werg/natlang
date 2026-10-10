@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v26-underinclusive-prior-root-rejected-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v26",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 398298,
+      "sha256": "86d245d740d8af8b607500cc4ca000f27840cc70a958c432b2538e9bc5252c76",
+      "lines": 512
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 4612787,
+      "sha256": "434e1d4e159ab7d4ccc2a64e565129df21fc436404c717d852cf2e82155211ef",
+      "lines": 7314
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 9017,
+      "sha256": "f75dcc29357e22f3cd4c5fcc2e1563e02b9ab20214f5ff5db7d7c6302429f58e"
+    }
+  ],
+  "bytes": 5020102
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v58-source-differences-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-scope-and-label-differences-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 131326,
+      "sha256": "665576df16d1f1f4de2031743b2cfc6c2886c444adc289300af12747b96e1a0a"
+    },
+    {
+      "path": "report.md",
+      "bytes": 37539,
+      "sha256": "c2014de033952800d3cf4f3e2305c9c1a9cba4fef044ebd54f748fa3664671ea"
+    }
+  ],
+  "bytes": 168865
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v58-child-request-visibility-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-child-request-visibility-supplement-v2",
+  "files": [
+    {
+      "path": "visibility-correction.json",
+      "bytes": 244980,
+      "sha256": "f967384e111507d6e4da4f6cc8e1754f4f92de1c5ed8ea8e1298523daf017a05"
+    },
+    {
+      "path": "visibility-correction.md",
+      "bytes": 1167,
+      "sha256": "cc05e2348513b8f3e52ecef0826e134bacd8847800e553c6880e92457bb7f445"
+    }
+  ],
+  "bytes": 246147
+}
