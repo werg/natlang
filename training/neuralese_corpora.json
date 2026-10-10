@@ -25499,6 +25499,32 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "512freshtraininheritedrowsdisjointIDsANDgroupspriorproviders; sharedprojectqueuebehindV15, activeoutputsnotincluded."
+    },
+    {
+      "id": "free-provider-google-v14-source-closure-jsonleaf-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v14-gemini-choice-confidence-and-static-replay-v1/source-closure-v1",
+      "include": [
+        "README.md",
+        "build_v14_closure_inputs.py",
+        "check_raw_group_keys.py",
+        "closure-harness4-v1/candidate-source-case-bindings.json",
+        "closure-harness4-v1/closed-source-case-port-projection.jsonl",
+        "closure-harness4-v1/closure-report.json",
+        "closure-harness4-v1/source-case-port-projection.jsonl",
+        "closure-input-v1/closure-candidate-root-actions.jsonl",
+        "closure-input-v1/closure-source-cases.jsonl",
+        "closure-input-v1/closure-source-manifest.json",
+        "closure-input-v1/selected-program-index.jsonl",
+        "closure-input-v1/selected-source-case-index.jsonl",
+        "closure-packet-v1.json",
+        "raw-key-harness-v1.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-closure-evidence",
+      "training_admission": false,
+      "admission": "held-full-s1-and-source-quality-review",
+      "notes": "47programs368items736question/state leafstrings, harnessgroup-onlyclosureclean. Originaldc-/g-keysretained. FullS1pendingDGX, noallvisiblecodeclaim, sourcequality/admissionheld."
     }
   ],
   "coverage_backlog": [
