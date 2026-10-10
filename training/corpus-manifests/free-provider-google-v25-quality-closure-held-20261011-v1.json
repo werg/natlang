@@ -1,0 +1,122 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v25-quality-closure-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 6092,
+      "sha256": "9023ba42d85952cbcfb9c26fc453987261ab9c8ddb1e679dbb02429e6f3f3657"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2449,
+      "sha256": "8a821bf08ac9ab20957f4096e0698588cabd529c690bac35abee25a775a614a6"
+    },
+    {
+      "path": "source-choice-disagreements-v1.json",
+      "bytes": 59202,
+      "sha256": "f4da28d929ad4020fbfed91f0ee31603d840a4b499cc9363699a630f00f9f78b"
+    },
+    {
+      "path": "source-choice-disagreements-v1.md",
+      "bytes": 3745,
+      "sha256": "04971209f24ecc0230985ad1c1d99cd6a2fa54b4db50405b39eb3ee4b04ef5d6"
+    },
+    {
+      "path": "source-closure-v1/README.md",
+      "bytes": 1265,
+      "sha256": "2ce74064e1daa79620d5534ab499f88d60e586e3027afc6608519a05232a4db1"
+    },
+    {
+      "path": "source-closure-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "b945cbe89c3fe6ad76b562d59a1206a5d85b051620b64ec4bf541ec0f7ee8c4a"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6371121,
+      "sha256": "ead45996a15557510eeab171e8aa087abb5a14270a26dd894cb0318c11b6b1ca",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1887398,
+      "sha256": "98fdc126ea7c3a98f4ee34e74dc1149e064f7d98aa3d21b07c2f0cccb725481d",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "bytes": 8150,
+      "sha256": "aa8428537cae317cbd69779c7c23f4bc69b63bbb992eb48ff288fd8b8fdd15af"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "bytes": 252497,
+      "sha256": "951d9442e9b9f167af9daaba3b1ba1b67dd9298f9c4aa8ea0183061810005396",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 412653,
+      "sha256": "eb29b7e749fd85c50583ad857bcf2196cbe11c597866440df87b60021e97c56e",
+      "lines": 402
+    },
+    {
+      "path": "source-closure-v1/closure-packet-v1.json",
+      "bytes": 8137,
+      "sha256": "a471a7527df8e8cf57fe4520849f6cf472ff8f426b600b9a8ffd0124f62bc288"
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v1/candidate-source-case-bindings.json",
+      "bytes": 30322,
+      "sha256": "41187e6d742deeb8f611590d4c13f8ac9e9ea16c37a09dbc31e3e6df6d0bc0ca"
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v1/closed-source-case-port-projection.jsonl",
+      "bytes": 1099391,
+      "sha256": "b0622288233eb52a697a0591221a057eba68507793e838018881ee9cf6aeb6a5",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v1/closure-report.json",
+      "bytes": 16556,
+      "sha256": "431862c29db308cbe9e043f35cd5088976df5d8ab4ebb031542e146cfbca0db0"
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v1/source-case-port-projection.jsonl",
+      "bytes": 1099391,
+      "sha256": "b0622288233eb52a697a0591221a057eba68507793e838018881ee9cf6aeb6a5",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v2/candidate-source-case-bindings.json",
+      "bytes": 30322,
+      "sha256": "41187e6d742deeb8f611590d4c13f8ac9e9ea16c37a09dbc31e3e6df6d0bc0ca"
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v2/closed-source-case-port-projection.jsonl",
+      "bytes": 1099391,
+      "sha256": "b0622288233eb52a697a0591221a057eba68507793e838018881ee9cf6aeb6a5",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v2/closure-report.json",
+      "bytes": 16556,
+      "sha256": "e0508c7eecc926f983a5057c6dd1d2d796d046666a5d44b6f90ea1b814523f22"
+    },
+    {
+      "path": "source-closure-v1/pop-harness4-v2/source-case-port-projection.jsonl",
+      "bytes": 1099391,
+      "sha256": "b0622288233eb52a697a0591221a057eba68507793e838018881ee9cf6aeb6a5",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/raw-key-harness-v1.json",
+      "bytes": 1082,
+      "sha256": "dcdd4442653e97d49090f643fcce555c2046702e7f5a242c0830ccf5793e101d"
+    }
+  ],
+  "bytes": 13507044
+}

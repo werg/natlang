@@ -27648,6 +27648,26 @@
         "root-generation-source-review-v1.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "free-provider-google-v25-quality-closure-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "include": [
+        "review.json",
+        "review.md",
+        "source-choice-disagreements-v1.json",
+        "source-choice-disagreements-v1.md",
+        "source-closure-v1/**/*"
+      ],
+      "notes": "Closed V25 provider quality review, exact 110 disagreements and full source closure packet. Pop harness-only 53/53. Full S1 requested from DGX; semantic admission remains separate. Later answerability review is a separate immutable corpus."
     }
   ],
   "coverage_backlog": [
