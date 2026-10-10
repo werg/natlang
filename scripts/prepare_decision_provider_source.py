@@ -7,22 +7,14 @@ all filtering is represented in omissions.jsonl.
 """
 import argparse
 import collections
-import hashlib
 import json
 from pathlib import Path
 import sys
 
 
-def sha256_bytes(data):
-    return hashlib.sha256(data).hexdigest()
-
-
-def sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for block in iter(lambda: stream.read(1 << 20), b''):
-            h.update(block)
-    return h.hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
 
 
 def parse_families(values):
