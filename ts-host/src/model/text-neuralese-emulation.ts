@@ -176,7 +176,10 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
   const store = options.store ?? new MemoryNeuraleseStore();
   const width = options.width ?? TEXT_NEURALESE_WIDTH;
   if (!Number.isSafeInteger(width) || width < 1) throw new RangeError('text Neuralese stand-in width must be positive');
-  const underlying = new StandInNeuralesePort(store, hashingEmbedder(width), width, TEXT_NEURALESE_DIALECT);
+  // The literal sidecar authenticates exact text bytes. Dropping whitespace here makes different texts
+  // share a content ID while the store keeps the first producer digest and the sidecar keeps the latest.
+  const underlying = new StandInNeuralesePort(store, hashingEmbedder(width, { preserveWhitespace: true }),
+    width, TEXT_NEURALESE_DIALECT);
   let standardLibrary = options.standardLibrary;
   const standardLibraryReady = options.standardLibrary ? Promise.resolve(options.standardLibrary) : (async () => {
     const bodies = {} as Record<keyof typeof COMBINATORS, string>;

@@ -184,9 +184,10 @@ export class StandInNeuralesePort implements NeuralesePort {
 /**
  * A deterministic stand-in embedder for runtimes without a model's embedding table, and for tests: one vector per
  * whitespace-separated token, derived from the token's hash. It carries no meaning.
+ * Text transports can retain whitespace fragments so distinct literal bodies have distinct payloads.
  */
-export function hashingEmbedder(width: number): TokenEmbedder {
-  return text => text.split(/\s+/).filter(Boolean).map(token => {
+export function hashingEmbedder(width: number, options: { preserveWhitespace?: boolean } = {}): TokenEmbedder {
+  return text => (options.preserveWhitespace ? text.match(/\s+|\S+/g) ?? [] : text.split(/\s+/).filter(Boolean)).map(token => {
     const vector = new Float32Array(width);
     let seed = digest(token);
     for (let index = 0; index < width; index++) {
