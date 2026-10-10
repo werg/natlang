@@ -525,7 +525,8 @@ def _message_soft_reads(value):
             yield from _message_soft_reads(child)
 
 
-def _soft_writer_sources(records, source_hashes, *, preview_only=False):
+def _soft_writer_sources(records, source_hashes, *, preview_only=False,
+                         ordinary_text_admitted_ids=None):
     """Index only admitted or explicitly held-preview successful writes as context bodies.
 
     These bodies are sourced from the exact `$write.source` in an approved
@@ -582,9 +583,14 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False):
             # writer that can close a recurrence edge into another record.
             continue
         admitted = (not preview_only
-                    and record.get("training_admission", {}).get("approved") is True
+                    and (record.get("training_admission", {}).get("approved") is True
+                         or record.get("id") in (ordinary_text_admitted_ids or set()))
                     and decision.get("training_approved") is True
                     and decision.get("failed_action") is False)
+        if record.get("id") in (ordinary_text_admitted_ids or set()):
+            # Text-only row approval authenticates a successful context writer
+            # for ordinary rendering. It never changes native or recurrence admission.
+            admitted = (not preview_only and decision.get("failed_action") is False)
         held_preview = (preview_only is True
                         and record.get("review_disposition") == "held_for_root_review"
                         and record.get("training_admission", {}).get("approved") is not True
@@ -683,7 +689,8 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False):
     return sources
 
 
-def authenticated_context_writer_sources(records, *, preview_only=False):
+def authenticated_context_writer_sources(records, *, preview_only=False,
+                                          ordinary_text_admitted_ids=None):
     """Build the shared source-hash and approved-writer index for context rendering.
 
     Recurrence training uses the same writer evidence as ordinary gold-text
@@ -696,7 +703,9 @@ def authenticated_context_writer_sources(records, *, preview_only=False):
             _sha(_canonical(dict(record)).encode("utf-8")))
         for record in record_rows
     }
-    return source_hashes, _soft_writer_sources(record_rows, source_hashes, preview_only=preview_only)
+    return source_hashes, _soft_writer_sources(
+        record_rows, source_hashes, preview_only=preview_only,
+        ordinary_text_admitted_ids=ordinary_text_admitted_ids)
 
 
 def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups,
@@ -1437,7 +1446,9 @@ def native_gold_packet(tokenizer, messages, target, tools):
 
 
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer,
-                   require_independent_splits: bool = True):
+                   require_independent_splits: bool = True,
+                   ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
+                   ordinary_text_admission_receipt_sha256: str | None = None):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1448,7 +1459,9 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     handover/read source values resolve handovers.
     """
     return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False,
-                           require_independent_splits=require_independent_splits)
+                           require_independent_splits=require_independent_splits,
+                           ordinary_text_admission_receipt=ordinary_text_admission_receipt,
+                           ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1461,7 +1474,88 @@ def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping
                            require_independent_splits=True)
 
 
-def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True):
+def bind_ordinary_text_admission(records, receipt, receipt_sha256):
+    """Validate and materialize exact root-scoped text bindings, without native admission."""
+    if receipt is None:
+        return {}
+    if (not isinstance(receipt, Mapping)
+            or receipt.get("schema") != "natlang.root-ordinary-text-only-admission/1"
+            or receipt.get("decision") != "approve-exact-ordinary-text-only-delta"
+            or receipt.get("status") != "approved"
+            or receipt.get("ordinary_text_stage_only") is not True
+            or receipt.get("native_sft") is not False
+            or receipt.get("recurrence") is not False
+            or receipt.get("whole_trajectory") is not False
+            or receipt.get("learned_writer") is not False
+            or receipt.get("active_GPU_inputs_changed") is not False
+            or not _sha256_hex(receipt_sha256)):
+        raise ValueError("ordinary-text admission receipt is missing, unsigned, or grants an unsupported scope")
+    rows = receipt.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("ordinary-text admission receipt has no bound rows")
+    by_id = {}
+    for row in rows:
+        rid = row.get("native_id") if isinstance(row, Mapping) else None
+        if not isinstance(rid, str) or not rid or rid in by_id:
+            raise ValueError("ordinary-text admission receipt has a missing or duplicate row id")
+        by_id[rid] = row
+    records_by_id = {row.get("id"): row for row in records}
+    if len(records_by_id) != len(records):
+        raise ValueError("ordinary-text renderer input has duplicate source record IDs")
+    approved_ids = receipt.get("approved_row_ids")
+    if (not isinstance(approved_ids, list)
+            or any(not isinstance(rid, str) or not rid for rid in approved_ids)
+            or len(approved_ids) != len(set(approved_ids))
+            or set(approved_ids) != set(by_id)):
+        raise ValueError("ordinary-text approved_row_ids must be the unique exact receipt row set")
+    if not set(by_id).issubset(records_by_id):
+        raise ValueError("ordinary-text receipt names a source row not supplied to the renderer")
+    if set(records_by_id) - set(by_id):
+        extras = [records_by_id[rid] for rid in set(records_by_id) - set(by_id)]
+        if any(not isinstance(row.get("training_admission"), Mapping)
+               or row["training_admission"].get("approved") is not True for row in extras):
+            raise ValueError("ordinary-text receipt has unbound extra source rows")
+    approved = {}
+    for rid, bound in by_id.items():
+        record = records_by_id[rid]
+        source_ref = record.get("source_ref") if isinstance(record.get("source_ref"), Mapping) else {}
+        base_digest = record.get("_source_record_sha256")
+        target_digest = _sha(_canonical(record.get("target")).encode("utf-8"))
+        cohort = source_ref.get("program_ir_id") or source_ref.get("trajectory_id")
+        checks = {
+            "source_record_sha256": base_digest,
+            "target_sha256": target_digest,
+            "source_row_sha256": source_ref.get("source_row_sha256"),
+            "split": record.get("split"),
+            "source_groups": record.get("source_groups"),
+            "cohort": cohort,
+        }
+        if (not _sha256_hex(base_digest)
+                or not _sha256_hex(source_ref.get("source_row_sha256"))):
+            raise ValueError(f"ordinary-text source/base digest is missing or malformed: {rid}")
+        groups = record.get("source_groups")
+        if (record.get("split") != "train" or not isinstance(cohort, str) or not cohort
+                or not isinstance(groups, list) or not groups
+                or any(not isinstance(group, str) or not group for group in groups)
+                or groups != sorted(set(groups))):
+            raise ValueError(f"ordinary-text row has invalid train cohort/group scope: {rid}")
+        if (bound.get("decision") != "admit-ordinary-text-only"
+                or any(bound.get(key) != value for key, value in checks.items())):
+            raise ValueError(f"ordinary-text admission binding mismatch: {rid}")
+        native_admission = record.get("training_admission")
+        trace_admission = record.get("trace_admission")
+        if ((isinstance(native_admission, Mapping) and native_admission.get("approved") is True)
+                or (isinstance(trace_admission, Mapping) and trace_admission.get("admitted") is True)):
+            raise ValueError(f"ordinary-text row also carries native/trace admission: {rid}")
+        expected = {"approved": True, "receipt_sha256": receipt_sha256,
+                    "native_id": rid, **checks}
+        approved[rid] = expected
+    return approved
+
+
+def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
+                    ordinary_text_admission_receipt=None,
+                    ordinary_text_admission_receipt_sha256=None):
     from ..train.trajectories import crisp_messages, handover_notes
 
     from ..serve.chat import bind_history_reasoning
@@ -1469,16 +1563,20 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
     # The backbone's declared history-reasoning policy (chat.BACKBONE_HISTORY_REASONING), asserted by a probe.
     history_reasoning = dict(bind_history_reasoning(tokenizer).natlang_history_reasoning)
     record_rows = list(records)
+    text_admitted = (bind_ordinary_text_admission(
+        record_rows, ordinary_text_admission_receipt, ordinary_text_admission_receipt_sha256)
+        if not preview_only else {})
     piece_map = (dict(pieces) if isinstance(pieces, Mapping) else
                  {p["name"]: p["text"] for p in pieces
                   if isinstance(p.get("name"), str) and isinstance(p.get("text"), str)})
     prepared, omitted = [], []
     source_hashes, writer_sources = authenticated_context_writer_sources(
-        record_rows, preview_only=preview_only)
+        record_rows, preview_only=preview_only, ordinary_text_admitted_ids=set(text_admitted))
     for record in record_rows:
         rid = record.get("id", "")
         admitted = (not preview_only
-                    and record.get("training_admission", {}).get("approved") is True)
+                    and (record.get("training_admission", {}).get("approved") is True
+                         or rid in text_admitted))
         derived_write = (_authenticated_derived_semantic_text_write(record)
                          if record.get("derived_target") is not None else None)
         if record.get("derived_target") is not None and derived_write is None:
@@ -1528,6 +1626,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
                                                             for item in context_attestations],
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
+        if rid in text_admitted:
+            prepared[-1]["ordinary_text_admission_bindings"] = [text_admitted[rid]]
 
     train_groups = {g for row in prepared if row["split"] == "train" for g in row["source_groups"]}
     test_groups = {g for row in prepared if row["split"] == "test" for g in row["source_groups"]}
@@ -1551,6 +1651,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             representative["neuralese_context_attestations"].extend(row["neuralese_context_attestations"])
             representative["capture_context_augmentation_attestations"].extend(
                 row["capture_context_augmentation_attestations"])
+            representative.setdefault("ordinary_text_admission_bindings", []).extend(
+                row.get("ordinary_text_admission_bindings", []))
     rows = list(dedup.values())
     same_split_dupes = n_before - excluded_train_held - len(rows)
     if (not preview_only and require_independent_splits and
@@ -1568,6 +1670,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                       if row["source_action_provenance"] else {}),
                    "neuralese_context_attestations": row["neuralese_context_attestations"],
                    "capture_context_augmentation_attestations": row["capture_context_augmentation_attestations"]}
+                  | ({"ordinary_text_admission_bindings": row["ordinary_text_admission_bindings"]}
+                     if "ordinary_text_admission_bindings" in row else {})
                   for row in rows]
     for row,entry in zip(rows,provenance):
         entry['supervised_suffix_start']=row['supervised_suffix_start']

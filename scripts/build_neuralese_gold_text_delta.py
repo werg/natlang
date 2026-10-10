@@ -770,6 +770,8 @@ def main():
     root_per_action_admission = source_approval.get("schema") == "natlang.root-per-action-training-admission/1"
     root_derived_writer_admission = source_approval.get("schema") in {
         "natlang.root-derived-observed-text-writer-admission/1", "natlang.root-derived-body-admission-index/1"}
+    root_ordinary_text_admission = source_approval.get("schema") == "natlang.root-ordinary-text-only-admission/1"
+    ordinary_text_receipt_sha256 = sha_file(args.source_approval) if root_ordinary_text_admission else None
     admission_rows = source_approval.get("rows", []) if root_action_admission else []
     if root_action_admission:
         approved_ids = [item.get("native_id") for item in admission_rows]
@@ -798,11 +800,33 @@ def main():
         admission_rows = admitted_root_derived_writer_rows(source_approval, args.source_approval,
                                                             delta_records=delta_records, root=repo_root)
         approved_ids = [item["native_id"] for item in admission_rows]
+    elif root_ordinary_text_admission:
+        admission_rows = source_approval.get("rows")
+        approved_ids = source_approval.get("approved_row_ids")
+        if (source_approval.get("status") != "approved"
+                or source_approval.get("decision") != "approve-exact-ordinary-text-only-delta"
+                or source_approval.get("ordinary_text_stage_only") is not True
+                or source_approval.get("native_sft") is not False
+                or source_approval.get("recurrence") is not False
+                or source_approval.get("whole_trajectory") is not False
+                or source_approval.get("learned_writer") is not False
+                or source_approval.get("active_GPU_inputs_changed") is not False):
+            raise ValueError("ordinary-text receipt is not approved for the exact text-only scope")
     else:
         approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
     if not isinstance(approved_ids, list) or set(approved_ids) != delta_ids or len(approved_ids) != len(delta_ids):
         raise ValueError("delta records do not equal source approval IDs")
+    if root_ordinary_text_admission:
+        if not isinstance(admission_rows, list) or not admission_rows:
+            raise ValueError("ordinary-text receipt has no exact row bindings")
+        admitted_by_id = {item.get("native_id"): item for item in admission_rows}
+        approved_list = source_approval.get("approved_row_ids")
+        if (len(admitted_by_id) != len(admission_rows)
+                or not isinstance(approved_list, list)
+                or len(approved_list) != len(admission_rows)
+                or set(approved_list) != set(admitted_by_id)):
+            raise ValueError("ordinary-text receipt row bindings and approved_row_ids do not match")
     if root_action_admission or root_per_action_admission or root_derived_writer_admission:
         admitted_by_id = {item["native_id"]: item for item in admission_rows}
         for row in delta_records:
@@ -893,7 +917,9 @@ def main():
         rendered, helper_receipt, omissions, provenance = gold_text_rows(
             [*(r for r in delta_records if not r.get("_text_context_omissions")), anchor],
             pieces, tokenizer=tokenizer,
-            require_independent_splits=False)
+            require_independent_splits=False,
+            ordinary_text_admission_receipt=(source_approval if root_ordinary_text_admission else None),
+            ordinary_text_admission_receipt_sha256=ordinary_text_receipt_sha256)
         qualification = anchor_qualification(anchor, rendered, omissions, helper_receipt)
         anchor_attempts.append({"id": anchor.get("id"),
                                 "source_record_sha256": anchor.get("_source_record_sha256"),
@@ -1009,6 +1035,14 @@ def main():
                     if (root_action_admission or root_per_action_admission) else 0,
                     "delta_root_derived_writer_admission_records": len(admission_rows)
                     if root_derived_writer_admission else 0,
+                    "delta_root_ordinary_text_admission_records": len(admission_rows)
+                    if root_ordinary_text_admission else 0,
+                    "ordinary_text_admission": ({"schema": "natlang.root-ordinary-text-only-admission/1",
+                                                  "receipt_sha256": ordinary_text_receipt_sha256,
+                                                  "approved_rows": len(admission_rows),
+                                                  "native_training_admission_granted": False,
+                                                  "trace_admission_granted": False}
+                                                 if root_ordinary_text_admission else None),
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "delta_authenticated_provider_context_only_blocks": len(provider_context_bindings),
                     "provider_context_bindings_sha256": sha(context_binding_bytes),

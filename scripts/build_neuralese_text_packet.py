@@ -47,12 +47,21 @@ def main():
     parser.add_argument("--tokenizer", required=True, help="Exact HF tokenizer ID or local snapshot for the student")
     parser.add_argument("--train-only-addition", action="store_true",
                         help="Render a train-only addition; it supplies no independent evaluation cohort")
+    parser.add_argument("--ordinary-text-admission-receipt", type=Path,
+                        help="Root approval receipt for a bound ordinary-text-only addition; requires --train-only-addition")
     args = parser.parse_args()
     if args.out.exists():
         parser.error(f"refusing to overwrite existing output directory: {args.out}")
     records, pieces = read_source(args.records), [json.loads(line) for line in args.pieces.read_text(encoding="utf-8").splitlines() if line]
     if args.train_only_addition and any(row.get("split") != "train" for row in records):
         parser.error("--train-only-addition requires every source record to retain its train split")
+    if args.ordinary_text_admission_receipt and not args.train_only_addition:
+        parser.error("--ordinary-text-admission-receipt is scoped to --train-only-addition")
+    ordinary_text_receipt = None
+    ordinary_text_receipt_sha256 = None
+    if args.ordinary_text_admission_receipt:
+        ordinary_text_receipt_sha256 = sha(args.ordinary_text_admission_receipt.read_bytes())
+        ordinary_text_receipt = json.loads(args.ordinary_text_admission_receipt.read_text(encoding="utf-8"))
     # The pinned-provenance loader: exact tokenizer class and, for TokenizersBackend snapshots, the exact serialized
     # backend (the same guard the delta builder uses); gold_text_rows then binds the renderer fingerprint.
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
@@ -66,7 +75,9 @@ def main():
     bind_history_reasoning(tokenizer, require_declared=True)
     rows, receipt, omissions, provenance = gold_text_rows(
         records, pieces, tokenizer=tokenizer,
-        require_independent_splits=not args.train_only_addition)
+        require_independent_splits=not args.train_only_addition,
+        ordinary_text_admission_receipt=ordinary_text_receipt,
+        ordinary_text_admission_receipt_sha256=ordinary_text_receipt_sha256)
     if not rows:
         raise ValueError("no renderer-qualified documents in the addition")
     args.out.mkdir(parents=True)
@@ -78,12 +89,20 @@ def main():
     (args.out / "provenance.jsonl").write_bytes(provenance_data)
     receipt.update({
         "split_scope": "train-only-addition-no-evaluation-credit" if args.train_only_addition else "independent-train-and-held",
+        "ordinary_text_admission": ({"schema": "natlang.root-ordinary-text-only-admission/1",
+                                     "receipt_sha256": ordinary_text_receipt_sha256,
+                                     "approved_rows": len(ordinary_text_receipt.get("rows", [])),
+                                     "native_training_admission_granted": False,
+                                     "trace_admission_granted": False}
+                                    if ordinary_text_receipt is not None else None),
         "source_run": str(args.records.parent),
         "renderer_code": {str(path.relative_to(ROOT)): sha(path.read_bytes()) for path in (
             Path(__file__).resolve(), ROOT / "training/neuralese/natlang_neuralese/data/text_corpus.py",
             ROOT / "training/neuralese/natlang_neuralese/serve/chat.py")},
         "source_files": {args.records.name: sha(args.records.read_bytes()),
-                         args.pieces.name: sha(args.pieces.read_bytes())},
+                         args.pieces.name: sha(args.pieces.read_bytes()),
+                         **({args.ordinary_text_admission_receipt.name: ordinary_text_receipt_sha256}
+                            if args.ordinary_text_admission_receipt else {})},
         "text_jsonl_sha256": sha(data),
         "tokenizer": {"path": str(tokenizer_path.resolve()), "class": type(tokenizer).__name__,
                       "files": {name: sha((tokenizer_path / name).read_bytes()) for name in (
