@@ -261,3 +261,20 @@ backwards plus one step; in BF16 with a fixed rounding offset <=1% of elements d
 contributions are summed in another order). Expected backbone-phase peak with v10's settings (batch 2, 1k tokens, layer
 checkpointing): weights 25.5 GB + LionSR momentum 23.4 GB + ~2.5 GB update transients + ~4 GB activations, preserve
 stream and heads, about 56 GB allocated (v9: ~75 GB).
+
+
+## raw-recurrence-mellum-v11 (2026-10-10): dense experts as grouped GEMMs; fused precision ramp
+
+The warm-up profile (plans/mellum-port.md "Warm-up step profile") found a q4 update at 34 s against 9.7 s for bf16:
+the eager precision ramp of the experts (~15 full-size FP32 passes per weight) ran in all 4 forwards of an update.
+Code-level and bit-identical, so every recipe gets it: `precision_value` (maple/ternary.py) keeps the rule's
+reductions eager and shared with export (`q4_scales`, `ternary_row_stats`, also behind `q4_0` and `ternary_codes`), and
+runs the elementwise rest as one Triton kernel per weight (maple/precision_kernels.py; IEEE division, no FMA
+contraction). Zero differing elements against the eager rule on 2 real Mellum layers (attention and experts), q4 group
+32/64 and ternary, mixes 1.0/0.47/0.03 (tests/neuralese/test_precision_kernels.py). The conversion's fused ternary
+ramp uses the same kernel (its compiled version differed at ~4e-5 of threshold ties). The LionSR in-backward norm
+reduces each latent in FP32 (FP64 was ~1 s per update on the GB10) and still totals in FP64.
+v11 itself sets `moe_kernel: grouped` for the text warm-up and the recurrence stages: SparseMoE's dense experts run as
+two `torch._grouped_mm` calls over the expert-sorted routed pairs (maple/fused_moe.dense_grouped_experts) instead of
+the 64-way loop; same pairs, order and combine, BF16 accumulation order only (relative error < 1e-2 in output and
+gradients, tests/neuralese/test_dense_grouped_moe.py). Backbone-inherent: dense trainable MoE experts.

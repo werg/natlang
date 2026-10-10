@@ -302,7 +302,7 @@ def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
     """Owner 2026-10-10: every write point is an evaluation point and the stage end is the last one (its gate)."""
     from natlang_neuralese.train.loop import check_declared_points
     from natlang_neuralese.train.recipe import resolve_recipe_data
-    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7', 'raw-recurrence-v8', 'raw-recurrence-mellum-v8', 'raw-recurrence-mellum-v9', 'raw-recurrence-mellum-v10'):
+    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7', 'raw-recurrence-v8', 'raw-recurrence-mellum-v8', 'raw-recurrence-mellum-v9', 'raw-recurrence-mellum-v10', 'raw-recurrence-mellum-v11'):
         path = RECIPES / f'{name}.json'
         if not path.exists():
             continue
@@ -313,3 +313,13 @@ def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
             if 'eval_every' in effective:
                 check_declared_points(effective['steps'], effective['eval_every'], effective.get('checkpoint_every'))
                 assert 'checkpoint_minutes' not in effective and 'eval_minutes' not in effective
+
+
+def test_mellum_v11_runs_dense_experts_as_grouped_gemms_in_every_trainer():
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    recipe = resolve_recipe_data(RECIPES / 'raw-recurrence-mellum-v11.json')
+    defaults = recipe['stage_parameter_defaults']
+    assert defaults['core_text_warmup']['moe_kernel'] == 'grouped'
+    assert defaults['core_text_warmup']['latent_step_in_backward'] is True  # v10 kept
+    assert defaults['raw_recurrence_training']['moe_kernel'] == 'grouped'
+

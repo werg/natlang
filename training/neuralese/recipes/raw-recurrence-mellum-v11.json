@@ -1,0 +1,16 @@
+{
+ "schema": "natlang.neuralese-training-recipe/1",
+ "id": "raw-recurrence-mellum-v11",
+ "extends": "raw-recurrence-mellum-v10",
+ "description": "raw-recurrence-mellum-v10 with the dense experts' MoE as two grouped GEMMs (moe_kernel grouped: maple/fused_moe.dense_grouped_experts) instead of the per-expert loop, in the text warm-up and the recurrence stages. Same routed pairs, order and combine; only the GEMMs' BF16 accumulation order differs (tests/neuralese/test_dense_grouped_moe.py). It runs with the code-level, bit-identical changes of the same push: the precision ramp as eager scales plus one elementwise kernel (maple/precision_kernels.py) and the FP32 per-latent gradient norm. plans/mellum-port.md 'Warm-up step profile'. Backbone-inherent (dense trainable MoE experts). History: recipes/HISTORY.md.",
+ "overrides": {
+  "stage_parameter_defaults": {
+   "core_text_warmup": {
+    "moe_kernel": "grouped"
+   },
+   "raw_recurrence_training": {
+    "moe_kernel": "grouped"
+   }
+  }
+ }
+}

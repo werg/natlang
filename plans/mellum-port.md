@@ -435,3 +435,37 @@ mix, against ~7.4 h now and more than 12 h once ternary and 3 passes arrive.
 Every code change, (3) included, touches the code the trainer imported at start (the `run-v9/runtime` snapshot), so
 it takes effect only at the next resume from checkpoint. The ledger change (a) is the only one that needs no restart. Per "newest code always",
 restart at the next checkpoint after (1) lands with its exactness test.
+
+### Implemented (2026-10-10, same day)
+
+- **Ledger:** `LazyFree` is left out of a job's use (36255319); the guard was restarted. The live job read 59.8 GB
+  instead of ~81 GB. Its claim's learned peak (95.1 GB, measured before the change) still counts until it is
+  re-learned or reset.
+- **(3) FP32 gradient norm** in the LionSR hook, with the total accumulated in FP64 (175c313c).
+- **(1) Fused precision ramp.** The rule's reductions stay eager and are shared with export (`q4_scales` behind
+  `q4_0`, `ternary_row_stats` behind `ternary_codes`); the elementwise rest is one Triton kernel
+  (`maple/precision_kernels.py`; IEEE division, no FMA contraction). It differs from the eager rule on zero
+  elements: tested on 2 real Mellum layers (attention and experts), q4 group 32/64 and ternary, mixes 1.0/0.47/0.03.
+- **(2) Grouped-GEMM dense MoE** (`moe_kernel: grouped`, `fused_moe.dense_grouped_experts`). Against the loop at
+  Mellum shape (bf16/q4/ternary), the relative error is < 1e-2 in the output and in all gradients. torch's grouped
+  GEMM still syncs with the host on the GB10.
+- **Recipe `raw-recurrence-mellum-v11`** = v10 + `moe_kernel: grouped` for the text warm-up and recurrence stages.
+
+Update time on 3 real Mellum layers (`scripts/bench_mellum_qat_update.py`). Each update is the warm-up's shape: main
+stream 2×500 tokens, preserve stream 3k tokens, per-layer checkpointing, layer-lockstep backward, LionSR in backward.
+The GPU was shared with the live job.
+
+| point | before | after | speedup |
+|---|---|---|---|
+| bf16 | 1.92 s | 1.21 s | 1.59× |
+| q4 (mix 0.47) | 7.27 s | 2.23 s | 3.26× |
+| ternary-experts (mix 0.5, attention int4) | 9.39 s | 3.86 s | 2.43× |
+
+Ternary stays the slowest point. The eager row reductions of Maple's rule materialise FP32 copies of the weight. A
+dedicated row-statistics kernel would have to become the one rule for export as well, which changes the published
+Maple codes at reduction-order ties. That needs an owner decision.
+
+Projected onto the live step times (q4 34.2 s, bf16 9.4 s, ternary ≈ 44 s):
+- after the change: q4 ≈ 10.5 s, bf16 ≈ 5.9 s, ternary ≈ 18 s;
+- now until ternary-experts starts (~step 3,510): mean 17.3 → ~7.5 s per update (2.3×);
+- after that: ~28 → ~12 s per update.
