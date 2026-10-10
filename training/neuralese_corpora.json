@@ -27235,6 +27235,19 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "All53 outputs closed;33 accepted exact-map/files,20 rejected.30/394 source decisions differ. Scope failures under investigation. Input records match pinned source; nested request wire visibility not established. No admission."
+    },
+    {
+      "id": "free-provider-luna-v58-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v58-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Closed53-case Luna V58 original outputs, traces, queues and journals.33 accepted exact map/files,20 differing maps. Scope errors and semantic differences retained; no automatic negative preference label or admission."
     }
   ],
   "coverage_backlog": [
