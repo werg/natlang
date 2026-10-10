@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neura
 from natlang_neuralese.common.paths import resolve  # noqa: E402
 from natlang_neuralese.data.records import RecordError, parse_record  # noqa: E402
 
-CONVERTER = "scripts/neuralese_data/view_corpus.py@3"
+CONVERTER = "scripts/neuralese_data/view_corpus.py@4"
 RESULT_TYPE = "Neuralese<string>"
 MAX_SOURCE_CHARS = 32_000
 MIN_SOURCE_CHARS = 200
@@ -1082,12 +1082,14 @@ def _log_extracts(text: str, rng: random.Random, command: str = "") -> list[tupl
 
 def swe_tool_outputs(ctx: Ctx):
     """Bash outputs from SWE-rebench OpenHands trajectories (workspace renamed as in the harness bench), with
-    code-computed facts; the agent's command is the purpose context. Splits follow the harness bench (repository)."""
+    code-computed facts; the agent's command is the purpose context. Splits are the harness bench's repository
+    placements (`harness_bench.records.placements` over its PLACED_BY indexes: S1's split where S1 places the
+    repository, `split_of` otherwise), so they agree with S1 and the harness bench by construction (v4)."""
     import pyarrow.parquet as pq
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neuralese"))
     from natlang_neuralese.harness_bench.openhands import normalize
-    from natlang_neuralese.harness_bench.records import split_of
+    from natlang_neuralese.harness_bench.records import PLACED_BY, placements, split_of
 
     ctx.use(NEBIUS, dataset="swe_tool_outputs", upstream="hf:nebius/SWE-rebench-openhands-trajectories", revision=None)
     lic = license_("CC-BY-4.0", False, "nebius/SWE-rebench-openhands-trajectories (CC-BY-4.0); tool output over "
@@ -1096,6 +1098,7 @@ def swe_tool_outputs(ctx: Ctx):
     groups = list(range(pf.metadata.num_row_groups))
     ctx.rng("swe_tool_outputs", "groups").shuffle(groups)
     made = 0
+    chosen = []  # ((trajectory id, repo, instance id), row index, call id, command, text, extracts), in selection order
     for g in groups:
         if made >= ctx.caps["swe_tool_outputs"]:
             break
@@ -1140,25 +1143,33 @@ def swe_tool_outputs(ctx: Ctx):
                         break
                     if not extracts:
                         continue
-                    # The harness bench's groups, plus S1's (repo:, swe-instance:) for cross-corpus closure.
-                    groups_ = [f"swe-rebench-repo:{t.repo}", f"swe-rebench-instance:{t.instance_id}",
-                               group_key("repo", t.repo), group_key("swe-instance", t.instance_id)]
-                    doc = Doc(ctx, dataset="swe_tool_outputs", key=f"{t.id}:{call_id}", artifact="log", text=text,
-                              title=f"bash: {command[:200]}", upstream="hf:nebius/SWE-rebench-openhands-trajectories",
-                              upstream_id=t.id, revision=None, row=index, lic=lic, split=split_of(t.repo, 5), groups=groups_,
-                              refs=exact_refs_from(text, limit=24),
-                              meta={"format": "bash output", "tool": "bash", "command": command[:2000]},
-                              notes={"instance_id": t.instance_id},
-                              prov=provenance("CC-BY-4.0", "hf:nebius/SWE-rebench-openhands-trajectories card",
-                                              content_source="command output over a public repository",
-                                              holder=f"github:{t.repo}",
-                                              facts=["outputs can quote repository files under the repository's licence"]))
-                    for m, (request, answer, method) in enumerate(extracts):
-                        doc.extract(request, answer, m, method=method)
-                    doc.reconstruct()
+                    chosen.append(((t.id, t.repo, t.instance_id), index, call_id, command, text, extracts))
                     taken += 1
                     made += 1
-                    yield doc
+    # Each repository's split is the harness bench's placement (one pass over every chosen repository).
+    placed, report = placements(((repo, instance) for (_, repo, instance), *_ in chosen), list(PLACED_BY), 5)
+    ctx.info["swe_tool_outputs_placement"] = report
+    for (tid, repo, instance), index, call_id, command, text, extracts in chosen:
+        placement = placed[repo]
+        # An unplaceable repository (several published splits) keeps split_of; the cross-corpus closure drops it.
+        split = placement["split"] or split_of(repo, 5)
+        # The harness bench's groups, plus S1's (repo:, swe-instance:) for cross-corpus closure.
+        groups_ = [f"swe-rebench-repo:{repo}", f"swe-rebench-instance:{instance}",
+                   group_key("repo", repo), group_key("swe-instance", instance)]
+        doc = Doc(ctx, dataset="swe_tool_outputs", key=f"{tid}:{call_id}", artifact="log", text=text,
+                  title=f"bash: {command[:200]}", upstream="hf:nebius/SWE-rebench-openhands-trajectories",
+                  upstream_id=tid, revision=None, row=index, lic=lic, split=split, groups=groups_,
+                  refs=exact_refs_from(text, limit=24),
+                  meta={"format": "bash output", "tool": "bash", "command": command[:2000]},
+                  notes={"instance_id": instance, "split_placement": placement["rule"]},
+                  prov=provenance("CC-BY-4.0", "hf:nebius/SWE-rebench-openhands-trajectories card",
+                                  content_source="command output over a public repository",
+                                  holder=f"github:{repo}",
+                                  facts=["outputs can quote repository files under the repository's licence"]))
+        for m, (request, answer, method) in enumerate(extracts):
+            doc.extract(request, answer, m, method=method)
+        doc.reconstruct()
+        yield doc
 
 
 # ---------------------------------------------------------------------------------------------- v2 sources

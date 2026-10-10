@@ -11,6 +11,9 @@ v2 (view-ask-20261010-v2): fetch --v2 into a new raw directory, then build --pre
 v3 (view-ask-20261010-v3): a hard-linked copy of the v2 raw directory, fetch --v3 into it, then build --preset v3 with
 the same --cross-index arguments (VIEW_CORPUS.md §5.3). Licences are recorded per record as provenance facts; no
 record is omitted for its licence (owner rule 2026-10-10).
+v4 (view-ask-20261010-v4): v3's raw directory and caps (--preset v4), SWE-rebench tool-output splits from the harness
+bench's placements (S1-aligned), closed with --cross-index cross-corpus-index-s1-full-final-20261003-v1 --cross-index
+cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1 (VIEW_CORPUS.md §5.4).
 
 Example (under the ledger; <repo> and <data_nvme> are natlang_neuralese.common.paths roots):
   python3 scripts/memory_ledger.py run --unit natlang-view-corpus-HHMM --budget-gb 8 --class experiment --wait 600 \
@@ -50,8 +53,8 @@ def main(argv=None) -> int:
     b.add_argument("--seed", type=int, default=0)
     b.add_argument("--protected", type=Path, default=view_corpus.PROTECTED_INDEX)
     b.add_argument("--only", action="append", default=None, help="restrict to these source adapters")
-    b.add_argument("--preset", choices=("v1", "v2", "v3"), default="v1",
-                   help="caps preset (v2 adds the v2 sources, v3 the v3 sources)")
+    b.add_argument("--preset", choices=("v1", "v2", "v3", "v4"), default="v1",
+                   help="caps preset (v2 adds the v2 sources, v3 the v3 sources; v4 = v3's caps)")
     b.add_argument("--cross-index", action="append", default=[],
                    help="published-corpus index: a directory (cross_corpus.index_corpus) or a registered "
                         "cross-corpus-index id (neuralese_data/cross_corpus_registry.py); repeatable")
@@ -67,7 +70,7 @@ def main(argv=None) -> int:
                                         websrc_pages_per_site=args.websrc_pages_per_site)
         print(json.dumps({"files": len(report["files"]), "raw": report["raw"]}))
         return 0
-    caps = dict({"v1": view_corpus.DEFAULT_CAPS, "v2": view_corpus.V2_CAPS, "v3": view_corpus.V3_CAPS}[args.preset])
+    caps = dict({"v1": view_corpus.DEFAULT_CAPS, "v2": view_corpus.V2_CAPS, "v3": view_corpus.V3_CAPS, "v4": view_corpus.V3_CAPS}[args.preset])
     if args.caps:
         caps.update(json.loads(args.caps))
     manifest = view_corpus.build(args.raw, args.out, corpus_id=args.corpus_id or args.out.name, caps=caps,
