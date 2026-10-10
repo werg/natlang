@@ -21355,6 +21355,41 @@
       "admission": "archival/restore evidence only; no channel qualification inherited",
       "independent_new_worlds": 0,
       "notes": "Inactive prefix AR experiment complete full state retained by exact manifests. Pop active29466 matching-history lineage references other immutable source checkpoint/heads; these inactive large files are eligible for verified offload to canonical DGX artifact storage."
+    },
+    {
+      "id": "luna-ar-gateref-29466-exact-source-heads-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v1/exact-source-export-v1",
+      "include": [
+        "source-heads.pt",
+        "source-heads.json"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "exact-full-state-heads-export",
+      "training_admission": false,
+      "admission": "unqualified heads export; exact handoff state only",
+      "notes": "Shared export_from_checkpoint reconstructed from immutable full29466 checkpoint. Export heads_current true, same exact step; v2 live continuation input. No certificate inherited."
+    },
+    {
+      "id": "luna-ar-gateref-29466-frozen-launches-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "luna-ar-native-harness-gateref-29466-20261010-v1/frozen-package-v1/**/*.py",
+        "luna-ar-native-harness-gateref-29466-20261010-v1/root-launch-receipt-v1.json",
+        "luna-ar-native-harness-gateref-29466-20261010-v1/startup-handoff-superseded-v1.json",
+        "luna-ar-native-harness-gateref-29466-20261010-v2/frozen-package-v1/**/*.py",
+        "luna-ar-native-harness-gateref-29466-20261010-v2/root-launch-receipt-v1.json"
+      ],
+      "split": "execution-provenance-not-training-data",
+      "source_class": "immutable-declared-runtime-and-launch-evidence",
+      "training_admission": false,
+      "admission": "execution provenance only; ongoing logs/checkpoints excluded",
+      "notes": "Both original superseded startup and active corrected frozen package preserved with inventories/receipts. Source code synchronization uses Git; these frozen evidence bytes document exact historical execution only.",
+      "include_root_prefixes": [
+        "luna-ar-native-harness-gateref-29466-20261010-v1",
+        "luna-ar-native-harness-gateref-29466-20261010-v2"
+      ]
     }
   ],
   "coverage_backlog": [
