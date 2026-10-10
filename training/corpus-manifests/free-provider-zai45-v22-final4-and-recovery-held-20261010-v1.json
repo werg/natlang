@@ -1,0 +1,101 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-v22-final4-and-recovery-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/case-003/collector.log",
+      "bytes": 436,
+      "sha256": "fbeac2ce55159d21cf32180b099c32741ea22a5c2206dca007ff171e83ae6dcd"
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.result.json",
+      "bytes": 2467852,
+      "sha256": "ba51ca3c8375752b793a60c91e9e4560da64143f67b2c6b4e4a93466cab596e5"
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.trace.jsonl",
+      "bytes": 479964,
+      "sha256": "c6ecfc37ccab3e05a550d74ebfb80b0552c5c0be51b91511783a8c48f8e9d506",
+      "lines": 327
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl",
+      "bytes": 2467852,
+      "sha256": "ba51ca3c8375752b793a60c91e9e4560da64143f67b2c6b4e4a93466cab596e5",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl.manifest.json",
+      "bytes": 1705,
+      "sha256": "9967c699fdb5c002cf8dbcc51709c3ca4c4a96c56e7ea1b1aabd3fb588d77972"
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/journal.jsonl",
+      "bytes": 18020,
+      "sha256": "07fbdbd29592315b7e66080e849ac1ba5b6d7df3ea853a20a10d89ff842bab6b",
+      "lines": 25
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/launch-receipt-v1.json",
+      "bytes": 1498,
+      "sha256": "4d39bd179ac6d06f52ab9304d793958b2fb0d967c16bfc62990cdcd4b06ff221"
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/queue.jsonl",
+      "bytes": 831,
+      "sha256": "5a715867d88e553028d1a32d444bb132b20a84865b1345c1bafaf9d9161ff16f",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-current-pass-boundary-recovery-v1/worker.log",
+      "bytes": 18020,
+      "sha256": "07fbdbd29592315b7e66080e849ac1ba5b6d7df3ea853a20a10d89ff842bab6b"
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/case-004/collector.log",
+      "bytes": 439,
+      "sha256": "115cda1eefd40eadfb6251c9b742ab8621f193bb3444acbdfe66c8e8b7bf20d7"
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.result.json",
+      "bytes": 8003624,
+      "sha256": "9f1589d078d11c2efda5bc5cea9113f67630522f75a0b50d6e78c8fbad8a5322"
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+      "bytes": 683499,
+      "sha256": "124b71d27027a96606e0ad8bbb53d88d9dbb363fcf3f7f36e8a71323a183fe96",
+      "lines": 654
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl",
+      "bytes": 8003624,
+      "sha256": "9f1589d078d11c2efda5bc5cea9113f67630522f75a0b50d6e78c8fbad8a5322",
+      "lines": 1
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl.manifest.json",
+      "bytes": 1689,
+      "sha256": "02b43fe887a6866790c6a961c8cab34774c5fee1d1c01845f346ecd3af14694d"
+    },
+    {
+      "path": "provider-zai45-flash-source-indices-1-4-v1/journal.jsonl",
+      "bytes": 125405,
+      "sha256": "ae3d7332c3fe6722c636fd847fd702f8b9e99a3611f092ad025d57af007c8d86",
+      "lines": 182
+    },
+    {
+      "path": "quality-review-v9/review.json",
+      "bytes": 53638,
+      "sha256": "6eac61b4e691fa475c4e9392862aa5233170a02f18ecd572668c1e0ead130c6c"
+    },
+    {
+      "path": "quality-review-v9/review.md",
+      "bytes": 3111,
+      "sha256": "c16025080fc6b8201e43f42590e188a7631c87e5e7f38d42832028e118c2c9f7"
+    }
+  ],
+  "bytes": 22331207
+}
