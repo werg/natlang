@@ -21584,6 +21584,40 @@
       "admission": "rootcontentreviewpassed; globalprotectedclosureawaitsportableindexes; conditionalstaticreferenceallowlistonly",
       "independent_new_worlds": 0,
       "notes": "16explicitpublictrainrows,2authoredwrappercases/36native turns,sourcebindingproviderreceipts preserved; zerooriginal7624heldoutgroup/exactstateoverlap andlocalbenchmarkexacthits. CivilComments excluded. No teacherreasoning/learnedchannel/worldcredit."
+    },
+    {
+      "id": "free-provider-luna-v28-five-runtimev7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev28-five-runtimev7-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "immutable launch inputs only; evolving outputs excluded pending independent source/trajectory quality review",
+      "independent_new_worlds": 0,
+      "notes": "Five disjoint queues against the existing reviewed V28 source-v3. gpt-6-luna/openai-codex, one request per worker, 32K context. Exact source/approval/runtime/supervisor SHA pins in reviewed plan. No gold injected, no teacher outcome or new-world credit. Mutable campaign launch, journals and outputs excluded."
+    },
+    {
+      "id": "free-provider-frozen-runtimev7-generation-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v7",
+      "include": [
+        "**/*"
+      ],
+      "split": "not-applicable",
+      "source_class": "immutable-generation-runtime-evidence",
+      "training_admission": false,
+      "admission": "execution evidence only, not a training corpus",
+      "independent_new_worlds": 0,
+      "notes": "Frozen runtime artifact for native Luna V28 campaign, 1330 pinned files. Includes shared scope-eval-v2 metadata correction; active older runtimes are unchanged. Source development synchronizes through Git; this snapshot preserves exact generation execution."
     }
   ],
   "coverage_backlog": [

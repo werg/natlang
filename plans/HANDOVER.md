@@ -10067,3 +10067,10 @@ Pop 03:56 UTC follow-up: corrected step29466 baseline completed with unchanged t
 
 
 Future decision generation now preserves raw shard/row source references in the shared builder, including every annotator row contributing to aggregate labels. Optional upstream source receipts require full immutableHFcommit and exactbytebinding; absence is an explicit obligation, not guessed provenance. Catalog licence values are retained as unbound localmetadata. Historical artifacts remain unchanged. Source/AST reviewed; no tests/rebuilds. No nativeLuna workers were active at04:15cycle; Pop is preparing a fresh five-worker campaign on the exact reviewed V28source-v3 to restore native teacher generation, separately from the quality-review helper.
+
+
+### Pop 2026-10-10 04:20 UTC — native Luna restored
+
+- Fresh five-worker native teacher campaign authenticated and producing streamed replies/saved turns on exact reviewed V28source-v3, unchanged source/gold, no new-world credit. LauncherPID802952; workerPIDs802957–802961. Runtimev7 frozen1330files includes shared native schema metadata fix. Immutable plan/rootdispatch/queues and runtime registered separately; mutable campaign/journals/output excluded until closed review. Each queue contains one case, so refill only after outcome/source review.
+- GPU continuation reached29696, whole-transformer adaptation; all optimizer state restored and alignment still unqualified. Gemini-v4 at868/1024; v5PID801317 waiting correct soleprojectlock. ZAI samequeue/journal resumedPID802132, case1active. /srv4.7GiBfree, root1.7GiBfree. Keep existing disk guards and checkpoints.
+- Source-bound16 logical static samples remain held pending portable globalprotected-index closure requested in coordpop-d56c. Sourcebuilder provenance improvement is shared in fd33d4ac, historical artifacts unchanged.
