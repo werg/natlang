@@ -26105,6 +26105,22 @@
       "training_admission": false,
       "admission": "unqualified; exact resume and diagnostic evidence only",
       "notes": "New shared-core frozen code continuation fromV5best31744,2048updates. BackboneLR2e-6/projections3e-4, doubled full/sketch embedding weights; native strictgatesunchanged. No new admission."
+    },
+    {
+      "id": "free-provider-luna-v49-repaired-train-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "reviewed-cardinality-repaired-iterate-inputs",
+      "training_admission": false,
+      "admission": "held-source-trace-curriculum-quality-review",
+      "independent_new_worlds": 0,
+      "notes": "Root reviewed V4 cardinality-only repairs; all four selected original train worlds now have consistent one-item rule/request/gold. New trajectories, no migration or history rewrite. Unrelated V48 campaign is terminal with one transport-failed case, preserved and under audit; this successor does not mark it complete."
     }
   ],
   "coverage_backlog": [

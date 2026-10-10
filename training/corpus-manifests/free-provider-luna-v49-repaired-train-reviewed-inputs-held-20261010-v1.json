@@ -1,0 +1,43 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v49-repaired-train-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 5352,
+      "sha256": "c46849f6d68af361d9df2ca5316720dc04edaf594aedb7998343f40234ab95c2"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 1776,
+      "sha256": "6efb552e3d410814a4c8d1d3e86bf9f895d660614ddf37c22156552e17fe27d5"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 948,
+      "sha256": "3625b14ff591c3ad4c8f19e898740bb4f2b16a5a3f85cb2f2adbd19c01931163",
+      "lines": 1
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 950,
+      "sha256": "e52c0b5c96d1afeef835041fb5196b2fe585a76f515c8d697fde76a5f7d345ae",
+      "lines": 1
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 950,
+      "sha256": "35c56eb139fab56d7e9c0b52129fdd01738d5210a5df153d65969796037cf361",
+      "lines": 1
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 950,
+      "sha256": "aed8d8f2ef60a9958083d82a4f6078a0a884da87666d41d18ee0c397914111fd",
+      "lines": 1
+    }
+  ],
+  "bytes": 10926
+}
