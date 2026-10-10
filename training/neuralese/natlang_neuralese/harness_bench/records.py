@@ -19,7 +19,12 @@ the teacher's own view; recurrence training writes the view through the port at 
 the following actions need. Records before natlang.harness-bench-conversion/2 named these parts `digest`; the trainer
 rejects them and scripts/neuralese_data/digest_to_view.py converts them.
 
-Splits are by repository (no repository in both); source groups are the repository and the task instance.
+Splits are by repository (no repository in both); source groups are the repository and the task instance. Published
+corpora that hold the same repositories cannot move, so a repository already placed by one keeps its split: its
+component (the repository's and its instances' keys, under this corpus's and S1's group names) is placed through the
+published corpora's cross-corpus indexes (scripts/neuralese_data/cross_corpus.py `place`; default S1's registered
+index, cross-corpus-index-s1-full-final-20261003-v1); a repository they do not hold is split by `split_of`; one they place in several splits is left
+out. Each record says how its split was decided (provenance.split_placement).
 Admission is recorded per record by explicit criteria (`admission`); the builder never approves on its own.
 """
 from __future__ import annotations
@@ -27,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -39,6 +45,9 @@ BUILDER = 'natlang.harness_bench.records/1'
 VIEW_CHARS = 2000
 PREVIEW_CHARS = 40_000
 SHAPE_HEAD, SHAPE_TAIL = 2500, 2000
+# Published corpora whose splits this corpus follows: registered cross-corpus indexes (scripts/neuralese_data/cross_corpus.py,
+# resolved by cross_corpus_registry).
+PLACED_BY = ('cross-corpus-index-s1-full-final-20261003-v1',)
 
 
 def text_digest(text: str) -> str:
@@ -59,6 +68,57 @@ def companion_shape(text: str, call_id: str) -> str:
 def split_of(repo: str, test_percent: int) -> str:
     """Repositories, not trajectories, are split: the same code never sits on both sides."""
     return 'test' if int(text_digest(f'harness-bench-split:{repo}')[:8], 16) % 100 < test_percent else 'train'
+
+
+def _neuralese_data():
+    """scripts/neuralese_data (cross-corpus indexes and the shared split-group key), imported from the checkout."""
+    scripts = str(Path(__file__).resolve().parents[4] / 'scripts')
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import neuralese_data.cross_corpus as cross_corpus
+    import neuralese_data.cross_corpus_registry as cross_corpus_registry
+    import neuralese_data.records as data_records
+    return cross_corpus, cross_corpus_registry, data_records
+
+
+def repository_groups(repo: str, instances: Iterable[str]) -> list[str]:
+    """A repository's split-group keys under this corpus's names and S1's (`repo:`, `swe-instance:`)."""
+    _, _, data_records = _neuralese_data()
+    keys = [f'swe-rebench-repo:{repo}', data_records.group_key('repo', repo)]
+    for instance in sorted(set(instances)):
+        keys += [f'swe-rebench-instance:{instance}', data_records.group_key('swe-instance', instance)]
+    return keys
+
+
+def placements(transcripts: Iterable[tuple[str, str]], index_refs: list, test_percent: int) -> tuple[dict, dict]:
+    """Each repository's split from (repo, instance) pairs: the published split when the indexes (directories or
+    registered index ids) place it (cross_corpus.place over the repository's component), else `split_of`; None when
+    they place it in several. Returns ({repo: {'split', 'rule', 'touched'?}}, report)."""
+    cross_corpus, cross_corpus_registry, _ = _neuralese_data()
+    resolved = [cross_corpus_registry.resolve(ref) for ref in index_refs]
+    indexes = [cross_corpus.Index(root, groups_only=True) for root, _ in resolved]
+    instances: dict[str, set] = {}
+    for repo, instance in transcripts:
+        instances.setdefault(repo, set()).add(instance)
+    placed = cross_corpus.place({repo: repository_groups(repo, insts) for repo, insts in instances.items()}, indexes)
+    out, moved = {}, {}
+    for repo in sorted(instances):
+        own = split_of(repo, test_percent)
+        if repo not in placed:
+            out[repo] = {'split': own, 'rule': 'split_of'}
+            continue
+        split = placed[repo]['split']
+        out[repo] = {'split': split, 'rule': 'published' if split else 'unplaceable', 'touched': placed[repo]['touched']}
+        if split and split != own:
+            moved[f'{own}->{split}'] = moved.get(f'{own}->{split}', 0) + 1
+    report = {'indexes': [{'corpus_id': ix.corpus_id, **({'registry_id': rid} if rid else {'path': str(ix.root)}),
+                           'records': ix.meta['records']} for ix, (_, rid) in zip(indexes, resolved)],
+              'repositories': len(out), 'published': sum(1 for p in out.values() if p['rule'] == 'published'),
+              'split_of': sum(1 for p in out.values() if p['rule'] == 'split_of'),
+              'unplaceable': sorted(repo for repo, p in out.items() if p['rule'] == 'unplaceable'),
+              'moved_from_split_of': dict(sorted(moved.items())),
+              'by_split': {name: sum(1 for p in out.values() if p['split'] == name) for name in ('train', 'validation', 'test')}}
+    return out, report
 
 
 def _arguments_text(arguments: Any) -> str:
@@ -161,11 +221,16 @@ def replayed(line: dict[str, Any]) -> tuple[Normalized, dict[str, Any] | None]:
 
 def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, tools: list[dict], corpus: str, test_percent: int,
           view_chars: int, preview_chars: int, targets: str, per_trajectory: int, seed: int,
-          transcript: Normalized | None = None, replay: dict[str, Any] | None = None, row_sha: str | None = None) -> Iterable[dict]:
+          transcript: Normalized | None = None, replay: dict[str, Any] | None = None, row_sha: str | None = None,
+          placement: dict[str, Any] | None = None) -> Iterable[dict]:
+    """`placement`: the repository's split decision (`placements`); without one the split is `split_of`."""
     transcript = transcript or normalize(row, 'pi')
     messages, assistants, views = native_messages(transcript, system_piece, view_chars, preview_chars)
     rng = random.Random(f'{seed}:{transcript.id}')
-    split = split_of(transcript.repo, test_percent)
+    placement = placement or {'split': split_of(transcript.repo, test_percent), 'rule': 'split_of'}
+    split = placement['split']
+    if split is None:
+        raise ValueError(f'repository {transcript.repo} is placed in several published splits: {placement.get("touched")}')
     admitted = admission(transcript, replay)
     groups = [f'swe-rebench-repo:{transcript.repo}', f'swe-rebench-instance:{transcript.instance_id}']
     row_sha = row_sha or text_digest(json.dumps((row or {}).get('trajectory'), sort_keys=True, default=str))
@@ -179,6 +244,7 @@ def build(row: dict[str, Any] | None, *, system_piece: str, surface_sha: str, to
                            'surface_sha256': surface_sha, 'teacher': 'Qwen3-Coder-480B-A35B-Instruct (OpenHands 0.54)',
                            'view_chars': view_chars, 'preview_chars': preview_chars,
                            'observations': 'pi-replayed' if replay else 'teacher-recorded',
+                           'split_placement': placement,
                            **({'replay': replay} if replay else {})},
             'task': {'kind': 'agent_trajectory', 'instance_id': transcript.instance_id, 'repo': transcript.repo,
                      'goal': transcript.goal},
@@ -209,7 +275,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--preview-chars', type=int, default=PREVIEW_CHARS)
     parser.add_argument('--test-percent', type=int, default=5)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--placed-by', action='append', default=None,
+                        help='cross-corpus index (registry id or directory) of a published corpus whose repository '
+                             'splits this corpus follows (repeatable; default: ' + ', '.join(PLACED_BY) + ')')
+    parser.add_argument('--no-placement', action='store_true', help='split by split_of alone (records before v4)')
     args = parser.parse_args(argv)
+    index_dirs = [] if args.no_placement else (args.placed_by or list(PLACED_BY))
     surface = json.loads(Path(args.surface).read_text())
     system_piece = f'prompt:pi-agent#sha256:{text_digest(surface["system"])}'
     tools = [{'type': 'function', 'function': {'name': t['name'], 'description': t['description'], 'parameters': t['parameters']}}
@@ -218,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     summary = {'builder': BUILDER, 'corpus': args.corpus, 'surface_sha256': surface_sha, 'trajectories': 0, 'records': 0,
-               'by_split': {'train': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'view_parts': 0}
+               'by_split': {'train': 0, 'validation': 0, 'test': 0}, 'admitted': 0, 'held': {}, 'view_parts': 0}
     def sources() -> Iterable[dict[str, Any]]:
         if args.replayed:
             with open(args.replayed) as lines:
@@ -231,14 +302,32 @@ def main(argv: list[str] | None = None) -> int:
             for row in rows(args.trajectories, columns):
                 yield {'transcript': None, 'replay': None, 'row': row, 'row_sha': None}
 
-    with (out / 'records.jsonl').open('w') as handle:
+    def selected() -> Iterable[dict[str, Any]]:
         for number, item in enumerate(sources()):
             if number < args.offset:
                 continue
             if args.limit and number >= args.offset + args.limit:
                 break
+            if item['transcript'] is None:
+                item['transcript'] = normalize(item['row'], 'pi')
+            yield item
+
+    if index_dirs:
+        # Two passes: a repository is one component, so every trajectory is known before any split is decided.
+        placed, summary['placement'] = placements(((item['transcript'].repo, item['transcript'].instance_id)
+                                                   for item in selected()), index_dirs, args.test_percent)
+    else:
+        placed, summary['placement'] = {}, {'indexes': [], 'rule': 'split_of'}
+    summary['unplaceable_trajectories'] = 0
+    with (out / 'records.jsonl').open('w') as handle:
+        for item in selected():
+            placement = placed.get(item['transcript'].repo)
+            if placement and placement['split'] is None:
+                summary['unplaceable_trajectories'] += 1
+                continue
             summary['trajectories'] += 1
             for record in build(item['row'], transcript=item['transcript'], replay=item['replay'], row_sha=item['row_sha'],
+                                placement=placement,
                                 system_piece=system_piece, surface_sha=surface_sha, tools=tools, corpus=args.corpus,
                                 test_percent=args.test_percent, view_chars=args.view_chars,
                                 preview_chars=args.preview_chars, targets=args.targets,

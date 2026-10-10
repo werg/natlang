@@ -122,3 +122,17 @@ raw-recurrence-v3 and raw-recurrence-mellum-v2 (unchanged) plus the declared, **
   mellum-v2's backbone-inherent overrides and applies its recurrence overrides to `view_operator` too; a test proves
   both resolve to their predecessors plus these additions.
 
+
+## raw-recurrence-v5 and raw-recurrence-mellum-v4 (2026-10-10)
+
+raw-recurrence-v4 and raw-recurrence-mellum-v3 (unchanged; v3's harness cohort is admitted and already used, so its
+pins stay) with the harness_bench cohort repinned. Harness-bench v3 split by `split_of(repo, 5)` while S1 holds all
+321 of its repositories, 53 in the other split (the view corpus v2 closure dropped 2,826 tool-output records for it).
+`harness-bench-swe-rebench-openhands-pi-records-20261010-v4` is the same 3,843 records with S1's split for every
+repository S1 holds (records.py `placements` over cross_corpus `place`; 2,969 train / 874 test), and its twins
+`...-text-lfm25-350m-20261010-v2` / `...-text-mellum21-12b-20261010-v2` render it (same tokens as v1, other splits).
+Pins: input bindings `harness-bench-records-v4` / `-pieces-v4` (view_gate), cohort source and recurrence inputs, both
+twins. Admission: the Mellum twin is admitted for the text stages too, since Pop's 89982d41 labels Mellum's
+tool-response user wrappers as tool (checked on the v2 twin: 87,337 tool turns); the recurrence stays held.
+raw-recurrence-mellum-v4 repeats mellum-v3's overrides on v5; a test proves both differ from their predecessors only
+in these pins.

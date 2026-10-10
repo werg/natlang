@@ -226,6 +226,61 @@ def test_view_operator_stage_is_declared_held_and_shared_by_both_lines():
         {k: v for k, v in mellum_rec.items() if lfm_rec.get(k) != v}
 
 
+def test_harness_bench_cohort_repinned_to_s1_placed_records_v4():
+    """raw-recurrence-v5 / raw-recurrence-mellum-v4 change only the harness_bench pins of v4 / mellum-v3: records v4
+    (splits follow S1's cross-corpus placement) and its v2 twins, with the Mellum twin admitted for the text stages."""
+    v4_records = 'harness-bench-swe-rebench-openhands-pi-records-20261010-v4'
+    registry = {c['id']: c for c in json.loads((ROOT / 'training/neuralese_corpora.json').read_text())['corpora']}
+    changed = {'id', 'description', 'input_bindings', 'view_operator', 'stages', 'cohorts'}
+    pairs = (('raw-recurrence-v5', 'raw-recurrence-v4'), ('raw-recurrence-mellum-v4', 'raw-recurrence-mellum-v3'))
+    for new, old in pairs:
+        resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
+        assert {k: v for k, v in resolved.items() if k not in changed} == \
+            {k: v for k, v in previous.items() if k not in changed}
+        bindings = dict(previous['input_bindings'])
+        del bindings['harness-bench-records-v3'], bindings['harness-bench-pieces-v3']
+        assert {k: v for k, v in resolved['input_bindings'].items() if not k.startswith('harness-bench-')} == bindings
+        assert resolved['input_bindings']['harness-bench-records-v4']['path'].endswith(f'{v4_records}/records.jsonl')
+        manifest = {f['path']: f['sha256'] for f in
+                    json.loads((ROOT / f'training/corpus-manifests/{v4_records}.json').read_text())['files']}
+        assert resolved['input_bindings']['harness-bench-records-v4']['sha256'] == manifest['records.jsonl']
+        assert resolved['input_bindings']['harness-bench-pieces-v4']['sha256'] == manifest['pieces.jsonl']
+        gate = copy.deepcopy(previous['view_operator'])
+        gate['gate']['metrics'] = [m.replace('harness-bench v3', 'harness-bench v4') for m in gate['gate']['metrics']]
+        assert resolved['view_operator'] == gate
+        for stage, before in zip(resolved['stages'], previous['stages']):
+            if stage['id'] == 'view_gate':
+                before = {**before, 'inputs': {**before['inputs'], 'harness_records': 'harness-bench-records-v4',
+                                               'harness_pieces': 'harness-bench-pieces-v4'}}
+            assert stage == before
+        cohort, before = resolved['cohorts']['harness_bench'], previous['cohorts']['harness_bench']
+        assert cohort['source'] == {**before['source'], 'corpus': v4_records}
+        assert cohort['recurrence'] == {**before['recurrence'], 'inputs': {**before['recurrence']['inputs'],
+                                                                           'records': v4_records, 'pieces': v4_records}}
+        assert cohort['recurrence']['admitted'] is False and cohort['admitted'] is True
+        assert cohort['text_stages'] == before['text_stages'] and cohort['backbone_inherent_differences'] == before['backbone_inherent_differences']
+        for name, twin in cohort['twins'].items():
+            entry = registry[twin['corpus']]
+            assert twin['admitted'] is True and entry['training_admission'] is True
+            assert entry['derived_from'] == [v4_records] and entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
+            assert entry['build']['tokenizer_sha256'] == twin['tokenizer_sha256'] == before['twins'][name]['tokenizer_sha256']
+            assert entry['build']['history_reasoning']['policy'] == twin['history_reasoning'] == before['twins'][name]['history_reasoning']
+            assert twin['tokens'] == {split: entry['tokens'][split]['tokens'] for split in ('train', 'test')}
+            # Same documents, other splits: the token total is the v1 twin's.
+            assert sum(twin['tokens'].values()) == sum(before['twins'][name]['tokens'].values())
+            assert registry[before['twins'][name]['corpus']]['superseded_by'] == twin['corpus']
+        assert registry[before['source']['corpus']]['superseded_by'] == v4_records
+        assert registry[v4_records]['training_admission'] is False
+    lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v5.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v4.json')
+    assert lfm['cohorts'] == mellum['cohorts'] and lfm['input_bindings'] == mellum['input_bindings']
+    # The Mellum line's differences from the shared recipe are mellum-v3's, unchanged.
+    v4, mellum_v3 = load_recipe(RECIPES / 'raw-recurrence-v4.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v3.json')
+    assert json.loads((RECIPES / 'raw-recurrence-mellum-v4.json').read_text())['overrides'] == \
+        json.loads((RECIPES / 'raw-recurrence-mellum-v3.json').read_text())['overrides']
+    assert [s for s in mellum['stages'] if s not in lfm['stages']] != [] and \
+        len([s for s in mellum['stages'] if s not in lfm['stages']]) == len([s for s in mellum_v3['stages'] if s not in v4['stages']])
+
+
 def test_stages_added_insert_after_a_named_stage(tmp_path):
     (tmp_path / 'base.json').write_text(json.dumps(base_recipe()))
     extra = {'id': 'token_identity_again', 'kind': 'token_identity', 'requires': ['token_identity'],

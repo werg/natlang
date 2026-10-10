@@ -1,0 +1,93 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v5",
+  "extends": "raw-recurrence-v4",
+  "description": "raw-recurrence-v4 with the harness_bench cohort repinned to records v4 (splits follow S1's cross-corpus placement) and its v2 text twins; the Mellum twin admitted for the text stages. Shared by every line. History: recipes/HISTORY.md.",
+  "overrides": {
+    "input_bindings": {
+      "harness-bench-records-v3": {
+        "$delete": true
+      },
+      "harness-bench-pieces-v3": {
+        "$delete": true
+      },
+      "harness-bench-records-v4": {
+        "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/records.jsonl",
+        "sha256": "83e1ee703d1ea4a2f7e245a13a2a84d0d4ea475ee5af40425283adcc278bbb16"
+      },
+      "harness-bench-pieces-v4": {
+        "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v4/pieces.jsonl",
+        "sha256": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9"
+      }
+    },
+    "view_operator": {
+      "gate": {
+        "metrics": [
+          "reconstruction recovery per artifact type, with its compression ratio (value tokens per vector)",
+          "QA recovery: target CE with the block vs the full text vs none, per artifact type",
+          "correct vs shuffled block margin per artifact type",
+          "purpose sensitivity: CE with a partner-purpose block minus CE with the own-purpose block",
+          "pi next-action CE on held harness-bench v4 records: view blocks vs crisp previews vs full outputs"
+        ]
+      }
+    },
+    "stages": {
+      "view_gate": {
+        "inputs": {
+          "harness_records": "harness-bench-records-v4",
+          "harness_pieces": "harness-bench-pieces-v4"
+        }
+      }
+    },
+    "cohorts": {
+      "harness_bench": {
+        "admission": "admitted by the owner (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'), effective per stage and twin as the trainer supports it: both text twins in the text stages (shared cohort/document sampler and tool-feedback weighting in text_warmup, train/text_supervision.py; on Mellum the tool-response user wrappers are labelled tool since 89982d41; assembled input scripts/assemble_neuralese_cohorts.py text); the recurrence is pending (its entry says why). Each line enters at its next declared handoff recipe with explicit cohort_weights; mixing or naming a cohort admits nothing else.",
+        "source": {
+          "corpus": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+        },
+        "twins": {
+          "lfm2.5-350m": {
+            "corpus": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2",
+            "text_jsonl_sha256": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+            "tokens": {
+              "train": 56223273,
+              "test": 18329680
+            },
+            "suffix_tokens": {
+              "train": 605772,
+              "test": 185811
+            },
+            "admission": "admitted (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'); text stages read it through an assembled text input (text_cohort harness_bench) with cohort_weights {native: 0.75, harness_bench: 0.25}"
+          },
+          "mellum2.1-12b-a2.5b-thinking": {
+            "corpus": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
+            "text_jsonl_sha256": "6ad00112ccc402bba6f2b3455b840b8680485503aae8c0d6fbeaf2eaf500fb61",
+            "tokens": {
+              "train": 72894669,
+              "test": 22516330
+            },
+            "suffix_tokens": {
+              "train": 629543,
+              "test": 192040
+            },
+            "admitted": true,
+            "admission": "admitted (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'; the pending trainer support landed in Pop's 89982d41: text_warmup.chat_roles labels a user turn whose body begins with <tool_response> as tool, so feedback_weight 0.25 applies; checked on this twin: 87,337 tool turns, no document with tool messages lacks a tool label); text stages read it through an assembled text input (text_cohort harness_bench) with cohort_weights {native: 0.75, harness_bench: 0.25}"
+          }
+        },
+        "mix": {
+          "held_documents": "the twin's test split (874 documents, the repositories S1 holds in test) is reported as its own stratum, not merged into the native held set"
+        },
+        "supervision": {
+          "feedback_weight_status": "implemented in shared train/text_supervision.py and the text_warmup loader/objective (tool role 0.25, reasoning and replies full weight; Mellum's tool-response user wrappers labelled tool since 89982d41) and, for the recurrence, GradSession._context_weights (non-assistant turns after the first reply)."
+        },
+        "recurrence": {
+          "inputs": {
+            "records": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+            "pieces": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4"
+          }
+        },
+        "split": "records v4: by repository following the published cross-corpus closure (S1's split for every repository S1 holds, all 321; split_of(repo, 5) otherwise); the twins inherit it"
+      }
+    }
+  }
+}

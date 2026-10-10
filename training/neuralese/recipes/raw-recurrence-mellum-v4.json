@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v4",
+  "extends": "raw-recurrence-v5",
+  "description": "raw-recurrence-mellum-v3 on raw-recurrence-v5 (the harness_bench cohort on records v4 and its v2 twins, the Mellum twin admitted for the text stages); the same backbone-inherent overrides. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "backbone_training": "qat",
+        "qat_latent_lr": 0.003,
+        "member_weight": 0.1,
+        "member_tokens": 2048,
+        "member_eval_windows": 4,
+        "member_mask_system": true,
+        "read_adapter": true
+      }
+    },
+    "stages": {
+      "embedding_distillation": {
+        "parameters": {
+          "cutoff": 27,
+          "contexts": 512
+        }
+      },
+      "recurrence_warmup": {
+        "parameters": {
+          "backbone_training": "qat",
+          "qat_latent_lr": 0.003,
+          "member_weight": 0.1,
+          "member_tokens": 2048,
+          "member_eval": 4,
+          "member_mask_system": true,
+          "member_full_weight": 1.0
+        }
+      },
+      "view_operator": {
+        "parameters": {
+          "backbone_training": "qat",
+          "qat_latent_lr": 0.003,
+          "member_weight": 0.1,
+          "member_tokens": 2048,
+          "member_eval": 4,
+          "member_mask_system": true,
+          "member_full_weight": 1.0
+        }
+      }
+    }
+  }
+}
