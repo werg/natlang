@@ -22,7 +22,11 @@ import shutil
 import struct
 from pathlib import Path, PurePosixPath
 
-REPO = Path(__file__).resolve().parents[3]
+# The machine's repo root (common/paths.py), not this file's location: a frozen recipe runtime or a code snapshot
+# outside the checkout must still read the live registries and manifests.
+from .common.paths import root as _root
+
+REPO = _root("repo")
 REGISTRY = "training/neuralese_artifacts.json"
 MANIFESTS = "training/artifact-manifests"
 STORE = "data/neuralese/artifacts"
