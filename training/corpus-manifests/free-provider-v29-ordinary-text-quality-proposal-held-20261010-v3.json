@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-ordinary-text-quality-proposal-held-20261010-v3",
+  "owner": "pop",
+  "path": "runs/luna-v29-ordinary-text-quality-proposal-20261010-v3",
+  "files": [
+    {
+      "path": "quality-decision-proposal.json",
+      "bytes": 322440,
+      "sha256": "5d3698fdd1067cd8d3eec02262fa099a4425e2adab243792467a0d801245e0f7"
+    }
+  ],
+  "bytes": 322440
+}

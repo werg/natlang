@@ -23431,6 +23431,63 @@
       "training_admission": false,
       "admission": "publication-only-no-training-native-trace-admission",
       "notes": "Root exact382734277durablebytes11supplementals; originalmanifestsunchanged/currentpresenceonlynotpublish-timeexistence. Dynamic17excluded/4alreadycoveredskip."
+    },
+    {
+      "id": "free-provider-v29-ordinary-text-quality-proposal-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/luna-v29-ordinary-text-quality-proposal-20261010-v3",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only-no-new-evaluation-credit",
+      "source_class": "held-root-reviewed-quality-proposal",
+      "training_admission": false,
+      "admission": "review-and-receipt-evidence-only",
+      "native_admission": false,
+      "trace_admission": false,
+      "independent_new_worlds": 0,
+      "notes": "RolecorrectV3 rechecks23proposedturns;20strictcandidates/1lineageheld; wrongRECwriterIDs0036/37excluded;8readouts exactbodycopies. Rootordinary-only20receipt separatelybound, no native/recurrenceadmission."
+    },
+    {
+      "id": "free-provider-v29-root-ordinary-text-admission-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only-no-new-evaluation-credit",
+      "source_class": "root-ordinary-text-only-receipt-evidence",
+      "training_admission": false,
+      "admission": "review-and-receipt-evidence-only",
+      "native_admission": false,
+      "trace_admission": false,
+      "independent_new_worlds": 0,
+      "notes": "Rootreceiptde2a6ae293c3f7a24d94f92169be4686752b3f68a26a97a42830c8b381d13052 binds20exacttrain-onlyactions; source321andpiecesunchanged, false native/trace flags retained. Receipt isapprovalscopeevidence, not extra training rows."
+    },
+    {
+      "id": "free-provider-v29-admitted-ordinary-text-20-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v29-admitted-ordinary-text-packet-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only-no-new-evaluation-credit",
+      "source_class": "admitted-ordinary-text-only",
+      "training_admission": true,
+      "admission": "ordinary-text-only",
+      "native_admission": false,
+      "trace_admission": false,
+      "independent_new_worlds": 0,
+      "notes": "20train/0held/0omissions;169069fulltokens5768supervisedsuffix/max12444. Text7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f. ExactpinnedLFM2.5 history/tokenizer rendering, no nativeIR/trace/recurrence qualification orindependentworldcredit. CurrentV5GPUinputunchanged."
     }
   ],
   "coverage_backlog": [

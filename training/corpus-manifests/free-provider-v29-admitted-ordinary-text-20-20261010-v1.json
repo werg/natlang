@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-admitted-ordinary-text-20-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v29-admitted-ordinary-text-packet-v1",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 101897,
+      "sha256": "76d4d329a61868a56b517c91e531e29364ecf665aedc74934c30eafc456f665d",
+      "lines": 20
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4280,
+      "sha256": "aa950249e224259d3fb798259e98844381d290dfc194985e7587f122de67d941"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 1699381,
+      "sha256": "7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f",
+      "lines": 20
+    }
+  ],
+  "bytes": 1805558
+}

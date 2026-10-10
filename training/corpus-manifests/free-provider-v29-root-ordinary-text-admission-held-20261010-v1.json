@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-root-ordinary-text-admission-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v29-root-ordinary-text-admission-v1",
+  "files": [
+    {
+      "path": "root-ordinary-text-admission.json",
+      "bytes": 20494,
+      "sha256": "de2a6ae293c3f7a24d94f92169be4686752b3f68a26a97a42830c8b381d13052"
+    },
+    {
+      "path": "selected-native-turns-render-input.jsonl",
+      "bytes": 2924291,
+      "sha256": "508475eb883a90d7e875aa69b9cbea90f698d3019420579e714a9d208f8bc429",
+      "lines": 20
+    }
+  ],
+  "bytes": 2944785
+}
