@@ -51,7 +51,38 @@ const poolSchema = 'natlang.gemini-decision-pool/1';
 const probabilityContract = 'natlang.typed-decision-probabilities/1';
 const choiceConfidenceContract = 'natlang.choice-label-confidence/1';
 const reviewedSourceFields = new Set(['id', 'family', 'kind', 'role', 'source', 'group', 'license', 'state',
-  'question', 'options', 'levels', 'criteria', 'version', 'answer']);
+  'question', 'options', 'levels', 'criteria', 'version', 'answer', 'source_refs',
+  'identity_state_sha256', 'full_state_sha256']);
+const pubmedReferenceFields = ['config', 'dataset', 'local_file_sha256', 'local_path', 'physical_row', 'pubmed_id',
+  'row_group', 'row_in_group', 'source_row_sha256', 'split', 'upstream', 'upstream_metadata_status'];
+const pubmedUpstreamFields = ['config', 'lfs_sha256', 'path', 'revision'];
+const sha256Hex = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
+function validateSourceProvenance(source) {
+  const hasIdentityHash = Object.hasOwn(source, 'identity_state_sha256');
+  const hasFullHash = Object.hasOwn(source, 'full_state_sha256');
+  if (hasIdentityHash !== hasFullHash) return { error: 'incomplete_state_hash_provenance' };
+  if (hasIdentityHash && (!sha256Hex(source.identity_state_sha256) || !sha256Hex(source.full_state_sha256) ||
+      source.full_state_sha256 !== sha(source.state))) return { error: 'invalid_state_hash_provenance' };
+  if (!Object.hasOwn(source, 'source_refs')) return {};
+  if (source.source !== 'qiaojin/PubMedQA' || !Array.isArray(source.source_refs) || source.source_refs.length !== 1)
+    return { error: 'unsupported_source_reference_provenance' };
+  for (const ref of source.source_refs) {
+    if (!exactSet(ref, pubmedReferenceFields) || ref.dataset !== source.source || ref.config !== 'pqa_labeled' ||
+        ref.split !== source.role || ref.upstream_metadata_status !== 'pinned_and_byte_bound' ||
+        ref.local_path !== 'source/pqa_labeled-train.parquet' || !Number.isSafeInteger(ref.physical_row) || ref.physical_row < 0 ||
+        ref.row_group !== 0 ||
+        !Number.isSafeInteger(ref.row_in_group) || ref.row_in_group < 0 ||
+        ref.physical_row !== ref.row_in_group ||
+        !Number.isSafeInteger(ref.pubmed_id) || ref.pubmed_id < 0 || !sha256Hex(ref.source_row_sha256) ||
+        !sha256Hex(ref.local_file_sha256) || !exactSet(ref.upstream, pubmedUpstreamFields) ||
+        ref.upstream.config !== ref.config || ref.upstream.path !== 'pqa_labeled/train-00000-of-00001.parquet' ||
+        !/^[a-f0-9]{40}$/.test(ref.upstream.revision ?? '') || !sha256Hex(ref.upstream.lfs_sha256) ||
+        ref.upstream.lfs_sha256 !== ref.local_file_sha256)
+      return { error: 'invalid_pubmedqa_source_reference_provenance' };
+  }
+  return {};
+}
 
 function reject(rejections, id, reason, detail = {}) {
   rejections.push({ schema: 'natlang.teacher-decision-label-rejection/1', id: id ?? null, reason, ...detail,
@@ -192,8 +223,10 @@ function createRecord(contract, batch, sourceMeta) {
   };
   const folderFiles = { 'task.json': JSON.stringify(task) };
   for (const row of records) {
-    // Preserve every visible source fact; only source.answer is hidden from the model-facing folder.
-    const { answer: _hiddenAnnotation, ...visible } = row;
+    // Keep annotations and source-provenance receipts out of model-facing inputs.
+    // Provenance is retained below in the static record's generation receipt.
+    const { answer: _hiddenAnnotation, source_refs: _sourceRefs, identity_state_sha256: _identityHash,
+      full_state_sha256: _fullStateHash, ...visible } = row;
     folderFiles[`${dataDirectory}/${row.id}.json`] = JSON.stringify(visible);
   }
   const expectedFiles = { ...folderFiles, 'decisions.json': JSON.stringify(childResults) };
@@ -276,6 +309,14 @@ return decisions;`;
     scorer_source_sha256: sourceMeta.scorer_source_sha256,
     scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
     transformations,
+    source_provenance_receipts: records.filter(row => Object.hasOwn(row, 'source_refs') ||
+      Object.hasOwn(row, 'identity_state_sha256') || Object.hasOwn(row, 'full_state_sha256')).map(row => ({
+      source_id: row.id,
+      ...(Object.hasOwn(row, 'source_refs') ? { source_refs: structuredClone(row.source_refs) } : {}),
+      ...(Object.hasOwn(row, 'identity_state_sha256') ? {
+        identity_state_sha256: row.identity_state_sha256, full_state_sha256: row.full_state_sha256,
+      } : {}),
+    })),
     label_receipts: batch.map(entry => ({ id: entry.source.id, label_file_sha256: entry.label.file_sha256,
       label_manifest_sha256: entry.label.artifact.manifest_sha256, label_manifest_schema: entry.label.artifact.schema,
       manifest_binding: entry.label.binding, label_row_sha256: entry.label.row_sha256,
@@ -394,6 +435,9 @@ async function main() {
     const unknownFields = Object.keys(source).filter(key => !reviewedSourceFields.has(key));
     if (unknownFields.length) { reject(rejections, id, 'unreviewed_source_fields_not_exposed', {
       fields: unknownFields, source_record_canonical_sha256: sha(JSON.stringify(canonical(source))) }); continue; }
+    const sourceProvenance = validateSourceProvenance(source);
+    if (sourceProvenance.error) { reject(rejections, id, sourceProvenance.error, {
+      source_record_canonical_sha256: sha(JSON.stringify(canonical(source))) }); continue; }
     if (source.role !== 'train') { reject(rejections, id, 'source_split_not_train', { role: source.role }); continue; }
     const label = labelById.get(id);
     if (!label) { reject(rejections, id, 'missing_label_for_source_case'); continue; }

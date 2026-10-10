@@ -26692,6 +26692,45 @@
       "training_admission": false,
       "admission": "held-source-semantic-native-runtime-quality-review",
       "notes": "Sealed 51-case native audit with exact source/IR/file pins, complete keys and valid decision options. Raw child wire request bodies unavailable; no byte-exact prompt visibility claim. Source-label comparison remains descriptive and all training admission held."
+    },
+    {
+      "id": "free-provider-google-v21-full-abstract-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-pubmedqa-full-abstract-v21",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-full-evidence-regeneration",
+      "training_admission": false,
+      "admission": "held-source-semantic-full-visibility-runtime-review",
+      "notes": "43 typed-valid final teacher labels, 42 saved-answer matches and one disagreement. Complete pinned source question/abstract, original source IDs/groups, no new worlds. All raw outcomes preserved."
+    },
+    {
+      "id": "free-provider-google-v21-full-abstract-static-reference-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-pubmedqa-full-abstract-v21-adapter-v2",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-full-evidence-regeneration",
+      "training_admission": false,
+      "admission": "held-source-semantic-full-visibility-runtime-review",
+      "notes": "Six source-bound authored programs /42 items; five actual reference replays pass and one fails strict full-state visibility. Preserve failure, runtime context diagnosis pending. No source or training admission."
+    },
+    {
+      "id": "free-provider-google-v21-full-abstract-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-pubmedqa-full-abstract-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-full-evidence-regeneration",
+      "training_admission": false,
+      "admission": "held-source-semantic-full-visibility-runtime-review",
+      "notes": "Sealed raw teacher audit and static replay, original metadata-allowlist failure preserved. Validated narrow pinned provenance excluded from model-facing state but retained in attribution. Source closure retains six programs, not replay admission. One full2290-character state visibility failure remains held. Full S1 and near-duplicate closure pending."
     }
   ],
   "coverage_backlog": [
