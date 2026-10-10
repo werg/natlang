@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-v28-case0-ordering-failure-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1/case-000",
+  "files": [
+    {
+      "path": "collector.log",
+      "bytes": 421,
+      "sha256": "5105bee67254746374e148370a8e2a6c2690fcb3ec75c33a2fe0833c8a31108f"
+    },
+    {
+      "path": "jobs/000000-92519f05f27da04e.result.json",
+      "bytes": 5492590,
+      "sha256": "34f6ab97672dae6bc76ca54b9fd285e3567903f955f23e91205d01a598324159"
+    },
+    {
+      "path": "jobs/000000-92519f05f27da04e.trace.jsonl",
+      "bytes": 814825,
+      "sha256": "5d37e5f47189a7e38e7a2c3bf5011c45a996a6fb7d7ac31756e47d2dd69facb7",
+      "lines": 555
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 5492590,
+      "sha256": "34f6ab97672dae6bc76ca54b9fd285e3567903f955f23e91205d01a598324159",
+      "lines": 1
+    },
+    {
+      "path": "results.jsonl.manifest.json",
+      "bytes": 1691,
+      "sha256": "ad3af6b1823546aaef2d3aed55604b421d764a06dae1ab0ec3e683da3198306c"
+    }
+  ],
+  "bytes": 11802117
+}

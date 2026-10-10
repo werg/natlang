@@ -21556,6 +21556,34 @@
       "admission": "exact provenance subset/review only; root16logical-row source approval pending global protected closure/current admitted derivative",
       "independent_new_worlds": 0,
       "notes": "24 rows bound to pinned official Parquet/physicalrow/hash,3authoredreferencewrappers/54native turns. CivilComments8excludedfrom firstqualitysubset due subjective/context quantization. Separatev20records ZAI V28ordering rejection, no transportfault; review evidence notrawclosedcasebytes."
+    },
+    {
+      "id": "free-provider-zai45-v28-case0-ordering-failure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1/case-000",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-model-semantic-ordering-failure",
+      "training_admission": false,
+      "admission": "failed actual teacher trajectory/review evidence only; potential same-contract preference negative requires valid paired success",
+      "independent_new_worlds": 0,
+      "notes": "52turns32447completiontokens, correcteligible set and advance but returned ascendingIDs/measures instead of explicit descendingcount ordering. Transportcomplete. SourceV28source-v3 immutable, oldruntimev6 metadata falselyv1 actualnativev2 documented by sharedschemafix; no retrospectivetrace mutation."
+    },
+    {
+      "id": "free-provider-sourcebound16-logical-static-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound-boardgame-ruletaker-16-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "source-bound-reviewed-logical-static-reference-candidate",
+      "training_admission": false,
+      "admission": "rootcontentreviewpassed; globalprotectedclosureawaitsportableindexes; conditionalstaticreferenceallowlistonly",
+      "independent_new_worlds": 0,
+      "notes": "16explicitpublictrainrows,2authoredwrappercases/36native turns,sourcebindingproviderreceipts preserved; zerooriginal7624heldoutgroup/exactstateoverlap andlocalbenchmarkexacthits. CivilComments excluded. No teacherreasoning/learnedchannel/worldcredit."
     }
   ],
   "coverage_backlog": [
