@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-v5-staged-eval-writer-diagnostic-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-staged-eval-diagnostic-v2",
+  "files": [
+    {
+      "path": "candidate-derivation.json",
+      "bytes": 14281,
+      "sha256": "8d41e791798edb04e67968367c3e9275e5a10169460fef95d5f1b34cfc55a839"
+    },
+    {
+      "path": "candidate-derivation.sha256",
+      "bytes": 65,
+      "sha256": "69cfde326ec7d37b73a71fae0576b47e80c3b31acd86e322cc0ce94702054c90"
+    }
+  ],
+  "bytes": 14346
+}

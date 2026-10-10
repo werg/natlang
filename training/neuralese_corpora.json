@@ -27470,6 +27470,19 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "Preserve older V21 and V58 shared audit revisions plus seven-disagreement/full-state review. V21v4 and V58 sharedv2 supersede weaker request-matching counts; history not admission. Root reviewed seven V21 inputs: no additional canonical source holds; study-level non-significant/direct subgroup prognostic evidence supports saved labels with uncertainty nuance. Do not equate non-significance with proof of zero biological effect."
+    },
+    {
+      "id": "semantic-iterate-v35-v5-staged-eval-writer-diagnostic-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-staged-eval-diagnostic-v2",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-conversion-proposal",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-approval-and-recurrence-proof",
+      "notes": "Shared validator now recognizes exact nonterminal model-authored eval-code marker linked to typed graph writer, host reference and downstream provider expansion. Four candidate staged writer/reader pairs; existing approval gate correctly prevents proof until reviewed. Computed host outputs without authored marker remain unsupported; no marker_outputs fabricated, no approval bypass."
     }
   ],
   "coverage_backlog": [

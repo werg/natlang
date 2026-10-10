@@ -40,7 +40,7 @@ function hostValue(result, callId) {
 }
 
 /** Recover only the exact complete text body that the model action returned. */
-export function writerActionBody(row, expectedBodySha256) {
+export function writerActionBody(row, expectedBodySha256, { allowStagedEvalCode = false } = {}) {
   const calls = row?.target?.tool_calls ?? [];
   const bodies = [];
   for (const call of calls) {
@@ -56,7 +56,10 @@ export function writerActionBody(row, expectedBodySha256) {
     } else if (call?.function?.name === 'eval') {
       try {
         const args = JSON.parse(call.function.arguments), code = args?.code;
-        if (args?.finish !== true || typeof code !== 'string') continue;
+        // A typed value can be staged by a nonterminal eval and returned later.
+        // The caller may accept that form only after independently validating
+        // the exact eval-code block_write, typed host reference, and reader edge.
+        if ((args?.finish !== true && !allowStagedEvalCode) || typeof code !== 'string') continue;
         const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
         if (markers.length !== 1) continue;
         const body = markers[0][1];
@@ -72,7 +75,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
     row.source_ref.source_row_sha256 === sourceRowSha && row.source_ref.invocation_id === callId &&
     row.decision?.training_approved === true && row.decision?.failed_action === false);
   if (role === 'writer') {
-    matches = matches.filter(row => writerActionBody(row, bodySha) !== undefined);
+    matches = matches.filter(row => writerActionBody(row, bodySha,
+      { allowStagedEvalCode: edge?.marker_context === 'eval-code' }) !== undefined);
   } else {
     matches = matches.filter(row => {
       const opening = row.messages?.find(message => message.role === 'user')?.content;
@@ -92,8 +96,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
   return { row, index };
 }
 
-function markerBody(row, blockId, bodySha) {
-  const body = writerActionBody(row, bodySha);
+function markerBody(row, blockId, bodySha, markerContext) {
+  const body = writerActionBody(row, bodySha, { allowStagedEvalCode: markerContext === 'eval-code' });
   if (body === undefined) fail(`producer ${row.id} lacks one exact complete text Neuralese writer action`);
   if (!body.length && !blockId) fail(`empty producer marker for ${row.id}`);
   return body;
@@ -236,20 +240,22 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
         !/^[0-9a-f]{64}$/.test(write.text_body_sha256 ?? ''))
       fail(`graph writer ${blockId} lacks text stand-in body provenance`);
     const expansion = providerExpansion(result, readerCallId, blockId);
-    providerMarkerOutput(result, writerCallId, write.text_body_sha256);
+    if (write.marker_context === 'return-result')
+      providerMarkerOutput(result, writerCallId, write.text_body_sha256);
     if (expansion.body_sha256 !== write.text_body_sha256)
       fail(`provider-visible body digest differs from graph writer for ${blockId}`);
     if (expansion.type === null && write.result_type !== 'Neuralese<string>')
       fail(`cannot infer omitted provider type for ${blockId} without an exact typed graph writer`);
 
-    const actionEdge = { ...reviewed, block_id: blockId, consumer_argument: argument };
+    const actionEdge = { ...reviewed, block_id: blockId, consumer_argument: argument,
+      marker_context: write.marker_context };
     const writer = actionForCall(actionRows, writerCallId, trajectoryId, sourceRowSha, 'writer', actionEdge, write.text_body_sha256);
     const reader = actionForCall(actionRows, readerCallId, trajectoryId, sourceRowSha, 'reader', actionEdge);
     if (writer.row.task?.program_ir?.split !== ir.split || reader.row.task?.program_ir?.split !== ir.split ||
         JSON.stringify(writer.row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups) ||
         JSON.stringify(reader.row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups))
       fail(`materialized edge actions changed source partition for ${blockId}`);
-    const body = markerBody(writer.row, blockId, write.text_body_sha256);
+    const body = markerBody(writer.row, blockId, write.text_body_sha256, write.marker_context);
     if (body !== expansion.body) fail(`producer marker and provider-visible body differ for ${blockId}`);
     const derived = { block_id: blockId, writer_call_id: writerCallId, writer_node: validated.writer_node,
       writer_record_id: writer.row.id, writer_decision_index: writer.index,
