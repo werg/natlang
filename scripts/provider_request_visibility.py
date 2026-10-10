@@ -7,13 +7,13 @@ For item-specific claims, callers must bind that item to explicit invocation IDs
 """
 from __future__ import annotations
 
-import hashlib
 import json
+from pathlib import Path
+import sys
 from typing import Any, Iterable, Mapping
 
-
-def sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import sha256_hex  # noqa: E402
 
 
 def _state_forms(state: str) -> tuple[str, ...]:
@@ -186,7 +186,7 @@ def analyze_item_visibility(
             "id": item_id,
             "program_id": program_id,
             "invocation_binding": "explicit-invocation-ids" if explicitly_bound else "program-only-unbound-to-item",
-            "state_sha256": sha256_text(state),
+            "state_sha256": sha256_hex(state.encode("utf-8")),
             "state_chars": len(state),
             "class": cls,
             "request_matches": request_matches,
