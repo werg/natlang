@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v31-reviewed-twelve-counterfactual-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-v31-next-iterate-expansion-20261010-v1",
+  "files": [
+    {
+      "path": "build-source.mjs",
+      "bytes": 19542,
+      "sha256": "5f10ab85d88ab0696b378986ff07523469ad29f0270d5965c4338139c4f5d0cc"
+    },
+    {
+      "path": "source-v2/root-generation-source-review-v1.json",
+      "bytes": 1073,
+      "sha256": "903559593cb58f0fe737781f97b8f33cd5b796c94f2dfe42ba843dbb65e8d66e"
+    },
+    {
+      "path": "source-v2/root-review-plan.json",
+      "bytes": 4165,
+      "sha256": "357facdcc0708ce7bd17f938c753da4346168226379f5a495b8ccd104fd743b9"
+    },
+    {
+      "path": "source-v2/source-manifest.json",
+      "bytes": 811,
+      "sha256": "461a031d5d58b40ce4845cb36b8c3b5ee2489f13696cd1dbc24367ee491aee44"
+    },
+    {
+      "path": "source-v2/source-proof.json",
+      "bytes": 49474,
+      "sha256": "7f32c74e11557bf1289549c6dcf70a0dab9c681cb45ece366b50a4b38c815a1a"
+    },
+    {
+      "path": "source-v2/source.cases.jsonl",
+      "bytes": 650330,
+      "sha256": "4b2539693a986ae5f7b4d84b314db8e52727c7eab19b3a0d5b3cc397feb1d5db",
+      "lines": 12
+    }
+  ],
+  "bytes": 725395
+}

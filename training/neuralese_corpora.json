@@ -21823,6 +21823,76 @@
       "admission": "generation inputs only; regeneratedlabels pending schema/sourcequalityreview",
       "independent_new_worlds": 0,
       "notes": "Exact178invalidV4inputs; sharedprompt/strictmassvalidation. Sharedfreezehelper preserves scheduler/sharedJSONwriter relativepackage layout; no sourcepathhardcoding. Confirmedsoleprojectlockwait, V5untouched; no paidfallback."
+    },
+    {
+      "id": "luna-v31-reviewed-twelve-counterfactual-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-v31-next-iterate-expansion-20261010-v1",
+      "include": [
+        "build-source.mjs",
+        "source-v2/source.cases.jsonl",
+        "source-v2/source-proof.json",
+        "source-v2/source-manifest.json",
+        "source-v2/root-review-plan.json",
+        "source-v2/root-generation-source-review-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-author-derived-semantic-iterate-counterfactual-sources",
+      "training_admission": false,
+      "admission": "sampling source approval only; generated trajectories need independent visibility/quality review",
+      "independent_new_worlds": 0,
+      "notes": "12unique inherited V25/V26train groups disjointV28/V29; one explicitpredicateedit percase, regeneratedvisiblefactline, exactrecomputedoracle; no goldinvisibleinput. Source-v1intermediate excluded; source-v2metadata corrected. Historicalbuilder pinned; sharedCLI generalization inprogress."
+    },
+    {
+      "id": "free-provider-luna-v31-twelve-runtimev8-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev31-twelve-runtimev8-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "queue/launch evidence only; evolvingoutputs excluded until closed review",
+      "independent_new_worlds": 0,
+      "notes": "12singlecase queueentries allocated2/3/3/2/2 acrossfiveworkers; source/proof/rootapproval/runtime/supervisor pins. gpt-6-luna, one requestperworker,32Kcontext,60turn384request resourcebudgets unchanged."
+    },
+    {
+      "id": "free-provider-frozen-runtimev8-generation-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/runtime-small-teachers-v8",
+      "include": [
+        "**/*"
+      ],
+      "split": "not-applicable",
+      "source_class": "immutable-generation-runtime-evidence",
+      "training_admission": false,
+      "admission": "execution evidence, not a training corpus",
+      "independent_new_worlds": 0,
+      "notes": "1330pinnedfiles plusfrozenruntime receipt; source/db code throughGit. DirectFileHandle argument.readText example and onefile siblingboundary guidance; olderfrozenruntime untouched."
+    },
+    {
+      "id": "free-provider-v21-contrast-and-v22-partial-reviews-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "quality-review-v21-luna-v28-five-supplement-v1/supplement.json",
+        "quality-review-v21-luna-v28-five-supplement-v1/supplement.md",
+        "quality-review-v22-zai45-v28case001-partial/review.json",
+        "quality-review-v22-zai45-v28case001-partial/review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-contrast-and-incomplete-trajectory-review",
+      "training_admission": false,
+      "admission": "diagnosticreview only; incompleteZAIcase notnegative, finalLuna/ZAIprefixnotprovenidentical",
+      "independent_new_worlds": 0,
+      "notes": "V21contrastsource/task/systempromptmatchbutfinalcaptureddecisionprefixunknown; noautomaticDPOpair. ZAIpartial40searchcallswithoutdirectFileHandle read, zero completediterateOnsteps; collectionlimitnotlanguagefailure."
     }
   ],
   "coverage_backlog": [

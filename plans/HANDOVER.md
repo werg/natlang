@@ -10088,3 +10088,10 @@ Pop05:20 UTC quality follow-up: V21independent review confirmed5/5native success
 
 
 Pop05:24 UTC corrections: V6repairstartup failedbeforeAPIrequests because freshlysharedJSONwriter dependencywasnotcopied into flatfreeze. Preserve failedreceipt/log; V7replacementPID807527 successfullywaitssoleprojectlock. Newsharedfreeze_decision_pool.py preserves scripts/trainingrelativepackage layout and pinswriterbytes; scheduleridentitynowincludesactualsharedpersistencehash. No PYTHONPATH/hardcodedcheckoutworkaround, no frozenrewrite. FutureFileHandlepromptadds directawaitsource.readText example withactualscopeargname and singlefile/siblingboundary guidance after ZAI001made40searchcalls withoutreadingfile; activefrozenruntimes unchanged. Source/AST/diffreview, no tests.
+
+
+### Pop 2026-10-10 05:32 UTC — larger native queues
+
+- V29allfive closed; V23independent review assigned. StartedV31source-v2 twelve reviewedcounterfactuals, inheriteddistinctV25/V26train groups disjointV28/V29; sourceSHA4b2539693a986ae5f7b4d84b314db8e52727c7eab19b3a0d5b3cc397feb1d5db. Rootreadalleligibility/authority/metrics/decisionrules and checkedpinnedparents. Maximumfiveworkers, queue2/3/3/2/2, launcher808763/workers808767–808771, runtimev8fresh1330files withdirectreadguidance. Sourceapproval grantsgenerationonly; zero new-worldcredit. SharedCLIpromotion pending toavoidpipelineaddition remainingonlyscratch.
+- V21supplement correctlylimitsLuna/ZAIcase0 tosame-taskcontrast: identicalfinaldecisionprefix notproven, no DPOpair admission. ZAIcase1resourcepartial59turns,40searchcalls, zero completediterateOnsteps; incompletionnotnegative. NativeV28visibleinput currentIR/textderivative being prepared for concreteadmissionreview, channelstillunqualified.
+- Gemini massrepairV7 successfullyqueued behindV5; V6startupfailure supersededbeforeanyAPIrequests. Allimmutable receipts/reviews/source/queues are registered and will beSSHverified; nohoteditingactivegeneration orGPUtraining.
