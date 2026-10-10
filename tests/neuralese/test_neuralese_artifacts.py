@@ -123,3 +123,19 @@ def test_a_finished_run_registers_its_bank_with_parent_and_corpora(tmp_path):
     entry = artifacts.entry(artifacts.load_registry(repo), "bank-run-v1")
     assert entry["init"]["parent"] == "bank-test-v1" and entry["training"]["corpora"] == ["corpus-a"]
     assert entry["backbone"]["revision"] == "feed01" and entry["qualification"]["status"] == "unqualified"
+
+
+def test_a_declared_local_replica_is_used_only_when_its_bytes_match(tmp_path, monkeypatch):
+    repo = repo_with_corpus(tmp_path)
+    artifacts.register(repo, item(), {"bank.nz": nz(tmp_path / "src.nz")})
+    replica = tmp_path / "nvme"
+    replica.mkdir()
+    (replica / "bank.nz").write_bytes((tmp_path / "src.nz").read_bytes())
+    table = tmp_path / "replicas.json"
+    table.write_text(json.dumps({"bank-test-v1": str(replica)}))
+    monkeypatch.setattr(artifacts, "REPLICAS", table)
+    path, sha = artifacts.resolve("bank-test-v1", repo=repo)
+    assert path == replica / "bank.nz"
+    (replica / "bank.nz").write_bytes(b"other bytes")  # a stale copy falls back to the registered bytes
+    path, fallback = artifacts.resolve("bank-test-v1", repo=repo)
+    assert path != replica / "bank.nz" and fallback == sha

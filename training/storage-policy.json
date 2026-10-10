@@ -101,7 +101,7 @@
     "docker-dangling"
   ],
   "checkpoint_cadence": {
-    "every_minutes": 45,
+    "every_minutes": 180,
     "on_sigterm": true,
     "rolling_slots": 1,
     "best_weights_only": true,

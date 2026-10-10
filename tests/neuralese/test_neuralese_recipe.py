@@ -714,3 +714,22 @@ def test_registered_artifacts_bind_by_id_and_are_hash_checked(tmp_path, monkeypa
     recipe['input_bindings'] = {'bank': {'artifact': 'missing-artifact-v1'}}
     with pytest.raises(ValueError, match='unknown artifact'):
         resolve_stage_inputs(recipe, recipe['stages'][0], {})
+
+
+def test_relative_binding_paths_resolve_against_the_repository_root_not_the_working_directory(tmp_path, monkeypatch):
+    import hashlib
+    from natlang_neuralese.common import paths
+    from natlang_neuralese.train import recipe as runner
+    data = tmp_path / 'repo' / 'data' / 'records.jsonl'
+    data.parent.mkdir(parents=True)
+    data.write_text('{}\n')
+    monkeypatch.setattr(paths, 'root', lambda name: tmp_path / 'repo')
+    monkeypatch.chdir(tmp_path)  # a runner started elsewhere (launch.sh: training/neuralese)
+    assert runner.binding_path('data/records.jsonl') == data.resolve()
+    assert runner.binding_path(str(data)) == data.resolve()
+    declared = {'input_bindings': {'records': {'path': 'data/records.jsonl',
+                                               'sha256': hashlib.sha256(data.read_bytes()).hexdigest()}},
+                'stages': []}
+    stage = {'id': 'warm', 'kind': 'core_text_warmup', 'inputs': {'records': 'records', 'pieces': 'records'}}
+    resolved = runner.resolve_stage_inputs(declared, stage, {})
+    assert resolved['records']['path'] == str(data.resolve())

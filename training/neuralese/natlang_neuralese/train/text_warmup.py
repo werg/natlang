@@ -1224,7 +1224,7 @@ def main(argv=None):
     p.add_argument('--backbone-ramp-evals',type=int,default=4)
     p.add_argument('--pass-ramp-evals',type=int,default=2)
     p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
-    p.add_argument('--checkpoint-minutes',type=float,default=10.,
+    p.add_argument('--checkpoint-minutes',type=float,default=180.,
                    help='also save full resumable state when this much wall time passed since the last save')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
@@ -2169,7 +2169,8 @@ def main(argv=None):
         async_write=(not wait and emergency_recovery is None and estimate is not None
                      and available is not None and available >= int(estimate*1.25))
         state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'artifact_refs':input_roles,'step':step,
-          'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
+          # Device tensors: the writer copies one storage at a time (no second full copy in unified memory).
+          'student_parameters':{n:q.detach() for n,q in named},'heads':heads.state_dict(),
           'optimizer':optimizer.state_dict(),'optimizer_param_names':optimizer_param_names(optimizer,dict(named)),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,

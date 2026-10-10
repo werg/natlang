@@ -163,3 +163,6 @@ nesting), ramps re-sized from v3's trend (q4 0.15–0.3, ternary-experts 0.3–0
 raw-recurrence-mellum-v5 reuses conversion v3 (backbone-inherent: Mellum-tokenized): `init` from its gated best
 latents with a ramp floor on `ternary`, `quantization.preserve` (teacher-v3 top-64 KL stream, weight 0.5) and
 `quantization.gate` (v3's generation gate and held KL per precision, BF16 reference 0.75).
+raw-recurrence-v6 (still before any run) declares full-state checkpoints every 3 h of wall clock in the text warm-ups
+and both recurrence stages (`checkpoint_minutes` 180, `checkpoint_every` 100000; owner "checkpoint every few hours";
+stops write the full state within the memory ledger's grace). The recurrence trainer gains `--checkpoint-minutes`.

@@ -41,7 +41,7 @@ HANDLERS = {
                                                'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
                                                'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size',
                                                'producer_batch_memory_gb', 'ffn_chunk_tokens',
-                                               'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
+                                               'optimizer', 'checkpoint_every', 'checkpoint_minutes', 'eval_every', 'seed', 'writer_text_weight',
                                                'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
                                                'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
                                                'projection_anchor_weight', 'projection_anchor_backbone_scale',
@@ -189,6 +189,14 @@ def parse_input_binding_overrides(values):
     return overrides
 
 
+def binding_path(value):
+    """A binding's file: recipe paths are relative to the repository root (``common.paths`` root ``repo``), never to
+    the runner's working directory; absolute paths and overrides stay as given."""
+    from ..common.paths import root
+    path = Path(value)
+    return (path if path.is_absolute() else root('repo') / path).resolve()
+
+
 def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
     """Return hashed, exact inputs for one stage; overrides change location, never identity."""
     selected = stage.get('inputs')
@@ -215,13 +223,13 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
             from ..artifacts import resolve as resolve_artifact
 
             stored, expected = resolve_artifact(spec['artifact'], spec.get('file'))
-            path = Path(overrides.get(name, stored)).resolve()
+            path = binding_path(overrides.get(name, stored))
             actual_sha = sha(path)
             if actual_sha != expected:
                 raise ValueError('input binding content hash mismatch: ' + name)
             result[role] = {'binding': name, 'artifact': spec['artifact'], 'path': str(path), 'sha256': actual_sha}
             continue
-        path = Path(overrides.get(name, spec['path'])).resolve()
+        path = binding_path(overrides.get(name, spec['path']))
         actual_sha = sha(path)
         if actual_sha != spec['sha256']:
             raise ValueError('input binding content hash mismatch: ' + name)
@@ -887,7 +895,9 @@ def main(argv=None):
         stage_defaults = dict(defaults)
         if 'text_data' in stage['parameters']:
             stage_defaults['text_data'] = stage['parameters']['text_data']
-        stage_inputs[stage['id']] = resolve_stage_inputs(recipe, stage, stage_defaults, overrides)
+        # A held stage (admitted: false) never runs in this lineage; its inputs are neither resolved nor hashed.
+        stage_inputs[stage['id']] = ({} if stage.get('admitted') is False else
+                                     resolve_stage_inputs(recipe, stage, stage_defaults, overrides))
     inputs = {str(args.heads): sha(args.heads)}
     for path in (args.records, args.pieces, args.text_data):
         if path is not None:

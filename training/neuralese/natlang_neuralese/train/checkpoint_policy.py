@@ -1,6 +1,8 @@
 """Shared checkpoint policy (plans/STORAGE_POLICY.md, training/storage-policy.json "checkpoint_cadence").
 
-One rolling resumable slot written on a wall-clock cadence (and when the process is asked to stop), a weights-only
+One rolling resumable slot written on a wall-clock cadence (default 3 h, owner 2026-10-10: "checkpoint every few
+hours"; it only bounds crash loss) and when the process is asked to stop (SIGTERM: the full state, within the
+stop grace the memory ledger gives every unit), a weights-only
 "best" snapshot on eval improvement, and a weights-only final export alongside the
 preserved resumable slot. The slot with its optimizer state is the continuation parent: a weights-only
 final never replaces or deletes it, and nothing deletes the only complete checkpoint before a pending
@@ -9,7 +11,7 @@ every trainer uses (trajectory_state.atomic_checkpoint). Insufficient disk space
 deleting the previous checkpoint. Pruning is a separate, explicitly authorized operation.
 Cadence and signals are the training-loop skeleton's (train/loop.py).
 
-    policy = CheckpointPolicy(out, every_minutes=45).install_signal_handlers()
+    policy = CheckpointPolicy(out, every_minutes=180).install_signal_handlers()
     for step in ...:
         ...
         if policy.due():
@@ -37,7 +39,7 @@ from .trajectory_state import atomic_checkpoint
 
 
 class CheckpointPolicy:
-    def __init__(self, out_dir, *, every_minutes: float = 45.0, name: str = "checkpoint.pt",
+    def __init__(self, out_dir, *, every_minutes: float = 180.0, name: str = "checkpoint.pt",
                  best_name: str = "best-weights.pt", final_name: str = "final-weights.pt",
                  free_factor: float = 1.2, clock=time.monotonic):
         self.out = Path(out_dir)

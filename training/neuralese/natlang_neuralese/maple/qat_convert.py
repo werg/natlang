@@ -527,7 +527,7 @@ def main(argv=None):
     r.add_argument("--kl-decay-steps", type=int, default=0, help="KL to the BF16 original falls to 0 over these updates")
     r.add_argument("--eval-every", type=int, default=100)
     r.add_argument("--checkpoint-every", type=int, default=0, help="also checkpoint every N updates (0: off)")
-    r.add_argument("--checkpoint-minutes", type=float, default=45.0, help="rolling checkpoint cadence (wall clock)")
+    r.add_argument("--checkpoint-minutes", type=float, default=180.0, help="rolling checkpoint cadence (wall clock)")
     r.add_argument("--drop-slot-when-full", action=argparse.BooleanOptionalAction, default=True,
                    help="when the disk cannot hold a second ~47 GB slot, drop the previous one first (DGX)")
     r.add_argument("--seed", type=int, default=0)

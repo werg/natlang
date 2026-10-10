@@ -45,6 +45,17 @@ STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/sta
 CLASSES = {'experiment': 900, 'collection': 600, 'service': 300}
 GIB = 2**30
 SETTLE_SECONDS = 1800
+# A guard stop gives the victim its declared grace (``run --stop-seconds``) to write its full checkpoint (latents and
+# optimizer: ~4 min for Mellum's 47 GB state), and kills at once only below this emergency level (under the floor).
+EMERGENCY_GB = 3
+# Stop grace scales with the job (owner 2026-10-10: "the guard should be different for smaller models"): the bytes
+# its family last checkpointed (the shared writer logs every write, train/trajectory_state.py) over the measured write
+# throughput, times a margin, plus a few seconds to reach a step boundary. A family that never checkpointed (tests,
+# probes, no state) gets the minimum. An explicit ``run --stop-seconds`` overrides.
+CHECKPOINT_WRITES = os.path.expanduser(os.environ.get('NATLANG_CHECKPOINT_WRITES',
+                                                      '~/.local/state/natlang/checkpoint-writes.jsonl'))
+GRACE_MIN, GRACE_MARGIN, GRACE_SLACK = 5.0, 2.0, 15.0
+DEFAULT_THROUGHPUT = 150e6  # bytes/s when nothing was measured yet (v3: 46.8 GB in ~250 s, ~190 MB/s)
 
 
 def mem_available():
@@ -288,6 +299,8 @@ def run(args):
             if free - budget >= reserve:
                 state['claims'][unit] = {'budget': budget, 'class': args.cls, 'admitted': time.time(),
                                          'command': args.command, 'host_max': args.host_max_gb,
+                                         **({'stop_seconds': args.stop_seconds, 'stop_seconds_explicit': True}
+                                            if args.stop_seconds is not None else {}),
                                          **({'hold_budget': True} if args.hold_budget else {})}
                 state['events'].append({'time': time.time(), 'event': 'admitted', 'unit': unit, 'budget': budget,
                                         'free': free})
@@ -306,7 +319,15 @@ def run(args):
     # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command
     # names, else one named like the unit (wrapper scripts that `docker run --name <unit>`; '-' ignores none).
     container = container_name(args.command) or unit.removesuffix('.service')
-    command += ['-p', f'ExecStopPost=-/usr/bin/docker stop -t 30 {container}']
+    # --stop-seconds: a planned stop (systemctl stop) waits this long for the job to checkpoint before its container
+    # is killed (a 47 GB latent+optimizer checkpoint takes minutes). The guard's pressure stops stay short.
+    if args.stop_seconds is not None:
+        stop_seconds = args.stop_seconds
+    else:
+        writes = checkpoint_writes()
+        stop_seconds = max(30.0, grace_seconds(unit, {}, family_state_bytes(writes), write_throughput(writes)))
+    command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
+                '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} {container}']
     result = subprocess.run(command + args.command)
     if result.returncode:
         with ledger() as state:
@@ -361,7 +382,7 @@ def status(args):
                                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
 
 
-def victim(live, floor_breached, overshoot, pressure=None):
+def victim(live, floor_breached, overshoot, pressure=None, grace=None):
     """The unit to stop, only under memory pressure (available below twice the floor; ``pressure`` defaults to
     ``floor_breached``): first the unit most over its budget by the overshoot factor, then, below the floor, the
     lowest-priority newest. A unit over its budget while memory is plentiful is not stopped (the guard raises its
@@ -372,13 +393,87 @@ def victim(live, floor_breached, overshoot, pressure=None):
     if over and (pressure or floor_breached):
         return max(over)[1], 'over budget under memory pressure'
     if floor_breached and live:
-        return max(live, key=lambda u: (CLASSES[live[u]['class']], live[u]['admitted'])), 'free memory below floor'
+        # Class priority first; within a class, the unit freeing the most memory per second of stop grace (small,
+        # stateless jobs such as tests and probes before big long-running trainers), then the newest.
+        grace = grace or {}
+        return max(live, key=lambda u: (CLASSES[live[u]['class']], live[u]['used'] / (grace.get(u, GRACE_MIN) + 1),
+                                        live[u]['admitted'])), 'free memory below floor'
     return None, None
+
+
+def escalation(pending, now, available, emergency, active):
+    """What the guard does with a graceful stop in progress: ``done`` when the unit has exited, ``kill`` when the
+    victim's grace has run out or available memory fell below the emergency level, else ``wait`` (the victim is
+    writing its checkpoint)."""
+    if not active:
+        return 'done'
+    if available < emergency:
+        return 'kill'
+    if now >= pending['deadline']:
+        return 'kill'
+    return 'wait'
+
+
+def terminate(unit, container):
+    """Ask a unit's job to checkpoint and exit: SIGTERM to the container's main process (``docker kill -s TERM``
+    does not stop the container itself) and to the unit."""
+    subprocess.Popen(['docker', 'kill', '--signal', 'SIGTERM', container], stderr=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL)
+    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
+
+
+def kill(unit, container):
+    subprocess.Popen(['docker', 'kill', container], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGKILL', unit])
+    subprocess.Popen(['systemctl', '--user', 'stop', unit], stderr=subprocess.DEVNULL)
+
+
+def checkpoint_writes(path=None, limit=2000):
+    path = path or CHECKPOINT_WRITES
+    try:
+        lines = open(path).read().splitlines()[-limit:]
+    except OSError:
+        return []
+    rows = []
+    for line in lines:
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    return rows
+
+
+def family_state_bytes(writes):
+    """The largest recent checkpoint each job family wrote (per family of the writing unit)."""
+    sizes = {}
+    for row in writes:
+        if row.get('unit'):
+            name = family(row['unit'] if row['unit'].endswith('.service') else row['unit'] + '.service')
+            sizes[name] = max(sizes.get(name, 0), int(row.get('bytes', 0)))
+    return sizes
+
+
+def write_throughput(writes):
+    """Median measured bytes per second of large writes (>= 256 MiB; small ones are dominated by latency)."""
+    rates = sorted(row['bytes'] / row['seconds'] for row in writes
+                   if row.get('bytes', 0) >= 256 << 20 and row.get('seconds', 0) > 0)
+    return rates[len(rates) // 2] if rates else DEFAULT_THROUGHPUT
+
+
+def grace_seconds(unit, claim, sizes, throughput):
+    """Seconds a stopping unit gets to write its full state: explicit ``stop_seconds``, else its family's measured
+    checkpoint size over the measured throughput."""
+    if claim.get('stop_seconds_explicit'):
+        return float(claim['stop_seconds'])
+    state = sizes.get(family(unit), 0)
+    return max(GRACE_MIN, GRACE_SLACK + GRACE_MARGIN * state / throughput) if state else GRACE_MIN
 
 
 def guard(args):
     floor = int(args.floor_gb * GIB)
+    emergency = int(getattr(args, 'emergency_gb', EMERGENCY_GB) * GIB)
     stopped = {}
+    pending = {}  # unit -> {'deadline', 'container'}: graceful stops in progress
     next_release, release = 0, None
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
@@ -405,28 +500,48 @@ def guard(args):
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
             available = mem_available()
-            unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor)
+            writes = checkpoint_writes()
+            sizes, throughput = family_state_bytes(writes), write_throughput(writes)
+            graces = {name: grace_seconds(name, state['claims'].get(name, {}), sizes, throughput) for name in live}
+            unit, reason = victim(live, available < floor, args.overshoot, pressure=available < 2 * floor, grace=graces)
             for name, claim in live.items():  # overshoot without pressure: the budget becomes what it uses
                 if not unit and claim['used'] > claim['budget'] * args.overshoot and name in state['claims']:
                     raised = int(claim['used'] * 1.1)
                     state['claims'][name]['budget'] = raised
                     state['events'].append({'time': time.time(), 'event': 'budget raised', 'unit': name,
                                             'used': claim['used'], 'budget': raised, 'available': available})
+            if pending:
+                # One graceful stop at a time: while a victim checkpoints, the guard watches it instead of picking
+                # another (cache release above continues).
+                unit, reason = None, None
             command = state['claims'].get(unit, {}).get('command') if unit else None
+            grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
+                                        'grace': round(grace, 1),
                                         'used': live[unit]['used'], 'budget': live[unit]['budget'],
                                         'available': mem_available()})
         if unit:
             print(json.dumps({'stopped': unit, 'reason': reason, 'used_gb': round(live[unit]['used'] / GIB, 1)}),
                   flush=True)
-            subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
             # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
-            # its memory. Stop the container itself.
+            # its memory. Signal the job inside, then give it its grace to write its full state.
             container = container_name(command) or unit.removesuffix('.service')
-            subprocess.Popen(['docker', 'stop', '-t', '20', container], stderr=subprocess.DEVNULL)
-            subprocess.Popen(['sh', '-c', f'sleep 20; systemctl --user stop {shlex.quote(unit)} 2>/dev/null'])
+            terminate(unit, container)
+            pending[unit] = {'deadline': time.time() + grace, 'container': container}
             stopped[unit] = time.time()
+        for name in list(pending):
+            action = escalation(pending[name], time.time(), mem_available(), emergency,
+                                unit_state(name)[0] in ('active', 'activating', 'deactivating'))
+            if action == 'wait':
+                continue
+            if action == 'kill':
+                kill(name, pending[name]['container'])
+                with ledger() as state:
+                    state['events'].append({'time': time.time(), 'event': 'killed after grace', 'unit': name,
+                                            'available': mem_available(),
+                                            'reason': 'emergency' if mem_available() < emergency else 'grace over'})
+            pending.pop(name)
         if args.once:
             return
         time.sleep(args.interval)
@@ -447,6 +562,9 @@ def main():
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
     r.add_argument('--hold-budget', action='store_true',
                    help='always count the whole unspent budget, even after the job settles (working set grows later)')
+    r.add_argument('--stop-seconds', type=float, default=None,
+                   help='seconds the job gets to write its full state when stopped (planned or by the guard); default: '
+                        'its family\'s measured checkpoint size over the measured write throughput')
     r.add_argument('--workdir', default='.')
     r.add_argument('--env', action='append', default=[])
     r.add_argument('command', nargs=argparse.REMAINDER)
@@ -461,6 +579,8 @@ def main():
     g.add_argument('--floor-gb', type=float, default=8)
     g.add_argument('--overshoot', type=float, default=1.15)
     g.add_argument('--interval', type=float, default=5)
+    g.add_argument('--emergency-gb', type=float, default=EMERGENCY_GB,
+                   help='below this available memory a stopping unit is killed at once (no checkpoint grace)')
     g.add_argument('--once', action='store_true')
     args = parser.parse_args()
     if args.action == 'run':

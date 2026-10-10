@@ -2,7 +2,7 @@
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "raw-recurrence-v6",
   "extends": "raw-recurrence-v5",
-  "description": "raw-recurrence-v5 with QAT inside the stages (owner 2026-10-10): the shared quantization component (precision points q4, ternary-experts, ternary over curriculum progress, ramps sized from conversion v3's trend; train/quantization.py) and the conservative backbone rate 7.5e-6 (Pop's full-backbone drift at 3e-5, coord pop-f309/8133). Shared by every line. History: recipes/HISTORY.md.",
+  "description": "raw-recurrence-v5 with QAT inside the stages (owner 2026-10-10): the shared quantization component (precision points q4, ternary-experts, ternary over curriculum progress, ramps sized from conversion v3's trend; train/quantization.py) and the conservative backbone rate 7.5e-6 (Pop's full-backbone drift at 3e-5, coord pop-f309/8133). Full-state checkpoints every 3 h of wall clock (owner 2026-10-10: \"checkpoint every few hours\"; stops write the full state within the memory ledger's stop grace), plus a retained best. Shared by every line. History: recipes/HISTORY.md.",
   "overrides": {
     "quantization": {
       "schema": "natlang.neuralese-quantization/1",
@@ -110,18 +110,24 @@
     },
     "stage_parameter_defaults": {
       "core_text_warmup": {
-        "lr": 7.5e-06
+        "lr": 7.5e-06,
+        "checkpoint_every": 100000,
+        "checkpoint_minutes": 180
       }
     },
     "stages": {
       "recurrence_warmup": {
         "parameters": {
-          "backbone_lr": 7.5e-06
+          "backbone_lr": 7.5e-06,
+          "checkpoint_every": 100000,
+          "checkpoint_minutes": 180
         }
       },
       "view_operator": {
         "parameters": {
-          "backbone_lr": 7.5e-06
+          "backbone_lr": 7.5e-06,
+          "checkpoint_every": 100000,
+          "checkpoint_minutes": 180
         }
       }
     }

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import struct
@@ -226,6 +227,21 @@ def verify(repo: Path, identity: str) -> dict:
     return manifest
 
 
+REPLICAS = Path(os.environ.get("NATLANG_ARTIFACT_REPLICAS",
+                               os.path.expanduser("~/.config/natlang/artifact-replicas.json")))
+
+
+def local_replica(identity: str, file: str) -> Path | None:
+    """This machine's declared local copy of an artifact file: ``REPLICAS`` maps artifact ids to directories holding
+    the same file names. Machine-local configuration, not registry content; ``resolve`` checks the bytes."""
+    try:
+        directories = json.loads(REPLICAS.read_text())
+    except (OSError, ValueError):
+        return None
+    directory = directories.get(identity)
+    return Path(directory) / safe_relative(file) if directory else None
+
+
 def resolve(identity: str, file: str | None = None, repo: Path | None = None, *, dialect: str | None = None,
             backbone_model: str | None = None) -> tuple[Path, str]:
     """(path, sha256) of a registered artifact's file after checking its bytes against the manifest. ``dialect`` and
@@ -245,6 +261,11 @@ def resolve(identity: str, file: str | None = None, repo: Path | None = None, *,
         file = next(iter(rows))
     if file not in rows:
         raise ArtifactError(f"artifact {identity} has no file {file}")
+    replica = local_replica(identity, file)
+    if replica is not None and replica.is_file() and digest(replica) == rows[file]["sha256"]:
+        # A declared fast copy of the same bytes (e.g. on NVMe while the canonical bytes sit on the slow external
+        # disk): used only when it matches the manifest.
+        return replica, rows[file]["sha256"]
     path = (repo / item["path"] / file).resolve()
     actual = digest(path)
     if actual != rows[file]["sha256"]:

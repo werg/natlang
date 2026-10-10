@@ -667,7 +667,9 @@ so both lines share it (`raw-recurrence-v6`).
 - **Behaviour preservation.** `preserve` names a registered BF16 teacher top-k artifact (Mellum:
   `mellum21-teacher-v3-top64-20261010`, conversion v3's dump of BF16 Mellum's own responses,
   corpus `mellum21-self-distill-v3-20261010`). Every update of every QAT stage adds `weight · KL(BF16 ‖ student)` on
-  one of its records (prompt positions at `prompt_weight`, cropped to `max_tokens`), at the update's precision: it
+  one of its records (prompt positions at `prompt_weight`, cropped to `max_tokens`), at the update's precision (the
+  shards are read through the artifact resolver, which prefers a machine's declared local replica, e.g. the NVMe copy
+  in `~/.config/natlang/artifact-replicas.json`, when its bytes match the manifest): it
   keeps chat, thinking and tool-call behaviour while the precision ramps. The teacher is fixed data, so no second
   model is held.
 - **Behaviour gate.** `gate` adds conversion v3's generation gate (fixed probes: thinking, end of turn, tool-call

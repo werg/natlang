@@ -99,8 +99,9 @@ def full_backbone_parameter_names(backbone):
 
 
 def backbone_trainable_state(named):
-    """Portable named values for full or QAT backbone trainables."""
-    return {name:parameter.detach().cpu() for name,parameter in named}
+    """Named values for full, latent or QAT backbone trainables, detached on their device: checkpoint writers copy one
+    storage at a time, and a host copy of a 12B model's latents would double it in unified memory."""
+    return {name:parameter.detach() for name,parameter in named}
 
 
 def restore_backbone_trainables(backbone, state, *, expected_names=None):

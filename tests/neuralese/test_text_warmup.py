@@ -338,7 +338,7 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     text_warmup.main(args+['--eval-every','2'])
     logged=[json.loads(l) for l in (tmp_path/'run'/'code-handoffs.jsonl').read_text().splitlines()]
     assert logged==[{'event':'code_handoff','step':4,'changed':['train/text_warmup.py'],'added':[],
-                     'removed':['train/retired.py'],'options_added':{'checkpoint_minutes':10.0},
+                     'removed':['train/retired.py'],'options_added':{'checkpoint_minutes':180.0},
                      'options_changed':{'eval_every':[1,2]}}]
     recipe=list(args);recipe+=['--lr','0.5']
     with pytest.raises(ValueError,match='resume identity changed'):

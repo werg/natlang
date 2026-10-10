@@ -30,9 +30,13 @@ keeps path, bytes, category, tier, reason, run and time.
 The largest consumer is checkpoints: the Mellum QAT conversion writes 47 GB per checkpoint (BF16 latents 23 GB +
 Lion momentum 23 GB), every ~15 min at one per 100 updates.
 
-- **Cadence by wall clock**, not steps: one rolling resumable slot every 45 min (configurable) and whenever the
-  process is asked to stop (SIGTERM/SIGINT/SIGUSR1 → checkpoint at the next step boundary, then exit). A run loses
-  at most 45 min of work; the disk sees ~3x fewer 47 GB writes.
+- **Cadence by wall clock**, not steps: one rolling resumable slot every 3 h (owner 2026-10-10: "checkpoint every
+  few hours"; configurable) and whenever the process is asked to stop (SIGTERM/SIGINT/SIGUSR1 → the full state,
+  latents and optimizer, at the next step boundary, then exit). Every stop path gives the job time to write it (the
+  memory ledger's per-unit stop grace, plans/MEMORY_ADMISSION.md), so the cadence only bounds crash loss. (Open: the
+  text warm-up still writes its full state at every evaluation; recipes space evaluations accordingly.)
+  Writes go from device tensors one storage at a time: no host copy of the model (unified memory). Measured: conversion
+  v3's 46.8 GB slot took ~250 s (~190 MB/s to NVMe).
 - **One rolling slot**, written atomically and durably (pending → fsync → rename → directory fsync).
   If the disk cannot hold the replacement beside the previous slot, report insufficient space and preserve the
   previous checkpoint. Failed partial writes are removed; pruning is separate from checkpoint writing.

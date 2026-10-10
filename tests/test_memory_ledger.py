@@ -206,3 +206,86 @@ def test_cgroup_usage_leaves_out_reclaimable_page_cache_but_keeps_shared_memory(
     (tmp_path / 'cgroup.procs').write_text('7\n')
     (tmp_path / 'memory.stat').write_text(f'anon {18 * GIB}\nfile {12 * GIB}\nshmem {2 * GIB}\n')
     assert ledger.cgroup_usage(str(tmp_path), {7: 5 * GIB}) == 30 * GIB - 10 * GIB + 5 * GIB
+
+
+def test_a_guard_stop_waits_out_the_victims_grace_and_kills_only_in_an_emergency():
+    pending = {'deadline': 1000.0, 'container': 'c'}
+    emergency = 3 * GIB
+    assert ledger.escalation(pending, 500.0, 20 * GIB, emergency, active=True) == 'wait'  # writing its checkpoint
+    assert ledger.escalation(pending, 500.0, 5 * GIB, emergency, active=True) == 'wait'  # below the floor, not yet critical
+    assert ledger.escalation(pending, 500.0, 2 * GIB, emergency, active=True) == 'kill'  # emergency: no grace
+    assert ledger.escalation(pending, 1000.0, 20 * GIB, emergency, active=True) == 'kill'  # grace over
+    assert ledger.escalation(pending, 500.0, 2 * GIB, emergency, active=False) == 'done'  # it exited
+
+
+def test_the_guard_signals_one_victim_then_watches_it_without_stopping_another(monkeypatch, tmp_path):
+    import json
+    import types
+    state = {'claims': {'big.service': {'budget': 8 * GIB, 'class': 'experiment', 'admitted': 1, 'command': [],
+                                        'stop_seconds': 600, 'stop_seconds_explicit': True},
+                        'other.service': {'budget': 8 * GIB, 'class': 'experiment', 'admitted': 2, 'command': []}},
+             'events': []}
+    path = tmp_path / 'ledger.json'
+    path.write_text(json.dumps(state))
+    monkeypatch.setattr(ledger, 'STATE', str(path))
+    calls = []
+    monkeypatch.setattr(ledger, 'checkpoint_writes', lambda path=None, limit=2000: [])
+    monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(('term', unit)))
+    monkeypatch.setattr(ledger, 'kill', lambda unit, container: calls.append(('kill', unit)))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    live = {'big.service': {'class': 'experiment', 'budget': 8 * GIB, 'used': 4 * GIB, 'admitted': 1},
+            'other.service': {'class': 'experiment', 'budget': 8 * GIB, 'used': 4 * GIB, 'admitted': 2}}
+    monkeypatch.setattr(ledger, 'live_claims', lambda state, gpu: dict(live))
+    available = [5 * GIB]
+    monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', ''))
+    passes = []
+
+    def sleep(_seconds):
+        passes.append(list(calls))
+        if len(passes) == 1:
+            available[0] = 5 * GIB  # still below the floor: the victim keeps its grace, no second victim
+        elif len(passes) == 2:
+            available[0] = 2 * GIB  # below the emergency level: kill it now
+        else:
+            raise StopIteration
+    monkeypatch.setattr(ledger.time, 'sleep', sleep)
+    args = types.SimpleNamespace(floor_gb=8, overshoot=1.15, interval=5, once=False, emergency_gb=3)
+    try:
+        ledger.guard(args)
+    except StopIteration:
+        pass
+    assert passes[0] == [('term', 'other.service')]  # below the floor: the newest gets SIGTERM, not a kill
+    assert passes[1] == [('term', 'other.service')]  # checkpointing within its grace: nothing new
+    assert passes[2] == [('term', 'other.service'), ('kill', 'other.service')]
+    events = json.loads(path.read_text())['events']
+    assert [e['event'] for e in events] == ['stopped', 'killed after grace'] and events[1]['reason'] == 'emergency'
+
+
+def test_stop_grace_scales_with_the_familys_measured_checkpoint():
+    writes = [{'unit': 'natlang-mellum-qat-foundation-113800.service', 'bytes': 46_800_000_000, 'seconds': 250.0},
+              {'unit': 'natlang-lfm-warmup-0900', 'bytes': 1_400_000_000, 'seconds': 7.0},
+              {'unit': 'natlang-lfm-warmup-0901', 'bytes': 100 << 20, 'seconds': 5.0}]  # small: latency, not rate
+    sizes = ledger.family_state_bytes(writes)
+    assert sizes == {'natlang-mellum-qat-foundation': 46_800_000_000, 'natlang-lfm-warmup': 1_400_000_000}
+    throughput = ledger.write_throughput(writes)
+    assert throughput == 200e6  # the median of the large writes (187 and 200 MB/s)
+    mellum = ledger.grace_seconds('natlang-mellum-qat-foundation-150000.service', {}, sizes, throughput)
+    lfm = ledger.grace_seconds('natlang-lfm-warmup-1200.service', {}, sizes, throughput)
+    probe = ledger.grace_seconds('pytest-quant-1200.service', {}, sizes, throughput)
+    assert 450 < mellum < 500 and 20 < lfm < 40 and probe == ledger.GRACE_MIN
+    explicit = {'stop_seconds': 600, 'stop_seconds_explicit': True}
+    assert ledger.grace_seconds('natlang-lfm-warmup-1200.service', explicit, sizes, throughput) == 600
+    assert ledger.write_throughput([]) == ledger.DEFAULT_THROUGHPUT
+
+
+def test_under_the_floor_the_cheapest_stop_per_grace_goes_first_within_a_class():
+    live = {'trainer.service': claim('experiment', 60, 50, 1), 'probe.service': claim('experiment', 8, 6, 2),
+            'svc.service': claim('service', 40, 30, 3)}
+    grace = {'trainer.service': 480, 'probe.service': 5, 'svc.service': 5}
+    # the probe frees 6 GB in ~5 s; the trainer 50 GB over 8 min; the service class is protected regardless
+    assert ledger.victim(live, True, 1.15, grace=grace) == ('probe.service', 'free memory below floor')
+    del live['probe.service']
+    assert ledger.victim(live, True, 1.15, grace=grace)[0] == 'trainer.service'

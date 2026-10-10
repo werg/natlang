@@ -839,6 +839,9 @@ def main(argv=None):
     from .optim_restore import add_optimizer_restore_arguments
     add_optimizer_restore_arguments(parser)
     parser.add_argument('--checkpoint-every', type=int, default=25)
+    parser.add_argument('--checkpoint-minutes', type=float, default=None,
+                        help='also save the full resumable state after this much wall time since the last save (with a '
+                             'large --checkpoint-every: a wall-clock cadence, e.g. 180)')
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     apply_consumer_defaults(parser)
     parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
@@ -950,7 +953,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'checkpoint_minutes', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'optimizer_state', 'optimizer_added', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -2013,7 +2016,7 @@ def main(argv=None):
     from .loop import (Cadence, StopSignal, TrainingLoop, accumulate_gradients,
                        commit_optimizer_step)
     stop = StopSignal().install()
-    eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every)
+    eval_cadence, checkpoint_cadence = Cadence(args.eval_every), Cadence(args.checkpoint_every, args.checkpoint_minutes)
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
                            'content_transport': heads.content.transport, 'sketch_gradient': args.sketch_gradient,
@@ -2444,6 +2447,7 @@ def main(argv=None):
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
             if checkpoint_cadence.due(step + 1, force=stop.requested or step + 1 == args.steps):
                 save_training_state(step + 1)
+                checkpoint_cadence.mark()
     stop.restore()
     log.close()
     if stop.requested:

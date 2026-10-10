@@ -1,5 +1,7 @@
 """Optimizer and atomic, complete state checkpoints for recurrence training."""
+import json
 import os
+import time
 import random
 import threading
 from collections import OrderedDict, defaultdict
@@ -91,9 +93,26 @@ def drop_file_cache(target):
         pass
 
 
+CHECKPOINT_WRITES = os.environ.get('NATLANG_CHECKPOINT_WRITES',
+                                   os.path.expanduser('~/.local/state/natlang/checkpoint-writes.jsonl'))
+
+
+def record_checkpoint_write(path, nbytes, seconds):
+    """Append one completed write (bytes, seconds, the memory-ledger unit it ran in) to the shared log the memory
+    guard sizes each unit's stop grace from (scripts/memory_ledger.py). Best effort: never fails a checkpoint."""
+    try:
+        os.makedirs(os.path.dirname(CHECKPOINT_WRITES), exist_ok=True)
+        with open(CHECKPOINT_WRITES, 'a') as log:
+            log.write(json.dumps({'time': time.time(), 'unit': os.environ.get('NATLANG_LEDGER_UNIT'),
+                                  'path': str(path), 'bytes': int(nbytes), 'seconds': round(seconds, 3)}) + '\n')
+    except OSError:
+        pass
+
+
 def atomic_checkpoint(path, state):
     path = Path(path)
     pending = path.with_suffix('.pending')
+    started = time.monotonic()
     try:
         with pending.open('wb') as stream:
             torch.save(state, stream)
@@ -109,6 +128,7 @@ def atomic_checkpoint(path, state):
             os.fsync(directory)
         finally:
             os.close(directory)
+        record_checkpoint_write(path, path.stat().st_size, time.monotonic() - started)
     except BaseException:
         # A failed write (often ENOSPC) leaves an incomplete owned temp file.
         # Remove it so a post-commit recovery save can use the reserved space.

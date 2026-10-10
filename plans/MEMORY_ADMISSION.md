@@ -51,3 +51,27 @@ systemctl --user start "natlang-campaign-resume@$(systemd-escape --path campaign
 
 Run under the unit, `KillMode=control-group` guarantees that no process of the previous run remains, which is
 what `--resume` requires.
+
+
+## Stop grace scales with the job (owner 2026-10-10)
+
+Owner: "we want to snapshot the optimizer state when the signal arrives — can't we just give it more time", and "the
+guard should be different for smaller models". Every stop now gives the job time to write its full state:
+
+- **Grace per unit.** The shared checkpoint writer (`train/trajectory_state.atomic_checkpoint`) logs every completed
+  write (bytes, seconds, `NATLANG_LEDGER_UNIT`) to `~/.local/state/natlang/checkpoint-writes.jsonl`; `run` passes the
+  unit name into its job (containers: `-e NATLANG_LEDGER_UNIT=<unit>`). A unit's grace is its family's largest recent
+  checkpoint over the median measured write throughput, times 2, plus 15 s to reach a step boundary (at least 5 s; a
+  family that never checkpointed, such as tests and probes, gets 5 s). `run --stop-seconds N` overrides it. Mellum
+  (46.8 GB at ~190 MB/s) gets ~8 min, a 350M LFM warm-up a few seconds.
+- **Planned stops** (`systemctl --user stop`): `TimeoutStopSec` = grace + 30 s and `ExecStopPost docker stop -t
+  grace`; launchers also create containers with `--stop-timeout` (runs/mellum-foundation-qat-20261010/launch.sh: 600).
+- **Guard stops.** Page cache release runs first, as before. Then one victim at a time gets SIGTERM (the unit and,
+  for containers, `docker kill -s TERM` to the job inside) and its grace while the guard watches; no second victim is
+  picked meanwhile. It is killed when the grace runs out, or at once when available memory falls below the emergency
+  level (3 GB, `guard --emergency-gb`, below the 8 GB floor), the same for every size.
+- **Victim order.** Over-budget units under pressure first (unchanged). Below the floor: class priority first
+  (unchanged), then within a class the unit that frees the most memory per second of grace (small, stateless jobs
+  before big long-running trainers), then the newest.
+- **No host copies on the stop path.** Checkpoints are written from device tensors (text warm-up synchronous
+  saves, `backbone_trainable_state`, qat_convert), so a stop does not double the model in unified memory.
