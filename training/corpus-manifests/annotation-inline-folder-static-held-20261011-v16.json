@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "annotation-inline-folder-static-held-20261011-v16",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v16",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 457212,
+      "sha256": "53be2b0f7189f3c970a5c210d915e0c4b312586f0bbfe46fa2377f4b8f6233c1",
+      "lines": 24
+    },
+    {
+      "path": "families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "materializer.review.json",
+      "bytes": 9114,
+      "sha256": "80945e6f05f09d51741db3b2171e2cbbeabd56a881f34f583fa38da343f06605"
+    },
+    {
+      "path": "replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "replay.results.jsonl",
+      "bytes": 7879260,
+      "sha256": "10499bb017c52a5bfa2a69a1363d8e98493d8cc61ab0cfd8b9faccefbecae3cb",
+      "lines": 24
+    },
+    {
+      "path": "summary.json",
+      "bytes": 13530,
+      "sha256": "7e7eb2ff89d17ed27a8db162566a394c6395b949948283ec4e6ea0dba15cf554"
+    }
+  ],
+  "bytes": 8367302
+}

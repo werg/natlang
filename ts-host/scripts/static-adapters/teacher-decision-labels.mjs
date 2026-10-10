@@ -17,15 +17,14 @@ import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { renderValue } from '../../dist/native/agent.js';
-import { curriculumCase, evalCall, returnCall } from '../inline-curriculum/lib.mjs';
+import { folderDecisionScaffold } from './folder-decision-scaffold.mjs';
+import { canonical } from '../advisory-file.mjs';
 import { referenceRow } from '../inline-curriculum/references.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, '../../../');
 const sha = value => createHash('sha256').update(value).digest('hex');
-const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
-  Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
-const jsonSha = value => sha(JSON.stringify(canonical(value)));
+const jsonSha = value => sha(canonical(value));
 const parse = text => JSON.parse(text);
 const nonempty = value => typeof value === 'string' && value.trim().length > 0;
 const lines = async path => {
@@ -232,74 +231,19 @@ function contractOf(source, decisionContract) {
 }
 
 function createRecord(contract, batch, sourceMeta) {
-  const records = batch.map(entry => entry.source), childResults = Object.fromEntries(batch.map(entry => [entry.source.id, entry.decision]));
-  const ids = records.map(row => row.id), groupIds = [...new Set(records.map(row => row.group))];
-  const first = records[0], dataDirectory = 'items';
-  const task = {
-    family: first.family, kind: first.kind, options: contract.options, levels: contract.levels,
-    labels: contract.labels, criteria: contract.criteria,
-    output_path: 'decisions.json',
-  };
-  const folderFiles = { 'task.json': JSON.stringify(task) };
-  for (const row of records) {
-    // Keep annotations and source-provenance receipts out of model-facing inputs.
-    // Provenance is retained below in the static record's generation receipt.
-    const { answer: _hiddenAnnotation, source_refs: _sourceRefs, identity_state_sha256: _identityHash,
-      full_state_sha256: _fullStateHash, ...visible } = row;
-    folderFiles[`${dataDirectory}/${row.id}.json`] = JSON.stringify(visible);
-  }
-  const expectedFiles = { ...folderFiles, 'decisions.json': JSON.stringify(childResults) };
-  const union = contract.labels.map(JSON.stringify).join(' | ');
-  const returnType = contract.kind === 'noul' ? 'boolean' : 'Decision';
-  const outputType = contract.kind === 'noul' ? 'Record<string, boolean>' : 'Record<string, Decision>';
-  const kindInstruction = contract.kind === 'noul'
-    ? 'Return true when yes is at least as likely as no; otherwise return false. Do not return a numeric probability.'
-    : 'Apply the scoped criteria and return exactly one declared option or level. Do not return a probability distribution.';
-  const controller = `const task = await folder.file('task.json').readJson();
-const decisions: ${outputType} = {};
-for (const file of await folder.files('${dataDirectory}/*.json')) {
- const item = await file.readJson();
- const caseId = item.id;
- const state = item.state;
- const question = item.question;
- const criteria = Object.hasOwn(item, 'criteria') ? item.criteria : task.criteria;
- const options = item.options ?? task.options ?? [];
- const levels = item.levels ?? task.levels ?? [];
- const decision = await nl<${returnType}>\`Question: \${question}\\nAnswer from the scoped state. Apply the scoped criteria. ${kindInstruction}\`(caseId, state, question, criteria, options, levels);
- decisions[caseId] = decision;
-}
-await folder.file(task.output_path).writeText(JSON.stringify(decisions));
-return decisions;`;
-  const childRefs = batch.map(entry => ({
-    match: [entry.source.id],
-    calls: [
-      evalCall('console.log(JSON.stringify({ caseId, state, question, criteria, options, levels }));'),
-      returnCall(entry.decision),
-    ],
-  }));
+  const records = batch.map(entry => entry.source), ids = records.map(row => row.id);
+  const groupIds = [...new Set(records.map(row => row.group))], first = records[0];
   const sourceRev = `${sourceSnapshot}:${sourceMeta.cases_sha256}`;
-  const batchKey = jsonSha({ signature: contract.signature, ids: ids.slice().sort(), groups: groupIds.slice().sort() }).slice(0, 24);
-  const record = curriculumCase({
-    family: `teacher_decision_labels_${slug(first.family)}_${contract.kind}`,
-    shape: `source_${sourceMeta.cases_sha256.slice(0, 12)}_${batchKey}`,
+  const curriculumFamily = `teacher_decision_labels_${slug(first.family)}_${contract.kind}`;
+  const record = folderDecisionScaffold({ contract, entries: batch, sourceSha: sourceMeta.cases_sha256,
+    sourceSnapshot, sourceGroups: groupIds,
+    curriculumFamily, recordFamily: `curriculum_${curriculumFamily}`,
     variant: contract.decisionContract === choiceConfidenceContract
       ? 'exact-choice-with-held-confidence-receipt-v1' : 'strict-top-label-v2-ordinal-source-mapping',
-    split: 'train', splitGroup: `source-groups:${groupIds.join(',')}`,
-    slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: 'required',
-    root: { name: 'reduce_decisions', kind: 'directory-reducer', args: {}, returns: outputType,
-      instructions: 'Read the task contract and every item in the directory. For each item, bind its case ID, state, question, criteria, options, and levels as separate scope values. Compose the item question into the inline natural-language instruction at runtime, and also pass question, state, criteria, options, and levels as separate arguments. Do not combine the fields into a serialized prompt variable. Save decisions.json and return that exact map.' },
-    files: { 'types.ts': `export type Decision = ${union};\n` },
-    folderFiles, expectedFiles, expected: childResults,
-    minimumSequence: ['read the runtime contract and directory items', 'capture case ID, state, question, criteria, options and levels as separate scope values',
-      `compose the item question into the typed inline instruction and follow the ${contract.kind}-specific output rule`,
-      'pass all captures separately for every item', 'save and return the exact aggregate map'],
-    reference: { root: [evalCall(controller), returnCall(childResults)], children: childRefs },
-  });
-  record.family = `curriculum_teacher_decision_labels_${slug(first.family)}_${contract.kind}`;
-  record.source = 'held-provider-decision-label-adapter';
-  record.source_ids = ids.slice();
-  record.source_groups = groupIds.slice();
-  record.source_revisions = [...new Set([sourceRev, ...batch.map(entry => entry.label.file_sha256)])];
+    splitGroup: `source-groups:${groupIds.join(',')}` });
+  const childResults = Object.fromEntries(batch.map(entry => [entry.source.id, entry.decision]));
+  record.source_revisions = [...new Set([sourceRev, `folder-decision-scaffold:${sourceMeta.folder_decision_scaffold_sha256}`,
+    ...batch.map(entry => entry.label.file_sha256)])];
   record.license = first.license;
   record.gold_sources = [`source-decision-annotation:${sourceMeta.cases_sha256}`];
   record.dataset = { source: first.source, family: first.family, kind: first.kind, source_split: 'train' };
@@ -323,6 +267,8 @@ return decisions;`;
     provider_calls: 0,
     training_admission: false,
     source_cases_sha256: sourceMeta.cases_sha256,
+    folder_decision_scaffold_sha256: sourceMeta.folder_decision_scaffold_sha256,
+    folder_decision_scaffold_components: sourceMeta.folder_decision_scaffold_components,
     label_file_sha256s: [...new Set(batch.map(entry => entry.label.file_sha256))],
     label_manifest_sha256s: [...new Set(batch.map(entry => entry.label.artifact.manifest_sha256))],
     scorer_source_sha256: sourceMeta.scorer_source_sha256,
@@ -517,8 +463,14 @@ async function main() {
     if (batch.length) batches.push({ contract: entries[0].contract, entries: batch });
   }
   const adapterSha = await hashFile(fileURLToPath(import.meta.url));
+  const folderDecisionScaffoldSha = await hashFile(new URL('./folder-decision-scaffold.mjs', import.meta.url));
+  const scaffoldDependencyComponents = {
+    [fileURLToPath(new URL('./folder-decision-scaffold.mjs', import.meta.url))]: folderDecisionScaffoldSha,
+    [fileURLToPath(new URL('../advisory-file.mjs', import.meta.url))]: await hashFile(new URL('../advisory-file.mjs', import.meta.url)),
+  };
   const records = batches.map(batch => createRecord(batch.contract, batch.entries,
-    { ...sourceMeta, adapter_sha256: adapterSha }));
+    { ...sourceMeta, adapter_sha256: adapterSha, folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
+      folder_decision_scaffold_components: scaffoldDependencyComponents }));
   const toolSurfaceSha256 = await defaultToolSurfaceHash();
   const replayRows = [], replayFailures = [], nativeRows = [];
   const options = { modelId: 'held-decision-label-static-reference', rootSeed: 4041, systemPrompt: TOOLS_PROMPT,
@@ -556,6 +508,8 @@ async function main() {
     rejection_rows: rejections.length, batch_size_limit: batchSize, group_preserving_oversized_batches: batches.filter(batch => batch.entries.length > batchSize).length,
     replay_options_sha256: replayOptsSha, replay_context: rootContext,
     files: { source_cases_sha256: casesSha, adapter_sha256: adapterSha,
+      folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
+      folder_decision_scaffold_components: scaffoldDependencyComponents,
       scorer_source_sha256: sourceMeta.scorer_source_sha256, scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
       tool_surface_sha256: toolSurfaceSha256 } };
 
@@ -567,7 +521,9 @@ async function main() {
   await writeExclusive(outDir, 'replay.failures.jsonl', replayFailures.map(row => JSON.stringify(row)).join('\n') + (replayFailures.length ? '\n' : ''));
   await writeExclusive(outDir, 'rejections.jsonl', rejections.map(row => JSON.stringify(row)).join('\n') + (rejections.length ? '\n' : ''));
   await writeExclusive(outDir, 'source-manifest.json', JSON.stringify({ schema: 'natlang.held-static-decision-source-manifest/1',
-    training_admission: false, ...sourceMeta, labels: artifacts.map(item => ({ path: item.path,
+    training_admission: false, ...sourceMeta, folder_decision_scaffold_sha256: folderDecisionScaffoldSha,
+    folder_decision_scaffold_components: scaffoldDependencyComponents,
+    labels: artifacts.map(item => ({ path: item.path,
       labels_sha256: item.labels_sha256, label_rows: item.label_rows, manifest_path: item.manifest_path, manifest_sha256: item.manifest_sha256,
       manifest: item.manifest })), adapter_sha256: adapterSha,
     decision_contracts: [...new Set(eligible.map(entry => entry.label.value.decision_contract ?? probabilityContract))],

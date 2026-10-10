@@ -112,7 +112,39 @@ def replay_identities(row: dict[str, Any]) -> set[str]:
     return identities
 
 
-def check_replay_visibility(row: dict[str, Any], identity: str) -> None:
+def check_replay_visibility(row: dict[str, Any], identity: str) -> list[str]:
+    """Validate one of the supported authored-reference gate envelopes.
+
+    Legacy replays carry explicit admission and capture_visibility records. The
+    static annotation adapter instead carries its actual reference result and
+    visibility assertions; those are not synthesized into admission flags.
+    """
+    result_row = row.get("row")
+    if "context_visibility" in row or "output_matches_annotation" in row:
+        if not isinstance(result_row, dict):
+            raise ValueError(f"Authored reference envelope is missing its exact result row: {identity}")
+        task = result_row.get("task")
+        program = task.get("program_ir") if isinstance(task, dict) else None
+        if not isinstance(program, dict) or program.get("id") != identity:
+            raise ValueError(f"Authored reference program identity mismatch: {identity}")
+        outcome = result_row.get("outcome")
+        if not isinstance(outcome, dict) or outcome.get("accepted") is not True:
+            raise ValueError(f"Authored reference did not accept its exact program: {identity}")
+        if row.get("output_matches_annotation") is not True:
+            raise ValueError(f"Authored reference output did not match its annotation: {identity}")
+        visibility = row.get("context_visibility")
+        if not isinstance(visibility, dict) or visibility.get("visible") is not True:
+            raise ValueError(f"Authored reference context is not fully visible: {identity}")
+        items = visibility.get("items")
+        if not isinstance(items, list) or not items:
+            raise ValueError(f"Authored reference visibility has no item evidence: {identity}")
+        required = ("exact_typed_input_visible", "question_visible", "complete_label_domain_visible")
+        for item in items:
+            if not isinstance(item, dict) or any(item.get(field) is not True for field in required):
+                raise ValueError(f"Authored reference item visibility is incomplete: {identity}")
+        return ["row.outcome.accepted", "output_matches_annotation", "context_visibility.visible",
+                "all_items_exact_typed_input_question_label_domain_visible"]
+
     admission = row.get("admission")
     visibility = row.get("capture_visibility")
     if not isinstance(admission, dict) or admission.get("admitted") is not True:
@@ -139,6 +171,7 @@ def check_replay_visibility(row: dict[str, Any], identity: str) -> None:
                     raise ValueError(f"Reference visibility item has hidden fields: {identity}")
             if item.get("missing_fields") not in (None, []):
                 raise ValueError(f"Reference visibility item reports missing fields: {identity}")
+    return ["admission.admitted", "capture_visibility.visible"]
 
 
 def load_predecessors(campaign: Path) -> list[dict[str, Any]]:
@@ -211,13 +244,14 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         raise ValueError("--item-agreement-count cannot exceed the derived source item count")
 
     replay_index: dict[str, dict[str, Any]] = {}
+    gates_by_identity: dict[str, list[str]] = {}
     for _, row in replay_rows:
         identity = replay_identity(row)
         if replay_identities(row) != {identity}:
             raise ValueError(f"Reference envelope does not consistently identify case: {identity}")
         if identity in replay_index:
             raise ValueError(f"Duplicate reference replay case id: {identity}")
-        check_replay_visibility(row, identity)
+        gates_by_identity[identity] = check_replay_visibility(row, identity)
         replay_index[identity] = row
     if len(case_ids) != len(replay_index):
         raise ValueError(f"Source/replay case counts differ: {len(case_ids)} vs {len(replay_index)}")
@@ -225,6 +259,23 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         missing = sorted(set(case_ids) - set(replay_index))
         extra = sorted(set(replay_index) - set(case_ids))
         raise ValueError(f"Source/replay identities differ; missing={missing[:5]} extra={extra[:5]}")
+    for _, case in case_rows:
+        identity = source_identity(case)
+        replay = replay_index[identity]
+        result = replay.get("row")
+        task = result.get("task") if isinstance(result, dict) else None
+        program = task.get("program_ir") if isinstance(task, dict) else None
+        if program is not None and program != case:
+            raise ValueError(f"Reference program contents differ from the supplied case: {identity}")
+        visibility = replay.get("context_visibility", replay.get("capture_visibility", {}))
+        items = visibility.get("items")
+        if items is not None:
+            visible_ids = [item.get("id") for item in items]
+            expected_ids = case.get("source_ids", [])
+            if (any(not isinstance(value, str) or not value for value in visible_ids) or
+                    len(visible_ids) != len(set(visible_ids)) or
+                    set(visible_ids) != set(expected_ids)):
+                raise ValueError(f"Reference item visibility does not cover the exact source IDs: {identity}")
     if args.workers > len(case_rows):
         raise ValueError("Worker count cannot exceed the number of source cases")
 
@@ -249,7 +300,8 @@ def build_plan(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
         "source_case_ids": case_ids,
         "source_splits": {"train": len(case_rows)},
         "reference_replay_cases": len(replay_rows),
-        "reference_gates": {"all_admission_admitted": True, "all_capture_visibility_visible": True},
+        "reference_gates": {"checked_gate_sets": sorted({tuple(gates) for gates in gates_by_identity.values()}),
+                            "per_case": gates_by_identity},
         "source_quality": "held_for_independent_quality_review",
         "training_admission": False,
         "independent_new_worlds": 0,

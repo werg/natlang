@@ -1,0 +1,240 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "annotation-folder-adapter-exploration-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/annotation-adapter-history-v1",
+  "files": [
+    {
+      "path": "provider-static-annotation-decision-folders-v10/cases.jsonl",
+      "bytes": 466728,
+      "sha256": "4619f059ea4702023ff2918996fef63ca3a1c483370156536915b7e0889b3249",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v10/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v10/materializer.review.json",
+      "bytes": 8973,
+      "sha256": "46019df8fbf98860a2f2bb7e2e46bbd92b440e6c554c742fb7a4bf81d1553b09"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v10/replay.failures.jsonl",
+      "bytes": 5400,
+      "sha256": "e88c319b51ad921a09048125892ad5eb00f2889d0c4e5e0e957391273436097e",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v10/replay.results.jsonl",
+      "bytes": 7901753,
+      "sha256": "00405357b5d4fca332a71cd74cef645bc751115bf9ee95bdac89232496d9135a",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v10/summary.json",
+      "bytes": 13403,
+      "sha256": "12928586379bf76ab8e1ef13a16c09ec10a03f50bc7b94a21a352aa43aaad5db"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/cases.jsonl",
+      "bytes": 466728,
+      "sha256": "4619f059ea4702023ff2918996fef63ca3a1c483370156536915b7e0889b3249",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/materializer.review.json",
+      "bytes": 8973,
+      "sha256": "46019df8fbf98860a2f2bb7e2e46bbd92b440e6c554c742fb7a4bf81d1553b09"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/replay.results.jsonl",
+      "bytes": 7901606,
+      "sha256": "9bb8a01506be022685bb87e598c53664a7a917861da6f099fa3c7b680877eb0a",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v11/summary.json",
+      "bytes": 13402,
+      "sha256": "96ae074e7754a1cb9d732a004408f240ad5bc98c69499a8f2d22130605eaf7b9"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/cases.jsonl",
+      "bytes": 475284,
+      "sha256": "ec8ecd5f2a90d87601294d65e89551ed3e8417dba7d2369a88161992a6247821",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/materializer.review.json",
+      "bytes": 9186,
+      "sha256": "bf10b9e97bef653430f5cc0ae128a1825f72978617851fa7d47866280f5271da"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/replay.results.jsonl",
+      "bytes": 7921758,
+      "sha256": "e1ccc66a4f90b0620c527926c10424c724a334f27aa86ff87e5274977c3b7dca",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v12/summary.json",
+      "bytes": 13402,
+      "sha256": "8f71094345df3f77d8609c8c115ec65ee80728e66ab1140fd7f420157183fbd9"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/cases.jsonl",
+      "bytes": 464844,
+      "sha256": "4f5c311ca303cf19e9e65aa70548840a9c4b221ba84a0fd52ffe2ae03afbdb2c",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/materializer.review.json",
+      "bytes": 9186,
+      "sha256": "bf10b9e97bef653430f5cc0ae128a1825f72978617851fa7d47866280f5271da"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/replay.results.jsonl",
+      "bytes": 7911321,
+      "sha256": "07a4834b20f5265de088fdc344665c79f6466e79737e0270d016b5e1e0c54f45",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v13/summary.json",
+      "bytes": 13402,
+      "sha256": "e02ce0a5120a849de469ffe171d12071ba6b27fe295e5db9ef39c26e3cbd64cb"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/cases.jsonl",
+      "bytes": 457356,
+      "sha256": "0ae3719012fa0102b5e08e01a1cd9731e2bf3f8571de3317e172446a60e95f17",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/materializer.review.json",
+      "bytes": 9186,
+      "sha256": "bf10b9e97bef653430f5cc0ae128a1825f72978617851fa7d47866280f5271da"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/replay.results.jsonl",
+      "bytes": 7892977,
+      "sha256": "8cbb4fe4277129b04ec79c9a14fb1de88a1a06db1a2c10b6691ffa030b08c033",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v14/summary.json",
+      "bytes": 13402,
+      "sha256": "895015572de2d4d7b28227124f9b620a8507830e1f61bd4caedd89b65ddf7d02"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/cases.jsonl",
+      "bytes": 457212,
+      "sha256": "53be2b0f7189f3c970a5c210d915e0c4b312586f0bbfe46fa2377f4b8f6233c1",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/families.json",
+      "bytes": 8186,
+      "sha256": "5296c5c844c53fb3350d2bb6018ba53cf6ed81425d56c93c867f18f02d50519b"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/materializer.review.json",
+      "bytes": 9114,
+      "sha256": "80945e6f05f09d51741db3b2171e2cbbeabd56a881f34f583fa38da343f06605"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/replay.failures.jsonl",
+      "bytes": 5312,
+      "sha256": "2ac0ef9bbf82f894b67fc35141d2764081cf83eb3ce15aa691e2d6cc883838df",
+      "lines": 23
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/replay.results.jsonl",
+      "bytes": 7875622,
+      "sha256": "d6ba58b29edb2fdfdca07f0fc7654e1160b319998f4a6a9d73b75b6636a15016",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v15/summary.json",
+      "bytes": 13531,
+      "sha256": "038da8c162ca4c9854f8e47fdd089da98ffa5f503c1611b983d9cd41f4c998a6"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/cases.jsonl",
+      "bytes": 170049,
+      "sha256": "0a54b89182c28db3ee025d12bed7ec7595d8a6208e223c04cdcb5ee79e630056",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/families.json",
+      "bytes": 7754,
+      "sha256": "255659b0fc0d98d78b74624c275474f1dbd2679e72de94cf9d0f9a3a925db24f"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/materializer.review.json",
+      "bytes": 7629,
+      "sha256": "1fea60bf2888865adf48a8fba9ecab82939caa234c6f42326ff11fc2e7e44046"
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/replay.results.jsonl",
+      "bytes": 4057595,
+      "sha256": "a701f60c273a41b401ba111548e69552d9f52d19710fcc30bd9d60fff69175e2",
+      "lines": 24
+    },
+    {
+      "path": "provider-static-annotation-decision-folders-v9/summary.json",
+      "bytes": 12446,
+      "sha256": "4b5ec272668387711fd0423ac13d0a67dd6025ce0b7908543387159dbc3961e8"
+    }
+  ],
+  "bytes": 54643650
+}

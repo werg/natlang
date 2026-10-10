@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-v25-answerability-candidate-evidence-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "pubmedqa-answerability-candidates-v1.json",
+      "bytes": 19402,
+      "sha256": "d9e3465bfa1135e6f423025c3b7291531954ce7eba3d1c45c4287bce75a62d48"
+    }
+  ],
+  "bytes": 19402
+}

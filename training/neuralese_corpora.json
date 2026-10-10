@@ -27678,6 +27678,64 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Root reviewed nine complete PubMedQA states from V25. Four forward strict-label holds: missing efficacy results, missing comparator, opinion survey without clinical recommendation, mixed exposure-attribution evidence. Five statistical/study-level cases retained for further model-quality review. All original annotations and attempts preserved."
+    },
+    {
+      "id": "annotation-inline-folder-static-held-20261011-v16",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-static-annotation-decision-folders-v16",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "24 programs and 96 complete annotation-grounded train items, zero provider label calls. Shared inline directory reducer scaffold; exact source groups preserved. All reference outputs/child captures pass. Source truth and native reasoning admission remain held."
+    },
+    {
+      "id": "luna-annotation-folder-v62-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v62-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Reviewed five-worker successor waits for V61 accounting before executing 24 annotation-only inline folder programs (96 items). Queues disjoint; current29 holds excluded. Active outputs excluded. Generation approval does not grant training admission.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "annotation-folder-adapter-exploration-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/annotation-adapter-history-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Preserved V9 through V15 exploratory reference artifacts. V9 fixed child does not satisfy intended inline topology; V10/V15 visibility checker failures and intermediate metadata/identity corrections are diagnostics, not training admission. Final V16 separately registered.",
+      "include": [
+        "provider-static-annotation-decision-folders-v9/**/*",
+        "provider-static-annotation-decision-folders-v10/**/*",
+        "provider-static-annotation-decision-folders-v11/**/*",
+        "provider-static-annotation-decision-folders-v12/**/*",
+        "provider-static-annotation-decision-folders-v13/**/*",
+        "provider-static-annotation-decision-folders-v14/**/*",
+        "provider-static-annotation-decision-folders-v15/**/*"
+      ]
+    },
+    {
+      "id": "google-v25-answerability-candidate-evidence-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v25-gemini-choice-confidence-and-static-replay-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Helper evidence for nine proposed answerability holds. Root separately reviewed full states, held four and declined five; no automatic source labels or training admission.",
+      "include": [
+        "pubmedqa-answerability-candidates-v1.json"
+      ]
     }
   ],
   "coverage_backlog": [
