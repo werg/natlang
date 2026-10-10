@@ -108,23 +108,49 @@ test('a queued request is cancelled by its signal or by its invocation, and is n
 test('a scheduler without priority, adjacency or window admits requests exactly as requestLimit does', async () => {
   const arrivals = Array.from({ length: 40 }, (_, index) => ({ id: index, delay: (index * 7) % 5, hold: 1 + (index * 3) % 4,
     invocation: `call-${index % 6}`, group: `g${index % 3}` }));
-  const run = async acquire => {
+  // A virtual clock: arrivals, holds and the scheduler's coalescing timer all run on it, so the order is a function of the
+  // inputs and not of how loaded the machine is. Events at the same instant fire in the order they were scheduled.
+  const virtualClock = () => {
+    let time = 0, sequence = 0;
+    const events = [];
+    const at = (ms, run) => { const event = { time: time + ms, sequence: sequence++, run, live: true }; events.push(event); return event; };
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    return {
+      sleep: ms => new Promise(resolve => at(ms, resolve)),
+      timers: { set: (run, ms) => at(ms, run), clear: event => { event.live = false; } },
+      async run() {
+        for (;;) {
+          await settle();
+          const live = events.filter(event => event.live);
+          if (!live.length) return;
+          const next = live.reduce((best, event) => event.time < best.time || (event.time === best.time && event.sequence < best.sequence) ? event : best);
+          events.splice(events.indexOf(next), 1);
+          time = next.time;
+          next.run();
+        }
+      },
+    };
+  };
+  const run = async (acquire, clock) => {
     let active = 0, peak = 0;
     const started = [], finished = [];
-    await Promise.all(arrivals.map(async item => {
-      await tick(item.delay);
+    const all = Promise.all(arrivals.map(async item => {
+      await clock.sleep(item.delay);
       const release = await acquire(item);
       active++; peak = Math.max(peak, active); started.push(item.id);
-      await tick(item.hold);
+      await clock.sleep(item.hold);
       active--; finished.push(item.id); release();
     }));
+    await clock.run();
+    await all;
     return { started, peak, finished: finished.length };
   };
   for (const size of [1, 3]) {
     const limit = requestLimit(size);
-    const scheduler = createScheduler({ maxConcurrent: size, priority: false, adjacency: false, coalesceMs: 0 });
-    const plain = await run(() => limit.acquire());
-    const scheduled = await run(item => scheduler.acquire({ invocation_id: item.invocation, group: item.group }));
+    const plainClock = virtualClock(), scheduledClock = virtualClock();
+    const scheduler = createScheduler({ maxConcurrent: size, priority: false, adjacency: false, coalesceMs: 0, timers: scheduledClock.timers });
+    const plain = await run(() => limit.acquire(), plainClock);
+    const scheduled = await run(item => scheduler.acquire({ invocation_id: item.invocation, group: item.group }), scheduledClock);
     assert.equal(plain.peak, size);
     assert.equal(scheduled.peak, size);
     assert.equal(scheduled.finished, arrivals.length);
