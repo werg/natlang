@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "mellum21-ternary-convert-v2-20261010",
+  "kind": "bundle",
+  "dialect": "nd:natlang@1",
+  "backbone": {
+    "model": "JetBrains/Mellum2.1-12B-A2.5B-Thinking",
+    "revision": "92ddae9fc7665e9f801d141d2e5a6b2caf2460c4",
+    "family": "maple"
+  },
+  "path": "data/neuralese/artifacts/mellum21-ternary-convert-v2-20261010",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 8907,
+      "sha256": "3da5f8b9862c7b3560e631d778e2402f222d87f1a332c34696dfa399608824a7"
+    },
+    {
+      "path": "chat_template.jinja",
+      "bytes": 4849,
+      "sha256": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48"
+    },
+    {
+      "path": "config.json",
+      "bytes": 2877,
+      "sha256": "a0c3cb63698df5fa26640ef197258aaba53faf422456e79ef48368968209203a"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 111,
+      "sha256": "a9dc104ca398a2ef376d3f2fbb03037d99950ddb2db0cd041b98398cf1fc8d7c"
+    },
+    {
+      "path": "mellum-logo-dark.svg",
+      "bytes": 5176,
+      "sha256": "e55d257b537fd279c60fae86145191e1e6cac61b730966a061b126c0fd10960b"
+    },
+    {
+      "path": "mellum21_summary.png",
+      "bytes": 174934,
+      "sha256": "2a86585d0f7075c56a9a3ae7cd582561dc7020aff87e094a065651d5d4f92324"
+    },
+    {
+      "path": "model-00001-of-00005.safetensors",
+      "bytes": 1026069208,
+      "sha256": "a00877a1966d1043e46c48cd05e98802a76c5a2457352cbf8f2512ef585b2b04"
+    },
+    {
+      "path": "model-00002-of-00005.safetensors",
+      "bytes": 629669416,
+      "sha256": "a91b3cdcd7879ff254d4aba9f770374e9a49b5fd48ed60f1b0daea817f6f66b7"
+    },
+    {
+      "path": "model-00003-of-00005.safetensors",
+      "bytes": 629668304,
+      "sha256": "9bed6621a71eff725a57800971c582997771c46ad944d09ee62d7d987d7de365"
+    },
+    {
+      "path": "model-00004-of-00005.safetensors",
+      "bytes": 629671120,
+      "sha256": "0fe72d60515c98d9e66106dbf4fce1ce407b24e7c840204b0ac548cff37af96f"
+    },
+    {
+      "path": "model-00005-of-00005.safetensors",
+      "bytes": 939052840,
+      "sha256": "e4dc9678935cdef3c775c1f11c3ca116eed34022cac68ea835476442862f7abf"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 526510,
+      "sha256": "a6ad930e5bb35ea92d5b734c4df4649bfcfdcd899f64b0a83efe40fe0ab9b60e"
+    },
+    {
+      "path": "qat-export.json",
+      "bytes": 491,
+      "sha256": "76e8d39de0c687135b62784f4efc00fbbeb293a8e952e5963f32fd52884b896a"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 1185,
+      "sha256": "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9"
+    },
+    {
+      "path": "ternary-pack.json",
+      "bytes": 1366181,
+      "sha256": "1df2e12ad96e38fc196c9f263c942e80a948dbf875253bbac1ce6ec0ccd5aa73"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 7091587,
+      "sha256": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 7033,
+      "sha256": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+    }
+  ],
+  "bytes": 3863320729
+}
