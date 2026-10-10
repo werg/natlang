@@ -1,0 +1,75 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v34-source-reviewed-29of32-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v34-counterfactual-refill-20261010-v1",
+  "files": [
+    {
+      "path": "explicit-specs.json",
+      "bytes": 31906,
+      "sha256": "e29d283b8cd6388bb96a31556bd70701f5f1ff9e81996d8f7223e431ac71f4fe"
+    },
+    {
+      "path": "prepare-source-specs.mjs",
+      "bytes": 7612,
+      "sha256": "7fd681de2d21a1f7bf139e36709bae0c426bb8280b81e8ac815c8dec9ca0e5cf"
+    },
+    {
+      "path": "review-paths.json",
+      "bytes": 273,
+      "sha256": "963a9e73e1497d849300573e74c4b51e44439b6b23c7599a2745228ea0bfde38"
+    },
+    {
+      "path": "source-pool/readable-source-review.md",
+      "bytes": 178583,
+      "sha256": "d2e960e5e839d1befdeba9da9fa06e6fd745c197a38500a2fc70a088c39bbfd7"
+    },
+    {
+      "path": "source-pool/root-generation-source-review-v1.json",
+      "bytes": 1861,
+      "sha256": "5aa47187db5756f346183d7862002040c6a4adee5b02b1c313bc9ad10df0cb84"
+    },
+    {
+      "path": "source-pool/root-review-plan.json",
+      "bytes": 11461,
+      "sha256": "18f021ae03d46ab8ee4014bf5b14057fa8a7821ca0af4bb1ee5f0f8d7d64f63b"
+    },
+    {
+      "path": "source-pool/source-manifest.json",
+      "bytes": 929,
+      "sha256": "191adb1716a5b09090f73eca6faf8970a01c0b28bc5ea94c8e3df48a1249779e"
+    },
+    {
+      "path": "source-pool/source-proof.json",
+      "bytes": 348487,
+      "sha256": "5948e8ce05532e6895b76889740db2732480bb4f8517fae7448e7cd9b4f77044"
+    },
+    {
+      "path": "source-pool/source-proposal.json",
+      "bytes": 50270,
+      "sha256": "6cbb4009f3e1c8b46825e027d851f0ad85d1880667a3bfcd973ef926c1b38a8e"
+    },
+    {
+      "path": "source-pool/source-quality-review.json",
+      "bytes": 190609,
+      "sha256": "e88982b2d5cb38362135d5fb783a37d822887578abc26ba8f0797ac645df6082"
+    },
+    {
+      "path": "source-pool/source.cases.jsonl",
+      "bytes": 1802243,
+      "sha256": "81397aed303d23097bb3d57a085601eb439683120e551cf103850991e074f642",
+      "lines": 32
+    },
+    {
+      "path": "source-pool/v32-v33-overlap-audit.json",
+      "bytes": 204614,
+      "sha256": "f7c151031187f709d23bb7c56fe15a004c86e23d9fae9fa389c090708130863a"
+    },
+    {
+      "path": "source-pools.json",
+      "bytes": 2049,
+      "sha256": "a7d38a90779c9ec6d7c03be08b404f7fb4f2a202d124a89f977053a434259998"
+    }
+  ],
+  "bytes": 2830897
+}

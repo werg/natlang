@@ -22434,6 +22434,48 @@
       "admission": "review-evidence-only",
       "independent_new_worlds": 0,
       "notes": "IndependentLunareviewer all23outcomes/notes/gold; sourcea947...activeV32exactpins. 21exact/2reject/3sourcequarantined/1formatambiguity. 19exactcandidates only; scopeerrorclusters stillunderreview. Receipt2a675b1470a8019f7bd07f898570de5ecf939ac1b48b539c0d7a5ded8ede2894."
+    },
+    {
+      "id": "free-provider-luna-v33-five-runtimev10-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev33-five-runtimev10-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-source-repaired-semantic-iterate-trajectories",
+      "training_admission": false,
+      "admission": "held-per-turn-quality-source-closure-review",
+      "independent_new_worlds": 0,
+      "notes": "5closed5exactoutputs, candidate-localfloodfactrepair/numericlistscoping successful inthese5singletrials. Not acontrolledpairedstudy nor trajectory/native/recurrence admission."
+    },
+    {
+      "id": "free-provider-luna-v34-source-reviewed-29of32-20261010-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v34-counterfactual-refill-20261010-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-authored-semantic-iterate-counterfactual-source",
+      "training_admission": false,
+      "admission": "generation-source-reviewed-only",
+      "independent_new_worlds": 0,
+      "notes": "Root32writtenevidence/goldreview,29generationselected;indices12/24/28exactV32contextduplicates skipped. 8inheritedV26groups, zeroindependentworlds. V34correctsV27overlappins/identity, nevercountshelddrafttwice; rootmisreadcase30correctedactualEwithdrawn, no goldbug."
+    },
+    {
+      "id": "free-provider-luna-v34-runtimev10-reviewed-queues-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev34-twentynine-runtimev10-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-five-worker-semantic-iterate-queues",
+      "training_admission": false,
+      "admission": "dispatch-evidence-live-output-excluded",
+      "notes": "5workers6/6/6/6/5singlecases from29reviewedsourceindices; frozenV10 dependencyoverlay/providerimportpreflight, max5nativeLuna total. Targetoutputsnotadmitted."
     }
   ],
   "coverage_backlog": [
