@@ -10462,6 +10462,10 @@ Google V25 closed with 512 typed-valid decisions: 402 match supplied annotations
 
 The annotation-only exploratory V9 batch is held. Its fixed judge_one child scaffold does not provide the requested runtime inline-lambda topology. The adapter is being redirected to reuse the existing shared directory reducer scaffold rather than create a separate training path. Preserve V9, claim no inline-lambda coverage or admission for it.
 
-### Pop source review, 2026-10-10 22:17 UTC
+### Pop source review, 2026-10-10 22:14 UTC
 
 Root independently read nine complete V25 PubMedQA disagreement states. Four forward strict-label holds bring the canonical policy to 29: absent trial results; absent improvement comparator; a practice survey without a clinical recommendation; and uncertain arsenic exposure attribution with mixed subgroup evidence. Five candidate holds were declined: statistical uncertainty does not automatically invalidate a study-level answer, and reported associations or explicitly weak review evidence can support the supplied target. Preserve source labels and attempts. All four held rows were already excluded from V25 static programs by annotation disagreement, so active V61 queues are unaffected.
+
+### Pop V7 evaluation at step 34816, 2026-10-10 22:20 UTC
+
+Held embedding deltas improved to long .02695/.03108, short .03540/.03631 and medium .05022/.04414. Eight strict gates still fail, including generated-history agreement .98684 long and .98615 medium; training continues with unchanged thresholds. The earlier V7 baseline had nine failures and materially larger embedding deltas. Shared folder scaffold extraction is under review before publication: retain teacher case identities bound to contract signatures, and keep hidden reference controller text separate from actual visible-input receipts. No active runtime changed.
