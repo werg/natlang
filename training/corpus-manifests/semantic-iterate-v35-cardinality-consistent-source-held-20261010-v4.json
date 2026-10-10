@@ -1,0 +1,55 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-cardinality-consistent-source-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1130,
+      "sha256": "1742fa4eb040460e559f83cdd93b7f320d53fd4cf52c82a539a09efcc2a402fe"
+    },
+    {
+      "path": "cardinality-audit.json",
+      "bytes": 36706,
+      "sha256": "bbbea88a9a1d22ef87a177a0a0632f6094570fcc455434d518e5790c0a9bef25"
+    },
+    {
+      "path": "cardinality-repair-manifest.json",
+      "bytes": 2690,
+      "sha256": "2080d6e0c9e53cd25c5391edf0e8d4b9d508b8d2be01f7b21e1485a20063b60a"
+    },
+    {
+      "path": "cardinality-repair-proposal.md",
+      "bytes": 3245,
+      "sha256": "246386a322a04e1e4df1a558a7a7a763026c1ae2d4a41c802edc9159c14d832b"
+    },
+    {
+      "path": "readable-facts-and-golds.md",
+      "bytes": 44117,
+      "sha256": "60a2ab297b59884441c6c5e6fa8688d5dc6c9048907f41528208747cd717ec34"
+    },
+    {
+      "path": "root-review-plan.json",
+      "bytes": 632,
+      "sha256": "a1019b473df4355b6f06188b31c03f31a5c4597d25cd6c6c9f372ce9aa382230"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1229,
+      "sha256": "e9978aa445475a9eeba3853ef6b95519ebb51fdde231517815e1650c496842d9"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 68889,
+      "sha256": "2b9fae8aff333639a3a89727aa63341c6fea99f12d3a31eeff514eb1f627be58"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1659261,
+      "sha256": "6fb770f975427117126acc8f8173e7a51166b476c2d19385f24da9b1215768b8",
+      "lines": 32
+    }
+  ],
+  "bytes": 1817899
+}

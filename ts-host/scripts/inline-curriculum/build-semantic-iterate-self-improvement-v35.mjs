@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { deriveWorldResult, sourceDomains, worlds } from './semantic-iterate-self-improvement-v35-data.mjs';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 
-export const REVISION = 'authored-semantic-iterate-self-improvement-v35/3-canonical-domain-grouped-source';
+export const REVISION = 'authored-semantic-iterate-self-improvement-v35/4-cardinality-consistent-rules';
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
   throw new Error('usage: node build-semantic-iterate-self-improvement-v35.mjs --out FRESH_DIRECTORY');
@@ -43,10 +43,18 @@ const rows = worlds.map((world, index) => {
   const derived = deriveWorldResult(world);
   if (JSON.stringify(derived) !== JSON.stringify(expected)) throw new Error(`${world.slug}: independently derived result differs from authored gold`);
   const task = JSON.parse(row.semantics.folder_files['task.json']);
+  const decisionRule = task.output_contract.decision_rule;
   if (task.passes.length !== 4 || task.output_contract.decision_rule.includes('undefined') ||
-      !task.output_contract.decision_rule.includes('Selection cardinality:') ||
-      !task.output_contract.decision_rule.includes('Decision mapping:'))
+      !decisionRule.includes('Selection cardinality:') ||
+      !decisionRule.includes('Decision mapping:'))
     throw new Error(`${world.slug}: missing four-stage or complete decision rule`);
+  const baseRule = decisionRule.split(' Selection cardinality:', 1)[0];
+  if (world.domainDefaultCardinality === 2 && world.selectionCardinality === 1 &&
+      !/select exactly one qualifying/i.test(baseRule))
+    throw new Error(`${world.slug}: one-item request is missing its matching ranking clause`);
+  if (world.domainDefaultCardinality === 2 && world.selectionCardinality === 2 &&
+      !/select up to two qualifying/i.test(baseRule))
+    throw new Error(`${world.slug}: two-item request is missing its matching ranking clause`);
   if (!task.output_contract.fields.measure.includes('digits') || !task.output_contract.fields.measure.includes(world.metricUnit))
     throw new Error(`${world.slug}: metric contract must name exact digit values and unit`);
   const texts = Object.values(world.evidence).join('\n');
@@ -116,7 +124,7 @@ await writeFile(resolve(output, 'readable-facts-and-golds.md'), `# V35 source re
   `## ${item.request_id} — ${item.domain}\n\nCase group: ${item.case_group}; domain group: ${item.domain_group}; split: ${item.split}.\n\n` +
   `Candidates:\n${item.candidates.map(candidate => `- ${candidate.id}: ${candidate.metric}; ${candidate.facts}`).join('\n')}\n\n` +
   `Authority evidence: ${item.authority}\n\nRecomputed gold: ${JSON.stringify(item.expected_recomputed)}\n`).join('\n'));
-await writeFile(resolve(output, 'README.md'), `# V35 semantic self-improvement source pool — V2\n\n` +
+await writeFile(resolve(output, 'README.md'), `# V35 semantic self-improvement source pool — V4\n\n` +
   `This proposal contains 32 newly authored fictional requests organized into eight related task families, with four cases per family. The eight complete domain groups are split as four train groups and four test groups, so no family crosses the split. Cases cover safety corrective-action selection, provenance reconciliation, experimental-plan revision, constrained resource scheduling, compliance document revision, incident response, evidence-backed claim triage, and maintenance work-order sequencing. These are authored fictional families, not 32 independently grounded domains.\n\n` +
   `Each task has four evidence files and uses the shared iterateOn/inline Neuralese scaffold. Decisions require carrying candidate-specific findings forward, applying conditions before ranking, and applying request-scoped authority separately. The CPU proof recomputes the gold from authored facts only. No model/provider calls were made. Root semantic review is pending; no generation or training admission is authorized.\n\nSHA-256: ${sourceSha}\n`);
 console.log(JSON.stringify({ revision: REVISION, source_cases_sha256: sourceSha, counts: proof.counts, domains: proof.domains.map(domain => domain.slug) }, null, 2));

@@ -164,6 +164,13 @@ for (const [domainIndex, domain] of domains.entries()) {
       : (a, b) => b.metric - a.metric || a.id.localeCompare(b.id);
     const eligible = candidate => domain.conditions.every(([label]) => candidate.flags[label]);
     const selected = candidates.filter(eligible).sort(compare).slice(0, count);
+    // Some scenarios intentionally reduce a two-item domain to a one-item
+    // request. Keep the authored ranking clause aligned with that scenario's
+    // request and output cardinality instead of retaining the domain's
+    // two-item default.
+    const ruleText = count === 1
+      ? domain.rule.replace('Select up to two qualifying ', 'Select exactly one qualifying ')
+      : domain.rule;
     const request = `${domain.action[0].toUpperCase()}${domain.action.slice(1)} items for ${scenario.id}.`;
     const format = rows => rows.length ? rows.map(row => row.id).join('; ') : 'none';
     const measure = rows => rows.length ? rows.map(row => String(row.metric)).join('; ') : 'none';
@@ -173,7 +180,7 @@ for (const [domainIndex, domain] of domains.entries()) {
       sourceGroup: `v35:${scenario.id}:world`, domain: domain.label,
       owner: domain.owner, requestId: scenario.id,
       requestText: `${request} ${count === 1 ? 'Select exactly one eligible item if any qualify.' : `Select up to ${count} eligible items.`}`,
-      ruleText: domain.rule.replace(`Select up to ${domain.count}`, `Select up to ${count}`),
+      ruleText,
       selectionInstruction: `${count === 1 ? 'exactly one if any qualify' : `up to ${count}`}; ${domain.direction === 'asc' ? 'ascending' : 'descending'} ${domain.metricName}; ties by ascending complete ID`,
       authorizationRule: { requirement: domain.requirement, scope: 'request' },
       instruction, registerHeading: 'Measured candidate register', auditHeading: 'Evidence condition review', authorityHeading: 'Action authority record',
@@ -191,6 +198,7 @@ for (const [domainIndex, domain] of domains.entries()) {
     world.domainGroup = `v35:${domain.slug}:domain`;
     world.split = domainIndex < 4 ? 'train' : 'test';
     world.selectionCardinality = count;
+    world.domainDefaultCardinality = domain.count;
     world.scenarioFacts = candidates;
     world.scenarioAuthority = scenario.authority;
     world.authorityEvidence = domain.authorityText(scenario.id);

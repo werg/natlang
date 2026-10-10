@@ -26045,6 +26045,20 @@
       "training_admission": false,
       "admission": "held-source-contract-and-trajectory-fidelity-review",
       "notes": "Four final/file expected matches, no scope failures. Three iterateOn; EXPT-530 manual sequence, SCHED-541 conflicting cardinality in source contract. Source fix pending; do not claim unambiguous correctness or iterative fidelity for all four. Canonical alias resolves the original report directory date typo; immutable report bytes unchanged."
+    },
+    {
+      "id": "semantic-iterate-v35-cardinality-consistent-source-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v4-cardinality-repair-final",
+      "include": [
+        "*"
+      ],
+      "split": "inherited-domain-groups-16train-16test",
+      "source_class": "versioned-authored-source-contract-repair",
+      "training_admission": false,
+      "admission": "held; source consistency repair only, actual new trajectory review required",
+      "independent_new_worlds": 0,
+      "notes": "Root reviewed ten incorrect up-to-two base clauses in one-item worlds, corrected by shared generator. All gold values,32IDs/source groups/splits unchanged; V3 and original traces preserved. Model acceptance does not override source contract ambiguity."
     }
   ],
   "coverage_backlog": [
