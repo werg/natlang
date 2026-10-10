@@ -39,12 +39,14 @@ export function agentModels(settings: AgentModelSettings): AgentModels {
   const reader: AgentReader = settings.reader ?? { kind: 'text' };
   const root = settings.endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
   const baseUrl = `${root}/v1`;
-  // One natlang driver per thinking setting, sent as the template argument pi-ai's qwen-chat-template format sends; for a
-  // Neuralese server also one per owner (the conversation's provider session ID), whose blocks its requests hold.
+  // One natlang driver per thinking setting, sent as the template argument `enable_thinking`; for a Neuralese server
+  // also one per owner (the conversation's provider session ID), whose blocks its requests hold. No `preserve_thinking`:
+  // earlier turns' reasoning renders by the served backbone's declared history-reasoning policy, its template default
+  // (training/neuralese/natlang_neuralese/serve/chat.py BACKBONE_HISTORY_REASONING: LFM2.5 last turn only, Mellum kept).
   const drivers = new Map<string, ModelDriver>();
   const driver = (reasoning: boolean, owner?: string): ModelDriver => {
     const request = { endpoint: root, model: modelId, apiKey,
-      request: { chat_template_kwargs: { enable_thinking: reasoning, preserve_thinking: true } } };
+      request: { chat_template_kwargs: { enable_thinking: reasoning } } };
     const key = reader.kind === 'neuralese' ? `${reasoning}\0${owner ?? ''}` : String(reasoning);
     if (!drivers.has(key)) drivers.set(key, reader.kind === 'neuralese' ?
       neuraleseServerModelTurn({ ...request, store, ...(owner ? { owner } : {}) }) : openAICompatibleModelTurn(request));
@@ -61,7 +63,8 @@ export function agentModels(settings: AgentModelSettings): AgentModels {
       baseUrl, input: ['text'], reasoning: true, reader,
       contextWindow: settings.contextWindow ?? 65536, maxTokens: settings.maxTokens ?? 16384,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      compat: { thinkingFormat: 'qwen-chat-template', supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
+      compat: { thinkingFormat: 'chat-template', chatTemplateKwargs: { enable_thinking: { $var: 'thinking.enabled' } },
+        supportsDeveloperRole: false, supportsStore: false, supportsReasoningEffort: false,
         maxTokensField: 'max_tokens' } } as never],
     api: transport === 'natlang' ? natlangApi((_model, { reasoning, owner }) => driver(reasoning, owner), store) : openAICompletionsApi(),
   }));

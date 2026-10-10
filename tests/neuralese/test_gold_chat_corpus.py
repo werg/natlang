@@ -75,6 +75,7 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     rows, receipt, omissions, provenance=gold_text_rows([record('train-world','train'),record('test-world','test')],{},tokenizer=tokenizer)
     assert not omissions
     assert receipt['rendering']=='natlang.native_gold_chat/3'
+    assert receipt['history_reasoning']=={'policy':'undeclared','backbone':None,'template_kwargs':{},'probe':'not-rendered'}
     assert all(r['tokenizer_sha256']==tokenizer_fingerprint(tokenizer) for r in rows)
     assert all(p['token_ids_sha256'] for p in provenance)
     path=tmp_path/'text.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))

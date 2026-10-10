@@ -21,6 +21,7 @@
             "text_jsonl_sha256": "1bdad40488a30bde20fff87b33be08f947972bb71d4680f5c64df565c3fb9886",
             "tokenizer_sha256": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
             "rendering": "natlang.native_gold_chat/3",
+            "history_reasoning": "last_turn_only",
             "tokens": {
               "train": 72442697,
               "test": 2110256
@@ -36,6 +37,7 @@
             "text_jsonl_sha256": "fce4d6fb6167be213079008012d46063688ee7137cd5681b45448dd4163a2f44",
             "tokenizer_sha256": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
             "rendering": "natlang.native_gold_chat/3",
+            "history_reasoning": "keep",
             "tokens": {
               "train": 92621371,
               "test": 2789628
@@ -46,7 +48,7 @@
             }
           }
         },
-        "backbone_inherent_differences": "tokenizer and chat template only (one twin per tokenizer from the same records and renderer); Mellum's nested members train on the same rows through the line's member_* parameters",
+        "backbone_inherent_differences": "tokenizer and chat template only (one twin per tokenizer from the same records and renderer); Mellum's nested members train on the same rows through the line's member_* parameters. history_reasoning (declared per backbone, owner 2026-10-10; serve/chat.py BACKBONE_HISTORY_REASONING, asserted by the renderer and recorded in each twin receipt; serving renders the same): every line trains the target turn's reasoning; earlier assistant turns' reasoning follows each backbone's post-training template default, LFM2.5 last_turn_only (only the most recent assistant turn of a rendered conversation keeps its reasoning; preserve_thinking is never set), Mellum2.1 keep (every assistant turn after the last user query keeps it)",
         "mix": {
           "policy": "added to the line's existing native text cohort of each listed stage, never replacing it",
           "weight": 0.25,

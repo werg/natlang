@@ -106,7 +106,7 @@ test('a turn round-trips text, thinking and tool calls through the natlang trans
   const [request] = chats();
   assert.equal(request.body.model, 'fake');
   assert.equal(request.body.max_tokens, 500);
-  assert.deepEqual(request.body.chat_template_kwargs, { enable_thinking: true, preserve_thinking: true });
+  assert.deepEqual(request.body.chat_template_kwargs, { enable_thinking: true });
   assert.deepEqual(request.body.tools, [{ type: 'function', function: tools[0] }]);
   assert.deepEqual(request.body.messages, [
     { role: 'system', content: 'You are pi.' },
@@ -120,7 +120,7 @@ test('a turn round-trips text, thinking and tool calls through the natlang trans
   reply = () => ({ status: 200, body: { choices: [{ finish_reason: 'length', message: { content: 'cut' } }] } });
   const cut = await models.completeSimple(model, { messages: [{ role: 'user', content: 'hi', timestamp: 1 }] });
   assert.equal(cut.stopReason, 'length');
-  assert.deepEqual(chats().at(-1).body.chat_template_kwargs, { enable_thinking: false, preserve_thinking: true });
+  assert.deepEqual(chats().at(-1).body.chat_template_kwargs, { enable_thinking: false });
 });
 
 test('server errors keep their text, so pi-ai classifies overflow and retries', async () => {

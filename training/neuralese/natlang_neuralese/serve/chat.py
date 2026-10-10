@@ -219,6 +219,103 @@ def render_with_empty_thought(render, messages: list[dict]) -> str:
     return text.replace(_REASONING, "") if _REASONING in text else render(messages)
 
 
+HISTORY_REASONING_POLICIES = ("keep", "last_turn_only")
+BACKBONE_HISTORY_REASONING = {"lfm2": "last_turn_only", "mellum": "keep"}
+"""Declared, backbone-inherent history-reasoning policy per backbone (`config.model_type`; owner 2026-10-10). The
+reasoning of the turn being trained or generated is rendered for every line; what differs is earlier assistant
+turns' reasoning in the history, which follows how each backbone was post-trained with its own template default:
+LFM2.5 drops it (`last_turn_only`: its template keeps only the last assistant turn's reasoning unless
+`preserve_thinking`/`keep_past_thinking` is set, which natlang never sets); Mellum2.1 keeps it (`keep`: its
+template renders every assistant turn's reasoning after the last user query, without a switch). Training text and
+serving prompts render through `bind_history_reasoning`, which pins the template switch to the declared policy and
+asserts with a rendering probe that the template behaves as declared."""
+_HISTORY_REASONING_SWITCHES = ("preserve_thinking", "keep_past_thinking")
+_PROBE_EARLIER, _PROBE_LATEST = "natlang-history-reasoning-probe-earlier", "natlang-history-reasoning-probe-latest"
+_PROBE_EXPECTED = {"keep": "keep", "last_turn_only": "drops-history"}
+
+
+def history_reasoning_kwargs(chat_template, policy: str) -> dict:
+    """The chat-template keyword arguments that pin `chat_template` to `policy`: a template with a switch gets it
+    set explicitly (true for 'keep', false for 'last_turn_only'); a template without one gets none."""
+    if policy not in HISTORY_REASONING_POLICIES:
+        raise ValueError(f"unknown history_reasoning policy {policy!r} (declared: {HISTORY_REASONING_POLICIES})")
+    if isinstance(chat_template, str):
+        for name in _HISTORY_REASONING_SWITCHES:
+            if name in chat_template:
+                return {name: policy == "keep"}
+    return {}
+
+
+def declared_history_reasoning(model_type) -> str | None:
+    """The declared policy of a backbone (`config.model_type`), or None for an undeclared one."""
+    return BACKBONE_HISTORY_REASONING.get(model_type) if isinstance(model_type, str) else None
+
+
+def tokenizer_model_type(tokenizer) -> str | None:
+    """`model_type` of the checkpoint a tokenizer was loaded from (its directory's config.json), when it has one."""
+    import pathlib
+    path = getattr(tokenizer, "name_or_path", None)
+    config = pathlib.Path(path) / "config.json" if isinstance(path, str) and path else None
+    if config is None or not config.is_file():
+        return None
+    try:
+        return json.loads(config.read_text(encoding="utf-8")).get("model_type")
+    except (OSError, ValueError):
+        return None
+
+
+def probe_history_reasoning(render) -> str:
+    """Render a tool-loop conversation (task, reasoned step, tool result, reasoned step) with `render(messages)` and
+    classify it: 'keep' (both reasonings rendered), 'drops-history' (only the latest turn's reasoning rendered) or
+    'not-rendered' (the template renders no reasoning)."""
+    text = render([{"role": "user", "content": "probe task"},
+                   {"role": "assistant", "reasoning_content": _PROBE_EARLIER, "content": "probe step"},
+                   {"role": "tool", "content": "probe result"},
+                   {"role": "assistant", "reasoning_content": _PROBE_LATEST, "content": "probe done"}])
+    if _PROBE_EARLIER in text and _PROBE_LATEST in text:
+        return "keep"
+    return "drops-history" if _PROBE_LATEST in text else "not-rendered"
+
+
+def bind_history_reasoning(tokenizer, policy: str | None = None, *, model_type: str | None = None,
+                           require_declared: bool = False):
+    """Bind a backbone's declared history-reasoning policy to `tokenizer.apply_chat_template` (idempotent) and record
+    it as `tokenizer.natlang_history_reasoning` ({"policy", "backbone", "template_kwargs", "probe"}).
+
+    `policy` defaults to the declaration for `model_type` (default: the tokenizer checkpoint's config.json). The
+    template switch, when it has one, is pinned to the policy, and a caller passing a contrary value raises. A
+    template whose probe contradicts the declared policy raises ValueError. An undeclared backbone (`policy`
+    "undeclared") keeps its template's behaviour, recorded by the probe; `require_declared` makes it an error."""
+    model_type = model_type if model_type is not None else tokenizer_model_type(tokenizer)
+    declared = policy if policy is not None else declared_history_reasoning(model_type)
+    bound = getattr(tokenizer, "natlang_history_reasoning", None)
+    if isinstance(bound, dict):
+        if declared is not None and bound.get("policy") != declared:
+            raise ValueError(f"tokenizer is bound to history_reasoning={bound.get('policy')!r}, not {declared!r}")
+        if require_declared and bound.get("policy") == "undeclared":
+            raise ValueError(f"backbone {model_type!r} declares no history_reasoning policy (chat.BACKBONE_HISTORY_REASONING)")
+        return tokenizer
+    if declared is None and require_declared:
+        raise ValueError(f"backbone {model_type!r} declares no history_reasoning policy (chat.BACKBONE_HISTORY_REASONING)")
+    kwargs = {} if declared is None else history_reasoning_kwargs(getattr(tokenizer, "chat_template", None), declared)
+    original = tokenizer.apply_chat_template
+
+    def apply_chat_template(conversation, *args, **options):
+        for name, value in kwargs.items():
+            if options.get(name, value) != value:
+                raise ValueError(f"history_reasoning={declared} pins chat-template {name}={value!r}")
+        return original(conversation, *args, **{**options, **kwargs})
+
+    probe = probe_history_reasoning(lambda m: apply_chat_template(m, tokenize=False, add_generation_prompt=False))
+    if declared is not None and probe != _PROBE_EXPECTED[declared]:
+        raise ValueError(f"chat template of backbone {model_type!r} renders history reasoning as {probe!r}, "
+                         f"not as its declared history_reasoning={declared}")
+    tokenizer.apply_chat_template = apply_chat_template
+    tokenizer.natlang_history_reasoning = {"policy": declared or "undeclared", "backbone": model_type,
+                                           "template_kwargs": dict(kwargs), "probe": probe}
+    return tokenizer
+
+
 def assistant_reply(apply_template, message: dict) -> str | None:
     """The text a model generates for assistant `message` after the generation prompt of a one-turn conversation, or
     None when the template's rendering of the turn does not continue that prompt. Thinking templates get the empty

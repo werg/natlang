@@ -341,7 +341,8 @@ def tokenizer_fingerprint(tokenizer) -> str:
 
 def _native_gold_render(tokenizer, turns, tools):
     """Use the serving renderer; content markers remain ordinary content tokens."""
-    from ..serve.chat import render_messages, render_with_empty_thought, split_escaped
+    from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought, split_escaped
+    bind_history_reasoning(tokenizer)
     def template(turns, schemas):
         return render_with_empty_thought(lambda m: tokenizer.apply_chat_template(
             m, tools=schemas or None, tokenize=False, add_generation_prompt=False), turns)
@@ -1185,7 +1186,8 @@ def native_gold_packet(tokenizer, messages, target, tools):
     target can change how earlier assistant turns render, so LCP is not a
     reliable task-target mask.
     """
-    from ..serve.chat import assistant_reply_segments, render_messages, split_escaped
+    from ..serve.chat import assistant_reply_segments, bind_history_reasoning, render_messages, split_escaped
+    bind_history_reasoning(tokenizer)
     if list(_message_neuralese_ids(target)):
         raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
 
@@ -1250,7 +1252,10 @@ def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True):
     from ..train.trajectories import crisp_messages, handover_notes
 
+    from ..serve.chat import bind_history_reasoning
     fingerprint = tokenizer_fingerprint(tokenizer)
+    # The backbone's declared history-reasoning policy (chat.BACKBONE_HISTORY_REASONING), asserted by a probe.
+    history_reasoning = dict(bind_history_reasoning(tokenizer).natlang_history_reasoning)
     record_rows = list(records)
     piece_map = (dict(pieces) if isinstance(pieces, Mapping) else
                  {p["name"]: p["text"] for p in pieces
@@ -1366,6 +1371,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                    if preview_only else "approved SFT records only; ") +
                   "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; serving generation prompt and assistant reply rendered separately with native chat content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/3", "tokenizer_sha256": fingerprint,
+        "history_reasoning": history_reasoning,
         "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
         "training_admission_granted": False,

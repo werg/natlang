@@ -56,6 +56,10 @@ def main():
     if not (tokenizer_path / "tokenizer.json").is_file():
         parser.error("--tokenizer must be a local tokenizer snapshot directory (pinned provenance)")
     tokenizer = load_pinned_tokenizer(tokenizer_path)
+    # A corpus is rendered only under its backbone's declared history-reasoning policy (serve/chat.py
+    # BACKBONE_HISTORY_REASONING), asserted against the template; the receipt records it.
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    bind_history_reasoning(tokenizer, require_declared=True)
     rows, receipt, omissions, provenance = gold_text_rows(records, pieces, tokenizer=tokenizer)
     args.out.mkdir(parents=True)
     data = "".join(canonical(row) + "\n" for row in rows).encode("utf-8")

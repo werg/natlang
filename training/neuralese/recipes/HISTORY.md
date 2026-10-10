@@ -89,3 +89,8 @@ backbone-inherent overrides on top of v3; a test proves both resolve to their pr
 - Recurrence (recurrence_warmup), after each student's runtime qualification for its exact weights and the view operator
   gate: the v3 records with `--view written --distill 1.0 --view-window 4096 --context-weight 1.0 --feedback-weight
   0.25`. The raw_recurrence_training handler whitelist does not carry these options yet; declared for its owner.
+- History reasoning (owner 2026-10-10, recorded in place: a declaration, no change to any rendered row): each twin
+  carries its backbone's declared, backbone-inherent `history_reasoning` (`serve/chat.py` BACKBONE_HISTORY_REASONING):
+  LFM2.5 `last_turn_only` (its post-training template default; `preserve_thinking` is never set), Mellum2.1 `keep`.
+  Target-turn reasoning is trained for both. The renderer asserts the template behaves as declared and records the
+  policy in each new receipt; the reference server binds the same policy. Both v1 twins already render as declared.
