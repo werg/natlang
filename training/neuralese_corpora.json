@@ -26469,6 +26469,32 @@
       "training_admission": false,
       "admission": "held-source-semantic-wire-visibility-review",
       "notes": "All 53 queues accounted, input files unchanged. 33 exact annotation maps; 20 cases contain 26 annotation disagreements. PubMedQA has 0 / 6 exact maps, supplementary source/visibility diagnosis assigned. 717 child invocations; 46 scope failures are observed caller syntax/callable/typed output mistakes, no demonstrated runtime bug. Aggregate host captures are not item-level visibility evidence."
+    },
+    {
+      "id": "free-provider-luna-v52-guidance-recovery-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "iterative-guidance-recovery-evidence",
+      "training_admission": false,
+      "admission": "held-source-native-runtime-quality-review",
+      "notes": "SCHED-543 V5 guidance retry completed with exact gold and all six files. Original V49 partial remains unscored; changed guidance and seed are descriptive, not a controlled causal comparison."
+    },
+    {
+      "id": "luna-v52-sched543-guidance-recovery-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/v52-sched543-guidance-recovery-audit-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "iterative-guidance-recovery-evidence",
+      "training_admission": false,
+      "admission": "held-source-native-runtime-quality-review",
+      "notes": "Sealed actual four-pass trace audit, exact source-bound result and file checks. Updated notes retain prior uncertainty as history and append current authority. No semantic truth beyond authored facts or independent world credit. No automatic admission."
     }
   ],
   "coverage_backlog": [

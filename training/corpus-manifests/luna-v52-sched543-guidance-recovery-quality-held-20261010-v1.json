@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v52-sched543-guidance-recovery-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v52-sched543-guidance-recovery-audit-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1044,
+      "sha256": "a39af5c77e4040c2d396f7ae3cd7b343dffa352fec6c8edb121f631013890636"
+    },
+    {
+      "path": "audit.json",
+      "bytes": 21768,
+      "sha256": "c2349ad618617a641031baec91fe888987379a189a914ee37f9644fc70bc56e7"
+    }
+  ],
+  "bytes": 22812
+}

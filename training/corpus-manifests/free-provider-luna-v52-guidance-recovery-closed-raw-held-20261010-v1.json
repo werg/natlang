@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v52-guidance-recovery-closed-raw-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+  "files": [
+    {
+      "path": "campaign-launch.json",
+      "bytes": 1650,
+      "sha256": "1b6646c3f15172ee1017e13a176cc95f77e88f7860a9d8f61793f87b478522a5"
+    },
+    {
+      "path": "launcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 3088,
+      "sha256": "647626befdca30e808ef05ca8e9046d6655d642ed03e6b5b5aa5ccdafb664463"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 618,
+      "sha256": "af2470cd7e38010298f50e5b1952ec97aa67cab857636195070592066cb06051"
+    },
+    {
+      "path": "worker-01/case-000015/collector.log",
+      "bytes": 78072,
+      "sha256": "3b34975f1d3c189f819b56606af745c768651d8a6e2d7dd715b4388820418169"
+    },
+    {
+      "path": "worker-01/case-000015/jobs/000015-4a4690304a88a742.result.json",
+      "bytes": 2363468,
+      "sha256": "03597b7c35aeeffaa7f613d2b6fbce3ba3ad1363762b511630dc00a9a188eb36"
+    },
+    {
+      "path": "worker-01/case-000015/jobs/000015-4a4690304a88a742.trace.jsonl",
+      "bytes": 628982,
+      "sha256": "ac2056309753670b612631858230cd462529acde5ba8a4fab9a9da6499eb8ae3",
+      "lines": 378
+    },
+    {
+      "path": "worker-01/case-000015/results.jsonl",
+      "bytes": 2363468,
+      "sha256": "03597b7c35aeeffaa7f613d2b6fbce3ba3ad1363762b511630dc00a9a188eb36",
+      "lines": 1
+    },
+    {
+      "path": "worker-01/case-000015/results.jsonl.manifest.json",
+      "bytes": 1696,
+      "sha256": "49d9d4f3adfb47756da8e72afde57dfb0cb9cd33ec9ae9b52b4765842306fc91"
+    },
+    {
+      "path": "worker-01/journal.jsonl",
+      "bytes": 5595,
+      "sha256": "7455e2d3de18416e5ab60a40f034e574a4f79aafb5171931ba6ff16e38fee554",
+      "lines": 6
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 930,
+      "sha256": "22b808492c46dcc69851227eafc29e8006346172a71e0a90a92e504a15988fcd",
+      "lines": 1
+    },
+    {
+      "path": "worker-01/worker.log",
+      "bytes": 5595,
+      "sha256": "7455e2d3de18416e5ab60a40f034e574a4f79aafb5171931ba6ff16e38fee554"
+    }
+  ],
+  "bytes": 5453162
+}
