@@ -25080,6 +25080,61 @@
       "training_admission": false,
       "admission": "evidence-only",
       "notes": "V12teacheractualc09424fd...8445878237B differsV13r2registered a55d1c9c...8445872885B. Sameinputs/differentbuilderoutputs notproofduplicate. Originalreviewwrongcitecorrected; uniqueV12retained."
+    },
+    {
+      "id": "pop-storage-cleanup-completed-evidence-20261010-v1",
+      "owner": "pop",
+      "path": "runs/pop-storage-cleanup-completed-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "cleanup-or-provider-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Nineexactverifiedoffloadreceipts/restorecommands plus cleanupsummary. Copiesremovedlocally, originalsretainedDGX; exactdedup/rendercachedeletion preserves sources/rejections."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v14-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v14",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "cleanup-or-provider-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512freshtraininheritedrows IDsANDgroupsdisjointallpriorproviders; sameprojectquotaqueuebehindV13. Sourcequalityheldactiveoutputsexcluded."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v12-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v12",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "cleanup-or-provider-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Closed512actualchoiceconfidenceoutputs/rawattempts/frozenadapter; independentqualityreviewongoing noautomaticadmission."
+    },
+    {
+      "id": "free-provider-luna-v39-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v39-fortyeight-runtimev12-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "cleanup-or-provider-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Closed48case operationalresults after rootreviewv2; failedv1launch retained. Semantic/capture/actionauditongoing. Originalsourcegroups/splitsheld noautomaticadmission."
     }
   ],
   "coverage_backlog": [

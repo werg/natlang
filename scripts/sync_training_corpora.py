@@ -645,14 +645,14 @@ def main():
     parser.add_argument('--machine', choices=['pop', 'dgx'], required=True,
                         help='identity of the machine running this command, not a verification destination')
     parser.add_argument('--id', action='append', dest='ids')
-    parser.add_argument('--file', action='append', dest='files', help='select exact manifest paths for restore or offload')
+    parser.add_argument('--file', action='append', dest='files', help='select exact manifest paths for sync, restore or offload')
     parser.add_argument('--execute', action='store_true', help='for offload, transfer/verify then unlink selected local files')
     parser.add_argument('--host', default='dgx')
     parser.add_argument('--remote-repo', default='/home/werg/natlang')
     parser.add_argument('--reserve-gib', type=float, default=8)
     args = parser.parse_args()
-    if args.files and (args.action not in {'restore', 'offload'} or not args.ids or len(args.ids) != 1):
-        parser.error('--file requires restore/offload and exactly one --id')
+    if args.files and (args.action not in {'sync', 'restore', 'offload'} or not args.ids or len(args.ids) != 1):
+        parser.error('--file requires sync/restore/offload and exactly one --id')
     if args.action == 'offload' and (not args.files or not args.ids or len(args.ids) != 1):
         parser.error('offload requires exactly one --id and one or more --file paths')
     if args.execute and args.action != 'offload':

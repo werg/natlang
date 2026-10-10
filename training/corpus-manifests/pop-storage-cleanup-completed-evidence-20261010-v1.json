@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-storage-cleanup-completed-evidence-20261010-v1",
+  "owner": "pop",
+  "path": "runs/pop-storage-cleanup-completed-20261010-v1",
+  "files": [
+    {
+      "path": "native-sft-v13-r2--b318819735bc518c.json",
+      "bytes": 2190,
+      "sha256": "1f15d7ad3f1717cc90b071ac6ebcc23278ab74bf9f91d5650f779dbabd95d757"
+    },
+    {
+      "path": "neuralese-v19-preservation-20261007-v1--525027c2959f8903.json",
+      "bytes": 3026,
+      "sha256": "f6960950c78d73513d26c1518a72c6613aefab20beda19ee543287722a821b81"
+    },
+    {
+      "path": "pop-inactive-model-lfm25-8b-a1b-nf4-preservation-20261010-v1--58b37015129d66ad.json",
+      "bytes": 3118,
+      "sha256": "7117f9764c68b6153de4d7efccda52fd7de7b9cdb16ae07f36c677ae4294c7ab"
+    },
+    {
+      "path": "pop-inactive-model-lfm25-8b-a1b-preservation-20261010-v1--f681187ee4c5632e.json",
+      "bytes": 2468,
+      "sha256": "09fc43cf51156fab7152848b25a795b6c39e55ff1239cdd7b4344516787f7c6e"
+    },
+    {
+      "path": "pop-inactive-model-ling3-tiny-hf-preservation-20261010-v1--87bce2f4a61cc065.json",
+      "bytes": 24446,
+      "sha256": "e90792887cf68bd785fab1bff115294d7aef32a4055453d3824c857e4c77cff6"
+    },
+    {
+      "path": "pop-inactive-model-ling3-tiny-natlang-v2-preservation-20261010-v1--18c81d41eaa6d825.json",
+      "bytes": 2586,
+      "sha256": "240d2f99e89fc9ae55ddb5fcce39268f08908986c3be8b8e714009fc3628ad4b"
+    },
+    {
+      "path": "pop-inactive-model-ling3-tiny-preservation-20261010-v1--583f3323d63b6da2.json",
+      "bytes": 2454,
+      "sha256": "da5472df1325dd2dbdec67bc07d1c5075a01aca558cfa3083ac3d5059fd1e74f"
+    },
+    {
+      "path": "pop-inactive-model-spark-x25-4b-hf-preservation-20261010-v1--c44bf1e23b26d268.json",
+      "bytes": 5390,
+      "sha256": "8ad99632692b2001dd60842f52b900784a91205053c0aa837150e240ee88c2a4"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 6813,
+      "sha256": "8f98a120a386d39fd6fb14420c4f948ab5f1cb5cb5b7fb3b7775fb823da90fab"
+    },
+    {
+      "path": "teacher-neuralese-v13-v8--1e48d4281191e8e3.json",
+      "bytes": 2224,
+      "sha256": "5320d82a7b8323ffbb496a27aabc1eec49807cfd1126826585cd71e8f7989d68"
+    }
+  ],
+  "bytes": 54715
+}
