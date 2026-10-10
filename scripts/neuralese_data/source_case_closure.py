@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -34,14 +34,11 @@ from .splits import check_closed, protected_hit
 
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
+sys.path.insert(0, str(ROOT / "training" / "neuralese"))
+from natlang_neuralese.common.hashing import (  # noqa: E402
+    canonical_json_sha256_hex as canonical_row_sha256,
+    sha256_file_hex as sha256,
+)
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -56,11 +53,6 @@ def dotted(value: dict, path: str, *, where: str):
             raise ValueError(f"{where}: missing {path}")
         cur = cur[key]
     return cur
-
-
-def canonical_row_sha256(row: dict) -> str:
-    payload = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
 
 
 def verify_source_manifest(source: Path, manifest_path: Path) -> tuple[dict, dict]:
