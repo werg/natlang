@@ -27839,6 +27839,92 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Final shared bounded-JSON audit:402/402 items request-backed;400 raw text and186 nested matches, including2 nested-only. Exact invocation joins and parent eval/source hashes. Original raw requests are not claimed. No semantic admission."
+    },
+    {
+      "id": "free-provider-google-v24-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v24",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "512 typed-valid decisions,406 annotation agreements and106 differences,556 attempts. Original source and actual frozen runner preserved. No semantic admission."
+    },
+    {
+      "id": "free-provider-google-v24-static-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v24-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "54 shared inline directory reducer programs with406 decision items. All actual reference/full-input visibility gates accepted.30 currentholds have no intersection; actualgeneration policy pin preserved. No source/world admission."
+    },
+    {
+      "id": "luna-choice-folder-v64-reviewed-inputs-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v64-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Five-worker successor on54 V24 programs406items, waiting for V63 closeout. Reviewed generation only and no extra concurrent slots. Active outputs excluded.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-approved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "luna-annotation-folder-v62-closed-raw-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-annotation-folder-v62-runtimev15-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "24 annotation-only programs96train items,11 accepted/76 exact decisions. Every saved map equals its return. Original source, traces and recovered scope failures retained. No source or training admission."
+    },
+    {
+      "id": "luna-annotation-folder-v62-quality-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-annotation-folder-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Superseded initial audit retained. Ten expected-map text hits later diagnosed as model console outputs after decisions, not hidden gold injected into inputs. Finalv2 separate."
+    },
+    {
+      "id": "luna-annotation-folder-v62-quality-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-annotation-folder-final-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "96/96 item-bound rendered-request state visibility;120/120 input files exact.11 accepted programs76 correct decisions20differences; eight recovered scope events. No gold leak: coincident expected-map text was model console output. Allheld."
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v7",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Root reviewed four exact V62 source candidates. Three forward strict-label holds: two body-only destination labels without context and lower-bound numeric evidence cannot entail upper bound. Season-versus-season-end timing case retained, no forced relabel."
+    },
+    {
+      "id": "luna-annotation-folder-v62-disagreement-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-disagreement-full-source-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "All20 exact disagreement source objects and raw outcomes pinned. Provisional review candidates are not automatic holds; root receipt v7 separately adjudicates four."
     }
   ],
   "coverage_backlog": [

@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v6",
+  "policy_id": "decision-visible-answerability-holds-v7",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -379,6 +379,39 @@
         "review_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
       },
       "decision_receipt_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
+    },
+    {
+      "item_id": "dc-cb38208ceed023db2460",
+      "original_source_group": "g-f5dfc5c2166605c7cc76d8e6",
+      "split": "train",
+      "reason": "One generic metaphor about madmen and a broken computer gives no recoverable newsgroup destination or thread context.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-20a6738320ab61bf3a8e",
+      "original_source_group": "g-2e12210aa81d5605d2c59061",
+      "split": "train",
+      "reason": "Surreal satire crosses food, physics and occult topics with no source header or thread provenance identifying sci.med. Exact original destination is not determined by the visible body.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+    },
+    {
+      "item_id": "dc-3ab8e9803c71929dc86f",
+      "original_source_group": "g-a9369454bc708886d286a129",
+      "split": "train",
+      "reason": "Evidence gives a lower bound of over90 million views, which does not entail an upper bound below100 million. Do not force the supplied strict SUPPORTS annotation.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v7/root-review.json",
+        "review_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
+      },
+      "decision_receipt_sha256": "b843007e8966193c48ef4675daff0aa2cb403fd45128ebf051429b85b55103df"
     }
   ],
   "root_review": {

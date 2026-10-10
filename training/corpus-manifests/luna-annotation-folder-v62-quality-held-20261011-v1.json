@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-annotation-folder-v62-quality-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v62-annotation-folder-final-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 297230,
+      "sha256": "d26557750c0bf8b786dca9668a231fba2505e6f7969c6c15af520c34f36d4f0a"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 2871,
+      "sha256": "a41cdf5ff52dfd800c60230130c52337308de18573e105b0446acbfb10ef8ba3"
+    }
+  ],
+  "bytes": 300101
+}
