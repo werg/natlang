@@ -21312,6 +21312,21 @@
       "admission": "generation-only; evolving journal/results excluded",
       "independent_new_worlds": 0,
       "notes": "Root alias resolves to /srv output volume. Exact approved V28 train source and runtimev6 hashes pinned in launch. One case/request at a time. Separate snapshot avoids parent traversal omission of nested directory aliases."
+    },
+    {
+      "id": "free-provider-quality-review-v18-and-trace-correction-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "quality-review-v18/**",
+        "quality-review-v18-trace-correction-v1/**"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "actual-rejection-review-and-canonical-trace-proof",
+      "training_admission": false,
+      "admission": "diagnostic evidence only; no generated trajectory admission",
+      "independent_new_worlds": 0,
+      "notes": "ZAI research index2 actually lost raw evidence in pass4 by returning final decision JSON; final parser defaulted to no_action. Runtime capture was intact. Apparent trace hash mismatch is false: canonical root-only events match recorded hash; raw sidecar includes child events. Correction supplement supersedes only that diagnostic claim, old review bytes retained. Native tool schema metadata fixed centrally for future runtime, not rewritten."
     }
   ],
   "coverage_backlog": [
