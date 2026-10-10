@@ -27799,6 +27799,46 @@
         "root-generation-source-review-v1.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "decision-visible-answerability-root-review-held-20261011-v6",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v6",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "One exact short-context DBpedia classification held. Two provisional PubMedQA holds declined after full-state review: amblyopic eyes improved, and nonzero false positives do not negate study-level specificity."
+    },
+    {
+      "id": "free-provider-luna-v61-visibility-correction-held-20261011-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-visibility-binding-supplement-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Superseded intermediate visibility correction; retained immutable, no admission."
+    },
+    {
+      "id": "free-provider-luna-v61-visibility-correction-held-20261011-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-visibility-binding-supplement-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Superseded intermediate visibility correction; retained immutable, no admission."
+    },
+    {
+      "id": "free-provider-luna-v61-visibility-correction-held-20261011-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-visibility-binding-supplement-v3",
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Final shared bounded-JSON audit:402/402 items request-backed;400 raw text and186 nested matches, including2 nested-only. Exact invocation joins and parent eval/source hashes. Original raw requests are not claimed. No semantic admission."
     }
   ],
   "coverage_backlog": [

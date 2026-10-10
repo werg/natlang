@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v5",
+  "policy_id": "decision-visible-answerability-holds-v6",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -368,6 +368,17 @@
         "review_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
       },
       "decision_receipt_sha256": "a074fa6d7a0d61dd69115b5ecdbf41bc579491eca3895cd8c9e59d6e7f0ecc4b"
+    },
+    {
+      "item_id": "dc-5325054407d6ae1e5dd8",
+      "original_source_group": "g-5594d6cd3ceef8cd8d4ba2c8",
+      "split": "train",
+      "reason": "Visible entry only identifies a lawyer and Celtic scholar. No supplied taxonomy defines scholar as Artist and neither an artistic role nor public office is stated. Hold this exact short-context classification from strict labels.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v6/root-review.json",
+        "review_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
+      },
+      "decision_receipt_sha256": "15f96424bfbfb8bbe8c0e2227ec005886ec7e64e7d258355678258c7fd30eb8d"
     }
   ],
   "root_review": {

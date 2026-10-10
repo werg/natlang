@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v61-visibility-correction-held-20261011-v2",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v61-visibility-binding-supplement-v2",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 223291,
+      "sha256": "93bc042f1c0ecab6ce1354b606b54ac7743b2e6debeb09940c95ce8e522f074c"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 2012,
+      "sha256": "3e361b20fecdd1e7b0bea5209ab0c882f24aa9c9f14bb7f58c6b50ee10368ce6"
+    }
+  ],
+  "bytes": 225303
+}

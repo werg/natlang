@@ -40,6 +40,37 @@ def _texts(value: Any) -> Iterable[str]:
             yield node
 
 
+def _bounded_json_fields(messages: Any) -> list[dict[str, Any]]:
+    """Decode only saved function-argument JSON envelopes, exactly one level.
+
+    These strings are structurally identified by the rendered chat schema. We do
+    not try to parse arbitrary message text or recursively decode string fields.
+    The saved messages remain rendered-request evidence, not original wire bytes.
+    """
+    found: list[dict[str, Any]] = []
+    if not isinstance(messages, list):
+        return found
+    for message_index, message in enumerate(messages):
+        if not isinstance(message, Mapping):
+            continue
+        calls = message.get("tool_calls")
+        if not isinstance(calls, list):
+            continue
+        for call_index, call in enumerate(calls):
+            fn = call.get("function") if isinstance(call, Mapping) else None
+            encoded = fn.get("arguments") if isinstance(fn, Mapping) else None
+            if not isinstance(encoded, str):
+                continue
+            try:
+                decoded = json.loads(encoded)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for path, value in _walk(decoded, f"$.messages[{message_index}].tool_calls[{call_index}].function.arguments"):
+                if isinstance(value, str):
+                    found.append({"path": path, "depth": 1, "value": value})
+    return found
+
+
 def _snapshot_equalities(invocation: Mapping[str, Any], state: str) -> list[str]:
     """Read named snapshots only from this exact invocation ledger row."""
     paths: list[str] = []
@@ -87,6 +118,7 @@ def _record_child_requests(record: Mapping[str, Any], record_index: int) -> list
             "invocation_id": invocation_id,
             "messages": messages,
             "request_text": "\n".join(_texts(messages)),
+            "nested_json_fields": _bounded_json_fields(messages),
             "capture_snapshot_paths_by_state": None,
             "transport_hashes": {
                 "raw_request_sha256": transport.get("raw_request_sha256"),
@@ -157,6 +189,25 @@ def analyze_item_visibility(
                     "event_id": event["event_id"],
                     "invocation_id": event["invocation_id"],
                     "match_form": "literal" if matching == state else "json-escaped",
+                    "match_source": "rendered-message-text",
+                    **event["transport_hashes"],
+                    "rendered_messages_count": event["rendered_messages_count"],
+                    "truncated_messages": event["truncated_messages"],
+                })
+            nested_match = next(
+                ((field, form) for field in event.get("nested_json_fields", [])
+                 for form in forms if form in field["value"]),
+                None,
+            )
+            if nested_match is not None:
+                field, matching = nested_match
+                request_matches.append({
+                    "event_id": event["event_id"],
+                    "invocation_id": event["invocation_id"],
+                    "match_form": "literal" if matching == state else "json-escaped",
+                    "match_source": "one-level-json-field",
+                    "json_depth": field["depth"],
+                    "json_path": field["path"],
                     **event["transport_hashes"],
                     "rendered_messages_count": event["rendered_messages_count"],
                     "truncated_messages": event["truncated_messages"],
