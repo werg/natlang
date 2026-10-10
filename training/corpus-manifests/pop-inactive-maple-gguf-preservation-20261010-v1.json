@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-inactive-maple-gguf-preservation-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-models/maple-preview-GGUF-20261010-v1",
+  "files": [
+    {
+      "path": "maple-preview-TQ2_0-head-F16.gguf",
+      "bytes": 6349082144,
+      "sha256": "2fad7b4903781aca6b1171881f2d273989fe1735b6b3ea704bc486b472d98039"
+    }
+  ],
+  "bytes": 6349082144
+}
