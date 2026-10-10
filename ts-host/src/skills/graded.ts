@@ -167,7 +167,7 @@ function probabilityOf(value: unknown): number | undefined {
 }
 
 /** A distribution over `k` ordered levels from probabilities (by level name or index), a level, or a fractional score. */
-function ordinalDistribution(value: unknown, levels: string[]): number[] | undefined {
+export function ordinalDistribution(value: unknown, levels: string[]): number[] | undefined {
   const k = levels.length;
   // A level's own name wins over parsing, so a level named "4" is that level, not index 4.
   const named = typeof value === 'string' ? levels.indexOf(value.trim()) : -1;

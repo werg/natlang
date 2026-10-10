@@ -34,7 +34,13 @@ Only source `train` rows are candidates. A candidate is retained only when the
 answer payload has exactly the expected probability keys, numeric finite values
 in `[0,1]`, and a total within `1e-4` of one; `scoreGraded` reports every gate
 true; and the deterministic highest-probability option/level (first source
-option wins a tie) or binary threshold agrees with the source annotation. The
+option wins a tie) or binary threshold agrees with the source annotation. Numeric
+ordinal annotations are zero-based positions, not literal level names. The
+adapter uses the scorer's shared `ordinalDistribution` for the annotation too:
+integer positions map to their named level; fractional positions split mass
+between neighbours and select the nearest level (the earlier level on an exact
+tie). This is an explicit crisp reduction, not a modification of the annotation
+or teacher probabilities. The
 adapter never normalizes probabilities or repairs labels. Rejections record
 missing labels, typed errors, strict-schema failures, gate failures, and
 source-label disagreement.
