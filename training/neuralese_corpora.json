@@ -26351,6 +26351,114 @@
       "training_admission": false,
       "admission": "held-source-quality-native-execution-review",
       "notes": "32 unchanged fictional source worlds in eight grouped families, 16 train / 16 test. Shared guidance allows labeled historical uncertainty and appended current status instead of global note rewriting. All IDs/groups/splits/golds/decision output bytes and source evidence match V4. Source SHA eb33efacfe38c88c4a9f253fe0d1dc246ac73cfc137c83f17976b28c3bc1e261. No new-world credit or retroactive partial repair."
+    },
+    {
+      "id": "free-provider-google-v19-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v19",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "512 exact choice/confidence envelopes; 390 saved-annotation matches, 122 disagreements. 94 transient 5xx attempts recovered; final rows all 200. Actual models Gemma 4 26B and 31B; daily Gemini models remained quota blocked. Preserve all evidence, no semantic truth inferred."
+    },
+    {
+      "id": "free-provider-google-v19-static-reference-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v19-adapter-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "51 authored programs over 390 unchanged source train items; actual replay 51/51 with zero visibility failures. Source disagreements excluded, retained in raw. Native reference turns held for quality admission."
+    },
+    {
+      "id": "free-provider-google-v19-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v19-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Sealed teacher and static replay audit plus Pop source closure packet. Full S1 closure and semantic ambiguity/quality review pending. Annotation agreement is descriptive, not independent truth."
+    },
+    {
+      "id": "free-provider-luna-v51-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v51-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "All 53 source queues fully accounted; actual final semantic/file/visibility/typed edge audit pending. No automatic admission."
+    },
+    {
+      "id": "free-provider-google-v20-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v20",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "512 new original train source rows, disjoint IDs and groups from all prior provider inputs; eight families of 64. Same quota pacing and cooldown, no paid fallback. Active output excluded until sealed closeout.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v52-guidance-recovery-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "One SCHED-543 train V5 guidance recovery with V4-identical facts and gold. V49 partial preserved unscored. One worker beside four V53 workers. Active outputs excluded.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v53-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v53-runtimev14-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "51 unchanged V19 train source programs, 390 items, complete reference replay and input visibility. Four workers beside one V52; V51 fully closed. Active outputs excluded; no source or training admission.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "unapproved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v52-guidance-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v49-sched543-guidance-recovery-v52-runtimev14-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 3088,
+      "sha256": "647626befdca30e808ef05ca8e9046d6655d642ed03e6b5b5aa5ccdafb664463"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 618,
+      "sha256": "af2470cd7e38010298f50e5b1952ec97aa67cab857636195070592066cb06051"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 930,
+      "sha256": "22b808492c46dcc69851227eafc29e8006346172a71e0a90a92e504a15988fcd",
+      "lines": 1
+    }
+  ],
+  "bytes": 4636
+}

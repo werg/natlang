@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v19-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v19-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 15422,
+      "sha256": "9bf4d4344cd68bb59452a73babf3880774383210549e0d39ed6afda7ce2c1224"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2229,
+      "sha256": "47d70f238bc2a8012699b360b15f8f5d3904288274a4241b46a624308ad39f6b"
+    },
+    {
+      "path": "source-closure-v1/README.md",
+      "bytes": 1561,
+      "sha256": "c6cfdccfb4bd51aa90ef4cc3f85f079afed833b922476bba7ea66973cf113b4c"
+    },
+    {
+      "path": "source-closure-v1/build_v19_closure_inputs.py",
+      "bytes": 9910,
+      "sha256": "76ecef15d931ff2adce27c8e3a4667623b06353e5e90f4067d16e6ac176e060e"
+    },
+    {
+      "path": "source-closure-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "f4504dc241f748702e5261976c1693a0356e3a1eacc8e2ffd8ef53b14185c229"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/candidate-source-case-bindings.json",
+      "bytes": 29195,
+      "sha256": "71f442bd6ebd4f4c023f7a89e445d2ae79a718f39eb70651885665be058cdb5f"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closed-source-case-port-projection.jsonl",
+      "bytes": 1078494,
+      "sha256": "bebb62134f05fcede236c4134d919ebd2c697eaee3fb6c6e080c4a189215d308",
+      "lines": 51
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closure-report.json",
+      "bytes": 16231,
+      "sha256": "dcd8dc714052ef2922c689db2d060eec59c9a1e3c2eba23aff6fe2a6f8b12520"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/source-case-port-projection.jsonl",
+      "bytes": 1078494,
+      "sha256": "bebb62134f05fcede236c4134d919ebd2c697eaee3fb6c6e080c4a189215d308",
+      "lines": 51
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6173615,
+      "sha256": "4995aeb71f7fb0292ac3dc5d3d7345ad87d59f4caf953864ea86f4024ef4f1f5",
+      "lines": 51
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1856722,
+      "sha256": "f5cceeafa0a38183df11698f1023a21cb238cab3b05bd1b8ef1688e54a146254",
+      "lines": 51
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "bytes": 6045,
+      "sha256": "b018c797bb9b9631167bccd94479fc1de24020e4265f310c845bef2ac2f63e13"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "bytes": 244754,
+      "sha256": "f8388b377f6c257648f02c2e3d24e0877479cc07d779a85cbe358587ac158ff7",
+      "lines": 51
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 360236,
+      "sha256": "1ff3d893ca2f2cb49e1bf46f2882005b4cee23a0ed13ad1ed29d1e8ee892c9bc",
+      "lines": 390
+    },
+    {
+      "path": "source-closure-v1/closure-packet-v1.json",
+      "bytes": 14060,
+      "sha256": "e803e6bfbfa1e44728a3980085b14137178c745820f781eadfdd88a9d916bdb5"
+    },
+    {
+      "path": "source-closure-v1/make_v19_packet_v1.py",
+      "bytes": 9137,
+      "sha256": "31f02ee207a67aa2f93753e0eb26b4a3365568aaa79caf76815d2882e1fa074c"
+    },
+    {
+      "path": "source-closure-v1/raw-key-harness-v1.json",
+      "bytes": 1082,
+      "sha256": "dae328aff1f864d2264aaf888fe326f2824175bda6b3dcda6ae7d4822657c2b6"
+    }
+  ],
+  "bytes": 10899120
+}
