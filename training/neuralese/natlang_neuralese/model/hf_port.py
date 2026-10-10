@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from .lfm2_port import AttentionState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
+from .layer_staging import staged_layers
 
 # Unused rows of the shared Qwen3/Maple vocabulary (151,669..151,935 have no token): the marker IDs are the same
 # in every model of the shared Neuralese space (MAPLE_QWEN_JOINT §1).
@@ -136,6 +137,7 @@ class QwenPortBackbone(PortBackbone):
         logits[..., self.controls.close_id] = normed @ rows[1]
         return logits
 
+    @staged_layers
     def run_layers(self, h, layers, cache, positions=None, padding=None, left_pad=None, _checkpoint_layer=False):
         if self.checkpoint_layers and torch.is_grad_enabled() and not _checkpoint_layer:
             return self._run_checkpointed(h, layers, cache, positions, padding, left_pad)

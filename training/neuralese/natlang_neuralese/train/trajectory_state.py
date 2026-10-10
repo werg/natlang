@@ -23,9 +23,13 @@ def gradient_norm(parameters):
 
 
 @torch.no_grad()
-def clip_finite_gradients(parameters, maximum=1.):
+def clip_finite_gradients(parameters, maximum=1., consumed_norm=None):
+    """Clip to a global norm. ``consumed_norm``: the norm of gradients already applied inside the backward (LionSR
+    in-backward latents); it counts toward the global norm, but only the remaining gradients are scaled."""
     parameters = list(parameters)
     norm = gradient_norm(parameters)
+    if consumed_norm is not None:
+        norm = torch.linalg.vector_norm(torch.stack([norm.to(consumed_norm.device), consumed_norm.double()]))
     if not torch.isfinite(norm):
         raise RuntimeError("nonfinite recurrence gradients before optimizer update")
     coefficient = (maximum / (norm + 1e-6)).clamp(max=1.)
@@ -36,10 +40,18 @@ def clip_finite_gradients(parameters, maximum=1.):
 
 
 def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=(),
-                         lora_names=None, latent_lrs=None):
+                         lora_names=None, latent_lrs=None, lion=()):
     """``latent_lrs`` (name → lr): QAT dense latents that get their own AdamW group at that rate (see
-    ``adapters.qat_latent_scales``) instead of sharing the Muon rate."""
+    ``adapters.qat_latent_scales``) instead of sharing the Muon rate. ``lion``: the latent policy's LionSR partition
+    (``optim.latent_partition``; names ``backbone.<name>``), stepped by PortMuonAdamW's latent child."""
     latent_lrs = dict(latent_lrs or {})
+    lion = list(lion)
+    if lion:
+        if policy != 'muon' or lora_names is None:
+            raise ValueError('the LionSR latent partition needs the muon policy and named backbone parameters')
+        stepped = {id(q) for _, q, *_ in lion}
+        kept = [(n, q) for n, q in zip(lora_names, lora) if id(q) not in stepped]
+        lora_names, lora = [n for n, _ in kept], [q for _, q in kept]
     latents = []
     if latent_lrs and lora_names is not None:
         kept = [(n, q) for n, q in zip(lora_names, lora) if n not in latent_lrs]
@@ -59,7 +71,7 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     named += ([(f'backbone.{name}', value) for name, value in zip(lora_names, lora)] if lora_names is not None
               else [(f'lora_{i}', value) for i, value in enumerate(lora)])
     named += [(f'heads.{i}', value) for i, value in enumerate(heads)]
-    optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids)
+    optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids, latent=lion)
     rates = {id(q): group['lr'] for group in groups for q in group['params']}
     # Keep each optimizer's partition/schema while preserving the three learning rates.
     for child in [optimizer.muon, optimizer.auxiliary]:

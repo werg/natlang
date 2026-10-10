@@ -731,6 +731,17 @@ def main(argv=None):
                         help="Maple QAT dense latents get their own AdamW groups at this rate times each matrix's "
                              "ternary scale (codes flip after moving ~0.5 of it); 0: Muon at the backbone rate, under "
                              "which codes practically never flip")
+    parser.add_argument("--latent-optimizer", choices=["muon", "lionsr"], default="muon",
+                        help="lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, "
+                             "stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3), as the "
+                             "text warm-up does")
+    parser.add_argument("--latent-step-in-backward", action=argparse.BooleanOptionalAction, default=False,
+                        help="with --latent-optimizer lionsr: the update's objectives (reader loss, crisp SFT, "
+                             "preserve stream) are backpropagated together, layer by layer across all of them "
+                             "(model/layer_staging.py), and every LionSR latent steps as its layer completes and frees "
+                             "its gradient, so no backbone gradient buffer exists; needs batch 1 and the joint backward "
+                             "policy, and is refused when a stream reads a deeper layer of another at its input. The "
+                             "latents are not norm-clipped (the global norm counts them)")
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--projection-anchor-weight", type=float, default=1.0,
                         help="gold-aligned auxiliary relative-MSE anchor for full content and shallow feedback projections against detached raw next-token embeddings; set 0 only for an explicit diagnostic ablation")
@@ -1689,7 +1700,21 @@ def main(argv=None):
             head_named += [('backbone.control_head_rows', backbone.control_head_rows)]
     for p in head_params:
         p.requires_grad_(True)
-    latent_lrs = {}
+    latent_lrs, lion = {}, []
+    if args.latent_optimizer == 'lionsr':
+        if args.optimizer != 'muon' or args.backbone_training != 'latent' or not args.qat_latent_lr:
+            raise ValueError('--latent-optimizer lionsr needs --optimizer muon --backbone-training latent and --qat-latent-lr')
+        from .optim import latent_partition
+        lion = latent_partition([(f'backbone.{n}', q) for n, q in backbone_named], args.qat_latent_lr)
+        print(json.dumps({'event': 'latent_optimizer', 'optimizer': 'lionsr', 'latents': len(lion),
+                          'elements': sum(q.numel() for _, q, *_ in lion), 'lr_row_scale_units': args.qat_latent_lr}),
+              flush=True)
+    if args.latent_step_in_backward:
+        if not lion:
+            raise ValueError('--latent-step-in-backward needs --latent-optimizer lionsr')
+        if args.batch != 1 or args.backward_policy != 'joint' or args.member_weight:
+            raise ValueError('--latent-step-in-backward needs one backward per update: --batch 1, '
+                             '--backward-policy joint and no --member-weight')
     if args.qat_latent_lr and args.backbone_training == 'qat':
         from .adapters import qat_latent_scales
         latent_lrs = {name: args.qat_latent_lr * scale for name, scale in qat_latent_scales(engine.backbone).items()
@@ -1701,7 +1726,14 @@ def main(argv=None):
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
                                      lora_lr=backbone_lr, heads_lr=args.heads_lr,
                                      embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
-                                     lora_names=lora_names, latent_lrs=latent_lrs)
+                                     lora_names=lora_names, latent_lrs=latent_lrs, lion=lion)
+    in_backward = None
+    if args.latent_step_in_backward:
+        in_backward = optimizer.latent
+        in_backward.step_in_backward(gated=True)
+        print(json.dumps({'event': 'latent_step_in_backward', 'latents': len(lion),
+                          'gradient_buffer_bytes_avoided': sum(q.numel() * q.element_size() for _, q, *_ in lion)}),
+              flush=True)
     from .optim_restore import optimizer_param_names, restore_optimizer_state, declared_added_names, record_restore_report
     optimizer_named = {**{f'soft.{name}': value for name, value in params.items()},
                        **({f'backbone.{name}': value for name, value in zip(lora_names, lora)} if lora_names is not None
@@ -2230,6 +2262,11 @@ def main(argv=None):
             optimizer.zero_grad(set_to_none=True)
             losses = []
             crisp_losses = []
+            single_terms = []  # --latent-step-in-backward: the update's objective terms, backpropagated once
+            armed = None
+            if in_backward is not None:
+                from ..model import layer_staging
+                staging = layer_staging.begin()  # the update's forwards record their layers (model/layer_staging.py)
             projection_anchor_values.clear()
             contrast_values.clear()
             view_lengths.clear()
@@ -2329,7 +2366,10 @@ def main(argv=None):
                         with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
                                                       persistent_tensors=persistent) as offload_stats:
                             loss = loss_of(record, leaves) / args.batch
-                            loss.backward()
+                            if in_backward is not None:
+                                single_terms.append(loss)  # backpropagated once with the update's other terms
+                            else:
+                                loss.backward()
                             losses.append(float(loss.detach()) * args.batch)
                             del loss
                             collect_graph_cycles()
@@ -2348,10 +2388,14 @@ def main(argv=None):
                     # accumulate before one optimizer step, never doubling live tapes.
                     if args.crisp_weight:
                         objective = args.crisp_weight * loss_of(record, {}, soft=False) / args.batch
-                        gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
-                        accumulate_gradients(trainables, gradients)
+                        if in_backward is not None:
+                            single_terms.append(objective)
+                        else:
+                            gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
+                            accumulate_gradients(trainables, gradients)
+                            del gradients
                         crisp_losses.append(float(objective.detach()) * args.batch)
-                        del objective, gradients
+                        del objective
                     collect_graph_cycles()
                     case_peak = torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
                     step_peak_bytes = max(step_peak_bytes, case_peak)
@@ -2408,11 +2452,39 @@ def main(argv=None):
             if preserve is not None and preserve.applies(engine.backbone.hf, step):
                 # Behaviour preservation at this update's precision (train/quantization.py).
                 preserve_loss, preserved = preserve.loss(engine.backbone.hf, step)
-                preserve_loss.backward()
+                if in_backward is not None:
+                    single_terms.append(preserve_loss)
+                else:
+                    preserve_loss.backward()
                 del preserve_loss
+            if single_terms:
+                # One backward at this update's precision; each LionSR latent steps inside it (train/optim.py).
+                armed = in_backward.in_backward()
+                try:
+                    total = single_terms[0]
+                    for term in single_terms[1:]:
+                        total = total + term
+                    single_terms.clear()
+                    with armed:
+                        total.backward()
+                        del total
+                        staging.backward()
+                    consumed = armed.norm()
+                except Exception as error:
+                    optimizer.zero_grad(set_to_none=True)
+                    layer_staging.end()
+                    if armed.started:
+                        # Latents already stepped: the live state is mid-update and is not written; the last
+                        # checkpoint is the resume point (as for a failed optimizer step).
+                        print(json.dumps({'event': 'in_backward_update_failed', 'step': step,
+                                          'latents_stepped': len(armed.stepped), 'state_written': False,
+                                          'error_type': type(error).__name__, 'error': str(error)[:1000]}), flush=True)
+                    raise
+            if in_backward is not None:
+                layer_staging.end()
             optimizer_phase = start_phase('gradient_clip_and_optimizer', step)
             writer_grad = float(gradient_norm(head_params)) if head_params else None
-            clip_finite_gradients(trainables, 1.0)
+            clip_finite_gradients(trainables, 1.0, consumed_norm=consumed if armed is not None else None)
             if quant is not None:
                 quant.set_active('bf16', 0.0)  # evaluations and checkpoints after the update see BF16
             commit_optimizer_step(optimizer)

@@ -229,3 +229,35 @@ BF16 resolution are not lost; lr 3e-4 per row ternary scale (v3). Expected incre
 activations, peak ~73 GB. Updates still happen after the full backward (step-in-backward, which would also drop the
 gradient buffer, needs one backward per update; the warm-up runs one per pass, precision and preserve stream).
 
+
+## raw-recurrence-mellum-v10 (2026-10-10): LionSR latents step inside one layer-lockstep backward per update
+
+v9's backbone phase still held a full BF16 gradient of the latents (~23 GB) because each update ran several backwards
+(one per sequence pass, the sampled precision point and the preserve stream) before one optimizer step. Summing the
+terms and backpropagating once is not enough: autograd runs the later-built graph completely before the earlier one, so
+each layer's partial gradient waits in the engine's buffers for the other graph (measured on 1-3 real Mellum layers:
++0.79 GB per layer with two passes, i.e. the whole gradient again). Shared code:
+`LionSR.step_in_backward(gated=True)` + `in_backward()` (train/optim.py) step each latent in its post-accumulate-grad
+hook only inside one update's backward, look up the live parameter group (staged learning rates and reloaded state
+apply), refuse a second gradient for the same latent in one update, and record the stepped gradients' FP64 norm.
+`LayerStaging` (model/layer_staging.py; the ports' `run_layers` are decorated) runs each layer on detached leaves while
+active and then backpropagates all graphs' layer i in one engine call, deepest first: each layer's weights get their
+whole gradient at once, step and free it (measured: +0.03 GB per layer with two passes and checkpointing). A stream that
+reads a deeper layer of another stream at its input is refused. text_warmup `--latent-step-in-backward` (needs
+`--latent-optimizer lionsr`, one precision point per update, no family term) uses both inside the precision context;
+the parametrized weights are built once and shared by the passes. Exact apart from clipping: the latents take the
+unclipped gradient (Lion's sign update is invariant to a constant scale; only the step-to-step variation of the clip
+coefficient differs), while heads and norms are clipped by the same global norm as before (the stepped latents count in
+it). A failure after the first latent stepped writes nothing; the last written checkpoint is the resume point, as for a
+failed optimizer step. Gradients are freed after each step (also in the old path), so evaluations no longer sit on
+them. The preserve stream's long record is now really checkpointed on Mellum (its model had no `checkpoint_layers`
+attribute, so the old guard left it uncheckpointed). The memory preflight models the change: no latent gradient buffer
+(four copies of the largest latent in flight instead), passes summed rather than maxed in the geometry, and a separate
+`:single` calibration kind. The recurrence trainer gained the same options (`latent_optimizer`,
+`latent_step_in_backward`; joint backward policy, batch 1) through the same code; no recurrence stage declares them.
+Tiny-model equivalence (tests/neuralese/test_latent_step_in_backward.py): the text warm-up end to end, a real port's two
+passes under LayerStaging and a parametrized, checkpointed multi-pass model write identical FP32 latents to separate
+backwards plus one step; in BF16 with a fixed rounding offset <=1% of elements differ by one sign step (gradient
+contributions are summed in another order). Expected backbone-phase peak with v10's settings (batch 2, 1k tokens, layer
+checkpointing): weights 25.5 GB + LionSR momentum 23.4 GB + ~2.5 GB update transients + ~4 GB activations, preserve
+stream and heads, about 56 GB allocated (v9: ~75 GB).

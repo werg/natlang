@@ -1,0 +1,13 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v10",
+  "extends": "raw-recurrence-mellum-v9",
+  "description": "raw-recurrence-mellum-v9 without the backbone gradient buffer in the text stages: once the backbone trains, each update's objective terms (sequence passes, its sampled precision point, the preserve stream) are backpropagated together, layer by layer across all of them (model/layer_staging.py), and every LionSR latent steps as soon as its layer's gradient is complete, then frees it (train/optim.py LionSR.step_in_backward(gated=True), as conversion v3 stepped). The same update as v9's separate backwards plus one step, except that the latents are not norm-clipped (the global norm still counts them and clips heads and norms; Lion's sign update is invariant to a constant gradient scale). Saves the ~23 GB BF16 latent gradient; the graphs of one update are live together. Backbone-inherent (BF16 latents of a ternary-deployed MoE). History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "latent_step_in_backward": true
+      }
+    }
+  }
+}

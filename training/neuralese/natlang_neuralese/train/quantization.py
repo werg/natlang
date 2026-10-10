@@ -417,20 +417,31 @@ class Preserve:
                   flush=True)
         return active
 
-    def loss(self, model, step):
-        """(weighted KL loss, record index) of update ``step``; ``model`` is the causal LM (``backbone.hf``)."""
+    def loss(self, model, step, checkpoint_layers=True):
+        """(weighted KL loss, record index) of update ``step``; ``model`` is the causal LM (``backbone.hf``).
+        ``checkpoint_layers``: recompute the long record's layers in backward rather than keep their activations
+        (~0.16 GB per 1k tokens per Mellum layer uncheckpointed); set for this forward only (a Maple/Mellum model reads
+        it per forward; it had no such attribute, so the record ran uncheckpointed before)."""
         from ..maple.qat_convert import weighted_topk_kl
 
         index = self.record(step)
         ids = self.train['ids'][index][:self.max_tokens]
         device = next(model.parameters()).device
         inner = getattr(model, 'model', None)
-        if inner is not None and hasattr(inner, 'checkpoint_layers'):
-            inner.checkpoint_layers = True  # a long record through every layer: recompute rather than keep
+        previous = getattr(inner, 'checkpoint_layers', None)
+        if inner is not None:
+            inner.checkpoint_layers = bool(checkpoint_layers)
         positions = len(ids) - 1  # cropped records keep the teacher rows of their own positions
-        scores = weighted_topk_kl(model, ids[None].long().to(device), self.train['top_ids'][index][:positions],
-                                  self.train['top_logp'][index][:positions],
-                                  min(self.train['prompt_len'][index], len(ids)), self.prompt_weight)
+        try:
+            scores = weighted_topk_kl(model, ids[None].long().to(device), self.train['top_ids'][index][:positions],
+                                      self.train['top_logp'][index][:positions],
+                                      min(self.train['prompt_len'][index], len(ids)), self.prompt_weight)
+        finally:
+            if inner is not None:
+                if previous is None:
+                    del inner.checkpoint_layers
+                else:
+                    inner.checkpoint_layers = previous
         return self.weight * scores['loss_kl'], {'preserve_kl': float(scores['loss_kl'].detach()),
                                                   'preserve_record': index}
 

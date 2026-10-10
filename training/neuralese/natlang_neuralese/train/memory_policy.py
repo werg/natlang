@@ -110,8 +110,12 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
                                       full_layout: dict, shallow_layout: dict,
                                       *, cutoff: int, vocab_size: int,
                                       readout_chunk_tokens: int = 128,
-                                      channel_consistency: bool = False):
+                                      channel_consistency: bool = False,
+                                      single_backward: bool = False):
     """Estimate the peak retained geometry of one text-warmup update.
+
+    ``single_backward``: the passes are summed and backpropagated once (in-backward LionSR latents), so their
+    graphs are live together and the peak is the sum of the passes rather than the larger one.
 
     Map adaptation may run a gold-history pass and mapped-history consumer at the
     same time; the optional AR fixup also retains its detached full-depth producer
@@ -157,7 +161,7 @@ def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
         # branch live while the shallow producer output remains differentiable.
         iterative_overlap = (producer_prefix + producer_shallow + consumer_prefix +
                             consumer_history + consumer_branch)
-        peak_per_row = max(pass_zero, iterative_overlap)
+        peak_per_row = pass_zero + iterative_overlap if single_backward else max(pass_zero, iterative_overlap)
     if channel_consistency:
         # geometry_bytes already budgets four vocabulary arrays. Same-history
         # KL additionally holds the detached target distribution and live

@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, atexit, hashlib, json, math, os, random, time, traceback
+import argparse, atexit, contextlib, hashlib, json, math, os, random, time, traceback
 from collections import Counter
 from array import array
 from collections.abc import Sequence
@@ -238,12 +238,14 @@ def _normalize_context_valid_strata(strata):
 
 
 def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128,
-                        ffn_chunk_tokens=1024, bootstrap=False):
+                        ffn_chunk_tokens=1024, bootstrap=False, single_backward=False):
     # The projection-only phase calibrates a different regime (no backbone gradient or optimizer state): its
     # observed/raw ratio must not scale the backbone phase's forecast (run-v7 predicted 115 GB for a ~50 GB update).
     return (f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:'
             f'passes{int(sequence_passes)}:readout{int(readout_chunk_tokens)}:'
-            f'ffn{int(ffn_chunk_tokens)}'+(':projection' if bootstrap else ''))
+            f'ffn{int(ffn_chunk_tokens)}'+(':projection' if bootstrap else '')
+            # One combined backward with in-backward LionSR steps: all passes' graphs live, no latent gradient buffer.
+            +(':single' if single_backward else ''))
 
 
 def _warmup_readout_calibration_state(state, *, default_ffn_chunk_tokens=1024):
@@ -277,7 +279,7 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
                                   full_layout, shallow_layout, cutoff,
                                   vocab_size, batch_size, named, optimizer,
                                   default_ffn_chunk_tokens=1024, channel_consistency=False):
-    """Bootstrap calibration only from previously successful update records."""
+    """Bootstrap calibration only from previously successful update records (each under its own backward mode)."""
     path=Path(train_log)
     if not path.is_file():return 0
     seeded=0
@@ -303,25 +305,35 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
             if positions<1 or target<1 or actual_prefix<1 or passes<1 or count<1 or peak<=start:continue
             readout_chunk=int(preflight.get('readout_chunk_tokens',128))
             ffn_chunk=int(preflight.get('ffn_chunk_tokens',default_ffn_chunk_tokens))
+            single=bool(preflight.get('single_backward',False))
             raw=text_warmup_update_geometry_bytes(actual_prefix,target,passes,count,
                 full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size,
-                readout_chunk_tokens=readout_chunk,channel_consistency=channel_consistency)
+                readout_chunk_tokens=readout_chunk,channel_consistency=channel_consistency,
+                single_backward=single)
             raw += text_warmup_ffn_workspace_delta_bytes(actual_prefix,target,count,
                 full_layout['intermediate'],base_chunk_tokens=default_ffn_chunk_tokens,
                 candidate_chunk_tokens=ffn_chunk)
             bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
-            raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk,ffn_chunk,bootstrap),
+            raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap,in_backward=single)
+            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk,ffn_chunk,bootstrap,single),
                               context,target,raw,peak-start)
             seeded+=1
     return seeded
 
 
-def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
-    """Bound new gradient and lazy optimizer-state allocations for one update."""
+def _warmup_update_floor_bytes(named, optimizer, *, bootstrap, in_backward=False):
+    """Bound new gradient and lazy optimizer-state allocations for one update.
+
+    ``in_backward``: LionSR latents step inside the update's single backward and free their gradient at once, so no
+    latent gradient buffer exists; a few latents' gradients and fused-update outputs are live at a time, bounded
+    here by four copies of the largest latent (its gradient, the new value and momentum, one more in flight)."""
     active=[(name,param) for name,param in named if not bootstrap or
             name.startswith(('heads.feedback.','heads.input_map.','heads.content.proj.'))]
-    grad_bytes=sum(param.numel()*param.element_size() for _,param in active)
+    latent=getattr(optimizer,'latent',None)
+    stepped=({id(q) for group in latent.param_groups for q in group['params']}
+             if in_backward and latent is not None else set())
+    grad_bytes=sum(param.numel()*param.element_size() for _,param in active if id(param) not in stepped)
+    grad_bytes+=4*max((param.numel()*param.element_size() for _,param in active if id(param) in stepped),default=0)
     active_params={id(param):param for _,param in active}
     children=((getattr(optimizer,'muon',None),getattr(optimizer,'auxiliary',None),getattr(optimizer,'latent',None))
               if hasattr(optimizer,'muon') else (optimizer,))
@@ -1260,6 +1272,13 @@ def main(argv=None):
     p.add_argument('--latent-optimizer',choices=['muon','lionsr'],default='muon',
                    help='lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, '
                         'stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3)')
+    p.add_argument('--latent-step-in-backward',action=argparse.BooleanOptionalAction,default=False,
+                   help='with --latent-optimizer lionsr: once the backbone trains, each update backpropagates its '
+                        'objective terms (sequence passes, precision point, preserve stream) together, layer by layer '
+                        'across all of them (model/layer_staging.py), and every LionSR latent steps as soon as its '
+                        'layer\'s gradient is complete and frees it, so no backbone gradient buffer exists. Same update '
+                        'as separate backwards plus one step, except that the latents are not norm-clipped (the global '
+                        'norm still counts them and clips heads and norms)')
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
                         '(a code flips after its latent moves ~0.5 of it); 0: Muon at the backbone rate, under which '
@@ -1520,6 +1539,20 @@ def main(argv=None):
     else:
         optimizer=torch.optim.AdamW([{'params':[q for n,q in named if n.startswith('backbone.')],'lr':a.lr},
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
+    in_backward=None  # the LionSR latents' in-backward stepper (--latent-step-in-backward)
+    if a.latent_step_in_backward:
+        if a.optimizer!='muon' or a.latent_optimizer!='lionsr':
+            raise ValueError('--latent-step-in-backward needs --optimizer muon --latent-optimizer lionsr')
+        if a.member_weight:
+            raise ValueError('--latent-step-in-backward does not combine the family term into its single backward yet')
+        if quant is not None and quant.mode=='sum':
+            raise ValueError('--latent-step-in-backward runs one precision point per update: quantization loss mode sample')
+        in_backward=optimizer.latent
+        in_backward.step_in_backward(gated=True)
+        print(json.dumps({'event':'latent_step_in_backward','latents':sum(len(g['params']) for g in in_backward.param_groups),
+                          'gradient_buffer_bytes_avoided':sum(q.numel()*q.element_size() for g in in_backward.param_groups
+                                                              for q in g['params'])}),flush=True)
+    in_backward_update={'armed':None}  # the current update's in-backward context, for failure handling
     rows,receipt=load_text_rows(a.records,a.pieces,a.text_data,tokenizer=engine.tokenizer)
     windows,mask_receipt=prepare_text_windows(engine,rows,tokens=a.tokens,
         prefix_tokens=a.prefix_tokens,target_tokens=a.target_tokens,
@@ -2371,27 +2404,53 @@ def main(argv=None):
                     list(heads.parameters())+list(heads.buffers())+
                     [q for _,q in named])
         wrapped_started=time.perf_counter()
+        # --latent-step-in-backward once the backbone trains: the update's weighted objective terms are summed and
+        # backpropagated once, layer by layer across all its graphs (model/layer_staging.py), and each LionSR latent
+        # steps and frees its gradient as its layer completes (train/optim.py). The graphs are live together and
+        # share one build of the parametrized weights.
+        single=in_backward is not None and not bootstrap
+        terms=[]
+        def backward(term,next_pass):
+            if single:terms.append(term)
+            else:term.backward();next_pass()
+        def backward_once(next_pass):
+            if not single:return
+            armed=in_backward_update['armed']=in_backward.in_backward()
+            total=terms[0]
+            for term in terms[1:]:total=total+term
+            terms.clear()
+            with armed:
+                total.backward()
+                del total
+                staging.backward()
+            next_pass()
+        from ..model.layer_staging import LayerStaging
+        staging=LayerStaging() if single else contextlib.nullcontext()
         with offload_attention_tensors(int(offload_budget_bytes),activations=True,
                                        persistent_tensors=persistent) as offload_stats:
-            with shared_parametrized_weights(backbone.hf) as next_pass:
+            with shared_parametrized_weights(backbone.hf) as next_pass,staging:
                 if quant is None:
                     for loss,metrics in objective(batch,passes,bootstrap,
                             readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
                         if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
-                        (loss/passes).backward();next_pass()
+                        backward(loss/passes,next_pass)
                         pass_losses.append(loss.detach());pass_metrics.append(metrics)
+                    backward_once(next_pass)
                 else:
                     # Multi-precision objective (train/quantization.py): the same objective under each planned
                     # precision point, weighted; the first planned point's passes report the usual metrics.
                     precision_losses={}
-                    for point,mix,weight in quant.plan(step):
+                    plan=quant.plan(step)
+                    if single and len(plan)!=1:
+                        raise RuntimeError('the in-backward LionSR update needs one precision point per update')
+                    for point,mix,weight in plan:
                         values=[]
                         with quant.context(point,mix):
                             next_pass()
                             for loss,metrics in objective(batch,passes,bootstrap,
                                     readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
                                 if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss at '+point)
-                                (weight*loss/passes).backward();next_pass()
+                                backward(weight*loss/passes,next_pass)
                                 values.append(float(loss.detach()))
                                 if not precision_losses:
                                     pass_losses.append(loss.detach());pass_metrics.append(metrics)
@@ -2399,7 +2458,10 @@ def main(argv=None):
                             if preserve is not None and preserve.applies(backbone.hf,step):
                                 # Behaviour preservation: KL to BF16 on its own responses, at this precision.
                                 preserve_loss,preserved=preserve.loss(backbone.hf,step)
-                                (weight*preserve_loss).backward();next_pass()
+                                if not torch.isfinite(preserve_loss):raise RuntimeError('nonfinite preserve loss at '+point)
+                                backward(weight*preserve_loss,next_pass)
+                            # Inside the precision context: checkpointed layers recompute at this precision.
+                            backward_once(next_pass)
                         precision_losses[point]={'loss':sum(values)/max(len(values),1),'mix':mix,'weight':weight,
                                                  **preserved}
                     next_pass()
@@ -2416,9 +2478,14 @@ def main(argv=None):
                                                               secondary_projection=secondary_metric_name)
         metrics=dict(pass_metrics[-1])
         if family_record is not None:metrics['family']=family_record
+        armed=in_backward_update['armed']
+        consumed=armed.norm() if armed is not None else None  # the stepped latents' gradient norm
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
+        if consumed is not None:
+            backbone_norm=torch.linalg.vector_norm(torch.stack([backbone_norm.to(consumed.device),consumed]))
         secondary_norm=gradient_norm(q for n,q in named if n.startswith(secondary_prefix))
-        clip_finite_gradients(parameters.values())
+        if consumed is None:clip_finite_gradients(parameters.values())
+        else:clip_finite_gradients(parameters.values(),consumed_norm=consumed)
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
                  for k,prefix in [('backbone','backbone.'),('input_map',secondary_prefix),
                                   ('full_projection','heads.content.proj.')]}
@@ -2430,7 +2497,7 @@ def main(argv=None):
                 'secondary_norm':secondary_norm,'samples':samples,'before':before,'controls':controls,
                 'memory_plan':memory_plan,'offload_stats':dict(offload_stats),
                 'wrapped_forward_backward_seconds':wrapped_forward_backward_seconds,
-                'batch_cohorts':batch_cohorts}
+                'batch_cohorts':batch_cohorts,'in_backward_stepped':len(armed.stepped) if armed is not None else 0}
 
     def checkpoint_preupdate_failure(error, *, pre_attempt_rng, pre_attempt_lrs, controls):
         """Save only the last committed update after a failure before optimizer.step."""
@@ -2474,6 +2541,7 @@ def main(argv=None):
         effective_free=None
         total=None
         candidate_forecasts=[]
+        single=in_backward is not None and not bootstrap  # perform_update's single combined backward
         # Readout and FFN tiles are selected only when the full-update forecast
         # fits current reusable memory. FFN deltas use actual module width.
         if a.device.startswith('cuda'):
@@ -2484,17 +2552,17 @@ def main(argv=None):
             effective_free=effective_cuda_free_bytes(int(device_free),int(total),
                 reserved,memory_start)
             usable_free=max(0,effective_free-math.ceil(int(total)*TEXT_WARMUP_MEMORY_HEADROOM))
-            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap,in_backward=single)
             predictions={}
             candidates={}
             for chunk in TEXT_WARMUP_READOUT_CHUNKS:
                 candidate_geometry=text_warmup_update_geometry_bytes(
                     prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
                     cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
-                    readout_chunk_tokens=chunk,channel_consistency=a.ar_feedback_fixup)
+                    readout_chunk_tokens=chunk,channel_consistency=a.ar_feedback_fixup,single_backward=single)
                 candidate_raw=candidate_geometry+update_floor
                 candidate_kind=_warmup_memory_kind(len(batch),passes,chunk,
-                                                   default_ffn_chunk_tokens,bootstrap)
+                                                   default_ffn_chunk_tokens,bootstrap,single)
                 native_prediction=memory_estimator.predict(
                     candidate_kind,prefix+target-1,target,candidate_raw)
                 calibration_count=len(memory_estimator.calibration(
@@ -2516,7 +2584,7 @@ def main(argv=None):
                         candidate_chunk_tokens=ffn_chunk)
                     geometry=candidate_geometry+ffn_delta
                     raw=geometry+update_floor
-                    kind=_warmup_memory_kind(len(batch),passes,chunk,ffn_chunk,bootstrap)
+                    kind=_warmup_memory_kind(len(batch),passes,chunk,ffn_chunk,bootstrap,single)
                     native=memory_estimator.predict(kind,prefix+target-1,target,raw)
                     observations=len(memory_estimator.calibration(kind,prefix+target-1,target))
                     if ffn_chunk==default_ffn_chunk_tokens:
@@ -2553,19 +2621,20 @@ def main(argv=None):
             raw_geometry=text_warmup_update_geometry_bytes(
                 prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
                 cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
-                readout_chunk_tokens=readout_chunk_tokens,channel_consistency=a.ar_feedback_fixup)
-            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+                readout_chunk_tokens=readout_chunk_tokens,channel_consistency=a.ar_feedback_fixup,
+                single_backward=single)
+            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap,in_backward=single)
             predictor_raw=raw_geometry+update_floor
             saved_activation_geometry=raw_geometry
             predictor_geometry=raw_geometry
-            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap)
+            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap,single)
             predicted=memory_estimator.predict(kind,prefix+target-1,target,predictor_raw)
         # The successful-update calibration measures the complete incremental
         # peak, including gradient buffers and lazy optimizer slots. Seed the
         # same floor once in the uncalibrated geometry; do not add it again to
         # the calibrated observation.
         context=prefix+target-1
-        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap)
+        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap,single)
         if a.device.startswith('cuda'):
             plan=plan_saved_activation_offload(predicted,effective_free,int(total),
                 saved_activation_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
@@ -2589,7 +2658,7 @@ def main(argv=None):
                 'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
                 'headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
                 'context_tokens':context,'target_tokens':target,'batch':len(batch),
-                'sequence_passes':passes}
+                'sequence_passes':passes,'single_backward':single}
             if not plan.predicted_fit and memory_start+predicted>int(total)*(1-TEXT_WARMUP_MEMORY_HEADROOM):
                 # More than the whole device could ever hold: waiting for memory to free up cannot help.
                 raise MemoryError('warm-up update cannot fit this device at all: '
@@ -2616,7 +2685,7 @@ def main(argv=None):
                 'chunk_policy':'conservative 128 readout / 1024 FFN on non-CUDA device',
                 'offload_budget_bytes':0,'predicted_fit':True,
                 'context_tokens':context,'target_tokens':target,'batch':len(batch),
-                'sequence_passes':passes}
+                'sequence_passes':passes,'single_backward':single}
         return {'plan':details,'raw_geometry_bytes':saved_activation_geometry,
                 'predictor_raw_bytes':predictor_raw,
                 'readout_chunk_tokens':readout_chunk_tokens,
@@ -2624,7 +2693,7 @@ def main(argv=None):
                 'ffn_chunk_tokens':ffn_chunk_tokens,
                 'context_tokens':context,'target_tokens':target,
                 'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes,
-                'bootstrap':bool(bootstrap)}
+                'bootstrap':bool(bootstrap),'single_backward':single}
 
     def finish_committed_update(prepared,memory_plan,passes,controls):
         """Persist one already-committed optimizer update; return a stop reason."""
@@ -2633,6 +2702,7 @@ def main(argv=None):
         m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
         memory_passes=int(memory_plan.get('sequence_passes',passes))
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
+        if prepared.get('in_backward_stepped'):updates['backbone']=True
         memory_record=None
         if a.device.startswith('cuda'):
             peak_allocated=int(torch.cuda.max_memory_allocated(a.device))
@@ -2646,7 +2716,8 @@ def main(argv=None):
                 # target quantity. An offloaded peak is censored telemetry.
                 memory_estimator.observe(_warmup_memory_kind(
                     a.batch,memory_passes,int(memory_plan['readout_chunk_tokens']),
-                    int(memory_plan['ffn_chunk_tokens']),memory_plan.get('bootstrap',False)),
+                    int(memory_plan['ffn_chunk_tokens']),memory_plan.get('bootstrap',False),
+                    memory_plan.get('single_backward',False)),
                     memory_plan['context_tokens'],memory_plan['target_tokens'],
                     memory_plan['predictor_raw_bytes'],actual_increment)
             memory_record={'start_allocated_bytes':prepared['memory_start'],
@@ -2678,6 +2749,7 @@ def main(argv=None):
                  updates=display_update_flags(updates),
                  update_state_ids=dict(updates),display_labels=identity['display'])
         m['batch_cohorts']=prepared['batch_cohorts']
+        if in_backward is not None:m['latents_stepped_in_backward']=prepared['in_backward_stepped']
         m[secondary_metric_name+'_gradient_norm']=float(prepared['secondary_norm'])
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])
@@ -2741,6 +2813,7 @@ def main(argv=None):
                                        ar_feedback_fixup=a.ar_feedback_fixup)
         pre_attempt_rng=capture_training_rng_state(a.device)
         pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
+        in_backward_update['armed']=None
         try:
             for name,q in named:
                 q.requires_grad_(not bootstrap or name.startswith((secondary_prefix,'heads.content.proj.')))
@@ -2804,6 +2877,18 @@ def main(argv=None):
                         f'tokens {sum(len(w["ids"]) for w in batch)}\n'
                         +profiler.key_averages().table(sort_by=sort,row_limit=80,max_name_column_width=90))
         except Exception as error:
+            armed=in_backward_update['armed']
+            if armed is not None and armed.started:
+                # The in-backward update already stepped latents: the live weights are mid-update, so nothing is
+                # written; the last written checkpoint is the resume point (as for a failed optimizer.step).
+                optimizer.zero_grad(set_to_none=True)
+                if a.device.startswith('cuda'):torch.cuda.empty_cache()
+                try:checkpoint_writer.drain()
+                except Exception:traceback.print_exc()
+                print(json.dumps({'event':'in_backward_update_failed','failed_attempt_step':step+1,
+                                  'latents_stepped':len(armed.stepped),'state_written':False,
+                                  'error_type':type(error).__name__,'error':str(error)[:1000]}),flush=True)
+                raise
             checkpoint_preupdate_failure(error,pre_attempt_rng=pre_attempt_rng,
                                          pre_attempt_lrs=pre_attempt_lrs,controls=controls)
             raise
@@ -2822,6 +2907,8 @@ def main(argv=None):
             try:checkpoint_writer.drain()
             except Exception:traceback.print_exc()
         commit_optimizer_step(optimizer,on_failure=discard_partial_optimizer_step)
+        # Gradients are spent: free them before the evaluation and checkpoint points that may follow this update.
+        optimizer.zero_grad(set_to_none=True)
         try:
             completion=finish_committed_update(prepared,memory_plan,passes,controls)
         except Exception as error:

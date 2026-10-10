@@ -19,6 +19,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from .layer_staging import staged_layers
+
 DEFAULT_BASE = "LiquidAI/LFM2.5-350M"
 DEFAULT_REVISION = "9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
 
@@ -408,6 +410,7 @@ class PortBackbone(nn.Module):
         from .isolated_sequence import isolated_sequence
         return isolated_sequence(self, fixed, replacements, cache, cutoff=cutoff)
 
+    @staged_layers
     def run_layers(
         self,
         h: torch.Tensor,

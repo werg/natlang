@@ -172,6 +172,7 @@ class LionSR(torch.optim.Optimizer):
                  fused: bool = False):
         super().__init__(params, dict(lr=lr, betas=betas, weight_decay=weight_decay))
         self.chunk, self.fused = chunk, fused
+        self._hooks, self._gated, self._armed = [], False, None
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -182,15 +183,45 @@ class LionSR(torch.optim.Optimizer):
                 if p.grad is not None:
                     self._update(p, group)
 
-    def step_in_backward(self):
+    def step_in_backward(self, *, gated: bool = False):
         """Update each parameter as soon as its gradient is complete and free that gradient (each parameter must
-        be used once per backward): the full-latent conversion then never holds a gradient copy of the model."""
-        for group in self.param_groups:
+        be used once per backward): the full-latent conversion then never holds a gradient copy of the model.
+
+        ``gated``: the hooks act only inside ``with optimizer.in_backward():`` (one update's single backward); any
+        other backward accumulates ``.grad`` as usual for ``step()``. A trainer whose update runs several objective
+        graphs backpropagates them together under ``model.layer_staging.LayerStaging`` (layer by layer across the
+        graphs; a plain summed backward would buffer one graph's gradient for the whole model), so each latent gets
+        exactly one step per update with its whole gradient.
+        The group is looked up when the hook fires, so learning-rate staging and ``load_state_dict`` (which
+        replaces the group dictionaries) apply."""
+        if self._hooks:
+            raise RuntimeError("LionSR step-in-backward hooks are already registered")
+        self._gated = gated
+        for index, group in enumerate(self.param_groups):
             for p in group["params"]:
-                def hook(param, group=group):
-                    self._update(param, group)
+                def hook(param, index=index):
+                    armed = self._armed
+                    if self._gated and armed is None:
+                        return
+                    if armed is not None:
+                        if id(param) in armed.stepped:
+                            raise RuntimeError("a LionSR latent received a second gradient in one in-backward update; "
+                                               "run the update's objectives as one backward")
+                        # No host sync per latent: the trainer checks the total after the backward.
+                        armed.squared_norm = (armed.squared_norm.to(param.device) +
+                                              torch.linalg.vector_norm(param.grad, dtype=torch.float64).square())
+                        armed.stepped.add(id(param))
+                    self._update(param, self.param_groups[index])
                     param.grad = None
-                p.register_post_accumulate_grad_hook(hook)
+                self._hooks.append(p.register_post_accumulate_grad_hook(hook))
+
+    def in_backward(self):
+        """Context of one update's single backward under ``step_in_backward(gated=True)``: inside it each latent
+        steps once as its gradient completes. The value records ``stepped`` (parameter ids) and ``squared_norm``
+        (FP64 squared norm of the stepped gradients, for the update's global gradient norm)."""
+        if not self._gated:
+            raise RuntimeError("in_backward needs step_in_backward(gated=True)")
+        return _InBackward(self)
 
     @torch.no_grad()
     def _update(self, p, group):
@@ -227,6 +258,40 @@ class LionSR(torch.optim.Optimizer):
             else:
                 flat_p[start:end].copy_(value)
             flat_m[start:end].copy_(m.mul_(beta2).add_(g, alpha=1 - beta2))
+
+
+class _InBackward:
+    def __init__(self, optimizer):
+        self.optimizer, self.stepped, self.squared_norm = optimizer, set(), torch.zeros((), dtype=torch.float64)
+
+    def __enter__(self):
+        if self.optimizer._armed is not None:
+            raise RuntimeError("in_backward contexts do not nest")
+        self.optimizer._armed = self
+        return self
+
+    def __exit__(self, *exc):
+        self.optimizer._armed = None
+        return False
+
+    def norm(self) -> torch.Tensor:
+        """The stepped gradients' FP64 norm; raises when it is nonfinite (the latents already stepped with it)."""
+        value = self.squared_norm.sqrt()
+        if not torch.isfinite(value):
+            raise RuntimeError("nonfinite latent gradient in the in-backward LionSR update")
+        return value
+
+    @property
+    def started(self) -> bool:
+        """Whether any latent stepped: after that the live weights are mid-update and must not be checkpointed."""
+        return bool(self.stepped)
+
+
+def latent_partition(named, lr: float):
+    """The latent policy's LionSR partition (conversion v3): every backbone weight matrix as (name, parameter,
+    lr, per-row ternary scale). Its ``lr`` is in units of each row's ternary scale."""
+    from ..maple.qat_convert import row_scale
+    return [(n, q, lr, row_scale(q)) for n, q in named if n.startswith('backbone.') and q.ndim >= 2]
 
 
 # ----------------------------------------------------------------------------------------------------------------
