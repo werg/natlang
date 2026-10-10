@@ -20808,6 +20808,75 @@
       "independent_new_worlds": 0,
       "license": "Inherited exact decision source train roles/groups/licenses; upstream source SHA pinned",
       "notes": "Two disjoint1024case cohorts19families each; v2generating/v3queuedbehind sameprojectlock. Source states <=1000JSONchars, <=8labels, roletrain only. V3excludes all existingtypedcohortIDs. Frozen exactdrivers/config/launchreceipt pinned. No labels/state/workerlog mutablefilesincluded; actualoutputs require separateclosed publication+quality/currentIRreview. Allfreeverifiedmodels eligible, aliasquota conservative, no paidfallback/distillationflag."
+    },
+    {
+      "id": "free-provider-google-pool-v2-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-google-model-pool-mixed-decisions-v2/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/__pycache__/label_decision_cases.cpython-310.pyc",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/label_decision_cases.py",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/models.json",
+        "provider-google-model-pool-mixed-decisions-v2/frozen-adapter-v1/run_gemini_decision_pool.py",
+        "provider-google-model-pool-mixed-decisions-v2/labels.jsonl",
+        "provider-google-model-pool-mixed-decisions-v2/labels.jsonl.attempts.jsonl",
+        "provider-google-model-pool-mixed-decisions-v2/labels.jsonl.manifest.json",
+        "provider-google-model-pool-mixed-decisions-v2/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v2/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v2/worker.log",
+        "quality-review-v10-correction-v1/review-correction.json",
+        "quality-review-v10-correction-v1/review-correction.md",
+        "quality-review-v10/review.json",
+        "quality-review-v10/review.md"
+      ],
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "independent_new_worlds": 0,
+      "split": "inherited-train",
+      "source_class": "typed-decision-labels-with-shared-quota-pool-provenance",
+      "admission": "held-pending-source-quality-and-current-IR-conversion",
+      "derived_from": [
+        "free-provider-google-planned-pool-sources-held-20261010-v1"
+      ],
+      "license": "Inherited source datasets and authored decision-case source provenance",
+      "notes": "Closed 1024 unique inherited train cases, 899 strict typed-valid and125 invalid probability sums. Provider allocations are nonpaired. No arithmetic normalization or semantic admission. Review v10 correction supplements the original mistaken per-family error display; both receipts retained. Active v3 labels and project quota state excluded."
+    },
+    {
+      "id": "free-provider-zai45-v22-final4-and-recovery-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-zai45-current-pass-boundary-recovery-v1/case-003/collector.log",
+        "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.result.json",
+        "provider-zai45-current-pass-boundary-recovery-v1/case-003/jobs/000003-fd4c46c6be24a0b0.trace.jsonl",
+        "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl",
+        "provider-zai45-current-pass-boundary-recovery-v1/case-003/results.jsonl.manifest.json",
+        "provider-zai45-current-pass-boundary-recovery-v1/journal.jsonl",
+        "provider-zai45-current-pass-boundary-recovery-v1/launch-receipt-v1.json",
+        "provider-zai45-current-pass-boundary-recovery-v1/queue.jsonl",
+        "provider-zai45-current-pass-boundary-recovery-v1/worker.log",
+        "provider-zai45-flash-source-indices-1-4-v1/case-004/collector.log",
+        "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.result.json",
+        "provider-zai45-flash-source-indices-1-4-v1/case-004/jobs/000004-4709f15b8532b6a2.trace.jsonl",
+        "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl",
+        "provider-zai45-flash-source-indices-1-4-v1/case-004/results.jsonl.manifest.json",
+        "provider-zai45-flash-source-indices-1-4-v1/journal.jsonl",
+        "quality-review-v9/review.json",
+        "quality-review-v9/review.md"
+      ],
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "independent_new_worlds": 0,
+      "split": "inherited-train",
+      "source_class": "actual-provider-native-results-and-prompt-only-recovery",
+      "admission": "held-pending-V22-source-quality-and-native-review",
+      "derived_from": [
+        "free-provider-zai45-first3-native-and-partial-held-20261010-v1",
+        "luna-v22-current-pass-pending-facts-source-held-20261010-v1"
+      ],
+      "license": "Inherited authored V22 same-world source provenance",
+      "notes": "Closed REC-976 and source-v5 DOC-954 have exact accepted final decisions and all scoped file checks. Same-seed/runtime DOC-954 prompt-only recovery took716.7s versus old1800.7s incomplete. One paired case only. Real child-call/argument topology uses text-marker stand-ins and does not qualify learned soft-state transport. Old resource cutoff is not a semantic negative or DPO rejection. Remaining case5 active and excluded."
     }
   ],
   "coverage_backlog": [
