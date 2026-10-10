@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v46-decide-binding-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v46-decide-binding-diagnosis-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 41755,
+      "sha256": "9d646835c2d6d7c7ef4b173f523c9c222a70bd2651fa96461b51eaf7fb404a03"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1220,
+      "sha256": "cb74034567d74b8dc5e982c0c3fba2520a02718bc5e0572dfd6f3768e049ef01"
+    }
+  ],
+  "bytes": 42975
+}

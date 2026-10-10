@@ -1,0 +1,85 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v17-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 14473,
+      "sha256": "b680e13145387b491552a2ebd959c8812d810bf8ae9cf41ace51dd245529cedc"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2205,
+      "sha256": "f2c58b6d0ad9a5b08667c55cd28da86d07963f3b4a79c1fa986772a6455318f7"
+    },
+    {
+      "path": "source-closure-v1/build_v17_closure_inputs.py",
+      "bytes": 9910,
+      "sha256": "a4f71144f6a87c67906e6c0d1a54f0c6307b5b906a15cec92907bb0ee715ef3a"
+    },
+    {
+      "path": "source-closure-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "8674e32d808d757855f4c4325581bc64e8c331d13977b7b7c3c41c0f0ee09d30"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/candidate-source-case-bindings.json",
+      "bytes": 26916,
+      "sha256": "52f7bd63fcf58d5506bbff016cc2f4d21a0c3d19de953204ae2ee4ecd19e7ba6"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closed-source-case-port-projection.jsonl",
+      "bytes": 884954,
+      "sha256": "0494d5a9b683074b408858c60439e68dc5832723b83296b165e99d760bfe9cf4",
+      "lines": 47
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/closure-report.json",
+      "bytes": 15532,
+      "sha256": "0329e1648020e4779ba3a16de2e135b5c32487ae395750d66210adbb6adc50d7"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v1/source-case-port-projection.jsonl",
+      "bytes": 884954,
+      "sha256": "0494d5a9b683074b408858c60439e68dc5832723b83296b165e99d760bfe9cf4",
+      "lines": 47
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 5409962,
+      "sha256": "3f5205e799a50f2377a6d22fb6b8b38a999f952bd0332eef2abc886b51f9b255",
+      "lines": 47
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1449265,
+      "sha256": "429dc3e9ab4093f301abf81c9b4fdb8d8580df58bd40debeb8efb4466a227a14",
+      "lines": 47
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "bytes": 6045,
+      "sha256": "05ed2db577cc28fbb55e4138f5c048880f198e3879d191fdebfee43fea63f902"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "bytes": 222359,
+      "sha256": "9a559384268605d576d87567b0284218b539459b9c24c14f45fad1e239263cb6",
+      "lines": 47
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 325400,
+      "sha256": "408003211586c96ee466c5bc5fdd055d358385526a046ccc5f0d23368cb39340",
+      "lines": 354
+    },
+    {
+      "path": "source-closure-v1/raw-key-harness-v1.json",
+      "bytes": 1082,
+      "sha256": "954f135cbfdc33d986e0d1bfa58cd0f38ebf12ce37e48fcac09955b231ee4607"
+    }
+  ],
+  "bytes": 9254990
+}

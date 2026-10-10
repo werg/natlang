@@ -25929,6 +25929,90 @@
       "training_admission": false,
       "admission": "held-source-semantic-trace-quality-review",
       "notes": "25/50 exact maps and351/389 saved-source-label agreements; all439 source input files unchanged. 995 child invocations990 output captures;5 unfinished/failed children in one ambiguous emotion item. Item quality/trajectory review held; no valid returns lost."
+    },
+    {
+      "id": "free-provider-google-v17-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v17",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-generation-diagnosis-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-split-trace-quality-review",
+      "notes": "Closed512 source labels; mismatches preserved; no admission."
+    },
+    {
+      "id": "free-provider-google-v17-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v17-adapter-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-generation-diagnosis-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-split-trace-quality-review",
+      "notes": "47 static programs354 exact saved annotation agreements158 rejected differences; all47 actual reference replay passed. Source semantic truth remains separate."
+    },
+    {
+      "id": "free-provider-google-v17-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-generation-diagnosis-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-split-trace-quality-review",
+      "notes": "Pinned actual output/static quality review and exact source leaf closure packet; held no admission."
+    },
+    {
+      "id": "free-provider-luna-v46-decide-binding-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v46-decide-binding-diagnosis-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-generation-diagnosis-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-split-trace-quality-review",
+      "notes": "23 callable TypeError action events across22 invocations8programs; first arguments are data, no local decide declarations. Source evidence does not support a name collision; current guidance already documents function-first API."
+    },
+    {
+      "id": "free-provider-luna-v48-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v48-runtimev14-v1",
+      "include": [
+        "prepared-plan-unapproved-v1.json",
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "provider-source-generation-diagnosis-review",
+      "training_admission": false,
+      "admission": "held-source-semantic-split-trace-quality-review",
+      "notes": "Four medium workers on47 source-bound train programs354items afterV47closed; launcher906943. Plan80332c5effe57c788b3e2f0b8a4417a1ba7635ebccd29008f5cece2950979989. No admission/new-world credit."
     }
   ],
   "coverage_backlog": [
