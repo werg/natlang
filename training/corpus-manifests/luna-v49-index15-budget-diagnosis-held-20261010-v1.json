@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v49-index15-budget-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v49-index15-budget-partial-diagnosis-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1914,
+      "sha256": "7adce44102de7c256e80a447736d50f170303ad4a94635df2fc8538b0f93d450"
+    },
+    {
+      "path": "diagnosis.json",
+      "bytes": 8972,
+      "sha256": "ba5768e7747c4ef5bdc01448c9fb5de7210f301a29b824f9d2771f518862f012"
+    }
+  ],
+  "bytes": 10886
+}

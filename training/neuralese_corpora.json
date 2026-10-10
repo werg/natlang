@@ -26331,6 +26331,16 @@
       "training_admission": false,
       "admission": "superseded-audit-held",
       "notes": "Original V18 source and visibility review preserved. Six checker false negatives are diagnosed and superseded by v2; raw source, labels, and cases unchanged. No automatic admission."
+    },
+    {
+      "id": "luna-v49-index15-budget-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/v49-index15-budget-partial-diagnosis-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "resource-partial-diagnosis",
+      "training_admission": false,
+      "admission": "held-unscored-resource-partial",
+      "notes": "SCHED-543 source is consistent. 384 unique request starts across 192 turns included useful evidence review, then repeated pass-four global note revisions and model-authored code errors. No provider stall or runtime defect evidenced; no parent result and no semantic negative or DPO pair. Source guidance improvement will use a fresh derivative."
     }
   ],
   "coverage_backlog": [
