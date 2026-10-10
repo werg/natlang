@@ -2311,7 +2311,7 @@ def main(argv=None):
                                 if not precision_losses:
                                     pass_losses.append(loss.detach());pass_metrics.append(metrics)
                             preserved={}
-                            if preserve is not None:
+                            if preserve is not None and preserve.applies(backbone.hf,step):
                                 # Behaviour preservation: KL to BF16 on its own responses, at this precision.
                                 preserve_loss,preserved=preserve.loss(backbone.hf,step)
                                 (weight*preserve_loss).backward();next_pass()

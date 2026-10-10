@@ -548,6 +548,10 @@ def test_preservation_stream_is_zero_at_bf16_and_trains_the_quantized_model_towa
                           shards=(records, records, {}))
     loss, info = preserve.loss(model, 3)
     assert info['preserve_record'] == preserve.record(3) and abs(info['preserve_kl']) < 1e-3  # BF16: its own teacher
+    # A frozen-backbone phase (projection first): no gradient path, so the stream is skipped and logged, not run.
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    assert not preserve.applies(model, 0) and not preserve.loss(model, 0)[0].requires_grad
     run = q.Quantization({'schema': q.SCHEMA, 'points': [
         {'name': 't', 'ramp': {'start': 0.0, 'end': 0.01}, 'modules': {'experts': {'format': 'ternary'},
                                                                         'attention': {'format': 'ternary'}}}],
@@ -556,6 +560,7 @@ def test_preservation_stream_is_zero_at_bf16_and_trains_the_quantized_model_towa
     named = [(n, p) for n, p in model.named_parameters() if 'original' in n or 'experts' in n]
     for _, parameter in named:
         parameter.requires_grad_(True)
+    assert preserve.applies(model, 1)
     optimizer = torch.optim.AdamW([p for _, p in named], lr=3e-3)
     with run.context('t', 1.0):
         start = float(preserve.loss(model, 0)[0])

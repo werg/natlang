@@ -3,7 +3,7 @@
 Input: records written by ts-host/scripts/neuralese-convert-trajectories.mjs and its pieces file. Every `soft` part
 (the runtime's prompt pieces, older system-prompt versions, program guidance) is a trainable soft parameter,
 initialised from its text: from a system-prompt bank where one is given and the piece is in it (`prompt:<id>`),
-otherwise encoded from the text in one pass through the port (`encode_text`). Each training step teacher-forces the record's target turn (cross-entropy on
+otherwise initialised in context from its text (text_init.py: the soft prompt reproduces the text-instructed call). Each training step teacher-forces the record's target turn (cross-entropy on
 its tokens) with the soft parameters as gradient leaves, optionally with a LoRA on the backbone. The trained
 parameters are saved as a bank of the current runtime's pieces (`system-prompts.nz`) and as all soft parameters by
 name (`soft-params.pt`).
@@ -152,6 +152,27 @@ def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str,
     """Messages with every soft part as its text and every handover as its note: the crisp rendering."""
     return render(messages, lambda name: {"type": "text", "text": texts[name]}, notes,
                   neuralese_bodies=neuralese_bodies)
+
+
+def _in_context_rows(engine, name: str, text: str, texts: dict, records: list) -> torch.Tensor:
+    """In-context text initialisation of soft prompt `name` (text_init.py, owner 2026-10-10): the first record that
+    reads it, rendered with every other soft part as its text and this one as a placeholder block; the body is what makes
+    that call the text-instructed call. A piece no record reads starts from a minimal system-message call."""
+    from ..serve.grad import embed_text
+    from ..text_init import instruction_body, instruction_rows
+
+    for record in records:
+        if any(isinstance(m.get("content"), list) and any(p.get("type") == "soft" and p.get("name") == name for p in m["content"])
+               for m in record.get("messages") or []):
+            placeholder = embed_text(engine, text, "Neuralese<SystemPrompt>").id
+            messages = render(record["messages"], lambda n: {"type": "neuralese", "id": placeholder} if n == name
+                              else {"type": "text", "text": texts[n]}, handover_notes(record))
+            try:
+                return instruction_body(engine, messages, record.get("tools"), placeholder, text,
+                                        "Neuralese<SystemPrompt>")[0].payload
+            except (ValueError, KeyError):
+                break
+    return instruction_rows(engine, text, "Neuralese<SystemPrompt>")[0].payload
 
 
 def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[str, str] | None = None,
@@ -1557,9 +1578,11 @@ def main(argv=None):
             rows = bank.rows[piece]
             from_bank.append(name)
         else:
-            rows = encode_text(engine, text).payload
+            # In-context text initialisation (text_init.py): the soft prompt reproduces its text where a recorded
+            # call shows it, not an encoding of the bare piece.
+            rows = _in_context_rows(engine, name, text, texts, train + list(producers.values()))
         block = engine.store.put(make_block(rows, engine.dialect, type="Neuralese<SystemPrompt>",
-                                            producer={"kind": "bank" if name in from_bank else "text-encode", "text": text}))
+                                            producer={"kind": "bank" if name in from_bank else "text-init-in-context", "text": text}))
         params[name] = torch.nn.Parameter(block.payload.clone().float().to(engine.device))
         leaf_ids[name] = block.id
     init = {name: p.detach().clone() for name, p in params.items()}
@@ -2358,7 +2381,7 @@ def main(argv=None):
                 family_record = {'member': member.key, 'ce': parts.ce / max(parts.tokens, 1),
                                  'kl': parts.kl / max(parts.tokens, 1), 'tokens': parts.tokens}
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
-            if preserve is not None:
+            if preserve is not None and preserve.applies(engine.backbone.hf, step):
                 # Behaviour preservation at this update's precision (train/quantization.py).
                 preserve_loss, preserved = preserve.loss(engine.backbone.hf, step)
                 preserve_loss.backward()

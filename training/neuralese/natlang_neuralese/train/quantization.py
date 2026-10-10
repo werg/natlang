@@ -405,6 +405,17 @@ class Preserve:
     def record(self, step):
         return random.Random(f'preserve:{self.seed}:{self.stage_id}:{step}').randrange(len(self.train['ids']))
 
+    def applies(self, model, step) -> bool:
+        """Whether the stream has a gradient path at ``step``: it depends only on the backbone, so while every backbone
+        weight is frozen (a projection-first phase) it is skipped, logged once per change, never given a dummy grad."""
+        active = any(parameter.requires_grad for parameter in model.parameters())
+        if active != getattr(self, '_active', None):
+            self._active = active
+            print(json.dumps({'event': 'preserve_applied' if active else 'preserve_skipped', 'step': step,
+                              'stage': self.stage_id, 'reason': None if active else 'no trainable backbone weight'}),
+                  flush=True)
+        return active
+
     def loss(self, model, step):
         """(weighted KL loss, record index) of update ``step``; ``model`` is the causal LM (``backbone.hf``)."""
         from ..maple.qat_convert import weighted_topk_kl
