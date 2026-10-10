@@ -682,15 +682,23 @@ class _TokenWindow(Sequence):
         return NotImplemented
 
 
-def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None):
+def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
+               tool_response_prefixes=()):
     """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens
-    split into reasoning (inside the think block) and reply. Structural start tokens count as 'other'."""
+    split into reasoning (inside the think block) and reply. Qwen-style user
+    turns with a tool_response body are semantic tool feedback. Structural
+    start tokens count as 'other'."""
     codes=array('B');role='other';thinking=False;header=False
-    for token in ids:
+    for position,token in enumerate(ids):
         if token==start_id:
             role='other';thinking=False;header=True;codes.append(0);continue
         if header:
             role=role_ids.get(token,'other');header=False
+            if role=='user' and any(
+                    len(prefix)>0 and position+1+len(prefix)<=len(ids) and
+                    all(ids[position+1+j]==value for j,value in enumerate(prefix))
+                    for prefix in tool_response_prefixes):
+                role='tool'
         if role=='assistant':
             if token==think_open:thinking=True
             name='assistant_reasoning' if thinking else 'assistant_reply'
@@ -726,6 +734,10 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
     if any('<|im_start|>' in row['text'] for row in rows) and (
             role_start is None or set(role_ids.values())!={'system','user','assistant','tool'}):
         raise ValueError('ChatML text requires effective role parsing before tool-feedback weighting')
+    # Match only the beginning of a rendered user body, never a marker quoted
+    # later in an ordinary user request. The renderer preserves exact bytes.
+    tool_response_prefixes=tuple(tuple(engine._tokens(prefix)) for prefix in
+                                ('\n<tool_response>', '\n\n<tool_response>'))
     system_code=ROLE_CODES.index('system')
     windows={'train':[],'test':[]}
     masked_system_tokens=0
@@ -740,7 +752,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
             role_tokens=array('I',[backbone.controls.open_id]);role_tokens.extend(row_tokens);role_tokens.append(backbone.controls.close_id)
             labels=chat_roles(role_tokens,
                 start_id=role_start,role_ids=role_ids,
-                think_open=token_id('<think>'),think_close=token_id('</think>'))
+                think_open=token_id('<think>'),think_close=token_id('</think>'),
+                tool_response_prefixes=tool_response_prefixes)
             if mask_system_prompt:
                 index=1
                 while index<len(labels) and labels[index]==0:index+=1
@@ -760,7 +773,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 'groups':row['source_groups']})
     receipt={'enabled':bool(mask_system_prompt and role_start is not None),
              'requested':bool(mask_system_prompt),'role_start_id':role_start,
-             'masked_system_tokens':masked_system_tokens,'documents':len(rows)}
+             'masked_system_tokens':masked_system_tokens,'documents':len(rows),
+             'tool_response_prefixes':[list(prefix) for prefix in tool_response_prefixes]}
     return windows,receipt
 
 
