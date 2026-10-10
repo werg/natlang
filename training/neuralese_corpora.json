@@ -21198,6 +21198,67 @@
       "admission": "held for native admission and teacher trace review",
       "independent_new_worlds": 0,
       "notes": "RES-832 passed six scoped checks with COHORT-C4-A34 /240/include. 20 turns,12382tokens. Exact V15 review pins source/runtime/output/trace. Old index2 storage pause remains preserved; fresh runtimev6 retry separate."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v6",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-decision-labels-google-poolv3-v2-replay72",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "held-authored-static-reference",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "All72 scripted replays accepted;1198 held native turns;527 labels. No learned/runtime qualification. Group lineage preserved; no test rows in source, future split by source groups. Source placeholders unresolved. V17 case-count wording corrected in separate source-license-evidence-v1."
+    },
+    {
+      "id": "free-provider-static-google-poolv3-quality-review-v17-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v17",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "read-only-quality-review",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Full replay and source-group review; original immutable V17 license count is per reducer case, not source-label row; correction in separate source receipt."
+    },
+    {
+      "id": "free-provider-google-poolv3-source-evidence-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/source-license-evidence-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "read-only-source-provenance",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Corrected row count276 placeholder labels; original upstream revisions unrecorded. Current HEADs are comparison references, not historical inputs. No source metadata or admission changed."
+    },
+    {
+      "id": "free-provider-zai45-sourcev5-research-index2-runtimev6-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev5-research-index2-runtimev6-v1",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "case-002/**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-native-trajectory",
+      "training_admission": false,
+      "admission": "held; publication and successful reference execution do not grant admission",
+      "independent_new_worlds": 0,
+      "notes": "Runtimev6 retry after original storage pause;28turns21975tokens completed exact result export. Gold and trace review pending; inherited authored train world, zero independent-world credit."
     }
   ],
   "coverage_backlog": [
