@@ -202,8 +202,12 @@ def rows(repo, splits, source_pins=None):
     return out, names, refs
 
 
-def clip(text, limit=1500):
-    text = ' '.join(str(text).split())
+def normalize_state(text):
+    return ' '.join(str(text).split())
+
+
+def legacy_identity_state(text, limit=1500):
+    text = normalize_state(text)
     return text if len(text) <= limit else text[:limit] + ' ...'
 
 
@@ -316,7 +320,8 @@ def hate_speech(split_names, source_pins=None):
             for c, v in by.items() if len(v) >= 2]
 
 
-def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, source_catalog_provenance=None):
+def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, source_catalog_provenance=None,
+                identity_collisions=None):
     repo, kind, question, train_splits, held_splits, mapper = spec
     out = []
     shared = train_splits == held_splits  # one split only: hold out a hash-selected tail
@@ -331,30 +336,44 @@ def build_cases(name, spec, per_train, per_heldout, licenses, source_pins=None, 
             mapped = [(m[0], m[1], m[2], [ref]) for r, ref in zip(data, refs)
                       if (m := mapper(r, names)) is not None]
         chosen = []
+        identity_states = defaultdict(lambda: defaultdict(list))
         for state, answer, options, source_refs in sorted(mapped, key=lambda m: digest(f'{name}:{m[0]}')):
-            # PubMedQA is an evidence-grounded task: clipping its abstract at an
-            # arbitrary character boundary can remove the conclusion needed to
-            # answer the question. Preserve the complete question + abstract
-            # for newly built PubMedQA cases. The generic cap remains in place
-            # for the other sources, whose current mappings use text as a
-            # bounded classification input rather than a complete evidence
-            # record.
-            state = state if name == 'pubmedqa' else clip(state)
-            key = digest(state)
-            if not state or key in seen:
+            # Preserve the complete mapped evidence for every newly built case.
+            # Keep the historical normalized/clipped value only as the stable
+            # identity and split key, so added suffix evidence does not create a
+            # new source world or move an existing row between splits.
+            full_state = state if name == 'pubmedqa' else normalize_state(state)
+            identity_state = legacy_identity_state(state)
+            key = digest(identity_state)
+            identity_states[key][digest(full_state)].extend(source_refs)
+            # Continue scanning after the selection limit so the collision
+            # census covers every already-loaded mapped row. Do not mark these
+            # unselected rows seen; the historical selection stops here.
+            if len(chosen) >= limit or not identity_state or key in seen:
                 continue
             if shared and (int(key[:8], 16) % 8 == 0) != (role == 'heldout'):
                 continue
             if isinstance(answer, float) and math.isnan(answer):
                 continue
             seen.add(key)
-            chosen.append((state, answer, options, source_refs))
-            if len(chosen) >= limit:
-                break
-        for state, answer, options, source_refs in chosen:
-            case = {'version': 'natlang.decision-case/1', 'id': 'dc-' + digest(f'{name}:{state}')[:20], 'source': repo,
+            chosen.append((full_state, identity_state, answer, options, source_refs))
+        if identity_collisions is not None:
+            for identity_sha, full_states in identity_states.items():
+                if len(full_states) > 1:
+                    identity_collisions.append({
+                        'family': f'decision:{name}', 'role': role,
+                        'identity_state_sha256': identity_sha,
+                        'distinct_full_state_sha256': sorted(full_states),
+                        'full_states': [
+                            {'full_state_sha256': full_sha, 'source_refs': refs}
+                            for full_sha, refs in sorted(full_states.items())
+                        ]
+                    })
+        for state, identity_state, answer, options, source_refs in chosen:
+            case = {'version': 'natlang.decision-case/1', 'id': 'dc-' + digest(f'{name}:{identity_state}')[:20], 'source': repo,
                     'family': f'decision:{name}', 'role': role, 'kind': kind, 'question': question, 'state': state,
-                    'group': 'g-' + digest(f'decision:{state}')[:24], 'license': licenses.get(repo),
+                    'group': 'g-' + digest(f'decision:{identity_state}')[:24], 'license': licenses.get(repo),
+                    'identity_state_sha256': digest(identity_state), 'full_state_sha256': digest(state),
                     'source_refs': source_refs}
             if source_catalog_provenance:
                 case['license_provenance'] = {
@@ -470,10 +489,10 @@ def main():
     specs = dict(SPECS)
     specs['hate-speech'] = ('ucberkeley-dlab/measuring-hate-speech', 'score', 'How hateful is this comment?',
                             ['train'], ['train'], None)
-    cases, counts = [], {}
+    cases, counts, identity_collisions = [], {}, []
     for name, spec in specs.items():
         built = build_cases(name, spec, args.per_train, args.per_heldout, licenses, source_pins,
-                            source_catalog_provenance)
+                            source_catalog_provenance, identity_collisions)
         counts[name] = {role: sum(1 for c in built if c['role'] == role) for role in ('train', 'heldout')}
         cases += built
         print(name, counts[name], flush=True)
@@ -518,6 +537,8 @@ def main():
                'kinds': {k: sum(1 for c in cases if c['kind'] == k) for k in ('choice', 'noul', 'score')},
                'sha256': {name: digest(body) for name, body in bodies.items()}, 'model_calls': 0,
                'source_provenance': source_provenance,
+               'identity_collision_census_scope': 'all_loaded_mapped_rows_per_family_and_role',
+               'identity_collisions': identity_collisions,
                'licenses': licenses}
     with open(os.path.join(args.out, 'decision-data.manifest.json'), 'x') as stream:
         stream.write(json.dumps(summary, indent=2) + '\n')

@@ -26656,6 +26656,16 @@
         "root-generation-source-review-v1.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "luna-v54-case02-case08-diagnostic-correction-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/v54-case02-case08-diagnostic-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "quality-audit-correction",
+      "training_admission": false,
+      "admission": "held-no-runtime-defect-evidence",
+      "notes": "Explicit correction supersedes V54 initial descriptions without altering original audit: SAFE-512 parent answer is correct but decision.json remains pending due missing write; rejection is file omission, not semantic answer failure. EXPT-530 final p4 typed note states signed/current authority; initial audit selected older p1 block. Manual iterator bypass still applies. No runtime bug evidenced."
     }
   ],
   "coverage_backlog": [

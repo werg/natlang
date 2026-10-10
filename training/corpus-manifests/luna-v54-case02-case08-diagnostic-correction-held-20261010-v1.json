@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v54-case02-case08-diagnostic-correction-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/v54-case02-case08-diagnostic-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1043,
+      "sha256": "b6b38f8f914ff1a305e3b9c5045e28c946908d01a02933d9701d067d38f9584d"
+    },
+    {
+      "path": "diagnosis.json",
+      "bytes": 118003,
+      "sha256": "11d38b0b03b42be22736910ff3f6bbc8d050fde99932ceb1987c45da18684b7a"
+    }
+  ],
+  "bytes": 119046
+}
