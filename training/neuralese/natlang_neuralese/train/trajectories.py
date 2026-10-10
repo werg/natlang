@@ -2447,13 +2447,8 @@ def main(argv=None):
                                                       'columns': {}}
                         if behaviour is not None:
                             evaluation['quantization']['bf16_behaviour'] = behaviour.report(engine.backbone.hf)
-                        for point in quant.gated_points():
-                            with quant.context(point, 1.0):
-                                evaluation['quantization']['columns'][point] = evaluate(f'periodic-soft-{point}', leaves)
-                                if behaviour is not None:
-                                    measured = behaviour.report(engine.backbone.hf)
-                                    evaluation['quantization']['columns'][point + ':behaviour'] = {
-                                        **measured, 'passed': behaviour.passed(measured)}
+                        # Precision columns run only at the stage gate (the final report below), not per evaluation.
+                        evaluation['quantization']['columns_deferred'] = 'gate columns run only at the stage gate'
                     if codes is not None:
                         evaluation['qat_codes'] = codes.update()
                     if family and args.member_eval:
@@ -2492,13 +2487,20 @@ def main(argv=None):
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if quant is not None:
         report["quantization"] = {**quant.describe(args.steps), "columns": {}}
+        final_mixes, required_points = quant.mixes(args.steps), set(quant.required_points())
         for point in quant.gated_points():
+            if point not in required_points and final_mixes.get(point, 0.0) <= 0.0:
+                report["quantization"]["columns"][point] = {'skipped': 'ramp not started in this stage'}
+                continue
+            column_started = time.perf_counter()
             with quant.context(point, 1.0):
                 report["quantization"]["columns"][point] = evaluate(f"soft-trained-{point}", leaves)
                 if behaviour is not None:
                     measured = behaviour.report(engine.backbone.hf)
                     report["quantization"]["columns"][point + ":behaviour"] = {**measured,
                                                                                "passed": behaviour.passed(measured)}
+            print(json.dumps({'event': 'precision_column', 'point': point, 'step': args.steps,
+                              'seconds': round(time.perf_counter() - column_started, 1)}), flush=True)
     if cohort_strata_held:
         report["cohort_strata-trained"] = {cohort: {"soft": evaluate(f"soft-trained-{cohort}", leaves, records=chosen)}
                                            for cohort, chosen in cohort_strata_held.items()}

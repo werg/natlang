@@ -1852,14 +1852,14 @@ def main(argv=None):
         except Exception:traceback.print_exc()
     atexit.register(drain_checkpoint_writer_at_exit)
     last_report=None
-    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False,record=True):
+    def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False,record=True,documents=None):
         nonlocal last_schedule_step,last_report
         evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};cohort_strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         tail_projection_cohorts={};tail_projection_cohort_roles={}
         ar_batch=None;ar_fallback=None;role_strata={};cohort_role_strata={}
         with torch.no_grad():
-            for batch in evaluation_batches(held,a.eval_batch,a.tokens):
+            for batch in evaluation_batches(held if documents is None else held[:documents],a.eval_batch,a.tokens):
                 w=batch[0]
                 cohort=w['cohort'];qualifying=cohort==a.qualification_cohort
                 active_strata=strata if qualifying else cohort_strata.setdefault(cohort,{})
@@ -2099,13 +2099,20 @@ def main(argv=None):
         if not record:return report
         log('eval.jsonl',report);last_report=report;return report
 
-    def evaluate_precisions(report):
+    def evaluate_precisions(report,decide=True):
         """The gate column of every gated precision point at its deploy precision (train/quantization.py), next to
-        the BF16 report; the stage qualifies only when BF16 and every required point pass."""
+        the BF16 report; the stage qualifies only when BF16 and every required point pass. Columns run only where a
+        gate decision is made (``decide``: a qualification candidate or the stage end); elsewhere they are deferred.
+        ``quantization.gate.column_held_documents`` (recipe) evaluates columns on the first N held documents."""
         if quant is None:return report
         from .quantization import gate_columns, precision_verdict
+        if not decide:
+            report['quantization']={**quant.describe(step),'columns':{},'precisions_qualified':None,
+                                    'columns_deferred':'gate columns run only at gate decisions'}
+            return report
+        column_documents=(quant.component.get('gate') or {}).get('column_held_documents')
         def column():
-            column_report=evaluate(observe_schedule=False,record=False)
+            column_report=evaluate(observe_schedule=False,record=False,documents=column_documents)
             if behaviour is not None:column_report['behaviour']=behaviour.report(backbone.hf)
             return column_report
         def column_passed(column_report):
@@ -2115,8 +2122,9 @@ def main(argv=None):
         if behaviour is not None:
             report['behaviour']=behaviour.report(backbone.hf)
             bf16_ok=bf16_ok and behaviour.passed(report['behaviour'])
-        columns=gate_columns(quant,column,column_passed)
-        summary={name:{'passed':column['passed'],
+        columns=gate_columns(quant,column,column_passed,step)
+        summary={name:{'passed':column['passed'],**({'skipped':column['skipped']} if 'skipped' in column else {}),
+                       **({'seconds':column['seconds']} if 'seconds' in column else {}),
                        **{k:v for k,v in column['report'].items() if k not in ('strata','cohort_strata','matched_history')}}
                  for name,column in columns.items()}
         report['quantization']={**quant.describe(step),'columns':summary,**precision_verdict(quant,columns,bf16_ok)}
@@ -2593,12 +2601,15 @@ def main(argv=None):
         log('train.jsonl',m)
         report=None
         if eval_cadence.due(step):
-            report=evaluate_precisions(evaluate())
+            report=evaluate()
             qualification_depth=_alignment_qualification_pass_depth(
                 schedule=schedule)
-            precisions_ok=report.get('quantization',{}).get('precisions_qualified',True)
-            streak=streak+1 if (qualification_depth is not None and passes==qualification_depth and
-                report['alignment_gate_passed'] and precisions_ok and all(updates.values())) else 0
+            bf16_pass=(qualification_depth is not None and passes==qualification_depth and
+                report['alignment_gate_passed'] and all(updates.values()))
+            # Precision columns only at a gate decision: a qualification candidate or the stage end.
+            report=evaluate_precisions(report,decide=(bf16_pass and streak+1>=a.consecutive_gates) or step==a.steps)
+            precisions_ok=report.get('quantization',{}).get('precisions_qualified')
+            streak=streak+1 if bf16_pass and precisions_ok is not False else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')

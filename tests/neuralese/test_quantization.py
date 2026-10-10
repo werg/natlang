@@ -266,6 +266,15 @@ def test_gate_columns_evaluate_each_gated_point_at_deploy_precision_and_name_wha
                        'precisions_qualified': True}
     assert not q.precision_verdict(run, {**columns, 'q4': {'passed': False}}, True)['precisions_qualified']
     assert not q.precision_verdict(run, columns, bf16_passed=False)['precisions_qualified']
+    # A point not required in this stage whose ramp has not started is skipped (never counted as passed); a required
+    # point is evaluated anyway. Each evaluated column records its wall time.
+    seen.clear()
+    run.mixes = lambda step: {'q4': 0.0, 'tern': 0.0}  # before either ramp starts
+    early = q.gate_columns(run, evaluate, lambda report: report['ok'], step=0)
+    assert 'tern' not in run.required_points()
+    assert early['tern']['skipped'] and early['tern']['passed'] is None and [p for p, _ in seen] == ['q4']
+    assert early['q4']['seconds'] >= 0
+    assert 'tern' not in q.precision_verdict(run, early, True)['precisions_passed']
 
 
 def test_recipe_gate_refuses_a_stage_that_missed_a_required_precision():
@@ -404,6 +413,7 @@ def test_text_warmup_trains_every_planned_precision_and_reports_gate_columns(tmp
     assert set(columns) == {'q4', 'tern'} and all('alignment_gate_passed' in c for c in columns.values())
     assert report['quantization']['precisions_required'] == ['bf16', 'q4']
     assert report['quantization']['mixes']['q4'] == 1.0
+    assert all('seconds' in c for c in columns.values())
     evaluations = (out / 'eval.jsonl').read_text().splitlines()
     assert all('quantization' not in json.loads(line) or 'columns' in json.loads(line)['quantization']
                for line in evaluations)  # gate-column evaluations are not logged as their own rows

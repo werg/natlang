@@ -496,20 +496,33 @@ def multi_precision_backward(quantization, step, passes, refresh=None):
     return results, losses
 
 
-def gate_columns(quantization, evaluate, passed):
+def gate_columns(quantization, evaluate, passed, step=None):
     """Evaluate each gated point at its deploy precision (λ = 1). ``evaluate()`` returns a report; ``passed(report)``
-    applies the stage's thresholds. Returns the per-precision columns and the names that passed."""
+    applies the stage's thresholds. Returns the per-precision columns (each with its wall time) and the names that
+    passed. Trainers call this only where a gate decision is made (owner 2026-10-10: sparse, cheap evaluations). With
+    ``step``, a point that is not required in this stage and whose ramp has not started (λ = 0) is skipped: its deploy
+    column would measure what the stage is not training yet."""
+    import time
     columns = {}
+    mixes = quantization.mixes(step) if step is not None else {}
+    required = set(quantization.required_points())
     for name in quantization.gated_points():
+        if step is not None and name not in required and mixes.get(name, 0.0) <= 0.0:
+            columns[name] = {'passed': None, 'skipped': 'ramp not started in this stage', 'report': {}}
+            continue
+        started = time.perf_counter()
         with quantization.context(name, 1.0):
             report = evaluate()
-        columns[name] = {'passed': bool(passed(report)), 'report': report}
+        seconds = time.perf_counter() - started
+        print(json.dumps({'event': 'precision_column', 'point': name, 'step': step, 'seconds': round(seconds, 1)}),
+              flush=True)
+        columns[name] = {'passed': bool(passed(report)), 'report': report, 'seconds': seconds}
     return columns
 
 
 def precision_verdict(quantization, columns, bf16_passed):
     """The stage's precision certificate: BF16 plus every required point must pass; names those that passed."""
-    passed = (['bf16'] if bf16_passed else []) + [n for n, c in columns.items() if c['passed']]
+    passed = (['bf16'] if bf16_passed else []) + [n for n, c in columns.items() if c['passed'] is True]
     required = ['bf16'] + quantization.required_points()
     return {'precisions_passed': passed, 'precisions_required': required,
             'precisions_qualified': all(name in passed for name in required)}
