@@ -26121,6 +26121,57 @@
       "admission": "held-source-trace-curriculum-quality-review",
       "independent_new_worlds": 0,
       "notes": "Root reviewed V4 cardinality-only repairs; all four selected original train worlds now have consistent one-item rule/request/gold. New trajectories, no migration or history rewrite. Unrelated V48 campaign is terminal with one transport-failed case, preserved and under audit; this successor does not mark it complete."
+    },
+    {
+      "id": "free-provider-luna-v48-closed-partial-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v48-runtimev14-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-infrastructure-recovery-review",
+      "training_admission": false,
+      "admission": "held-semantic-trace-source-review",
+      "notes": "46 durable results and one unscored infrastructure-failed partial. Source17 upstream reset before headers; no budget failure. Original evidence retained."
+    },
+    {
+      "id": "free-provider-luna-v48-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v48-choice-folder-final-v1",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-infrastructure-recovery-review",
+      "training_admission": false,
+      "admission": "held-semantic-trace-source-review",
+      "notes": "23/46 exact maps23wrong, all source inputs unchanged;1transport failed partial unscored, never model-negative or automatic DPO."
+    },
+    {
+      "id": "free-provider-luna-v50-transport-recovery-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v48-case17-transport-recovery-v50-runtimev14-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-infrastructure-recovery-review",
+      "training_admission": false,
+      "admission": "held-semantic-trace-source-review",
+      "notes": "One fresh isolated retry of V48 case17 after proven upstream connection reset before headers at request160. Original partial78turns remains unscored; no model-negative label or source rewrite. One additional worker beside at mostfour V49 workers, maximumfive authorized."
     }
   ],
   "coverage_backlog": [
