@@ -38,6 +38,7 @@ sys.path.insert(0, str(ROOT / "training" / "neuralese"))
 from natlang_neuralese.common.hashing import (  # noqa: E402
     canonical_json_sha256_hex as canonical_row_sha256,
     sha256_file_hex as sha256,
+    sha256_hex,
 )
 
 
@@ -246,8 +247,7 @@ def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage
                                               meta={"path": path, "role": "visible-input"}, exact_refs=[]))
 
     question = task.get("instruction") or task.get("criterion") or json.dumps(task, ensure_ascii=False)
-    case_sha = hashlib.sha256(json.dumps(case, sort_keys=True, ensure_ascii=False,
-                                         separators=(",", ":")).encode("utf-8")).hexdigest()
+    case_sha = canonical_row_sha256(case)
     candidate_bindings = [{"id": candidate["id"], "source_ref": candidate.get("source_ref"),
                            "source_ids": candidate.get("source_ids", []),
                            "source_groups": candidate.get("source_groups", [])}
@@ -255,7 +255,7 @@ def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage
     kind = "text" if isinstance(expected, str) else "json"
     record = {
         "version": records.VERSION,
-        "id": "natlang:source-case-" + hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:24],
+        "id": "natlang:source-case-" + sha256_hex(case_id.encode("utf-8"))[:24],
         "family": "authored_source_case_closure",
         "task": "consume",
         "sources": visible_sources,
