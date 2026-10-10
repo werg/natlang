@@ -1,0 +1,55 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v35-source-proposal-v1-excluded-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 926,
+      "sha256": "4bdf19e9c7bb0b66713c0013c358153278575c6fa26b46aa7ed4e331b4d86c17"
+    },
+    {
+      "path": "implementation-snapshot/build-semantic-iterate-self-improvement-v35.mjs",
+      "bytes": 9967,
+      "sha256": "cbaa777dc3a8ab4cf2002eace90fcfb7b00a661debe87a301f279077650d9098"
+    },
+    {
+      "path": "implementation-snapshot/semantic-iterate-self-improvement-v35-data.mjs",
+      "bytes": 20672,
+      "sha256": "2dc13c037f4abadcc59db96643197d983855ff9e2e5f5a1dd766d6bac10f1a88"
+    },
+    {
+      "path": "implementation-snapshot/snapshot-manifest.json",
+      "bytes": 571,
+      "sha256": "b7e675f757485cc3767f06c469d09f23774c7784e7e497149beb36ea576173c3"
+    },
+    {
+      "path": "readable-facts-and-golds.md",
+      "bytes": 38293,
+      "sha256": "10f4504a0a7c9a0589599525b9a319e701df56cf52de6a45f593968e8c5d1dfe"
+    },
+    {
+      "path": "root-review-plan.json",
+      "bytes": 534,
+      "sha256": "3ed68a876f0a48a4fd79cd498f045e6cf94efab1776a9dfe6dbca41be6c77298"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1116,
+      "sha256": "bc808eb08615e6a85f9be1056fc36ccf4fe0aa7e78c3686319f316856132bf7b"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 62971,
+      "sha256": "b31c895fa5b10b2625beb06db6c02ef9a933fe86f468a81535697c5321b16956"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1652701,
+      "sha256": "a3ca5c69064fb8bc60046db315437252daa57d1e62258ebb43f09d46388c1f32",
+      "lines": 32
+    }
+  ],
+  "bytes": 1787751
+}
