@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-visible-input-native-text-v3-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v3-ast-span-map",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1862,
+      "sha256": "640901e5ca3d595b43ebd73a616ae1fa1239c2044fd0e1114f040e7e6bc136b3"
+    },
+    {
+      "path": "converted-turns.jsonl",
+      "bytes": 45071340,
+      "sha256": "5af5d84aea424fb88d851ac1ad2dc5e0a780e71a0b357c8615467b71730e4abf",
+      "lines": 344
+    },
+    {
+      "path": "native-turns.jsonl",
+      "bytes": 50620334,
+      "sha256": "08abf3dac46193fc9fe3cf3a2ab6b54437306f7b7e3205768b5b804e67a3f5e3",
+      "lines": 344
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 75769,
+      "sha256": "b273e4f1d1198add5501ab06bd36ebe3aae4d197b2d733578b424a8f4507c71e",
+      "lines": 28
+    },
+    {
+      "path": "quality-replay-receipt.json",
+      "bytes": 2480,
+      "sha256": "692f52b8157ffaaefb08b48341c15433dc00f9f6a7dc8b4fd3535e5cbea8dc33"
+    },
+    {
+      "path": "raw-results.jsonl",
+      "bytes": 30098144,
+      "sha256": "c488e88b7db7808bfe0f1ecc2a99a47b52b1047bca36248aa09026daf169efad",
+      "lines": 5
+    },
+    {
+      "path": "source-manifest.parent.json",
+      "bytes": 2482,
+      "sha256": "91178ce9b03bc4da85c4dec1853cf07155c399299ce96565e453e3654a45b56e"
+    }
+  ],
+  "bytes": 125872411
+}
