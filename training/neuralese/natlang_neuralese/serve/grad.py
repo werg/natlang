@@ -58,8 +58,17 @@ import os
 
 import torch
 
-# cuBLAS picks its split-K workspace per stream; deterministic gradients need a fixed one (read at the first CUDA handle).
-os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+DETERMINISTIC_ENV = "NATLANG_NEURALESE_DETERMINISTIC"
+
+
+def deterministic_requested() -> bool:
+    """The declared setting: NATLANG_NEURALESE_DETERMINISTIC=1 (the server's --deterministic-gradients sets it)."""
+    return os.environ.get(DETERMINISTIC_ENV, "").lower() in ("1", "true", "yes", "on")
+
+
+if deterministic_requested():
+    # cuBLAS picks its split-K workspace per stream; deterministic gradients need a fixed one (read at the first CUDA handle).
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 from ..model.heads import PayloadSample, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortCache
@@ -89,7 +98,11 @@ def state_dialect(dialect: str) -> str:
 class GradSession:
     """Replays recorded turns on one engine's backbone and heads."""
 
-    def __init__(self, engine):
+    def __init__(self, engine, deterministic: bool | None = None):
+        """`deterministic`: run `run()` under `deterministic_kernels()`; default the NATLANG_NEURALESE_DETERMINISTIC
+        setting (off: training and other GPU runs keep the fast kernels and cannot hit an op without a deterministic
+        implementation)."""
+        self.deterministic = deterministic_requested() if deterministic is None else deterministic
         self.engine = engine
         self.backbone, self.heads = engine.backbone, engine.heads
 
@@ -775,7 +788,7 @@ class GradSession:
         order = int(body.get("order") or 1)
         if order not in (1, 2):
             raise Unavailable("gradients of order 1 or 2")
-        with deterministic_kernels():
+        with deterministic_kernels() if self.deterministic else contextlib.nullcontext():
             if order == 2:
                 with second_order(self.backbone):
                     return self._run(body, body.get("derived") or [])

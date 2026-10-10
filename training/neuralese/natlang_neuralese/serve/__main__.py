@@ -28,6 +28,9 @@ def main(argv=None):
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--deterministic-gradients", action="store_true",
+                        help="gradient replay under torch.use_deterministic_algorithms (same request, same gradient bytes on a GPU; "
+                             "slower, and an op without a deterministic kernel fails); same as NATLANG_NEURALESE_DETERMINISTIC=1")
     parser.add_argument("-c", "--ctx-size", type=int, default=None,
                         help="served context in tokens (default and maximum: the model's max_position_embeddings), as "
                              "the fork's -c; view plans its write sites against it")
@@ -45,6 +48,9 @@ def main(argv=None):
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
+    if args.deterministic_gradients:
+        os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
     import torch
 

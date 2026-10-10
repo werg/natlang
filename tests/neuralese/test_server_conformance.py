@@ -50,6 +50,8 @@ CONTEXT = 8192
 # CPU threads of both servers: the reference's torch intra-op pool (torch.set_num_threads, process-wide, so also the
 # engine's and the HTTP handlers' threads) and the native fork's -t. NATLANG_CONFORMANCE_THREADS, default min(8, cores):
 # torch's default (every core) crawls when the machine is loaded. The threaded wasm build keeps its own four threads.
+# Gradient replay under deterministic kernels (NATLANG_NEURALESE_DETERMINISTIC, serve/grad.py), as the learning tests run it.
+os.environ.setdefault("NATLANG_NEURALESE_DETERMINISTIC", "1")
 THREADS = int(os.environ.get("NATLANG_CONFORMANCE_THREADS") or min(8, os.cpu_count() or 1))
 
 
