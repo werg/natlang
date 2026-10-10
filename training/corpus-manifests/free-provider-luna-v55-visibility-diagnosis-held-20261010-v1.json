@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v55-visibility-diagnosis-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v55-child-state-visibility-diagnosis-v1",
+  "files": [
+    {
+      "path": "diagnosis.json",
+      "bytes": 144816,
+      "sha256": "90287a812c65e8286dae711a069a94c1f4020905f9fe0a93a6b055f645520a5b"
+    },
+    {
+      "path": "diagnosis.md",
+      "bytes": 2581,
+      "sha256": "e28a5af4a38be654d0eff7db90079b754c22227a6b0071748a9e2229a3a91684"
+    }
+  ],
+  "bytes": 147397
+}

@@ -27044,6 +27044,19 @@
         "launch-receipt-v1.json",
         "frozen-adapter-v1/**/*"
       ]
+    },
+    {
+      "id": "free-provider-luna-v55-visibility-diagnosis-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v55-child-state-visibility-diagnosis-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-context-visibility-and-source-quality-review",
+      "notes": "Separate follow-up to101unknown invocations across64sourceitems23programs:22direct exact request literals,53request+exactcapture but literal unlocated,10item-onlybinding,16nochildrequest. Eight clipped full-object displays with full input.state retained; all state lengths<=1504. Snapshots alone not visibility. No causal/admission claim; old receipt unchanged."
     }
   ],
   "coverage_backlog": [
