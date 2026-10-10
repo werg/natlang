@@ -33,8 +33,10 @@ test('decisions arriving together are one POST /v1/natlang/score; prompts are ad
     const results = await Promise.allSettled([
       decide({ messages: user('a'), options: ['x', 'y'] }), decide({ messages: user('b'), options: ['boom'] }),
       decide({ messages: user('a'), options: ['z'] })]);
-    assert.equal(server.posts.length, 1);
-    assert.deepEqual(server.posts[0].body.items.map(item => item.messages[0].content), ['a', 'a', 'b']);
+    const scores = server.posts.filter(post => post.path === '/v1/natlang/score');
+    assert.equal(scores.length, 1);
+    assert.deepEqual(server.posts.filter(post => post.path === '/v1/neuralese/decide'), []);
+    assert.deepEqual(scores[0].body.items.map(item => item.messages[0].content), ['a', 'a', 'b']);
     assert.deepEqual(results[0].value.log_probs, [0, -1]);
     assert.deepEqual(results[2].value.log_probs, [0]);
     assert.equal(results[1].status, 'rejected');
