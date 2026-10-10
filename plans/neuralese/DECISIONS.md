@@ -1369,3 +1369,8 @@ Qualification and checkpoint ranking now share one declared reference: unchanged
 Full optimizer, RNG and unchanged-objective plateau state survive a policy handoff. Old gate streaks and best-checkpoint comparisons do not. Preserve the failed old reports and launch from an exact full-state checkpoint with frozen shared code. Generated-tail projection diagnostics now disclose selected-token counts and error by cohort and semantic role without extra model forward passes.
 
 Validation: source review, AST parsing and whitespace checks; no test suite run. Actual training continuation supplies execution evidence separately.
+
+
+### 2026-10-10 — typed label probability mass
+
+Gemini-v4 closed178invalidprobability distributions:46allzero and132substantialmass errors, not rounding drift. Preserve strict1e-4sumvalidation and originalresponses. Prospective sharedprompt clarifies mutuallyexclusive label alternatives and distributing oneunitmass; expliciterrorrecord includes mass/delta. Do not normalize invalidresponses into labels. Separate178case regeneration uses samefreequota/projectlock and unchangedsource/gold, helduntilactualsourcequalityreview. Existingfrozen runs unchanged.

@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-quality-review-v22-gemini-v4-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v22-gemini-v4",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 16630,
+      "sha256": "3cde16580a8dd461bc7044c5903ada9986d94024079a1229b6bd5b47f51fbe24"
+    },
+    {
+      "path": "review.md",
+      "bytes": 5695,
+      "sha256": "df9459aeb00083f68c6f35262e39b7b85c837669fd9dd35a40b7f14848d28abe"
+    },
+    {
+      "path": "root-mass-diagnosis-v1.json",
+      "bytes": 807,
+      "sha256": "ea4ce1b6fb63e077766b7edf5d5d267cef4e70c645680dfc2819335bf9f0b147"
+    }
+  ],
+  "bytes": 23132
+}

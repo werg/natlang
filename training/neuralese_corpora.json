@@ -21751,6 +21751,40 @@
       "admission": "1024 typed labels pending source-bound truth/schema/quality review; standalone labels are not native teacher trajectories",
       "independent_new_worlds": 0,
       "notes": "Four quota-group workers with soleprojectlock; batch closed and v5 automatically continued. No raw probability annotation conversion or trace/reasoning credit. Independent LunaV22 review pending."
+    },
+    {
+      "id": "free-provider-quality-review-v22-gemini-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v22-gemini-v4",
+      "include": [
+        "review.json",
+        "review.md",
+        "root-mass-diagnosis-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "independent-typed-label-quality-review",
+      "training_admission": false,
+      "admission": "review evidence only; source-binding/admission still pending",
+      "independent_new_worlds": 0,
+      "notes": "846valid/178invalid, allprobabilitymass; 581gradedgates but21ordinaldecisionfalseadmissions. Rootsupplement refinesfailurecause:46allzero/132substantialmass errors, norounding-only. No rawnormalization/teachertrajectorycredit."
+    },
+    {
+      "id": "free-provider-google-v4-mass-repair-v6-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/*.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "quota-locked-invalid-typed-output-regeneration-queue",
+      "training_admission": false,
+      "admission": "generation inputs only; repair outputs still require schema/sourcequality review",
+      "independent_new_worlds": 0,
+      "notes": "Exact178failedV4inputs, sourceannotations/splits unchanged, newprompt clarifiesexclusiveprobabilitymass and noallzero. Samefree4quota-group scheduler/soleprojectlock behindV5, no extra immediate calls or paidfallback. Originalinvalidresponses preserved separately."
     }
   ],
   "coverage_backlog": [

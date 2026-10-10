@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v4-mass-repair-v6-queued-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v6",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 108860,
+      "sha256": "37f296751f2a0e08dcb283772bfb69bf2421e9d8f9cabea37a56a2b85d71c493",
+      "lines": 178
+    },
+    {
+      "path": "frozen-adapter-v1/label_decision_cases.py",
+      "bytes": 26639,
+      "sha256": "36aafdd16b4faa52b20b69ea405ab55754065d1d0ea07031a22f10049a8e64f7"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/run_gemini_decision_pool.py",
+      "bytes": 9326,
+      "sha256": "1ddd832f555c878c30438cd81b81ffd20951b267edec877e9871311f9197cc37"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1360,
+      "sha256": "8a83794b1238dca8cada985f0cc1189380e8a6c81cfc39daf19ca3f5f79cbaeb"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 903,
+      "sha256": "d4e77cb605d37b330818629a4084aff915265d89aafbcf477787e90dfd0e405f"
+    }
+  ],
+  "bytes": 149894
+}
