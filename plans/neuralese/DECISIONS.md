@@ -1434,3 +1434,35 @@ stage changes the weights again, so a certificate earned before them would not c
   generation gate and held KL are the per-precision gate (one implementation, `maple.generation_gate`). Ramp lengths
   follow v3's trend (λ=1 held KL 10.0 → 4.0 and agreement 0.03 → 0.35 over its first 500 updates): each ternary ramp
   spans ~40% of the curriculum.
+
+## 2026-10-10 — soft bodies are text-initialised in context; combinators answer in the normal call (owner)
+
+Owner, after the S5 smoke's text-initialised library (3.460 held) lost to zeroed (3.169) and shuffled (3.224) bodies:
+the init encoded each description bare through the port (`/encode`, a value write) and spliced it through the legacy
+RMS read transport (markers plus an interface norm). That is a context-free paraphrase at an instruction slot, not the
+instruction.
+
+- One mechanism for every text-initialised body (`natlang_neuralese/text_init.py`, `POST /v1/neuralese/init_body`,
+  `ts-host/src/neuralese/text-init.ts` `initBodyInContext`): render the soft call exactly as the runtime does with a
+  placeholder body; the body is the read transport's inverse of the embeddings of the instruction tokens as the
+  text-instructed call tokenizes them. A gate compares the soft call with the text-instructed call (next-token
+  agreement ≥ 0.98, KL ≤ 0.02 over the generation position and a greedy reply). Exact (bit-exact gate) on heads
+  without read markers and with an identity input map (raw-token-v1, latent-sketch-v1/v2); the legacy RMS profile
+  cannot pass (pilot-v4 heads: agreement 0.58–0.96), so a failed gate is an error unless accepted as a diagnostic.
+- Producers moved to it: `buildStandardLibrary` (per combinator, rendered with sample arguments), the system-prompt
+  bank builder, soft-skill text-init arms (`soft-skill-decision`, `soft-skill-baseline`, `memetic-decision`,
+  `run-method-arms`; `encode`/`embed` stay as named diagnostic arms), Python `stdlib.build_text_library`,
+  `train/trajectories.py` soft-prompt init, `eval/trajectory_execution.py` unseen prompts, `train/delta_e2e.py` base,
+  and the operator collector's map transforms. Context-free artifacts are superseded ("context-free encoding"):
+  `stdlib-lfm25-350m-pilotv4-text-20261009-v1` (and its trained child), `system-prompt-bank-lfm2.5-350m-text-init-20261004-v1/v2`.
+  New: `stdlib-lfm25-350m-luna28793-incontext-20261010-v1` (all gates bit-exact), diagnostic
+  `stdlib-lfm25-350m-pilotv4-incontext-20261010-v1` (gates failed).
+- Combinators (map, zip, ap, combine, split, splitList, convert, gloss, and `ask`'s map) run the normal call
+  trajectory; template readout stays only where the value must be forced: `read` (a validated `T`), kernel
+  representation-generic Neuralese results and `view`. Spec: spec/ext/neuralese.md "Combinators"; skills updated.
+- The combinator description wording is kept until measured live (plans/MODEL_FACING_CHANGES.md).
+- The S5 operator full-size run restarts on the new library with Pop's LFM closed-output heads (identity transport);
+  shards collected on the old bodies were discarded.
+- `init-body` is a reference-only capability. Open: the llama.cpp fork (native and the vendored wasm builds) still
+  answers 404 rather than 501 `neuralese-init-body-unavailable` for the path; one line beside the `grad`/`optim`
+  stubs in `tools/neuralese/neuralese-service.cpp`, then a conformance `lacking` entry, at the next fork rebuild.

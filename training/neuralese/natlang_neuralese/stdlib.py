@@ -43,14 +43,31 @@ def _nz_block_header(block) -> dict:
             **({"producer": block.producer} if block.producer else {})}
 
 
-def build_text_library(engine, path, *, method: str = "encode", provenance: dict | None = None) -> dict[str, str]:
-    """Write the text-initialised standard library for `engine`'s backbone to `path`. Returns name → body block ID."""
-    from .serve.grad import embed_text, encode_text
+def build_text_library(engine, path, *, method: str = "in-context", calls: dict | None = None,
+                       provenance: dict | None = None) -> dict[str, str]:
+    """Write the text-initialised standard library for `engine`'s backbone to `path`. Returns name → body block ID.
+    `method="in-context"` needs `calls`: name → {"messages", "tools", "placeholder"}, each combinator's call as the
+    runtime renders it with a placeholder body (what TS `buildStandardLibrary` captures); every body is gated against
+    its text-instructed call (`text_init.init_gate`) and the gates go into the provenance. `method="embed"` is the
+    bare token-embedding fixture (tests only: it is not reproduced by the call on a read transport that changes it)."""
+    from .serve.grad import embed_text
+    from .text_init import init_gate, instruction_body
 
-    tensors, blocks, exports, bodies = {}, {}, {}, {}
+    if method not in ("in-context", "embed"):
+        raise ValueError(f"unknown text initialisation {method!r} (in-context or embed)")
+    if method == "in-context" and not calls:
+        raise ValueError("in-context initialisation needs each combinator's rendered call (TS buildStandardLibrary)")
+    tensors, blocks, exports, bodies, gates = {}, {}, {}, {}, {}
     for name, entry in combinator_texts().items():
         kind = f"Neuralese<{entry['type']}>"
-        block = (encode_text if method == "encode" else embed_text)(engine, entry["text"], kind)
+        if method == "embed":
+            block = embed_text(engine, entry["text"], kind)
+        else:
+            call = calls[name]
+            block, info = instruction_body(engine, call["messages"], call.get("tools"), call["placeholder"],
+                                           entry["text"], kind)
+            swapped = json.loads(json.dumps(call["messages"]).replace(call["placeholder"], block.id))
+            gates[name] = {"init": info, "gate": init_gate(engine, swapped, call.get("tools"), block.id, entry["text"])}
         tensors[block.id] = block.payload.detach().float().cpu().contiguous()
         blocks[block.id] = _nz_block_header(block)
         exports[name] = {"type": kind, "description": entry["text"],
@@ -58,8 +75,8 @@ def build_text_library(engine, path, *, method: str = "encode", provenance: dict
         bodies[name] = block.id
     header = {"format": FORMAT, "dialect": engine.dialect, "exports": exports, "blocks": blocks,
               "provenance": {"kind": "natlang-standard-library",
-                             "initialisation": "text-encode" if method == "encode" else "text-embeddings",
-                             **(provenance or {})}}
+                             "initialisation": "text-in-context" if method == "in-context" else "text-embeddings",
+                             **({"init_gates": gates} if gates else {}), **(provenance or {})}}
     save_file(tensors, str(path), metadata={"natlang": json.dumps(header, sort_keys=True, separators=(",", ":"))})
     return bodies
 

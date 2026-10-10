@@ -325,7 +325,7 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     assert status == 501 and body["error"]["code"] == "neuralese-adapters-projection-unavailable"
 
 
-REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "grad",
+REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "grad", "init-body",
                   "grad.order2", "optim"}
 
 

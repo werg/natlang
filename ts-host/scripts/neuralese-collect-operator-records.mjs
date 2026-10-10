@@ -17,19 +17,19 @@
  * the producer chain. Records go to OUT (JSONL) with their blocks in OUT-without-.jsonl + `.blocks/`.
  *
  *   node scripts/neuralese-collect-operator-records.mjs --endpoint URL --library stdlib.nz --cases cases.jsonl \
- *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N]
+ *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N] [--gate-reply-tokens 8]
  */
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { createNatlangRuntime, createLearning, learningService, loadStandardLibrary, createNeuraleseLibrary, softFunction,
-  replayRecordSink } from '../dist/index.js';
+  replayRecordSink, initBodyInContext } from '../dist/index.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 
 const { values: args } = parseArgs({ options: {
   endpoint: { type: 'string' }, library: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' },
   programs: { type: 'string', default: 'read,map,zipsplit,laws' }, limit: { type: 'string', default: '0' },
-  split: { type: 'string', default: '' }, model: { type: 'string', default: 'natlang-neuralese' } } });
+  split: { type: 'string', default: '' }, 'gate-reply-tokens': { type: 'string', default: '8' }, model: { type: 'string', default: 'natlang-neuralese' } } });
 for (const key of ['endpoint', 'library', 'cases', 'out']) if (!args[key]) throw new Error(`--${key} is required`);
 
 const programs = new Set(args.programs.split(',').filter(Boolean));
@@ -50,7 +50,18 @@ async function post(path, body) {
   return response.json();
 }
 const encode = async (text, type = 'Neuralese<string>') => ({ $neuralese: { type, id: (await post('/v1/neuralese/encode', { text, type })).id } });
-const embedId = async (text, type) => (await post('/v1/neuralese/embed', { text, type })).id;
+// A transform's soft body is initialised in context (src/neuralese/text-init.ts): in a call of the soft function on the
+// case's text, so that at initialisation it is the text-instructed function. Its gate is kept in the case's records.
+const FUNCTION_TYPE = 'Neuralese<(text: string) => string>';
+let gate = null;
+async function instructionBody(instruction, text) {
+  const result = await initBodyInContext({ endpoint: args.endpoint, text: instruction, type: FUNCTION_TYPE,
+    acceptFailedGate: true, replyTokens: Number(args['gate-reply-tokens']),
+    render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store } })
+      .run(() => softFunction({ type: '(text: string) => string', body: placeholder })(text)) });
+  gate = { init: result.init, gate: result.gate };
+  return result.id;
+}
 
 // The library bodies are the trained values: every program's gradient session takes them as its arguments.
 const bodies = Object.fromEntries(Object.entries(library.bodies).map(([name, id]) =>
@@ -79,9 +90,8 @@ for (const item of cases.slice(0, limit)) {
     await collect({ ...base, operator: 'read', expected: item.text },
       () => objectives.crossEntropy(() => runtime.run(() => lib.read(v)), item.text));
   if (programs.has('map')) {
-    const f = softFunction({ type: '(text: string) => string',
-      body: await embedId(item.map.instruction, 'Neuralese<(text: string) => string>') });
-    await collect({ ...base, operator: 'map', transform: item.map.transform, expected: item.map.expected },
+    const f = softFunction({ type: '(text: string) => string', body: await instructionBody(item.map.instruction, item.text) });
+    await collect({ ...base, operator: 'map', transform: item.map.transform, expected: item.map.expected, init: gate },
       () => objectives.crossEntropy(() => runtime.run(async () => lib.read(await lib.map(v, f))), item.map.expected));
   }
   if (programs.has('zipsplit')) {

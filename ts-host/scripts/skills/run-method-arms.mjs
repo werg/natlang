@@ -25,7 +25,7 @@
  * Usage: run-method-arms.mjs --cases decision-cases.jsonl --out DIR --endpoint URL [--families a,b]
  *          [--arms none,soft-init,soft-gold,soft-teacher,adapter-gold,adapter-teacher,joint-gold]
  *          [--teacher-labels labels.jsonl] [--support 16 --query 24 --steps 8 --lr 0.02 --adapter-lr 0.01
- *           --adapter-rank 4 --init-text FILE --init encode|embed]
+ *           --adapter-rank 4 --init-text FILE --init in-context|encode|embed]
  */
 import { readFileSync } from 'node:fs';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
@@ -38,7 +38,7 @@ import { caseTarget, casesByFamily, decisionSession, quality, sampleCases } from
 
 const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold', 'prompt-teacher'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
-const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(','), init: 'encode', sample: 'stratified' };
+const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(','), init: 'in-context', sample: 'stratified' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
   if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'arms', 'teacher-labels', 'init-text', 'init', 'sample'].includes(key) || value === undefined)
@@ -90,10 +90,12 @@ await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.method
 
 const session = decisionSession(options.endpoint);
 const { learning, runtime, readouts, readoutOf, lossOn: lossWith } = session;
-// Soft artifacts start from their text encoded through the port (one pass), or with `--init embed` from raw token
-// embeddings (the method-arms v2 runs).
-if (!['encode', 'embed'].includes(options.init)) throw Error('--init is encode or embed');
-const initialise = text => options.init === 'embed' ? session.embed(text) : session.encode(text);
+// Soft artifacts start from their text in context (text-init.ts, owner 2026-10-10: the soft call reproduces the
+// text-instructed call), or as diagnostic context-free arms `--init encode` (through the port, method-arms v1/v3) and
+// `--init embed` (raw token embeddings, v2).
+if (!['in-context', 'encode', 'embed'].includes(options.init)) throw Error('--init is in-context, encode or embed');
+const initialise = async (text, c) => options.init === 'in-context' ? (await session.initSkill(text, c)).skill
+  : options.init === 'embed' ? session.embed(text) : session.encode(text);
 const { valueAndGrad, optimizers, adapters } = learning;
 const lossOn = (cases, source) => lossWith(cases, source === 'teacher' ? teacherTarget : c => caseTarget(c).gold);
 
@@ -131,7 +133,7 @@ const teacherQuality = cases => {
 
 const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(entry) + '\n');
 const stepRecord = entry => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep(entry)) + '\n');
-const init = await initialise(initText);
+const init = await initialise(initText, supportOf(families[0])[0]);
 const refs = params => [...(params.skill ? [{ kind: 'soft-skill', id: params.skill.$neuralese.id, role: 'skill' }] : []),
   ...(params.adapter ? [{ kind: 'adapter', id: params.adapter.$neuralese.id, role: 'adapter' }] : []),
   ...Object.entries(params.prompts ?? {}).map(([piece, ref]) => ({ kind: 'system-prompt', id: ref.$neuralese.id, role: `prompt:${piece}` }))];

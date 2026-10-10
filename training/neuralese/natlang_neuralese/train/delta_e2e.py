@@ -112,7 +112,9 @@ def main(argv=None):
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
     session, device = GradSession(engine), engine.device
-    base = encode_text(engine, BASE_TEXT).payload.float().to(device)
+    # The base skill starts from its text in context (text_init.py), not the bare text encoded through the port.
+    from ..text_init import instruction_rows
+    base = instruction_rows(engine, BASE_TEXT)[0].payload.float().to(device)
     projection = DeltaProjection(engine.dialect, engine.width, args.hidden).to(device)
     with torch.no_grad():
         projection.out.weight.normal_(0, 1e-3)

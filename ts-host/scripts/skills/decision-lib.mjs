@@ -2,7 +2,7 @@
  * scoring, case splits, the runtime against a Neuralese server, and typed decision calls with optional guidance text,
  * soft skill and adapter. */
 import { readFileSync } from 'node:fs';
-import { Context, createNatlangRuntime, learningService, createLearning, loadVirtualNatlang } from '../../dist/index.js';
+import { Context, createNatlangRuntime, learningService, createLearning, loadVirtualNatlang, initBodyInContext } from '../../dist/index.js';
 import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { rankedProbabilityScore } from '../../dist/skills/graded.js';
@@ -77,7 +77,7 @@ export function decisionSession(endpoint) {
   /** The case as a typed decision function: `params.guidance` (crisp text before the question), `params.skill` (a soft
    * context item), `params.adapter` (active weight adapter) and `params.prompts` (soft system-prompt pieces by piece ID,
    * DECISIONS.md 40) are each optional. */
-  function call(c, params = {}) {
+  function call(c, params = {}, on = runtime) {
     const key = c.id + '\0' + (params.guidance ?? '');
     let fn = functions.get(key);
     if (!fn) {
@@ -88,7 +88,7 @@ export function decisionSession(endpoint) {
       functions.set(key, fn);
     }
     const bound = params.skill ? fn.in(Context.ofCallable(fn).with({ skill: params.skill })) : fn;
-    const run = () => runtime.run(() => bound(c.state));
+    const run = () => on.run(() => bound(c.state));
     const prompted = params.prompts ? () => learning.withSystemPrompts(params.prompts, run) : run;
     return params.adapter ? learning.withAdapters(params.adapter, prompted) : prompted();
   }
@@ -114,9 +114,21 @@ export function decisionSession(endpoint) {
     if (!response.ok) throw Error(`encode failed: ${response.status} ${await response.text()}`);
     return { $neuralese: { type, id: (await response.json()).id } };
   }
+  /**
+   * A soft skill initialised in context from `text` (src/neuralese/text-init.ts, owner 2026-10-10): case `c`'s call is
+   * rendered with the skill as a placeholder block, and the server returns the body under which that call is the call
+   * with the skill as text (gated). The body depends on the context only through tokenization at its edges, so one case
+   * serves a family. Returns the skill and the init record (gate, exactness).
+   */
+  async function initSkill(text, c, type = 'Neuralese<string>') {
+    const result = await initBodyInContext({ endpoint, text, type,
+      render: (placeholder, driver) => call(c, { skill: { $neuralese: { type, id: placeholder } } },
+        createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } })) });
+    return { skill: { $neuralese: { type, id: result.id } }, init: { case: c.id, context: result.context, ...result.init, gate: result.gate } };
+  }
   const asTarget = (c, probabilities) => Object.fromEntries(caseTarget(c).values.map((v, i) => [String(v), probabilities[i]]));
   /** Summed decision log loss of `params` on cases against gold (or `targetOf(c)`), as a learning Loss. */
   const lossOn = (cases, targetOf = c => caseTarget(c).gold) => params => bounded(cases, 4, c =>
     learning.objectives.decision(() => call(c, params), asTarget(c, targetOf(c)), 'logLoss')).then(losses => learning.objectives.sum(...losses));
-  return { store, learning, runtime, traces, call, readouts, readoutOf, embed, encode, lossOn };
+  return { store, learning, runtime, traces, call, readouts, readoutOf, embed, encode, initSkill, lossOn };
 }

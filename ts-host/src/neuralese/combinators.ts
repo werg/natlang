@@ -4,15 +4,17 @@
  * `read(map(block, question))` (DECISIONS.md 2026-10-09, "one summarizer family"; its law in S0 §4.2).
  *
  * Each combinator except `empty` and `ask` is a system natural-language function whose instructions are a soft body: a block
- * initialised from a text description (encoded in one pass through the port, or token embeddings on a server without
- * `encode`) and trained later like any other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
- * `loadStandardLibrary` reads its bytes). Every combinator call and readout is recorded as an execution-graph node.
+ * initialised in context from its text description (text-init.ts, owner 2026-10-10: the soft call reproduces the
+ * text-instructed call at initialisation) and trained later like any other block (S5). The bodies live in a
+ * standard-library `.nz` file (`buildStandardLibrary` writes one for a server; `loadStandardLibrary` reads its bytes).
+ * Every combinator call and readout is recorded as an execution-graph node.
  *
- * Combinators answer by template readout, not free decoding: the call's opening is rendered as for any call, and its
- * first reply is forced to `return_result(status="success", value=…)`. A Neuralese result (`map`, `zip`, `ap`,
- * `combine`, `convert`) is written as a block at the value; any other result (`read`, `gloss`, and the record or list
- * of `split` and `splitList`, whose elements are blocks the model writes as it decodes) is decoded after the forced
- * call opening. The trajectory keeps the agentic format, so the same template trains the combinators.
+ * Combinators answer in the normal call trajectory (owner 2026-10-10): the call's opening is rendered as for any call
+ * and the model may work in its turns before it returns. A Neuralese result (`map`, `zip`, `ap`, `combine`, `convert`)
+ * is a block the model writes as the returned value; any other result is decoded. Template readout (the first reply
+ * forced to `return_result`) stays only where a value must be forced: typed `read` (the readout behind text conversion
+ * and coercions), a representation-generic call used for its Neuralese form (runtime/kernel.ts) and the builtin `view`
+ * write.
  */
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
@@ -62,24 +64,69 @@ async function postJson(endpoint: string, path: string, body: unknown, headers: 
   return await response.json() as Json;
 }
 
+/** Sample arguments that render each combinator's call for its in-context initialisation (the body's context). */
+const SAMPLE_VALUE = 'The meeting moved to Tuesday at 3 pm in Lyon.';
+const SAMPLE_PARTNER = 'Bring the signed contract.';
+const SAMPLE_FUNCTION = 'Translate the text into French.';
+
 /**
- * Initialise every combinator body from its description on a Neuralese server and return the library and its `.nz`
- * bytes. On Node, `buildStandardLibrary` from `@natlang/node` (neuralese/node-files.ts) also writes them to `path`.
+ * Initialise every combinator body in context from its description on a Neuralese server (text-init.ts: the soft call
+ * reproduces the text-instructed call at initialisation; each body's gate goes into the library's provenance) and
+ * return the library and its `.nz` bytes. On Node, `buildStandardLibrary` from `@natlang/node`
+ * (neuralese/node-files.ts) also writes them to `path`. `acceptFailedGate` keeps bodies whose gate failed (heads whose
+ * read transport cannot reproduce text, e.g. the legacy RMS profile), recorded as such.
  */
 export async function buildStandardLibrary(options: { endpoint: string; headers?: Record<string, string>;
-  store?: NeuraleseStore; textProviderRead?: boolean }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
+  store?: NeuraleseStore; textProviderRead?: boolean; acceptFailedGate?: boolean;
+  /** Greedy reply tokens the gate compares (default 24). */
+  gateReplyTokens?: number }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
+  const { initBodyInContext } = await import('./text-init.js');
+  const { createNatlangRuntime } = await import('../runtime/runtime.js');
+  const { MemoryNeuraleseStore } = await import('../native/neuralese-store.js');
+  const headers = options.headers ?? {};
   const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
   const info = await (await fetchModel(options.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: options.headers })).json() as
     { dialects: string[]; width: number };
+  const local = new MemoryNeuraleseStore();
+  const fetchBlock = async (id: string) => {
+    if (!(await local.has(id))) {
+      const block = await remote.get(id);
+      if (!block) throw new Error(`neuralese standard library: the server lost block ${id}`);
+      const { id: _, ...rest } = block.meta;
+      await local.put({ ...rest, data: block.data });
+    }
+    return id;
+  };
+  const value = async (text: string, type: string, path = '/v1/neuralese/encode') =>
+    neuraleseRef(type, await fetchBlock(String((await postJson(options.endpoint, path, { text, type }, headers)).id)));
+  const v = await value(SAMPLE_VALUE, 'Neuralese<string>');
+  const w = await value(SAMPLE_PARTNER, 'Neuralese<string>');
+  const record = await value(JSON.stringify({ city: 'Lyon', day: 'Tuesday' }), 'Neuralese<{ city: string; day: string }>');
+  const list = await value(JSON.stringify(['Lyon', 'Paris']), 'Neuralese<string[]>');
+  const fnBody = await value(SAMPLE_FUNCTION, 'Neuralese<(text: string) => string>', '/v1/neuralese/embed');
+  const f = softFunction({ type: '(text: string) => string', body: fnBody.$neuralese.id });
+  const samples: Record<CombinatorName, (lib: ReturnType<typeof createNeuraleseLibrary>) => Promise<unknown>> = {
+    map: lib => lib.map(v, f), zip: lib => lib.zip(v, w), ap: lib => lib.ap(fnBody, SAMPLE_PARTNER),
+    combine: lib => lib.combine(v, w), split: lib => lib.split(record), splitList: lib => lib.splitList(list),
+    read: lib => lib.read(v), convert: lib => lib.convert(v, info.dialects[0]!), gloss: lib => lib.gloss(v) };
   const bodies = {} as Record<CombinatorName, string>;
+  const gates: Record<string, unknown> = {};
   const exports: Record<string, { type: string; value: unknown; description: string }> = {};
   for (const [name, entry] of Object.entries(COMBINATORS) as [CombinatorName, (typeof COMBINATORS)[CombinatorName]][]) {
-    // Encoded in one pass through the port (decision 42); servers without `encode` fall back to token embeddings.
-    const meta = await postJson(options.endpoint, '/v1/neuralese/encode', { text: entry.text, type: `Neuralese<${entry.type}>` }, options.headers)
-      .catch(() => postJson(options.endpoint, '/v1/neuralese/embed', { text: entry.text, type: `Neuralese<${entry.type}>` }, options.headers));
-    bodies[name] = String(meta.id);
-    exports[name] = { type: `Neuralese<${entry.type}>`, description: entry.text,
-      value: { kind: 'soft-function', type: `Neuralese<${entry.type}>`, body: String(meta.id), captures: {} } };
+    const type = `Neuralese<${entry.type}>`;
+    const result = await initBodyInContext({ endpoint: options.endpoint, headers, text: entry.text, type,
+      acceptFailedGate: options.acceptFailedGate, replyTokens: options.gateReplyTokens,
+      render: async (placeholder, driver) => {
+        await fetchBlock(placeholder);
+        const all = Object.fromEntries(Object.keys(COMBINATORS).map(key => [key, placeholder])) as Record<CombinatorName, string>;
+        const lib = createNeuraleseLibrary({ dialect: info.dialects[0]!, width: info.width, bodies: all });
+        const runtime = createNatlangRuntime({ model: driver as never, neuralese: { store: local } });
+        return runtime.run(() => samples[name](lib));
+      } });
+    bodies[name] = result.id;
+    gates[name] = { init: result.init, gate: result.gate };
+    exports[name] = { type, description: entry.text,
+      value: { kind: 'soft-function', type, body: result.id, captures: {} } };
   }
   const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
     return (await options.store?.get(id)) ?? (await remote.get(id)); } } as NeuraleseStore;
@@ -89,10 +136,9 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
     sourceSha256: hexDigest(COMBINATORS.read.text), learnedVectors: false as const,
   } : undefined;
   const bytes = await saveNz(exports, { store, dialect: info.dialects[0]!, provenance: { kind: 'natlang-standard-library',
-    initialisation: 'text-embeddings', ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
+    initialisation: 'text-in-context', init_gates: gates, ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
   return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(textReadSource ? { textReadSource } : {}) }, bytes };
 }
-
 /**
  * Read a standard-library `.nz` file from its bytes, registering its blocks in `store`. On Node, `loadStandardLibrary`
  * from `@natlang/node` (neuralese/node-files.ts) also takes a path.
@@ -140,8 +186,7 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
   const functions = new Map<CombinatorName, ReturnType<typeof softFunction>>();
   const fn = (name: CombinatorName) => {
     let found = functions.get(name);
-    if (!found) functions.set(name, found = softFunction({ type: COMBINATORS[name].type, body: library.bodies[name], name: `natlang.${name}`,
-      readout: 'template' }));
+    if (!found) functions.set(name, found = softFunction({ type: COMBINATORS[name].type, body: library.bodies[name], name: `natlang.${name}` }));
     return found;
   };
   const call = async (name: CombinatorName, args: unknown[]) => {
@@ -163,6 +208,8 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
       if (typeof v === 'string') return v;
       if (!isNeuraleseRef(v)) throw new TypeError('read needs a Neuralese value');
       record('readout', { type: elementType(v), call_id: currentFrame()?.parentCallId ?? null }, [v]);
+      // Typed readout must produce exactly a value of the declared type (JS coercions, text conversion and the text
+      // transport's typed-readout provenance depend on it): it keeps template readout.
       const typed = softFunction({ type: `(v: ${v.$neuralese.type}) => ${elementType(v)}`, body: library.bodies.read, name: 'natlang.read',
         readout: 'template', adHoc: false });
       return (typed as unknown as (value: unknown) => Promise<unknown>)(v);
@@ -179,7 +226,7 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
       if (typeof question !== 'string' || !question.trim()) throw new TypeError('ask needs a question (a non-empty string)');
       record('combinator', { combinator: 'map', call_id: currentFrame()?.parentCallId ?? null }, [v, question]);
       const map = softFunction({ type: `(v: ${v.$neuralese.type}, f: string) => Neuralese<string>`, body: library.bodies.map,
-        name: 'natlang.map', readout: 'template', adHoc: false });
+        name: 'natlang.map', adHoc: false });
       const answer = await (map as unknown as (value: unknown, f: string) => Promise<unknown>)(v, question);
       if (!isNeuraleseRef(answer)) throw new TypeError('ask: map did not write its answer as a Neuralese value');
       return await lib.read(answer) as string;

@@ -279,6 +279,66 @@
       ]
     },
     {
+      "id": "stdlib-lfm25-350m-luna28793-incontext-20261010-v1",
+      "kind": "standard-library",
+      "owner": "dgx",
+      "dialect": "nd:natlang-latent-sketch@2",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/neuralese/combinators.ts",
+        "builder": "ts-host/src/neuralese/combinators.ts:buildStandardLibrary (in-context, src/neuralese/text-init.ts)"
+      },
+      "training": null,
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "stdlib.nz": "/home/werg/.claude/jobs/9c849f00/tmp/opinit/stdlib-luna28793.nz"
+      },
+      "registered": "2026-10-10T13:50:00+00:00",
+      "notes": "In-context text initialisation (owner 2026-10-10) of the combinator bodies on Pop's LFM closed-output heads runs/luna-ar-native-harness-8805-final28793-20261010-v1/closed-output-v1/best-heads.pt (latent-sketch-v2, cutoff 8, identity read transport): each body is the instruction span's embeddings as the text-instructed call tokenizes them; all 9 init gates bit-exact (provenance.init_gates). Replaces the context-free encoding of stdlib-lfm25-350m-pilotv4-text-20261009-v1. Init of the S5 operator full-size relaunch.",
+      "path": "data/neuralese/artifacts/stdlib-lfm25-350m-luna28793-incontext-20261010-v1",
+      "files": [
+        "stdlib.nz"
+      ]
+    },
+    {
+      "id": "stdlib-lfm25-350m-pilotv4-incontext-20261010-v1",
+      "kind": "standard-library",
+      "owner": "dgx",
+      "dialect": "nd:natlang@1",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/neuralese/combinators.ts",
+        "builder": "ts-host/src/neuralese/combinators.ts:buildStandardLibrary (in-context, acceptFailedGate)"
+      },
+      "training": null,
+      "qualification": {
+        "status": "failed",
+        "evidence": []
+      },
+      "origin": {
+        "stdlib.nz": "/home/werg/.claude/jobs/9c849f00/tmp/opinit/stdlib-pilotv4.nz"
+      },
+      "registered": "2026-10-10T13:50:01+00:00",
+      "notes": "In-context text initialisation of the combinator bodies on the pilot-v4 legacy-rms-v1 heads (runs/neuralese-s3-pilot-20261005-v4): read markers and the interface norm make an exact body impossible; every init gate failed (agreement 0.58-0.96, provenance.init_gates). Diagnostic successor of the context-free stdlib-lfm25-350m-pilotv4-text-20261009-v1; not an init for training.",
+      "path": "data/neuralese/artifacts/stdlib-lfm25-350m-pilotv4-incontext-20261010-v1",
+      "files": [
+        "stdlib.nz"
+      ]
+    },
+    {
       "id": "stdlib-lfm25-350m-pilotv4-text-20261009-v1",
       "kind": "standard-library",
       "owner": "dgx",
@@ -295,8 +355,13 @@
       },
       "training": null,
       "qualification": {
-        "status": "unqualified",
-        "evidence": []
+        "status": "superseded",
+        "evidence": [],
+        "superseded": {
+          "date": "2026-10-10",
+          "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
+          "by": "stdlib-lfm25-350m-luna28793-incontext-20261010-v1"
+        }
       },
       "origin": {
         "stdlib.nz": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/stdlib-text-init.nz"
@@ -331,10 +396,15 @@
         "run": "runs/neuralese-s5-operator-smoke-20261009-v1/train"
       },
       "qualification": {
-        "status": "unqualified",
+        "status": "superseded",
         "evidence": [
           "runs/neuralese-s5-operator-smoke-20261009-v1/train/result.json"
-        ]
+        ],
+        "superseded": {
+          "date": "2026-10-10",
+          "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
+          "by": "stdlib-lfm25-350m-luna28793-incontext-20261010-v1"
+        }
       },
       "origin": {
         "stdlib.nz": "/mnt/external/natlang-development-data/runs/neuralese-s5-operator-smoke-20261009-v1/train/trained.nz",
@@ -367,8 +437,13 @@
       },
       "training": null,
       "qualification": {
-        "status": "unqualified",
-        "evidence": []
+        "status": "superseded",
+        "evidence": [],
+        "superseded": {
+          "date": "2026-10-10",
+          "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
+          "by": null
+        }
       },
       "origin": {
         "bank.nz": "/mnt/external/natlang-development-data/runs/neuralese-system-prompts-20261004/bank-text-init-v1.nz"
@@ -397,8 +472,13 @@
       },
       "training": null,
       "qualification": {
-        "status": "unqualified",
-        "evidence": []
+        "status": "superseded",
+        "evidence": [],
+        "superseded": {
+          "date": "2026-10-10",
+          "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
+          "by": null
+        }
       },
       "origin": {
         "bank.nz": "/mnt/external/natlang-development-data/runs/neuralese-system-prompts-20261004/bank-text-init-v2.nz"

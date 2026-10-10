@@ -71,6 +71,7 @@ export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite } from './neuralese
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
 export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js';
 export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
+export { initBodyInContext, captureCallRequest, TextInitGateError, type TextInitResult, type TextInitGate } from './neuralese/text-init.js';
 export { FileNeuraleseStore, type FileNeuraleseStoreOptions } from './neuralese/node-block-store.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
 export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';

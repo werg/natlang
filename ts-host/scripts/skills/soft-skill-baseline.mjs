@@ -16,7 +16,7 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { Context, createNatlangRuntime, iterateOn, learningService, createLearning } from '../../dist/index.js';
+import { Context, createNatlangRuntime, iterateOn, learningService, createLearning, initBodyInContext } from '../../dist/index.js';
 import { loadNatlang } from '../../dist/runtime/node.js';
 import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
@@ -46,12 +46,6 @@ function goldAnswer(row) {
   return undefined;
 }
 
-async function embed(text, type) {
-  const response = await fetch(`${options.endpoint}/v1/neuralese/embed`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text, type }) });
-  if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
-  return (await response.json()).id;
-}
 
 function loadTarget(episode) {
   const root = mkdtempSync(join(tmpdir(), 'soft-skill-target-'));
@@ -118,9 +112,15 @@ for (const episode of rows) {
 
   const none = await arm(undefined);
   await record({ arm: 'none', ...none });
-  const init = { $neuralese: { type: 'Neuralese<string>', id: await embed(initText, 'Neuralese<string>') } };
+  // The text-initialised skill, in context (text-init.ts, owner 2026-10-10): the first support case's call rendered
+  // with the skill as a placeholder; the body makes it the call with the skill as text (gated).
+  const initResult = await initBodyInContext({ endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
+    render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store } })
+      .run(() => solve.in(base.with({ skill: { $neuralese: { type: 'Neuralese<string>', id: placeholder } } }))(...support[0].args)) });
+  const init = { $neuralese: { type: 'Neuralese<string>', id: initResult.id } };
   const initArm = await arm(init);
-  await record({ arm: 'text-init', ...initArm, support_nll: await value(support, init) });
+  await record({ arm: 'text-init', ...initArm, support_nll: await value(support, init),
+    init: { context: initResult.context, ...initResult.init }, gate: initResult.gate });
   const adam = optimizers.adam({ lr: options.lr });
   const trace = [];
   const step = async state => {

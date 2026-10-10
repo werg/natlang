@@ -125,7 +125,16 @@ the structured `neuralese-readout-unavailable` capability error. The runtime
 never reads vector payloads as text. `split` and `splitList` are the only way to soft parts of a
 structured value. Each combinator except `empty` and `ask` is a system natural-language
 function with a soft body, trainable like any other; a program may bind its own
-tuned bodies in its context. None takes a purpose argument: a value encodes what
+tuned bodies in its context. A combinator call answers in the normal call
+trajectory (it may evaluate code before `return_result`); only `read` keeps the
+forced template readout, because its value must be a validated `T`. A body
+initialised from text is initialised **in context**: it is the value under
+which the soft call is the text-instructed call (the instruction tokens as that
+call's rendering tokenizes them, through the inverse of the read transport),
+gated at initialisation by next-token agreement and KL against the
+text-instructed call ([NEURALESE_PORT.md](../NEURALESE_PORT.md),
+`POST /v1/neuralese/init_body`). Encoding the bare text through the port is not
+a body initialisation. None takes a purpose argument: a value encodes what
 its write site (the producing function's instructions, declared result, and
 context) wrote it for.
 

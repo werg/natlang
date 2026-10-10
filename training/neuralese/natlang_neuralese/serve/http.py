@@ -20,6 +20,7 @@
 | `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type"?, "context"?}` → block metadata. |
+| `POST /v1/neuralese/init_body` | In-context text initialisation of a soft body (text_init.py): `{"messages", "tools"?, "placeholder", "text", "type"?, "gate"?}`, where `messages` is the soft call as the runtime renders it with `placeholder` (any stored block) at the body's position → `{"block", "init", "gate"}`; `gate` (default true) checks that the soft call with the new body reproduces the text-instructed call. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
 | `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`view.py`): `{"value", "instructions"?, "system"?, "window"?}` → the view block's metadata, `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is viewed in chunks) and `window`. Every write is the template write of view's body (the reply forced to `return_result`, its value written). Without `instructions` the view is faithful. `system` is view's body, as text or parts (its soft form). |
 
@@ -77,7 +78,7 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
 CAPABILITIES = sorted([
     "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
-    "decide", "embed", "encode", "grad", "grad.order2", "guidance.check", "optim", "parts.value-type",
+    "decide", "embed", "encode", "grad", "grad.order2", "guidance.check", "init-body", "optim", "parts.value-type",
     "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
 
 
@@ -322,6 +323,25 @@ def make_handler(engine: Engine):
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)
                     return self._json(201, {"prompt": prompt})
+                if self.path == "/v1/neuralese/init_body":
+                    from ..text_init import init_gate, instruction_body
+
+                    body = self._object()
+                    placeholder, text = body.get("placeholder"), body.get("text")
+                    if not isinstance(placeholder, str) or not isinstance(text, str) or not text:
+                        raise RequestError("neuralese-init-body", "init_body needs a placeholder block ID and the text")
+                    with grad_lock:
+                        try:
+                            block, info = instruction_body(engine, body.get("messages") or [], body.get("tools"),
+                                                           placeholder, text, body.get("type"))
+                        except ValueError as error:
+                            raise RequestError("neuralese-init-body", str(error)) from error
+                        gate = None
+                        if body.get("gate", True):
+                            swapped = json.loads(json.dumps(body.get("messages") or []).replace(placeholder, block.id))
+                            gate = init_gate(engine, swapped, body.get("tools"), block.id, text,
+                                             reply_tokens=int(body.get("reply_tokens") or 24))
+                    return self._json(201, {"block": block.meta(), "init": info, "gate": gate})
                 if self.path == "/v1/neuralese/encode":
                     body = self._object()
                     with grad_lock:

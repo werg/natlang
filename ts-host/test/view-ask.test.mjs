@@ -78,8 +78,9 @@ test('ask(block, question) is read(map(block, question)): answering from the blo
     const blocks = [...shown.matchAll(/nz1_[a-z2-7]+/g)].map(match => match[0])
       .filter(id => texts.has(id) && !Object.values(bodies).includes(id));
     const block = blocks.at(-1);
-    turns.push({ template: request.template?.value, body: Object.entries(bodies).find(([, id]) => shown.includes(id))?.[0] });
-    if (request.template?.value === 'write') {
+    const body = Object.entries(bodies).find(([, id]) => shown.includes(id))?.[0];
+    turns.push({ template: request.template?.value, body });
+    if (body === 'map') {
       const question = shown.includes('Which desk?') ? 'Which desk?' : '';
       return { calls: [['return_result', { status: 'success', value: answer(question, texts.get(block)) }]] };
     }
@@ -89,7 +90,8 @@ test('ask(block, question) is read(map(block, question)): answering from the blo
   const note = neuraleseRef('Neuralese<string>', (await port.write('A certified copy is waiting at desk 4.')).id);
   const lib = createNeuraleseLibrary(library);
   const asked = await runtime.run(() => lib.ask(note, 'Which desk?'));
-  assert.deepEqual(turns.map(turn => [turn.body, turn.template]), [['map', 'write'], ['read', 'decode']],
+  // map answers in the normal call trajectory (owner 2026-10-10); typed read keeps template readout.
+  assert.deepEqual(turns.map(turn => [turn.body, turn.template]), [['map', undefined], ['read', 'decode']],
     'ask is map (a written answer) then read (its readout)');
   const read = await runtime.run(() => lib.read(note));
   assert.equal(asked, answer('Which desk?', read), 'ask(v, q) ≈ answering q from read(v)');

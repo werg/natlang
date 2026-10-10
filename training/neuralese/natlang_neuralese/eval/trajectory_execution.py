@@ -114,7 +114,9 @@ def main(argv=None):
             bank = state['params'] if a.prompt_parameters == 'trained' else state.get('init', {})
             if a.prompt_parameters != 'encoded' and name in bank and trained_texts.get(name)==texts[name]:
                 block=engine.store.put(make_block(bank[name].to(a.device),engine.dialect));soft_initializations[name]=a.prompt_parameters
-            else:block=encode_text(engine,texts[name]);soft_initializations[name]='unseen-text-initialized'
+            else:
+                from ..text_init import instruction_rows
+                block=instruction_rows(engine,texts[name],'Neuralese<SystemPrompt>')[0];soft_initializations[name]='unseen-text-initialized-in-context'
             soft_ids[name]=block.id
         return {'type':'neuralese','id':soft_ids[name]}
     writer_rows=[]; writer_trace=None

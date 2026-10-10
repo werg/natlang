@@ -22,7 +22,7 @@
  *
  * Usage: memetic-decision.mjs --cases decision-cases.jsonl --out DIR --endpoint URL --families a,b [--author-endpoint
  *          URL --author-model ID --generations 24 --population 6 --support 16 --validation 16 --query 24 --steps 8
- *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8 --init encode|embed
+ *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8 --init in-context|encode|embed
  *          --adapters off|on --adapter-rank 4 --adapter-lr 0.05]
  */
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
@@ -38,7 +38,7 @@ import { bounded, caseTarget, casesByFamily, decisionSession, quality, sampleCas
 const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps',
   'adapter-rank', 'adapter-lr'];
 const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 8, lr: 0.02, 'seed-texts': 3,
-  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', sample: 'stratified', adapters: 'off',
+  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'in-context', sample: 'stratified', adapters: 'off',
   'adapter-rank': 4, 'adapter-lr': 0.05, 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
@@ -67,8 +67,10 @@ await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.memeti
   cases_sha256: sha(readFileSync(options.cases)) }, null, 2) + '\n', { flag: 'wx' });
 const session = decisionSession(options.endpoint);
 const { learning, readoutOf, lossOn, readouts } = session;
-// Crisp → soft: the text encoded in one pass through the port, or with `--init embed` its raw token embeddings (v1, v2).
-const embed = text => options.init === 'embed' ? session.embed(text) : session.encode(text);
+// Crisp → soft: the text initialised in context (text-init.ts; owner 2026-10-10), or as diagnostic context-free arms
+// `--init encode` (one pass through the port, v1–v3) and `--init embed` (raw token embeddings, v2).
+const embed = async (text, c) => options.init === 'in-context' ? (await session.initSkill(text, c)).skill
+  : options.init === 'embed' ? session.embed(text) : session.encode(text);
 const remote = new HttpNeuraleseStore(options.endpoint);
 
 // Author ---------------------------------------------------------------------------------------------------------
@@ -208,12 +210,12 @@ for (const [index, family] of families.entries()) {
   // Seeds: the bare question with a generic skill text, and author-written guidance texts, each with its embedding.
   let population = [];
   const familyReadouts = readouts();
-  const plain = individual({ guidance: '', skill: await embed(INIT_TEXT), parent: null, operator: 'seed' });
+  const plain = individual({ guidance: '', skill: await embed(INIT_TEXT, support[0]), parent: null, operator: 'seed' });
   plain.origin = plain.skill.$neuralese.id;
   population.push(plain);
   for (let i = 0; i < options['seed-texts']; i++) {
     const guidance = await author(seedPrompt(family, question, support.slice(i * 3).concat(support).slice(0, 6)));
-    const ind = individual({ guidance, skill: await embed(guidance), parent: null, operator: 'seed' });
+    const ind = individual({ guidance, skill: await embed(guidance, support[0]), parent: null, operator: 'seed' });
     ind.origin = ind.skill.$neuralese.id;
     population.push(ind);
   }
@@ -234,7 +236,7 @@ for (const [index, family] of families.entries()) {
         const guidance = await author(revisePrompt(question, parent.guidance, worstRows.map((r, i) => ({ ...r, share: shares[i] }))));
         child = individual({ guidance, skill: parent.skill, origin: parent.origin, adapter: parent.adapter });
       } else if (operator === 'embed') {
-        const skill = await embed(parent.guidance || INIT_TEXT);
+        const skill = await embed(parent.guidance || INIT_TEXT, support[0]);
         child = individual({ guidance: parent.guidance, skill, origin: skill.$neuralese.id, adapter: parent.adapter });
       } else if (operator === 'refine-lamarck') {
         child = individual({ guidance: parent.guidance, skill: await refine(parent, support), origin: parent.origin, adapter: parent.adapter });

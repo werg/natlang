@@ -28,7 +28,7 @@ import { improvementStep } from '../../dist/improvement/step-record.js';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { Context, createNatlangRuntime, iterateOn, learningService, createLearning, loadVirtualNatlang } from '../../dist/index.js';
+import { Context, createNatlangRuntime, iterateOn, learningService, createLearning, loadVirtualNatlang, initBodyInContext } from '../../dist/index.js';
 import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { rankedProbabilityScore } from '../../dist/skills/graded.js';
@@ -90,7 +90,7 @@ const runtime = createNatlangRuntime({ model: { driver: neuraleseServerModelTurn
   neuralese: { store }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
 const functions = new Map();
 /** The case as a typed decision function, bound to a context holding the skill item when there is one. */
-function call(c, skill) {
+function call(c, skill, on = runtime) {
   let fn = functions.get(c.id);
   if (!fn) {
     const { values } = caseTarget(c);
@@ -99,7 +99,7 @@ function call(c, skill) {
     functions.set(c.id, fn);
   }
   const bound = skill ? fn.in(Context.ofCallable(fn).with({ skill })) : fn;
-  return runtime.run(() => bound(c.state));
+  return on.run(() => bound(c.state));
 }
 const target = c => { const { values, gold } = caseTarget(c); return Object.fromEntries(values.map((v, i) => [String(v), gold[i]])); };
 /** Map with at most `limit` calls in flight: the reference server queues requests on one engine, and a hundred
@@ -115,12 +115,6 @@ async function bounded(items, limit, fn) {
 const decisionLoss = (cases, skill) => bounded(cases, 4, c => objectives.decision(() => call(c, skill), target(c), 'logLoss'))
   .then(losses => objectives.sum(...losses));
 
-async function embed(text) {
-  const response = await fetch(`${options.endpoint}/v1/neuralese/embed`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text, type: 'Neuralese<string>' }) });
-  if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
-  return { $neuralese: { type: 'Neuralese<string>', id: (await response.json()).id } };
-}
 
 /** Adam on `loss(skill)` from `start`; returns the tuned value and the loss trace. */
 async function tune(start, loss) {
@@ -173,7 +167,14 @@ const step = (family, arm, from, to, trace, gains) => appendFile(join(out, 'impr
   after: [{ kind: 'soft-skill', id: to.$neuralese.id, role: 'skill' }],
   outcome: { ...gains, compute: { gradient_steps: trace.length } },
   trajectory: { id: `soft-skill-decision:${family}:${arm}`, step: 0 } })) + '\n');
-const init = await embed(initText);
+// The text-initialised skill, in context (text-init.ts, owner 2026-10-10): the first family's first support case renders
+// the call; its body makes that call the call with the skill as text (gated).
+const initResult = await initBodyInContext({ endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
+  render: (placeholder, driver) => call(split[families[0]].support[0], { $neuralese: { type: 'Neuralese<string>', id: placeholder } },
+    createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } })) });
+const init = { $neuralese: { type: 'Neuralese<string>', id: initResult.id } };
+await appendFile(join(out, 'results.jsonl'), JSON.stringify({ arm: 'text-init', init: { context: initResult.context, ...initResult.init },
+  gate: initResult.gate }) + '\n');
 // The generic skill: support pooled across every family, an equal share from each.
 const share = Math.max(1, Math.floor(options.support / 2));
 const pooled = families.flatMap(f => split[f].support.slice(0, share));
