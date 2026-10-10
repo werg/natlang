@@ -22211,6 +22211,34 @@
       "training_admission": false,
       "admission": "held-training-evidence-not-new-training-data",
       "notes": "ClosedV2 cleanSIGTERM30515. Best29696 used byV4; completeoptimizerstate, same-history gate failed, no qualification certificate. Preserve heldprobes and failedrepresentation drift."
+    },
+    {
+      "id": "free-provider-luna-v32-source-ambiguity-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v2",
+      "include": [
+        "alert-verification-review.md",
+        "alert-verification-review.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-source-ambiguity-and-exact-format-review",
+      "training_admission": false,
+      "admission": "held-quality-evidence-not-positive-or-negative-data",
+      "notes": "Current collected V32bytes unchanged. Alertsource gaps quarantine affected positives/negatives; exactcountcomma formatting needs explicitlydeclared comparator successor. No newtrainingadmission/DPO."
+    },
+    {
+      "id": "free-provider-luna-v32-initial-rejections-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v1",
+      "include": [
+        "review-receipt.json",
+        "review.md"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-source-ambiguity-and-exact-format-review",
+      "training_admission": false,
+      "admission": "held-quality-evidence-not-positive-or-negative-data",
+      "notes": "Current collected V32bytes unchanged. Alertsource gaps quarantine affected positives/negatives; exactcountcomma formatting needs explicitlydeclared comparator successor. No newtrainingadmission/DPO."
     }
   ],
   "coverage_backlog": [

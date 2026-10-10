@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v32-initial-rejections-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v1",
+  "files": [
+    {
+      "path": "review-receipt.json",
+      "bytes": 7377,
+      "sha256": "f7a1eb0e496c567f22509ed9a5e339fe97895a0f880efc13299cb34b2b43f9e6"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2218,
+      "sha256": "ecc6ab83b6eca5e0519327b0b658d8569321eb3d9b42a876e6531a1390845fce"
+    }
+  ],
+  "bytes": 9595
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v32-source-ambiguity-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-iterate-refill-20261010-v1/review-v2",
+  "files": [
+    {
+      "path": "alert-verification-review.json",
+      "bytes": 5992,
+      "sha256": "72ddefcd6230e0ca2ab20fe6b9c658558c939ae91483f56d125c5db2008c443b"
+    },
+    {
+      "path": "alert-verification-review.md",
+      "bytes": 1209,
+      "sha256": "a1c4a0ee166aa18604fc9ba4ddffe6b48c81a3e89913a8733b4f6b53818c3571"
+    }
+  ],
+  "bytes": 7201
+}
