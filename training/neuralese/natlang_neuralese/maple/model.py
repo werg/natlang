@@ -359,6 +359,15 @@ class DenseExperts(nn.Module):
         """Every expert's (ramped ternary) weights from one op per tensor. Indexing the latent per expert instead
         makes each expert's backward materialise a zero gradient the size of all experts (64x per tensor per
         layer: most of a Mellum QAT step); unbind's backward stacks all expert gradients once."""
+        from .ternary import QUANT_MIX
+
+        if QUANT_MIX.get("cache") is not None:  # generation under no_grad: compute the deployed values once
+            key = (id(self), dtype)
+            if key not in QUANT_MIX["cache"]:
+                with torch.no_grad():
+                    QUANT_MIX["cache"][key] = (self._value(self.gate_up, dtype).unbind(0),
+                                               self._value(self.down, dtype).unbind(0))
+            return QUANT_MIX["cache"][key]
         return self._value(self.gate_up, dtype).unbind(0), self._value(self.down, dtype).unbind(0)
 
     def run_weights(self, x: torch.Tensor, gate_up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
