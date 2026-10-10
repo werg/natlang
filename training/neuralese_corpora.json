@@ -27348,6 +27348,19 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "REJECTED preparation: physical prior-root undercounted historical logical aliases (6777 vs7584 overlap exclusions). No jobs launched and not eligible for launch/admission. Corrected fresh V26 reviewed-v2 replaces candidate without overwriting history."
+    },
+    {
+      "id": "semantic-iterate-v35-v5-sixteen-held-conversion-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-held-conversion-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-conversion-proposal",
+      "training_admission": false,
+      "admission": "held-pending-recurrence-proof-and-source-quality-review",
+      "notes": "16 accepted exact-file/source cases yield485 materialized/converted turns. No child-result or inline-instruction soft-edge conversion established: parent approval flags false, unsupported captures/interpolation and missing producer/writer proof are being separated. Native originals preserved;10 typed target writes preserve exact source values per correction. No fabricated writer or recurrence coverage claim. Four original train families, no independent-world credit."
     }
   ],
   "coverage_backlog": [
