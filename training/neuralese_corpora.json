@@ -21524,9 +21524,9 @@
       ],
       "split": "closed by source group and against published corpora (s1-full-final-20261003, harness-bench-swe-rebench-openhands-pi-records-20261010-v3; scripts/neuralese_data/cross_corpus.py): upstream splits kept; train-only sources carved 5/5 by group; protected bgkit benchmark hits forced to test; components touching a published split take it, unplaceable components and already-published examples dropped",
       "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
-      "admission": "held-pending-view-stage-qualification",
+      "admission": "superseded-by-view-ask-20261010-v4;held-pending-view-stage-qualification",
       "training_admission": false,
-      "training_admission_reason": "pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
+      "training_admission_reason": "superseded by view-ask-20261010-v4; pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
       "corpus_publication_for_training": false,
       "supersedes": "view-ask-20261010-v2",
       "derived_from": [
@@ -21596,6 +21596,92 @@
         "view_stage_conversion": "natlang_neuralese.data.view_records@2 (view-stage/: train and test splits; records.jsonl sha256 85f693b7f5f943f183391715bd36678e8dea980aa3a094ce42213822544d4c78)"
       },
       "notes": "170395 port records over 68403 sources; by split {\"train\": 144030, \"validation\": 12539, \"test\": 13826}; by artifact x kind {\"code\": {\"extract\": 9552, \"reconstruct\": 11666, \"summary\": 11666}, \"data\": {\"extract\": 15376, \"qa\": 2662, \"reconstruct\": 5549}, \"html\": {\"extract\": 9211, \"qa\": 9513, \"reconstruct\": 5423}, \"log\": {\"extract\": 11013, \"qa\": 2819, \"reconstruct\": 6321}, \"prose\": {\"qa\": 87, \"reconstruct\": 16005, \"summary\": 19754}, \"table\": {\"extract\": 8452, \"qa\": 20222, \"reconstruct\": 5104}}; by task {\"compare\": 92179, \"consume\": 28148, \"reconstruct\": 50068}; by dataset {\"arxiv\": 4000, \"bird\": 1112, \"booksum\": 3936, \"cnn_dailymail\": 7990, \"codesearchnet\": 19486, \"codesearchnet_go\": 1402, \"codesearchnet_java\": 3000, \"codesearchnet_javascript\": 2996, \"codesearchnet_php\": 3000, \"codesearchnet_ruby\": 3000, \"common_crawl\": 7147, \"fetaqa\": 4975, \"govreport\": 2999, \"loghub\": 3574, \"mind2web\": 4215, \"multi_news\": 3000, \"pubmed\": 4035, \"qmsum\": 1250, \"quality\": 243, \"repo_configs\": 5673, \"s1_tool_outputs\": 7205, \"spider\": 4433, \"squad\": 395, \"swe_tool_outputs\": 9374, \"tabfact\": 10866, \"toolace\": 7968, \"websrc\": 12785, \"wtq\": 12392, \"xlam\": 9946, \"xsum\": 7998}. v3 adds the sources once omitted or queued for licence reasons (BookSum, XSum, GovReport, Multi-News as multi-source records, arXiv and PubMed Central original text, LogHub, Mind2Web with DOM reduction, Common Crawl) and repository configs under any licence (plans/neuralese/VIEW_CORPUS.md section 5.3). Targets: reconstruction, code-computed extraction, and questions/summaries/labels taken from the datasets; no teacher-generated targets. Closed against S1 and harness-bench v3 (closure counts in manifest.json); view-stage/ conversion: 157856 records."
+    },
+    {
+      "id": "view-ask-20261010-v4",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/view-ask-20261010-v4",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "view-stage/records.jsonl",
+        "view-stage/pieces.jsonl",
+        "view-stage/conversion.json"
+      ],
+      "split": "closed by source group and against published corpora (s1-full-final-20261003, harness-bench-swe-rebench-openhands-pi-records-20261010-v4; scripts/neuralese_data/cross_corpus.py): upstream splits kept; train-only sources carved 5/5 by group; protected bgkit benchmark hits forced to test; components touching a published split take it, unplaceable components and already-published examples dropped; SWE-rebench tool outputs take the harness bench's repository placements (S1's split where S1 places the repository, split_of otherwise)",
+      "source_class": "public-dataset-questions-and-summaries-with-code-computed-extraction-and-reconstruction",
+      "admission": "held-pending-view-stage-qualification",
+      "training_admission": false,
+      "training_admission_reason": "pending the view operator stage's qualification (raw-recurrence-v4 / raw-recurrence-mellum-v3 view_operator admitted:false: runtime qualification and the view gate). Licences are per-record provenance facts only (owner rule 2026-10-10); no record is held or omitted for its licence",
+      "corpus_publication_for_training": false,
+      "supersedes": "view-ask-20261010-v3",
+      "derived_from": [
+        "view-sources-20261010-v3",
+        "nebius-swe-rebench-openhands-trajectories-20261009-v1",
+        "s1-full-final-20261003"
+      ],
+      "license": "per record (license field and lineage.notes.license_provenance, facts only): classes {\"unverified\": 61063, \"share-alike\": 34173, \"attribution\": 26477, \"permissive\": 40753, \"copyleft\": 4996, \"weak-copyleft\": 2195, \"noncommercial\": 3000}",
+      "build": {
+        "script": "scripts/neuralese_view_corpus.py build --preset v4 --cross-index cross-corpus-index-s1-full-final-20261003-v1 --cross-index cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+        "code_commit": "5c15c1fe",
+        "manifest_code_commit": "5c15c1fef36ce962eb4de5ffd30fe4d630ba2371",
+        "builder": "scripts/neuralese_data/view_corpus.py@4",
+        "record_version": "natlang.port-record/1",
+        "options": {
+          "caps": {
+            "cnn_dailymail": 4000,
+            "squad": 400,
+            "quality": 300,
+            "qmsum": 400,
+            "codesearchnet": 5000,
+            "codesearchnet_go": 1500,
+            "codesearchnet_java": 1500,
+            "codesearchnet_javascript": 1500,
+            "codesearchnet_php": 1500,
+            "codesearchnet_ruby": 1500,
+            "websrc": 2000,
+            "xlam": 3000,
+            "repo_configs": 1500,
+            "toolace": 2000,
+            "wtq": 2000,
+            "fetaqa": 2500,
+            "spider_bird": 2500,
+            "tabfact": 2000,
+            "swe_tool_outputs": 3500,
+            "s1_tool_outputs": 3000,
+            "booksum": 2000,
+            "xsum": 4000,
+            "govreport": 1500,
+            "multi_news": 3000,
+            "arxiv": 2000,
+            "pubmed": 2000,
+            "loghub": 1000,
+            "mind2web": 2000,
+            "common_crawl": 2000
+          },
+          "max_source_chars": 32000,
+          "min_source_chars": 200,
+          "seed": 0,
+          "questions_per_source": 4,
+          "extracts_per_source": 3,
+          "protected_index": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+          "protected_index_sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+        },
+        "cross_corpus_indexes": [
+          {
+            "corpus_id": "s1-full-final-20261003",
+            "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+            "records": 1870591
+          },
+          {
+            "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
+            "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+            "records": 3843
+          }
+        ],
+        "view_stage_conversion": "natlang_neuralese.data.view_records@2 (view-stage/: train and test splits; records.jsonl sha256 a708dc970ac344d5795a7d4bf344e0ec1e9148bc54092c0a312aeb3789fecf45)"
+      },
+      "notes": "172657 port records over 69034 sources; by split {\"train\": 144440, \"validation\": 12539, \"test\": 15678}; by task {\"compare\": 93796, \"consume\": 28167, \"reconstruct\": 50694}; v4 = v3's raw inputs and caps (--preset v4) with SWE-rebench tool-output splits taken from the harness bench's repository placements (harness_bench.records.placements over PLACED_BY: all 771 repositories placed by S1, none unplaceable; 62 moved train->test and 29 test->train against split_of), closed against S1 and harness-bench v4: swe_tool_outputs keeps 11,584 records (v3 9,374; closure drops 901, v3 3,111), 3,740 of them on harness-bench repositories, all in the harness bench's split (plans/neuralese/VIEW_CORPUS.md section 5.4). Targets as v3 (no teacher-generated targets). view-stage/ conversion: 160118 records."
     },
     {
       "id": "free-provider-zai45-sourcev5-procurement-closeout-held-20261010-v1",

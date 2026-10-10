@@ -294,7 +294,7 @@ against the S1 and harness-bench v3 indexes (§4.1). Raw inputs: `view-sources-2
   (2,621 / 8,992) or whose answer is empty or longer than 20 rows; BIRD gold queries that fail on the shipped database
   (235); CodeSearchNet docstrings that are not prose (3,119 over six languages).
 
-### 5.3 v3: `view-ask-20261010-v3` (supersedes v2)
+### 5.3 v3: `view-ask-20261010-v3` (supersedes v2; superseded by v4, §5.4)
 
 Registry `training/neuralese_corpora.json`; manifest `training/corpus-manifests/view-ask-20261010-v3.json`; stored at
 `/home/werg/data/natlang-corpora/view-ask-20261010-v3`, linked from `data/neuralese/corpora/`. Built with
@@ -339,10 +339,42 @@ takes repository configs from repositories under any licence. CodeSearchNet alre
   repositories and S1 tool outputs).
 - `view-stage/`: `natlang_neuralese.data.view_records@2`: 157,856 records (144,030 train, 13,826 test; validation
   stays with the corpus), `records.jsonl` SHA-256 85f693b7…, pinned by raw-recurrence-v4 (and so by
-  raw-recurrence-mellum-v3). Multi-News records become one view part over the joined value (§1).
+  raw-recurrence-mellum-v3) until the v4 repin (§5.4). Multi-News records become one view part over the joined value (§1).
 - Rejections, by reason, are in `manifest.json`. The main new ones: arXiv papers and PMC articles longer than the cap
   (5,082 and 10,215), GovReport reports longer than the cap (3,005), Common Crawl pages over the cap or with
   encoding damage (2,646), BookSum chapters over the cap (702).
+
+### 5.4 v4: `view-ask-20261010-v4` (supersedes v3)
+
+Registry `training/neuralese_corpora.json`; manifest `training/corpus-manifests/view-ask-20261010-v4.json`
+(22 files, 4.47 GB); stored at `/home/werg/data/natlang-corpora/view-ask-20261010-v4`, linked from
+`data/neuralese/corpora/`. Same raw inputs (`view-sources-20261010-v3`), caps (`--preset v4` = `V3_CAPS`), character
+cap and seed as v3; built by `view_corpus.py@4` (commit 5c15c1fe, which the manifest names) and closed against the S1
+index and the **harness-bench v4** index (`cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1`).
+`training_admission: false` (the view operator stage's qualification only), as v3.
+
+The one change: SWE-rebench tool outputs take the harness bench's repository placements
+(`harness_bench.records.placements` over `PLACED_BY`: S1's split where S1 places the repository, `split_of`
+otherwise; an unplaceable repository keeps `split_of` and the closure drops it). v3 split them by `split_of(repo, 5)`
+and lost most of them to the closure, because S1 holds these repositories in its own split. In v4 all 771 chosen
+repositories are placed by S1 (none unplaceable; against `split_of`, 62 moved train→test and 29 test→train;
+707 train / 64 test repositories), recorded per record as `lineage.notes.split_placement` and in
+`manifest.json` `info.swe_tool_outputs_placement`.
+
+172,657 records over 69,034 sources: 144,440 train, 12,539 validation, 15,678 test (v3: 170,395; 144,030 /
+12,539 / 13,826). Every other source is identical to v3.
+
+- SWE-rebench bash outputs: 11,584 records (9,227 train / 2,357 test; v3 9,374 = 8,825 / 549). Closure drops 901
+  (v3 3,111): 829 whose component touches several published splits (links inside the slice across S1 train and test
+  repositories, e.g. near-duplicate outputs; the harness v4 index causes none of them, dgx-hb-splits 2026-10-10) and 72
+  own-test-vs-published-train. 3,740 records lie on harness-bench repositories, all in the harness bench's split
+  (no disagreement); the rest are placed by S1.
+- Side effects of the changed components: repository configs 5,673 → 5,705 (several-splits drops 121 → 83),
+  CodeSearchNet 19,486 → 19,506 (20 records moved validation→test instead of being dropped).
+- Closure: 177,258 built, 172,657 kept, 4,595 dropped (v3 6,857); protected hits 1,098; no violations.
+- Licence classes (facts, §6): as v3 except attribution 26,477 and permissive 40,753 (the added tool outputs).
+- `view-stage/`: `view_records@2`: 160,118 records (144,440 train, 15,678 test), `records.jsonl` SHA-256 a708dc97…,
+  pinned by raw-recurrence-v4 (and so by raw-recurrence-v5 and raw-recurrence-mellum-v3/-v4); the stages stay held.
 
 ## 6. Licence provenance and open items
 

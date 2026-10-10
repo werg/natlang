@@ -122,6 +122,10 @@ raw-recurrence-v3 and raw-recurrence-mellum-v2 (unchanged) plus the declared, **
 - Repinned 2026-10-10 (stages held, never run): the view stage's records are those of `view-ask-20261010-v3`
   (`view-stage/records.jsonl` SHA-256 85f693b7…, converter view_records@2); the licence hold is removed from the
   admission texts (owner rule 2026-10-10: licences are provenance facts only).
+- Repinned again 2026-10-10 (stages still held, never run): `view-ask-20261010-v4` (`view-stage/records.jsonl`
+  SHA-256 a708dc97…, 160,118 records): v3's data with the SWE-rebench tool outputs split by the harness bench's
+  S1-aligned repository placements and closed against harness-bench v4 (VIEW_CORPUS.md §5.4). raw-recurrence-v5 and
+  raw-recurrence-mellum-v3/-v4 inherit the pin.
 - New shared mechanism: `overrides.stages_added` (insert a stage after a named one). raw-recurrence-mellum-v3 repeats
   mellum-v2's backbone-inherent overrides and applies its recurrence overrides to `view_operator` too; a test proves
   both resolve to their predecessors plus these additions.
@@ -140,3 +144,17 @@ twins. Admission: the Mellum twin is admitted for the text stages too, since Pop
 tool-response user wrappers as tool (checked on the v2 twin: 87,337 tool turns); the recurrence stays held.
 raw-recurrence-mellum-v4 repeats mellum-v3's overrides on v5; a test proves both differ from their predecessors only
 in these pins.
+
+
+## raw-recurrence-v6, raw-recurrence-mellum-v5 and token-preserving-foundation-mellum-v2 (2026-10-10)
+
+QAT inside the stages (owner 2026-10-10; DECISIONS.md "QAT inside every training stage"; TRAINING_RECIPE.md "QAT inside
+the stages"). raw-recurrence-v6 = v5 plus the top-level `quantization` component (points `q4` required 0.2–0.35,
+`ternary-experts` required 0.35–0.7, `ternary` reported 0.6–0.95; stage progress warm-up 0–0.35, AR fixup
+0.35–0.45, recurrence and view stage 0.45–1; sampled objective, BF16 weight 1) and the backbone rate 7.5e-6 for the
+warm-up default and both recurrence stages (Pop's full-backbone drift at 3e-5). Shared by every line; the LFM line's
+`auto` policy resolves to `full`, which the component quantizes the same way. raw-recurrence-mellum-v5 extends v6
+with the backbone-inherent overrides of mellum-v4 except the ternary ones: cutoff 27, 512 contexts, the `latent`
+policy in place of `qat`/`qat_latent_lr`, and no member terms (a BF16 student has no nested-family state).
+token-preserving-foundation-mellum-v2 is foundation-mellum-v1 started from BF16 Mellum heads
+(`foundation_heads.py --precision bf16`); its stages are unchanged.

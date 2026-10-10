@@ -341,7 +341,7 @@ Declared (2026-10-10) as `view_operator` and its gate `view_gate` in raw-recurre
 stage additionally requires the gate). Both are **held** (`admitted: false`; the runner refuses a stage so declared)
 until each student's runtime qualification and the stage's own qualification (licences are provenance facts only, owner
 rule 2026-10-10). Data:
-the view-ask corpus `view-ask-20261010-v3` converted by `natlang_neuralese.data.view_records` into trajectory-trainer
+the view-ask corpus `view-ask-20261010-v4` converted by `natlang_neuralese.data.view_records` into trajectory-trainer
 records with one view part each (faithful parts for reconstruction; the purpose as the part's instructions
 otherwise; the full value as the preview, so `--distill` distils from the full-text reader). Objectives: reconstruct
 CE, consume/QA CE with the source withheld, the purpose contrast (`--purpose-contrast 0.25 --purpose-margin 0.1`:
@@ -622,7 +622,8 @@ all held depth/source strata and preserve failed gates.
 Native LFM trajectory training now defaults to all transformer layer parameters,
 using the same selection implementation as ordinary-text warm-up. The fixed
 embedding/readout/final-normalization reference stays fixed. Maple resolves to its
-QAT policy. Explicit LoRA is diagnostic and requires a positive rank. Native full
+QAT policy (an already ternary port); a BF16 Maple-family port uses the `latent` policy with the recipe's
+quantization component ("QAT inside the stages" below). Explicit LoRA is diagnostic and requires a positive rank. Native full
 training uses a separate gentle backbone learning rate (30e-6 default), and exports
 complete named layer state in both resumable checkpoints and serving heads.
 Serving and recurrence restore the complete declared full-layer state; changing
@@ -630,6 +631,42 @@ weights still requires exact-channel qualification. Within-run Muon state remain
 resumable. A new objective's optimizer handoff is not implicitly inherited merely
 by loading the preceding heads file.
 
+
+### QAT inside the stages (owner 2026-10-10)
+
+Quantization-aware training is part of every trained-backbone stage, not a separate conversion gate
+(DECISIONS.md 2026-10-10). A recipe declares one top-level `quantization` component
+(`natlang.neuralese-quantization/1`, `train/quantization.py`); `extends`/`overrides` inherit it like any other member,
+so both lines share it (`raw-recurrence-v6`).
+
+- **Latents.** The backbone trains as BF16 latents: the `latent` policy on a Maple-family backbone loaded at BF16
+  (`foundation_heads.py --precision bf16`: dense experts, attention not ternarized), the `full` policy on dense
+  backbones. Checkpoints hold latents and optimizer state only, under plain parameter names; a precision point is a
+  function of the latents and the step, so resume needs nothing else.
+- **Precision points.** Each point maps module groups (`experts`, `mlp`, `attention`, `conv`, `router`,
+  `embeddings`, `heads`) to a format: `int4` is llama.cpp's Q4_0 rule (bit-exact, block 32), `ternary` Maple's per-row
+  rule, optionally `nested_group` = applied to the Q4_0 values (the ternary weights are a function of the int4 codes:
+  the coarsest level of the int4 grid). Its forward value is `w + λ·(Q(w) − w)` computed in FP32, straight-through to
+  the latent. Groups a backbone lacks select nothing.
+- **Curriculum progress.** `stage_progress` gives each trained-backbone stage a range of curriculum progress
+  ([0, 0.35] warm-up, [0.35, 0.45] AR fixup, [0.45, 1] recurrence in v6); within a stage progress is linear in its
+  update range (an AR fixup's range starts at its predecessor's step). A point's λ ramps linearly over its
+  `ramp` range; stages not named (the foundation's frozen-backbone stages) run at BF16.
+- **Objective.** `loss.mode` `sum`: `bf16_weight·L(BF16) + Σ weight·L(point)` over the active points, each pass its
+  own forward/backward (text warm-up). `sample`: one of BF16 and the active points per update, drawn by weight from
+  `(seed, stage, step)`, scaled by the total weight in the warm-up; the recurrence trainer always draws one pass per
+  update (its expected gradient is the weight-normalized mixture). Experts and dense FFN first, attention later
+  (`ternary-experts` keeps attention at int4); a point may restrict itself to the least sensitive layers of a pinned
+  probe (`python -m natlang_neuralese.train.quantization sensitivity`).
+- **Teacher.** Everything outside a point's context runs at BF16: references, baselines, self-distillation teachers
+  (`serve/grad.py` runs them under `_bf16_teacher`).
+- **Gates.** Each evaluation adds a column per gated point at its deploy precision (λ = 1), with the stage's own
+  thresholds. A stage qualifies only when BF16 and every `required` point whose ramp ends within the stage pass; the
+  report's `quantization.precisions_passed` names what passed (`report` points are measured, not required). The
+  recipe runner refuses a stage whose report says `precisions_qualified: false`.
+- **Learning rate.** Latents train with the backbone optimizer at the backbone rate (7.5e-6 in v6). Whether ternary
+  codes then move enough is measured by the gate columns; a per-latent rate in units of the ternary scale
+  (`qat_latent_lr`, the conversion's mechanism) is not yet wired to the `latent` policy.
 
 ### Native gold-text corpus rendering (2026-10-07)
 

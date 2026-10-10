@@ -6,11 +6,11 @@
   "overrides": {
     "input_bindings": {
       "view-stage-records": {
-        "path": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/records.jsonl",
-        "sha256": "85f693b7f5f943f183391715bd36678e8dea980aa3a094ce42213822544d4c78"
+        "path": "data/neuralese/corpora/view-ask-20261010-v4/view-stage/records.jsonl",
+        "sha256": "a708dc970ac344d5795a7d4bf344e0ec1e9148bc54092c0a312aeb3789fecf45"
       },
       "view-stage-pieces": {
-        "path": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/pieces.jsonl",
+        "path": "data/neuralese/corpora/view-ask-20261010-v4/view-stage/pieces.jsonl",
         "sha256": "a513ed464460664e38d7d7673f2fc0556e21cb5da7a2f42d9f18593dbec57fb0"
       },
       "harness-bench-records-v3": {
@@ -27,8 +27,8 @@
       "admission": "held: each student's exact-weight runtime qualification precedes this stage and the stage awaits its own qualification (licences are provenance facts only, owner rule 2026-10-10); the stage runs only when this declaration admits it",
       "decision": "DECISIONS.md 2026-10-09 'one summarizer family: view and ask'; TRAINING_RECIPE.md 'The view operator stage'",
       "corpus": {
-        "id": "view-ask-20261010-v3",
-        "records": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/records.jsonl",
+        "id": "view-ask-20261010-v4",
+        "records": "data/neuralese/corpora/view-ask-20261010-v4/view-stage/records.jsonl",
         "conversion": "natlang_neuralese.data.view_records@2 (view-ask port records -> trajectory-trainer records with one view part; multi-source records rendered as one value, Document k of n; validation split kept with the corpus)",
         "training_admission": false
       },

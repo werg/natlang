@@ -75,3 +75,23 @@ def test_v4_preset_keeps_v3_caps():
     src = (ROOT / "scripts" / "neuralese_view_corpus.py").read_text()
     assert '"v4": view_corpus.V3_CAPS' in src
     assert vc.CONVERTER.endswith("@4")
+
+
+def test_registered_view_v4_supersedes_v3_and_is_pinned_by_the_recipe():
+    entries = {e["id"]: e for e in json.loads((ROOT / "training/neuralese_corpora.json").read_text())["corpora"]}
+    v4, v3 = entries["view-ask-20261010-v4"], entries["view-ask-20261010-v3"]
+    assert v4["training_admission"] is False and v4["supersedes"] == "view-ask-20261010-v3"
+    assert v3["admission"].startswith("superseded-by-view-ask-20261010-v4")
+    held = " ".join(str(v4.get(k, "")) for k in ("admission", "training_admission_reason")).lower()
+    assert "licen" not in held or "facts only" in held
+    ids = [ix["registry_id"] for ix in v4["build"]["cross_corpus_indexes"]]
+    assert ids == ["cross-corpus-index-s1-full-final-20261003-v1",
+                   "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1"]
+    assert all(entries[i]["kind"] == "cross-corpus-index" for i in ids) and v4["build"]["builder"].endswith("@4")
+    recipe = json.loads((ROOT / "training/neuralese/recipes/raw-recurrence-v4.json").read_text())["overrides"]
+    binding = recipe["input_bindings"]["view-stage-records"]
+    assert binding["path"] == v4["path"] + "/view-stage/records.jsonl"
+    assert binding["sha256"] in v4["build"]["view_stage_conversion"]
+    manifest = json.loads((ROOT / "training/corpus-manifests/view-ask-20261010-v4.json").read_text())
+    assert {f["path"]: f["sha256"] for f in manifest["files"]}["view-stage/records.jsonl"] == binding["sha256"]
+    assert recipe["view_operator"]["corpus"]["id"] == v4["id"] and recipe["view_operator"]["admitted"] is False
