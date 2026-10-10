@@ -10043,3 +10043,12 @@ The owner authorized deleting the old candidate code. Retired: the Sharp-MiniCPM
 - Storage check:root2.1GiB,/srv5.4GiB, new run4.2GiB including checkpoint reserve,
   best/current full checkpoints and heads. Keep all optimizer lineage; check
   write reserve before any new local model/download or large artifact generation.
+
+
+### Pop 2026-10-10 03:50 UTC — matching-history qualification and provenance
+
+- Shared commits `4b90591f` and `157cebf8` correct AR gate/ranking reference and regional scalar materialization. Gold-prefix comparisons include the first differing decision; generated-tail channel comparisons now use identical generated history. Numeric thresholds and native-only qualification remain unchanged. Full gold-history metrics remain diagnostics. No prior failed checkpoint becomes qualified.
+- Mixed run stopped with full optimizer checkpoint at step29466, SHA7364f788092d035e05d508abc830ecc3c30b84ed58d9aba780b03dc2ef5e9d7c. Exact heads reconstructed via shared export, no weights-only handoff. New frozen continuation `luna-ar-native-harness-gateref-29466-20261010-v2` targets32889 with same admitted8805-document 75/25 mix and 32K capacity. V1 startup was superseded before any optimizer update when source review caught omitted regional scalar packing; its stop requests waited on startup baseline, so it was terminated with immutable parent intact. V2 was paused while V1 exited, then resumed. Original receipts/evidence preserved.
+- Shared native tool-surface constant fixes collector/CLI metadata falsely claimingv1 while runtime actions/traces usev2. Active runtimev6 generation stays frozen; next runtime adopts correction. V18 alleged trace SHA mismatch was false: canonical root-only events match recorded SHA; raw sidecar includes child events. Preserve originalreview and correction supplement.
+- Gemini v4 progressed614/1024 labels; labels require typed/source-quality review, not automatic admission. ZAI V28 approved-five queue remains supplied on /srv. Luna reviews remaining static source/split admission blockers.
+- Startup-stop improvement skips launching a fresh baseline if a stop is already pending after load, allowing direct full-state checkpoint. Source/AST review only; no test suites run.

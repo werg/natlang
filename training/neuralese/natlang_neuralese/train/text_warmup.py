@@ -2156,7 +2156,9 @@ def main(argv=None):
         (a.out/'eval-only.json').write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps({'event':'eval_only_done','step':step}),flush=True)
         return None
-    if not was_resumed:
+    if not was_resumed and not stop.requested:
+        # Honor a startup stop before launching an expensive held evaluation.
+        # The restored full state can be checkpointed directly by the stop path.
         # A continued full state gets a fresh starting-weight evaluation on
         # its current held domain before any update. This evaluates without
         # advancing the restored plateau/ramp schedule or consuming its RNG.
