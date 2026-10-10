@@ -26459,6 +26459,16 @@
         "root-generation-source-review-v1.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "free-provider-luna-v51-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v51-choice-folder-final-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "native-source-bound-quality-audit",
+      "training_admission": false,
+      "admission": "held-source-semantic-wire-visibility-review",
+      "notes": "All 53 queues accounted, input files unchanged. 33 exact annotation maps; 20 cases contain 26 annotation disagreements. PubMedQA has 0 / 6 exact maps, supplementary source/visibility diagnosis assigned. 717 child invocations; 46 scope failures are observed caller syntax/callable/typed output mistakes, no demonstrated runtime bug. Aggregate host captures are not item-level visibility evidence."
     }
   ],
   "coverage_backlog": [
