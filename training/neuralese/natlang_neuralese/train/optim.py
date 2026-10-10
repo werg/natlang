@@ -217,6 +217,16 @@ class LionSR(torch.optim.Optimizer):
                     param.grad = None
                 self._hooks.append(p.register_post_accumulate_grad_hook(hook))
 
+    def load_state_dict(self, state_dict):
+        """Also moves each group's per-row scale onto its parameter's device as an owned copy. torch's loader keeps the
+        saved group values, and a scale still viewing an ``mmap=True`` checkpoint keeps the whole file mapping (and the
+        pages the device copies dirtied: ~46 GB of host memory on Mellum's resume) alive for the rest of the run."""
+        super().load_state_dict(state_dict)
+        for group in self.param_groups:
+            scale = group.get("row_scale")
+            if isinstance(scale, torch.Tensor):
+                group["row_scale"] = scale.to(group["params"][0].device, copy=True)
+
     def in_backward(self):
         """Context of one update's single backward under ``step_in_backward(gated=True)``: inside it each latent
         steps once as its gradient completes. The value records ``stepped`` (parameter ids) and ``squared_norm``

@@ -2839,6 +2839,13 @@ def main(argv=None):
                 except RuntimeError as error:
                     if 'preflight refused' not in str(error) or wait==10 or stop.requested:raise
                     if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)
+                    # Page cache is usable memory once dropped (the GB10's CUDA allocator sees only MemFree): free it
+                    # and re-measure at once instead of waiting for the kernel.
+                    from .memory_policy import reclaimable_file_bytes,release_page_cache
+                    if reclaimable_file_bytes()>=1<<30:
+                        released=release_page_cache()
+                        print(json.dumps({'event':'preflight_released_page_cache','step':step+1,**released}),flush=True)
+                        if 'files' in released:continue
                     time.sleep(30)
             backbone.ffn_chunk_tokens=int(memory_plan['ffn_chunk_tokens'])
             # Performance work on a live run: touching <out>/profile-request profiles the next update.

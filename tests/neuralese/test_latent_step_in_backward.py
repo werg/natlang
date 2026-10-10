@@ -363,3 +363,18 @@ def test_in_backward_norm_reduces_each_latent_in_fp32_and_accumulates_in_fp64():
     # bf16 gradients; FP32 per-tensor reduction is within FP32 rounding of the FP64 reference.
     assert armed.squared_norm.dtype == torch.float64
     assert abs(float(armed.squared_norm) - expected) <= 1e-3 * expected
+
+
+def test_lionsr_resume_drops_every_view_of_an_mmap_checkpoint(tmp_path):
+    q = torch.nn.Parameter(torch.randn(16, 8, dtype=torch.bfloat16))
+    optimizer = LionSR([{'params': [q], 'lr': 1e-3, 'row_scale': torch.rand(16, 1)}], lr=1e-3)
+    q.grad = torch.randn_like(q)
+    optimizer.step()
+    torch.save({'lion': optimizer.state_dict()}, tmp_path / 'state.pt')
+    saved = torch.load(tmp_path / 'state.pt', mmap=True, weights_only=False)
+    fresh = LionSR([{'params': [q], 'lr': 1e-3, 'row_scale': torch.ones(16, 1)}], lr=1e-3)
+    fresh.load_state_dict(saved['lion'])
+    mapped = {saved['lion']['param_groups'][0]['row_scale'].untyped_storage().data_ptr()}
+    scale = fresh.param_groups[0]['row_scale']
+    assert scale.untyped_storage().data_ptr() not in mapped  # an owned copy: the mapping can close
+    assert torch.equal(scale, saved['lion']['param_groups'][0]['row_scale'])

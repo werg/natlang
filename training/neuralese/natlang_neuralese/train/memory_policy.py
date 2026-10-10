@@ -264,3 +264,34 @@ def plan_saved_activation_offload(predicted_update_increment_bytes: int,
     expected_reduction = math.floor(budget * assumed_gpu_bytes_freed_per_cpu_byte)
     residual = max(0, required_reduction - expected_reduction)
     return SavedActivationPlan(budget, required_reduction, residual, usable_free, incremental_peak)
+
+
+def reclaimable_file_bytes() -> int:
+    """Clean file-backed pages the kernel could drop (MemAvailable − MemFree, from /proc/meminfo); 0 when unknown."""
+    try:
+        fields = {line.split(':')[0]: int(line.split()[1]) * 1024
+                  for line in open('/proc/meminfo') if line.startswith(('MemAvailable:', 'MemFree:'))}
+        return max(0, fields['MemAvailable'] - fields['MemFree'])
+    except (OSError, ValueError, IndexError, KeyError):
+        return 0
+
+
+def release_page_cache(timeout: float = 900.0) -> dict:
+    """Turn reclaimable page cache into free memory with the ledger's own mechanism (scripts/memory_ledger.py
+    release-cache: posix_fadvise DONTNEED on large files of the data roots, then the balloon). On the GB10 a CUDA
+    allocation can use only MemFree, so a preflight counts page cache as usable only after this has freed it."""
+    import json
+    import subprocess
+    import sys
+
+    from ..common.paths import root
+    script = root('repo') / 'scripts' / 'memory_ledger.py'
+    if not script.exists():
+        return {'skipped': 'no ledger script at ' + str(script)}
+    try:
+        out = subprocess.run([sys.executable, str(script), 'release-cache'], capture_output=True, text=True,
+                             timeout=timeout).stdout.strip().splitlines()
+        return json.loads(out[-1]) if out else {'skipped': 'no output'}
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        return {'error': f'{type(error).__name__}: {error}'[:300]}
+
