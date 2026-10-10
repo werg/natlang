@@ -207,9 +207,11 @@ class LionSR(torch.optim.Optimizer):
                         if id(param) in armed.stepped:
                             raise RuntimeError("a LionSR latent received a second gradient in one in-backward update; "
                                                "run the update's objectives as one backward")
-                        # No host sync per latent: the trainer checks the total after the backward.
-                        armed.squared_norm = (armed.squared_norm.to(param.device) +
-                                              torch.linalg.vector_norm(param.grad, dtype=torch.float64).square())
+                        # No host sync per latent: the trainer checks the total after the backward. Each tensor's
+                        # norm reduces in FP32 (FP64 is ~9x slower on the GB10: ~1 s per Mellum update), the
+                        # update's total accumulates in FP64.
+                        armed.squared_norm = (armed.squared_norm.to(param.device) + torch.linalg.vector_norm(
+                            param.grad, dtype=torch.float32).double().square())
                         armed.stepped.add(id(param))
                     self._update(param, self.param_groups[index])
                     param.grad = None

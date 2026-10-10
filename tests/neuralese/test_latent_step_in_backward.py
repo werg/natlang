@@ -349,3 +349,17 @@ def test_layer_staging_steps_each_layer_once_from_the_top_and_matches_separate_b
         assert layers == sorted(layers, reverse=True)  # deepest layer first, each layer's latents together
     for (name, value), (_, expected) in zip(named, reference_named):
         torch.testing.assert_close(value.detach(), expected.detach(), rtol=0, atol=0, msg=name)
+
+
+def test_in_backward_norm_reduces_each_latent_in_fp32_and_accumulates_in_fp64():
+    torch.manual_seed(0)
+    latents = [torch.nn.Parameter(torch.randn(64, 48, dtype=torch.bfloat16)) for _ in range(3)]
+    optimizer = LionSR([{'params': [q], 'lr': 1e-3} for q in latents], lr=1e-3)
+    optimizer.step_in_backward(gated=True)
+    grads = [((2e3 * (i + 1) ** 2) * q.detach().float()).bfloat16() for i, q in enumerate(latents)]  # before steps
+    expected = sum(float(torch.linalg.vector_norm(g, dtype=torch.float64).square()) for g in grads)
+    with optimizer.in_backward() as armed:
+        sum((q.float() * (i + 1)).square().sum() * 1e3 for i, q in enumerate(latents)).backward()
+    # bf16 gradients; FP32 per-tensor reduction is within FP32 rounding of the FP64 reference.
+    assert armed.squared_norm.dtype == torch.float64
+    assert abs(float(armed.squared_norm) - expected) <= 1e-3 * expected
