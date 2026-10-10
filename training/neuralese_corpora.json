@@ -21099,6 +21099,68 @@
       "notes": "v1's raw directory copied, then fetch --v2: 80k leading Python train rows, 15k per other CodeSearchNet language with full valid/test, <language>_licenses.pkl from the pre-Parquet zips read member by member and converted to <language>-licenses.json by a restricted unpickler (no classes) with licences detected by view_extract.detect_license (GNU licences by title), 40 WebSRC pages per site, TabFact statements/split ids/page titles and 2,920 seeded tables. sources.json lists URL, revision, SHA-256 and licence per file (5,390 files)."
     },
     {
+      "id": "cross-corpus-index-s1-full-final-20261003-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/cross-corpus-index-s1-full-final-20261003-v1",
+      "include": [
+        "index.json",
+        "groups.json",
+        "digests.npz",
+        "sketches.npz"
+      ],
+      "kind": "cross-corpus-index",
+      "purpose": "exact digest/group/sketch matching for split closure and contamination checks against the published corpus (scripts/neuralese_data/cross_corpus.py Index); not training data",
+      "split": "none (index of s1-full-final-20261003's splits)",
+      "source_class": "derived-index-of-published-corpus",
+      "admission": "not-training-data",
+      "training_admission": false,
+      "training_admission_reason": "an index (hashes, MinHash sketches and group splits), never training examples",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "s1-full-final-20261003"
+      ],
+      "license": "derived from s1-full-final-20261003; contains digests and sketches only",
+      "build": {
+        "script": "scripts/neuralese_data/cross_corpus.py index_corpus",
+        "schema": "natlang.cross-corpus-index/1",
+        "format": "port",
+        "records": 1870591,
+        "groups": 985434
+      },
+      "notes": "index.json 'files' lists the DGX paths the index was built from (provenance only). Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py."
+    },
+    {
+      "id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+      "include": [
+        "index.json",
+        "groups.json",
+        "digests.npz",
+        "sketches.npz"
+      ],
+      "kind": "cross-corpus-index",
+      "purpose": "exact digest/group/sketch matching for split closure and contamination checks against the published corpus (scripts/neuralese_data/cross_corpus.py Index); not training data",
+      "split": "none (index of harness-bench-swe-rebench-openhands-pi-records-20261010-v3's splits)",
+      "source_class": "derived-index-of-published-corpus",
+      "admission": "not-training-data",
+      "training_admission": false,
+      "training_admission_reason": "an index (hashes, MinHash sketches and group splits), never training examples",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+      ],
+      "license": "derived from harness-bench-swe-rebench-openhands-pi-records-20261010-v3; contains digests and sketches only",
+      "build": {
+        "script": "scripts/neuralese_data/cross_corpus.py index_corpus",
+        "schema": "natlang.cross-corpus-index/1",
+        "format": "turn",
+        "records": 3843,
+        "groups": 769
+      },
+      "notes": "index.json 'files' lists the DGX paths the index was built from (provenance only). Resolve by registry id: scripts/neuralese_data/cross_corpus_registry.py."
+    },
+    {
       "id": "view-ask-20261010-v2",
       "owner": "dgx",
       "path": "data/neuralese/corpora/view-ask-20261010-v2",
@@ -21161,13 +21223,13 @@
         "cross_corpus_indexes": [
           {
             "corpus_id": "s1-full-final-20261003",
-            "path": "/home/werg/data/natlang-corpora/cross-corpus-index/s1-full-final-20261003",
-            "records": 1870591
+            "records": 1870591,
+            "registry_id": "cross-corpus-index-s1-full-final-20261003-v1"
           },
           {
             "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
-            "path": "/home/werg/data/natlang-corpora/cross-corpus-index/harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
-            "records": 3843
+            "records": 3843,
+            "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1"
           }
         ],
         "view_stage_conversion": "natlang_neuralese.data.view_records@1 (view-stage/: train and test splits; records.jsonl sha256 3e276b32bfc1a13dc7d588e03cd0f3e68e12dab95ea84b923e4689437090cf4c)"
