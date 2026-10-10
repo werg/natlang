@@ -86,7 +86,7 @@ const guidedPath = fileURLToPath(new URL('./semantic-iterate-worlds-v15-soft-gui
 const pins = Object.fromEntries(await Promise.all([dataPath, builderPath, guidedPath].map(async path => [path, sha(await readFile(path))])));
 await mkdir(output, { recursive: false });
 await writeFile(resolve(output, 'source.cases.jsonl'), bytes, { flag: 'wx' });
-const derivations = rows.map((row, index) => ({ index, id: row.id, case_group: worlds[index].group,
+const derivations = rows.map((row, index) => ({ index, id: row.id, request_id: row.id, split: row.split, case_group: worlds[index].group,
   domain_group: row.generation.source_domain_group, domain: worlds[index].domain,
   candidates: worlds[index].scenarioFacts, authority: worlds[index].authorityEvidence,
   expected_recomputed: deriveWorldResult(worlds[index]), independent_world_credit: false }));
