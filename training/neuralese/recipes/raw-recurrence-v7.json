@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v7",
+  "extends": "raw-recurrence-v6",
+  "description": "raw-recurrence-v6 with sparser full-state writes in the AR fixup (owner: full writes only every few hours). autoregressive_text_fixup writes its full state at step 512 and at its end (checkpoint_every 128 -> 512): its 16k-token steps are unmeasured on Mellum (estimate 10-80 s/step), so 128 could mean a ~47 GB write every 20 min; 512 keeps writes >= ~1.4 h apart even at 10 s/step and bounds crash loss to half the stage at 80 s/step. eval_every 64 (16 points) stays: the warm-up curriculum needs about 13. Re-size once measured. History: recipes/HISTORY.md.",
+  "overrides": {
+    "stages": {
+      "autoregressive_text_fixup": {
+        "parameters": {
+          "checkpoint_every": 512
+        }
+      }
+    }
+  }
+}

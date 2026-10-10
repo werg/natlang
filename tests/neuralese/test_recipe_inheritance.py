@@ -302,7 +302,7 @@ def test_v6_line_declares_its_evaluation_and_checkpoint_points_in_steps():
     """Owner 2026-10-10: every write point is an evaluation point and the stage end is the last one (its gate)."""
     from natlang_neuralese.train.loop import check_declared_points
     from natlang_neuralese.train.recipe import resolve_recipe_data
-    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6'):
+    for name in ('raw-recurrence-v6', 'raw-recurrence-mellum-v5', 'raw-recurrence-mellum-v6', 'raw-recurrence-v7', 'raw-recurrence-mellum-v7'):
         path = RECIPES / f'{name}.json'
         if not path.exists():
             continue

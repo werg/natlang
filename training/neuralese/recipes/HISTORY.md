@@ -196,3 +196,15 @@ gate failure"). The 512 contexts only enlarged the held sample and had no declar
 token-preserving-foundation-mellum-v1) inherit the shared foundation unchanged; heads come from
 `maple/foundation_heads.py --precision bf16` at full depth. Both lines now share a full-depth foundation. A shallow
 cutoff stays possible only as a separate, optional efficiency variant with its own gate.
+
+## raw-recurrence-v7, raw-recurrence-mellum-v7 (2026-10-10): fixup full-state writes 128 -> 512
+
+Coordinator review of the v6 step points: `autoregressive_text_fixup` (1024 steps of 16k tokens) wrote its full state
+every 128 steps. Its step time is unmeasured on Mellum (estimate 10-80 s), so that could be eight ~47 GB writes in a
+few hours. v7 writes at step 512 and the end (>= ~1.4 h apart at 10 s/step; at 80 s/step ~11 h, which bounds crash
+loss to half the stage). eval_every stays 64 (16 points; the warm-up curriculum needs about 13). Every other v6 stage
+was re-checked and is unchanged: embedding_distillation end only (~1 h at 0.45 s/step; at full depth it qualifies at
+initialization), core_text_warmup every 2048 of 4096 (~2.8 h at ~5 s/step), view_operator every 2048 of 4096 and
+recurrence_warmup end only (2048 steps, ~2.8 h at ~5 s/step), each with 16 evaluation points. raw-recurrence-mellum-v7
+= mellum-v6 plus the same override (the inheritance chain is linear). Re-size from measured step times.
+
