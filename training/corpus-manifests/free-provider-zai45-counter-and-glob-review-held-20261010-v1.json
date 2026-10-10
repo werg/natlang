@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-counter-and-glob-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v14",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 5833,
+      "sha256": "0b39033164769a27a70340712e37c6792811506122fa5431a5b796cf611914dc"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2299,
+      "sha256": "e308d3be3b7b0d359d7fb3b07bc5f5e9537c94f9e592f1749c5c48cc19eda3e8"
+    }
+  ],
+  "bytes": 8132
+}
