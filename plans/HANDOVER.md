@@ -10455,3 +10455,9 @@ V60 finished53 programs:36 exact-map/file successes,17 rejected on23of397 differ
 ### V60 exact source review, 2026-10-10 21:57 UTC
 
 Root reviewed23 fullsource disagreements andaddedfive forwardqualityholds, canonical25total. Specificissues: teachinghospitalclassambiguity; shortKoreshreplywithoutthreadorigin; Britishborn doesnotimplyBritishcitizenship; neutralcontact invitation notuniquelyjoy; economicviabilitycriterion absentdespitepositiveextraexpenseafterreported savings. Retain annotations/attempts andoldsealedderivatives. No forcedgold or automatic DPO negatives. Clear location-versus-size confusion and reportedstatistical/outcomeevidence remain modelrepair candidates; do not demandcertainty or blanketfilterstatisticalnullresults. Existing runtimelexicalscope/captureguidance coversV60scope errors; no magicalcapturecoercionadded.
+
+### Pop 2026-10-10 22:15 UTC — five Luna workers refilled
+
+Google V25 closed with 512 typed-valid decisions: 402 match supplied annotations and 110 differ. The shared static directory reducer adapter retained 402 items in 53 programs; all reference and full-input visibility checks passed, producing 910 native turns. Source annotations remain subject to review. Five Luna workers now run V61 on these programs, supervisor 957294, approved plan SHA e11d548082f8f770e96a0befbfa78a695ec0ac9a8c095b86563931c37e2dc5cb. Google V24 has acquired the quota lock and is producing labels. V7 GPU training reached step 34812 of 37888 and entered its scheduled evaluation; no qualification threshold changed.
+
+The annotation-only exploratory V9 batch is held. Its fixed judge_one child scaffold does not provide the requested runtime inline-lambda topology. The adapter is being redirected to reuse the existing shared directory reducer scaffold rather than create a separate training path. Preserve V9, claim no inline-lambda coverage or admission for it.
