@@ -357,7 +357,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       };
       findUnresolved(annotation);
       if (unresolved) {
-        const name = unresolved.typeName.getText(file);
+        const name = unresolved.typeName.getText(node.getSourceFile());
         report(unresolved, 'nl-undeclared-type', `Type name ${JSON.stringify(name)} is not declared in this eval scope, so the inline result is untyped; declare it in scope or use a type written in this annotation.`);
         return;
       }
