@@ -21893,6 +21893,34 @@
       "admission": "diagnosticreview only; incompleteZAIcase notnegative, finalLuna/ZAIprefixnotprovenidentical",
       "independent_new_worlds": 0,
       "notes": "V21contrastsource/task/systempromptmatchbutfinalcaptureddecisionprefixunknown; noautomaticDPOpair. ZAIpartial40searchcallswithoutdirectFileHandle read, zero completediterateOnsteps; collectionlimitnotlanguagefailure."
+    },
+    {
+      "id": "free-provider-sourcebound16-admitted-native-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound16-admitted-native-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "authored-static-source-bound-logical-reference",
+      "training_admission": true,
+      "admission": "root-approved-exact-reference-native-text-only",
+      "independent_new_worlds": 0,
+      "notes": "Exact 36 reference turns, two wrappers, sixteen inherited train rows. Admission receipt and DGX closure pinned; trace_admission remains false because these are authored references, not teacher trajectories. No learned channel/world/eval credit."
+    },
+    {
+      "id": "free-provider-sourcebound16-admitted-text-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/static-sourcebound16-text-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "lfm25-native-chat-static-reference-text",
+      "training_admission": true,
+      "admission": "root-approved-exact-reference-native-text-only",
+      "independent_new_worlds": 0,
+      "notes": "36 train-only documents; 186350 full-context tokens, 1617 supervised suffix tokens; exact tokenizer and renderer pinned. Existing held parent unchanged."
     }
   ],
   "coverage_backlog": [

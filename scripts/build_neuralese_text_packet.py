@@ -45,10 +45,14 @@ def main():
     parser.add_argument("--pieces", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--tokenizer", required=True, help="Exact HF tokenizer ID or local snapshot for the student")
+    parser.add_argument("--train-only-addition", action="store_true",
+                        help="Render a train-only addition; it supplies no independent evaluation cohort")
     args = parser.parse_args()
     if args.out.exists():
         parser.error(f"refusing to overwrite existing output directory: {args.out}")
     records, pieces = read_source(args.records), [json.loads(line) for line in args.pieces.read_text(encoding="utf-8").splitlines() if line]
+    if args.train_only_addition and any(row.get("split") != "train" for row in records):
+        parser.error("--train-only-addition requires every source record to retain its train split")
     # The pinned-provenance loader: exact tokenizer class and, for TokenizersBackend snapshots, the exact serialized
     # backend (the same guard the delta builder uses); gold_text_rows then binds the renderer fingerprint.
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
@@ -60,7 +64,11 @@ def main():
     # BACKBONE_HISTORY_REASONING), asserted against the template; the receipt records it.
     from natlang_neuralese.serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer, require_declared=True)
-    rows, receipt, omissions, provenance = gold_text_rows(records, pieces, tokenizer=tokenizer)
+    rows, receipt, omissions, provenance = gold_text_rows(
+        records, pieces, tokenizer=tokenizer,
+        require_independent_splits=not args.train_only_addition)
+    if not rows:
+        raise ValueError("no renderer-qualified documents in the addition")
     args.out.mkdir(parents=True)
     data = "".join(canonical(row) + "\n" for row in rows).encode("utf-8")
     omission_data = "".join(canonical(row) + "\n" for row in omissions).encode("utf-8")
@@ -69,6 +77,7 @@ def main():
     (args.out / "omissions.jsonl").write_bytes(omission_data)
     (args.out / "provenance.jsonl").write_bytes(provenance_data)
     receipt.update({
+        "split_scope": "train-only-addition-no-evaluation-credit" if args.train_only_addition else "independent-train-and-held",
         "source_run": str(args.records.parent),
         "renderer_code": {str(path.relative_to(ROOT)): sha(path.read_bytes()) for path in (
             Path(__file__).resolve(), ROOT / "training/neuralese/natlang_neuralese/data/text_corpus.py",

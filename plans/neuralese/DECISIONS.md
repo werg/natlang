@@ -1374,3 +1374,10 @@ Validation: source review, AST parsing and whitespace checks; no test suite run.
 ### 2026-10-10 — typed label probability mass
 
 Gemini-v4 closed178invalidprobability distributions:46allzero and132substantialmass errors, not rounding drift. Preserve strict1e-4sumvalidation and originalresponses. Prospective sharedprompt clarifies mutuallyexclusive label alternatives and distributing oneunitmass; expliciterrorrecord includes mass/delta. Do not normalize invalidresponses into labels. Separate178case regeneration uses samefreequota/projectlock and unchangedsource/gold, helduntilactualsourcequalityreview. Existingfrozen runs unchanged.
+
+
+### 2026-10-10 — train-only corpus additions and static reference scope
+
+A reviewed train-only source addition need not manufacture an evaluation split to use the shared gold renderer. The packet CLI exposes an explicit train-only-addition declaration, checks that every input retains its train split, and reports no evaluation credit. The default complete packet still requires independent train and held data. Source admission, cross-split overlap checks, authenticated context and pinned native templates are unchanged.
+
+The source-bound sixteen-row logical batch passed global closure. Admission covers its two authored wrappers and 36 authored static reference turns, plus an independently pinned LFM text rendering. Preserve the previous held receipt and exclude parent data, subjective numeric labels, raw probability targets and sampled-teacher or learned-channel claims. Context token counts are reported separately from supervised suffix tokens.

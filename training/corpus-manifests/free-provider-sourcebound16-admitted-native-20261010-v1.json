@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-sourcebound16-admitted-native-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound16-admitted-native-v1",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1195,
+      "sha256": "4d55794c0e122c42bb182a689f4e6f228c5a032288146cbd8815ad3270b6f599"
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 21967,
+      "sha256": "7c71214821271e5a3585b902cd390b87a3d875b9f4543a49d54efce4d941cd29",
+      "lines": 5
+    },
+    {
+      "path": "native.admitted.jsonl",
+      "bytes": 3311607,
+      "sha256": "3bd9cea3e58495f2f8cf4d673bd8d1f11154f8d62d3aa4aaf36b3f53faede6b4",
+      "lines": 36
+    },
+    {
+      "path": "native.converted.jsonl",
+      "bytes": 2759189,
+      "sha256": "603521b186ee5d66b8782dd5db0e37fed2e44382f759e2fd43e68bef701f2f18",
+      "lines": 36
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 4796,
+      "sha256": "beccc771bc5eedaba72a2156d4a2bc14dd479593545350f93524a0dcd93f926a"
+    }
+  ],
+  "bytes": 6098754
+}

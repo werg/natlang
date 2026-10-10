@@ -35,11 +35,13 @@ def main():
     if args.out.exists() and any(args.out.iterdir()):
         raise ValueError("fresh or empty output directory required")
     from natlang_neuralese.data.text_corpus import gold_text_preview_rows, tokenizer_fingerprint
-    from transformers import AutoTokenizer
+    from build_neuralese_gold_text_delta import load_pinned_tokenizer
+    from natlang_neuralese.serve.chat import bind_history_reasoning
 
     records = read_records(args.records)
     pieces = [json.loads(line) for line in args.pieces.read_text(encoding="utf-8").splitlines() if line.strip()]
-    tokenizer = AutoTokenizer.from_pretrained(str(args.tokenizer), local_files_only=True)
+    tokenizer = load_pinned_tokenizer(args.tokenizer)
+    bind_history_reasoning(tokenizer, require_declared=True)
     rows, receipt, omissions, provenance = gold_text_preview_rows(records, pieces, tokenizer=tokenizer)
     if receipt.get("review_only") is not True or receipt.get("sft_eligible") is not False:
         raise ValueError("shared renderer did not return a held-only receipt")
