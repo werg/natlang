@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { deriveWorldResult, sourceDomains, worlds } from './semantic-iterate-self-improvement-v35-data.mjs';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 
-export const REVISION = 'authored-semantic-iterate-self-improvement-v35/4-cardinality-consistent-rules';
+export const REVISION = 'authored-semantic-iterate-self-improvement-v35/5-current-status-correction-history-guidance';
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
   throw new Error('usage: node build-semantic-iterate-self-improvement-v35.mjs --out FRESH_DIRECTORY');
@@ -124,7 +124,7 @@ await writeFile(resolve(output, 'readable-facts-and-golds.md'), `# V35 source re
   `## ${item.request_id} — ${item.domain}\n\nCase group: ${item.case_group}; domain group: ${item.domain_group}; split: ${item.split}.\n\n` +
   `Candidates:\n${item.candidates.map(candidate => `- ${candidate.id}: ${candidate.metric}; ${candidate.facts}`).join('\n')}\n\n` +
   `Authority evidence: ${item.authority}\n\nRecomputed gold: ${JSON.stringify(item.expected_recomputed)}\n`).join('\n'));
-await writeFile(resolve(output, 'README.md'), `# V35 semantic self-improvement source pool — V4\n\n` +
+await writeFile(resolve(output, 'README.md'), `# V35 semantic self-improvement source pool — V5\n\n` +
   `This proposal contains 32 newly authored fictional requests organized into eight related task families, with four cases per family. The eight complete domain groups are split as four train groups and four test groups, so no family crosses the split. Cases cover safety corrective-action selection, provenance reconciliation, experimental-plan revision, constrained resource scheduling, compliance document revision, incident response, evidence-backed claim triage, and maintenance work-order sequencing. These are authored fictional families, not 32 independently grounded domains.\n\n` +
   `Each task has four evidence files and uses the shared iterateOn/inline Neuralese scaffold. Decisions require carrying candidate-specific findings forward, applying conditions before ranking, and applying request-scoped authority separately. The CPU proof recomputes the gold from authored facts only. No model/provider calls were made. Root semantic review is pending; no generation or training admission is authorized.\n\nSHA-256: ${sourceSha}\n`);
 console.log(JSON.stringify({ revision: REVISION, source_cases_sha256: sourceSha, counts: proof.counts, domains: proof.domains.map(domain => domain.slug) }, null, 2));

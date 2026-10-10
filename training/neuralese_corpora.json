@@ -26341,6 +26341,16 @@
       "training_admission": false,
       "admission": "held-unscored-resource-partial",
       "notes": "SCHED-543 source is consistent. 384 unique request starts across 192 turns included useful evidence review, then repeated pass-four global note revisions and model-authored code errors. No provider stall or runtime defect evidenced; no parent result and no semantic negative or DPO pair. Source guidance improvement will use a fresh derivative."
+    },
+    {
+      "id": "semantic-iterate-v35-current-status-guidance-source-held-20261010-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance",
+      "split": "inherited-grouped-train-test-source",
+      "source_class": "authored-semantic-iterative-source-guidance-derivative",
+      "training_admission": false,
+      "admission": "held-source-quality-native-execution-review",
+      "notes": "32 unchanged fictional source worlds in eight grouped families, 16 train / 16 test. Shared guidance allows labeled historical uncertainty and appended current status instead of global note rewriting. All IDs/groups/splits/golds/decision output bytes and source evidence match V4. Source SHA eb33efacfe38c88c4a9f253fe0d1dc246ac73cfc137c83f17976b28c3bc1e261. No new-world credit or retroactive partial repair."
     }
   ],
   "coverage_backlog": [

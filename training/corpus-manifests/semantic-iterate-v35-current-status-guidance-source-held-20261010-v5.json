@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-current-status-guidance-source-held-20261010-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-self-improvement-v35-source-20261010-v5-current-status-guidance",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1538,
+      "sha256": "cdc1346ae546fe564cff7f623babeacbd2e1065bcf9f2698fb4d53696b28690e"
+    },
+    {
+      "path": "readable-facts-and-golds.md",
+      "bytes": 44117,
+      "sha256": "60a2ab297b59884441c6c5e6fa8688d5dc6c9048907f41528208747cd717ec34"
+    },
+    {
+      "path": "root-review-plan.json",
+      "bytes": 632,
+      "sha256": "4928d8821ed6acac3af808faa7dc91602890b961119b87467c1f8ae0c0a4e15c"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1243,
+      "sha256": "0e48a69f7938453315d40ff1e6f5b020419929234d3c46731758a8e704c37d59"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 68903,
+      "sha256": "ccb8a2671be84758d8edbc027f05bf9ad13bd8c3100d8bc327ad0ffa086f31e5"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 1719197,
+      "sha256": "eb33efacfe38c88c4a9f253fe0d1dc246ac73cfc137c83f17976b28c3bc1e261",
+      "lines": 32
+    },
+    {
+      "path": "v4-comparison.json",
+      "bytes": 43874,
+      "sha256": "7d56f8ad787126696f7df4e4991b9c12be8ea5068fe5dacc9ff8d459712ef53b"
+    }
+  ],
+  "bytes": 1879504
+}
