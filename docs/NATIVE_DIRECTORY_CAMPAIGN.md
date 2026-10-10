@@ -1,5 +1,7 @@
 # Native directory improvement and optimizer distillation
 
+> **Retired (owner decision 2026-10-10):** `scripts/self_improvement_data.py` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 This campaign tests whether an ordinary natlang optimizer can diagnose and redesign partially working programs. Luna executes the optimizer; Bonsai executes the target programs. The default source remains one diagnosis-and-edit directory reducer, called through the authored lifecycle and `folder.iterateOn`. No special tool filter, replacement runtime prompt, compatibility mode or language gas system is added.
 
 The four development families exercise final refund decisions over nested files, invoice/decision joins by ID, exact sequential file edits, and deduplication of revised reviews. Two transfer families exercise authorized training exceptions and final confirmed meeting assignments. Each starting program implements the easy case; each family has three train folders, one validation folder and two sealed confirmation folders. Fixtures preserve unrelated files and compare exact output text. Reference source stays hidden from the optimizer. These are independently specified reconstructions of observed failure mechanisms, not falsely labelled historical student failures.

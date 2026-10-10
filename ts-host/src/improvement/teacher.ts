@@ -27,11 +27,18 @@ export async function run(record:ProgramRecord,driver:Parameters<typeof executeP
   const gateway=new UsageGateway({maxModelCalls:104,maxRollouts:40,maxProposals:8,maxElapsedMs:600000});
   const target=fixture.caseDefinition;
   const evaluator=new SourceEvaluator(target.contract,target.cases,driver,gateway,{signal:options.signal,timeoutMs:fixture.executorTimeoutMs,executorId:fixture.executorId??'canonical-improvement-fixture',sourcePolicy:{baseline:target.files,mode:target.policy.mode,allowedFiles:target.policy.allowedFiles}});
-  const runtime=createNatlangRuntime({model:{driver,contextTokens:options.contextTokens,maxTurns:options.maxTurns??16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal:options.signal,seed:{mode:'derived',root:options.rootSeed},codeEdits:'deny',network:false,trace:trace=>traces.push(trace),services:{evaluator:{check:evaluator.check.bind(evaluator),evaluate:evaluator.evaluate.bind(evaluator),page:evaluator.page.bind(evaluator)},plans:planService()},serviceDeclarations:{evaluator:EVALUATOR_DECLARATION,plans:PLANS_DECLARATION},serviceScopes:{evaluator:['improveStep.nl'],plans:['improveStep.nl']}});
+  // The model-run lifecycle step and its editor (recorded runs of the rewriteProgram generation) saw the evaluator and plan
+  // services in their scope. The current improver's stages see none: the crisp step holds them.
+  const retiredService=record.semantics.root==='improveStep.nl'||record.semantics.root==='improveStep/rewriteProgram.nl';
+  // The plan journal service came with the journaled plan: an authored lifecycle that takes `plans` was recorded with it.
+  const journaled=/\bplans\b/.test(record.semantics.files['improveStep/lifecycle.ts']??'');
+  const runtime=createNatlangRuntime({model:{driver,contextTokens:options.contextTokens,maxTurns:options.maxTurns??16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal:options.signal,seed:{mode:'derived',root:options.rootSeed},codeEdits:'deny',network:false,trace:trace=>traces.push(trace),...(retiredService?{services:{evaluator:{check:evaluator.check.bind(evaluator),evaluate:evaluator.evaluate.bind(evaluator),page:evaluator.page.bind(evaluator)},...(journaled?{plans:planService()}:{})},serviceDeclarations:{evaluator:EVALUATOR_DECLARATION,...(journaled?{plans:PLANS_DECLARATION}:{})},serviceScopes:{evaluator:['improveStep.nl'],...(journaled?{plans:['improveStep.nl']}:{})}}:{})});
   const reducer=loadVirtualNatlang(record.semantics.files,record.semantics.root);
   if(record.semantics.root!=='improveStep.nl'){
-   const args=callableMeta(reducer)!.definition.params.map(param=>record.semantics.inputs[param.name]);
-   const value=await runtime.run(()=>folder.apply(reducer,...args));
+   const definition=callableMeta(reducer)!.definition;
+   const args=definition.params.map(param=>record.semantics.inputs[param.name]);
+   // A stage that is not a directory reducer (a typed value: diagnose, hypothesize, a search policy) takes no folder.
+   const value=await runtime.run(()=>definition.subtype==='directory-reducer'?folder.apply(reducer,...args):(reducer as unknown as (...values:unknown[])=>Promise<unknown>)(...args));
    const files=sourceFiles(folder.snapshot());
    const accepted=isDeepStrictEqual(value,record.semantics.expected)&&isDeepStrictEqual(files,record.semantics.expected_files);
    return {outcome:{accepted,kind:accepted?'done':'failed',value,source:files},trace:traces.flatMap(trace=>trace.events) as Record<string,unknown>[]};

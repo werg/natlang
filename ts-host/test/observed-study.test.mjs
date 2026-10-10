@@ -93,7 +93,7 @@ test('retired optimizer templates migrate to the exact lifecycle and lose stale 
  const old={id:'old-turn',task:{program_ir:{semantics:{files:{'improveStep.nl':'old root','improveStep/measureBaseline.nl':'old measurement'}}}},messages:[{role:'tool',content:'historical observation'}],training_admission:{approved:true},trace_admission:{admitted:true}};
  const migrated=migrateLifecycle(old);
  assert.equal(migrated.changes,1);assert.equal(migrated.row.training_admission.approved,false);assert.equal(migrated.row.trace_admission.admitted,false);assert.equal(migrated.row.migration.disposition,'recollect-required');
- assert.equal(migrated.row.task.program_ir.semantics.files['improveStep.nl'],AUTHORED_IMPROVER['improveStep.nl']);assert.equal(migrated.row.task.program_ir.semantics.files['improveStep/measureBaseline.nl'],undefined);
+ assert.equal(migrated.row.task.program_ir.semantics.files['improveStep.nl'],AUTHORED_IMPROVER['improveStep.nl']);assert.equal(migrated.row.task.program_ir.semantics.files['improveStep/lifecycle.ts'],AUTHORED_IMPROVER['improveStep/lifecycle.ts']);assert.equal(migrated.row.task.program_ir.semantics.files['improveStep/measureBaseline.nl'],undefined);
  assert.equal(old.training_admission.approved,true);assert.deepEqual(migrated.row.messages,old.messages);
  assert.equal(migrateLifecycle(migrated.row).changes,0);
  assert.equal(AUTHORED_IMPROVER['improveStep/selectCandidate.nl'],undefined);

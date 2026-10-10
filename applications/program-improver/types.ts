@@ -25,13 +25,15 @@ export type ParentChoice = {id:string;quality:number;wonCases:string[];timesPare
 export type IncumbentChoice = {id:string;quality:number;sourceBytes?:number;modelCalls?:number};
 export type StopDecision = {stop:boolean;reason:string};
 export type StopFacts = {disposition:Disposition;reason:string;selectedQuality:number;objective:Objective;iteration:number;maxExperiments:number;recent:{disposition:Disposition;failingCases:string[]}[]};
+/** What the counterexample loop's stop decision reads, measured by the host after a round: the examples admitted, the oracle allowance left, and the repair (absent when nothing was admitted). */
+export type CounterexampleStopFacts = {search:'counterexample';round:number;admitted:number;remainingChecks:number;repair?:{eligible:boolean;trainingQuality:number;disposition:string}};
 export type OpportunityFacts = {objective:Objective;rows:{caseId:string;passed:boolean;modelCalls?:number;failureKind?:string}[]};
 export type MoveFacts = {iteration:number;members:{id:string;changedKeys:string[]}[]};
 export type ComponentFacts = {eligible:{key:string;coveredCases:number;failingCases:number;proposals:number;accepts:number}[]};
 
 export type ComponentValue = {kind:'program.guidance';text:string} | {kind:'lambda.instructions';template:{segments:string[];slotIds:string[]}};
 export type Candidate = Record<string,ComponentValue>;
-export type ComponentRewriteRequest = {keys:string[];components:unknown[];feedback:unknown};
+export type ComponentRewriteRequest = {keys:string[];components:unknown[];feedback:unknown;problem?:string};
 export type ComponentLoopState = {iteration:number;incumbent:string;done:boolean;stopReason:string};
 export type CounterexampleRequest={goal:string;evidence:unknown[];maxSuggestions?:number};
 export type CounterexampleSuggestions={inputs:unknown[][];reason:string};

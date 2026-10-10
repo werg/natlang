@@ -133,6 +133,45 @@ export function prune<T extends Member>(members: readonly T[], protectedIds: Ite
   return unique.filter(member => kept.has(member.id));
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item) =>
+  isRecord(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item) ?? 'undefined';
+
+/**
+ * What is wrong with an edited component set, as text that says what to change, or '' when nothing is. The edit of a
+ * component search changes only the selected keys of its parent and keeps every kind, every slot id list and the number
+ * of segments of each instruction template; the segments are an array of strings. This is the exact check that stands
+ * behind the natural-language component edit (componentSearchStep/rewriteComponents.ts sends the text back once; the
+ * engine's `check` applies it again).
+ */
+export function componentProblem(parent: Record<string, unknown>, candidate: unknown, keys: readonly string[]): string {
+  if (!isRecord(candidate)) return 'components.json holds one JSON object whose keys are the component keys.';
+  const missing = Object.keys(parent).filter(key => !(key in candidate));
+  if (missing.length) return `components.json keeps every component of the parent; these are missing: ${missing.join(', ')}.`;
+  const unknown = Object.keys(candidate).filter(key => !(key in parent));
+  if (unknown.length) return `components.json holds only the components of the parent; these are not among them: ${unknown.join(', ')}.`;
+  for (const key of Object.keys(parent)) {
+    const before = parent[key], after = candidate[key];
+    if (!keys.includes(key)) {
+      if (canonicalJson(before) !== canonicalJson(after)) return `The component ${key} is not selected, so it keeps its parent value; the selected components are: ${keys.join(', ')}.`;
+      continue;
+    }
+    if (!isRecord(before) || !isRecord(after)) return `The component ${key} is an object with a kind.`;
+    if (after.kind !== before.kind) return `The component ${key} keeps its kind \`${String(before.kind)}\`.`;
+    if (before.kind === 'program.guidance') {
+      if (typeof after.text !== 'string') return `The guidance component ${key} has its text as a string.`;
+      continue;
+    }
+    const was = before.template, now = after.template;
+    if (!isRecord(was) || !isRecord(now)) return `The instructions component ${key} has a template object.`;
+    if (!Array.isArray(now.segments) || now.segments.some(segment => typeof segment !== 'string'))
+      return `The segments of ${key} are a JSON array of strings; each static segment is one string in that array.`;
+    if (canonicalJson(now.slotIds) !== canonicalJson(was.slotIds)) return `The slot ids of ${key} keep their parent value: ${canonicalJson(was.slotIds)}.`;
+    if (now.segments.length !== (was.segments as unknown[]).length) return `${key} keeps its ${(was.segments as unknown[]).length} segments (it has ${now.segments.length}); write the new text inside the existing segments.`;
+  }
+  return '';
+}
+
 /** The module natlang code imports as `natlang:gepa`. */
 export const gepaModule = { __esModule: true, caseIds, frontier, frontierSet, wonCases, draw, pick, parentChoices, drawParent, better,
-  objectiveMeasure, leaders, chooseIncumbent, prune } as const;
+  objectiveMeasure, leaders, chooseIncumbent, prune, componentProblem } as const;

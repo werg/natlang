@@ -7,6 +7,7 @@ import { join, resolve, relative, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { recordedDriver } from '../self-improvement/replay-followup-study.mjs';
+import { LEGACY, legacyServices, definitionSourceOf, editorSources, stageFields, stageOf, supervisionOf } from '../self-improvement/improver-stages.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const jsonSha = value => sha(Buffer.from(JSON.stringify(value)));
@@ -68,7 +69,10 @@ export function materializeVerifiedTrajectory(row, materializer) {
   if (result.acceptedRows !== 1 || result.rejectedRows !== 0 || result.unlinked.length ||
       !result.turns.length || result.turns.some(turn => turn.training_admission?.approved !== true))
     throw new Error('general native-teacher materializer did not approve every replayed decision');
-  return result.turns;
+  const stage = row.provenance?.improver_stage;
+  if (!isObject(stage) || typeof stage.stage !== 'string' || typeof stage.generation !== 'string' || typeof stage.definition_source !== 'string')
+    throw new Error('trajectory does not name its improver stage and generation');
+  return result.turns.map(turn => ({ ...turn, improver_stage: structuredClone(stage), supervision: supervisionOf(turn.messages ?? []) }));
 }
 
 export function objectiveKinds(objectiveModule) {
@@ -77,7 +81,9 @@ export function objectiveKinds(objectiveModule) {
 }
 
 /** Construct the sole task definition the exporter permits: only the support search definition. */
-export function supportTaskDefinition(definition, selectedFiles) {
+export function supportTaskDefinition(definition, selectedFiles, editorSource) {
+  if (!editorSources().includes(editorSource))
+    throw new Error(`unexpected editor definition ${JSON.stringify(editorSource)}; the exported editors are ${editorSources().join(', ')}`);
   if (!isObject(definition) || definition.version !== 'natlang.improvement-case/1' ||
       !Array.isArray(definition.cases) || !Array.isArray(definition.sourceGroups) ||
       !isObject(definition.authoredFiles) || typeof definition.authoredDigest !== 'string')
@@ -96,7 +102,7 @@ export function supportTaskDefinition(definition, selectedFiles) {
     family: 'skill-authoring', split: 'train', source_groups: groups,
     source_ids: definition.cases.map(row => row.id), source: 'project-generated', license: 'project-generated',
     semantics: {
-      root: 'improveStep/rewriteProgram.nl', files: structuredClone(definition.authoredFiles),
+      root: editorSource, files: structuredClone(definition.authoredFiles),
       inputs: {}, expected: null, folder_files: structuredClone(definition.files), expected_files: structuredClone(selectedFiles),
       effects: { kind: 'support-selected-skill-files', support_only: true },
     },
@@ -161,7 +167,7 @@ function childTraceFields(trace) {
   const manifest = trace.events?.find(event => event.kind === 'manifest');
   const initial = trace.events?.find(event => event.kind === 'state' && event.phase === 'initial');
   const final = trace.events?.findLast(event => event.kind === 'state' && event.phase === 'final');
-  if (trace.outcome !== 'done' || manifest?.definition_source !== 'improveStep/rewriteProgram.nl')
+  if (trace.outcome !== 'done' || !editorSources().includes(manifest?.definition_source))
     throw new Error('rewrite invocation did not complete with a replayable request and return');
   const exactInput = trace.events?.find(event => event.kind === 'host_capture' &&
     event.capture_kind === 'invocation_input' && event.name === 'request');
@@ -256,7 +262,7 @@ function verifyCodePins(artifact, manifest) {
   }
 }
 
-function makeTrajectory({ artifact, definition, trace, exchanges, before, after, parentTrace, task }) {
+function makeTrajectory({ artifact, definition, trace, exchanges, before, after, parentVerified, task }) {
   const turns = exchanges.map(responseTurn);
   if (!turns.length || turns.some(turn => turn.invocation_id !== trace.callId)) throw new Error('author exchange invocation identity mismatch');
   const id = `${task.id}:${sha(Buffer.from(trace.callId)).slice(0, 16)}`;
@@ -269,7 +275,8 @@ function makeTrajectory({ artifact, definition, trace, exchanges, before, after,
       collection_role: 'teacher', source_replay: 'skill-authoring-child-replay/1',
       collection_sha256: artifact.collection_sha256, invocation_id: trace.callId,
       parent_invocation_id: trace.parentCallId, support_only: true,
-      parent_candidate_verified: parentSelectionProof(parentTrace, artifact.selected, after),
+      parent_candidate_verified: parentVerified,
+      ...stageFields(stageOf(definitionSourceOf(trace))),
       scoring_identity: definition.scoringIdentity ?? null,
     },
     outcome: { accepted: true, status: 'completed', oracle: 'exact' },
@@ -344,12 +351,16 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parentTrace, searchState, task }) {
+/**
+ * Replay one recorded editor invocation offline, from its exact captured request and recorded provider replies. The
+ * editor is whichever definition the trace records (the legacy `rewriteProgram` or `editSource`/`editSourceStructural`).
+ */
+async function replayEditor({ runtime, artifact, trace, exchanges }) {
   verifyCodePins(artifact, runtime.manifest);
   const module = path => import(pathToFileURL(join(runtime.root, path)).href);
   const { Folder, createNatlangRuntime } = await module('dist/index.js');
   const { loadVirtualNatlang } = await module('dist/runtime/virtual-project.js');
-  const { EVALUATOR_DECLARATION } = await module('dist/improvement/services.js');
+  const { EVALUATOR_DECLARATION, PLANS_DECLARATION } = await module('dist/improvement/services.js');
   const { request, value: expectedValue } = childTraceFields(trace);
   if (!Array.isArray(request.sourceFiles) || !isObject(request)) throw new Error('rewrite request lacks exact source files');
   const before = filesObject(request.sourceFiles);
@@ -369,20 +380,44 @@ async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parent
   const replay = createNatlangRuntime({
     model: { driver, maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4, contextTokens: 16384 },
     seed: { mode: 'derived', root: 0 }, codeEdits: 'deny', network: false,
-    services: { evaluator: {} }, serviceDeclarations: { evaluator: EVALUATOR_DECLARATION },
-    serviceScopes: { evaluator: ['improveStep.nl'] }, signal: AbortSignal.timeout(60000),
+    // The legacy editor saw the evaluator service in its scope (declared for the model-run step); the stages see none.
+    ...(stageOf(definitionSourceOf(trace)).generation === LEGACY ? legacyServices(artifact.searchDefinition.authoredFiles, EVALUATOR_DECLARATION, PLANS_DECLARATION) : {}), signal: AbortSignal.timeout(60000),
   });
   const value = await replay.run(() => folder.apply(loadVirtualNatlang(artifact.searchDefinition.authoredFiles,
-    'improveStep/rewriteProgram.nl'), request));
+    definitionSourceOf(trace)), request));
   const after = Object.fromEntries(folder.snapshot().filePaths().map(path => [path, new TextDecoder().decode(folder.readBytesSync(path))]));
-  const parentFiles = parentTrace?.events?.findLast(event => event.kind === 'state' && event.phase === 'final')?.value?.$lambda?.return?.lastExperiment?.sourceFiles;
   if (!isDeepStrictEqual(value, expectedValue) || driver.audit().unconsumedRequests !== 0 || driver.audit().requestsReplayed !== exchanges.length)
     throw new Error('recorded rewrite invocation did not replay exactly');
-  if (parentTrace?.callId !== trace.parentCallId ||
-      !parentSelectionProof(parentTrace, artifact.selected, after, searchState) || !isDeepStrictEqual(after, task.semantics.expected_files) ||
-      !Array.isArray(parentFiles)) throw new Error('rewrite effects do not match the measured, accepted support candidate');
-  return { row: makeTrajectory({ artifact, definition: artifact.searchDefinition, trace, exchanges, before, after, parentTrace, task }),
-    audit: { providerCalls: 0, requestsReplayed: driver.audit().requestsReplayed, selectedDigest: artifact.selected } };
+  return { before, after, audit: driver.audit(), digest: files => Folder.fromFiles(files).snapshot().digest };
+}
+
+/**
+ * Under the stages generation the experiment around the editors is crisp, so no step invocation records which edit was
+ * selected. The run's own state does: the selected source was accepted and selected in its history, and the edit's
+ * resulting files are that source.
+ */
+export function stateHistorySelectionProof(state, selectedDigest, editedDigest) {
+  return !!(state?.incumbent === selectedDigest && editedDigest === selectedDigest && Array.isArray(state.history) &&
+    state.history.some(item => item.source === selectedDigest && item.accepted === true && item.selected === true));
+}
+
+async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parentTrace, searchState, task }) {
+  const replayed = await replayEditor({ runtime, artifact, trace, exchanges });
+  const { before, after } = replayed, stage = stageOf(definitionSourceOf(trace));
+  let verifiedParent;
+  if (stage.generation === LEGACY) {
+    const parentFiles = parentTrace?.events?.findLast(event => event.kind === 'state' && event.phase === 'final')?.value?.$lambda?.return?.lastExperiment?.sourceFiles;
+    if (parentTrace?.callId !== trace.parentCallId ||
+        !parentSelectionProof(parentTrace, artifact.selected, after, searchState) || !isDeepStrictEqual(after, task.semantics.expected_files) ||
+        !Array.isArray(parentFiles)) throw new Error('rewrite effects do not match the measured, accepted support candidate');
+    verifiedParent = true;
+  } else {
+    if (!stateHistorySelectionProof(searchState, artifact.selected, replayed.digest(after)) || !isDeepStrictEqual(after, task.semantics.expected_files))
+      throw new Error('edit effects do not match the measured, accepted support candidate in the run state');
+    verifiedParent = true;
+  }
+  return { row: makeTrajectory({ artifact, definition: artifact.searchDefinition, trace, exchanges, before, after, parentVerified: verifiedParent, task }),
+    audit: { providerCalls: 0, requestsReplayed: replayed.audit.requestsReplayed, selectedDigest: artifact.selected } };
 }
 
 function sidecar(record) { return JSON.stringify(record) + '\n'; }
@@ -447,13 +482,23 @@ export async function exportCollection(collectionPath, outputPath) {
         throw new Error('authored improver files do not match their digest');
       const traces = Array.isArray(artifact.traces) ? artifact.traces : [];
       const byCall = new Map(traces.map(trace => [trace.callId, trace]));
-      const eligible = traces.filter(trace => trace.outcome === 'done' &&
-        trace.events?.some(event => event.kind === 'manifest' && event.definition_source === 'improveStep/rewriteProgram.nl'));
+      const eligible = traces.filter(trace => trace.outcome === 'done' && editorSources().includes(definitionSourceOf(trace)));
       const matches = [];
       for (const trace of eligible) {
-        const parent = byCall.get(trace.parentCallId);
-        if (parent?.callId === trace.parentCallId &&
-            parentSelectionProof(parent, artifact.selected, artifact.selectedFiles, paired.searchState)) matches.push({ trace, parent });
+        if (stageOf(definitionSourceOf(trace)).generation === LEGACY) {
+          // The model-run step's final state records which edit it selected.
+          const parent = byCall.get(trace.parentCallId);
+          if (parent?.callId === trace.parentCallId &&
+              parentSelectionProof(parent, artifact.selected, artifact.selectedFiles, paired.searchState)) matches.push({ trace, parent });
+        } else {
+          // No step invocation exists: the edit that produced the selected source is found by replaying each editor
+          // offline and comparing the source it leaves with the selected one, then the run state vouches for it.
+          const own = artifact.authorExchanges.filter(exchange => exchange.request?.invocation_id === trace.callId);
+          if (!own.length) continue;
+          let replayed;
+          try { replayed = await replayEditor({ runtime, artifact, trace, exchanges: own }); } catch { continue; }
+          if (stateHistorySelectionProof(paired.searchState, artifact.selected, replayed.digest(replayed.after))) matches.push({ trace, parent: undefined });
+        }
       }
       if (matches.length !== 1) throw new Error(`expected one child invocation linked to accepted selected candidate; found ${matches.length}`);
       const savedChild = childTraceFields(matches[0].trace);
@@ -466,7 +511,7 @@ export async function exportCollection(collectionPath, outputPath) {
       if (replayedChildren.length !== 1) throw new Error(`expected one exact child input/output match in host replay; found ${replayedChildren.length}`);
       const groups = artifact.authorExchanges.filter(exchange => exchange.request?.invocation_id === matches[0].trace.callId);
       if (!groups.length) throw new Error('selected rewrite has no recorded author exchanges');
-      const task = supportTaskDefinition(definition, artifact.selectedFiles);
+      const task = supportTaskDefinition(definition, artifact.selectedFiles, definitionSourceOf(matches[0].trace));
       if (Folder.fromFiles(artifact.selectedFiles).snapshot().digest !== artifact.selected)
         throw new Error('selected candidate files do not match their source digest');
       const verified = await replayAcceptedChild({ runtime, artifact,

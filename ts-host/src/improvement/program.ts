@@ -4,10 +4,10 @@ import { OperationJournal } from './operations.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { Folder, FolderSnapshot } from '../native/scoped-fs.js';
 import { createNatlangRuntime, type InvocationTrace, type ModelDriver } from '../runtime/node.js';
-import { loadVirtualNatlang } from '../runtime/virtual-project.js';
+import { loadVirtualCallables } from '../runtime/virtual-project.js';
 import { AUTHORED_IMPROVER } from './authored-source.js';
 import { SourceEvaluator, sourceFiles,SOURCE_EVALUATION_VERSION } from './host.js';
-import { EVALUATOR_DECLARATION, PLANS_DECLARATION, planService } from './services.js';
+import { planService } from './services.js';
 import { IterationLimitError,IterationDivergedError } from '../runtime/iterate.js';
 import {NatlangCallError} from '../runtime/kernel.js';
 import { BudgetExhausted, UsageGateway } from '../evaluation/usage.js';
@@ -24,6 +24,21 @@ export type ImproveProgramOptions = { folder: Folder; contract: ProgramContract;
   improver: ModelDriver; executor: ModelDriver; executorId: string; executorTimeoutMs?:number; excludeModelWaitFromTimeout?:boolean; metadataOnlySkillFiles?:string[]; budget: BudgetLimits; signal?: AbortSignal; trace?: (trace: InvocationTrace) => void; seed?: number; directory?: string; improverSource?: FolderSnapshot; gateway?:UsageGateway; evaluationLevel?:1|2; executeCase?: import('./host.js').SourceCaseExecution; singleStep?:boolean; scoring?:import('./host.js').SourceResultScoring; transformation?:TransformationSpec;
   captureExactRewriteIO?: boolean };
 class InvalidImprovementState extends Error {}
+/**
+ * Exact capture of the arguments and result of every natural-language stage of the authored improver (the editors, the
+ * diagnose and hypothesize stages, the search policies): each `.nl` in a folder of the program. The training exporters
+ * replay these invocations, and a bounded state summary cannot be replayed.
+ */
+function exactStageCapture(authored: Readonly<Record<string, string>>) {
+  const sources = Object.keys(authored).filter(path => path.endsWith('.nl') && path.includes('/'));
+  const names = new Set<string>();
+  for (const path of sources) {
+    const header = /^---\n([\s\S]*?)\n---/.exec(authored[path]!)?.[1] ?? '';
+    const args = /^args:\n((?:[ ]{2}.*\n?)*)/m.exec(header)?.[1] ?? '';
+    for (const match of args.matchAll(/^ {2}([A-Za-z_$][\w$]*)\??:/gm)) names.add(match[1]!);
+  }
+  return { definitionSources: sources, inputArguments: [...names], captureOutput: true, maxBytes: 8_000_000 };
+}
 /** The SDK entry runs an authored reducer; native services supply only source and evidence authority. */
 export async function improveProgram(options: ImproveProgramOptions) {
   if (!Number.isSafeInteger(options.policy.maxExperiments) || options.policy.maxExperiments < 1 || !Number.isSafeInteger(options.policy.maxPopulation) || options.policy.maxPopulation < 2) throw new RangeError('finite experiment and population limits are required');
@@ -31,7 +46,12 @@ export async function improveProgram(options: ImproveProgramOptions) {
   if(options.policy.objective!==undefined&&!['quality','source-size','model-calls'].includes(options.policy.objective))throw new RangeError('unknown improvement objective');
   const authored = options.improverSource ? sourceFiles(options.improverSource) : AUTHORED_IMPROVER;
   // The selected improver is frozen for this invocation; adoption only affects later invocations.
-  const step = loadVirtualNatlang(authored, 'improveStep.nl');
+  // One experiment is crisp mechanism (improveStep/lifecycle.ts) that calls the natural-language stages. The folder
+  // iteration applies it as a directory reducer: it runs on a private copy of the folder and its changes are installed
+  // when it returns. The evaluator and the plan journal are host capabilities handed to it; no natural-language stage
+  // can reach them.
+  const lifecycle = (loadVirtualCallables(authored) as { improveStep?: { lifecycle?: { step?: (...args: unknown[]) => Promise<ImprovementState> } } }).improveStep?.lifecycle;
+  if (typeof lifecycle?.step !== 'function') throw new TypeError('the authored program-improver has no improveStep/lifecycle.ts step');
   const journal = options.directory ? new OperationJournal(options.directory) : undefined;
   const identity = fingerprint({ runtime:6,compiler:NATLANG_COMPILE_VERSION,evaluation:SOURCE_EVALUATION_VERSION,authored, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384,limits:{maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4,maxRequests:options.budget.maxModelCalls}}, seed: options.seed ?? 0, source: options.folder.snapshot().digest, contract: options.contract, cases: options.cases, policy: options.policy, transformation:options.transformation??null, executor: options.executorId, executorTimeoutMs:options.executorTimeoutMs??120000, excludeModelWaitFromTimeout:options.excludeModelWaitFromTimeout??false, metadataOnlySkillFiles:options.metadataOnlySkillFiles??null, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, budget: options.budget });
   const savedIdentity = journal?.read<string>('run-identity')?.value;
@@ -57,11 +77,11 @@ export async function improveProgram(options: ImproveProgramOptions) {
     return evaluator.evaluate(folder,{...request,seed});
   };
   const task = createNatlangRuntime({ model: { driver: (request,signal) => gateway.request(options.improver,request,signal??options.signal,'reflection'), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
-    exactHostTraceCapture: options.captureExactRewriteIO ? { definitionSources: ['improveStep/editSource.nl','improveStep/editSourceStructural.nl'],
-      inputArguments: ['request'], captureOutput: true, maxBytes: 8_000_000 } : undefined,
-    trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), services: { evaluator: { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) }, plans: planService(journal) },
-    serviceDeclarations: { evaluator: EVALUATOR_DECLARATION, plans: PLANS_DECLARATION },
-    serviceScopes: { evaluator:['improveStep.nl'], plans:['improveStep.nl'] }, limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
+    exactHostTraceCapture: options.captureExactRewriteIO ? exactStageCapture(authored) : undefined,
+    trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });
+  const stepEvaluator = { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) };
+  const plans = planService(journal);
+  const step = (folder: unknown, state: ImprovementState, policy: unknown) => lifecycle.step!(folder, stepEvaluator, plans, state, policy);
   const initial: ImprovementState = { iteration: 0, done: false, incumbent: baselineSource.digest, quality: 0, population: [], history: [], stopReason: '' };
   const checkpoint = journal?.checkpoint<{ source: string; state: ImprovementState }>();
   let revision = checkpoint?.revision ?? 0;
@@ -98,7 +118,8 @@ export async function improveProgram(options: ImproveProgramOptions) {
     const folder = committed ? restore(committed.source) : lastValid.folder;
     const state = committed?.state ?? lastValid.state;
     const interrupted = options.signal?.aborted || error instanceof IterationLimitError || error instanceof BudgetExhausted || gateway.ledger.usage.modelCalls >= options.budget.maxModelCalls;
-    const semanticFailure=error instanceof NatlangCallError||(error instanceof Error&&error.cause instanceof NatlangCallError);
+    const boundName=(value:unknown)=>(value as {name?:string}|undefined)?.name==='PolicyBoundError';
+    const semanticFailure=error instanceof NatlangCallError||(error instanceof Error&&(error.cause instanceof NatlangCallError||boundName(error.cause)))||boundName(error);
     const files=sourceFiles(folder),baseFiles=sourceFiles(baselineSource);
     const sourceDiff=[...new Set([...Object.keys(baseFiles),...Object.keys(files)])].sort().filter(path=>baseFiles[path]!==files[path]).map(path=>({path,kind:baseFiles[path]===undefined?'added':files[path]===undefined?'deleted':'modified'}));
     return {folder,state,disposition:interrupted ? 'interrupted' : error instanceof IterationDivergedError||error instanceof InvalidImprovementState||semanticFailure?'incomplete-search':'infrastructure-failure',error:String(error),sourceDiff,baseline:null,validation:null,

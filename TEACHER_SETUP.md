@@ -1,5 +1,7 @@
 # Teacher execution setup
 
+> **Retired (owner decision 2026-10-10):** `scripts/combine_sft.py`, `scripts/select_teacher_programs.py` were removed with the old candidate/teacher lines; see plans/LEGACY_CODE_REMOVAL.md. Restore from git history (`git log --diff-filter=D -- PATH`) if ever needed.
+
 > **Current path:** `scripts/run_teacher_generation.sh`. It builds the program IR
 > snapshot (`natlang.program/2`), enforces coverage, collects with the Node
 > collector, and materializes and exports turns; re-running resumes atomic jobs.

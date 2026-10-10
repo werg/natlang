@@ -26,7 +26,7 @@ function componentModel(rewrite) {
  return scriptedModel(opening => opening.includes('Perform one component-search experiment') ? componentStep : rewrite(opening));
 }
 function rewriteComponents(text) {
-  return componentModel(() => `const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=[${JSON.stringify(text())}]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return candidate;`).driver;
+  return componentModel(() => `const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=[${JSON.stringify(text())}]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return "edited";`).driver;
 }
 
 function fixtureSuite({ disposeFailure = false } = {}) {
@@ -169,6 +169,38 @@ test('GEPA and reflection search evaluate real runtime, retain baseline, persist
   }
 });
 
+test('the component edit is checked exactly and sent back once with the problem text', async () => {
+  const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+  const model = scriptedModel(opening => /first word/.test(opening) ? 'return value.split(" ")[0]' : 'return value');
+  let edits = 0;
+  const rewrite = (broken) => componentModel(opening => {
+    edits++;
+    const retry = opening.includes('problem: "');
+    const segments = edits === 1 && broken ? '["Return the first word of value.", "an extra segment"]' : '["Return the first word of value."]';
+    const guard = retry ? 'if(!/segments/.test(String(request.problem)))throw Error("the retry must carry the problem text: "+request.problem);'
+      : 'if(request.problem!==undefined)throw Error("a first attempt carries no problem");';
+    return guard + 'const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=' + segments + '; await folder.file("components.json").writeText(JSON.stringify(candidate)); return "edited";';
+  }).driver;
+  const events = [];
+  const result = await optimize(suite, { executor: model.driver, reflection: rewrite(true), seed: 3, out: join(fixture.root, 'retry'), finalTest: false,
+    progress: event => events.push(event) });
+  assert.ok(edits >= 2, 'the first proposal was edited twice: the attempt and its correction');
+  assert.equal(events.filter(event => event.type === 'accepted').length, 1);
+  assert.equal(events.some(event => event.type === 'invalid-proposal'), false, 'the corrected candidate reached the engine valid');
+  assert.equal(result.report.selectedValidation.quality, 1);
+});
+
+test('a component edit that still breaks a constraint after its correction is an invalid proposal, not a failure of the search', async () => {
+  const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path);
+  const model = scriptedModel(opening => /first word/.test(opening) ? 'return value.split(" ")[0]' : 'return value');
+  const reflection = componentModel(() => 'const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=["first","second"]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return "edited";').driver;
+  const events = [];
+  const result = await optimize(suite, { executor: model.driver, reflection, seed: 3, out: join(fixture.root, 'unfixed'), finalTest: false,
+    progress: event => events.push(event) });
+  assert.ok(events.some(event => event.type === 'invalid-proposal' && /segments/.test(event.error ?? '')), JSON.stringify(events.map(event => event.type)));
+  assert.equal(result.report.selectedValidation.quality, 0, 'no invalid candidate was installed');
+});
+
 test('orderly interruption after a committed decision resumes the same scripted incumbent and PRNG state', async () => {
   const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path), key = suite.components[0];
   const makeModel = () => scriptedModel(opening => opening.includes('first word') ? 'return value.split(" ")[0]' : 'return value');
@@ -301,7 +333,7 @@ test('revalidation of changed guidance requires validation coverage of authored 
 test('default optimizer edits typed native component source rather than string-encoded proposals', async()=>{
   const fixture=fixtureSuite(),suite=await loadEvaluationSuite(fixture.path);
   const executor=scriptedModel(opening=>opening.includes('first word')?'return value.split(" ")[0]':'return value');
-  const reflection=componentModel(()=> 'const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=["Return the first word of value."]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return candidate;');
+  const reflection=componentModel(()=> 'const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=["Return the first word of value."]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return "edited";');
   const result=await optimize(suite,{executor:executor.driver,reflection:reflection.driver,out:join(fixture.root,'native-default'),budget:{...suite.suite.budget,maxModelCalls:100}});
   assert.equal(result.report.selectedValidation.quality,1);
   assert.ok(reflection.openings.some(opening=>opening.includes('typed edit')));

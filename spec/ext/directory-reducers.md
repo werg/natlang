@@ -12,6 +12,15 @@ returns the typed result and discards file changes.
 result selects every change; `commit` selects changes by glob. Folder writers
 serialize.
 
+A directory reducer need not be a `.nl` function. `folder.apply`, `folder.propose` and
+`folder.iterateOn` also take a host or TypeScript function `(folder, ...args)`. It has
+the same contract: it runs on an isolated writable copy of the folder, receives that
+copy as `folder`, may call `folder.apply` on natural-language reducers inside it, and
+its changes are validated and installed when it returns and discarded when it throws.
+Use one for the crisp mechanism around natural-language stages (a fixed sequence of
+checks and calls), so that no model call sequences it. A natural-language function that
+is not a `kind: directory-reducer` is not accepted as a reducer.
+
 A reducer over a context folder is the way to compute a new context: its staged
 tree, once compiled, is a file context from which new executable nodes may be
 bound (see Contexts). Self-improvement is a function from a context and evidence

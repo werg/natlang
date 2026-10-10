@@ -13,7 +13,7 @@ import { EvaluationFeedbackError } from '../evaluation/feedback.js';
 import type { Candidate, ComponentDescriptor } from '../adaptation/types.js';
 import type { EvaluationBatch, PreparedSuite } from '../evaluation/types.js';
 import { frontierParents, memberOf, meanBetter, mergeCandidates } from './strategies/gepa.js';
-import { draw, pick, prune } from '../gepa/index.js';
+import { componentProblem, draw, pick, prune } from '../gepa/index.js';
 import { checkPolicySettings, closeUnderDependencies, componentFactsOf, crispMove, decide, moveFacts, parentChoices, policyFunction, verifyComponents, verifyMove, verifyParent, type ComponentPolicySettings } from './policies.js';
 import { ComponentSelector } from './vendor/ax-gepa/gepaSelection.js';
 import { getUpdateGroup } from './vendor/ax-gepa/gepaDependencies.js';
@@ -88,8 +88,9 @@ export async function runAuthoredSearch(context: {prepared:PreparedSuite;options
     },
     merge:()=>{if(!plan)throw Error('experiment not opened');const value=mergeCandidates(state.baseline.value,plan.parent.value,plan.partner.value);if(value)merged.add(fingerprint(value));return value;},
     check:async(value:Candidate)=>{if(!plan)throw Error('experiment not opened');
+      // The edit of the selected keys is checked exactly; a composed candidate (search.merge) changes several, by construction.
+      if(!merged.has(fingerprint(value))){const problem=componentProblem(plan.parent.value,value,plan.keys);if(problem)return {valid:false,id:'',feedback:problem};}
       let candidate:Candidate;try {candidate=validateCandidate(value,descriptors);}catch(error){return {valid:false,id:'',feedback:String(error)};}
-      for(const [key,base]of Object.entries(plan.parent.value))if(!merged.has(fingerprint(candidate))&&!plan.keys.includes(key)&&canonical(base)!==canonical(candidate[key]))throw Error('unselected component changed: '+key);
       const checked=await target.validate(candidate);return {...checked,id:checked.valid?register(candidate):''};},
     evaluate:async(id:string,split:'mini'|'train'|'validation',parent=false)=>{
       if(!plan)throw Error('experiment not opened');

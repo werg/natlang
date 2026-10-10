@@ -185,5 +185,9 @@ test('the authored program has no magic control strings and no caller-hint hypot
     assert.doesNotMatch(text, /startsWith\('fixture-error:'\)|reason==='No supported hypothesis\.'|'fixture-error: '/, `${name} decides from dispositions`);
   }
   assert.doesNotMatch(AUTHORED_IMPROVER['types.ts'], /hypothesis: string/);
-  assert.doesNotMatch(AUTHORED_IMPROVER['improveStep.nl'], /rewriteProgram/);
+  // One experiment is crisp mechanism that calls the stages; no model sequences it.
+  assert.match(AUTHORED_IMPROVER['improveStep.nl'], /no model sequences it|runs in improveStep\/lifecycle\.ts/, 'improveStep.nl is the typed root, not a model-run step');
+  assert.doesNotMatch(AUTHORED_IMPROVER['improveStep.nl'], /lifecycle\.step\(/);
+  assert.match(AUTHORED_IMPROVER['improveStep/lifecycle.ts'], /export async function step/);
+  for (const [name, text] of Object.entries(AUTHORED_IMPROVER)) assert.doesNotMatch(text, /rewriteProgram/, name);
 });
