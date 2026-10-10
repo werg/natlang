@@ -8,10 +8,13 @@ export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judge
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
 /** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
+export type NumericListFieldSpec = { key: string; separator: '; '; empty_value: 'none' };
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
   threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | (string & {});
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
+  /** Explicit answer-map keys whose values are ordered exact unsigned integer lists. */
+  numeric_list_fields?: NumericListFieldSpec[];
   /** Explicit answer-map keys whose lowercase strings are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
   rubric?: string; context?: unknown; [key: string]: unknown };
@@ -119,9 +122,69 @@ export function jsonStringRecordWithRadixFieldsCanonical(value: unknown, radixFi
     fields.has(key) ? [key, { exact_radix_integer: parsed.get(key)!.toString() }] : [key, { exact_string: entry }]));
 }
 
-function jsonStringRecordAnswerCanonical(value: unknown, numericKeys: unknown, radixFields: unknown): string | null {
+/** Canonicalize explicitly declared measured-count lists only. Grouping commas are accepted
+ * only in standard three-digit groups; order and list membership remain exact. */
+export function jsonStringRecordWithNumericListFieldsCanonical(value: unknown, numericListFields: unknown = []): string | null {
+  if (!validNumericListFieldSchema(numericListFields)) return null;
+  const fields = new Map<string, NumericListFieldSpec>();
+  for (const field of numericListFields) {
+    fields.set(field.key, field as NumericListFieldSpec);
+  }
+  let record: Record<string, unknown>;
+  if (typeof value === 'string') {
+    if (jsonStringRecordCanonical(value) === null) return null;
+    try { record = JSON.parse(value) as Record<string, unknown>; } catch { return null; }
+  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+    try {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return null;
+      record = Object.create(null) as Record<string, unknown>;
+      for (const key of Object.keys(value)) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !('value' in descriptor) || typeof descriptor.value !== 'string') return null;
+        record[key] = descriptor.value;
+      }
+    } catch { return null; }
+  } else return null;
+
+  const parsed = new Map<string, string[]>();
+  for (const [key, field] of fields) {
+    if (!Object.hasOwn(record, key) || typeof record[key] !== 'string') return null;
+    const text = record[key] as string;
+    if (text === field.empty_value) { parsed.set(key, []); continue; }
+    const items = text.split(field.separator);
+    if (!items.length) return null;
+    const canonicalItems: string[] = [];
+    for (const item of items) {
+      if (!/^(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)$/.test(item)) return null;
+      canonicalItems.push(BigInt(item.replaceAll(',', '')).toString());
+    }
+    parsed.set(key, canonicalItems);
+  }
+  return JSON.stringify(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) =>
+    fields.has(key) ? [key, { exact_unsigned_integer_list: parsed.get(key)! }] : [key, { exact_string: entry }]));
+}
+
+function validNumericListFieldSchema(value: unknown): value is NumericListFieldSpec[] {
+  if (!Array.isArray(value)) return false;
+  const keys = new Set<string>();
+  for (const field of value) {
+    if (!field || typeof field !== 'object' || Array.isArray(field) ||
+        Object.keys(field).sort().join(',') !== 'empty_value,key,separator' ||
+        typeof field.key !== 'string' || !field.key || field.separator !== '; ' || field.empty_value !== 'none' ||
+        keys.has(field.key)) return false;
+    keys.add(field.key);
+  }
+  return true;
+}
+
+function jsonStringRecordAnswerCanonical(value: unknown, numericKeys: unknown, radixFields: unknown, numericListFields: unknown): string | null {
   if (radixFields !== undefined && !Array.isArray(radixFields)) return null;
-  if (Array.isArray(numericKeys) && numericKeys.length && Array.isArray(radixFields) && radixFields.length) return null;
+  if (numericListFields !== undefined && !validNumericListFieldSchema(numericListFields)) return null;
+  const declared = [numericKeys, radixFields, numericListFields].filter(value => Array.isArray(value) && value.length > 0).length;
+  if (declared > 1) return null;
+  if (Array.isArray(numericListFields) && numericListFields.length)
+    return jsonStringRecordWithNumericListFieldsCanonical(value, numericListFields);
   return Array.isArray(radixFields) && radixFields.length ?
     jsonStringRecordWithRadixFieldsCanonical(value, radixFields) : jsonStringRecordWithNumericKeysCanonical(value, numericKeys);
 }
@@ -219,8 +282,12 @@ export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
 export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'markdown-terminal-newline' | (string & {}); threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
+  /** Explicit answer file for return-value consistency when the default answers.json names do not apply. */
+  return_path?: string;
   /** Explicit answer-map keys whose string values are exact decimal quantities. */
   numeric_keys?: string[];
+  /** Explicit answer-map keys whose values are ordered exact unsigned integer lists. */
+  numeric_list_fields?: NumericListFieldSpec[];
   /** Explicit answer-map fields whose lowercase values are unsigned numerals in a declared base. */
   radix_fields?: Array<{ key: string; base: number }>;
   /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
@@ -328,6 +395,12 @@ export function markdownTerminalNewlineEqual(path: string, actual: string | unde
 export function checkFiles(actual: Record<string, string>, expected: Record<string, string>, input: Record<string, string>,
     spec: FilesOracle = {}, judgments: FilesVerdict['judgments'] = {}): FilesVerdict {
   assertKnownComparator('compare', spec.compare, BUILTIN_FILE_COMPARES);
+  if (spec.return_path !== undefined && (typeof spec.return_path !== 'string' || !spec.return_path || spec.return_path.startsWith('/') ||
+      spec.return_path.includes('\\') || spec.return_path.split('/').some(part => !part || part === '.' || part === '..')))
+    return { accepted: false, score: 0, passed: 0, items: 0, failed: [], errors: ['invalid_return_path'], pending: [], quality_version: DATA_QUALITY_VERSION };
+  if (spec.compare === 'json-string-record' && spec.numeric_list_fields !== undefined &&
+      !validNumericListFieldSchema(spec.numeric_list_fields))
+    return { accepted: false, score: 0, passed: 0, items: 0, failed: [], errors: ['invalid_numeric_list_field_schema'], pending: [], quality_version: DATA_QUALITY_VERSION };
   const compare = spec.compare ?? 'exact', threshold = probability(spec.threshold ?? 0.9, 'files'),
     span = probability(spec.span ?? 0.5, 'files span');
   if (compare === 'content') {
@@ -396,10 +469,10 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     // Existing source files are checked exactly, even in a CSV/rewrite task.
     if (want === input[path]) { item(path, got === want); continue; }
     if (compare === 'json-string-record') {
-      const parsed = jsonStringRecordAnswerCanonical(got, spec.numeric_keys, spec.radix_fields);
+      const parsed = jsonStringRecordAnswerCanonical(got, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields);
       const candidates = [want, ...(spec.alternates?.[path] ?? [])];
       item(path, parsed !== null && candidates.some(candidate =>
-        parsed === jsonStringRecordAnswerCanonical(candidate, spec.numeric_keys, spec.radix_fields)));
+        parsed === jsonStringRecordAnswerCanonical(candidate, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields)));
       continue;
     }
     if (compare === 'qa-string-map') {
@@ -469,7 +542,8 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
       positiveRecall >= threshold && positivePrecision >= threshold), score, passed, items, failed: failed.slice(0, 20),
     errors, pending, quality_version: DATA_QUALITY_VERSION,
     ...(compare === 'qa-string-map' ? { comparison_version: 'squad-token-map/1' } : {}),
-    ...(compare === 'json-string-record' ? { comparison_version: spec.numeric_keys?.length ?
+    ...(compare === 'json-string-record' ? { comparison_version: spec.numeric_list_fields?.length ?
+      'json-string-record-integer-list-fields/1' : spec.numeric_keys?.length ?
       'json-string-record-decimal-fields/1' : spec.radix_fields?.length ? 'json-string-record-radix-fields/1' :
         'json-string-record-object/1' } : {}),
     ...(compare === 'csv' ? { positive_recall: positiveRecall, positive_precision: positivePrecision } : {}),
@@ -530,12 +604,16 @@ export function checkFileReturn(actual: unknown, files: Record<string, string>, 
     return written !== undefined && registered.equal(actual, written);
   }
   if (spec.compare === 'json-string-record') {
-    const answerFiles = ['answers.json', 'answer.json'].filter(path => Object.hasOwn(files, path));
-    if (answerFiles.length !== 1) return false;
+    if (spec.return_path !== undefined && (typeof spec.return_path !== 'string' || !spec.return_path || spec.return_path.startsWith('/') ||
+        spec.return_path.includes('\\') || spec.return_path.split('/').some(part => !part || part === '.' || part === '..'))) return false;
+    if (spec.numeric_list_fields !== undefined && !validNumericListFieldSchema(spec.numeric_list_fields)) return false;
+    const answerPath = spec.return_path;
+    const answerFiles = answerPath === undefined ? ['answers.json', 'answer.json'].filter(path => Object.hasOwn(files, path)) : [answerPath];
+    if (answerFiles.length !== 1 || !Object.hasOwn(files, answerFiles[0]!)) return false;
     const written = files[answerFiles[0]!];
-    const returned = jsonStringRecordAnswerCanonical(actual, spec.numeric_keys, spec.radix_fields);
+    const returned = jsonStringRecordAnswerCanonical(actual, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields);
     return written !== undefined && returned !== null &&
-      returned === jsonStringRecordAnswerCanonical(written, spec.numeric_keys, spec.radix_fields);
+      returned === jsonStringRecordAnswerCanonical(written, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields);
   }
   if (!spec.return_count) return true;
   try { return canonical(actual) === canonical(fileReturnValue(files, input, spec)); } catch { return false; }
@@ -564,10 +642,13 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     return { accepted: answer !== null && candidates.some(candidate => qaStringMapCanonical(candidate) === answer), level };
   }
   if (level === 'normalized' && spec.normalization === 'json-string-record') {
-    const answer = jsonStringRecordAnswerCanonical(actual, spec.numeric_keys, spec.radix_fields);
+    if (spec.numeric_list_fields !== undefined && !validNumericListFieldSchema(spec.numeric_list_fields))
+      return { accepted: false, level, comparison_version: 'invalid-json-string-record-spec/1' };
+    const answer = jsonStringRecordAnswerCanonical(actual, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields);
     return { accepted: answer !== null && candidates.some(candidate =>
-      jsonStringRecordAnswerCanonical(candidate, spec.numeric_keys, spec.radix_fields) === answer), level,
-      comparison_version: spec.numeric_keys?.length ? 'json-string-record-decimal-fields/1' : spec.radix_fields?.length ?
+      jsonStringRecordAnswerCanonical(candidate, spec.numeric_keys, spec.radix_fields, spec.numeric_list_fields) === answer), level,
+      comparison_version: spec.numeric_list_fields?.length ? 'json-string-record-integer-list-fields/1' : spec.numeric_keys?.length ?
+        'json-string-record-decimal-fields/1' : spec.radix_fields?.length ?
         'json-string-record-radix-fields/1' : 'json-string-record-object/1' };
   }
   const registered = level === 'normalized' ? recordComparator(spec.normalization) : undefined;

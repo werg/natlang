@@ -180,6 +180,29 @@ for (let newIndex = 0; newIndex < specs.length; newIndex++) {
   setPassStates(world, expected);
   const modelFacingReplacements = applyModelFacingReplacements(world, spec);
   const row = makeGuidedSoftIterateCase(world, newIndex, { revision, shapeVersion });
+  // Successor specs may explicitly declare a measure as an ordered count list.
+  // This is scoped to that authored field; no other strings or map fields normalize.
+  if (spec.numeric_list_fields !== undefined) {
+    const declarations = spec.numeric_list_fields;
+    if (!Array.isArray(declarations) || declarations.length !== 1 ||
+        Object.keys(declarations[0] ?? {}).sort().join(',') !== 'empty_value,key,separator' ||
+        declarations[0]?.key !== 'measure' || declarations[0]?.separator !== '; ' || declarations[0]?.empty_value !== 'none')
+      throw new Error(`${row.id}: numeric_list_fields must explicitly declare measure with separator "; " and empty_value "none"`);
+    const task = JSON.parse(row.semantics.folder_files['task.json']);
+    const measureFormat = task.output_contract?.fields?.measure;
+    const measure = row.semantics.expected?.measure;
+    const declaresListSeparator = typeof measureFormat === 'string' &&
+      (/semicolon and one space/i.test(measureFormat) || /separated by\s+["'`](?:; )["'`]/i.test(measureFormat));
+    const listValue = value => typeof value === 'string' && (value === 'none' ||
+      value.split('; ').length > 0 && value.split('; ').every(item => /^(?:0|[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})*)$/.test(item)));
+    if (!declaresListSeparator ||
+        !/none/i.test(measureFormat) || !listValue(measure))
+      throw new Error(`${row.id}: authored measure field does not declare the numeric-list contract`);
+    row.semantics.oracle = { level: 'normalized', normalization: 'json-string-record', numeric_list_fields: declarations };
+    if (typeof task.output_path !== 'string' || !task.output_path)
+      throw new Error(`${row.id}: numeric-list output contract must name output_path`);
+    row.semantics.files_oracle = { compare: 'json-string-record', numeric_list_fields: declarations, return_path: task.output_path };
+  }
   const beforeId = row.id;
   row.id = row.id.replaceAll('authored_semantic_iterate_worlds_v15', `authored_semantic_iterate_reducers_v${sourceVersion}`)
     .replace(/:v15-/g, `:v${sourceVersion}-`).replace(/:evidence-scoped-guided-soft-state-derived-decision-v\d+$/, `:evidence-scoped-guided-soft-state-derived-decision-${caseShapeVersion}`);
