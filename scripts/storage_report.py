@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import storage_retention as retention  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'training' / 'neuralese'))
-from natlang_neuralese.common.paths import root  # noqa: E402
+from natlang_neuralese.common.paths import root as machine_root  # noqa: E402
 
 GIB = 2**30
 
@@ -49,7 +49,7 @@ def extras(policy: dict, scanned: list[str], timeout: int) -> dict:
     report['cache'] = sorted(((child.name, du(child, timeout)) for child in cache.iterdir()
                               if child.is_dir() and not child.is_symlink()), key=lambda x: -(x[1] or 0)) \
         if cache.is_dir() else []
-    external = root('data_hdd')
+    external = machine_root('data_hdd')
     report['external_top'] = sorted(((str(child), du(child, timeout)) for child in external.iterdir()
                                      if child.is_dir() and not any(str(child) == s or s.startswith(str(child) + '/')
                                                                    for s in scanned)),
@@ -85,7 +85,7 @@ def markdown(report: dict, top: int = 25) -> str:
     lines += [f'| `{d}` | {gb(b)} |' for d, b in sorted(revisions.items(), key=lambda kv: -kv[1])[:15]]
     lines += ['', '## ~/.cache', '', '| Dir | GB |', '|---|---|']
     lines += [f'| {name} | {gb(size)} |' for name, size in report['extras']['cache'][:15]]
-    lines += ['', f"## Other {root('data_hdd')} top directories (report only)", '', '| Dir | GB |', '|---|---|']
+    lines += ['', f"## Other {machine_root('data_hdd')} top directories (report only)", '', '| Dir | GB |', '|---|---|']
     lines += [f'| {name} | {gb(size)} |' for name, size in report['extras']['external_top']]
     lines += ['', '## Docker', '', '| Type | Total | Size | Reclaimable |', '|---|---|---|---|']
     lines += [f'| {d.get("Type")} | {d.get("TotalCount")} | {d.get("Size")} | {d.get("Reclaimable")} |'
