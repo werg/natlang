@@ -7,8 +7,11 @@ conflict markers in other sessions' files and their staged entries unstaged. Thi
 
   1. `git fetch origin`;
   2. builds the commit in a temporary index seeded from origin/main (`git read-tree origin/main`) holding the
-     caller's paths' worktree content. A path upstream changed since the local HEAD (the caller's base) is merged
-     3-way (`git merge-file` of HEAD / origin/main / worktree); any conflict aborts before anything is pushed;
+     caller's paths' worktree content. What to publish is decided against origin/main: a path whose worktree
+     content differs from origin/main's is published, including content committed locally but never pushed. The
+     caller's base is the merge base of the local HEAD and origin/main (the local HEAD itself when it is behind);
+     a path upstream changed since that base is merged 3-way (`git merge-file` of base / origin/main / worktree);
+     any conflict aborts before anything is pushed;
   3. `git commit-tree` with parent origin/main, `git push origin <sha>:main`; a non-fast-forward rejection refetches
      and rebuilds (up to --retries times);
   4. advances the shared checkout without stashing: paths whose worktree already holds the new content get that
@@ -19,7 +22,7 @@ conflict markers in other sessions' files and their staged entries unstaged. Thi
 
 Usage:
   scripts/git_publish.py -m "Subject" [-m "Body paragraph"] [--trailer "Key: value"] PATH...
-  scripts/git_publish.py --dry-run -m "Subject" PATH...      # show what would be committed; push nothing
+  scripts/git_publish.py --dry-run -m "Subject" PATH...      # show the plan; push and change nothing
   scripts/git_publish.py --sync-only                         # fetch and fast-forward the checkout only
 
 A deleted path is published as a deletion. A directory expands to its tracked and untracked (not ignored) files.
@@ -151,7 +154,7 @@ def merge3(git: Git, path: str, base: tuple[str, str], upstream: tuple[str, str]
         for name, (_, sha) in (("mine", mine), ("base", base), ("upstream", upstream)):
             files[name] = Path(tmp) / name
             files[name].write_bytes(git.blob(sha))
-        proc = git.run("merge-file", "-p", "-L", f"{path} (worktree)", "-L", f"{path} (local HEAD)", "-L",
+        proc = git.run("merge-file", "-p", "-L", f"{path} (worktree)", "-L", f"{path} (base)", "-L",
                        f"{path} (origin/main)", str(files["mine"]), str(files["base"]), str(files["upstream"]),
                        check=False)
         if proc.returncode != 0:
@@ -163,7 +166,8 @@ def merge3(git: Git, path: str, base: tuple[str, str], upstream: tuple[str, str]
 
 
 def plan_paths(git: Git, base: str, upstream: str, paths: list[str]):
-    """For each path: (action, new entry or None, note). Raises on conflict."""
+    """For each path: (action, new entry or None, note). Raises on conflict. `base` is the merge base of the local
+    HEAD and `upstream`: content the caller committed locally but never pushed differs from it and is published."""
     plan = []
     for path in paths:
         b = git.entry(base, path)
@@ -171,10 +175,10 @@ def plan_paths(git: Git, base: str, upstream: str, paths: list[str]):
         w = worktree_entry(git, path)
         if w is None and b is None and u is None:
             raise PublishError(f"{path}: not in the worktree, HEAD or origin/main")
-        if u == b:
-            new, note = w, "worktree"
-        elif w == u:
+        if w == u:
             new, note = u, "already upstream"
+        elif u == b:
+            new, note = w, "worktree"
         elif w is None or u is None or b is None:
             if w == b:  # caller did not touch it: keep upstream
                 new, note = u, "upstream (unchanged locally)"
@@ -370,21 +374,28 @@ def main(argv: list[str] | None = None) -> int:
                           file=sys.stderr)
                     return EXIT_ERROR
 
-        base = git.rev("HEAD")
-        if base is None:
+        head = git.rev("HEAD")
+        if head is None:
             raise PublishError("the checkout has no HEAD")
         for attempt in range(a.retries + 1):
             upstream = fetch(git, a.remote, a.branch)
-            if attempt == 0 and not git.is_ancestor(base, upstream):
-                ahead = git.out("rev-list", "--count", f"{upstream}..{base}")
+            # The caller's base: where the local HEAD and upstream diverged (HEAD itself when it is behind), so that
+            # named paths' content committed locally but never pushed counts as the caller's change.
+            base = git.out("merge-base", head, upstream)
+            if attempt == 0 and base != head:
+                ahead = git.out("rev-list", "--count", f"{upstream}..{head}")
                 print(f"git_publish: note: the checkout's HEAD has {ahead} commit(s) not on {a.remote}/{a.branch}; "
-                      "they are not published (only the named paths' changes relative to HEAD are)", flush=True)
+                      "only the named paths' content is published (their local commits included), not the commits",
+                      flush=True)
             plan = plan_paths(git, base, upstream, paths)
             commit, _ = build_commit(root, upstream, plan, message)
             for path, new, note in plan:
                 print(f"  {'delete' if new is None else 'publish'} {path} ({note})")
             if commit is None:
                 print(f"git_publish: nothing to publish; {a.remote}/{a.branch} already has these contents")
+                if a.dry_run:  # a dry run never changes HEAD, index or worktree
+                    print(advance_checkout(git, upstream, dry_run=True)[1])
+                    return EXIT_OK
                 new_head = upstream
                 break
             if a.dry_run:

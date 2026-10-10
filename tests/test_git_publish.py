@@ -251,3 +251,48 @@ def test_unpushed_local_commits_stay_local_and_the_checkout_merges_in_object_spa
     assert git(dgx, "diff", "--name-only").splitlines() == ["foreign_dirty.txt"]
     assert git(dgx, "diff", "--cached", "--name-only") == ""
     assert git(dgx, "stash", "list") == ""
+
+
+def test_dry_run_changes_nothing_even_when_there_is_nothing_to_publish(repos):
+    """A dry run never moves HEAD, the index or the worktree, also when the checkout is behind with local commits
+    (a dry run used to fall through to advancing the checkout when its plan was empty)."""
+    remote, dgx, pop = repos
+    write(pop, "other.txt", LINES + "from pop\n")
+    git(pop, "commit", "-qam", "pop change")
+    git(pop, "push", "-q", "origin", "main")
+    write(dgx, "foreign_staged.txt", "another session's local commit\n")
+    git(dgx, "commit", "-qam", "local, unpushed")
+    foreign_work(dgx)
+    head, status, index = git(dgx, "rev-parse", "HEAD"), git(dgx, "status", "--porcelain"), git(dgx, "ls-files", "-s")
+    for paths in (["other.txt"], ["mine.txt"]):  # upstream's content already; unchanged everywhere
+        assert publish(dgx, "--dry-run", "-m", "Dry", *paths) == 0
+        assert git(dgx, "rev-parse", "HEAD") == head
+        assert git(dgx, "status", "--porcelain") == status and git(dgx, "ls-files", "-s") == index
+        assert read(dgx, "other.txt") == LINES
+    write(dgx, "mine.txt", LINES + "mine\n")
+    assert publish(dgx, "--dry-run", "-m", "Dry", "mine.txt") == 0
+    assert git(dgx, "rev-parse", "HEAD") == head and git(remote, "rev-parse", "main") == git(pop, "rev-parse", "HEAD")
+    assert gp.main(["-C", str(dgx), "--sync-only", "--dry-run"]) == 0
+    assert git(dgx, "rev-parse", "HEAD") == head and read(dgx, "other.txt") == LINES
+
+
+def test_content_committed_locally_but_never_pushed_is_published(repos):
+    """The named paths are compared with origin/main, not the local HEAD: a change committed locally and never
+    pushed (worktree clean) is published; a path untouched locally keeps upstream's newer content."""
+    remote, dgx, pop = repos
+    write(pop, "other.txt", LINES + "from pop\n")
+    write(pop, "mine.txt", "pop's first line\n" + LINES[len("line 1\n"):])
+    git(pop, "commit", "-qam", "pop change")
+    git(pop, "push", "-q", "origin", "main")
+    write(dgx, "mine.txt", LINES + "mine, committed locally\n")
+    write(dgx, "foreign_staged.txt", LINES + "also committed locally\n")
+    git(dgx, "commit", "-qam", "local, unpushed")
+    assert git(dgx, "status", "--porcelain") == ""
+    assert publish(dgx, "-m", "Mine", "mine.txt", "other.txt") == 0
+    # mine.txt: the local commit's change merged 3-way with pop's (base: the merge base); other.txt: pop's kept.
+    assert remote_file(remote, "mine.txt") == ("pop's first line\n" + LINES[len("line 1\n"):] + "mine, committed locally").strip()
+    assert remote_file(remote, "other.txt").endswith("from pop")
+    assert remote_file(remote, "foreign_staged.txt") == LINES.strip()  # not named: not published
+    assert git(remote, "log", "--format=%s", "main").splitlines()[:2] == ["Mine", "pop change"]
+    assert read(dgx, "mine.txt") == "pop's first line\n" + LINES[len("line 1\n"):] + "mine, committed locally\n"
+    assert git(dgx, "stash", "list") == ""
