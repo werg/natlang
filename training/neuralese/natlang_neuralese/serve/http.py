@@ -51,7 +51,7 @@ import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .chat import RequestError
+from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
 from .grad import GradSession, decide, decide_many, embed_text, encode_text, new_adapter, optim_step
@@ -154,7 +154,7 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
-                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 2, "stream": True,
+                                        "max_block_length": engine.max_block, "context": engine.context, "grad": True, "grad_order": 2, "stream": True,
                                         "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()},
@@ -265,23 +265,24 @@ def make_handler(engine: Engine):
                         return self._error(500, "neuralese-write", "the write produced no block")
                     return self._json(201, blocks[0])
                 if self.path == "/v1/neuralese/view":
-                    from ..view import INSTRUCTIONS, TEMPLATE, TOOLS, window_of, write_view
+                    from ..view import INSTRUCTIONS, REPLY_TOKENS, TEMPLATE, TOOLS, window_of, write_view
 
                     body = self._object()
 
                     def write(messages):
                         # The template write of view's body: the reply forced to return_result, its value written.
                         request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
-                                                    max_tokens=engine.max_block + 64)
+                                                    max_tokens=engine.max_block + REPLY_TOKENS)
                         blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
                         if not blocks:
                             raise RequestError("neuralese-view", "a view write produced no block")
                         return blocks[0]["id"]
 
                     instructions = body.get("instructions") or None
-                    window = window_of(engine, instructions, body.get("window"))
-                    block, parts = write_view(write, body.get("system") or INSTRUCTIONS, body.get("value") or "",
-                                              instructions, engine.tokenizer, window)
+                    system = body.get("system") or INSTRUCTIONS
+                    window = window_of(engine, instructions, body.get("window"), system)
+                    block, parts = write_view(write, system, body.get("value") or "", instructions, engine.tokenizer,
+                                              window)
                     return self._json(201, {**engine.lookup(block).meta(), "parts": parts, "window": window})
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide
@@ -355,7 +356,28 @@ def make_handler(engine: Engine):
         def _event(self, value):
             self._chunk(b"data: " + (value if isinstance(value, bytes) else json.dumps(self._hold(value)).encode()) + b"\n\n")
 
+        def _client_gone(self) -> bool:
+            """Whether the client closed its connection (readable with nothing to read): a streamed reply checks this
+            while it has nothing to send, as the fork's sink.is_writable()."""
+            import select
+            import socket
+
+            try:
+                readable, _, _ = select.select([self.connection], [], [], 0)
+                return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b""
+            except OSError:
+                return True
+
         def _stream(self, request: GenerationRequest):
+            """A streamed chat completion. A client that leaves (a failed write, or a closed connection while the
+            stream has nothing to send) cancels the request: the engine drops it at its next round."""
+            try:
+                self._stream_events(request)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                request.cancelled = True
+                self.close_connection = True
+
+        def _stream_events(self, request: GenerationRequest):
             deltas: queue.Queue = queue.Queue()
             request.on_delta = deltas.put
             future = engine.submit(request)
@@ -381,7 +403,12 @@ def make_handler(engine: Engine):
             # Call markup is LFM2's Pythonic `<|tool_call_start|>` or the Qwen family's `<tool_call>` (chat.build_message).
             markers, streamed, pending, in_call = ("<|tool_call_start|>", "<tool_call>"), "", "", False
             while True:
-                item = deltas.get()
+                try:
+                    item = deltas.get(timeout=0.25)
+                except queue.Empty:
+                    if self._client_gone():
+                        raise BrokenPipeError("the client went away")
+                    continue
                 if item is None:
                     break
                 if in_call:
@@ -414,7 +441,7 @@ def make_handler(engine: Engine):
                     self._event(chunk({"tool_calls": [{"index": i, "id": c["id"], "type": "function",
                                                        "function": {"name": c["function"]["name"],
                                                                     "arguments": c["function"]["arguments"] if isinstance(
-                                                                        c["function"]["arguments"], str) else json.dumps(
+                                                                        c["function"]["arguments"], str) else arguments_text(
                                                                         c["function"]["arguments"])}}
                                                       for i, c in enumerate(calls)]}))
                 self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": message,

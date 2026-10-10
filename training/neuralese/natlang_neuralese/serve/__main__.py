@@ -28,6 +28,9 @@ def main(argv=None):
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("-c", "--ctx-size", type=int, default=None,
+                        help="served context in tokens (default and maximum: the model's max_position_embeddings), as "
+                             "the fork's -c; view plans its write sites against it")
     parser.add_argument("--prefill-padding", action="store_true",
                         help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
@@ -77,6 +80,8 @@ def main(argv=None):
             parser.error('runtime qualification requires a recurrence checkpoint')
         engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
     engine.prefill_padding = args.prefill_padding
+    if args.ctx_size:
+        engine.context = min(engine.context, args.ctx_size)
     if args.store_dir is not None:
         from ..common.paths import resolve
         from .store import TensorStore

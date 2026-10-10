@@ -192,6 +192,9 @@ class GenerationRequest:
     request_id: str = ""
     on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
     adapters: list | None = None  # [{"id": adapter block, "scale": 1.0}], active for every forward of the request
+    # Set by the transport when the client has gone (a streamed reply's connection closed): the engine drops the
+    # sequence at its next round and fails its future with RequestError("cancelled").
+    cancelled: bool = False
 
 
 @dataclass
@@ -226,7 +229,7 @@ class Sequence:
 class Engine:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
-                 prefill_tokens: int = 8192, prefill_padding: bool = False):
+                 prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None):
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
         # Padded-token budget of one batched prefill (new requests that arrive in the same round).
         self.prefill_tokens = prefill_tokens
@@ -236,6 +239,12 @@ class Engine:
         self.prefill_padding = prefill_padding
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.width = backbone.config.hidden_size
+        # The served context (spec: info `context`): positions one request's prompt and reply may span. Default the
+        # model's training context (max_position_embeddings); the fork's equivalent is min(n_ctx_train, -c). View plans
+        # its write sites against it.
+        config = getattr(getattr(backbone, "hf", None), "config", None) or backbone.config
+        trained = int(getattr(config, "max_position_embeddings", None) or 32768)
+        self.context = min(trained, int(context)) if context else trained
         self.stop_ids = {i for i in (tokenizer.convert_tokens_to_ids("<|im_end|>"), tokenizer.eos_token_id) if i is not None}
         self._incoming: queue.Queue = queue.Queue()
         self._active: list[Sequence] = []
@@ -411,6 +420,13 @@ class Engine:
         return [("tokens", self._template_tokens(segment, rendered.escape_nonce)) if isinstance(segment, str)
                 else ("block", rendered.blocks[segment]) for segment in rendered.segments]
 
+    def prompt_positions(self, messages, tools) -> int:
+        """Positions the rendered prompt takes in the cache (its `usage.prompt_tokens`), without running the model:
+        text tokens, and per block its vectors (with the read markers when the heads add them)."""
+        markers = 2 if self.heads.read_markers else 0
+        return sum(len(value) if kind == "tokens" else int(self.lookup(value).length) + markers
+                   for kind, value in self._prompt_plan(messages, tools))
+
     def prompt_embeddings(self, messages, tools, *, block_mode="port", prepared=None) -> torch.Tensor:
         if block_mode not in {"port", "transparent"}:
             raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
@@ -474,6 +490,10 @@ class Engine:
     # Decoding ------------------------------------------------------------------------------
     def _round(self, sequences: list[Sequence]):
         """One scheduler round: every sequence advances one position; text and sketch steps run batched."""
+        for seq in sequences:
+            if seq.request.cancelled:
+                self._fail(seq, RequestError("cancelled", "the client went away"))
+        sequences = [seq for seq in sequences if seq.phase != "done"]
         phases = [(seq, seq.phase) for seq in sequences]
         text_rows, sketch_rows = [], []
         fresh = [seq for seq, phase in phases if phase == "prefill"]
@@ -814,7 +834,7 @@ class Engine:
         template = seq.request.template or {}
         if template.get("value") == "write" and template.get("value_type") == "unknown":
             import json
-            from .chat import _at_value_path
+            from .chat import _at_value_path, arguments_text
             def mark_unknown(value):
                 if isinstance(value, list):
                     for item in value:mark_unknown(item)
@@ -828,7 +848,7 @@ class Engine:
                 path = template.get("argument_path")
                 value = arguments.get(argument) if path is None else _at_value_path(arguments, path)
                 mark_unknown(value)
-                call["function"]["arguments"] = json.dumps(arguments)
+                call["function"]["arguments"] = arguments_text(arguments)
         finish = seq.finish_reason
         if finish == "stop" and message.get("tool_calls"):
             finish = "tool_calls"

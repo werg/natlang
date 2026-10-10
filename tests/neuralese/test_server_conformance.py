@@ -24,8 +24,8 @@ visible. Each check sends one request to both servers and compares what a client
 Block IDs are content hashes of float payloads, so they differ whenever floats differ in the last bits; lengths
 and payload closeness are compared instead. Skipped unless the fork's CPU build exists. The fork also runs as
 WebAssembly (`final-wasm`: ts-host/vendor/neuralese-wasm through scripts/neuralese-wasm-server.mjs), the browser
-runtime's service, against the same checks; `final-wasm-mt` (opt-in, NATLANG_CONFORMANCE_WASM_MT=1) the threaded build
-with four threads. The WebGPU build needs a browser's WebGPU and is not run under Node.
+runtime's service, against the same checks; `final-wasm-mt` the threaded build with four threads (NATLANG_CONFORMANCE_WASM_MT=0
+leaves it out). The WebGPU build needs a browser's WebGPU and is not run under Node.
 """
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ torch = pytest.importorskip("torch")
 
 ATOL_PAYLOAD = 2e-2
 ATOL_LOGPROB = 5e-2
+# The served context of every pair (the fork's -c, the reference Engine's context): view plans its write sites against it.
+CONTEXT = 8192
 
 
 def _binary():
@@ -80,12 +82,16 @@ def _wasm_command(model_gguf, heads_gguf, build: str = "neuralese-wasm"):
 
     repo = Path(__file__).resolve().parents[2]
     script = repo / "ts-host" / "scripts" / "neuralese-wasm-server.mjs"
-    module = repo / "ts-host" / "vendor" / "neuralese-wasm" / f"{build}.wasm"
+    # NATLANG_CONFORMANCE_WASM_DIR: a directory holding the builds to check before they are vendored (e.g. a fork build's
+    # bin directory); default the vendored ones.
+    vendor = os.environ.get("NATLANG_CONFORMANCE_WASM_DIR")
+    module = (Path(vendor) if vendor else repo / "ts-host" / "vendor" / "neuralese-wasm") / f"{build}.wasm"
     node = shutil.which("node") or str(Path.home() / ".local" / "bin" / "node")
     if not module.exists() or not (repo / "ts-host" / "dist" / "browser" / "neuralese-wasm.js").exists():
         pytest.skip("the WebAssembly service or the ts-host build is missing")
-    threads = ["--module", str(module.with_suffix(".mjs")), "-t", "4"] if build == "neuralese-wasm-mt" else []
-    return [node, str(script), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "--max-block", "6", *threads]
+    threads = ["--module", str(module.with_suffix(".mjs"))] + (["-t", "4"] if build == "neuralese-wasm-mt" else [])
+    return [node, str(script), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "--max-block", "6",
+            "-c", str(CONTEXT), *threads]
 
 
 def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
@@ -119,19 +125,24 @@ def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
     out = tmp_path_factory.mktemp(f"conformance-{stop_source}")
     model_gguf = export_model_gguf(export_model_hf(backbone, tokenizer, out / "hf"), out / "model-f32.gguf")
     heads_gguf = export_heads_gguf(heads, backbone, out / "neuralese-f32.gguf")
-    engine = engine or Engine(backbone, heads, tokenizer, TensorStore(), heads_dialect(), max_block=6)
+    engine = engine or Engine(backbone, heads, tokenizer, TensorStore(), heads_dialect(), max_block=6, context=CONTEXT)
+    engine.context = min(engine.context, CONTEXT)
     engine.start()
     reference = serve(engine)
     threading.Thread(target=reference.serve_forever, daemon=True).start()
     command = _wasm_command(model_gguf, heads_gguf) if impl == "wasm" else \
         _wasm_command(model_gguf, heads_gguf, "neuralese-wasm-mt") if impl == "wasm-mt" else \
-        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", str(engine.max_block)]
-    fork = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    line = fork.stdout.readline()
-    fork_url = json.loads(line)["listening"]
+        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", str(engine.max_block),
+         "-c", str(CONTEXT)]
+    fork, fork_url = _start(command)
     host, port = reference.server_address[:2]
     return {"reference": f"http://{host}:{port}", "fork": fork_url, "process": fork, "server": reference, "engine": engine,
-            "hf": out / "hf"}
+            "hf": out / "hf", "command": command}
+
+
+def _start(command):
+    fork = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    return fork, json.loads(fork.stdout.readline())["listening"]
 
 
 def heads_dialect():
@@ -142,10 +153,11 @@ def heads_dialect():
 
 # NATLANG_CONFORMANCE_HEADS=checkpoint.pt adds a pair serving a trained port (S3 pilot or full run).
 _TRAINED = [("trained", "native")] if os.environ.get("NATLANG_CONFORMANCE_HEADS") else []
-# NATLANG_CONFORMANCE_WASM_MT=1 adds the threaded WebAssembly build under Node (`final-wasm-mt`). Opt-in: on DGX
-# (2026-10-10, fork 2d6557813) it deadlocks intermittently under Node (the main thread waits in a futex while a ggml
-# worker waits in another and the other workers sit idle) after 4 to 12 of these checks; every check it completed agreed.
-_WASM_MT = [("final", "wasm-mt")] if os.environ.get("NATLANG_CONFORMANCE_WASM_MT") else []
+# The threaded WebAssembly build under Node (`final-wasm-mt`, four threads) runs by default; NATLANG_CONFORMANCE_WASM_MT=0
+# leaves it out. Until fork 8b41aecff it deadlocked intermittently (ggml created and joined its worker threads per graph,
+# and one worker hung in emscripten's thread exit while the main thread joined it); the service now keeps one persistent
+# threadpool.
+_WASM_MT = [] if os.environ.get("NATLANG_CONFORMANCE_WASM_MT") == "0" else [("final", "wasm-mt")]
 
 
 @pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")] + _WASM_MT + _TRAINED,
@@ -224,6 +236,40 @@ def test_decision_readout_agrees(servers):
     print(f"decide: reference {ref['log_probs']} fork {fork['log_probs']}")
     for a, b in zip(ref["log_probs"], fork["log_probs"]):
         assert abs(a - b) <= ATOL_LOGPROB, (ref, fork)
+
+
+def test_decision_after_an_assistant_turn_with_reasoning_scores_the_generation_prompt(servers):
+    """A decision whose prompt holds an earlier assistant turn with reasoning (the runtime's `scope_` turn): LFM2.5's
+    template (history policy last_turn_only) keeps that reasoning while the turn is the last assistant turn, as when the
+    model generates the reply, and drops it once the scored option follows as another assistant turn. Both servers
+    score the option after the prompt as generation renders it (reasoning kept), cutting the option from the full
+    rendering after its own generation prefix; neither refuses it, and the scores agree. A server that scored the
+    full rendering's prefix would score the variant without the reasoning."""
+    tokenizer = servers["engine"].tokenizer
+    turn = {"role": "assistant", "content": "Scoped.", "reasoning_content": "Only the capital matters here."}
+    messages = [{"role": "user", "content": "Is Paris the capital of France?"}, turn,
+                {"role": "user", "content": "Reply with a JSON value."}]
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    full = tokenizer.apply_chat_template(messages + [{"role": "assistant", "content": "true"}], tokenize=False)
+    assert turn["reasoning_content"] in prompt and turn["reasoning_content"] not in full, "the template keeps reasoning"
+    body = {"messages": messages, "options": ["true", "false"]}
+    got = _both(servers, "/v1/neuralese/decide", "POST", body)
+    (rs, ref), (fs, fork) = got["reference"], got["fork"]
+    assert rs == fs == 200, (ref, fork)
+    assert ref["tokens"] == fork["tokens"]
+    for a, b in zip(ref["log_probs"], fork["log_probs"]):
+        assert abs(a - b) <= ATOL_LOGPROB, (ref, fork)
+    plain = dict(turn)
+    plain.pop("reasoning_content")
+    without = _both(servers, "/v1/neuralese/decide", "POST", {**body, "messages": [messages[0], plain, messages[2]]})
+    for name in ("reference", "fork"):
+        assert without[name][0] == 200
+        assert max(abs(a - b) for a, b in zip(got[name][1]["log_probs"], without[name][1]["log_probs"])) > 1e-4, name
+    many = _both(servers, "/v1/natlang/score", "POST", {"items": [{"messages": messages, "continuations": ["true", "false"]}]})
+    for name in ("reference", "fork"):
+        item = many[name][1]["results"][0]
+        assert "error" not in item, (name, item)
+        assert max(abs(a - b) for a, b in zip(item["log_probs"], got[name][1]["log_probs"])) <= 1e-4, name
 
 
 def test_batched_decision_scoring_agrees_and_fails_per_item(servers):
@@ -401,12 +447,140 @@ def test_view_plans_agree(servers):
     atol = 3 * ATOL_PAYLOAD
     ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", fixture["site"]), atol=atol)
     assert ref["parts"] == fork["parts"] == 1
+    # The default window: the served context less the site's prompt without the value, the reply and a margin. Both
+    # servers serve CONTEXT, so the windows agree, for each site (instructions lengthen the site's prompt).
+    assert ref["window"] == fork["window"] < CONTEXT - 6 - 64 - 32
     faithful = {"value": fixture["site"]["value"]}
-    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", faithful), atol=atol)
-    assert ref["parts"] == fork["parts"] == 1
+    ref_faithful, fork_faithful = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", faithful), atol=atol)
+    assert ref_faithful["parts"] == fork_faithful["parts"] == 1
+    assert ref_faithful["window"] == fork_faithful["window"] > ref["window"]
     long = {**fixture["site"], "value": json.dumps({f"line{i}": f"fee {i} paid" for i in range(12)}), "window": 16}
     ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/view", "POST", long), atol=3 * ATOL_PAYLOAD)
     assert ref["parts"] == fork["parts"] > 1 and ref["window"] == fork["window"] == 16
+
+
+def _small_context_pair(servers, context: int):
+    """A second pair from the same weights serving `context` tokens: a reference Engine sharing the fixture's backbone
+    and heads, and the fork's command with its -c replaced."""
+    from natlang_neuralese.serve.engine import Engine
+    from natlang_neuralese.serve.http import serve
+    from natlang_neuralese.serve.store import TensorStore
+
+    base = servers["engine"]
+    engine = Engine(base.backbone, base.heads, base.tokenizer, TensorStore(), base.dialect, max_block=base.max_block,
+                    context=context)
+    engine.start()
+    reference = serve(engine)
+    threading.Thread(target=reference.serve_forever, daemon=True).start()
+    command = list(servers["command"])
+    command[command.index("-c") + 1] = str(context)
+    fork, fork_url = _start(command)
+    host, port = reference.server_address[:2]
+    return {"reference": f"http://{host}:{port}", "fork": fork_url, "process": fork, "server": reference, "engine": engine}
+
+
+def test_view_default_window_chunks_the_same_at_the_served_context(servers):
+    """With no `window`, view plans against the served context of the server writing it (spec: view): two servers
+    configured with the same context report the same context and window and cut a value longer than one site into the
+    same parts. The value is a little over one window, so a small context keeps the part writes short."""
+    small = _small_context_pair(servers, 1024)
+    try:
+        infos = {name: _json(small[name] + "/v1/neuralese/info")[1] for name in ("reference", "fork")}
+        assert infos["reference"]["context"] == infos["fork"]["context"] == 1024
+        probe = _both(small, "/v1/neuralese/view", "POST", {"value": "short"})
+        window = probe["reference"][1]["window"]
+        assert probe["fork"][1]["window"] == window and 256 <= window < 1024
+        tokenizer = servers["engine"].tokenizer
+        value = " ".join(f"fee {i} paid on day {i % 28 + 1}." for i in range(400))
+        ids = tokenizer(value, add_special_tokens=False)["input_ids"]
+        value = tokenizer.decode(ids[:window + window // 2])
+        n = len(tokenizer(value, add_special_tokens=False)["input_ids"])
+        assert window < n <= 2 * window
+        ref, fork = _block_agrees(small, _both(small, "/v1/neuralese/view", "POST", {"value": value}), atol=3 * ATOL_PAYLOAD)
+        assert ref["parts"] == fork["parts"] == 2 and ref["window"] == fork["window"] == window
+    finally:
+        small["process"].terminate()
+        small["server"].shutdown()
+        small["engine"].stop()
+
+
+def test_tool_call_arguments_are_the_same_canonical_text(servers):
+    """`function.arguments` is compact JSON text (no spaces after separators), with non-ASCII characters as UTF-8 and
+    keys in the order the model wrote them (spec "Response fields"); both servers answer the same bytes, streamed or
+    not, for LFM2's Pythonic calls and the Qwen family's JSON calls."""
+    plans = [
+        ['<|tool_call_start|>[f(zeta="caf\u00e9 \u2713", alpha=[1, 2.5, True, None], nested={"b": 1, "a": "x\\ny \\"q\\""})]'
+         '<|tool_call_end|>'],
+        ['<tool_call>\n{"name": "g", "arguments": {"z": "\u00fc", "a": {"k": [1, -2, 0.5]}, "m": "tab\\tend"}}\n</tool_call>'],
+    ]
+    for plan in plans:
+        body = {"messages": OPENING, "max_tokens": 128, "x_natlang_forced": plan}
+        got = _both(servers, "/v1/chat/completions", "POST", body)
+        texts = {}
+        for name, (status, reply) in got.items():
+            assert status == 200, (name, reply)
+            calls = reply["choices"][0]["message"].get("tool_calls") or []
+            assert calls, (name, reply["choices"][0]["message"])
+            texts[name] = [c["function"]["arguments"] for c in calls]
+            for text in texts[name]:
+                assert text == json.dumps(json.loads(text), separators=(",", ":"), ensure_ascii=False), (name, text)
+            status, _, events = _stream(servers[name], body)
+            streamed, _ = _assemble(events)
+            assert [c["function"]["arguments"] for c in streamed["calls"]] == texts[name], name
+        assert texts["reference"] == texts["fork"]
+        assert all(any(ord(ch) > 127 for ch in text) for text in texts["reference"]), texts
+
+
+def _stream_then_leave(url: str, body: dict) -> int:
+    """Open a streamed chat completion, read until the first content delta, and close the connection: the deltas read."""
+    import http.client
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=600)
+    connection.request("POST", "/v1/chat/completions", json.dumps({**body, "stream": True}),
+                       {"content-type": "application/json"})
+    response = connection.getresponse()
+    assert response.status == 200
+    seen = 0
+    while seen < 2:
+        line = response.fp.readline()
+        assert line, "the stream ended before any content"
+        if line.startswith(b"data: ") and b'"content"' in line:
+            seen += 1
+    response.close()
+    connection.close()
+    return seen
+
+
+def test_a_client_that_leaves_a_stream_stops_generation(servers):
+    """A streamed reply whose client disconnects stops generating (spec: streaming) instead of running out its
+    max_tokens: the reference drops the sequence from its engine; the fork, which serves one request at a time, is free
+    for the next request at once. The reply is a long forced text, so it would otherwise run for thousands of steps."""
+    import time
+
+    if servers["process"].args[0].endswith("node"):
+        pytest.skip("the wasm module serves in process: Node cannot see the client leave while the module runs")
+    words = " ".join(f"w{i}" for i in range(2500))
+    body = {"messages": [{"role": "user", "content": "Repeat the words."}], "max_tokens": 4000, "x_natlang_forced": [words]}
+    engine = servers["engine"]
+    _stream_then_leave(servers["reference"], body)
+    deadline = time.time() + 30
+    while engine._active and time.time() < deadline:
+        time.sleep(0.05)
+    assert not engine._active, "the reference kept generating for a client that left"
+    # The fork: a full forced reply of these words takes far longer than a short request after the client left.
+    start = time.time()
+    status, _ = _json(servers["fork"] + "/v1/chat/completions", "POST", {**body, "max_tokens": 200})
+    assert status == 200
+    per_token = (time.time() - start) / 200
+    _stream_then_leave(servers["fork"], body)
+    start = time.time()
+    status, _ = _json(servers["fork"] + "/v1/chat/completions", "POST",
+                      {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 1})
+    assert status == 200
+    waited = time.time() - start
+    assert waited < 0.25 * per_token * 2500, f"the fork kept generating for a client that left ({waited:.1f} s)"
 
 
 def test_template_readout_agrees(servers):
