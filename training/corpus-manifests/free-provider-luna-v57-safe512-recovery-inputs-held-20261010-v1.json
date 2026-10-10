@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v57-safe512-recovery-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1",
+  "files": [
+    {
+      "path": "candidate-unapproved-plan-v1.json",
+      "bytes": 3917,
+      "sha256": "168853ce599b7c228e1ddad07f1960aba503cf080a3b4baa9422f046f713dfff"
+    },
+    {
+      "path": "preparation-review.json",
+      "bytes": 4276,
+      "sha256": "15948060acfb5502ce79ad0a2ab5e5dceb49ebe33a77910150a152cd7f902a43"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 4162,
+      "sha256": "5b412091fa86f7e18f0fe406d518113c904524bb4b1b021d6d8de7c8035d0ca7"
+    },
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 155,
+      "sha256": "2034beffc8c0247af4f568579561a67eeefae83b3dfbdae943a79b417c4f36e9"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 945,
+      "sha256": "5d0d5e9bdcffd9781a6ecaa2a5f37538201d0b6765133c4169489d4c923d6d1b",
+      "lines": 1
+    }
+  ],
+  "bytes": 13455
+}

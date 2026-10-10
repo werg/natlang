@@ -26868,6 +26868,85 @@
       "training_admission": false,
       "admission": "held-source-semantic-native-runtime-quality-review",
       "notes": "Six closed full-abstract programs; two exact maps,33/42 item annotation matches. Complete42 child context strings visible; output maps equal saved decisions. No causal comparison, source truth unadjudicated, no training admission."
+    },
+    {
+      "id": "free-provider-google-v22-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v22",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "512 typed-valid labels,394 annotation matches/118 differences. Confidence uncalibrated; exact local source binding only, unknown upstream pins."
+    },
+    {
+      "id": "free-provider-google-v22-static-reference-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v22-adapter-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "53 replayed static programs394items; all reference and visibility checks pass. Synthetic source-label filtered execution, not independent semantic truth."
+    },
+    {
+      "id": "free-provider-google-v22-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v22-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Sealed review and Pop harness closure53/53; no raw ID/group hits. Full S1 text closure pending; no new-world credit or admission."
+    },
+    {
+      "id": "free-provider-luna-v57-safe512-recovery-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-safe512-file-write-recovery-v57-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "One unchanged original SAFE-512 train case recovery for missing file write. Prior correct-return/file-omission rejection preserved; no gold hint or semantic rewrite.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "candidate-unapproved-plan-v1.json",
+        "preparation-review.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v58-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v58-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "53 source-label filtered V22 programs394items, four workers V15 runtime, fifth slot reserved forV57. Source truth remains held.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "candidate-unapproved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [
