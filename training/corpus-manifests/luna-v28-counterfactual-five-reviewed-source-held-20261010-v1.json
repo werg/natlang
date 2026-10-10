@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v28-counterfactual-five-reviewed-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-counterfactual-next-five-v26-v24-v25-20261009-v1/source-v3",
+  "files": [
+    {
+      "path": "generation-script.snapshot.mjs",
+      "bytes": 16470,
+      "sha256": "ced02e7b85d8d5acf3f0f165c51994ad4c764801b2c5d1c722bcd26243ee4a63"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 2378,
+      "sha256": "cdb5f7bdc5e55b7244eb0794359291e06896e86415de2cf25528b42e9e991744"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 729,
+      "sha256": "aac043e1892e2cc48e4eacccb0334b304a69a97d943801c03d0102b49686c224"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 17650,
+      "sha256": "5da1b6cdb773eda3f620dcae3ad08063ffc7d28170325b8d6d20bc619edebc03"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 268412,
+      "sha256": "4a4e589db037e71041703d250e5993d5b50a329411600d810957ae57202c6ee7",
+      "lines": 5
+    }
+  ],
+  "bytes": 305639
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-sourcev28-five-runtimev6-queue-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+  "files": [
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1736,
+      "sha256": "248e1b82c79947f4a3729a3528fcc5782976b689ce88654b8a626d85497b5d13"
+    },
+    {
+      "path": "queue.jsonl",
+      "bytes": 4040,
+      "sha256": "52c19e44dfa616408064cef379c48221ece848d246f07bda795df2afacf66029",
+      "lines": 5
+    }
+  ],
+  "bytes": 5776
+}

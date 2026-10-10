@@ -21259,6 +21259,59 @@
       "admission": "held; publication and successful reference execution do not grant admission",
       "independent_new_worlds": 0,
       "notes": "Runtimev6 retry after original storage pause;28turns21975tokens completed exact result export. Gold and trace review pending; inherited authored train world, zero independent-world credit."
+    },
+    {
+      "id": "luna-v28-counterfactual-five-reviewed-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-counterfactual-next-five-v26-v24-v25-20261009-v1/source-v3",
+      "include": [
+        "source.cases.jsonl",
+        "source-proof.json",
+        "source-manifest.json",
+        "root-generation-source-review-v1.json",
+        "generation-script.snapshot.mjs"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-data-derived-semantic-iterate-worlds",
+      "training_admission": false,
+      "admission": "source-approved-for-sampled-generation-only; source-v1/v2 excluded; results require independent gold/capture/admission review",
+      "independent_new_worlds": 0,
+      "notes": "Five exact counterfactual worlds from existing V26/V24/V25 train groups. Four iterative lambda children and captured semantic notes. Root review independently checked20evidence files; task input has no gold decision. The vendor convenience symlink is excluded; this snapshot covers embedded case/source/proof bytes, not the entire dataset cache."
+    },
+    {
+      "id": "free-provider-runtimev6-and-active-queue-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "runtime-small-teachers-v6/frozen-runtime.json",
+        "runtime-small-teachers-v6-freeze.log",
+        "provider-google-model-pool-mixed-decisions-v4/cases.jsonl",
+        "provider-google-model-pool-mixed-decisions-v4/source-manifest.json",
+        "provider-google-model-pool-mixed-decisions-v4/launch-receipt-v1.json",
+        "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/*.py",
+        "provider-google-model-pool-mixed-decisions-v4/frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "frozen-generation-inputs-and-runtime-manifest",
+      "training_admission": false,
+      "admission": "generation inputs and provenance only; evolving labels/journals/results excluded from this immutable snapshot",
+      "independent_new_worlds": 0,
+      "notes": "V4 Google further1024disjoint train rows; exact V28 ZAI queue seeds/gates/budgets; runtimev6 isolated compiled manifest includes globstar zero-directory fix. Sync of manifest is not an executable Node deployment or data admission. ZAI queue is rooted at a directory alias and is intentionally published as a separate snapshot; parent traversal does not follow nested directory symlinks."
+    },
+    {
+      "id": "free-provider-zai45-sourcev28-five-runtimev6-queue-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+      "include": [
+        "queue.jsonl",
+        "launch-receipt-v1.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "frozen-reviewed-generation-queue",
+      "training_admission": false,
+      "admission": "generation-only; evolving journal/results excluded",
+      "independent_new_worlds": 0,
+      "notes": "Root alias resolves to /srv output volume. Exact approved V28 train source and runtimev6 hashes pinned in launch. One case/request at a time. Separate snapshot avoids parent traversal omission of nested directory aliases."
     }
   ],
   "coverage_backlog": [
