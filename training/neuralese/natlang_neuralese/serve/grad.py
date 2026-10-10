@@ -177,11 +177,18 @@ class GradSession:
         flush()
         return torch.cat(pieces, 1)
 
-    def _context_weights(self, prompt, feedback_weight: float = 1.0) -> list[float]:
+    def _context_weights(self, prompt, feedback_weight: float = 1.0, covered_replies: int | None = None) -> list[float]:
         """Per-item CE weights of the prompt's text. Instructions and inputs (everything before the first assistant
         reply) are NatLang programs the student should learn to write: weight 1. Later non-assistant turns are
-        mechanical feedback (tool results, harness nudges): `feedback_weight`. Items up to the last earlier assistant
-        reply weigh 0: their own records already supervise them. The generation prefix weighs 1."""
+        mechanical feedback (tool results, harness nudges): `feedback_weight`. The generation prefix weighs 1.
+
+        Items that other records already supervise weigh 0. By default (`covered_replies` None) that is everything up
+        to the last earlier assistant reply: each reply has its own record. A corpus that keeps only some turns of a
+        trajectory as records (harness_bench: up to 8 per trajectory) passes `covered_replies`, the number of leading
+        assistant replies an earlier record of the same trajectory supervises (its prompt and its target); only items
+        up to that reply weigh 0, and later assistant replies are whole-trajectory targets at weight 1."""
+        if covered_replies is not None and (type(covered_replies) is not int or covered_replies < 0):
+            raise RequestError('neuralese-grad-term', 'covered_replies must be a nonnegative integer')
         tokenizer = self.engine.tokenizer
         im_start = tokenizer.convert_tokens_to_ids("<|im_start|>")
         starts = [i for i, item in enumerate(prompt) if item == ("tok", im_start)]
@@ -190,11 +197,16 @@ class GradSession:
         weights = [1.0] * len(prompt)
         if not assistants:
             return weights
+        if covered_replies is not None and covered_replies > len(assistants):
+            raise RequestError('neuralese-grad-term', 'covered_replies exceeds the prompt\'s assistant replies')
+        covered_end = (assistants[-1] if covered_replies is None else
+                       assistants[covered_replies - 1] if covered_replies else -1)
         bounds = starts + [len(prompt)]
         for begin, end in zip(bounds, bounds[1:]):
             if begin == starts[-1]:
                 continue  # the generation prefix
-            weight = 0.0 if begin <= assistants[-1] else 1.0 if begin < assistants[0] else feedback_weight
+            weight = (0.0 if begin <= covered_end else 1.0 if begin < assistants[0] or begin in assistants
+                      else feedback_weight)
             weights[begin:end] = [weight] * (end - begin)
         weights[:starts[0]] = [0.0] * starts[0]
         return weights
@@ -545,12 +557,12 @@ class GradSession:
 
     def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0, context_weight=0.0,
                              feedback_weight=1.0, projection_anchor_weight=0.0,
-                             projection_anchor_backbone_scale=0.05):
+                             projection_anchor_backbone_scale=0.05, covered_replies=None):
         """CE and optional KL from one reader forward, with the same existing objectives.
 
         `context_weight` adds the CE of the prompt's new text (instructions and inputs, plus tool results and other
         mechanical feedback at `feedback_weight`), averaged over its tokens: the whole trajectory is a training
-        target, not only the reply.
+        target, not only the reply. `covered_replies` is `_context_weights`' coverage of earlier records.
 
         Trajectory training used to replay the entire student reader once for CE
         and again for self-distillation, retaining both recurrence graphs.
@@ -580,7 +592,8 @@ class GradSession:
             score_options['projection_anchor_backbone_scale'] = projection_anchor_backbone_scale
         if context_weight:
             scored = self._score(prompt, rest, leaves, write_terms=False,
-                                 context_weights=self._context_weights(prompt, feedback_weight), **score_options)
+                                 context_weights=self._context_weights(prompt, feedback_weight, covered_replies),
+                                 **score_options)
         else:
             scored = self._score(prompt, rest, leaves, write_terms=False, **score_options)
         loss = -scored['token_logp'].mean()

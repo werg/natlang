@@ -335,3 +335,36 @@ def test_context_loss_scores_new_prompt_text_like_a_full_forward(engine):
     target_only = session.supervised_text_loss(term_, {})
     whole = session.supervised_text_loss(term_, {}, context_weight=.5, feedback_weight=.25)
     torch.testing.assert_close(whole, target_only - .5 * (w * expected).mean(), atol=1e-4, rtol=1e-4)
+
+
+def test_context_coverage_supervises_turns_no_earlier_record_covers(engine):
+    """A corpus with only some turns of a trajectory as records (harness_bench) passes the number of leading replies an
+    earlier record supervises: later assistant replies become targets at weight 1, tool results after the first reply
+    stay at the feedback weight, and the covered prefix weighs 0. The default (None) keeps last-reply coverage."""
+    from natlang_neuralese.serve.grad import GradSession
+    from natlang_neuralese.serve.chat import RequestError
+
+    messages = [{"role": "user", "content": "Fix the bug in parser.py."},
+                {"role": "assistant", "content": "Reading the file."},
+                {"role": "tool", "content": "def parse(): pass"},
+                {"role": "assistant", "content": "Running the tests."},
+                {"role": "tool", "content": "3 failed"}]
+    target = {"role": "assistant", "content": "Patching."}
+    session = GradSession(engine)
+    prompt, _ = session._target_items(messages, None, target)
+    weighted = lambda weights, w: engine.tokenizer.decode(
+        [v for (k, v), x in zip(prompt, weights) if k == "tok" and x == w])
+    legacy = session._context_weights(prompt, .25)
+    assert session._context_weights(prompt, .25, None) == legacy
+    assert "Running the tests" in weighted(legacy, 0.) and "def parse" in weighted(legacy, 0.)
+    nothing = session._context_weights(prompt, .25, 0)
+    assert "Fix the bug" in weighted(nothing, 1.) and "Reading the file" in weighted(nothing, 1.)
+    assert "Running the tests" in weighted(nothing, 1.)
+    assert "def parse" in weighted(nothing, .25) and "3 failed" in weighted(nothing, .25)
+    first = session._context_weights(prompt, .25, 1)
+    assert "Fix the bug" in weighted(first, 0.) and "Reading the file" in weighted(first, 0.)
+    assert "def parse" in weighted(first, .25) and "Running the tests" in weighted(first, 1.)
+    assert session._context_weights(prompt, .25, 2) == legacy
+    for bad in (3, -1, 1.0):
+        with pytest.raises(RequestError):
+            session._context_weights(prompt, .25, bad)
