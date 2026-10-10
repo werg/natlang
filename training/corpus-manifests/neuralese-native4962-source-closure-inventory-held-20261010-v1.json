@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v1",
+  "files": [
+    {
+      "path": "inventory.json",
+      "bytes": 78514,
+      "sha256": "c0cc0d9526a7480f5f8637d1c8ce67c5e3d70f4894405a592cf60fb052c58751"
+    },
+    {
+      "path": "inventory.md",
+      "bytes": 1977,
+      "sha256": "59d63b05491f6a5e1ec39fb826db692afa0e080c990f6b28c5f69a4597b43909"
+    },
+    {
+      "path": "row-bindings.jsonl",
+      "bytes": 5149500,
+      "sha256": "148768b2096eb051bd3c0199b8518890faa6a443425cb6e91f7bd044cf679e6d",
+      "lines": 4962
+    }
+  ],
+  "bytes": 5229991
+}

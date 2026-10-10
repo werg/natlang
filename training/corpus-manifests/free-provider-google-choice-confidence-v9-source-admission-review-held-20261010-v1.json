@@ -1,0 +1,75 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-choice-confidence-v9-source-admission-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v28-google-choice-confidence-v9-source-admission",
+  "files": [
+    {
+      "path": "closure-candidate-root-actions.jsonl",
+      "bytes": 1066730,
+      "sha256": "5864a9e59f706468ae94605fd5f3c55b724f2dee43116343bed24451da801cf0",
+      "lines": 10
+    },
+    {
+      "path": "closure-harness-only-v2/candidate-source-case-bindings.json",
+      "bytes": 5915,
+      "sha256": "32844252ae7393f1cecb58728b697f02302fc91a7665fe2f6754ff98c7dc65ee"
+    },
+    {
+      "path": "closure-harness-only-v2/closed-source-case-port-projection.jsonl",
+      "bytes": 111710,
+      "sha256": "77a42516df670938a8615636342dd2f4b473e759ba70a609266a56c1a6c4c5fc",
+      "lines": 10
+    },
+    {
+      "path": "closure-harness-only-v2/closure-report.json",
+      "bytes": 8318,
+      "sha256": "327afbf8df2120983a4a100e717b0caf3fa8fd9aaaca77cb0ffcfa00cd4ebfbf"
+    },
+    {
+      "path": "closure-harness-only-v2/source-case-port-projection.jsonl",
+      "bytes": 111710,
+      "sha256": "77a42516df670938a8615636342dd2f4b473e759ba70a609266a56c1a6c4c5fc",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v2/closure-candidate-root-actions.jsonl",
+      "bytes": 1076295,
+      "sha256": "f9e21e168825c36dc20989c0c5b2d2b64ebc67d827b515934c9ef9ac135b59a5",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v2/closure-source-cases.jsonl",
+      "bytes": 249535,
+      "sha256": "d9d4639e9a1efde6bd03baa8de2ef1b93bed31b54d434f3e84036c154b46f70d",
+      "lines": 10
+    },
+    {
+      "path": "closure-input-v2/closure-source-manifest.json",
+      "bytes": 1689,
+      "sha256": "6702d7e508c6bd6a189fa8641ee731a75dbac8421a888850c1c622d88cf96e9b"
+    },
+    {
+      "path": "closure-source-cases.jsonl",
+      "bytes": 244925,
+      "sha256": "449e90debdc1b5465782ca93b8cfd81a05af4481f885d800595b6d906b9089a7",
+      "lines": 10
+    },
+    {
+      "path": "closure-source-manifest.json",
+      "bytes": 1464,
+      "sha256": "f0b41c9e77cb0abdac99fc5421edfde9aae79d4722f48b83645d6e9a157ea01d"
+    },
+    {
+      "path": "review.json",
+      "bytes": 12373,
+      "sha256": "797ce88b7d008500f5718d0e6931b70c95990036125638f60b47a7818f02f9df"
+    },
+    {
+      "path": "review.md",
+      "bytes": 3356,
+      "sha256": "8454fdbddb021a48d06121eb20f3cd62ea28d5f6a78afdac0dc7adfe3d7accf5"
+    }
+  ],
+  "bytes": 2894020
+}
