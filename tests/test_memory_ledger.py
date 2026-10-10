@@ -59,7 +59,7 @@ def test_attached_container_is_charged_to_its_unit(monkeypatch, tmp_path):
         (path / 'memory.current').write_text(str(current))
         (path / 'cgroup.procs').write_text(procs)
     monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', str(unit_cg).removeprefix('/sys/fs/cgroup')))
-    monkeypatch.setattr(ledger, 'container_cgroup', lambda command: str(container_cg) if 'docker' in ' '.join(command) else None)
+    monkeypatch.setattr(ledger, 'container_cgroup', lambda command, unit=None: str(container_cg) if 'docker' in ' '.join(command) else None)
     real = ledger.cgroup_usage  # the unit's cgroup lives under /sys/fs/cgroup; point it at the fixture
     monkeypatch.setattr(ledger, 'cgroup_usage', lambda root, gpu: real(str(unit_cg) if root.endswith('/unit') else root, gpu))
     gpu = {21: 50 * GIB}

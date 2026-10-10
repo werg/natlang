@@ -175,14 +175,14 @@ def cgroup_usage(root, gpu):
     return max(0, host) + sum(gpu.get(pid, 0) for pid in pids)
 
 
-def container_cgroup(command):
-    """The cgroup of the container a `docker start -a NAME` unit attaches to: its processes are Docker's, not the
-    unit's, so the unit's own cgroup shows only the attached client."""
-    text = ' '.join(command) if isinstance(command, list) else str(command or '')
-    match = re.search(r'docker start (?:-a|--attach) (\S+)', text)
-    if not match:
+def container_cgroup(command, unit=None):
+    """The cgroup of the container a unit runs: its processes are Docker's, not the unit's, so the unit's own cgroup
+    shows only the docker client. The container is the one its command names (``docker start -a NAME``,
+    ``docker run --name NAME``), else one named like the unit (a wrapper script that runs ``docker run``)."""
+    name = container_name(command) or (unit.removesuffix('.service') if unit else None)
+    if not name:
         return None
-    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}}', match.group(1).strip("'\"")],
+    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}}', name],
                          capture_output=True, text=True).stdout.strip()
     return f'/sys/fs/cgroup/system.slice/docker-{out}.scope' if out else None
 
@@ -195,7 +195,7 @@ def unit_usage(unit, gpu, command=None):
     used = cgroup_usage('/sys/fs/cgroup' + cgroup, gpu)
     if used is None:
         return None
-    container = container_cgroup(command)
+    container = container_cgroup(command, unit)
     return used + ((cgroup_usage(container, gpu) or 0) if container else 0)
 
 
@@ -303,9 +303,10 @@ def run(args):
                '-E', f'NATLANG_CUDA_MEMORY_GB={round(budget / GIB, 1)}', '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     for env in args.env:
         command += ['-E', env]
-    container = container_name(args.command)
-    if container:  # a stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger)
-        command += ['-p', f'ExecStopPost=-/usr/bin/docker stop -t 30 {container}']
+    # A stopped unit takes its container with it (an orphaned one held 36 GB outside the ledger): the one its command
+    # names, else one named like the unit (wrapper scripts that `docker run --name <unit>`; '-' ignores none).
+    container = container_name(args.command) or unit.removesuffix('.service')
+    command += ['-p', f'ExecStopPost=-/usr/bin/docker stop -t 30 {container}']
     result = subprocess.run(command + args.command)
     if result.returncode:
         with ledger() as state:
@@ -422,9 +423,8 @@ def guard(args):
             subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
             # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
             # its memory. Stop the container itself.
-            container = container_name(command)
-            if container:
-                subprocess.Popen(['docker', 'stop', '-t', '20', container])
+            container = container_name(command) or unit.removesuffix('.service')
+            subprocess.Popen(['docker', 'stop', '-t', '20', container], stderr=subprocess.DEVNULL)
             subprocess.Popen(['sh', '-c', f'sleep 20; systemctl --user stop {shlex.quote(unit)} 2>/dev/null'])
             stopped[unit] = time.time()
         if args.once:
