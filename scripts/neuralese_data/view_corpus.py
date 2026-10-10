@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "neura
 from natlang_neuralese.common.paths import resolve  # noqa: E402
 from natlang_neuralese.data.records import RecordError, parse_record  # noqa: E402
 
-CONVERTER = "scripts/neuralese_data/view_corpus.py@2"
+CONVERTER = "scripts/neuralese_data/view_corpus.py@3"
 RESULT_TYPE = "Neuralese<string>"
 MAX_SOURCE_CHARS = 32_000
 MIN_SOURCE_CHARS = 200
@@ -86,6 +86,13 @@ V2_CAPS = {
     "wtq": 2000, "fetaqa": 2500, "spider_bird": 2500, "tabfact": 2000,
     "swe_tool_outputs": 3500, "s1_tool_outputs": 3000,
 }
+# v3: the v2 sources plus those omitted or queued for licence reasons until the owner rule of 2026-10-10 (every
+# licence is acceptable), and repository configs from repositories under any licence.
+V3_CAPS = {
+    **V2_CAPS,
+    "booksum": 2000, "xsum": 4000, "govreport": 1500, "multi_news": 3000, "arxiv": 2000, "pubmed": 2000,
+    "loghub": 1000, "mind2web": 2000, "common_crawl": 2000,
+}
 QUESTIONS_PER_SOURCE = 4
 EXTRACTS_PER_SOURCE = 3
 SPLIT_MAP = {"train": "train", "validation": "validation", "valid": "validation", "val": "validation", "dev": "validation",
@@ -122,11 +129,12 @@ def _file_sha256(path: Path) -> str:
 
 def provenance(dataset_spdx: str, dataset_source: str, *, content_spdx: str | None = None,
                content_source: str | None = None, holder: str | None = None, content_unverified: bool = False,
-               concerns=(), license_class: str | None = None) -> dict:
-    """Per-record licence provenance (`lineage.notes.license_provenance`), so a licence review can filter records:
-    the dataset's licence and where it was read, the licence of the underlying content (repository, website, news
-    publisher) when it differs or is known, a review class (the most restrictive of the known licences, `unverified`
-    when the content's licence is unknown and substantial), and short concerns."""
+               facts=(), license_class: str | None = None) -> dict:
+    """Per-record licence provenance (`lineage.notes.license_provenance`), recorded as facts (owner rule 2026-10-10:
+    every licence is acceptable; nothing is omitted or held for its licence): the dataset's licence and where it was
+    read, the licence of the underlying content (repository, website, news publisher) when it differs or is known,
+    a class (the most restrictive of the known licences, `unverified` when the content's licence is not stated), and
+    short facts about the content's origin."""
     # A dataset whose licence is "per repository" has no class of its own: its content's licence decides.
     per_content = dataset_spdx == "LicenseRef-repository-content"
     classes = [] if per_content else [vx.license_class(dataset_spdx)]
@@ -137,7 +145,7 @@ def provenance(dataset_spdx: str, dataset_source: str, *, content_spdx: str | No
     cls = license_class or max(classes, key=vx.CLASS_ORDER.index)
     return {"dataset": {"spdx": dataset_spdx, "source": dataset_source},
             "content": {"spdx": content_spdx, "source": content_source, "holder": holder},
-            "class": cls, "concerns": list(concerns)}
+            "class": cls, "facts": list(facts)}
 
 
 class Ctx:
@@ -169,8 +177,12 @@ class Doc:
 
     def __init__(self, ctx: Ctx, *, dataset: str, key, artifact: str, text: str, title=None, meta=None, refs=None,
                  upstream: str, upstream_id=None, revision=None, store_version=None, row=None, lic: dict, split: str,
-                 groups: list[str], source_role: str | None = None, notes=None, prov: dict | None = None):
+                 groups: list[str], source_role: str | None = None, notes=None, prov: dict | None = None,
+                 more_sources: list[dict] | None = None):
         self.ctx, self.dataset, self.key, self.artifact, self.text = ctx, dataset, _safe(key), artifact, text
+        # Multi-source records (v3, Multi-News): further sources ({text, title, meta}) after the first. Such a record
+        # is `view(xs, instructions)` over the list; it has no reconstruction record (one value per reconstruction).
+        self.more = list(more_sources or [])
         self.title, self.meta, self.refs = title, dict(meta or {}), list(refs or [])
         self.upstream, self.upstream_id, self.revision, self.store_version = upstream, upstream_id, revision, store_version
         self.row, self.lic, self.split, self.groups = row if row is not None else str(key), lic, split, groups
@@ -179,10 +191,13 @@ class Doc:
         self.notes["license_provenance"] = prov or provenance(lic["spdx"], lic.get("notes", ""))
         self.records: list[dict] = []
 
-    def _source(self, drop: str | None = None) -> dict:
+    def _sources(self, drop: str | None = None) -> list[dict]:
         refs = [r for r in self.refs if not (drop and r["text"] in drop)]
-        return source(self.role, self.text, title=self.title, meta={"artifact": self.artifact, **self.meta},
-                      exact_refs=refs)
+        first = source(self.role, self.text, title=self.title, meta={"artifact": self.artifact, **self.meta},
+                       exact_refs=refs)
+        return [first] + [source(self.role, m["text"], title=m.get("title"),
+                                 meta={"artifact": self.artifact, **self.meta, **(m.get("meta") or {})}, exact_refs=[])
+                          for m in self.more]
 
     def _record(self, kind: str, task: str, n: int, *, instructions: str, general: str | None, request: str, target,
                 target_kind: str, alternatives, checked: str, origin: str, view_call: str, extra_notes=None) -> dict:
@@ -195,7 +210,7 @@ class Doc:
             "id": f"view:{self.dataset}:{self.key}:{kind}:{n}",
             "family": f"view_{self.artifact}_{kind}",
             "task": task,
-            "sources": [self._source(drop=None if kind == "reconstruct" else target_text)],
+            "sources": self._sources(drop=None if kind == "reconstruct" else target_text),
             "writer": writer,
             "consumer": {"context": [{"role": "user", "content": request}], "withheld": ["sources"]},
             "target": {"kind": target_kind, "value": target, "alternatives": list(alternatives)},
@@ -215,6 +230,8 @@ class Doc:
         return record
 
     def reconstruct(self):
+        if self.more:
+            raise ValueError("a multi-source document has no reconstruction record")
         noun = NOUNS[self.artifact]
         return self._record("reconstruct", "reconstruct", 0,
                             instructions=f"Keep the whole {noun}, so that it can be reproduced exactly.", general=None,
@@ -222,10 +239,11 @@ class Doc:
                             alternatives=(), checked="identity", origin="identity", view_call="view(x)")
 
     def summary(self, instruction: str, target: str, *, origin: str = "dataset-summary", n: int = 0, alternatives=(),
-                general: str | None = None):
+                general: str | None = None, extra_notes=None):
         return self._record("summary", "consume", n, instructions=instruction, general=general, request=instruction,
                             target=target, target_kind="text", alternatives=alternatives, checked="reference-summary",
-                            origin=origin, view_call="view(x, instructions)")
+                            origin=origin, view_call="view(xs, instructions)" if self.more else "view(x, instructions)",
+                            extra_notes=extra_notes)
 
     def qa(self, question: str, answer, n: int, *, request: str | None = None, target_kind: str = "text",
            alternatives=(), checked: str = "reference-answer", origin: str = "dataset-qa", extra_notes=None):
@@ -279,7 +297,7 @@ def cnn_dailymail(ctx: Ctx):
     lic = license_("Apache-2.0", False, "abisee/cnn_dailymail card licence; article text from CNN and the Daily Mail.")
     prov = provenance("Apache-2.0", "hf:abisee/cnn_dailymail dataset card", content_source="news articles and highlights",
                       holder="CNN / Daily Mail", content_unverified=True,
-                      concerns=["article and highlight text is the publishers' copyright; the card's Apache-2.0 covers the dataset release"])
+                      facts=["article and highlight text is the publishers' copyright; the card's Apache-2.0 covers the dataset release"])
     for split, path in files.items():
         ctx.use(path, dataset="cnn_dailymail", upstream="hf:abisee/cnn_dailymail", revision=revision)
         want = max(1, round(ctx.caps["cnn_dailymail"] * UPSTREAM_SHARE[split]))
@@ -369,7 +387,7 @@ def quality(ctx: Ctx):
                       prov=provenance("LicenseRef-QuALITY", "no licence on nyu-mll/quality or the tasksource/quality card",
                                       content_source="article licence field: " + (qs[0][1].get("license") or "none")[:160],
                                       holder="Project Gutenberg / source publication",
-                                      concerns=["QuALITY annotation licence not stated"]))
+                                      facts=["QuALITY annotation licence not stated"]))
             seen = set()
             n = 0
             for i, r in sorted(qs, key=lambda x: _h(ctx.seed, x[1]["question_unique_id"])):
@@ -464,7 +482,7 @@ def qmsum(ctx: Ctx):
     prov = provenance("MIT", "github:Yale-LILY/QMSum LICENSE", content_spdx="CC-BY-4.0",
                       content_source="AMI and ICSI corpora (CC-BY-4.0); Welsh Parliament and Parliament of Canada records "
                                      "(open government licences)", holder="AMI/ICSI; parliaments",
-                      concerns=["committee transcripts are under open government licences, not CC"])
+                      facts=["committee transcripts are under open government licences, not CC"])
     for split_file, split in (("train", "train"), ("val", "validation"), ("test", "test")):
         path = ctx.raw / "qmsum/data/ALL/jsonl" / f"{split_file}.jsonl"
         ctx.use(path, dataset="qmsum", upstream="github:Yale-LILY/QMSum", revision=meta["revision"])
@@ -612,7 +630,7 @@ def codesearchnet(ctx: Ctx):
                                   content_spdx=spdx, holder=f"github:{repo}", content_unverified=not spdx,
                                   content_source=("CodeSearchNet original release licence files: " + ", ".join(found.get("files", [])[:3]))
                                   if found else "licence not found in CodeSearchNet's licence files",
-                                  concerns=[] if spdx else ["repository licence not detected"])
+                                  facts=[] if spdx else ["repository licence not detected"])
                 path_ref = row["func_path_in_repository"]
                 refs = [{"text": path_ref, "kind": "path"}] + \
                     ([{"text": row["func_name"], "kind": "identifier"}] if row["func_name"] else [])  # anonymous JS
@@ -653,7 +671,7 @@ def websrc(ctx: Ctx):
     lic = license_("CC-BY-4.0", False, "WebSRC v1.0 (X-LANCE/WebSRC_v1.0); page content from the source websites.")
     prov = provenance("CC-BY-4.0", "hf:X-LANCE/WebSRC_v1.0 card", content_source="third-party web pages (cars, books, "
                       "jobs, sports, ... sites)", holder="the source websites", content_unverified=True,
-                      concerns=["page text and markup belong to the source websites"])
+                      facts=["page text and markup belong to the source websites"])
     csvs = sorted((ctx.raw / "websrc").rglob("dataset.csv"))
     pages = []
     for csv_path in csvs:
@@ -790,7 +808,7 @@ def xlam(ctx: Ctx):
                   lic=lic, split=carve(group), groups=[group, schema_group], source_role="schema",
                   prov=provenance("CC-BY-4.0", "hf:Salesforce/xlam-function-calling-60k card", content_spdx="CC-BY-4.0",
                                   content_source="generated queries and calls over API descriptions (APIGen)",
-                                  concerns=["queries and calls were generated by models in the dataset's pipeline"]),
+                                  facts=["queries and calls were generated by models in the dataset's pipeline"]),
                   refs=[{"text": n, "kind": "identifier"} for n in names if n][:16], meta={"format": "json"})
         doc.qa(r["query"].strip(), answers, 0, target_kind="calls",
                request=r["query"].strip() + "\nAnswer with the function calls as a JSON list of {\"name\", \"arguments\"} objects.")
@@ -801,14 +819,6 @@ def xlam(ctx: Ctx):
         yield doc
 
 
-PERMISSIVE = [
-    ("MIT", re.compile(r"Permission is hereby granted, free of charge", re.I)),
-    ("Apache-2.0", re.compile(r"Apache License,?\s+Version 2\.0", re.I)),
-    ("BSD-3-Clause", re.compile(r"Redistribution and use in source and binary forms[\s\S]*Neither the name", re.I)),
-    ("BSD-2-Clause", re.compile(r"Redistribution and use in source and binary forms", re.I)),
-    ("ISC", re.compile(r"Permission to use, copy, modify, and/or distribute this software for any purpose", re.I)),
-    ("Unlicense", re.compile(r"This is free and unencumbered software released into the public domain", re.I)),
-]
 LICENSE_FILES = re.compile(r"^(LICEN[SC]E|COPYING)(\.(md|txt|rst))?$", re.I)
 CONFIG_FILE = re.compile(r"\.(json|ya?ml)$", re.I)
 SKIP_CONFIG = re.compile(r"(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|.*\.min\.json|.*\.map\.json"
@@ -821,14 +831,14 @@ def _git(repo: Path, *args) -> str:
 
 
 def classify_license(text: str) -> str | None:
-    for spdx, pattern in PERMISSIVE:
-        if pattern.search(text):
-            return spdx
-    return None
+    """The licence a repository's licence file states (view_extract.detect_license: GNU licences by title, then
+    MIT/Apache/BSD/ISC/MPL/… texts); None when no known text matches."""
+    return vx.detect_license(text)
 
 
 def repo_configs(ctx: Ctx):
-    """JSON and YAML files from permissively licensed bare repositories (bgkit's mirror); JSONPath targets."""
+    """JSON and YAML files from bgkit's mirror of bare repositories, whatever their licence (v3; v1/v2 took only
+    MIT/Apache/BSD/ISC/Unlicense repositories); the detected licence is recorded. JSONPath targets."""
     import yaml
 
     # Lazy, seeded walk: owners in hash order, then their repositories in hash order. Listing every repository of the
@@ -865,9 +875,6 @@ def repo_configs(ctx: Ctx):
             spdx = classify_license(_git(repo, "cat-file", "-p", f"HEAD:{lp}"))
             if spdx:
                 break
-        if not spdx:
-            ctx.reject("repo_configs", name, "license-not-permissive-or-unknown")
-            continue
         cands = [(p, s) for p, s in entries if CONFIG_FILE.search(p) and not SKIP_CONFIG.search(p)
                  and ctx.min_chars <= s <= ctx.max_chars]
         cands.sort(key=lambda c: _h("repo_configs", name, c[0]))
@@ -894,10 +901,13 @@ def repo_configs(ctx: Ctx):
             if not extracts:
                 ctx.reject("repo_configs", f"{name}:{path}", "no-extract")
                 continue
-            lic = license_(spdx, False, f"File from {name} (licence detected from its {', '.join(lic_paths)} at HEAD).")
-            prov = provenance(spdx, f"github:{name} {', '.join(lic_paths)} at HEAD (regex detection)", content_spdx=spdx,
-                              content_source="repository file", holder=f"github:{name}",
-                              concerns=["licence detected by a regular expression; spot-check"])
+            where = ", ".join(lic_paths) or "no top-level licence file"
+            lic = license_(spdx or "LicenseRef-repository-content", False,
+                           f"File from {name} (licence {'detected from its ' + where if spdx else 'not detected: ' + where} at HEAD).")
+            prov = provenance(spdx or "LicenseRef-repository-content", f"github:{name} {where} at HEAD (text-pattern detection)",
+                              content_spdx=spdx, content_source="repository file", holder=f"github:{name}",
+                              facts=["licence detected from the licence file's text"] if spdx else
+                                    ["no known licence text in the repository's top-level licence files"])
             doc = Doc(ctx, dataset="repo_configs", key=f"{name}:{path}", artifact="data", text=text, title=path,
                       upstream=f"github:{name}", upstream_id=path, revision=head, row=f"{name}:{path}", lic=lic,
                       split=carve(group_key("repo", name)), groups=[group_key("repo", name)], prov=prov,
@@ -1142,7 +1152,7 @@ def swe_tool_outputs(ctx: Ctx):
                               prov=provenance("CC-BY-4.0", "hf:nebius/SWE-rebench-openhands-trajectories card",
                                               content_source="command output over a public repository",
                                               holder=f"github:{t.repo}",
-                                              concerns=["outputs can quote repository files under the repository's licence"]))
+                                              facts=["outputs can quote repository files under the repository's licence"]))
                     for m, (request, answer, method) in enumerate(extracts):
                         doc.extract(request, answer, m, method=method)
                     doc.reconstruct()
@@ -1377,7 +1387,7 @@ def toolace(ctx: Ctx):
     lic = license_("Apache-2.0", False, "Team-ACE/ToolACE (Apache-2.0); synthetic tool schemas and results.")
     prov = provenance("Apache-2.0", "hf:Team-ACE/ToolACE card", content_spdx="Apache-2.0",
                       content_source="tool schemas and results synthesized by models in the ToolACE pipeline",
-                      concerns=["model-generated source content (used as sources only; targets are code-computed)"])
+                      facts=["model-generated source content (used as sources only; targets are code-computed)"])
     made = 0
     for i in sorted(range(len(rows)), key=lambda i: _h("toolace", i)):
         if made >= cap:
@@ -1529,7 +1539,7 @@ def s1_tool_outputs(ctx: Ctx):
                               prov=provenance(lic["spdx"], f"S1 record licence ({upstream.split(':')[0]} card)",
                                               content_spdx=content.group(1) if content else None,
                                               content_source="tool output in an agent trajectory",
-                                              concerns=[] if content else ["outputs can quote files under their own licences"]))
+                                              facts=[] if content else ["outputs can quote files under their own licences"]))
                     for m, (request, answer, method) in enumerate(extracts):
                         doc.extract(request, answer, m, method=method)
                     doc.reconstruct()
@@ -1537,6 +1547,664 @@ def s1_tool_outputs(ctx: Ctx):
                     made += 1
                     yield doc
         ctx.info[f"s1_tool_outputs:{name}"] = {"outputs": made, "wanted": want}
+
+
+# ---------------------------------------------------------------------------------------------- v3 sources
+# Added in v3 (owner rule 2026-10-10: every dataset licence is acceptable; licences are provenance facts only).
+
+MULTI_NEWS = resolve("data_hdd", "bgkit-data/multi_news_v1/raw")
+ARXIV_S2ORC = resolve("data_hdd", "bgkit-data/arxiv_v1/raw/data")
+PMC_MD = resolve("data_hdd", "bgkit-data/pubmed_v1/raw/data")
+ARXIV_FILES = 2   # leading parquet files read (9.3k papers each)
+PMC_FILES = 2     # leading parquet files read (10.6k articles each)
+LOGHUB_WINDOW = 6000  # characters of consecutive log lines per source
+MIND2WEB_ACTIONS_PER_TASK = 4
+
+
+def _csv_rows(path: Path) -> list[dict]:
+    csv.field_size_limit(1 << 30)
+    with open(path, encoding="utf-8", newline="") as stream:
+        return list(csv.DictReader(stream))
+
+
+def _parquet_rows(path: Path, columns=None) -> list[dict]:
+    import pyarrow.parquet as pq
+
+    return pq.read_table(str(path), columns=columns).to_pylist()
+
+
+def _summary_docs(ctx: Ctx, *, dataset: str, rows_by_split: dict, cap: int, make):
+    """Upstream splits 90/5/5 of `cap`, rows in seeded order; `make(row, split, index)` returns a Doc or None (and
+    rejects with its reason)."""
+    for split, rows in rows_by_split.items():
+        want = max(1, round(cap * UPSTREAM_SHARE[split]))
+        made = 0
+        for i in sorted(range(len(rows)), key=lambda i: _h(dataset, split, i)):
+            if made >= want:
+                break
+            doc = make(rows[i], split, i)
+            if doc is not None:
+                made += 1
+                yield doc
+
+
+def booksum(ctx: Ctx):
+    """BookSum chapter level: the chapter as the source, the study-guide summaries of it (several summary sources
+    per chapter: the first in seeded order is the target, the rest are alternatives)."""
+    cap = ctx.caps.get("booksum", 0)
+    root = ctx.raw / "booksum"
+    if not cap or not root.exists():
+        return
+    meta = _raw_meta(ctx, "booksum")
+    lic = license_("BSD-3-Clause", False, "kmfoda/booksum (BSD-3-Clause card); chapters from Project Gutenberg, summaries "
+                   "from study-guide websites (SparkNotes, CliffsNotes, GradeSaver, ...).")
+    rows_by_split = {}
+    for name, split in (("train.csv", "train"), ("dev.csv", "validation"), ("test.csv", "test")):
+        ctx.use(root / name, dataset="booksum", upstream="hf:kmfoda/booksum", revision=meta["revision"])
+        by_chapter: dict[str, list] = defaultdict(list)
+        for r in _csv_rows(root / name):  # chapters and aggregates (chapter ranges) alike
+            by_chapter[r["chapter_path"]].append(r)
+        rows_by_split[split] = [by_chapter[k] for k in sorted(by_chapter)]
+
+    def make(group, split, i):
+        chapter = (group[0].get("chapter") or "").strip()
+        key = group[0]["chapter_path"]
+        if not ctx.fits(chapter):
+            ctx.reject("booksum", key, "length")
+            return None
+        summaries = []
+        for r in sorted(group, key=lambda r: _h(ctx.seed, r.get("summary_path") or r.get("source"))):
+            text = re.sub(r"\s+", " ", r.get("summary_text") or "").strip()
+            if len(text) >= 80 and text not in summaries and text not in chapter:
+                summaries.append(text)
+        if not summaries:
+            ctx.reject("booksum", key, "no-summary")
+            return None
+        book = group[0].get("book_id") or key
+        title = book.split(".")[0]
+        sources = sorted({r.get("source") or "" for r in group} - {""})
+        doc = Doc(ctx, dataset="booksum", key=key, artifact="prose", text=chapter, title=book,
+                  upstream="hf:kmfoda/booksum", upstream_id=key, revision=meta["revision"], row=key, lic=lic, split=split,
+                  groups=[group_key("booksum-book", title)], meta={"format": "book chapter"},
+                  notes={"summary_sources": sources},
+                  prov=provenance("BSD-3-Clause", "hf:kmfoda/booksum card (Salesforce release)",
+                                  content_source="chapters: Project Gutenberg; summaries: " + ", ".join(sources),
+                                  holder="Project Gutenberg (public domain books); the study-guide websites (summaries)",
+                                  content_unverified=True,
+                                  facts=["summaries were scraped from study-guide websites; the card's BSD-3-Clause covers the release"]))
+        doc.summary(f"Summarize this chapter of {title}.", summaries[0], alternatives=summaries[1:4],
+                    general="Keep what a summary of the chapter needs.")
+        doc.reconstruct()
+        return doc
+
+    yield from _summary_docs(ctx, dataset="booksum", rows_by_split=rows_by_split, cap=cap, make=make)
+
+
+def xsum(ctx: Ctx):
+    """XSum: BBC articles with their one-sentence summaries (the article's introductory sentence, removed from the
+    article by the dataset)."""
+    cap = ctx.caps.get("xsum", 0)
+    root = ctx.raw / "xsum/data"
+    if not cap or not root.exists():
+        return
+    meta = _raw_meta(ctx, "xsum")
+    lic = license_("LicenseRef-unknown", False, "EdinburghNLP/xsum (licence not stated on the card); BBC articles.")
+    prov = provenance("LicenseRef-unknown", "hf:EdinburghNLP/xsum card (licence: unknown)", content_source="BBC news articles",
+                      holder="BBC", content_unverified=True, license_class="unverified")
+    rows_by_split = {}
+    for name, split in (("train", "train"), ("validation", "validation"), ("test", "test")):
+        path = root / f"{name}-00000-of-00001.parquet"
+        ctx.use(path, dataset="xsum", upstream="hf:EdinburghNLP/xsum", revision=meta["revision"])
+        rows_by_split[split] = _parquet_rows(path)
+
+    def make(r, split, i):
+        article, summary = r["document"].strip(), r["summary"].strip()
+        if not ctx.fits(article) or len(summary) < 20:
+            ctx.reject("xsum", r["id"], "length")
+            return None
+        doc = Doc(ctx, dataset="xsum", key=r["id"], artifact="prose", text=article, upstream="hf:EdinburghNLP/xsum",
+                  upstream_id=r["id"], revision=meta["revision"], row=i, lic=lic, prov=prov, split=split,
+                  groups=[group_key("xsum", r["id"])], meta={"format": "news article"})
+        doc.summary("Write a one-sentence summary of this news article.", summary,
+                    general="Keep what a short summary of the article needs.")
+        doc.reconstruct()
+        return doc
+
+    yield from _summary_docs(ctx, dataset="xsum", rows_by_split=rows_by_split, cap=cap, make=make)
+
+
+def govreport(ctx: Ctx):
+    """GovReport: US Government Accountability Office and Congressional Research Service reports with their
+    expert-written summaries; only reports within the source cap."""
+    cap = ctx.caps.get("govreport", 0)
+    root = ctx.raw / "govreport/document"
+    if not cap or not root.exists():
+        return
+    meta = _raw_meta(ctx, "govreport")
+    lic = license_("LicenseRef-not-stated", False, "ccdv/govreport-summarization (licence not stated); GAO and CRS reports "
+                   "(US federal government works).")
+    prov = provenance("LicenseRef-not-stated", "hf:ccdv/govreport-summarization card (no licence field)",
+                      content_spdx="LicenseRef-PublicDomain", content_source="GAO and CRS reports (Huang et al. 2021)",
+                      holder="US Government Accountability Office; Congressional Research Service",
+                      facts=["US federal government works", "the dataset card states no licence"], license_class="unverified")
+    rows_by_split = {}
+    for pattern, split in (("train-*.parquet", "train"), ("validation-*.parquet", "validation"), ("test-*.parquet", "test")):
+        rows = []
+        for path in sorted(root.glob(pattern)):
+            ctx.use(path, dataset="govreport", upstream="hf:ccdv/govreport-summarization", revision=meta["revision"])
+            rows += _parquet_rows(path)
+        rows_by_split[split] = rows
+
+    def make(r, split, i):
+        report, summary = r["report"].strip(), r["summary"].strip()
+        key = f"{split}-{i}"
+        if not ctx.fits(report):
+            ctx.reject("govreport", key, "length")
+            return None
+        if len(summary) < 200 or summary in report:
+            ctx.reject("govreport", key, "summary-short-or-in-report")
+            return None
+        doc = Doc(ctx, dataset="govreport", key=key, artifact="prose", text=report, upstream="hf:ccdv/govreport-summarization",
+                  upstream_id=key, revision=meta["revision"], row=i, lic=lic, prov=prov, split=split,
+                  groups=[group_key("govreport", _h(report[:2000])[:16])], meta={"format": "government report"})
+        doc.summary("Write the summary of this government report: what was examined, what was found, and what is "
+                    "recommended.", summary, general="Keep what a summary of the report needs.")
+        doc.reconstruct()
+        return doc
+
+    yield from _summary_docs(ctx, dataset="govreport", rows_by_split=rows_by_split, cap=cap, make=make)
+
+
+def multi_news(ctx: Ctx):
+    """Multi-News: several news articles about one story (separate sources of one record) and the newser.com
+    editors' summary of the story. A multi-source record: `view(xs, instructions)` over the list of articles."""
+    cap = ctx.caps.get("multi_news", 0)
+    root = MULTI_NEWS / "data"
+    if not cap or not root.exists():
+        return
+    lic = license_("LicenseRef-multi-news", False, "Multi-News (alexfabbri/multi_news; card licence 'other': the authors' "
+                   "non-commercial research terms); articles from the linked news sites, summaries from newser.com.")
+    prov = provenance("LicenseRef-multi-news", "hf:alexfabbri/multi_news card (license: other; non-commercial research terms)",
+                      content_source="news articles cited by newser.com; newser.com summaries", holder="the news publishers; newser.com",
+                      license_class="noncommercial", facts=["the dataset's terms restrict it to non-commercial research"])
+    rows_by_split = {}
+    for name, split in (("train", "train"), ("val", "validation"), ("test", "test")):
+        src, tgt = root / f"{name}.src.cleaned", root / f"{name}.tgt"
+        ctx.use(src, dataset="multi_news", upstream="hf:alexfabbri/multi_news", revision="38cb2069")
+        ctx.use(tgt, dataset="multi_news", upstream="hf:alexfabbri/multi_news", revision="38cb2069")
+        with open(src, encoding="utf-8") as a, open(tgt, encoding="utf-8") as b:
+            rows_by_split[split] = list(zip(a.read().split("\n"), b.read().split("\n")))
+
+    def make(pair, split, i):
+        src, tgt = pair
+        key = f"{split}-{i}"
+        articles = [re.sub(r"(?:\s*NEWLINE_CHAR\s*)+", "\n\n", a).strip() for a in src.split("|||||")]
+        articles = list(dict.fromkeys(a for a in articles if len(a) >= ctx.min_chars))
+        summary = re.sub(r"^\s*[–-]\s*", "", tgt).strip()
+        if len(articles) < 2 or len(summary) < 80:
+            ctx.reject("multi_news", key, "fewer-than-two-articles-or-short-summary")
+            return None
+        if sum(len(a) for a in articles) > ctx.max_chars:
+            ctx.reject("multi_news", key, "length")
+            return None
+        doc = Doc(ctx, dataset="multi_news", key=key, artifact="prose", text=articles[0], title="article 1",
+                  upstream="hf:alexfabbri/multi_news", upstream_id=key, revision="38cb2069", row=i, lic=lic, prov=prov,
+                  split=split, groups=[group_key("multi_news", _h(*sorted(text_hash(a) for a in articles))[:16])],
+                  meta={"format": "news article", "articles": len(articles)},
+                  more_sources=[{"text": a, "title": f"article {k + 2}"} for k, a in enumerate(articles[1:])])
+        doc.summary("Write a summary of the news story these articles report, combining what they say.", summary,
+                    general="Keep what a summary of the story across the articles needs.",
+                    extra_notes={"sources": len(articles)})
+        return doc
+
+    yield from _summary_docs(ctx, dataset="multi_news", rows_by_split=rows_by_split, cap=cap, make=make)
+
+
+def _strip_all(text: str, part: str) -> str | None:
+    """`text` without every copy of `part` (whitespace-insensitive at the ends); None if `part` is not found."""
+    part = part.strip()
+    if not part or part not in text:
+        return None
+    return re.sub(r"\n{3,}", "\n\n", text.replace(part, "")).strip()
+
+
+def arxiv(ctx: Ctx):
+    """arXiv papers (S2ORC-parsed full text, original casing): the abstract as the summary, removed from the text."""
+    cap = ctx.caps.get("arxiv", 0)
+    if not cap or not ARXIV_S2ORC.exists():
+        return
+    files = sorted(ARXIV_S2ORC.glob("train-*.parquet"))[:ARXIV_FILES]
+    lic = license_("LicenseRef-arxiv-per-paper", False, "AlgorithmicResearchGroup/arxiv_s2orc_parsed (S2ORC parse of arXiv "
+                   "papers); each paper under its arXiv licence.")
+    rows = []
+    for path in files:
+        ctx.use(path, dataset="arxiv", upstream="hf:AlgorithmicResearchGroup/arxiv_s2orc_parsed", revision="7cb654ce", hash=False)
+        rows += _parquet_rows(path, ["arxivid", "title", "abstract", "text", "doi"])
+    made = 0
+    for i in sorted(range(len(rows)), key=lambda i: _h("arxiv", i)):
+        if made >= cap:
+            break
+        r = rows[i]
+        aid, abstract = r.get("arxivid") or f"row{i}", re.sub(r"\s+", " ", r.get("abstract") or "").strip()
+        if len(abstract) < 200 or not r.get("text"):
+            ctx.reject("arxiv", aid, "no-abstract")
+            continue
+        text = _strip_all(r["text"], r["abstract"])
+        if text is None:
+            ctx.reject("arxiv", aid, "abstract-not-in-text")
+            continue
+        if not ctx.fits(text):
+            ctx.reject("arxiv", aid, "length")
+            continue
+        if abstract[:120] in re.sub(r"\s+", " ", text):
+            ctx.reject("arxiv", aid, "abstract-remains")
+            continue
+        title = (r.get("title") or [None])[0]
+        group = group_key("arxiv", aid)
+        doc = Doc(ctx, dataset="arxiv", key=aid, artifact="prose", text=text, title=title,
+                  upstream="hf:AlgorithmicResearchGroup/arxiv_s2orc_parsed", upstream_id=aid, revision="7cb654ce", row=i,
+                  lic=lic, split=carve(group), groups=[group], meta={"format": "scientific paper (S2ORC text)", "abstract_removed": True},
+                  refs=[{"text": f"arXiv:{aid}", "kind": "identifier"}] if r.get("arxivid") else [],
+                  prov=provenance("LicenseRef-arxiv-per-paper", "hf:AlgorithmicResearchGroup/arxiv_s2orc_parsed card (no licence field)",
+                                  content_source=f"arXiv:{aid} (licence per paper on arXiv; not recorded in the dataset)",
+                                  holder="the paper's authors", content_unverified=True))
+        doc.summary("Write the abstract of this paper.", abstract, general="Keep what a summary of the paper needs.")
+        doc.reconstruct()
+        made += 1
+        yield doc
+
+
+_PMC_HEADER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
+_PMC_SPDX = {"CC BY 4.0": "CC-BY-4.0", "CC BY 3.0": "CC-BY-3.0", "CC BY-SA 4.0": "CC-BY-SA-4.0", "CC0 1.0": "CC0-1.0",
+             "CC BY-NC 4.0": "CC-BY-NC-4.0", "CC BY-NC-SA 4.0": "CC-BY-NC-SA-4.0", "CC BY-NC 3.0": "CC-BY-NC-3.0"}
+
+
+def pmc_sections(text: str) -> tuple[dict, str, str, str | None] | None:
+    """(YAML header fields, text without the abstract section, the abstract, the simple summary or None) for a PMC
+    Open Access Markdown article; None without a `## Abstract` section."""
+    import yaml
+
+    m = _PMC_HEADER.match(text)
+    try:
+        header = yaml.safe_load(m.group(1)) if m else {}
+    except yaml.YAMLError:
+        header = {}
+    sec = re.search(r"^## (?:Abstract|ABSTRACT)[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if not sec:
+        return None
+    body = sec.group(1).strip()
+    subs = dict((h.strip().lower(), t.strip()) for h, t in re.findall(r"^### ([^\n]+)\n(.*?)(?=^### |\Z)", body, re.M | re.S))
+    abstract = subs.get("abstract")
+    if not abstract:  # a structured abstract (### Background, ### Methods, ...) is the whole section
+        abstract = re.sub(r"^### Simple Summary\n.*?(?=^### |\Z)", "", body, flags=re.M | re.S | re.I).strip()
+    if not abstract:
+        return None
+    rest = (text[:sec.start()] + text[sec.end():]).strip()
+    return (header if isinstance(header, dict) else {}), rest, abstract, subs.get("simple summary")
+
+
+def pubmed(ctx: Ctx):
+    """PubMed Central Open Access articles in Markdown (original text): the abstract as the summary (and the
+    journal's plain-language summary when the article has one), the abstract section removed from the source."""
+    cap = ctx.caps.get("pubmed", 0)
+    if not cap or not PMC_MD.exists():
+        return
+    files = sorted(PMC_MD.glob("train-*.parquet"))[:PMC_FILES]
+    rows = []
+    for path in files:
+        ctx.use(path, dataset="pubmed", upstream="hf:casperhansen/pmc-oa-markdown", revision="faaf29e9", hash=False)
+        rows += _parquet_rows(path, ["text"])
+    made = 0
+    for i in sorted(range(len(rows)), key=lambda i: _h("pubmed", i)):
+        if made >= cap:
+            break
+        parsed = pmc_sections(rows[i]["text"] or "")
+        if parsed is None:
+            ctx.reject("pubmed", i, "no-abstract")
+            continue
+        header, text, abstract, simple = parsed
+        pmcid = str(header.get("pmcid") or f"row{i}")
+        if not ctx.fits(text) or len(abstract) < 200:
+            ctx.reject("pubmed", pmcid, "length")
+            continue
+        if abstract[:120] in text:
+            ctx.reject("pubmed", pmcid, "abstract-remains")
+            continue
+        article_license = str(header.get("license") or "").strip()
+        spdx = _PMC_SPDX.get(article_license)
+        group = group_key("pmc", pmcid)
+        lic = license_(spdx or "LicenseRef-pmc-oa", False, f"PMC Open Access article {pmcid} ({article_license or 'licence not in header'}), "
+                       "via casperhansen/pmc-oa-markdown (card licence 'cc'; no-derivatives articles excluded upstream).")
+        doc = Doc(ctx, dataset="pubmed", key=pmcid, artifact="prose", text=text, title=str(header.get("title") or "") or None,
+                  upstream="hf:casperhansen/pmc-oa-markdown", upstream_id=pmcid, revision="faaf29e9", row=i, lic=lic,
+                  split=carve(group), groups=[group], meta={"format": "scientific article (Markdown)", "abstract_removed": True},
+                  refs=[{"text": pmcid, "kind": "identifier"}] + ([{"text": str(header["doi"]), "kind": "identifier"}] if header.get("doi") else []),
+                  prov=provenance("LicenseRef-pmc-oa", "hf:casperhansen/pmc-oa-markdown card (license: cc)", content_spdx=spdx,
+                                  content_source=f"PMC OA commercial-use subset; article licence field: {article_license or 'none'}",
+                                  holder="the article's authors / publisher", content_unverified=not spdx))
+        doc.summary("Write the abstract of this article.", abstract, n=0, general="Keep what a summary of the article needs.")
+        if simple and len(simple) >= 200 and simple[:120] not in text:
+            doc.summary("Write a plain-language summary of this article for a general reader.", simple, n=1,
+                        general="Keep what a summary of the article needs.")
+        doc.reconstruct()
+        made += 1
+        yield doc
+
+
+def _loghub_split(system: str) -> str:
+    """LogHub has no splits: whole systems are held out (two to test, one to validation, in hash order)."""
+    order = sorted(view_sources_loghub_systems(), key=lambda s: _h("loghub-split", s))
+    k = order.index(system)
+    return "test" if k < 2 else "validation" if k < 3 else "train"
+
+
+def view_sources_loghub_systems() -> list[str]:
+    from .view_sources import LOGHUB
+
+    return list(LOGHUB["systems"])
+
+
+def _unique_prefix(lines: list[str], k: int, minimum: int = 30) -> str | None:
+    line = lines[k]
+    for n in range(minimum, len(line) + 1, 10):
+        p = line[:n]
+        if sum(1 for l in lines if l.startswith(p)) == 1:
+            return p
+    return line if sum(1 for l in lines if l == line) == 1 and len(line) >= minimum else None
+
+
+def loghub(ctx: Ctx):
+    """LogHub (2k-line samples of 16 systems with human-labelled event templates): windows of consecutive raw log
+    lines; targets from the labels (a line's template, the distinct templates in order, a template's line count)."""
+    cap = ctx.caps.get("loghub", 0)
+    root = ctx.raw / "loghub"
+    if not cap or not root.exists():
+        return
+    meta = _raw_meta(ctx, "loghub")
+    lic = license_("LicenseRef-loghub", False, "logpai/loghub (no licence file; 'for research purposes'); logs from the "
+                   "systems' public sources as listed per system.")
+    prov = provenance("LicenseRef-loghub", "github:logpai/loghub README (no licence; research use)",
+                      content_source="system logs collected by LogPAI (per-system READMEs)", holder="LogPAI; the logs' producers",
+                      content_unverified=True, license_class="unverified")
+    made = 0
+    for system in view_sources_loghub_systems():
+        log_path, struct_path = root / system / f"{system}_2k.log", root / system / f"{system}_2k.log_structured.csv"
+        if not log_path.exists() or not struct_path.exists():
+            continue
+        ctx.use(log_path, dataset="loghub", upstream="github:logpai/loghub", revision=meta["revision"])
+        ctx.use(struct_path, dataset="loghub", upstream="github:logpai/loghub", revision=meta["revision"])
+        raw_lines = log_path.read_text(encoding="utf-8", errors="replace").split("\n")
+        labels = {int(r["LineId"]): r["EventTemplate"] for r in _csv_rows(struct_path)}
+        lines = [(raw_lines[i - 1].rstrip("\r"), labels[i]) for i in sorted(labels) if 0 < i <= len(raw_lines)]
+        windows, cur, size = [], [], 0
+        for item in lines:
+            if cur and size + len(item[0]) + 1 > LOGHUB_WINDOW:
+                windows.append(cur)
+                cur, size = [], 0
+            cur.append(item)
+            size += len(item[0]) + 1
+        if cur:
+            windows.append(cur)
+        split = _loghub_split(system)
+        for w, window in enumerate(windows):
+            if made >= cap:
+                return
+            text = "\n".join(l for l, _ in window)
+            if not ctx.fits(text) or len(window) < 5:
+                ctx.reject("loghub", f"{system}:{w}", "length")
+                continue
+            doc = Doc(ctx, dataset="loghub", key=f"{system}:{w}", artifact="log", text=text, title=f"{system} log",
+                      upstream="github:logpai/loghub", upstream_id=f"{system}_2k.log#{w}", revision=meta["revision"],
+                      row=f"{system}:{w}", lic=lic, prov=prov, split=split, groups=[group_key("loghub-system", system)],
+                      meta={"format": f"{system} log", "system": system, "lines": len(window)})
+            rng = ctx.rng("loghub", system, w)
+            templates = list(dict.fromkeys(t for _, t in window))
+            n = 0
+            if 2 <= len(templates) <= 12:
+                doc.qa("List the distinct event templates of these log lines (variable parts as <*>), in order of first "
+                       "appearance, one per line.", "\n".join(templates), n, checked="reference-labels",
+                       origin="dataset-labels", extra_notes={"labels": "loghub EventTemplate"})
+                n += 1
+            raw = [l for l, _ in window]
+            picks = list(range(len(window)))
+            rng.shuffle(picks)
+            asked = 0
+            for k in picks:
+                if asked >= 2:
+                    break
+                prefix = _unique_prefix(raw, k)
+                if prefix is None or window[k][1] == raw[k]:
+                    continue
+                doc.qa(f"What is the event template (variable parts as <*>) of the log line that begins `{prefix}`?",
+                       window[k][1], n, checked="reference-labels", origin="dataset-labels",
+                       extra_notes={"labels": "loghub EventTemplate", "line": k})
+                n += 1
+                asked += 1
+            counts = Counter(t for _, t in window)
+            multi = [t for t in templates if counts[t] >= 2]
+            if multi:
+                t = rng.choice(multi)
+                doc.qa(f"How many lines of this log have the event template `{t}`?", str(counts[t]), n,
+                       checked="reference-labels", origin="dataset-labels", extra_notes={"labels": "loghub EventTemplate"})
+            doc.reconstruct()
+            made += 1
+            yield doc
+
+
+def _serialize(node, memo: dict) -> str:
+    """HTML text of a parsed node (view_extract.Node), memoized by id."""
+    import html as _html
+
+    if isinstance(node, str):
+        return _html.escape(node, quote=False)
+    got = memo.get(id(node))
+    if got is not None:
+        return got
+    inner = "".join(_serialize(c, memo) for c in node.children)
+    if node.tag == "#document":
+        out = inner
+    else:
+        attrs = "".join(f' {k}="{_html.escape(v)}"' if v != "" else f" {k}" for k, v in node.attrs.items())
+        out = f"<{node.tag}{attrs}>" + ("" if node.tag in vx.VOID else inner + f"</{node.tag}>")
+    memo[id(node)] = out
+    return out
+
+
+def reduce_dom(html: str, target_attr: str, target_value: str, cap: int, drop_attrs=()) -> str | None:
+    """The page cut to at most `cap` characters around one element: the element's subtree, its ancestors, and
+    sibling subtrees of each ancestor added nearest-first while they fit (larger ones are skipped). `drop_attrs`
+    are removed afterwards. None if the element is missing or its own subtree is over half the cap."""
+    dom = vx.HtmlDoc(html)
+    target = next((n for n in dom.root.elements() if n.attrs.get(target_attr) == target_value), None)
+    if target is None:
+        return None
+    memo: dict = {}  # sizes over the parsed nodes, which stay alive (ids are never reused within the call)
+    size = len(_serialize(target, memo))
+    if size > cap // 2:
+        return None
+    kept_children: dict[int, list] = {}  # ancestor id -> the children it keeps, in document order
+    node = target
+    while node.parent is not None and node.parent.tag != "#document":
+        parent = node.parent
+        size += len(_serialize(vx.Node(parent.tag, parent.attrs, None), {}))
+        at = parent.children.index(node)
+        keep = {at}
+        lo, hi = at - 1, at + 1
+        while lo >= 0 or hi < len(parent.children):
+            for idx in (lo, hi):
+                if 0 <= idx < len(parent.children):
+                    n = len(_serialize(parent.children[idx], memo))
+                    if size + n <= cap:
+                        keep.add(idx)
+                        size += n
+            lo, hi = lo - 1, hi + 1
+        kept_children[id(parent)] = [parent.children[k] for k in sorted(keep)]
+        node = parent
+
+    def build(n):
+        if isinstance(n, str):
+            return n
+        c = vx.Node(n.tag, {k: v for k, v in n.attrs.items() if k not in drop_attrs}, None)
+        c.children = [build(x) for x in kept_children.get(id(n), n.children)]
+        return c
+
+    return _serialize(build(node), {})
+
+
+def _mind2web_files(ctx: Ctx) -> list[Path]:
+    return sorted((ctx.raw / "mind2web/data/train").glob("train_*.json"), key=lambda p: int(p.stem.split("_")[1]))
+
+
+def mind2web(ctx: Ctx):
+    """Mind2Web train tasks: one page snapshot per chosen action, reduced around the action's target element to
+    the source cap (`reduce_dom`); the dataset's task and previous actions as the question, the dataset's action
+    (`[role] text -> OPERATION[: value]`) as the answer; CSS-selector extraction and reconstruction of the reduced
+    page. The test sets are not fetched."""
+    cap = ctx.caps.get("mind2web", 0)
+    files = _mind2web_files(ctx)
+    if not cap or not files:
+        return
+    meta = _raw_meta(ctx, "mind2web")
+    lic = license_("CC-BY-4.0", False, "osunlp/Mind2Web (CC-BY-4.0); page snapshots of the listed websites.")
+    prov = provenance("CC-BY-4.0", "hf:osunlp/Mind2Web card", content_source="snapshots of third-party websites",
+                      holder="the source websites", content_unverified=True,
+                      facts=["page text and markup belong to the source websites"])
+    made = 0
+    for path in files:
+        if made >= cap:
+            break
+        ctx.use(path, dataset="mind2web", upstream="hf:osunlp/Mind2Web", revision=meta["revision"])
+        tasks = json.loads(path.read_text(encoding="utf-8"))
+        for task in sorted(tasks, key=lambda t: _h("mind2web", t["annotation_id"])):
+            if made >= cap:
+                break
+            reprs = task.get("action_reprs") or []
+            actions = task.get("actions") or []
+            order = list(range(min(len(actions), len(reprs))))
+            ctx.rng("mind2web", task["annotation_id"]).shuffle(order)
+            taken = 0
+            for k in order:
+                if taken >= MIND2WEB_ACTIONS_PER_TASK or made >= cap:
+                    break
+                a = actions[k]
+                pos = [c for c in a.get("pos_candidates") or [] if c.get("backend_node_id")]
+                key = f"{task['annotation_id']}:{a.get('action_uid') or k}"
+                if not pos or not a.get("cleaned_html"):
+                    ctx.reject("mind2web", key, "no-target")
+                    continue
+                html = reduce_dom(a["cleaned_html"], "backend_node_id", str(pos[0]["backend_node_id"]), ctx.max_chars,
+                                  drop_attrs=("backend_node_id",))
+                if html is None or not ctx.fits(html):
+                    ctx.reject("mind2web", key, "reduce")
+                    continue
+                answer = re.sub(r"\s+", " ", reprs[k]).strip()
+                previous = "\n".join(re.sub(r"\s+", " ", r).strip() for r in reprs[:k]) or "none"
+                dom = vx.HtmlDoc(html)
+                group = group_key("mind2web-site", task["website"])
+                doc = Doc(ctx, dataset="mind2web", key=key, artifact="html", text=html, title=dom.title() or task["website"],
+                          upstream="hf:osunlp/Mind2Web", upstream_id=key, revision=meta["revision"], row=key, lic=lic, prov=prov,
+                          split=carve(group), groups=[group, group_key("mind2web-task", task["annotation_id"])],
+                          refs=[r for r in exact_refs_from(html, limit=16) if r["text"] not in answer],
+                          meta={"format": "html", "website": task["website"], "domain": task.get("domain"),
+                                "normalized": "Mind2Web cleaned_html reduced around the action's target element; "
+                                              "backend_node_id attributes removed"})
+                question = f"Task: {task['confirmed_task'].strip()}\nPrevious actions:\n{previous}\nWhat is the next action on this page?"
+                doc.qa(question, answer, 0, request=question + " Answer as `[element role] element text -> OPERATION`, "
+                       "with `: value` after TYPE and SELECT.", extra_notes={"upstream_action_uid": a.get("action_uid"),
+                                                                            "action_index": k})
+                for m, (request, ans, method) in enumerate(_html_extracts(dom, ctx.rng("mind2web", key))[:2]):
+                    doc.extract(request, ans, m, method=method)
+                doc.reconstruct()
+                taken += 1
+                made += 1
+                yield doc
+        del tasks
+
+
+def _warc_records(path: Path):
+    """(headers, payload bytes) of each WARC response record in a gzip-member WARC file or a prefix of one (the cut
+    last member of a prefix is skipped)."""
+    import zlib
+
+    data = path.read_bytes()
+    view_ = memoryview(data)
+    pos = 0
+    while pos < len(data):
+        d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        parts = []
+        while not d.eof:
+            if pos >= len(data):
+                return
+            chunk = view_[pos:pos + (1 << 20)]
+            try:
+                parts.append(d.decompress(chunk))
+            except zlib.error:
+                return
+            pos += len(chunk)
+        pos -= len(d.unused_data)
+        head, _, body = b"".join(parts).partition(b"\r\n\r\n")
+        headers = {}
+        for line in head.decode("latin-1").split("\r\n")[1:]:
+            k, _, v = line.partition(":")
+            headers[k.strip().lower()] = v.strip()
+        if headers.get("warc-type") == "response":
+            yield headers, body
+
+
+def common_crawl(ctx: Ctx):
+    """Common Crawl HTML pages (one WARC prefix of CC-MAIN-2025-38): scripts, styles and comments removed; pages
+    within the source cap with a title; CSS-selector extraction and reconstruction."""
+    cap = ctx.caps.get("common_crawl", 0)
+    files = sorted((ctx.raw / "common_crawl").glob("*.warc.gz"))
+    if not cap or not files:
+        return
+    meta = _raw_meta(ctx, "common_crawl")
+    lic = license_("LicenseRef-commoncrawl-terms", False, "Common Crawl (Terms of Use); page content under its publishers' terms.")
+    made, hosts = 0, Counter()
+    for path in files:
+        ctx.use(path, dataset="common_crawl", upstream=f"commoncrawl:{meta['revision']}", revision=meta["revision"])
+        for headers, payload in _warc_records(path):
+            if made >= cap:
+                return
+            url = headers.get("warc-target-uri", "")
+            http_head, _, body = payload.partition(b"\r\n\r\n")
+            head = http_head.decode("latin-1", errors="replace").lower()
+            if " 200" not in head.split("\r\n", 1)[0] or "content-type: text/html" not in head:
+                continue
+            charset = re.search(r"charset=([\w-]+)", head)
+            try:
+                page = body.decode(charset.group(1) if charset else "utf-8", errors="replace")
+            except LookupError:
+                page = body.decode("utf-8", errors="replace")
+            html = vx.clean_html(page)
+            html = re.sub(r"\sstyle=\"[^\"]*\"", "", html)
+            host = re.sub(r"^www\.", "", url.split("/")[2]) if url.count("/") >= 2 else url
+            if hosts[host] >= 2:
+                continue
+            if not ctx.fits(html) or "�" in html[:2000]:
+                ctx.reject("common_crawl", url[:200], "length-or-encoding")
+                continue
+            dom = vx.HtmlDoc(html)
+            title = dom.title()
+            extracts = _html_extracts(dom, ctx.rng("common_crawl", url))
+            if not title or not extracts:
+                ctx.reject("common_crawl", url[:200], "no-title-or-extract")
+                continue
+            hosts[host] += 1
+            group = group_key("cc-host", host)
+            doc = Doc(ctx, dataset="common_crawl", key=headers.get("warc-record-id", url).strip("<>").split(":")[-1],
+                      artifact="html", text=html, title=title, upstream=f"commoncrawl:{meta['revision']}", upstream_id=url,
+                      revision=meta["revision"], row=headers.get("warc-record-id"), lic=lic, split=carve(group), groups=[group],
+                      refs=[{"text": url, "kind": "url"}] + exact_refs_from(html, limit=15),
+                      meta={"format": "html", "url": url, "normalized": "scripts, styles, svg, comments and style attributes removed"},
+                      prov=provenance("LicenseRef-commoncrawl-terms", "commoncrawl.org Terms of Use",
+                                      content_source=f"web page {url[:300]}", holder=host, content_unverified=True,
+                                      facts=["page text and markup belong to the page's publisher"]))
+            for m, (request, ans, method) in enumerate(extracts):
+                doc.extract(request, ans, m, method=method)
+            doc.reconstruct()
+            made += 1
+            yield doc
 
 
 # ---------------------------------------------------------------------------------------------- build
@@ -1549,6 +2217,8 @@ ADAPTERS = {
     "wtq": wtq, "fetaqa": fetaqa,
     "swe_tool_outputs": swe_tool_outputs,
     "spider_bird": spider_bird, "tabfact": tabfact, "toolace": toolace, "s1_tool_outputs": s1_tool_outputs,
+    "booksum": booksum, "xsum": xsum, "govreport": govreport, "multi_news": multi_news, "arxiv": arxiv, "pubmed": pubmed,
+    "loghub": loghub, "mind2web": mind2web, "common_crawl": common_crawl,
 }
 
 
@@ -1717,7 +2387,7 @@ def build(raw: Path, out: Path, *, corpus_id: str, caps: dict, max_source_chars:
         "closure": closure,
         "cross_corpus_indexes": [{"corpus_id": ix.corpus_id, **({"registry_id": rid} if rid else {"path": str(ix.root)}),
                                   "records": ix.meta["records"]} for ix, (_, rid) in zip(indexes, resolved)],
-        "license_review": {
+        "license_provenance": {
             "by_class": dict(Counter(r["lineage"]["notes"]["license_provenance"]["class"] for r in kept)),
             "by_dataset_class": dict(Counter(f"{r['lineage']['store']}:{r['lineage']['notes']['license_provenance']['class']}"
                                              for r in kept)),
@@ -1728,43 +2398,8 @@ def build(raw: Path, out: Path, *, corpus_id: str, caps: dict, max_source_chars:
         "files": files,
         "inputs": inputs,
         "admission": {"training_admission": False,
-                      "reason": "pending view-stage qualification (TRAINING_RECIPE.md) and license review"},
+                      "reason": "pending the view operator stage's qualification (TRAINING_RECIPE.md); licences are "
+                                "provenance facts only (owner rule 2026-10-10)"},
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
-    return manifest
-
-
-def filter_by_license(src: Path, out: Path, allow: set[str]) -> dict:
-    """Copy a built corpus keeping only records whose `license_provenance.class` is in `allow`. Purpose pairs that
-    point at dropped records are removed; a compare record left without pairs becomes consume. Splits are unchanged
-    (a subset of a closed corpus stays closed). Writes a manifest with the filter and counts."""
-    unknown = allow - set(vx.CLASS_ORDER)
-    if unknown:
-        raise ValueError(f"unknown licence classes: {sorted(unknown)}")
-    records = [json.loads(l) for p in sorted(Path(src).glob("*.port-records.jsonl")) for l in p.open(encoding="utf-8") if l.strip()]
-    keep = [r for r in records if r["lineage"]["notes"]["license_provenance"]["class"] in allow]
-    ids = {r["id"] for r in keep}
-    for r in keep:
-        pairs = [i for i in r["contrasts"]["purpose_pairs"] if i in ids]
-        r["contrasts"]["purpose_pairs"] = pairs
-        if r["task"] == "compare" and not pairs:
-            r["task"] = "consume"
-        seal(r)
-    out.mkdir(parents=True, exist_ok=True)
-    by_family: dict[str, list] = defaultdict(list)
-    for r in keep:
-        by_family[r["family"]].append(r)
-    files = []
-    for family in sorted(by_family):
-        path = out / f"{family}.port-records.jsonl"
-        with open(path, "w", encoding="utf-8") as stream:
-            for r in by_family[family]:
-                stream.write(json.dumps(r, ensure_ascii=False) + "\n")
-        files.append({"path": path.name, "records": len(by_family[family]), "sha256": _file_sha256(path)})
-    manifest = {"schema": "natlang.view-corpus-license-filter/1", "source": str(src), "allow": sorted(allow),
-                "records_in": len(records), "records": len(keep),
-                "dropped_by_class": dict(Counter(r["lineage"]["notes"]["license_provenance"]["class"] for r in records
-                                                 if r["id"] not in ids)), "files": files,
-                "admission": {"training_admission": False, "reason": "a licence-filtered copy inherits the source's hold"}}
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     return manifest
