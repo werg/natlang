@@ -1,0 +1,94 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-inactive-model-spark-x25-4b-hf-preservation-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-model-candidates-20261010-v1/spark-x25-4b-hf",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11338,
+      "sha256": "525c465ab952779d2d360a9ff36f7f49ae018a23d80302ff839a850a77784c36"
+    },
+    {
+      "path": "chat_template.jinja",
+      "bytes": 4648,
+      "sha256": "705345721970da40e6aa56db548a46ecd1d8d94a5418808fa180ac19ee77a9ba"
+    },
+    {
+      "path": "config.json",
+      "bytes": 2035,
+      "sha256": "767161ece8ed2891e44345afdf98d29c1cacb964116cb6db7d20dc1c757490ad"
+    },
+    {
+      "path": "configuration_spark.py",
+      "bytes": 4329,
+      "sha256": "02218597240490f490659b184052db940b08163ff9c3af7b7e59323f6f963722"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 281,
+      "sha256": "804a5276a9d237600688267dd2bf6f9d4129ec21faf417f870d5d52b32ad9e6c"
+    },
+    {
+      "path": "merges.txt",
+      "bytes": 1567883,
+      "sha256": "b06fc88940ae6a20f71142f06304c12547f58ab52c175e56af12a38c3dc62f36"
+    },
+    {
+      "path": "model-00001-of-00005.safetensors",
+      "bytes": 1982449560,
+      "sha256": "cc36bfe9ca2b839df89fd8c0c94f566f6717bd07ae859dfad074b303f90bdf5b"
+    },
+    {
+      "path": "model-00002-of-00005.safetensors",
+      "bytes": 1993132424,
+      "sha256": "d98ea6b9059433181042c1ff9fbec167ae2f0850029787c82520d04a04942952"
+    },
+    {
+      "path": "model-00003-of-00005.safetensors",
+      "bytes": 1993225080,
+      "sha256": "0ba22891378cf0ef3d9bf1f73c3159df3fc3dab8aa6e17679a9ffe7e9d867526"
+    },
+    {
+      "path": "model-00004-of-00005.safetensors",
+      "bytes": 1993132448,
+      "sha256": "6aae0314fdf8fc3801677c017f296bcb14bc16095286c3bd1e7ce27e0398a113"
+    },
+    {
+      "path": "model-00005-of-00005.safetensors",
+      "bytes": 262252896,
+      "sha256": "ffe48ea1c2ee668407dd6ded0c02529da9c54580a8c38f6e53cf902b85a1bd95"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 24133,
+      "sha256": "77a11d49b279b5e44fcb1f2453f71a8023237f93992fe5275d842e149d896edd"
+    },
+    {
+      "path": "modeling_spark.py",
+      "bytes": 19418,
+      "sha256": "9cf0d1ad2b54b9f7088792779ddd8b5cb4d4fe63bfea054da7f2dd16362bcaf4"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 156,
+      "sha256": "48a257e3f5f20a004e7c30482a70ae19ae7d9cf713144f2a1394ba20af8c3cb5"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 10115786,
+      "sha256": "710cce15cf3565674c499f9413997c6e8101f2bdd96245cff8f0311fb501248c"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 4797,
+      "sha256": "0729b0aeb1b88e000687b51c72d5aece759233bb4f6fb353eb497676e04d43b0"
+    },
+    {
+      "path": "vocab.json",
+      "bytes": 3032795,
+      "sha256": "9f42cb7e7af5afe27cae2337d272d60b5659e10143ef4bb952f642b847916fe1"
+    }
+  ],
+  "bytes": 8238980007
+}

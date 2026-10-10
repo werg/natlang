@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-inactive-model-ling3-tiny-natlang-v2-preservation-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-model-candidates-20261010-v1/ling3-tiny-natlang-v2",
+  "files": [
+    {
+      "path": "Ling-3.0-tiny-natlang-v2-Q4_K_M.gguf",
+      "bytes": 4823894944,
+      "sha256": "201e1bf5a9482568516de876fc39fdcdaacd059a71b01cac486331cd6527d934"
+    }
+  ],
+  "bytes": 4823894944
+}

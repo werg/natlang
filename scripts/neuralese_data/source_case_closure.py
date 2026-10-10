@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fnmatch
 import json
 import sys
 from collections import Counter
@@ -102,6 +103,73 @@ def verify_raw_lineage(manifest: dict, manifest_path: Path) -> tuple[dict[str, d
                         "manifest_sha256": raw_spec["sha256"], "manifest_rows": expected_rows}
 
 
+def validate_visible_json_projection(spec: dict | None) -> list[dict]:
+    """Validate optional, manifest-declared semantic string fields in visible JSON inputs.
+
+    Selected documents are indexed by their declared string values, not their serialized
+    JSON wrapper. The source record still carries the container path and hash as metadata.
+    """
+    if spec is None:
+        return []
+    if not isinstance(spec, dict) or spec.get("schema") != "natlang.visible-json-text-fields/1":
+        raise ValueError("visible_json_text_fields must use natlang.visible-json-text-fields/1")
+    entries = spec.get("files")
+    if not isinstance(entries, list):
+        raise ValueError("visible_json_text_fields.files must be a list")
+    seen_globs = set()
+    normalized = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"visible_json_text_fields.files[{index}] must be an object")
+        pattern = entry.get("glob")
+        pointers = entry.get("pointers")
+        if not isinstance(pattern, str) or not pattern or pattern.startswith("/") or ".." in Path(pattern).parts:
+            raise ValueError(f"visible_json_text_fields.files[{index}].glob must be a relative file pattern")
+        if pattern in seen_globs:
+            raise ValueError(f"duplicate visible JSON file pattern: {pattern}")
+        seen_globs.add(pattern)
+        if not isinstance(pointers, list):
+            raise ValueError(f"visible_json_text_fields.files[{index}].pointers must be a list")
+        fields = []
+        seen_pointers = set()
+        for field_index, field in enumerate(pointers):
+            if not isinstance(field, dict):
+                raise ValueError(f"visible_json_text_fields.files[{index}].pointers[{field_index}] must be an object")
+            pointer, role = field.get("pointer"), field.get("role", "record")
+            if not isinstance(pointer, str) or not pointer.startswith("/"):
+                raise ValueError(f"visible JSON field pointer must be a non-root JSON pointer: {field!r}")
+            if pointer in seen_pointers:
+                raise ValueError(f"duplicate JSON pointer {pointer!r} for file pattern {pattern}")
+            if role not in records.SOURCE_ROLES:
+                raise ValueError(f"unknown source role {role!r} for JSON pointer {pointer!r}")
+            seen_pointers.add(pointer)
+            fields.append({"pointer": pointer, "role": role})
+        normalized.append({"glob": pattern, "pointers": fields,
+                           "basis": entry.get("basis") or spec.get("basis") or "explicit visible-input semantic field selection"})
+    return normalized
+
+
+def json_pointer_value(value, pointer: str, *, where: str):
+    """Resolve one concrete RFC 6901 JSON pointer; wildcard expansion is intentionally unsupported."""
+    current = value
+    for raw_part in pointer[1:].split("/"):
+        for index, char in enumerate(raw_part):
+            if char == "~" and (index + 1 >= len(raw_part) or raw_part[index + 1] not in "01"):
+                raise ValueError(f"{where}: JSON pointer {pointer!r} contains an invalid escape")
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        elif (isinstance(current, list) and part.isascii() and
+              (part == "0" or (part and part[0] in "123456789" and all(char in "0123456789" for char in part[1:]))) and
+              int(part) < len(current)):
+            current = current[int(part)]
+        else:
+            raise ValueError(f"{where}: JSON pointer {pointer!r} does not resolve")
+    if not isinstance(current, str) or not current.strip():
+        raise ValueError(f"{where}: JSON pointer {pointer!r} must resolve to non-empty text")
+    return current
+
+
 def verify_registered_index(reference: str, index_root: Path) -> dict:
     """Verify registered index manifest file hashes when an index is registered locally."""
     registry = json.loads((ROOT / "training/neuralese_corpora.json").read_text(encoding="utf-8"))
@@ -134,7 +202,8 @@ def verify_registered_index(reference: str, index_root: Path) -> dict:
             "files": verified_files}
 
 
-def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage: dict[tuple[str, str], dict]) -> dict:
+def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage: dict[tuple[str, str], dict],
+                           visible_json_fields: list[dict] | None = None) -> dict:
     """Create one auditable port component per source case, not per native action."""
     case_id = case.get("id")
     if not isinstance(case_id, str) or not case_id:
@@ -237,14 +306,46 @@ def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage
 
     visible_sources = [records.source("file", root_text, title=root_name,
                                       meta={"path": root_name, "role": "callable-root"}, exact_refs=[])]
+    file_projection_receipts = []
     for path, body in sorted(file_map.items()):
+        body_sha = sha256_hex(body.encode("utf-8")) if isinstance(body, str) else None
         if path == output_path:
+            file_projection_receipts.append({"path": path, "file_sha256": body_sha,
+                                             "projection": "excluded-generated-output", "semantic_text_in_sources": False})
             continue
         if not isinstance(body, str) or not body:
             raise ValueError(f"{case_id}: declared visible file {path} is empty or non-text")
-        role = "record" if path.startswith("records/") else "file"
-        visible_sources.append(records.source(role, body, title=path,
-                                              meta={"path": path, "role": "visible-input"}, exact_refs=[]))
+        selectors = [entry for entry in (visible_json_fields or []) if fnmatch.fnmatchcase(path, entry["glob"])]
+        if len(selectors) > 1:
+            raise ValueError(f"{case_id}: visible JSON input {path} matches multiple field-selection patterns")
+        if selectors:
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"{case_id}: {path} matches a JSON projection pattern but is not JSON") from exc
+            selected = selectors[0]
+            emitted = []
+            for field in selected["pointers"]:
+                pointer, role = field["pointer"], field["role"]
+                text = json_pointer_value(parsed, pointer, where=f"{case_id}:{path}")
+                text_sha = sha256_hex(text.encode("utf-8"))
+                visible_sources.append(records.source(
+                    role, text, title=f"{path}#{pointer}",
+                    meta={"path": path, "role": "visible-json-field", "json_pointer": pointer,
+                          "container_sha256": body_sha, "selected_text_sha256": text_sha}, exact_refs=[]))
+                emitted.append({"pointer": pointer, "role": role, "text_sha256": text_sha})
+            file_projection_receipts.append({"path": path, "file_sha256": body_sha,
+                                             "projection": "declared-semantic-json-fields",
+                                             "matched_glob": selected["glob"], "basis": selected["basis"],
+                                             "wrapper_text_in_sources": False, "emitted_fields": emitted})
+        else:
+            role = "record" if path.startswith("records/") else "file"
+            visible_sources.append(records.source(role, body, title=path,
+                                                  meta={"path": path, "role": "visible-input",
+                                                        "file_sha256": body_sha}, exact_refs=[]))
+            file_projection_receipts.append({"path": path, "file_sha256": body_sha,
+                                             "projection": "whole-visible-file-text",
+                                             "semantic_text_in_sources": True})
 
     question = task.get("instruction") or task.get("criterion") or json.dumps(task, ensure_ascii=False)
     case_sha = canonical_row_sha256(case)
@@ -271,6 +372,7 @@ def source_case_projection(case: dict, bound_candidates: list[dict], raw_lineage
                     "notes": {"question": question, "source_case_id": case_id,
                               "source_case_sha256": case_sha,
                               "semantic_target_origin": "source_case.semantics.expected",
+                              "visible_file_projection_receipts": file_projection_receipts,
                               "candidate_native_rows_are_provenance_only": True,
                               "candidate_rows_bound_to_component": candidate_bindings}},
         "license": {"spdx": "LicenseRef-Natlang-Project-Generated", "noncommercial": False,
@@ -336,7 +438,16 @@ def run(args: argparse.Namespace) -> dict:
     indexes = [cross_corpus.Index(root) for root in index_roots]
     protected = json.loads(protected_path.read_text(encoding="utf-8"))
 
-    projection = [source_case_projection(case, candidates_by_case[case["id"]], raw_lineage) for case in cases]
+    visible_json_fields = validate_visible_json_projection(source_manifest.get("visible_json_text_fields"))
+    projection = [source_case_projection(case, candidates_by_case[case["id"]], raw_lineage, visible_json_fields)
+                  for case in cases]
+    matched_patterns = {receipt.get("matched_glob")
+                        for record in projection
+                        for receipt in record["lineage"]["notes"]["visible_file_projection_receipts"]
+                        if receipt.get("matched_glob")}
+    missing_patterns = sorted({entry["glob"] for entry in visible_json_fields} - matched_patterns)
+    if missing_patterns:
+        raise ValueError(f"visible_json_text_fields patterns matched no declared visible files: {missing_patterns}")
     projection_path = out / "source-case-port-projection.jsonl"
     projection_path.write_text("".join(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n"
                                                     for record in projection), encoding="utf-8")
@@ -376,7 +487,9 @@ def run(args: argparse.Namespace) -> dict:
                            "rows": len(candidates), "binding_path": str(binding_path),
                            "binding_sha256": sha256(binding_path)},
         "projection": {"path": str(projection_path), "sha256": sha256(projection_path),
-                       "records": len(projection), "basis": "one port record per source case; exact callable root and visible input files as sources; actual user request as consumer; authored semantics.expected as target"},
+                       "records": len(projection), "basis": "one port record per source case; exact callable root, manifest-selected visible JSON text fields and other visible input files as sources; actual user request as consumer; authored semantics.expected as target",
+                       "visible_json_text_fields": visible_json_fields,
+                       "visible_json_text_fields_sha256": sha256_hex(json.dumps(visible_json_fields, sort_keys=True, ensure_ascii=False).encode("utf-8")) if visible_json_fields else None},
         "closed_projection": {"path": str(kept_path), "sha256": sha256(kept_path), "records": len(kept),
                                "omitted_projection_ids": sorted(record["id"] for record in projection if record["id"] not in kept_ids)},
         "indexes": index_receipts,

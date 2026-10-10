@@ -24657,6 +24657,121 @@
       "training_admission": false,
       "admission": "held-source-quality-closure-pending",
       "notes": "FourmediumreasoningfreshV12qualityrecovery attempts V35indices8/10/12/18;1brokenstatechain2wrongdecisions1incompleteedgecount. Sourcegroups/golds unchanged noindependentworldcredit noautoDPO/admission. Max5includingoneV37remainingworker. Activeoutputsexcluded."
+    },
+    {
+      "id": "pop-inactive-model-ling3-tiny-hf-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/ling3-tiny-hf",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-inactive-model-ling3-tiny-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/ling3-tiny",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-inactive-model-ling3-tiny-natlang-v2-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/ling3-tiny-natlang-v2",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-inactive-model-spark-x25-4b-hf-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/spark-x25-4b-hf",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-inactive-model-lfm25-8b-a1b-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/lfm25-8b-a1b",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-inactive-model-lfm25-8b-a1b-nf4-preservation-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-model-candidates-20261010-v1/lfm25-8b-a1b-nf4",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        ".cache",
+        "__pycache__"
+      ],
+      "kind": "model-artifact",
+      "source_class": "inactive-model-candidate-preservation",
+      "training_admission": false,
+      "admission": "model-artifact-only-not-training-data",
+      "notes": "InactivePopcandidate exactweights/config/tokenizer/sourceREADMEpreservationforverifiedDGXoffload. Noactive350Mweights/currentV5inputs included. KeepmetadataonPop; exactlargeweight offloadrestore receipts recordavailability. HFdownloadcacheexcluded."
+    },
+    {
+      "id": "pop-stopped-container-preservation-20261010-v1",
+      "owner": "pop",
+      "path": "runs/storage-cleanup-pop-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "source_class": "storage-maintenance-evidence",
+      "split": "evidence-only",
+      "training_admission": false,
+      "admission": "maintenance-evidence-only",
+      "notes": "176stoppedNatlang/Lunacontainers sanitizedmetadata+compressedlogs preserved beforedisposablewritablelayerdeletion; noimages/volumes/activejobs selected. Envenamesonlysecretvaluesexcluded."
     }
   ],
   "coverage_backlog": [
