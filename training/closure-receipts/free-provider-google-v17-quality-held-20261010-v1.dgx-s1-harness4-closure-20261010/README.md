@@ -18,3 +18,8 @@ Input: registry snapshot `free-provider-google-v17-quality-held-20261010-v1` (14
 
 Report paths name DGX temp locations; hashes are authoritative. Evidence only; no source-truth, label-quality or
 training admission.
+
+Packet note: `closure-packet-v1.json` is not part of the registered snapshot's manifest and had not been synced to
+DGX. It was read once from Pop (`/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-…/source-closure-v1/closure-packet-v1.json`)
+and its sha256 matched the value in the request (8c204046…) before use; the copy here is that file. Every file it
+pins is in the registered snapshot and was verified there.
