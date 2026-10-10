@@ -108,8 +108,13 @@ Training uses the existing trajectory trainer with no new objective:
 - **`--distill`** adds self-distillation from the same model reading `preview`, which for most outputs is the full
   output. The view is thereby taught to act like the full output, at a fraction of its context. No summaries are
   fabricated: relevance is defined by what the trajectory did next.
-- **Size**: `--tokens-per-vector` sizes a write from the preview it replaces, and the stop head learns the boundary;
-  at inference the stop head decides.
+- **Size**: every view write stays within the port's block bound (`--max-write-vectors`). A value whose write would
+  exceed it is chunked at the view site, the chunk window sized from the bound and `--view-tokens-per-vector R`
+  (at most bound·R tokens per chunk), and each write is teacher-forced to ceil(its own text's tokens / R) vectors, the
+  stop head learning that boundary; the combining write of a chunked value is sized like its parts (capped at the
+  bound) or, under `--stop-pg`, left to the stop head at the length cost (`train.trajectories.view_write_plan`). R only
+  sizes training targets: at inference the stop head decides. The recipes declare R = 4 for views (notes keep
+  `--tokens-per-vector 1`); over all 20,302 view parts of the v3 records (LFM2.5 tokenizer) no write exceeds 512.
 
 ## 4. Background offers
 

@@ -1,0 +1,133 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "view-ask-20261010-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/view-ask-20261010-v2",
+  "files": [
+    {
+      "path": "manifest.json",
+      "bytes": 2541888,
+      "sha256": "a475ad0011ffe793e8972665a75b69e7bcca4d561127e5bf2aa6dc7f29d8b4e3"
+    },
+    {
+      "path": "view-stage/conversion.json",
+      "bytes": 697,
+      "sha256": "5df63ee2dad1290a86ae2b7f0d0e4b278f66d13266c8f336f6f61ba7d2f22b3b"
+    },
+    {
+      "path": "view-stage/pieces.jsonl",
+      "bytes": 595,
+      "sha256": "a513ed464460664e38d7d7673f2fc0556e21cb5da7a2f42d9f18593dbec57fb0",
+      "lines": 1
+    },
+    {
+      "path": "view-stage/records.jsonl",
+      "bytes": 1112402938,
+      "sha256": "3e276b32bfc1a13dc7d588e03cd0f3e68e12dab95ea84b923e4689437090cf4c",
+      "lines": 119048
+    },
+    {
+      "path": "view_code_extract.port-records.jsonl",
+      "bytes": 34939702,
+      "sha256": "47f256cf340c30ccd3d02e74697f4a51738c9e882c16df3a4e0271b3aad17b34",
+      "lines": 9552
+    },
+    {
+      "path": "view_code_reconstruct.port-records.jsonl",
+      "bytes": 49697341,
+      "sha256": "789cf43bffefcfd860ce80416d5c6fa48484f0b9d89dd1409a4c1052a9f76267",
+      "lines": 11666
+    },
+    {
+      "path": "view_code_summary.port-records.jsonl",
+      "bytes": 41329563,
+      "sha256": "c63f164a9efa25a090eec9eaab1c913593185213fa609905966ae965e56f0cd3",
+      "lines": 11666
+    },
+    {
+      "path": "view_data_extract.port-records.jsonl",
+      "bytes": 66269855,
+      "sha256": "8ae0c8af34461c5438dccd2b4763321f6a792fafc3c50580846282845b5b695c",
+      "lines": 15415
+    },
+    {
+      "path": "view_data_qa.port-records.jsonl",
+      "bytes": 10203890,
+      "sha256": "a0a72691075e79220ae2264ca3a6b0d5868a7aaff54d987703f2ea0791937e61",
+      "lines": 2662
+    },
+    {
+      "path": "view_data_reconstruct.port-records.jsonl",
+      "bytes": 32005699,
+      "sha256": "c5ac3c6061356e928fcea9bac84057205cbb148022472b1e8b4c5d9832863e64",
+      "lines": 5565
+    },
+    {
+      "path": "view_html_extract.port-records.jsonl",
+      "bytes": 18349103,
+      "sha256": "df8b6251bd66b111911b7cee46d7cf142ac87e1e24b192982cb3335b7d71a206",
+      "lines": 2805
+    },
+    {
+      "path": "view_html_qa.port-records.jsonl",
+      "bytes": 55580291,
+      "sha256": "105e1871c27a8a152f6372acaa69a4dd4fbd0d0f750469873e985564eebc15b6",
+      "lines": 8000
+    },
+    {
+      "path": "view_html_reconstruct.port-records.jsonl",
+      "bytes": 22433642,
+      "sha256": "9eac4d3101a91dd853086cd42031cefe2ee3c333eb036093521b90f44daa8e1b",
+      "lines": 2000
+    },
+    {
+      "path": "view_log_extract.port-records.jsonl",
+      "bytes": 121021819,
+      "sha256": "055d4ad08de0221d4b772a6fb35afc164cc66d26aa46e9c087e622da5f045f69",
+      "lines": 11008
+    },
+    {
+      "path": "view_log_reconstruct.port-records.jsonl",
+      "bytes": 89825613,
+      "sha256": "d71ee7098fca7f77241a6a8de479d19d66138d3d718140607125c38ffb74b52d",
+      "lines": 5564
+    },
+    {
+      "path": "view_prose_qa.port-records.jsonl",
+      "bytes": 2325894,
+      "sha256": "ef38f1527e32146f19d1518b7bd049eb1cb175f5268daf6fc7cbb64a364ac32d",
+      "lines": 87
+    },
+    {
+      "path": "view_prose_reconstruct.port-records.jsonl",
+      "bytes": 48327217,
+      "sha256": "f552cbc1dc0cb1b412b35e45ee84689d79c72542ac6faa312543a8e322bef98e",
+      "lines": 4546
+    },
+    {
+      "path": "view_prose_summary.port-records.jsonl",
+      "bytes": 62186902,
+      "sha256": "52ec61f2fbf1a5910ef7e91d7ee97c8343f8ea9bc10cd7dde592e685d0ef431c",
+      "lines": 5245
+    },
+    {
+      "path": "view_table_extract.port-records.jsonl",
+      "bytes": 31199717,
+      "sha256": "a4bb4efaf89b386f8c5b1897b2c1f1fd89e8923ad66d5504d05f7b09170c459b",
+      "lines": 8452
+    },
+    {
+      "path": "view_table_qa.port-records.jsonl",
+      "bytes": 84399501,
+      "sha256": "698fc91a8d195aae5a2a6e04ad5a2f5e82349e131e039f39486afe68125a2efa",
+      "lines": 20222
+    },
+    {
+      "path": "view_table_reconstruct.port-records.jsonl",
+      "bytes": 28795140,
+      "sha256": "9c61b294673aa2e141996e4cfdde7ceaf347b1de40b02dbd9b0577ebca65eff3",
+      "lines": 5104
+    }
+  ],
+  "bytes": 1913837007
+}

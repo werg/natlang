@@ -1,0 +1,176 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v4",
+  "extends": "raw-recurrence-v3",
+  "description": "raw-recurrence-v3 plus the declared, held view operator stage (view_operator, its gate view_gate; the recurrence stage then also requires the gate). Shared by every line. History: recipes/HISTORY.md.",
+  "overrides": {
+    "input_bindings": {
+      "view-stage-records": {
+        "path": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/records.jsonl",
+        "sha256": "3e276b32bfc1a13dc7d588e03cd0f3e68e12dab95ea84b923e4689437090cf4c"
+      },
+      "view-stage-pieces": {
+        "path": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/pieces.jsonl",
+        "sha256": "a513ed464460664e38d7d7673f2fc0556e21cb5da7a2f42d9f18593dbec57fb0"
+      },
+      "harness-bench-records-v3": {
+        "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3/records.jsonl",
+        "sha256": "be22d6f7074d87ddfd5303453671defa429164da8f57373d0d1d155e3b0fe5e5"
+      },
+      "harness-bench-pieces-v3": {
+        "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3/pieces.jsonl",
+        "sha256": "7759ef340ad702764c64c8bf03bf7e66f60ef344b66fd8862c82564c2ee06ec9"
+      }
+    },
+    "view_operator": {
+      "admitted": false,
+      "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+      "decision": "DECISIONS.md 2026-10-09 'one summarizer family: view and ask'; TRAINING_RECIPE.md 'The view operator stage'",
+      "corpus": {
+        "id": "view-ask-20261010-v2",
+        "records": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/records.jsonl",
+        "conversion": "natlang_neuralese.data.view_records (view-ask port records -> trajectory-trainer records with one view part; validation split kept with the corpus)",
+        "training_admission": false
+      },
+      "after": "each student's exact-weight runtime qualification (adapted_runtime) on the text warm-up's weights; the recurrence stage (recurrence_warmup) requires this stage's gate",
+      "objectives": {
+        "reconstruct": "reader CE of the value from its faithful view (view(x): parts marked faithful, no instructions)",
+        "consume": "reader CE of the dataset's answer, summary or the code-computed fact with the source withheld (the prompt shows only the block written for the purpose)",
+        "compare": "purpose sensitivity: purpose_contrast hinge (weight 0.25, margin 0.1 nats/token) against the same value viewed for a partner purpose (view_stage.contrast_instructions)",
+        "distill": "self-distillation (weight 1.0) from the full-text reader: the crisp rendering shows the whole value (the part's preview is the value)",
+        "length": "every write within the port's block bound (max_write_vectors 512; values chunked at the view site so each chunk's write fits: train.trajectories.view_write_plan); single and chunk writes teacher-forced to ceil(tokens / 4) vectors (view_tokens_per_vector 4; the stop head learns the boundary, stop_weight); the combining write of a chunked value is the stop head's choice, trained by policy gradient with a length cost of 0.01 nats per vector (stop_pg). At inference the stop head decides."
+      },
+      "gate": {
+        "stage": "view_gate (eval/view_gate.py on the view stage's recurrence checkpoint and its trained soft view body)",
+        "metrics": [
+          "reconstruction recovery per artifact type, with its compression ratio (value tokens per vector)",
+          "QA recovery: target CE with the block vs the full text vs none, per artifact type",
+          "correct vs shuffled block margin per artifact type",
+          "purpose sensitivity: CE with a partner-purpose block minus CE with the own-purpose block",
+          "pi next-action CE on held harness-bench v3 records: view blocks vs crisp previews vs full outputs"
+        ],
+        "thresholds": "proposed (the stage's parameters); the owner confirms them before admission"
+      },
+      "open": [
+        "a smoke of this stage on a small slice for both lines (trainer options were added for it: faithful parts, purpose_contrast, stop_pg in the handler)",
+        "recurrence_warmup starts from the text warm-up's weights, not this stage's: carrying the view stage's weights forward needs a declared continuation (the trajectory trainer's --continue-from requires identical data)"
+      ]
+    },
+    "cohorts": {
+      "harness_bench": {
+        "recurrence": {
+          "trajectory_trainer": {
+            "view_tokens_per_vector": 4
+          },
+          "view_length": "written views sized ceil(tokens / 4) per write within the port's block bound (values chunked at the view site to fit: train.trajectories.view_write_plan); the notes keep tokens_per_vector 1. backward_policy auto resolves to joint when views are written (train.trajectories), so the stage's auto declaration stays valid."
+        }
+      }
+    },
+    "stages_added": [
+      {
+        "after": "adapted_runtime",
+        "stage": {
+          "id": "view_operator",
+          "kind": "raw_recurrence_training",
+          "admitted": false,
+          "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+          "requires": [
+            "autoregressive_text_fixup",
+            "adapted_runtime"
+          ],
+          "inputs": {
+            "records": "view-stage-records",
+            "pieces": "view-stage-pieces"
+          },
+          "parameters": {
+            "steps": 4096,
+            "batch": 1,
+            "lr": 0.0001,
+            "backbone_training": "auto",
+            "backbone_lr": 3e-05,
+            "rank": 16,
+            "lora_lr": 2e-05,
+            "max_tokens": 12288,
+            "train": 60000,
+            "eval": 64,
+            "handover": "crisp",
+            "view": "written",
+            "view_window": 4096,
+            "tokens_per_vector": 0,
+            "view_tokens_per_vector": 4,
+            "stop_pg": 0.01,
+            "max_write_vectors": 512,
+            "heads_lr": 3e-05,
+            "distill": 1.0,
+            "crisp_weight": 1,
+            "backward_policy": "joint",
+            "graph_headroom_gb": 0.25,
+            "checkpoint_layers": true,
+            "ffn_chunk_tokens": 1024,
+            "optimizer": "muon",
+            "checkpoint_every": 25,
+            "eval_every": 128,
+            "seed": 0,
+            "writer_text_weight": 1.0,
+            "content_transport": "top-state",
+            "writer_length_policy": "native-value",
+            "writer_supervision": "native-value",
+            "stop_supervision": "gold-native-boundary",
+            "sketch_gradient": "local_stage",
+            "sketch_target_weight": 0.1,
+            "sketch_target_backbone_scale": 0.05,
+            "train_control_rows": true,
+            "local_stage_batch_size": 16,
+            "read_adapter": true,
+            "context_weight": 1.0,
+            "feedback_weight": 0.25,
+            "cohort_weights": {
+              "view": 1.0
+            },
+            "qualification_cohort": "view",
+            "purpose_contrast": 0.25,
+            "purpose_margin": 0.1
+          }
+        }
+      },
+      {
+        "after": "view_operator",
+        "stage": {
+          "id": "view_gate",
+          "kind": "view_operator_gate",
+          "admitted": false,
+          "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+          "requires": [
+            "view_operator"
+          ],
+          "inputs": {
+            "records": "view-stage-records",
+            "harness_records": "harness-bench-records-v3",
+            "harness_pieces": "harness-bench-pieces-v3"
+          },
+          "parameters": {
+            "split": "test",
+            "per_artifact": 32,
+            "harness_limit": 32,
+            "seed": 0,
+            "view_window": 4096,
+            "min_reconstruction_recovery": 0.8,
+            "min_qa_recovery": 0.7,
+            "min_shuffle_margin": 0.05,
+            "min_purpose_margin": 0.0,
+            "max_next_action_delta": 0.05
+          }
+        }
+      }
+    ],
+    "stages": {
+      "recurrence_warmup": {
+        "requires": [
+          "autoregressive_text_fixup",
+          "adapted_runtime",
+          "view_gate"
+        ]
+      }
+    }
+  }
+}

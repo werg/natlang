@@ -336,6 +336,23 @@ block; purpose sensitivity; and pi's next-action loss with view blocks vs crisp
 views vs full outputs. Records with `digest` parts (before the rename) are refused
 and converted by `scripts/neuralese_data/digest_to_view.py` into a new corpus.
 
+Declared (2026-10-10) as `view_operator` and its gate `view_gate` in raw-recurrence-v4 and raw-recurrence-mellum-v3
+(each its predecessor plus these stages, inserted after `adapted_runtime` with `overrides.stages_added`; the recurrence
+stage additionally requires the gate). Both are **held** (`admitted: false`; the runner refuses a stage so declared)
+until the owner's licence review of the corpus (VIEW_CORPUS.md §6) and each student's runtime qualification. Data:
+the view-ask corpus `view-ask-20261010-v2` converted by `natlang_neuralese.data.view_records` into trajectory-trainer
+records with one view part each (faithful parts for reconstruction; the purpose as the part's instructions
+otherwise; the full value as the preview, so `--distill` distils from the full-text reader). Objectives: reconstruct
+CE, consume/QA CE with the source withheld, the purpose contrast (`--purpose-contrast 0.25 --purpose-margin 0.1`:
+hinge against the same value viewed for a partner purpose), distillation 1.0, and written-view lengths within the
+block bound (`--view-tokens-per-vector 4`, the combining write under `--stop-pg 0.01`). The gate stage runs
+`natlang_neuralese.eval.view_gate` on the view stage's recurrence checkpoint (its exact weights and trained soft view
+body): reconstruction recovery per artifact type with its compression ratio, QA recovery (block vs full text vs
+none), the shuffled-block margin, the purpose margin and pi's next-action CE on held harness-bench v3 records (view
+blocks vs crisp previews vs full outputs); thresholds are proposals the owner confirms. `backward_policy auto`
+resolves to joint when views are written. A smoke of both stages ran on LFM2.5-350M with untrained-for-views heads
+(two steps; the gate end to end); no qualification is claimed.
+
 ## Owner clarification: compression is an operator, not the training goal
 
 2026-10-06: ordinary neuralese natlang lambda calls are not required to compress.

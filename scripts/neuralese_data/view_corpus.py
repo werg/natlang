@@ -127,10 +127,12 @@ def provenance(dataset_spdx: str, dataset_source: str, *, content_spdx: str | No
     the dataset's licence and where it was read, the licence of the underlying content (repository, website, news
     publisher) when it differs or is known, a review class (the most restrictive of the known licences, `unverified`
     when the content's licence is unknown and substantial), and short concerns."""
-    classes = [vx.license_class(dataset_spdx)]
+    # A dataset whose licence is "per repository" has no class of its own: its content's licence decides.
+    per_content = dataset_spdx == "LicenseRef-repository-content"
+    classes = [] if per_content else [vx.license_class(dataset_spdx)]
     if content_spdx:
         classes.append(vx.license_class(content_spdx))
-    if content_unverified and not content_spdx:
+    if (content_unverified or per_content) and not content_spdx:
         classes.append("unverified")
     cls = license_class or max(classes, key=vx.CLASS_ORDER.index)
     return {"dataset": {"spdx": dataset_spdx, "source": dataset_source},
@@ -559,6 +561,7 @@ def codesearchnet(ctx: Ctx):
         if lang != "python":
             cols.append("func_documentation_string")
         dataset = "codesearchnet" if lang == "python" else f"codesearchnet_{lang}"
+        seen_keys: set = set()
         for split, path in paths.items():
             want = max(1, round(cap * UPSTREAM_SHARE[split]))
             made = 0
@@ -567,6 +570,12 @@ def codesearchnet(ctx: Ctx):
                     break
                 repo = row["repository_name"]
                 key = f"{repo}/{row['func_path_in_repository']}:{row['func_name']}"
+                if key in seen_keys:  # same-named methods in one file (Go receivers, overloads): the line anchor
+                    anchor = (row.get("func_code_url") or "").rpartition("#")[2]
+                    key = f"{key}@{anchor or row['__row']}"
+                    if key in seen_keys:
+                        key = f"{key}@{split}{row['__row']}"
+                seen_keys.add(key)
                 whole = row["whole_func_string"]
                 if lang == "python":
                     facts = vx.python_facts(whole)
@@ -605,7 +614,8 @@ def codesearchnet(ctx: Ctx):
                                   if found else "licence not found in CodeSearchNet's licence files",
                                   concerns=[] if spdx else ["repository licence not detected"])
                 path_ref = row["func_path_in_repository"]
-                refs = [{"text": path_ref, "kind": "path"}, {"text": row["func_name"], "kind": "identifier"}]
+                refs = [{"text": path_ref, "kind": "path"}] + \
+                    ([{"text": row["func_name"], "kind": "identifier"}] if row["func_name"] else [])  # anonymous JS
                 common = dict(upstream="hf:code-search-net/code_search_net", upstream_id=row.get("func_code_url"),
                               revision=meta["revision"], store_version=lang, row=row["__row"], lic=lic, prov=prov,
                               split=SPLIT_MAP[split], groups=[group_key("repo", repo)])
@@ -614,7 +624,8 @@ def codesearchnet(ctx: Ctx):
                           refs=refs, meta={"format": fmt, "language": lang, "repository": repo, "docstring_removed": True},
                           **common)
                 name = facts["name"] if facts else row["func_name"].split(".")[-1]
-                doc.summary(f"Describe in one sentence what the function `{name}` does.", summary, origin="upstream-docstring",
+                doc.summary(f"Describe in one sentence what the function `{name}` does." if name else
+                            "Describe in one sentence what this function does.", summary, origin="upstream-docstring",
                             general="Keep what a description of the function needs.")
                 n = 0
                 if facts and facts["params"]:
