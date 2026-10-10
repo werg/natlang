@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v60-closed-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v60-choice-folder-final-v1",
+  "files": [
+    {
+      "path": "outcome-diagnostics.json",
+      "bytes": 49505,
+      "sha256": "9a6296e3e7c6e8599943224fa2812463dfa78541962ba24c55d58916cd5dbafb"
+    },
+    {
+      "path": "outcome-diagnostics.md",
+      "bytes": 3110,
+      "sha256": "fbe1dccf8d95ff26b4eeeb09c0cd08a719baaea9624b99044514007bab0a3723"
+    },
+    {
+      "path": "quality-review.json",
+      "bytes": 1200357,
+      "sha256": "bb86641741680a025f00ba138dac19e3acc64fd636cd77ef0bd59cfaa4f9b542"
+    },
+    {
+      "path": "quality-review.md",
+      "bytes": 1487,
+      "sha256": "4dae55c1c92a5100e575d1f9b4b21e790130c22c7f7099662750f4aca65ec4b6"
+    }
+  ],
+  "bytes": 1254459
+}

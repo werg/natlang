@@ -27551,6 +27551,32 @@
       "training_admission": false,
       "admission": "held-pending-source-trace-review",
       "notes": "Current shared hashing/helper pin:37 item-bound states,35 exact child request and2 same-invocation capture-only,124 saved request turns. Outcome2of5exact,30of37 itemmatches remains unchanged and held."
+    },
+    {
+      "id": "free-provider-luna-v60-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v60-runtimev15-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "Closed53 programs397 source items.36 accepted exact-map/file,17 rejected on23 decisions; all saved decision maps equal returns. Actual traces and failures retained; no training admission."
+    },
+    {
+      "id": "free-provider-luna-v60-closed-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v60-choice-folder-final-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-proof-and-quality-evidence",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review",
+      "notes": "397/397 exact saved source fields; all itemboundrequeststatesverified through sharedhelper:923 requestturns772childinvocations.374/397 decisionsmatchsource/providerlabels.21scope errors under review, noinfra causeestablished. No admission, sourceannotationstillsubjectreview."
     }
   ],
   "coverage_backlog": [
