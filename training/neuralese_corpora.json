@@ -21517,6 +21517,45 @@
         "luna-ar-native-harness-gateref-29466-20261010-v1",
         "luna-ar-native-harness-gateref-29466-20261010-v2"
       ]
+    },
+    {
+      "id": "free-provider-google-pool-v5-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-mixed-decisions-v5",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/*.py",
+        "frozen-adapter-v1/models.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "quota-locked-disjoint-generation-queue",
+      "training_admission": false,
+      "admission": "generation inputs only; typed labels still need source-bound quality/current-IR review",
+      "independent_new_worlds": 0,
+      "notes": "1024 rows across18families, fullstate<=1000JSONchars/8labels; prior Google caseIDs AND sourcegroups excluded. Waits sole project lock afterv4, existing4quota-groupworkerpool and persistentcooldowns. Outputlabels/journalnotpublishedwhileevolving."
+    },
+    {
+      "id": "free-provider-sourcebound24-and-quality-v19-v20-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "gemini-poolv3-static-sourcebound-24-v1/**",
+        "quality-review-v19-gemini-static-admission/**",
+        "quality-review-v20-sourcebinding-v28case000/**"
+      ],
+      "include_root_prefixes": [
+        "gemini-poolv3-static-sourcebound-24-v1",
+        "quality-review-v19-gemini-static-admission",
+        "quality-review-v20-sourcebinding-v28case000"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "pinned-public-row-bindings-and-static-reference-review",
+      "training_admission": false,
+      "admission": "exact provenance subset/review only; root16logical-row source approval pending global protected closure/current admitted derivative",
+      "independent_new_worlds": 0,
+      "notes": "24 rows bound to pinned official Parquet/physicalrow/hash,3authoredreferencewrappers/54native turns. CivilComments8excludedfrom firstqualitysubset due subjective/context quantization. Separatev20records ZAI V28ordering rejection, no transportfault; review evidence notrawclosedcasebytes."
     }
   ],
   "coverage_backlog": [

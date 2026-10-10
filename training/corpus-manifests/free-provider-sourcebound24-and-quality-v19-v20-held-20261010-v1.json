@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-sourcebound24-and-quality-v19-v20-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/cases.jsonl",
+      "bytes": 96091,
+      "sha256": "ea00d91a888f0a82a82e0e0e2a81873e4f109b7437c129ffcc283642b4415fe8",
+      "lines": 3
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/native.held.jsonl",
+      "bytes": 4849603,
+      "sha256": "a2dff21a7a310475c974c7c0e008796a07cd8d9239dec2187844d2767ebf1836",
+      "lines": 54
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/download-manifest.json",
+      "bytes": 2623,
+      "sha256": "5eb68e10407556e8ac23ba770f41102d23db37b793fb8eb5648db6aa5af31f80"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/google__civil_comments__train-00000-of-00002.parquet",
+      "bytes": 193527147,
+      "sha256": "c20f01c3aecbdd942886cacb0ee67e995df33bc712a622fde75927ed3d6ccefe"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/google__civil_comments__train-00001-of-00002.parquet",
+      "bytes": 186778090,
+      "sha256": "a76af69d7b24758bc38b196bc422d4767935c1dd7d3c1465554649c546d99ccb"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/google__civil_comments-README_md",
+      "bytes": 7758,
+      "sha256": "52f6ab996afff4720bf5896d3b09dbc0a69031d27e2087c69d0ade218723c643"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/google__civil_comments-api_json",
+      "bytes": 5220,
+      "sha256": "8aaec542e3c7d7647ce86b06a55b3da76e736c373ca55e662bf506fb0ab48d10"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/tasksource__Boardgame-QA-README_md",
+      "bytes": 656,
+      "sha256": "c506387964fa1883d3b15f38988a2ceab740dc193e56aa53e0142824f4290997"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/tasksource__Boardgame-QA-api_json",
+      "bytes": 4556,
+      "sha256": "049a871039dfbbf5920b486fc9f5a0599f93a7cf8fda66a5569e54860d33b64f"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/tasksource__ruletaker-README_md",
+      "bytes": 1161,
+      "sha256": "d811ee99da83516a0a79bce5989d6c27a2b1b9b6f4e3bd2b96f8de069b32f993"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/public-receipts/tasksource__ruletaker-api_json",
+      "bytes": 4571,
+      "sha256": "e3184a94d0b693f66f2f341e65da5895df8af37243bbef2b2c2caf51e55da1c7"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/tasksource__Boardgame-QA__train-00000-of-00001-d7aa2b268ef1ea08.parquet",
+      "bytes": 13049461,
+      "sha256": "040254305c0b5aa06a611f9161e4808203d30d02ea936a8dea03645c05e94e7d"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/raw/tasksource__ruletaker__train-00000-of-00001-52adaa842dd7ed92.parquet",
+      "bytes": 28594899,
+      "sha256": "beade0ce8650bfaf3f1d57bae54e686db029bbef277fa75617e35edc1d53b2c9"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/replay.results.jsonl",
+      "bytes": 1571357,
+      "sha256": "38fad0b1d2b809ce1b53806904c6e76c282f8e97b3080e5b80cc9a26df058c96",
+      "lines": 3
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/source-bound-manifest.json",
+      "bytes": 25770,
+      "sha256": "2871f763ce2bc6684fc54a3e0521f555b370ef5f919159eafbbfc6e701c317bd"
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/source-bound-rows.jsonl",
+      "bytes": 79430,
+      "sha256": "dcb33d1bc0ccbef084d59f111d8f6ad8a9d4601c3097b1197740b0facf19ac25",
+      "lines": 24
+    },
+    {
+      "path": "gemini-poolv3-static-sourcebound-24-v1/summary.json",
+      "bytes": 1024,
+      "sha256": "3f7fd88d6eee89288f4cb5690b6847d4079bcf4d93d0431583cef3d2cd18f8b5"
+    },
+    {
+      "path": "quality-review-v19-gemini-static-admission/review.json",
+      "bytes": 14066,
+      "sha256": "c57e6a0703a9d6f58194e1e4b55b16b4e8f491cfb1eb9623f007eb1cf65d553c"
+    },
+    {
+      "path": "quality-review-v19-gemini-static-admission/review.md",
+      "bytes": 3072,
+      "sha256": "b76bdd21a83cefb3fab689c532e535d663372b64b70f76c776a4a3a78da890c6"
+    },
+    {
+      "path": "quality-review-v20-sourcebinding-v28case000/review.json",
+      "bytes": 6145,
+      "sha256": "f66ef9d50d59103744a5650873be68a0670f2867b1b93eac77680d11221c075a"
+    },
+    {
+      "path": "quality-review-v20-sourcebinding-v28case000/review.md",
+      "bytes": 1888,
+      "sha256": "94b3f62d85db8ae4ba08280a50cdea5f3b0b957d67314080509404fbaf91d68f"
+    }
+  ],
+  "bytes": 428624588
+}
