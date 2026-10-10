@@ -62,10 +62,11 @@ _OBJECTIVE_METRIC_SCALARS = (
 _EVALUATION_CONTEXT_METRICS = (
     'context_valid_gold_ce', 'context_valid_gold_accuracy',
     'context_valid_text_argmax_agreement', 'context_valid_ce_delta',
+    'context_valid_embedding_mse_delta',
     'context_valid_last256_target_tokens', 'context_valid_last256_gold_tokens',
     'context_valid_last256_gold_fraction', 'context_valid_last256_gold_ce',
     'context_valid_last256_gold_accuracy', 'context_valid_last256_text_argmax_agreement',
-    'context_valid_last256_ce_delta',
+    'context_valid_last256_ce_delta', 'context_valid_last256_embedding_mse_delta',
 )
 
 
@@ -138,16 +139,42 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, s
         metric_names = (*metric_names, *_EVALUATION_CONTEXT_METRICS)
     packed = [metric[name].detach().reshape(())
               for metric in pass_metrics for name in metric_names]
+    grouped_paths = []
+    for metric_index, metric in enumerate(pass_metrics):
+        groups = metric.get('generated_tail_projection_groups')
+        if groups is None:
+            continue
+        def collect_group_scalars(value, path=()):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    collect_group_scalars(child, (*path, key))
+            elif isinstance(value, torch.Tensor):
+                grouped_paths.append((metric_index, path))
+                packed.append(value.detach().reshape(()))
+            else:
+                raise TypeError('tail projection diagnostic groups must contain scalar tensors')
+        collect_group_scalars(groups)
     if pass_losses is not None:
         packed.extend(loss.detach().reshape(()) for loss in pass_losses)
     values = torch.stack(packed).to(device='cpu').tolist()
     metric_values = values[:len(pass_metrics) * len(metric_names)]
-    loss_values = values[len(metric_values):] if pass_losses is not None else []
+    group_start = len(metric_values)
+    group_end = group_start + len(grouped_paths)
+    loss_values = values[group_end:] if pass_losses is not None else []
 
     materialized = []
     width = len(metric_names)
+    def clone_group_containers(value):
+        if isinstance(value, dict):
+            return {key:clone_group_containers(child) for key,child in value.items()}
+        if isinstance(value, list):
+            return [clone_group_containers(child) for child in value]
+        return value
     for index, metric in enumerate(pass_metrics):
         row = dict(metric)
+        if 'generated_tail_projection_groups' in metric:
+            row['generated_tail_projection_groups']=clone_group_containers(
+                metric['generated_tail_projection_groups'])
         scalars = metric_values[index * width:(index + 1) * width]
         row.update(zip(metric_names, scalars))
         close_targets = int(row['close_targets'])
@@ -157,6 +184,14 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1, *, s
         if close_targets == row['tokens']:
             row['premature_close_top1'] = 0.
         materialized.append(row)
+
+    def set_path(value, path, scalar):
+        for key in path[:-1]:
+            value = value[key]
+        value[path[-1]] = scalar
+    for index, (metric_index, path) in enumerate(grouped_paths):
+        set_path(materialized[metric_index]['generated_tail_projection_groups'],
+                 path, values[group_start + index])
 
     # Keep the original Python accumulation order and division semantics.
     total_loss = None
@@ -172,7 +207,8 @@ def _normalize_context_valid_strata(strata):
     for row in strata.values():
         non_metrics={'tokens','context_valid_gold_tokens','context_valid_gold_fraction',
                      'context_valid_last256_target_tokens','context_valid_last256_gold_tokens',
-                     'context_valid_windows', 'channel_consistency_tokens'}
+                     'context_valid_windows', 'channel_consistency_tokens',
+                     'generated_tail_projection_tokens'}
         non_metrics.update(n for n in row if n.endswith('_weighted_sum'))
         for n in row.keys()-non_metrics:row[n]/=row['tokens']
         channel_count=row.get('channel_consistency_tokens',0)
@@ -183,12 +219,17 @@ def _normalize_context_valid_strata(strata):
         row['context_valid_last256_gold_fraction']=(
             row['context_valid_last256_gold_tokens']/row['context_valid_last256_target_tokens']
             if row['context_valid_last256_target_tokens'] else 0.)
+        tail_count=row.get('generated_tail_projection_tokens',0)
+        tail_sum=row.pop('generated_tail_projection_mse_weighted_sum',0.)
+        row['generated_tail_projection_mse']=(tail_sum/tail_count if tail_count else None)
         for n in ('context_valid_gold_ce','context_valid_gold_accuracy',
-                  'context_valid_text_argmax_agreement','context_valid_ce_delta'):
+                  'context_valid_text_argmax_agreement','context_valid_ce_delta',
+                  'context_valid_embedding_mse_delta'):
             total=row.pop(n+'_weighted_sum',0.)
             row[n]=total/row['context_valid_gold_tokens'] if row['context_valid_gold_tokens'] else None
         for n in ('context_valid_last256_gold_ce','context_valid_last256_gold_accuracy',
-                  'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta'):
+                  'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta',
+                  'context_valid_last256_embedding_mse_delta'):
             total=row.pop(n+'_weighted_sum',0.)
             row[n]=total/row['context_valid_last256_gold_tokens'] if row['context_valid_last256_gold_tokens'] else None
 
@@ -304,8 +345,12 @@ def same_resume_identity(previous, current):
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     changed = {k for k in old_options.keys() & new_options.keys()
                if old_options[k] != new_options[k]}
-    old_recipe = {k: v for k, v in previous.items() if k not in {'code', 'options', 'display'}}
-    new_recipe = {k: v for k, v in current.items() if k not in {'code', 'options', 'display'}}
+    # Qualification references affect evidence and streaks, not the optimized
+    # objective. A report-policy handoff may preserve model/optimizer/schedule
+    # state but must explicitly reset old best/gate streak state below.
+    ignored={'code','options','display','qualification_reference'}
+    old_recipe = {k: v for k, v in previous.items() if k not in ignored}
+    new_recipe = {k: v for k, v in current.items() if k not in ignored}
     return (old_recipe == new_recipe and not (changed - RESUME_OPERATIONAL_OPTIONS)
             and not (old_options.keys() - new_options.keys()))
 
@@ -574,25 +619,111 @@ def matched_history_completion(backbone, heads, prefix_ids, span_ids, objective_
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
                   min_agreement=.9):
-    """All held strata must pass; no aggregate can hide a failing stratum."""
+    """All held strata pass the report's declared reference policy."""
+    criteria=_alignment_gate_criteria(report,max_ce_delta=max_ce_delta,
+        max_relative_mse=max_relative_mse,min_agreement=min_agreement)
+    return bool(criteria) and all(item['status'] != 'fail' for item in criteria)
+
+
+def _alignment_gate_criteria(report, *, max_ce_delta, max_relative_mse, min_agreement):
+    """Collect the exact checks shared by qualification and checkpoint ranking."""
+    policy=report.get('qualification_reference')
+    if policy is not None and policy.get('schema') != 'natlang.alignment-qualification-reference/1':
+        raise ValueError('unknown alignment qualification reference schema')
+    autoregressive=policy is not None and policy.get('mode') == 'autoregressive-feedback-fixup'
+    if policy is not None and not autoregressive:
+        raise ValueError('unknown alignment qualification reference mode')
+    thresholds={'max_ce_delta':max_ce_delta,'max_relative_mse':max_relative_mse,
+                'min_agreement':min_agreement}
+    if policy is not None and policy.get('thresholds') != thresholds:
+        raise ValueError('alignment qualification thresholds differ from the declared reference')
+    criteria=[]
     strata=report.get('strata',{})
-    return bool(strata) and all(r['tokens']>0 and
-        r['ce_delta']<=max_ce_delta and r['embedding_mse_delta']<=max_relative_mse and
-        r.get('text_ce_delta_from_initial',0.)<=max_ce_delta and
-        r['text_argmax_agreement']>=min_agreement for r in strata.values())
+    if not strata:
+        return criteria
+
+    def add(key,name,value,limit,kind,*,count=None,metric=None):
+        if count is not None and count <= 0:
+            reason=('no channel decisions fall in the last256 region after close'
+                    if key.endswith('-last256') and name.startswith('channel_consistency') else
+                    'no context-valid gold positions in this last256 region'
+                    if key.endswith('-last256') else 'no selected positions')
+            criteria.append({'stratum':key,'name':name,'metric':metric or name,
+                'value':None,'limit':limit,'comparison':kind,'status':'not_applicable',
+                'reason':reason})
+            return
+        if value is None or not math.isfinite(value):
+            criteria.append({'stratum':key,'name':name,'metric':metric or name,
+                'value':None,'observed':None if value is None else str(value),'limit':limit,
+                'comparison':kind,'status':'fail','reason':'missing or non-finite metric'})
+            return
+        passed=(value <= limit if kind == '<=' else value >= limit)
+        criteria.append({'stratum':key,'name':name,'metric':metric or name,
+            'value':value,'limit':limit,'comparison':kind,
+            'status':'pass' if passed else 'fail'})
+
+    def selected_count(key,row,field,*,zero_is_na):
+        count=row.get(field)
+        valid=(isinstance(count,(int,float)) and not isinstance(count,bool) and
+               math.isfinite(count) and count >= 0 and int(count)==count)
+        if not valid:
+            criteria.append({'stratum':key,'name':field,'metric':field,
+                'value':None,'observed':count,'limit':0,'comparison':'>=',
+                'status':'fail','reason':'selected-position count missing, non-finite, negative, or non-integer'})
+            return None
+        count=int(count)
+        if count == 0 and not zero_is_na:
+            criteria.append({'stratum':key,'name':field,'metric':field,
+                'value':None,'observed':0,'limit':0,'comparison':'>','status':'fail',
+                'reason':'empty required comparison is unexpected'})
+            return None
+        return count
+
+    for key,row in strata.items():
+        tokens=selected_count(key,row,'tokens',zero_is_na=False)
+        if tokens is None:
+            continue
+        is_pass1=key.startswith('pass-1-')
+        if autoregressive and is_pass1:
+            regional=key.endswith('-last256')
+            gold_count=selected_count(key,row,'context_valid_gold_tokens',zero_is_na=regional)
+            if gold_count is not None:
+                add(key,'context_valid_ce_delta',row.get('context_valid_ce_delta'),max_ce_delta,'<=',
+                    count=gold_count)
+                add(key,'context_valid_embedding_mse_delta',row.get('context_valid_embedding_mse_delta'),
+                    max_relative_mse,'<=',count=gold_count)
+                add(key,'context_valid_text_argmax_agreement',
+                    row.get('context_valid_text_argmax_agreement'),min_agreement,'>=',count=gold_count)
+            channel_count=selected_count(key,row,'channel_consistency_tokens',zero_is_na=regional)
+            if channel_count is not None:
+                add(key,'channel_consistency_kl',row.get('channel_consistency_kl'),max_ce_delta,'<=',
+                    count=channel_count,metric='same_generated_history_kl')
+                add(key,'channel_consistency_agreement',row.get('channel_consistency_agreement'),
+                    min_agreement,'>=',count=channel_count,
+                    metric='same_generated_history_argmax_agreement')
+        else:
+            add(key,'ce_delta',row.get('ce_delta'),max_ce_delta,'<=')
+            add(key,'embedding_mse_delta',row.get('embedding_mse_delta'),max_relative_mse,'<=')
+            add(key,'text_argmax_agreement',row.get('text_argmax_agreement'),min_agreement,'>=')
+        add(key,'text_ce_delta_from_initial',row.get('text_ce_delta_from_initial',0.),
+            max_ce_delta,'<=')
+    return criteria
 
 
 def alignment_selection_score(report, *, max_ce_delta=.1, max_relative_mse=.25, min_agreement=.9):
     """Prefer certified alignment, then the worst held gate ratio, never prompt volume."""
+    criteria=_alignment_gate_criteria(report,max_ce_delta=max_ce_delta,
+        max_relative_mse=max_relative_mse,min_agreement=min_agreement)
     ratios=[]
-    for row in report.get('strata',{}).values():
-        if row.get('tokens',0)<=0:return (1,math.inf)
-        for value,limit in ((row['ce_delta'],max_ce_delta),
-                            (row['embedding_mse_delta'],max_relative_mse),
-                            (row.get('text_ce_delta_from_initial',0.),max_ce_delta),
-                            (1-row['text_argmax_agreement'],1-min_agreement)):
-            if not math.isfinite(value):return (1,math.inf)
-            ratios.append(max(0.,value)/limit if limit>0 else (0. if value<=0 else math.inf))
+    for item in criteria:
+        if item['status']=='not_applicable':continue
+        if item['status']=='fail' and item['value'] is None:return (1,math.inf)
+        value=item['value'];limit=item['limit']
+        excess=(value if item['comparison']=='<=' else 1-value)
+        denominator=(limit if item['comparison']=='<=' else 1-limit)
+        if not math.isfinite(value):return (1,math.inf)
+        ratios.append(max(0.,excess)/denominator if denominator>0 else
+                      (0. if excess<=0 else math.inf))
     return (0 if report.get('qualified') else 1,max(ratios,default=math.inf))
 
 
@@ -1140,8 +1271,23 @@ def main(argv=None):
     options={k:str(v.resolve()) if isinstance(v,Path) else v for k,v in vars(a).items() if k!='out'}
     paths=[x for x in (a.heads,a.records,a.pieces,a.text_data,a.student_checkpoint,a.continue_from) if x]
     package=Path(__file__).parents[1]
+    qualification_reference={
+        'schema':'natlang.alignment-qualification-reference/1',
+        'mode':'autoregressive-feedback-fixup',
+        'thresholds':{'max_ce_delta':a.max_ce_delta,
+            'max_relative_mse':a.max_relative_mse,'min_agreement':a.min_agreement},
+        'metric_mapping':{
+            'pass0_gold_control':'existing ce_delta, embedding_mse_delta, text_argmax_agreement, and plain-text CE drift checks',
+            'pass1_gold_targets':'context_valid_ce_delta, context_valid_embedding_mse_delta, and context_valid_text_argmax_agreement; context-valid includes the first differing decision',
+            'pass1_channel_equivalence':'same-history KL(ordinary || projected), measured in nats, and argmax agreement through first close, inclusive',
+            'max_ce_delta':'applies to CE deltas and same-history KL ceiling in nats',
+            'max_relative_mse':'applies to embedding MSE delta on context-valid gold comparisons',
+            'min_agreement':'applies to context-valid text agreement and same-history channel agreement',
+            'empty_subsets':'marked not_applicable with null metric; never treated as zero-valued success'},
+        'legacy_reports_without_policy':'retain their original qualification and selection semantics'} if a.ar_feedback_fixup else None
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
+              'qualification_reference':qualification_reference,
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':('gold-context control then detached sequential full-depth projected-payload history; '
                               'consumer gold supervision ends after its first differing decision; '
@@ -1381,7 +1527,7 @@ def main(argv=None):
                                                       engine.tokenizer.bos_token_id))
         labels=window_labels(ids,min(max(1,context),ids.shape[1]-1))
         return ids[:,-a.member_tokens:],labels[:,-a.member_tokens:]
-    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None,objective_passes=1):
+    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None,cohort_ids=None,objective_passes=1):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
         weights=consumer_position_weights(weights,out.get('gold_prefix_mask'))
@@ -1401,6 +1547,8 @@ def main(argv=None):
                     embedding=relative_mse(heads.content.reference(top.detach()),target))
                 if evaluation:
                     baseline.update(token_losses=token_losses.detach(),
+                                    embedding_positions=relative_mse_positions(
+                                        heads.content.reference(top.detach()),target).detach(),
                                     tail_reference=heads.content.reference(top[:,-256:].detach()))
         plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
@@ -1412,6 +1560,8 @@ def main(argv=None):
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         channel_metrics = {name: top.new_zeros((), dtype=torch.float32) for name in
                            ('channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens',
+                            'channel_consistency_last256_kl', 'channel_consistency_last256_agreement',
+                            'channel_consistency_last256_tokens',
                             'generated_tail_projection_mse', 'generated_tail_projection_tokens')}
         if 'ordinary_generated_top' in out:
             from .channel_objective import generated_history_channel_loss, generated_tail_projection_loss
@@ -1422,7 +1572,9 @@ def main(argv=None):
             channel_metrics.update(consistency_metrics)
             tail_projection, tail_metrics = generated_tail_projection_loss(
                 backbone, heads, out['ordinary_generated_top'], out['producer_predictions'],
-                out['gold_prefix_mask'], backbone.controls.close_id, chunk_size=readout_chunk_tokens)
+                out['gold_prefix_mask'], backbone.controls.close_id, chunk_size=readout_chunk_tokens,
+                group_ids=cohort_ids if evaluation else None,
+                role_ids=roles if evaluation else None, role_names=ROLE_CODES)
             channel_metrics.update(tail_metrics)
             loss = loss + objective_passes * a.embedding_weight * tail_projection
             if not bootstrap:
@@ -1466,18 +1618,27 @@ def main(argv=None):
           'context_valid_gold_fraction':prefix_stats['context_valid_fraction']}
         metrics.update(channel_metrics)
         if evaluation:
+            valid_mask=out.get('gold_prefix_mask',torch.ones_like(span,dtype=torch.bool))
+            valid_count=valid_mask.sum()
+            valid_embedding_delta=embedding_positions.detach()-baseline['embedding_positions']
+            valid_embedding_sum=(valid_embedding_delta*valid_mask).sum()
+            tail_mask=valid_mask[:,-256:]
+            tail_valid_count=tail_mask.sum()
+            tail_embedding_sum=(valid_embedding_delta[:,-256:]*tail_mask).sum()
             metrics.update({
               'context_valid_gold_ce':prefix_stats['context_valid_ce'],
               'context_valid_gold_accuracy':prefix_stats['context_valid_accuracy'],
               'context_valid_text_argmax_agreement':prefix_stats['context_valid_text_argmax_agreement'],
               'context_valid_ce_delta':prefix_stats['context_valid_ce_delta'],
+              'context_valid_embedding_mse_delta':valid_embedding_sum/valid_count.clamp_min(1),
               'context_valid_last256_target_tokens':prefix_stats['tail_target_tokens'],
               'context_valid_last256_gold_tokens':prefix_stats['tail_context_valid_tokens'],
               'context_valid_last256_gold_fraction':prefix_stats['tail_context_valid_fraction'],
               'context_valid_last256_gold_ce':prefix_stats['tail_context_valid_ce'],
               'context_valid_last256_gold_accuracy':prefix_stats['tail_context_valid_accuracy'],
               'context_valid_last256_text_argmax_agreement':prefix_stats['tail_context_valid_text_argmax_agreement'],
-              'context_valid_last256_ce_delta':prefix_stats['tail_context_valid_ce_delta']})
+              'context_valid_last256_ce_delta':prefix_stats['tail_context_valid_ce_delta'],
+              'context_valid_last256_embedding_mse_delta':tail_embedding_sum/tail_valid_count.clamp_min(1)})
             metrics['context_valid_windows']=prefix_stats['windows']
         metrics['pass_index']=out['pass_index']
         if evaluation and span.shape[1]>256:
@@ -1509,10 +1670,12 @@ def main(argv=None):
         rows=[w] if isinstance(w,dict) else w
         roles=(torch.tensor([list(r['roles'][r['prefix']:]) for r in rows],device=span.device)
                if not torch.is_grad_enabled() and all('roles' in r for r in rows) else None)
+        cohort_ids=[r.get('cohort','native') for r in rows]
         completions=text_history_completions(backbone,heads,prefix,span,passes=passes,
             ar_feedback_fixup=a.ar_feedback_fixup)
         for out in completions:
-            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer,roles,objective_passes=passes)
+            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,
+                projected_observer,roles,cohort_ids,objective_passes=passes)
 
     step=0;streak=0;best=None;updates={'backbone':False,'input_map':False,'full_projection':False}
     initial_text_ce={}
@@ -1561,7 +1724,20 @@ def main(argv=None):
         step=restored['step'];updates=display_update_flags(restored['updates'])
         updates.setdefault('full_projection',False)
         if resumed:
-            streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
+            same_qualification_reference=(
+                resumed['identity'].get('qualification_reference') == identity.get('qualification_reference'))
+            streak=resumed['streak'] if same_qualification_reference else 0
+            best=resumed['best'] if same_qualification_reference else None
+            if not same_qualification_reference:
+                handoff={'event':'qualification_reference_handoff','step':resumed['step'],
+                    'old':resumed['identity'].get('qualification_reference'),
+                    'new':identity.get('qualification_reference'),
+                    'streak_reset':True,'best_qualification_reset':True,
+                    'optimizer_preserved':True,'plateau_schedule_preserved':True}
+                code_handoffs.append(handoff)
+                with (a.out/'code-handoffs.jsonl').open('a') as f:f.write(json.dumps(handoff)+'\n')
+                print(json.dumps(handoff),flush=True)
+            initial_text_ce=resumed['initial_text_ce']
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
         elif continuation:
@@ -1645,6 +1821,7 @@ def main(argv=None):
         nonlocal last_schedule_step,last_report
         evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
         strata={};cohort_strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
+        tail_projection_cohorts={};tail_projection_cohort_roles={}
         ar_batch=None;ar_fallback=None;role_strata={};cohort_role_strata={}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
@@ -1695,11 +1872,36 @@ def main(argv=None):
                     for name in ('channel_consistency_kl','channel_consistency_agreement'):
                         key_sum=name+'_weighted_sum'
                         row[key_sum]=row.get(key_sum,0.)+m[name]*channel_count
+                    if m['positions']>256:
+                        regional=active_strata.setdefault(key+'-last256',{'tokens':0})
+                        regional_channel_count=int(m['channel_consistency_last256_tokens'])
+                        regional['channel_consistency_tokens']=regional.get('channel_consistency_tokens',0)+regional_channel_count
+                        for name in ('channel_consistency_last256_kl','channel_consistency_last256_agreement'):
+                            target_name=name.replace('_last256','')
+                            key_sum=target_name+'_weighted_sum'
+                            regional[key_sum]=regional.get(key_sum,0.)+m[name]*regional_channel_count
+                    tail_count=int(m['generated_tail_projection_tokens'])
+                    row['generated_tail_projection_tokens']=row.get('generated_tail_projection_tokens',0)+tail_count
+                    row['generated_tail_projection_mse_weighted_sum']=(
+                        row.get('generated_tail_projection_mse_weighted_sum',0.)+
+                        m['generated_tail_projection_mse']*tail_count)
+                    groups=m.get('generated_tail_projection_groups') or {}
+                    for cohort_name, values in groups.get('by_cohort',{}).items():
+                        aggregate=tail_projection_cohorts.setdefault(cohort_name,{'error_sum':0.,'tokens':0})
+                        aggregate['error_sum']+=values['error_sum']
+                        aggregate['tokens']+=int(values['tokens'])
+                    for cohort_name, roles_of_cohort in groups.get('by_cohort_role',{}).items():
+                        cohort_roles=tail_projection_cohort_roles.setdefault(cohort_name,{})
+                        for role_name, values in roles_of_cohort.items():
+                            aggregate=cohort_roles.setdefault(role_name,{'error_sum':0.,'tokens':0})
+                            aggregate['error_sum']+=values['error_sum']
+                            aggregate['tokens']+=int(values['tokens'])
                     valid_count=int(m['context_valid_gold_tokens'])
                     row['context_valid_gold_tokens']=row.get('context_valid_gold_tokens',0)+valid_count
                     row['context_valid_gold_fraction']=row.get('context_valid_gold_fraction',0)+valid_count
                     for n in ('context_valid_gold_ce','context_valid_gold_accuracy',
-                              'context_valid_text_argmax_agreement','context_valid_ce_delta'):
+                              'context_valid_text_argmax_agreement','context_valid_ce_delta',
+                              'context_valid_embedding_mse_delta'):
                         key_sum=n+'_weighted_sum'
                         row[key_sum]=row.get(key_sum,0.)+m[n]*valid_count
                     tail_targets=int(m['context_valid_last256_target_tokens'])
@@ -1707,7 +1909,8 @@ def main(argv=None):
                     row['context_valid_last256_target_tokens']=row.get('context_valid_last256_target_tokens',0)+tail_targets
                     row['context_valid_last256_gold_tokens']=row.get('context_valid_last256_gold_tokens',0)+tail_valid
                     for n in ('context_valid_last256_gold_ce','context_valid_last256_gold_accuracy',
-                              'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta'):
+                              'context_valid_last256_text_argmax_agreement','context_valid_last256_ce_delta',
+                              'context_valid_last256_embedding_mse_delta'):
                         key_sum=n+'_weighted_sum'
                         row[key_sum]=row.get(key_sum,0.)+m[n]*tail_valid
                     window_rows=row.setdefault('context_valid_windows',[])
@@ -1735,10 +1938,12 @@ def main(argv=None):
                                 ('context_valid_last256_gold_accuracy','context_valid_gold_accuracy'),
                                 ('context_valid_last256_text_argmax_agreement','context_valid_text_argmax_agreement'),
                                 ('context_valid_last256_ce_delta','context_valid_ce_delta'),
+                                ('context_valid_last256_embedding_mse_delta','context_valid_embedding_mse_delta'),
                                 ('context_valid_last256_gold_ce','context_valid_last256_gold_ce'),
                                 ('context_valid_last256_gold_accuracy','context_valid_last256_gold_accuracy'),
                                 ('context_valid_last256_text_argmax_agreement','context_valid_last256_text_argmax_agreement'),
-                                ('context_valid_last256_ce_delta','context_valid_last256_ce_delta')):
+                                ('context_valid_last256_ce_delta','context_valid_last256_ce_delta'),
+                                ('context_valid_last256_embedding_mse_delta','context_valid_last256_embedding_mse_delta')):
                                 key_sum=target_name+'_weighted_sum'
                                 regional[key_sum]=regional.get(key_sum,0.)+m[source_name]*tail_valid
             autoregressive_controls=None
@@ -1752,6 +1957,16 @@ def main(argv=None):
         _normalize_context_valid_strata(strata)
         for values in cohort_strata.values():
             _normalize_context_valid_strata(values)
+        def finish_tail_projection_groups(groups):
+            return {name:{'tokens':values['tokens'],
+                          'mse':values['error_sum']/values['tokens'] if values['tokens'] else None}
+                    for name,values in sorted(groups.items())}
+        tail_projection_report={'schema':'natlang.generated-tail-projection-evaluation/1',
+            'pass_index':1,'selection':'positions after first gold-prefix mismatch through and including first generated close',
+            'metric':'tail-token-weighted relative MSE of full projector output against raw embedding of the ordinary consumer argmax at the same predictor state',
+            'by_cohort':finish_tail_projection_groups(tail_projection_cohorts),
+            'by_cohort_role':{cohort:finish_tail_projection_groups(values)
+                              for cohort,values in sorted(tail_projection_cohort_roles.items())}}
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
@@ -1795,6 +2010,7 @@ def main(argv=None):
                 'projection_held_errors':{'input_map':errors['input_map'],'full_depth':errors['full_depth']},
                 'input_map_history_ce_delta':history_ce_delta,
                 'pass_ce_deltas':pass_ce_deltas,'evaluation_passes':evaluation_passes}
+        report['generated_tail_projection']=tail_projection_report
         if baseline_reason is not None:
             report['text_ce_baseline_remeasurement']={'reason':baseline_reason,
                 'schedule_observation':False,'model_or_optimizer_update':False,
@@ -1838,6 +2054,11 @@ def main(argv=None):
                 'selected_windows':len(held),'diagnostic_forward_passes_per_batch':len(MATCHED_CONSUMERS)},
             'future_gold_inputs':False,'windows':matched_history_rows,'weighted_summary':matched_summary,
             'changes_qualification_gates':False}
+        if identity['qualification_reference'] is not None:
+            report['qualification_reference']=identity['qualification_reference']
+        report['alignment_gate_criteria']=_alignment_gate_criteria(report,
+            max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,
+            min_agreement=a.min_agreement)
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);last_report=report;return report
@@ -2026,11 +2247,14 @@ def main(argv=None):
                  for k,prefix in [('backbone','backbone.'),('input_map',secondary_prefix),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
+        batch_rows=[batch] if isinstance(batch,dict) else batch
+        batch_cohorts=dict(Counter(row.get('cohort','native') for row in batch_rows))
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
                 'started':started,'memory_start':memory_start,'backbone_norm':backbone_norm,
                 'secondary_norm':secondary_norm,'samples':samples,'before':before,'controls':controls,
                 'memory_plan':memory_plan,'offload_stats':dict(offload_stats),
-                'wrapped_forward_backward_seconds':wrapped_forward_backward_seconds}
+                'wrapped_forward_backward_seconds':wrapped_forward_backward_seconds,
+                'batch_cohorts':batch_cohorts}
 
     def checkpoint_preupdate_failure(error, *, pre_attempt_rng, pre_attempt_lrs, controls):
         """Save only the last committed update after a failure before optimizer.step."""
@@ -2270,6 +2494,7 @@ def main(argv=None):
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
                  updates=display_update_flags(updates),
                  update_state_ids=dict(updates),display_labels=identity['display'])
+        m['batch_cohorts']=prepared['batch_cohorts']
         m[secondary_metric_name+'_gradient_norm']=float(prepared['secondary_norm'])
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])

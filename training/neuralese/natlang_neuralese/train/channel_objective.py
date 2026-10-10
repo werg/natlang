@@ -62,14 +62,20 @@ def generated_history_channel_loss(backbone, plain_states, projected_states,
         backbone, plain_states, projected_states, chunk_size=chunk_size, gradients=gradients)
     mask = through_first_close(generated_tokens, close_id)
     count = mask.sum()
-    loss = (kl * mask).sum() / count
+    loss = (kl * mask).sum() / count.clamp_min(1)
+    tail_mask = mask[:, -256:]
+    tail_count = tail_mask.sum()
     return loss, {'channel_consistency_kl': loss.detach(),
-                  'channel_consistency_agreement': (agreement.float() * mask).sum().detach() / count,
-                  'channel_consistency_tokens': count.detach()}
+                  'channel_consistency_agreement': (agreement.float() * mask).sum().detach() / count.clamp_min(1),
+                  'channel_consistency_tokens': count.detach(),
+                  'channel_consistency_last256_kl': (kl[:, -256:] * tail_mask).sum().detach() / tail_count.clamp_min(1),
+                  'channel_consistency_last256_agreement': (agreement[:, -256:].float() * tail_mask).sum().detach() / tail_count.clamp_min(1),
+                  'channel_consistency_last256_tokens': tail_count.detach()}
 
 
 def generated_tail_projection_loss(backbone, heads, ordinary_states, generated_tokens,
-                                   gold_prefix_mask, close_id, *, chunk_size=128):
+                                   gold_prefix_mask, close_id, *, chunk_size=128,
+                                   group_ids=None, role_ids=None, role_names=()):
     """Distill the full projector after gold targets stop belonging to this history.
 
     The live ordinary consumer already ran on these same generated decisions.
@@ -82,6 +88,10 @@ def generated_tail_projection_loss(backbone, heads, ordinary_states, generated_t
             gold_prefix_mask.shape != generated_tokens.shape or
             gold_prefix_mask.dtype != torch.bool or chunk_size < 1):
         raise ValueError('aligned generated history and boolean gold prefix required')
+    if group_ids is not None and len(group_ids) != ordinary_states.shape[0]:
+        raise ValueError('one diagnostic group is required per batch row')
+    if role_ids is not None and role_ids.shape != generated_tokens.shape:
+        raise ValueError('aligned role IDs are required for role diagnostics')
     mask = through_first_close(generated_tokens, close_id) & ~gold_prefix_mask
     errors = []
     for start in range(0, ordinary_states.shape[1], chunk_size):
@@ -94,5 +104,36 @@ def generated_tail_projection_loss(backbone, heads, ordinary_states, generated_t
     positions = torch.cat(errors, dim=1)
     count = mask.sum()
     loss = (positions * mask).sum() / count.clamp_min(1)
-    return loss, {'generated_tail_projection_mse': loss.detach(),
-                  'generated_tail_projection_tokens': count.detach()}
+    metrics = {'generated_tail_projection_mse': loss.detach(),
+               'generated_tail_projection_tokens': count.detach()}
+    # Keep only scalar sums/counts for diagnostics. These preserve the exact
+    # selected-tail weighting when held windows are aggregated across batches.
+    if group_ids is not None:
+        grouped = {'by_cohort': {}, 'by_cohort_role': {}}
+        for row, group in enumerate(group_ids):
+            selected = mask[row]
+            error_sum = (positions[row] * selected).sum().detach()
+            selected_count = selected.sum().detach()
+            if group not in grouped['by_cohort']:
+                grouped['by_cohort'][group] = {'error_sum': error_sum,
+                                               'tokens': selected_count}
+            else:
+                grouped['by_cohort'][group]['error_sum'] = (
+                    grouped['by_cohort'][group]['error_sum'] + error_sum)
+                grouped['by_cohort'][group]['tokens'] = (
+                    grouped['by_cohort'][group]['tokens'] + selected_count)
+            if role_ids is None:
+                continue
+            for role_code, role_name in enumerate(role_names):
+                role_selected = selected & role_ids[row].eq(role_code)
+                role_error_sum = (positions[row] * role_selected).sum().detach()
+                role_count = role_selected.sum().detach()
+                by_role = grouped['by_cohort_role'].setdefault(group, {})
+                if role_name not in by_role:
+                    by_role[role_name] = {'error_sum': role_error_sum,
+                                          'tokens': role_count}
+                else:
+                    by_role[role_name]['error_sum'] += role_error_sum
+                    by_role[role_name]['tokens'] += role_count
+        metrics['generated_tail_projection_groups'] = grouped
+    return loss, metrics
