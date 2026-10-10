@@ -21764,9 +21764,9 @@
       "split": "model-checkpoint-not-data",
       "source_class": "closed-full-optimizer-checkpoint-and-failed-channel-evidence",
       "training_admission": false,
-      "admission": "unqualified model lineage; archive/restore state only",
+      "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
       "independent_new_worlds": 0,
-      "notes": "Stopped at29466 by SIGTERM with complete model/optimizer/RNG checkpoint. Immutable closed source for new matching-history-reference continuation; no inherited qualification. Best and current checkpoint retained with reports. Alias roots exact closed /srv output; storage transfer preserves bytes before inactive best checkpoint offload."
+      "notes": "Stopped at29466 by SIGTERM with complete model/optimizer/RNG checkpoint. Immutable closed source for new matching-history-reference continuation; no inherited qualification. Best and current checkpoint retained with reports. Alias roots exact closed /srv output; storage transfer preserves bytes before inactive best checkpoint offload. Later749cf77c harnessS1splitcorrection: mixedexposure disqualifiescleanancestor andheldevalcredit. Preserveevidence."
     },
     {
       "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
@@ -22453,8 +22453,8 @@
       "split": "inherited-train-held-qualification",
       "source_class": "neuralese-foundation-checkpoint-failed-gate-evidence",
       "training_admission": false,
-      "admission": "held-training-evidence-not-new-training-data",
-      "notes": "ClosedV2 cleanSIGTERM30515. Best29696 used byV4; completeoptimizerstate, same-history gate failed, no qualification certificate. Preserve heldprobes and failedrepresentation drift."
+      "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
+      "notes": "ClosedV2 cleanSIGTERM30515. Best29696 used byV4; completeoptimizerstate, same-history gate failed, no qualification certificate. Preserve heldprobes and failedrepresentation drift. Later749cf77c harnessS1splitcorrection: mixedexposure disqualifiescleanancestor andheldevalcredit. Preserveevidence."
     },
     {
       "id": "free-provider-luna-v32-source-ambiguity-review-held-20261010-v1",
@@ -22733,6 +22733,32 @@
       "training_admission": false,
       "admission": "excluded-clean-lineage-ancestor-harness-split-overlap",
       "notes": "CleanSIGTERM29968/fulloptimizer preserved. Mixed harnessv1 disagreed with S1 held repository placement53/321groups; mixedV1/V2/V4 all excluded cleanlineage. No held eval credit/foundation certificate. Restart native-only28793 with harnessv2; independent S1 closure not newly certified."
+    },
+    {
+      "id": "free-provider-v29-visible-input-native-text-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-source-group-review-only",
+      "source_class": "provider-derived-held-quality-review",
+      "training_admission": false,
+      "admission": "held-explicit-global-closure-and-root-admission-pending",
+      "notes": "344actualconvertedturns/0errors;321clean targets after23failedactions excluded;299heldtextpreviews deduplicated22. Shared8ce4db33 perread graphproducer /3. No native/recurrence/admission claim."
+    },
+    {
+      "id": "free-provider-luna-v32-failed-action-audit-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/luna-sourcev32-runtimev8-failed-action-audit-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-source-group-review-only",
+      "source_class": "provider-derived-held-quality-review",
+      "training_admission": false,
+      "admission": "held-quality-audit-not-training-data",
+      "notes": "117failedactiontargets;100badtargets within17of19otherwiseunambiguousexactoutcomes. Turn-level targetexclusion required, no wholetrajectory automaticadmission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,78 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-visible-input-native-text-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v29-visible-input-native-text-v2",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1862,
+      "sha256": "aedac64210706a852d380fc16fed235d457d4e339fca215e50b5e0fd311b4089"
+    },
+    {
+      "path": "converted-turns.jsonl",
+      "bytes": 45068677,
+      "sha256": "03f7958de2c72a008d9fe9b318228348eec4d0a58366f3e0d608c087cf45bff7",
+      "lines": 344
+    },
+    {
+      "path": "excluded-failed-action-turns.jsonl",
+      "bytes": 3163334,
+      "sha256": "1df69683c630045e8e4c9f8551e3ff624d01afe2644d50e3e7816ded20b5eb73",
+      "lines": 23
+    },
+    {
+      "path": "native-turns-render-input.jsonl",
+      "bytes": 41931665,
+      "sha256": "2e0b2fae5af82fed5352f5c627a985cecc6a628f7b43c44d09257e499c2e9e1b",
+      "lines": 321
+    },
+    {
+      "path": "native-turns.jsonl",
+      "bytes": 50616079,
+      "sha256": "4634e126661422df15c926a45fedda4febdb67053290e855a8a3d42abc74685b",
+      "lines": 344
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 75774,
+      "sha256": "3f01f3cfbd18fd3c2c2bb830fbc8762e6edb4a2afd9513a3000d3e9d4e3668e0",
+      "lines": 28
+    },
+    {
+      "path": "preview/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "preview/provenance.jsonl",
+      "bytes": 727897,
+      "sha256": "3c5c9c71eefce6c7f7f258e07ce5810946da24ef9c95e4f6c4a7487e2696eb12",
+      "lines": 299
+    },
+    {
+      "path": "preview/receipt.json",
+      "bytes": 3200,
+      "sha256": "35df922482f90e44c7cf009fcf9593099a06b8a694d9bf9330410307d544b52b"
+    },
+    {
+      "path": "preview/text.jsonl",
+      "bytes": 23853514,
+      "sha256": "62e037214ad00656d2dd1ff355b1ab77622fd07eac3b6bb259a278e14ad10f46",
+      "lines": 299
+    },
+    {
+      "path": "raw-results.jsonl",
+      "bytes": 30098144,
+      "sha256": "c488e88b7db7808bfe0f1ecc2a99a47b52b1047bca36248aa09026daf169efad",
+      "lines": 5
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2482,
+      "sha256": "91178ce9b03bc4da85c4dec1853cf07155c399299ce96565e453e3654a45b56e"
+    }
+  ],
+  "bytes": 195542628
+}
