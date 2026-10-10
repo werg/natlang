@@ -578,7 +578,7 @@ export class NativeToolAgent {
   private toolsScope(session: NativeSession): any[] {
     const tools = [
       tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A final expression inspects data. A typed top-level return stages the result; finish:true completes the whole call immediately with the fresh typed value of this action\'s final expression or explicit return. Include every required predicate in that value; a later final action cannot revise it.',
-        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Use false or omit for inspection or staging; never finishes an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1,
+        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Omit finish or set false for inspection or staging; true needs a fresh typed final result and cannot reuse an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1,
           description: 'Optional wall-clock deadline, including all time waiting for natural-language children. Omit timeout_ms for nl calls or iterateOn work unless the task requires a deadline; do not guess a duration from the amount of code.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
@@ -625,7 +625,7 @@ export class NativeToolAgent {
       tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr and changed paths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
         { command: { type: 'string' } }, ['command']),
       tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr and changed paths. Use finite for loops; while and recursion are refused.',
-        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Use false or omit for inspection or staging; never finishes an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
+        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Omit finish or set false for inspection or staging; true needs a fresh typed final result and cannot reuse an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
       tool('delegate', 'Give one subfolder to a directory reducer child with its own context. Its successful file changes are merged into this folder.',
         { path: { type: 'string', description: 'Relative subfolder path.' },
           instructions: { type: 'string', description: 'What the child should do in this subfolder.' },

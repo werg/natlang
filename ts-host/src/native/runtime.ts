@@ -2179,7 +2179,7 @@ export class NativeSession {
         if (functionResult === undefined) {
           const finishHint = notResult
             ? "\nCorrect this eval's value to match the declared result type; a previously staged value cannot finish this action."
-            : '\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.';
+            : '\nFor inspection or staging, omit finish or set false; finish:true needs a fresh value of the declared result type from this eval as its final expression or explicit return, and cannot reuse an older staged value.';
           return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:[refinementFailure?.code ?? 'missing-fresh-result']};
         }
         // Finish with the staged value as checked above (computed values keep their extra fields), not a re-check.

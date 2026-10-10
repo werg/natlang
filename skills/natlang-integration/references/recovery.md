@@ -4,6 +4,8 @@
 
 Portable values (records, arrays, strings, finite numbers, booleans, null) are copied into an invocation and checked at its boundary. Everything else — functions, class instances, DOM nodes, database clients, processes, folders — is passed by reference as a live handle and stays owned by the application. The model sees a preview and can call methods; the handle is released with the task. Do not invent a universal serialization protocol for native objects.
 
+For `nl.with<ResultType>({ fixedContext })`, the single type argument declares the child result and the object supplies captured context; pass changing values to the returned child function. If an eval reports `missing-fresh-result`, omit `finish` or set it to false while inspecting or staging; `finish:true` needs a fresh typed final expression or explicit `return`. Treat an incorrect result type as a rejected action and revise the value; do not coerce or wrap it to bypass the declared contract.
+
 ## What is and is not rolled back
 
 | Change | When it takes effect | On failure |
