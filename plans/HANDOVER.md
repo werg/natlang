@@ -10539,3 +10539,7 @@ DGX reports stagedrecipe childcwd couldshadowfrozenPythonpath; Popdirectstagechi
 ### Google V27 closeout, 2026-10-10 23:51 UTC
 
 V27closed512typedvalid decisions404match suppliedannotations108differ,563attempts. Actualsevenfamilies; PubMedQAomissionexplicit. Sharedstatic54programs404items916nativeturns, allreference/visibilityaccepted, exactcanonical45holdpolicyappliedwith0intersection. Everyproviderinputmatches localpinnedsourceobject; source_refs0so no upstreamrevisionclaim. FullS1request2026-10-10T23:50:11.780087Z-pop-4634pending. Allheld. FreshproviderrefillpreparedwithV21reservation640IDs/groups, nestedpriorlineageexclusionfixunderreview.
+
+### Provider reservation and lineage fix, 2026-10-10 23:52 UTC
+
+Sharedproviderpreparer nowvalidates exactannotationreservationmanifest/sourceindex/rowhash/group/trainsplit, omitsbothreservedIDs/groups, and scans prior nestedsource_ids/source_groups aswell asprogramidentities. Thisclosesfutureannotation-source reusegap. Rootcaught andfixed emptyreservationreturnarityregressionbeforepublication; normalnoreservationpath returnsfivevalues. V28exactcode/policypreserved; freshV29actualpreparation source512matchesV28bytes, updatedexclusionreceipts. Actualninefamilies57eachfirsteight/56Yahoo; intentlists>20omitted,PubMedQAfullpool exhausted. Rootverifiedall512trainuniquecomplete/currentholds/V21nooverlap. FrozenfreepoolstartedPID975483 withsharedquotabackoff, no paidfallback. V7at35840scheduledevaluation.

@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "google-reservation-preparations-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/google-reservation-preparations-20261011-v1",
+  "files": [
+    {
+      "path": "provider-google-choice-confidence-v28-input/v28-component-freeze/decision_source_quality_holds.json",
+      "bytes": 35316,
+      "sha256": "ea67230ed1dd7b28ec65c83e0e440f8871bb39bc90c949b93df625fb02b66b5a"
+    },
+    {
+      "path": "provider-google-choice-confidence-v28-input/v28-component-freeze/freeze.json",
+      "bytes": 1147,
+      "sha256": "1d1b170d2e03aa1b2e9f5753a1ec5525adb09fb73da0bd77b4b1571879d1c146"
+    },
+    {
+      "path": "provider-google-choice-confidence-v28-input/v28-component-freeze/prepare_decision_provider_source.py",
+      "bytes": 27421,
+      "sha256": "daa6e827b1be38bfa690cd8068a9786b7aaa56f952145e08b89f99239b79b35d"
+    },
+    {
+      "path": "provider-google-choice-confidence-v28-source/cases.jsonl",
+      "bytes": 417996,
+      "sha256": "d13322ac5e1512f61858ada70d872159b8dea6e782b04437c6a0d9798fc430b1",
+      "lines": 512
+    },
+    {
+      "path": "provider-google-choice-confidence-v28-source/omissions.jsonl",
+      "bytes": 11232352,
+      "sha256": "756cceaed888898c3bc259aa175fd11f220f30dccf54137741cf7261e9057bc5",
+      "lines": 16821
+    },
+    {
+      "path": "provider-google-choice-confidence-v28-source/source-manifest.json",
+      "bytes": 15815,
+      "sha256": "378be205b61bc85d36bcfcb8526d69d787bcae8684eb2d303c699c43942465bf"
+    }
+  ],
+  "bytes": 11730047
+}

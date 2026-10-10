@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v29-reviewed-inputs-held-20261011-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v29-source",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 417996,
+      "sha256": "d13322ac5e1512f61858ada70d872159b8dea6e782b04437c6a0d9798fc430b1",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1194,
+      "sha256": "b3103103058597205e2e9d89322cae332e78a02aad7ec30970720d9ff847eb40"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29670,
+      "sha256": "adccf20446070bad4d1b3d4cb445ca18f4a28e76fc11657f2dd7f36c532b045b"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10420,
+      "sha256": "418bb4f7dc5394063035471254c6d12b26c0e22526b0b25ea8e0bcb6da3d4e4d"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 11379656,
+      "sha256": "bf8a8caac89349747e285b1fa67a2d20b93e270f3ddb7cf97aa1d059eaa20e92",
+      "lines": 16821
+    },
+    {
+      "path": "root-source-launch-review-v1.json",
+      "bytes": 1396,
+      "sha256": "90f593547d1770b4d905d3594a548c9504506948701f510d31560e98c519b95b"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 21367,
+      "sha256": "ecd9fa2c9f91932a32f60053f8fe63435fc7cb7e7a56f78e3b9173ce5cd8c65d"
+    },
+    {
+      "path": "source-preparation-code/decision_source_quality_holds.json",
+      "bytes": 35316,
+      "sha256": "ea67230ed1dd7b28ec65c83e0e440f8871bb39bc90c949b93df625fb02b66b5a"
+    },
+    {
+      "path": "source-preparation-code/prepare_decision_provider_source.py",
+      "bytes": 29600,
+      "sha256": "5ec6704fe8a2e51b6cb542ea1aa8dbc386d65ce49af818078117e39bd0c75c66"
+    }
+  ],
+  "bytes": 11931409
+}

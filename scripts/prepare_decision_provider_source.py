@@ -107,10 +107,12 @@ def omission(case, source_path, source_sha, line_number, row_sha, reasons):
 def read_prior_cases(prior_root):
     root = Path(prior_root).resolve()
     files = sorted(root.glob('provider-*/cases.jsonl'))
-    used_ids, used_groups = set(), set()
+    program_ids, program_groups = set(), set()
+    source_ids, source_groups = set(), set()
     manifests = []
     for path in files:
-        file_ids, file_groups = set(), set()
+        file_program_ids, file_program_groups = set(), set()
+        file_source_ids, file_source_groups = set(), set()
         raw_sha = sha256_file(path)
         with path.open('rb') as stream:
             for line_no, raw_line in enumerate(stream, 1):
@@ -118,23 +120,139 @@ def read_prior_cases(prior_root):
                     continue
                 case = json.loads(raw_line)
                 if isinstance(case.get('id'), str):
-                    file_ids.add(case['id'])
-                    used_ids.add(case['id'])
+                    file_program_ids.add(case['id'])
+                    program_ids.add(case['id'])
                 if isinstance(case.get('group'), str):
-                    file_groups.add(case['group'])
-                    used_groups.add(case['group'])
+                    file_program_groups.add(case['group'])
+                    program_groups.add(case['group'])
+                for field, target, file_target in (
+                        ('source_ids', source_ids, file_source_ids),
+                        ('source_groups', source_groups, file_source_groups)):
+                    values = case.get(field)
+                    if values is None:
+                        continue
+                    if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
+                        raise ValueError(f'{path}:{line_no}: {field} must be an array of nonempty strings')
+                    target.update(values)
+                    file_target.update(values)
         manifests.append({
             'path': str(path), 'sha256': raw_sha,
-            'unique_ids': len(file_ids), 'unique_groups': len(file_groups)
+            # Retain the old keys as explicit direct program-level counts.
+            'unique_ids': len(file_program_ids), 'unique_groups': len(file_program_groups),
+            'direct_program_ids': len(file_program_ids), 'direct_program_groups': len(file_program_groups),
+            'nested_source_ids': len(file_source_ids), 'nested_source_groups': len(file_source_groups)
         })
-    return root, used_ids, used_groups, manifests
+    return root, program_ids, program_groups, source_ids, source_groups, manifests
+
+
+def source_manifest_pin(source_path, source_sha, source_rows):
+    """Read the adjacent source manifest when available for exact cross-packet lineage."""
+    candidates = [source_path.parent / 'source-manifest.json', source_path.parent / 'decision-data.manifest.json']
+    manifest_path = next((path for path in candidates if path.is_file()), None)
+    if manifest_path is None:
+        return None, None, None
+    raw = manifest_path.read_bytes()
+    doc = json.loads(raw)
+    declared_count = doc.get('cases', {}).get('rows') if isinstance(doc.get('cases'), dict) else doc.get('cases')
+    declared_hash = (doc.get('cases', {}).get('sha256') if isinstance(doc.get('cases'), dict) else None)
+    declared_hash = declared_hash or doc.get('selected_sha256') or doc.get('cases_sha256')
+    if declared_hash is None and isinstance(doc.get('sha256'), dict):
+        declared_hash = doc['sha256'].get(source_path.name)
+    declared_count = declared_count or doc.get('selected_count') or doc.get('selection', {}).get('selected_count')
+    if declared_hash != source_sha or declared_count != source_rows:
+        raise ValueError(f'{manifest_path}: source manifest does not pin the supplied source bytes/count')
+    return manifest_path.resolve(), sha256_bytes(raw), doc
+
+
+def load_reserved_annotation_cases(paths, source_path, source_sha, source_manifest_sha):
+    """Validate annotation-folder reservations against exact source rows, then reserve IDs/groups."""
+    if not paths:
+        return set(), set(), {}, {}, []
+    row_pins = {}
+    id_pins = {}
+    with source_path.open('rb') as stream:
+        source_index = 0
+        for raw_line in stream:
+            if not raw_line.strip():
+                continue
+            row_sha = sha256_bytes(raw_line.rstrip(b'\r\n'))
+            case = json.loads(raw_line)
+            entry = (case.get('id'), case.get('group'), case.get('role'), row_sha)
+            row_pins[source_index] = entry
+            if isinstance(case.get('id'), str):
+                if case['id'] in id_pins:
+                    raise ValueError(f'{source_path}: duplicate source ID {case["id"]}')
+                id_pins[case['id']] = (source_index, entry)
+            source_index += 1
+    reserved_ids, reserved_groups, reserved_id_refs, reserved_group_refs, receipts = set(), set(), {}, {}, []
+    reserved_program_ids = set()
+    for raw_path in paths:
+        path = Path(raw_path).resolve()
+        file_sha = sha256_file(path)
+        programs = 0
+        file_ids, file_groups = set(), set()
+        with path.open('rb') as stream:
+            for line_number, raw_line in enumerate(stream, 1):
+                if not raw_line.strip():
+                    continue
+                program = json.loads(raw_line)
+                programs += 1
+                program_id = program.get('id')
+                if not isinstance(program_id, str) or not program_id or program_id in reserved_program_ids:
+                    raise ValueError(f'{path}:{line_number}: missing or duplicate reserved program ID')
+                reserved_program_ids.add(program_id)
+                external = program.get('external_source')
+                if not isinstance(external, dict) or (external.get('snapshot_sha256') != source_sha or
+                        external.get('source_manifest_sha256') != source_manifest_sha):
+                    raise ValueError(f'{path}:{line_number}: reservation source snapshot mismatch')
+                ids = program.get('source_ids')
+                groups = program.get('source_groups')
+                rows = external.get('source_rows')
+                if not isinstance(ids, list) or not isinstance(groups, list) or not isinstance(rows, list) or len(ids) != len(rows):
+                    raise ValueError(f'{path}:{line_number}: malformed reservation source lineage')
+                actual_groups = []
+                for source_id, declared in zip(ids, rows):
+                    if not isinstance(source_id, str) or not isinstance(declared, dict) or declared.get('id') != source_id:
+                        raise ValueError(f'{path}:{line_number}: reservation ID/source-row mismatch')
+                    source_index = declared.get('row_index')
+                    if not isinstance(source_index, int) or source_index not in row_pins:
+                        raise ValueError(f'{path}:{line_number}: reservation row index is invalid')
+                    actual = row_pins[source_index]
+                    if (actual[0] != source_id or actual[1] != declared.get('group') or
+                            actual[2] != declared.get('split') or actual[3] != declared.get('row_sha256') or
+                            actual[2] != 'train'):
+                        raise ValueError(f'{path}:{line_number}: reservation does not match exact source row {source_id}')
+                    if source_id in reserved_ids or actual[1] in reserved_groups:
+                        raise ValueError(f'{path}:{line_number}: duplicate reserved source ID/group')
+                    reserved_ids.add(source_id)
+                    reserved_groups.add(actual[1])
+                    reserved_id_refs[source_id] = {'path': str(path), 'program_id': program_id}
+                    reserved_group_refs[actual[1]] = {'path': str(path), 'program_id': program_id}
+                    file_ids.add(source_id)
+                    file_groups.add(actual[1])
+                    actual_groups.append(actual[1])
+                if len(set(actual_groups)) != len(groups) or set(actual_groups) != set(groups):
+                    raise ValueError(f'{path}:{line_number}: reservation source_groups mismatch')
+        receipts.append({'path': str(path), 'sha256': file_sha, 'programs': programs,
+                         'source_ids': len(file_ids), 'source_groups': len(file_groups),
+                         'identity_binding': 'each source_id is bound to an exact source line index, row SHA-256, group, and train split'})
+    return reserved_ids, reserved_groups, reserved_id_refs, reserved_group_refs, receipts
 
 
 def build(args):
     families = parse_families(args.families)
     source_path = Path(args.source).resolve()
-    prior_root, used_ids, used_groups, prior_files = read_prior_cases(args.prior_root)
+    prior_root, prior_program_ids, prior_program_groups, prior_source_ids, prior_source_groups, prior_files = read_prior_cases(args.prior_root)
+    used_ids = prior_program_ids | prior_source_ids
+    used_groups = prior_program_groups | prior_source_groups
     source_bytes_sha = sha256_file(source_path)
+    with source_path.open('rb') as source_stream:
+        source_rows = sum(1 for line in source_stream if line.strip())
+    source_manifest_path, source_manifest_sha, _ = source_manifest_pin(source_path, source_bytes_sha, source_rows)
+    if args.exclude_cases and not source_manifest_sha:
+        raise ValueError('annotation reservations require an adjacent exact source manifest')
+    reserved_ids, reserved_groups, reserved_id_refs, reserved_group_refs, reservation_receipts = load_reserved_annotation_cases(
+        args.exclude_cases, source_path, source_bytes_sha, source_manifest_sha)
     canonical_policy_path = Path(__file__).resolve().parents[1] / 'training' / 'decision_source_quality_holds.json'
     quality_holds, quality_receipts, canonical_policy = load_quality_holds([
         (canonical_policy_path, True), (args.source_quality_holds, False)
@@ -219,10 +337,20 @@ def build(args):
             for key in ('id', 'group', 'source', 'question'):
                 if not isinstance(case.get(key), str) or not case[key]:
                     reasons.append({'code': f'source_quality_missing_{key}'})
-            if case_id in used_ids:
-                reasons.append({'code': 'prior_provider_case_id_overlap'})
-            if isinstance(case.get('group'), str) and case['group'] in used_groups:
+            if case_id in prior_program_ids:
+                reasons.append({'code': 'prior_provider_program_id_overlap'})
+            if case_id in prior_source_ids:
+                reasons.append({'code': 'prior_provider_source_id_overlap'})
+            if isinstance(case.get('group'), str) and case['group'] in prior_program_groups:
+                reasons.append({'code': 'prior_provider_program_group_overlap'})
+            if isinstance(case.get('group'), str) and case['group'] in prior_source_groups:
                 reasons.append({'code': 'prior_provider_source_group_overlap'})
+            if case_id in reserved_ids:
+                reasons.append({'code': 'reserved_annotation_source_id',
+                                'reservation': reserved_id_refs[case_id]})
+            if isinstance(case.get('group'), str) and case['group'] in reserved_groups:
+                reasons.append({'code': 'reserved_annotation_source_group',
+                                'reservation': reserved_group_refs[case['group']]})
             if reasons:
                 omissions.append(omission(case, source_path, source_bytes_sha, line_number, row_sha, reasons))
                 continue
@@ -286,6 +414,8 @@ def build(args):
         'independent_new_worlds': 0,
         'source': {
             'path': str(source_path), 'sha256': source_bytes_sha, 'row_count': source_rows,
+            'manifest_path': str(source_manifest_path) if source_manifest_path else None,
+            'manifest_sha256': source_manifest_sha,
             'scope_row_count': source_scope_rows,
             'row_hash_contract': 'SHA-256 of exact UTF-8 JSONL row bytes excluding the line terminator'
         },
@@ -312,7 +442,19 @@ def build(args):
         },
         'prior_provider_cases': {
             'root': str(prior_root), 'files': prior_files,
-            'unique_case_ids': len(used_ids), 'unique_source_groups': len(used_groups)
+            'unique_case_ids': len(prior_program_ids), 'unique_source_groups': len(prior_program_groups),
+            'unique_direct_program_ids': len(prior_program_ids),
+            'unique_direct_program_groups': len(prior_program_groups),
+            'unique_nested_source_ids': len(prior_source_ids),
+            'unique_nested_source_groups': len(prior_source_groups),
+            'unique_reserved_id_union': len(used_ids), 'unique_reserved_group_union': len(used_groups),
+            'lineage_policy': 'Direct program IDs/groups and nested source_ids/source_groups are stored and counted separately, then the union is used for overlap prevention.'
+        },
+        'annotation_reservations': {
+            'files': reservation_receipts,
+            'reserved_source_ids': len(reserved_ids),
+            'reserved_source_groups': len(reserved_groups),
+            'policy': 'Each reservation is validated against the exact source manifest and every exact source row index/hash/group/train split; IDs and groups are excluded from selection.'
         },
         'by_family': dict(sorted(by_family.items())),
         'omissions': {
@@ -341,6 +483,8 @@ def main():
                         help='Family name or comma-separated family names; may be repeated')
     parser.add_argument('--source-quality-holds',
                         help='Optional additional JSON hold receipt; canonical training policy is always applied')
+    parser.add_argument('--exclude-cases', action='append', default=[],
+                        help='Prior annotation program JSONL; validates and reserves its exact source IDs/groups; may be repeated')
     args = parser.parse_args()
     if args.count <= 0 or args.max_state_chars <= 0 or args.max_options < 2:
         parser.error('--count and --max-state-chars must be positive; --max-options must be at least 2')
