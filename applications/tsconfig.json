@@ -25,6 +25,7 @@
     "pi/vendor/durable/vitest*.config.ts",
     "pi/vendor/durable/src/testing",
     "pi/vendor/durable/src/storage/sqlite/cloudflare.ts",
-    "pi/test"
+    "pi/test",
+    "pi/browser.ts"
   ]
 }

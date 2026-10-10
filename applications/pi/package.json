@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "build:browser": "node ../../ts-host/scripts/build-application-browser.mjs .",
     "test:vendor": "cd vendor/durable && vitest --run",
     "test:policy": "cd vendor/durable && vitest --run --config vitest.policy.config.ts",
     "test:conformance": "vitest --run --config test/conformance/vitest.config.ts"

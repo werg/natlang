@@ -1,0 +1,11 @@
+{
+  "compilerOptions": { "target": "ES2024", "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true,
+    "skipLibCheck": true, "rootDir": ".", "outDir": "dist", "types": [], "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "allowImportingTsExtensions": true, "rewriteRelativeImportExtensions": true, "erasableSyntaxOnly": true },
+  "include": ["browser.ts", "index.ts", "types.ts", "ops.ts", "host/**/*.ts", "harness/**/*.ts", "generation/**/*.ts", "tool/**/*.ts",
+    "compaction/**/*.ts", "scheduler/**/*.ts", "extensions/**/*.ts", "vendor/durable/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test", ".natlang", "main.ts", "surface.ts", "bench", "tasks",
+    "host/node.ts", "host/resources.ts", "extensions/pi-prompt/node.ts",
+    "vendor/durable/test", "vendor/durable/src/testing", "vendor/durable/src/env/node.ts", "vendor/durable/src/env/node-watch.ts",
+    "vendor/durable/src/storage/sqlite/node.ts", "vendor/durable/src/storage/sqlite/cloudflare.ts", "vendor/durable/src/storage/jsonl/node.ts"]
+}
