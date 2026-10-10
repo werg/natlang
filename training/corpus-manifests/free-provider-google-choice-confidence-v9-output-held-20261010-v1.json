@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-choice-confidence-v9-output-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
+  "files": [
+    {
+      "path": "labels.jsonl",
+      "bytes": 108629,
+      "sha256": "cca37931bcecbf48e871261a8c000b59125b33b4ddf3b02106d8d51c859af1cc",
+      "lines": 92
+    },
+    {
+      "path": "labels.jsonl.attempts.jsonl",
+      "bytes": 95638,
+      "sha256": "cc001a4d28e2b224558be9a68e9357745d6038a259e3ef1b43e54c060d69e13e",
+      "lines": 98
+    },
+    {
+      "path": "labels.jsonl.manifest.json",
+      "bytes": 2483,
+      "sha256": "219c184288c16112e68dda4960df0979073ca5de8549b7c3375cce8d3d0704da"
+    },
+    {
+      "path": "worker.log",
+      "bytes": 6193,
+      "sha256": "73c59973dfcafaaa816f4a5d6cb285343e6cf5b0f142c7ae1dbb8fa640e6a0d2"
+    }
+  ],
+  "bytes": 212943
+}
