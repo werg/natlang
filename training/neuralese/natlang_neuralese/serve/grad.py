@@ -54,8 +54,12 @@ from __future__ import annotations
 import json
 import contextlib
 import math
+import os
 
 import torch
+
+# cuBLAS picks its split-K workspace per stream; deterministic gradients need a fixed one (read at the first CUDA handle).
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 from ..model.heads import PayloadSample, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortCache
@@ -771,10 +775,11 @@ class GradSession:
         order = int(body.get("order") or 1)
         if order not in (1, 2):
             raise Unavailable("gradients of order 1 or 2")
-        if order == 2:
-            with second_order(self.backbone):
-                return self._run(body, body.get("derived") or [])
-        return self._run(body, [])
+        with deterministic_kernels():
+            if order == 2:
+                with second_order(self.backbone):
+                    return self._run(body, body.get("derived") or [])
+            return self._run(body, [])
 
     def _run(self, body: dict, derived: list) -> dict:
         arguments = list(dict.fromkeys(body.get("arguments") or []))
@@ -929,6 +934,20 @@ def functional_step(name, hyper: dict, step: int, p: torch.Tensor, g: torch.Tens
         m_hat, v_hat = m / (1 - beta1 ** step), v / (1 - beta2 ** step)
         return p - lr * (m_hat / (v_hat.sqrt() + eps) + weight_decay * p), {"m": m, "v": v}
     raise RequestError("neuralese-optim", f"unknown optimizer {name!r}")
+
+
+@contextlib.contextmanager
+def deterministic_kernels():
+    """Gradients are content-addressed blocks, so the same request must give the same bytes. The flash and
+    memory-efficient attention backward and index scatters accumulate with atomics in an arbitrary order (bf16 on a GPU:
+    different gradient bytes, hence after an `lr`-sized step different adapted values and losses, every run). Strict mode
+    selects flash attention's deterministic backward; `warn_only` would leave it atomic (PyTorch only warns)."""
+    was, warn = torch.are_deterministic_algorithms_enabled(), torch.is_deterministic_algorithms_warn_only_enabled()
+    torch.use_deterministic_algorithms(True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(was, warn_only=warn)
 
 
 @contextlib.contextmanager
