@@ -152,6 +152,43 @@ def test_raw_recurrence_recipe_propagates_named_optimizer_restore_controls(tmp_p
     ]
 
 
+HARNESS_RECURRENCE = {'view': 'written', 'view_window': 4096, 'distill': 1.0, 'context_weight': 1.0,
+                      'feedback_weight': 0.25, 'context_coverage': 'records',
+                      'cohort_weights': {'native': 0.75, 'harness_bench': 0.25}, 'qualification_cohort': 'native'}
+
+
+def recurrence_recipe_with(tmp_path, parameters):
+    recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
+    stage = next(stage for stage in recipe['stages'] if stage['kind'] == 'raw_recurrence_training')
+    stage['parameters'].update(parameters)
+    path = tmp_path / 'recurrence-cohort.json'
+    path.write_text(json.dumps(recipe))
+    return path
+
+
+def test_raw_recurrence_recipe_carries_the_harness_cohort_trainer_options(tmp_path):
+    loaded = load_recipe(recurrence_recipe_with(tmp_path, HARNESS_RECURRENCE))
+    parameters = next(stage['parameters'] for stage in loaded['stages'] if stage['kind'] == 'raw_recurrence_training')
+    assert stage_parameter_args({key: parameters[key] for key in HARNESS_RECURRENCE}) == [
+        '--view', 'written', '--view-window', '4096', '--distill', '1.0', '--context-weight', '1.0',
+        '--feedback-weight', '0.25', '--context-coverage', 'records',
+        '--cohort-weights', '{"harness_bench":0.25,"native":0.75}', '--qualification-cohort', 'native']
+    declared = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v3.json')
+    assert declared['cohorts']['harness_bench']['recurrence']['trajectory_trainer'] == HARNESS_RECURRENCE
+
+
+@pytest.mark.parametrize('bad', [{'view': 'digest'}, {'view_window': 0}, {'view_window': 4096.0},
+                                 {'context_weight': -1}, {'context_weight': float('nan')}, {'distill': 'yes'},
+                                 {'feedback_weight': 1.5}, {'context_coverage': 'all'},
+                                 {'cohort_weights': {'native': 0.5, 'harness_bench': 0.25}},
+                                 {'cohort_weights': {'native': 1.0, '': 0.0}}, {'cohort_weights': [1]},
+                                 {'cohort_weights': {'native': 1.0}, 'qualification_cohort': 'harness_bench'},
+                                 {'qualification_cohort': ''}])
+def test_raw_recurrence_recipe_rejects_malformed_cohort_trainer_options(tmp_path, bad):
+    with pytest.raises(ValueError):
+        load_recipe(recurrence_recipe_with(tmp_path, bad))
+
+
 def test_raw_recurrence_recipe_hands_fixup_heads_to_runtime_and_recurrence():
     recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
     by_id={stage['id']:stage for stage in recipe['stages']}

@@ -18574,7 +18574,7 @@
       ],
       "split": "by-repository (5% test; source groups repository and instance)",
       "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
-      "admission": "held-pending-owner-and-recipe-owner-admission-of-the-declared-harness_bench-cohort",
+      "admission": "admitted-by-owner-pending-recurrence-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): read directly only by the recurrence stage, which stays held until each student's runtime qualification and the view gate, and until written views run on these records (raw-recurrence-v3 cohorts.harness_bench.recurrence.status); its LFM text twin is admitted",
       "training_admission": false,
       "corpus_publication_for_training": false,
       "derived_from": [
@@ -18614,8 +18614,8 @@
       ],
       "split": "inherited from the source records (by repository; source groups repository and instance)",
       "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
-      "admission": "held-pending-owner-and-recipe-owner-admission-of-the-harness_bench-cohort",
-      "training_admission": false,
+      "admission": "admitted-harness_bench-cohort-text-stages (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the LFM line's text stages (core_text_warmup, autoregressive_text_fixup) at cohort fraction 0.25 beside the native text, via an assembled text input (scripts/assemble_neuralese_cohorts.py) and text_warmup --cohort-weights; the 112 test documents are a reported stratum, never qualification evidence; enters the LFM line at its next declared handoff recipe",
+      "training_admission": true,
       "corpus_publication_for_training": false,
       "derived_from": [
         "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
@@ -18676,7 +18676,7 @@
       ],
       "split": "inherited from the source records (by repository; source groups repository and instance)",
       "source_class": "derived-native-chat-gold-text-twin-of-harness-bench-records",
-      "admission": "held-pending-owner-and-recipe-owner-admission-of-the-harness_bench-cohort",
+      "admission": "admitted-by-owner-pending-trainer-support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the Mellum template renders tool results as user turns, so text_warmup's tool-feedback weight (0.25) does not apply yet; training_admission flips when it does (raw-recurrence-v3 cohorts.harness_bench.twins)",
       "training_admission": false,
       "corpus_publication_for_training": false,
       "derived_from": [

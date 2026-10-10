@@ -94,3 +94,14 @@ backbone-inherent overrides on top of v3; a test proves both resolve to their pr
   LFM2.5 `last_turn_only` (its post-training template default; `preserve_thinking` is never set), Mellum2.1 `keep`.
   Target-turn reasoning is trained for both. The renderer asserts the template behaves as declared and records the
   policy in each new receipt; the reference server binds the same policy. Both v1 twins already render as declared.
+
+Update (2026-10-10, owner decision "harness-bench cohort admitted to training"): the cohort is admitted, effective per
+twin and stage as the trainer supports it. Admitted now: the LFM2.5 twin in the text stages (shared
+cohort/document sampler and tool-feedback weighting, train/text_supervision.py; assembled text input,
+scripts/assemble_neuralese_cohorts.py; registry training_admission true). Pending: the Mellum twin (its template renders
+tool results as user turns, so text_warmup's 0.25 tool weight does not apply yet) and the recurrence (runtime and view
+gates; written views do not yet run on harness records, see cohorts.harness_bench.recurrence.status). The recurrence
+declaration gains context_coverage records, cohort_weights {native 0.75, harness_bench 0.25} and qualification_cohort
+native; the raw_recurrence_training handler carries and validates them. The text warm-up's context_weight,
+feedback_weight and qualification_cohort defaults (the text_warmup CLI defaults) are declared in v3 rather than v1, so
+raw-recurrence-v1/v2 and raw-recurrence-mellum-v1 keep their identity.

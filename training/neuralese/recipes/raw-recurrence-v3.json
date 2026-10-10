@@ -6,8 +6,8 @@
   "overrides": {
     "cohorts": {
       "harness_bench": {
-        "admitted": false,
-        "admission": "held: the owner and both recipe owners (Pop for the LFM line, the DGX Mellum session) must admit the cohort before any stage reads it (HARNESS_BENCH.md §6/§7). Declaring it here admits nothing.",
+        "admitted": true,
+        "admission": "admitted by the owner (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'), effective per stage and twin as the trainer supports it: the LFM2.5 text twin in the text stages (shared cohort/document sampler and tool-feedback weighting in text_warmup, train/text_supervision.py; assembled input scripts/assemble_neuralese_cohorts.py text); the Mellum twin and the recurrence are pending (their entries say why). Each line enters at its next declared handoff recipe with explicit cohort_weights; mixing or naming a cohort admits nothing else.",
         "source": {
           "corpus": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
           "records": "records.jsonl",
@@ -29,7 +29,9 @@
             "suffix_tokens": {
               "train": 771218,
               "test": 20365
-            }
+            },
+            "admitted": true,
+            "admission": "admitted (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'); text stages read it through an assembled text input (text_cohort harness_bench) with cohort_weights {native: 0.75, harness_bench: 0.25}"
           },
           "mellum2.1-12b-a2.5b-thinking": {
             "corpus": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v1",
@@ -45,7 +47,9 @@
             "suffix_tokens": {
               "train": 800422,
               "test": 21161
-            }
+            },
+            "admitted": false,
+            "admission": "pending trainer support (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training'): the Mellum chat template renders tool results as user turns ('<|im_start|>user\\n<tool_response>...'), and text_warmup.chat_roles labels roles by the turn header, so tool output would carry full context weight instead of feedback_weight 0.25. Admit once text_warmup labels tool responses as tool on Mellum (Pop's seam, requested 2026-10-10)."
           }
         },
         "backbone_inherent_differences": "tokenizer and chat template only (one twin per tokenizer from the same records and renderer); Mellum's nested members train on the same rows through the line's member_* parameters. history_reasoning (declared per backbone, owner 2026-10-10; serve/chat.py BACKBONE_HISTORY_REASONING, asserted by the renderer and recorded in each twin receipt; serving renders the same): every line trains the target turn's reasoning; earlier assistant turns' reasoning follows each backbone's post-training template default, LFM2.5 last_turn_only (only the most recent assistant turn of a rendered conversation keeps its reasoning; preserve_thinking is never set), Mellum2.1 keep (every assistant turn after the last user query keeps it)",
@@ -61,7 +65,8 @@
           },
           "autoregressive_text_fixup": {
             "view": "preview"
-          }
+          },
+          "assembly": "scripts/assemble_neuralese_cohorts.py text: the line's native text (text_cohort native) plus the line's twin (text_cohort harness_bench), one tokenizer; text_warmup --cohort-weights and --qualification-cohort native"
         },
         "supervision": {
           "whole_trajectory": true,
@@ -69,7 +74,7 @@
           "context_weight": 1.0,
           "feedback_weight": 0.25,
           "feedback_weight_meaning": "relative weight, inside the context term, of tool results and other mechanical feedback (the trajectory trainer's --feedback-weight semantics)",
-          "feedback_weight_status": "implemented in shared train/text_supervision.py and the text_warmup loader/objective; tool-result context is weighted at 0.25, reasoning and replies remain full weight. Controlled training handoff and admission review are still required; the frozen Pop job is unchanged."
+          "feedback_weight_status": "implemented in shared train/text_supervision.py and the text_warmup loader/objective (tool role 0.25, reasoning and replies full weight) and, for the recurrence, GradSession._context_weights (non-assistant turns after the first reply). Mellum text: not yet effective (tool results render as user turns; see the Mellum twin's admission)."
         },
         "recurrence": {
           "stage": "recurrence_warmup",
@@ -77,18 +82,32 @@
           "after": "each student's runtime qualification for its exact weights (adapted_runtime) and the view operator stage gate (TRAINING_RECIPE.md 'The view operator stage'); for Mellum every nested member is an objective",
           "inputs": {
             "records": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
-            "pieces": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3"
+            "pieces": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+            "assembly": "scripts/assemble_neuralese_cohorts.py records: the line's native records (cohort native) plus these records (cohort harness_bench) as one records/pieces input; train.trajectories draws a cohort by cohort_weights, then a document (record), seeded per cursor"
           },
           "trajectory_trainer": {
             "view": "written",
             "distill": 1.0,
             "view_window": 4096,
             "context_weight": 1.0,
-            "feedback_weight": 0.25
+            "feedback_weight": 0.25,
+            "context_coverage": "records",
+            "cohort_weights": {
+              "native": 0.75,
+              "harness_bench": 0.25
+            },
+            "qualification_cohort": "native"
           },
-          "status": "declared, not admitted; shared raw_recurrence_training handler now carries view, view_window, context_weight and feedback_weight. Exact-weight runtime and view-operator qualification remain required."
+          "status": "declared, not admitted (plans/neuralese/DECISIONS.md 2026-10-10 'harness-bench cohort admitted to training': after each student's runtime qualification and the view gate). The shared raw_recurrence_training handler carries view, view_window, distill, context_weight, feedback_weight, context_coverage, cohort_weights and qualification_cohort (validated); train.trajectories samples cohort then record and weights the context by context_coverage records (harness records keep up to 8 turns per trajectory, so only what an earlier training record of the same trajectory supervises weighs 0; the last-reply default would leave the turns between records unsupervised). cohort_weights mirror the text mix (0.25, added to native, never replacing). Open before admission, found by the 2026-10-10 smoke: (1) --view written does not run on harness records: each view write is supervised to the length of the record's whole preview (part.preview, mostly the full tool output, up to ~13k tokens), also for every chunk of a chunked value, which exceeds max_write_vectors 512 (and 4096); the view operator stage must define the written view's target length; (2) --view written requires backward_policy joint (the base stage declares auto); (3) the lines' native recurrence records still carry digest parts and must be converted (scripts/neuralese_data/digest_to_view.py) and registered before an assembled mix; (4) max_tokens 65536 skips the longest harness prompts (reported)."
         },
         "notes": "Each document is one record (task, whole earlier trajectory, one target turn); a trajectory contributes up to 8 records, so its prefix recurs in each, and about 1% of a twin's tokens are target suffix. The window sampler should therefore draw windows per document, not per token."
+      }
+    },
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "context_weight": 1.0,
+        "feedback_weight": 0.25,
+        "qualification_cohort": "native"
       }
     }
   }

@@ -754,6 +754,18 @@ def main(argv=None):
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
     parser.add_argument("--context-weight", type=float, default=1.0, help="CE weight of each record's new prompt text (instructions, inputs, tool results since the last assistant reply); the whole trajectory is a target, not only replies (owner, 2026-10-07)")
     parser.add_argument("--feedback-weight", type=float, default=0.25, help="relative weight, inside --context-weight, of tool results and other mechanical feedback (non-assistant turns after the first reply)")
+    parser.add_argument("--context-coverage", choices=["last-reply", "records"], default="last-reply",
+                        help="which earlier prompt text other records supervise (weight 0 in the context term): "
+                             "last-reply assumes every earlier reply has its own record; records zeroes only what an "
+                             "earlier training record of the same trajectory (exact message-prefix chain) covers, so "
+                             "corpora that keep some turns per trajectory (harness_bench) supervise the whole trajectory")
+    parser.add_argument("--cohort-weights", default=None,
+                        help="JSON fractions per record cohort (record field 'cohort', default native), naming exactly "
+                             "the loaded training cohorts and summing to one; draws cohort, then document (record). "
+                             "Naming a cohort admits nothing")
+    parser.add_argument("--qualification-cohort", default="native",
+                        help="the cohort whose held records drive the evaluations and probes; other cohorts' held "
+                             "records are reported separately in cohort_strata")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=None,
@@ -798,6 +810,17 @@ def main(argv=None):
         return
     if args.token_cache_mib < 0:
         raise ValueError('negative token cache budget')
+    cohort_weights = None
+    if args.cohort_weights is not None:
+        from .recipe import validate_cohort_weights
+        cohort_weights = json.loads(args.cohort_weights)
+        validate_cohort_weights(cohort_weights)
+        if args.qualification_cohort not in cohort_weights:
+            raise ValueError('the qualification cohort must be one of --cohort-weights')
+    if not math.isfinite(args.context_weight) or args.context_weight < 0:
+        raise ValueError('context weight must be finite and nonnegative')
+    if not math.isfinite(args.feedback_weight) or not 0 <= args.feedback_weight <= 1:
+        raise ValueError('feedback weight must be finite and between zero and one')
     if args.local_stage_batch_size < 1 or (args.local_stage_batch_size != 1 and args.sketch_gradient != 'local_stage'):
         raise ValueError('local stage batches require local_stage and a positive size')
     if args.producer_batch_size < 1:
@@ -1373,16 +1396,26 @@ def main(argv=None):
 
     # Records whose prompt already holds native Neuralese blocks have no attested crisp body to render here;
     # they are omitted (and counted), never silently expanded.
+    # Cohorts (record field 'cohort', default native): without --cohort-weights every record must be the
+    # qualification cohort and the selection below is unchanged; with it, --train caps each cohort's training records,
+    # held records of the qualification cohort drive the evaluations and other cohorts' held records are a stratum.
+    from .record_cohorts import record_cohort, RecordCohortSampler, trajectory_coverage
     train, held_pool, skipped = [], [], {"long": 0, "no-target": 0, "native-neuralese-prompt": 0,
                                         "unresolved-authenticated-context": context_review["excluded_context_records"]}
+    cohort_held, train_per_cohort = {}, {}
     for record in records:
+            cohort = record_cohort(record)
+            if cohort_weights is None and cohort != args.qualification_cohort:
+                raise ValueError('records of cohort ' + cohort + ' need explicit --cohort-weights')
             if not record.get("target"):
                 skipped["no-target"] += 1
                 continue
             if args.only_handover and not (reads(record) or handover_notes(record)):
                 continue
             bucket = held_pool if record.get("split") == "test" else train
-            if bucket is train and len(train) >= args.train:
+            if bucket is held_pool and cohort != args.qualification_cohort:
+                bucket = cohort_held.setdefault(cohort, [])
+            if bucket is train and train_per_cohort.get(cohort, 0) >= args.train:
                 continue
             if native_neuralese_prompt(record):
                 skipped["native-neuralese-prompt"] += 1
@@ -1391,6 +1424,13 @@ def main(argv=None):
                 skipped["long"] += 1
                 continue
             bucket.append(record)
+            if bucket is train:
+                train_per_cohort[cohort] = train_per_cohort.get(cohort, 0) + 1
+    if cohort_weights is not None and set(train_per_cohort) != set(cohort_weights):
+        raise ValueError('--cohort-weights must name exactly the loaded training cohorts: ' +
+                         ', '.join(sorted(train_per_cohort)))
+    sampler = RecordCohortSampler(train, cohort_weights, seed=args.seed) if cohort_weights is not None else None
+    coverage = trajectory_coverage(train) if args.context_coverage == 'records' else {}
     from .trajectory_probe import select_held, select_paired_held, source_groups
     probe_policy = 'typed-factual-reciprocal-readers-v1'
     held = select_held(held_pool, args.eval)
@@ -1401,10 +1441,25 @@ def main(argv=None):
                        'train_written': train_probe_accounting,
                        'scope': 'Declared typed factual-disjoint reciprocal readers only; exclusions explicit. '
                                 'Forced native lengths; not autonomous stop or broad task quality qualification.'}
+    cohort_strata_held = {cohort: select_held(pool, args.eval) for cohort, pool in sorted(cohort_held.items())}
+    if cohort_strata_held:
+        probe_selection['cohort_strata_ids'] = {cohort: [r['id'] for r in chosen]
+                                                for cohort, chosen in cohort_strata_held.items()}
     probe_selection_hash = hashlib.sha256(json.dumps(probe_selection, sort_keys=True).encode()).hexdigest()
     (out / 'eval-selection.json').write_text(json.dumps(probe_selection, indent=2) + '\n')
+    if sampler is not None or coverage:
+        covered = [n for n in coverage.values() if n]
+        (out / 'cohort-sampling.json').write_text(json.dumps({
+            'sampling': sampler.receipt() if sampler is not None else 'cursor over the selected records (one cohort)',
+            'qualification_cohort': args.qualification_cohort, 'train_per_cohort': train_per_cohort,
+            'held_strata': {cohort: len(chosen) for cohort, chosen in cohort_strata_held.items()},
+            'context_coverage': args.context_coverage,
+            'coverage': {'records': len(coverage), 'continuing_an_earlier_record': len(covered),
+                         'covered_replies_total': sum(covered)} if coverage else None,
+            'admission_granted': False}, indent=2) + '\n')
     # Soft parameters for the names the selected records use (a corpus has thousands of instructions texts).
-    used_names = {part["name"] for record in train + held + paired_held + paired_train + list(producers.values()) for message in record["messages"]
+    strata_records = [record for chosen in cohort_strata_held.values() for record in chosen]
+    used_names = {part["name"] for record in train + held + strata_records + paired_held + paired_train + list(producers.values()) for message in record["messages"]
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.view == "written":
         used_names.add("prompt:view")
@@ -1439,7 +1494,9 @@ def main(argv=None):
         handovers = sum(1 for r in train if reads(r) or handover_notes(r))
     print(json.dumps({"train": len(train), "heldout": len(held), "skipped": skipped, "soft_params": len(params),
                       "from_bank": len(from_bank), "from_previous_soft": len(from_previous), "records_with_handover": handovers,
-                      "handover": args.handover, "note_producers": len(producers)}), flush=True)
+                      "handover": args.handover, "note_producers": len(producers),
+                      **({"train_per_cohort": train_per_cohort,
+                          "held_strata": {c: len(r) for c, r in cohort_strata_held.items()}} if sampler else {})}), flush=True)
 
     from .backbone_policy import configure_backbone_training, backbone_trainable_state, resolve_backbone_policy
     args.backbone_training=resolve_backbone_policy(engine.backbone,args.backbone_training)
@@ -1673,6 +1730,7 @@ def main(argv=None):
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
             distill_weight=distill, context_weight=args.context_weight if training_objective else 0.,
             feedback_weight=args.feedback_weight,
+            covered_replies=coverage.get(record['id']) if args.context_coverage == 'records' else None,
             projection_anchor_weight=anchor_now[0] if training_objective else 0.,
             projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
         if training_objective and anchor_now[0]:
@@ -1702,10 +1760,10 @@ def main(argv=None):
             stop_terms.clear()
         return loss
 
-    def evaluate(label, leaves, soft=True):
+    def evaluate(label, leaves, soft=True, records=None):
         values = []
         with torch.no_grad():
-            for record in _progress(held, label):
+            for record in _progress(held if records is None else records, label):
                 try:
                     values.append(float(loss_of(record, leaves, soft, training_objective=False)))
                 except RequestError:
@@ -1793,6 +1851,12 @@ def main(argv=None):
     report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
     if resumed is None and family and args.member_eval:
         report["family-init"] = evaluate_members(backbone, member_eval_windows())
+    if resumed is None and cohort_strata_held:
+        # Other cohorts' held records: reported strata, never qualification evidence.
+        report["cohort_strata-init"] = {
+            cohort: {"crisp": evaluate(f"crisp-{cohort}", {}, soft=False, records=chosen),
+                     "soft": evaluate(f"soft-init-{cohort}", leaves, records=chosen)}
+            for cohort, chosen in cohort_strata_held.items()}
     if resumed is None and (args.handover == "written" or args.view == "written"):
         report["written-init"] = evaluate_written("written-init", leaves, paired_held, held_probe_accounting)
         report["written-init-train"] = evaluate_written("written-init-train", leaves, paired_train, train_probe_accounting)
@@ -2002,7 +2066,7 @@ def main(argv=None):
             for _ in range(args.batch):
                 if args.device.startswith("cuda"):
                     torch.cuda.reset_peak_memory_stats()
-                record = train[cursor % len(train)]
+                record = train[cursor % len(train)] if sampler is None else sampler.record(cursor)
                 step_record_ids.append(record['id'])
                 cursor += 1
                 geometry_phase_started = time.perf_counter()
@@ -2240,6 +2304,9 @@ def main(argv=None):
         print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
+    if cohort_strata_held:
+        report["cohort_strata-trained"] = {cohort: {"soft": evaluate(f"soft-trained-{cohort}", leaves, records=chosen)}
+                                           for cohort, chosen in cohort_strata_held.items()}
     if family and args.member_eval:
         report["family-trained"] = evaluate_members(backbone, member_eval_windows())
     if args.handover == "written" or args.view == "written":

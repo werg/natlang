@@ -193,6 +193,17 @@ Before admission (owner and both recipe owners):
 4. Pop's LFM continuations run frozen direct-stage recipes (`luna-*`); the cohort enters the LFM line at its next
    declared handoff, through a new recipe.
 
+**Admitted 2026-10-10 (owner, DECISIONS.md), effective as the trainer supports it.** Items 1-3 are implemented: Pop's
+shared `train/text_supervision.py` (cohort, then document, then window; tool context 0.25) in text_warmup, the cohort
+assembler `scripts/assemble_neuralese_cohorts.py` (text rows labelled `text_cohort`, records labelled `cohort`, pinned
+inputs, receipt), and the recurrence handler options with per-cohort, per-record sampling and `--context-coverage
+records` in `train.trajectories` (only what an earlier training record of the same trajectory supervises weighs 0, so
+the turns between a trajectory's up to 8 records are supervised too). Admitted now: the LFM twin in the text stages.
+Pending: the Mellum twin (its template renders tool results as user turns, so the tool weight does not apply in
+text_warmup yet) and the recurrence (runtime and view gates; written views on these records are supervised to the
+whole preview's length, beyond any write capacity; native recurrence records still carry digest parts). Details:
+raw-recurrence-v3 `cohorts.harness_bench`.
+
 ## 7. Order of work
 
 1. Slice: 20, then 200 trajectories through build.sh; review the replay divergence reasons and the records; register as

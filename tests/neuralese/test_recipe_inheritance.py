@@ -150,21 +150,32 @@ def test_history_keeps_every_original_description():
 
 
 def test_harness_bench_cohort_is_declared_held_and_shared_by_both_lines():
-    """raw-recurrence-v3 / raw-recurrence-mellum-v2 add only the held harness_bench cohort to v2 / mellum-v1."""
-    ignore = {'id', 'description', 'cohorts'}
+    """raw-recurrence-v3 / raw-recurrence-mellum-v2 add only the harness_bench cohort to v2 / mellum-v1, plus the text
+    warm-up's cohort/context defaults made explicit (the text_warmup CLI defaults; declared in v3, not v1, so earlier
+    recipes keep their identity)."""
+    ignore = {'id', 'description', 'cohorts', 'stage_parameter_defaults'}
+    explicit = {'context_weight': 1.0, 'feedback_weight': 0.25, 'qualification_cohort': 'native'}
     for new, old in (('raw-recurrence-v3', 'raw-recurrence-v2'), ('raw-recurrence-mellum-v2', 'raw-recurrence-mellum-v1')):
         resolved, previous = load_recipe(RECIPES / f'{new}.json'), load_recipe(RECIPES / f'{old}.json')
         assert {k: v for k, v in resolved.items() if k not in ignore} == \
             {k: v for k, v in previous.items() if k not in ignore}
         assert 'cohorts' not in previous
+        defaults = previous['stage_parameter_defaults']
+        assert resolved['stage_parameter_defaults'] == {
+            **defaults, 'core_text_warmup': {**defaults['core_text_warmup'], **explicit}}
+        assert not set(explicit) & set(defaults['core_text_warmup'])
     lfm, mellum = load_recipe(RECIPES / 'raw-recurrence-v3.json'), load_recipe(RECIPES / 'raw-recurrence-mellum-v2.json')
     cohort = lfm['cohorts']['harness_bench']
     assert mellum['cohorts'] == lfm['cohorts']
-    assert cohort['admitted'] is False and cohort['recurrence']['admitted'] is False
+    # Owner decision 2026-10-10: admitted, effective per twin and stage as the trainer supports it.
+    assert cohort['admitted'] is True and 'DECISIONS.md 2026-10-10' in cohort['admission']
+    assert cohort['recurrence']['admitted'] is False
     assert cohort['recurrence']['trajectory_trainer']['view'] == 'written'
     registry = {c['id']: c for c in json.loads((ROOT / 'training/neuralese_corpora.json').read_text())['corpora']}
+    assert registry[cohort['source']['corpus']]['training_admission'] is False
     for twin in cohort['twins'].values():
         entry = registry[twin['corpus']]
-        assert entry['training_admission'] is False
+        assert entry['training_admission'] is twin['admitted']
+        assert 'DECISIONS.md 2026-10-10' in entry['admission'] and 'DECISIONS.md 2026-10-10' in twin['admission']
         assert entry['build']['text_jsonl_sha256'] == twin['text_jsonl_sha256']
         assert cohort['source']['corpus'] in entry['derived_from']

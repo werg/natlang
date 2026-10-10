@@ -7,6 +7,7 @@ An unsuccessful stage cannot advance its dependents or issue a certificate.
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 import signal
@@ -48,6 +49,8 @@ HANDLERS = {
                                                'local_stage_batch_size', 'train_control_rows', 'token_cache_mib',
                                                'qat_latent_lr', 'member_weight', 'member_tokens', 'member_eval',
                                                'member_mask_system', 'member_full_weight',
+                                               'view', 'view_window', 'context_weight', 'feedback_weight',
+                                               'context_coverage', 'cohort_weights', 'qualification_cohort',
                                                'optimizer_state', 'optimizer_added'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
@@ -69,10 +72,50 @@ DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
 
 
+def _finite_number(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def validate_cohort_weights(weights):
+    """Explicit training fractions per named cohort (the shared text_supervision semantics). Naming a cohort here
+    admits nothing; admission is the recipe's and the corpus registry's."""
+    if (not isinstance(weights, dict) or not weights or
+            any(not isinstance(name, str) or not name for name in weights) or
+            any(not _finite_number(value) or value <= 0 for value in weights.values()) or
+            not math.isclose(sum(weights.values()), 1., abs_tol=1e-8)):
+        raise ValueError('cohort_weights must map nonempty cohort names to positive fractions that sum to one')
+
+
+def validate_recurrence_parameters(parameters):
+    """Typed values of the trajectory trainer options that recipes declare (train.trajectories flags)."""
+    if 'view' in parameters and parameters['view'] not in ('preview', 'written'):
+        raise ValueError('view must be preview or written')
+    if 'view_window' in parameters and (type(parameters['view_window']) is not int or parameters['view_window'] < 1):
+        raise ValueError('view_window must be a positive integer')
+    for name in ('context_weight', 'distill'):
+        if name in parameters and (not _finite_number(parameters[name]) or parameters[name] < 0):
+            raise ValueError(name + ' must be finite and nonnegative')
+    if 'feedback_weight' in parameters and (not _finite_number(parameters['feedback_weight']) or
+                                            not 0 <= parameters['feedback_weight'] <= 1):
+        raise ValueError('feedback_weight must be finite and between zero and one')
+    if 'context_coverage' in parameters and parameters['context_coverage'] not in ('last-reply', 'records'):
+        raise ValueError('context_coverage must be last-reply or records')
+    if 'cohort_weights' in parameters:
+        validate_cohort_weights(parameters['cohort_weights'])
+    if 'qualification_cohort' in parameters:
+        cohort = parameters['qualification_cohort']
+        if not isinstance(cohort, str) or not cohort:
+            raise ValueError('qualification_cohort must be a nonempty cohort name')
+        if 'cohort_weights' in parameters and cohort not in parameters['cohort_weights']:
+            raise ValueError('qualification_cohort must be one of the cohort_weights cohorts')
+
+
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
     if kind not in ('core_text_warmup', 'raw_recurrence_training'):
         return
+    if kind == 'raw_recurrence_training':
+        validate_recurrence_parameters(parameters)
     if ('optimizer_state' in parameters and
             parameters['optimizer_state'] not in ('restore', 'fresh')):
         raise ValueError('optimizer_state must be restore or fresh')
@@ -335,6 +378,7 @@ def load_recipe(path):
         if (kind not in HANDLERS or not isinstance(defaults, dict) or
                 not set(defaults) <= HANDLERS[kind]['parameters']):
             raise ValueError('invalid stage parameter defaults for ' + str(kind))
+        validate_stage_parameters(kind, defaults)
         if not any(stage.get('kind') == kind for stage in recipe['stages']):
             raise ValueError('unused stage parameter defaults for ' + str(kind))
     declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
