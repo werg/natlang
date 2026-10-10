@@ -364,12 +364,26 @@ def grep_hits(text: str) -> list[tuple[str, int]]:
 
 # Ordered: more specific texts first (LGPL/AGPL before GPL; BSD-3 before BSD-2). Matching is on the licence file's
 # text, so a reviewer should spot-check (VIEW_CORPUS.md §6); an unmatched file is "unknown", never guessed.
+# GNU licence texts mention each other (GPLv3 points to the Affero and Lesser GPL, GPLv2 to the Library GPL), so the
+# GNU family is recognised by its upper-case title anywhere, or by a mixed-case title in the first lines only.
+GNU_TITLES = [
+    ("AGPL-3.0", re.compile(r"GNU AFFERO GENERAL PUBLIC LICENSE")),
+    ("LGPL-3.0", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3")),
+    ("LGPL-2.1", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE|GNU LIBRARY GENERAL PUBLIC LICENSE")),
+    ("GPL-3.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 3")),
+    ("GPL-2.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 2")),
+]
+GNU_HEAD = [
+    ("AGPL-3.0", re.compile(r"GNU Affero General Public License", re.I)),
+    ("LGPL-3.0", re.compile(r"GNU Lesser General Public License,?\s+(?:Version\s+|v)3", re.I)),
+    ("LGPL-2.1", re.compile(r"GNU (?:Lesser|Library) General Public License", re.I)),
+    ("GPL-3.0", re.compile(r"GNU General Public License,?\s+(?:Version\s+|v)3", re.I)),
+    ("GPL-2.0", re.compile(r"GNU General Public License,?\s+(?:Version\s+|v)2", re.I)),
+]
+HEAD_CHARS = 400
+# Ordered: more specific texts first (BSD-3 before BSD-2). Matching is on the licence file's text, so a reviewer
+# should spot-check (VIEW_CORPUS.md §6); an unmatched file is "unknown", never guessed.
 LICENSE_PATTERNS = [
-    ("AGPL-3.0", re.compile(r"GNU AFFERO GENERAL PUBLIC LICENSE", re.I)),
-    ("LGPL-3.0", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3", re.I)),
-    ("LGPL-2.1", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE|GNU LIBRARY GENERAL PUBLIC LICENSE", re.I)),
-    ("GPL-3.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 3", re.I)),
-    ("GPL-2.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 2", re.I)),
     ("MPL-2.0", re.compile(r"Mozilla Public License,?\s+(?:Version|v\.?)\s*2\.0", re.I)),
     ("EPL-1.0", re.compile(r"Eclipse Public License", re.I)),
     ("Apache-2.0", re.compile(r"Apache License,?\s+Version 2\.0", re.I)),
@@ -397,6 +411,13 @@ CLASS_ORDER = ("permissive", "attribution", "share-alike", "weak-copyleft", "cop
 
 
 def detect_license(text: str) -> str | None:
+    for spdx, pattern in GNU_TITLES:
+        if pattern.search(text):
+            return spdx
+    head = text[:HEAD_CHARS]
+    for spdx, pattern in GNU_HEAD:
+        if pattern.search(head):
+            return spdx
     for spdx, pattern in LICENSE_PATTERNS:
         if pattern.search(text):
             return spdx

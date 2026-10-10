@@ -36,6 +36,10 @@ def test_license_detection_and_classes():
     assert vx.detect_license("GNU GENERAL PUBLIC LICENSE\n                       Version 2, June 1991") == "GPL-2.0"
     assert vx.detect_license("MIT License\n\nPermission is hereby granted, free of charge, to any person") == "MIT"
     assert vx.detect_license("All rights reserved.") is None
+    gpl3 = ("                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n ... "
+            "13. Use with the GNU Affero General Public License. ... use the GNU Lesser General Public License instead")
+    assert vx.detect_license(gpl3) == "GPL-3.0"  # GPLv3 names the Affero and Lesser GPL in its text
+    assert vx.detect_license("GNU Affero General Public License v3.0\n...") == "AGPL-3.0"
     assert [vx.license_class(s) for s in ("MIT", "CC-BY-4.0", "CC-BY-SA-4.0", "GPL-3.0", "CC-BY-NC-4.0", None)] == \
         ["permissive", "attribution", "share-alike", "copyleft", "noncommercial", "unverified"]
     p = vc.provenance("CC-BY-4.0", "card", content_source="web pages", content_unverified=True)

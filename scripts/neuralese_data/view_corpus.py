@@ -76,11 +76,12 @@ DEFAULT_CAPS = {
 }
 # Sources added in v2 (absent from DEFAULT_CAPS means off, so a v1 rebuild stays a v1 rebuild).
 V2_CAPS = {
-    "cnn_dailymail": 4000, "squad": 600, "quality": 400, "qmsum": 400,
+    # SQuAD and QuALITY: their questions are already in S1 (exact examples there are dropped, SQuAD is S1 test).
+    "cnn_dailymail": 4000, "squad": 400, "quality": 300, "qmsum": 400,
     "codesearchnet": 5000, "codesearchnet_go": 1500, "codesearchnet_java": 1500, "codesearchnet_javascript": 1500,
     "codesearchnet_php": 1500, "codesearchnet_ruby": 1500,
     "websrc": 2000,
-    "xlam": 3000, "repo_configs": 2000, "toolace": 2000,
+    "xlam": 3000, "repo_configs": 1500, "toolace": 2000,
     "wtq": 2000, "fetaqa": 2500, "spider_bird": 2500, "tabfact": 2000,
     "swe_tool_outputs": 3500, "s1_tool_outputs": 3000,
 }
