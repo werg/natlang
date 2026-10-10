@@ -21921,6 +21921,97 @@
       "admission": "root-approved-exact-reference-native-text-only",
       "independent_new_worlds": 0,
       "notes": "36 train-only documents; 186350 full-context tokens, 1617 supervised suffix tokens; exact tokenizer and renderer pinned. Existing held parent unchanged."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v1-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v2",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v3-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v3",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-v28-conversion-intermediate-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v4",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "superseded-held-conversion-review-evidence",
+      "training_admission": false,
+      "admission": "excluded-intermediate-debug-artifacts",
+      "notes": "Preserve exact historical conversion attempts and receipts. Superseded by V5/V6 scoped candidate; no training admission. Verified remote retention before local offload."
+    },
+    {
+      "id": "free-provider-luna-v29-five-runtimev7-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev29-five-runtimev7-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-provider-results",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+    },
+    {
+      "id": "free-provider-luna-v29-v23-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-luna-sourcev29-native",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-quality-review",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
+    },
+    {
+      "id": "free-provider-zai45-sourcev28-five-runtimev6-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-zai45-sourcev28-five-runtimev6-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-provider-results",
+      "training_admission": false,
+      "admission": "held-source-and-turn-review-required",
+      "notes": "Closed raw and review evidence only. Native accepted outcome is not turn admission; partial collections remain incompletions, not preference negatives. No learned-channel credit."
     }
   ],
   "coverage_backlog": [
