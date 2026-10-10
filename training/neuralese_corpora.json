@@ -23614,458 +23614,458 @@
       "notes": "20train/0held/0omissions;169069fulltokens5768supervisedsuffix/max12444. Text7a04cbf2b523fa892be09509d766643cdd9e9c06f2d90d446b58c9537e99036f. ExactpinnedLFM2.5 history/tokenizer rendering, no nativeIR/trace/recurrence qualification orindependentworldcredit. CurrentV5GPUinputunchanged."
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-output-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
-        "include": [
-            "labels.jsonl",
-            "labels.jsonl.attempts.jsonl",
-            "labels.jsonl.manifest.json",
-            "worker.log"
-        ],
-        "exclude_dirs": [
-            "__pycache__"
-        ],
-        "split": "inherited-source-case-review-only",
-        "source_class": "provider-decision-label-confidence-generation-raw-outputs",
-        "training_admission": false,
-        "admission": "held-raw-output-evidence-only",
-        "notes": "Closed Gemini choice-confidence V9 raw output snapshot. 92 labeled cases; includes complete labels, attempts ledger, run manifest, and terminal worker log. Existing V1/V2 input registrations retain cases, source manifest, launch receipt, and frozen adapter. Preserve all output/attempt outcomes; no semantic or confidence admission."
+      "id": "free-provider-google-choice-confidence-v9-output-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v9",
+      "include": [
+        "labels.jsonl",
+        "labels.jsonl.attempts.jsonl",
+        "labels.jsonl.manifest.json",
+        "worker.log"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-decision-label-confidence-generation-raw-outputs",
+      "training_admission": false,
+      "admission": "held-raw-output-evidence-only",
+      "notes": "Closed Gemini choice-confidence V9 raw output snapshot. 92 labeled cases; includes complete labels, attempts ledger, run manifest, and terminal worker log. Existing V1/V2 input registrations retain cases, source manifest, launch receipt, and frozen adapter. Preserve all output/attempt outcomes; no semantic or confidence admission."
     },
     {
-        "id": "free-provider-luna-v34-raw-output-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev34-twentynine-runtimev10-v1",
-        "include": [
-            "campaign-launch.json",
-            "worker-01/journal.jsonl",
-            "worker-01/case-000/collector.log",
-            "worker-01/case-000/results.jsonl",
-            "worker-01/case-000/results.jsonl.manifest.json",
-            "worker-01/case-000/jobs/000000-6793e9fa430bb598.result.json",
-            "worker-01/case-000/jobs/000000-6793e9fa430bb598.trace.jsonl",
-            "worker-01/case-005/collector.log",
-            "worker-01/case-005/results.jsonl",
-            "worker-01/case-005/results.jsonl.manifest.json",
-            "worker-01/case-005/jobs/000005-efd276b6c1a1ef9a.result.json",
-            "worker-01/case-005/jobs/000005-efd276b6c1a1ef9a.trace.jsonl",
-            "worker-01/case-010/collector.log",
-            "worker-01/case-010/results.jsonl",
-            "worker-01/case-010/results.jsonl.manifest.json",
-            "worker-01/case-010/jobs/000010-0f00c1ac611bb2e1.result.json",
-            "worker-01/case-010/jobs/000010-0f00c1ac611bb2e1.trace.jsonl",
-            "worker-01/case-016/collector.log",
-            "worker-01/case-016/results.jsonl",
-            "worker-01/case-016/results.jsonl.manifest.json",
-            "worker-01/case-016/jobs/000016-485e0d81f3f6058f.result.json",
-            "worker-01/case-016/jobs/000016-485e0d81f3f6058f.trace.jsonl",
-            "worker-01/case-021/collector.log",
-            "worker-01/case-021/results.jsonl",
-            "worker-01/case-021/results.jsonl.manifest.json",
-            "worker-01/case-021/jobs/000021-8016d970679f8ac5.result.json",
-            "worker-01/case-021/jobs/000021-8016d970679f8ac5.trace.jsonl",
-            "worker-01/case-027/collector.log",
-            "worker-01/case-027/results.jsonl",
-            "worker-01/case-027/results.jsonl.manifest.json",
-            "worker-01/case-027/jobs/000027-28ee48c5ef175232.result.json",
-            "worker-01/case-027/jobs/000027-28ee48c5ef175232.trace.jsonl",
-            "worker-02/journal.jsonl",
-            "worker-02/case-001/collector.log",
-            "worker-02/case-001/results.jsonl",
-            "worker-02/case-001/results.jsonl.manifest.json",
-            "worker-02/case-001/jobs/000001-d099f7890f14fbcd.result.json",
-            "worker-02/case-001/jobs/000001-d099f7890f14fbcd.trace.jsonl",
-            "worker-02/case-006/collector.log",
-            "worker-02/case-006/results.jsonl",
-            "worker-02/case-006/results.jsonl.manifest.json",
-            "worker-02/case-006/jobs/000006-5dfdd9065042f49b.result.json",
-            "worker-02/case-006/jobs/000006-5dfdd9065042f49b.trace.jsonl",
-            "worker-02/case-011/collector.log",
-            "worker-02/case-011/results.jsonl",
-            "worker-02/case-011/results.jsonl.manifest.json",
-            "worker-02/case-011/jobs/000011-c74a80a11b2f2f8d.result.json",
-            "worker-02/case-011/jobs/000011-c74a80a11b2f2f8d.trace.jsonl",
-            "worker-02/case-017/collector.log",
-            "worker-02/case-017/results.jsonl",
-            "worker-02/case-017/results.jsonl.manifest.json",
-            "worker-02/case-017/jobs/000017-f26ed9546244019f.result.json",
-            "worker-02/case-017/jobs/000017-f26ed9546244019f.trace.jsonl",
-            "worker-02/case-022/collector.log",
-            "worker-02/case-022/results.jsonl",
-            "worker-02/case-022/results.jsonl.manifest.json",
-            "worker-02/case-022/jobs/000022-2fb891bcd40ab29f.result.json",
-            "worker-02/case-022/jobs/000022-2fb891bcd40ab29f.trace.jsonl",
-            "worker-02/case-029/collector.log",
-            "worker-02/case-029/results.jsonl",
-            "worker-02/case-029/results.jsonl.manifest.json",
-            "worker-02/case-029/jobs/000029-3f1c30dc250ef878.result.json",
-            "worker-02/case-029/jobs/000029-3f1c30dc250ef878.trace.jsonl",
-            "worker-03/journal.jsonl",
-            "worker-03/case-002/collector.log",
-            "worker-03/case-002/results.jsonl",
-            "worker-03/case-002/results.jsonl.manifest.json",
-            "worker-03/case-002/jobs/000002-25d990a102e565b1.result.json",
-            "worker-03/case-002/jobs/000002-25d990a102e565b1.trace.jsonl",
-            "worker-03/case-007/collector.log",
-            "worker-03/case-007/results.jsonl",
-            "worker-03/case-007/results.jsonl.manifest.json",
-            "worker-03/case-007/jobs/000007-1bee8cc849ce80f1.result.json",
-            "worker-03/case-007/jobs/000007-1bee8cc849ce80f1.trace.jsonl",
-            "worker-03/case-013/collector.log",
-            "worker-03/case-013/results.jsonl",
-            "worker-03/case-013/results.jsonl.manifest.json",
-            "worker-03/case-013/jobs/000013-488ec859d94c946c.result.json",
-            "worker-03/case-013/jobs/000013-488ec859d94c946c.trace.jsonl",
-            "worker-03/case-018/collector.log",
-            "worker-03/case-018/results.jsonl",
-            "worker-03/case-018/results.jsonl.manifest.json",
-            "worker-03/case-018/jobs/000018-cd7b611ae830fd5b.result.json",
-            "worker-03/case-018/jobs/000018-cd7b611ae830fd5b.trace.jsonl",
-            "worker-03/case-023/collector.log",
-            "worker-03/case-023/results.jsonl",
-            "worker-03/case-023/results.jsonl.manifest.json",
-            "worker-03/case-023/jobs/000023-e59d976ed53cf3ba.result.json",
-            "worker-03/case-023/jobs/000023-e59d976ed53cf3ba.trace.jsonl",
-            "worker-03/case-030/collector.log",
-            "worker-03/case-030/results.jsonl",
-            "worker-03/case-030/results.jsonl.manifest.json",
-            "worker-03/case-030/jobs/000030-9d67eec19d129cb5.result.json",
-            "worker-03/case-030/jobs/000030-9d67eec19d129cb5.trace.jsonl",
-            "worker-04/journal.jsonl",
-            "worker-04/case-003/collector.log",
-            "worker-04/case-003/results.jsonl",
-            "worker-04/case-003/results.jsonl.manifest.json",
-            "worker-04/case-003/jobs/000003-f3d5a0ace68284b8.result.json",
-            "worker-04/case-003/jobs/000003-f3d5a0ace68284b8.trace.jsonl",
-            "worker-04/case-008/collector.log",
-            "worker-04/case-008/results.jsonl",
-            "worker-04/case-008/results.jsonl.manifest.json",
-            "worker-04/case-008/jobs/000008-87e51798915f4efe.result.json",
-            "worker-04/case-008/jobs/000008-87e51798915f4efe.trace.jsonl",
-            "worker-04/case-014/collector.log",
-            "worker-04/case-014/results.jsonl",
-            "worker-04/case-014/results.jsonl.manifest.json",
-            "worker-04/case-014/jobs/000014-561abacaa82063cd.result.json",
-            "worker-04/case-014/jobs/000014-561abacaa82063cd.trace.jsonl",
-            "worker-04/case-019/collector.log",
-            "worker-04/case-019/results.jsonl",
-            "worker-04/case-019/results.jsonl.manifest.json",
-            "worker-04/case-019/jobs/000019-68c8f5af74f0f052.result.json",
-            "worker-04/case-019/jobs/000019-68c8f5af74f0f052.trace.jsonl",
-            "worker-04/case-025/collector.log",
-            "worker-04/case-025/results.jsonl",
-            "worker-04/case-025/results.jsonl.manifest.json",
-            "worker-04/case-025/jobs/000025-97930a0c886cce64.result.json",
-            "worker-04/case-025/jobs/000025-97930a0c886cce64.trace.jsonl",
-            "worker-04/case-031/collector.log",
-            "worker-04/case-031/results.jsonl",
-            "worker-04/case-031/results.jsonl.manifest.json",
-            "worker-04/case-031/jobs/000031-81d91565a286e664.result.json",
-            "worker-04/case-031/jobs/000031-81d91565a286e664.trace.jsonl",
-            "worker-05/journal.jsonl",
-            "worker-05/case-004/collector.log",
-            "worker-05/case-004/results.jsonl",
-            "worker-05/case-004/results.jsonl.manifest.json",
-            "worker-05/case-004/jobs/000004-68189a983dae2849.result.json",
-            "worker-05/case-004/jobs/000004-68189a983dae2849.trace.jsonl",
-            "worker-05/case-009/collector.log",
-            "worker-05/case-009/results.jsonl",
-            "worker-05/case-009/results.jsonl.manifest.json",
-            "worker-05/case-009/jobs/000009-592f9d54e9329441.result.json",
-            "worker-05/case-009/jobs/000009-592f9d54e9329441.trace.jsonl",
-            "worker-05/case-015/collector.log",
-            "worker-05/case-015/results.jsonl",
-            "worker-05/case-015/results.jsonl.manifest.json",
-            "worker-05/case-015/jobs/000015-eefca4a7ce0a8aba.result.json",
-            "worker-05/case-015/jobs/000015-eefca4a7ce0a8aba.trace.jsonl",
-            "worker-05/case-020/collector.log",
-            "worker-05/case-020/results.jsonl",
-            "worker-05/case-020/results.jsonl.manifest.json",
-            "worker-05/case-020/jobs/000020-706064bbb1824ac4.result.json",
-            "worker-05/case-020/jobs/000020-706064bbb1824ac4.trace.jsonl",
-            "worker-05/case-026/collector.log",
-            "worker-05/case-026/results.jsonl",
-            "worker-05/case-026/results.jsonl.manifest.json",
-            "worker-05/case-026/jobs/000026-91d081bb69cf1758.result.json",
-            "worker-05/case-026/jobs/000026-91d081bb69cf1758.trace.jsonl"
-        ],
-        "exclude_dirs": [
-            "__pycache__"
-        ],
-        "split": "inherited-train-only",
-        "source_class": "native-luna-semantic-iterate-campaign-raw-outputs",
-        "training_admission": false,
-        "admission": "held-raw-output-evidence-only",
-        "notes": "Closed V34 five-worker raw output snapshot; all five workers finished with exit_code 0, 29 exact result rows, and all per-case manifests validate. Includes campaign launch provenance, raw result rows plus per-job result/trace artifacts, collector logs, and terminal worker journals. Existing source/plan/queue registrations remain unchanged. Preserve all outcomes including failed/held targets; no action or trajectory admission."
+      "id": "free-provider-luna-v34-raw-output-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev34-twentynine-runtimev10-v1",
+      "include": [
+        "campaign-launch.json",
+        "worker-01/journal.jsonl",
+        "worker-01/case-000/collector.log",
+        "worker-01/case-000/results.jsonl",
+        "worker-01/case-000/results.jsonl.manifest.json",
+        "worker-01/case-000/jobs/000000-6793e9fa430bb598.result.json",
+        "worker-01/case-000/jobs/000000-6793e9fa430bb598.trace.jsonl",
+        "worker-01/case-005/collector.log",
+        "worker-01/case-005/results.jsonl",
+        "worker-01/case-005/results.jsonl.manifest.json",
+        "worker-01/case-005/jobs/000005-efd276b6c1a1ef9a.result.json",
+        "worker-01/case-005/jobs/000005-efd276b6c1a1ef9a.trace.jsonl",
+        "worker-01/case-010/collector.log",
+        "worker-01/case-010/results.jsonl",
+        "worker-01/case-010/results.jsonl.manifest.json",
+        "worker-01/case-010/jobs/000010-0f00c1ac611bb2e1.result.json",
+        "worker-01/case-010/jobs/000010-0f00c1ac611bb2e1.trace.jsonl",
+        "worker-01/case-016/collector.log",
+        "worker-01/case-016/results.jsonl",
+        "worker-01/case-016/results.jsonl.manifest.json",
+        "worker-01/case-016/jobs/000016-485e0d81f3f6058f.result.json",
+        "worker-01/case-016/jobs/000016-485e0d81f3f6058f.trace.jsonl",
+        "worker-01/case-021/collector.log",
+        "worker-01/case-021/results.jsonl",
+        "worker-01/case-021/results.jsonl.manifest.json",
+        "worker-01/case-021/jobs/000021-8016d970679f8ac5.result.json",
+        "worker-01/case-021/jobs/000021-8016d970679f8ac5.trace.jsonl",
+        "worker-01/case-027/collector.log",
+        "worker-01/case-027/results.jsonl",
+        "worker-01/case-027/results.jsonl.manifest.json",
+        "worker-01/case-027/jobs/000027-28ee48c5ef175232.result.json",
+        "worker-01/case-027/jobs/000027-28ee48c5ef175232.trace.jsonl",
+        "worker-02/journal.jsonl",
+        "worker-02/case-001/collector.log",
+        "worker-02/case-001/results.jsonl",
+        "worker-02/case-001/results.jsonl.manifest.json",
+        "worker-02/case-001/jobs/000001-d099f7890f14fbcd.result.json",
+        "worker-02/case-001/jobs/000001-d099f7890f14fbcd.trace.jsonl",
+        "worker-02/case-006/collector.log",
+        "worker-02/case-006/results.jsonl",
+        "worker-02/case-006/results.jsonl.manifest.json",
+        "worker-02/case-006/jobs/000006-5dfdd9065042f49b.result.json",
+        "worker-02/case-006/jobs/000006-5dfdd9065042f49b.trace.jsonl",
+        "worker-02/case-011/collector.log",
+        "worker-02/case-011/results.jsonl",
+        "worker-02/case-011/results.jsonl.manifest.json",
+        "worker-02/case-011/jobs/000011-c74a80a11b2f2f8d.result.json",
+        "worker-02/case-011/jobs/000011-c74a80a11b2f2f8d.trace.jsonl",
+        "worker-02/case-017/collector.log",
+        "worker-02/case-017/results.jsonl",
+        "worker-02/case-017/results.jsonl.manifest.json",
+        "worker-02/case-017/jobs/000017-f26ed9546244019f.result.json",
+        "worker-02/case-017/jobs/000017-f26ed9546244019f.trace.jsonl",
+        "worker-02/case-022/collector.log",
+        "worker-02/case-022/results.jsonl",
+        "worker-02/case-022/results.jsonl.manifest.json",
+        "worker-02/case-022/jobs/000022-2fb891bcd40ab29f.result.json",
+        "worker-02/case-022/jobs/000022-2fb891bcd40ab29f.trace.jsonl",
+        "worker-02/case-029/collector.log",
+        "worker-02/case-029/results.jsonl",
+        "worker-02/case-029/results.jsonl.manifest.json",
+        "worker-02/case-029/jobs/000029-3f1c30dc250ef878.result.json",
+        "worker-02/case-029/jobs/000029-3f1c30dc250ef878.trace.jsonl",
+        "worker-03/journal.jsonl",
+        "worker-03/case-002/collector.log",
+        "worker-03/case-002/results.jsonl",
+        "worker-03/case-002/results.jsonl.manifest.json",
+        "worker-03/case-002/jobs/000002-25d990a102e565b1.result.json",
+        "worker-03/case-002/jobs/000002-25d990a102e565b1.trace.jsonl",
+        "worker-03/case-007/collector.log",
+        "worker-03/case-007/results.jsonl",
+        "worker-03/case-007/results.jsonl.manifest.json",
+        "worker-03/case-007/jobs/000007-1bee8cc849ce80f1.result.json",
+        "worker-03/case-007/jobs/000007-1bee8cc849ce80f1.trace.jsonl",
+        "worker-03/case-013/collector.log",
+        "worker-03/case-013/results.jsonl",
+        "worker-03/case-013/results.jsonl.manifest.json",
+        "worker-03/case-013/jobs/000013-488ec859d94c946c.result.json",
+        "worker-03/case-013/jobs/000013-488ec859d94c946c.trace.jsonl",
+        "worker-03/case-018/collector.log",
+        "worker-03/case-018/results.jsonl",
+        "worker-03/case-018/results.jsonl.manifest.json",
+        "worker-03/case-018/jobs/000018-cd7b611ae830fd5b.result.json",
+        "worker-03/case-018/jobs/000018-cd7b611ae830fd5b.trace.jsonl",
+        "worker-03/case-023/collector.log",
+        "worker-03/case-023/results.jsonl",
+        "worker-03/case-023/results.jsonl.manifest.json",
+        "worker-03/case-023/jobs/000023-e59d976ed53cf3ba.result.json",
+        "worker-03/case-023/jobs/000023-e59d976ed53cf3ba.trace.jsonl",
+        "worker-03/case-030/collector.log",
+        "worker-03/case-030/results.jsonl",
+        "worker-03/case-030/results.jsonl.manifest.json",
+        "worker-03/case-030/jobs/000030-9d67eec19d129cb5.result.json",
+        "worker-03/case-030/jobs/000030-9d67eec19d129cb5.trace.jsonl",
+        "worker-04/journal.jsonl",
+        "worker-04/case-003/collector.log",
+        "worker-04/case-003/results.jsonl",
+        "worker-04/case-003/results.jsonl.manifest.json",
+        "worker-04/case-003/jobs/000003-f3d5a0ace68284b8.result.json",
+        "worker-04/case-003/jobs/000003-f3d5a0ace68284b8.trace.jsonl",
+        "worker-04/case-008/collector.log",
+        "worker-04/case-008/results.jsonl",
+        "worker-04/case-008/results.jsonl.manifest.json",
+        "worker-04/case-008/jobs/000008-87e51798915f4efe.result.json",
+        "worker-04/case-008/jobs/000008-87e51798915f4efe.trace.jsonl",
+        "worker-04/case-014/collector.log",
+        "worker-04/case-014/results.jsonl",
+        "worker-04/case-014/results.jsonl.manifest.json",
+        "worker-04/case-014/jobs/000014-561abacaa82063cd.result.json",
+        "worker-04/case-014/jobs/000014-561abacaa82063cd.trace.jsonl",
+        "worker-04/case-019/collector.log",
+        "worker-04/case-019/results.jsonl",
+        "worker-04/case-019/results.jsonl.manifest.json",
+        "worker-04/case-019/jobs/000019-68c8f5af74f0f052.result.json",
+        "worker-04/case-019/jobs/000019-68c8f5af74f0f052.trace.jsonl",
+        "worker-04/case-025/collector.log",
+        "worker-04/case-025/results.jsonl",
+        "worker-04/case-025/results.jsonl.manifest.json",
+        "worker-04/case-025/jobs/000025-97930a0c886cce64.result.json",
+        "worker-04/case-025/jobs/000025-97930a0c886cce64.trace.jsonl",
+        "worker-04/case-031/collector.log",
+        "worker-04/case-031/results.jsonl",
+        "worker-04/case-031/results.jsonl.manifest.json",
+        "worker-04/case-031/jobs/000031-81d91565a286e664.result.json",
+        "worker-04/case-031/jobs/000031-81d91565a286e664.trace.jsonl",
+        "worker-05/journal.jsonl",
+        "worker-05/case-004/collector.log",
+        "worker-05/case-004/results.jsonl",
+        "worker-05/case-004/results.jsonl.manifest.json",
+        "worker-05/case-004/jobs/000004-68189a983dae2849.result.json",
+        "worker-05/case-004/jobs/000004-68189a983dae2849.trace.jsonl",
+        "worker-05/case-009/collector.log",
+        "worker-05/case-009/results.jsonl",
+        "worker-05/case-009/results.jsonl.manifest.json",
+        "worker-05/case-009/jobs/000009-592f9d54e9329441.result.json",
+        "worker-05/case-009/jobs/000009-592f9d54e9329441.trace.jsonl",
+        "worker-05/case-015/collector.log",
+        "worker-05/case-015/results.jsonl",
+        "worker-05/case-015/results.jsonl.manifest.json",
+        "worker-05/case-015/jobs/000015-eefca4a7ce0a8aba.result.json",
+        "worker-05/case-015/jobs/000015-eefca4a7ce0a8aba.trace.jsonl",
+        "worker-05/case-020/collector.log",
+        "worker-05/case-020/results.jsonl",
+        "worker-05/case-020/results.jsonl.manifest.json",
+        "worker-05/case-020/jobs/000020-706064bbb1824ac4.result.json",
+        "worker-05/case-020/jobs/000020-706064bbb1824ac4.trace.jsonl",
+        "worker-05/case-026/collector.log",
+        "worker-05/case-026/results.jsonl",
+        "worker-05/case-026/results.jsonl.manifest.json",
+        "worker-05/case-026/jobs/000026-91d081bb69cf1758.result.json",
+        "worker-05/case-026/jobs/000026-91d081bb69cf1758.trace.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "native-luna-semantic-iterate-campaign-raw-outputs",
+      "training_admission": false,
+      "admission": "held-raw-output-evidence-only",
+      "notes": "Closed V34 five-worker raw output snapshot; all five workers finished with exit_code 0, 29 exact result rows, and all per-case manifests validate. Includes campaign launch provenance, raw result rows plus per-job result/trace artifacts, collector logs, and terminal worker journals. Existing source/plan/queue registrations remain unchanged. Preserve all outcomes including failed/held targets; no action or trajectory admission."
     },
     {
-        "id": "free-provider-google-choice-confidence-v11-inputs-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v11",
-        "include": [
-            "cases.jsonl",
-            "source-manifest.json",
-            "launch-receipt-v1.json",
-            "frozen-adapter-v1/frozen-runtime.json",
-            "frozen-adapter-v1/models.json",
-            "frozen-adapter-v1/scripts/label_decision_cases.py",
-            "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
-            "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
-            "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
-            "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
-        ],
-        "exclude_dirs": [
-            "__pycache__"
-        ],
-        "split": "inherited-source-case-review-only",
-        "source_class": "provider-decision-label-confidence-generation-inputs",
-        "training_admission": false,
-        "admission": "held-generation-inputs-only-live-output-excluded",
-        "notes": "Immutable input snapshot for queued Gemini choice-confidence V11. Exact cases/source manifest/launch receipt and frozen adapter files only; active worker.log and live labels/output artifacts intentionally excluded. Cases use new source IDs/groups disjoint from existing provider choice inputs per approved source selection; no output or training admission."
+      "id": "free-provider-google-choice-confidence-v11-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v11",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/frozen-runtime.json",
+        "frozen-adapter-v1/models.json",
+        "frozen-adapter-v1/scripts/label_decision_cases.py",
+        "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+        "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-decision-label-confidence-generation-inputs",
+      "training_admission": false,
+      "admission": "held-generation-inputs-only-live-output-excluded",
+      "notes": "Immutable input snapshot for queued Gemini choice-confidence V11. Exact cases/source manifest/launch receipt and frozen adapter files only; active worker.log and live labels/output artifacts intentionally excluded. Cases use new source IDs/groups disjoint from existing provider choice inputs per approved source selection; no output or training admission."
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v2",
-        "include": [
-            "cases.jsonl",
-            "label-manifest.json",
-            "native.held.jsonl",
-            "rejections.jsonl",
-            "replay.failures.jsonl",
-            "replay.results.jsonl",
-            "scorer-manifest.json",
-            "source-manifest.json",
-            "summary.json"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "source-bound-static-choice-label-derivative",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "source labels V9 / static derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "held-static-choice-confidence-v9-derivative",
-        "snapshot_pin": {
-            "files": 9,
-            "bytes": 390113,
-            "file_sha256": {
-                "cases.jsonl": "6b8083b143be175414dbfe09fada97a8ba837ad0a01ec28a36b943418f1d5a04",
-                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
-                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
-                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
-                "source-manifest.json": "563d040ec1fe942ccce40707ccaa4efb2dcdb587c0d9cf4bd4be193f4d6dcd90",
-                "summary.json": "144c49015d66b37b2cf77883b5f7832c1db044f66edc278b95500cbd27317644"
-            }
+      "id": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v2",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-bound-static-choice-label-derivative",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "source labels V9 / static derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "held-static-choice-confidence-v9-derivative",
+      "snapshot_pin": {
+        "files": 9,
+        "bytes": 390113,
+        "file_sha256": {
+          "cases.jsonl": "6b8083b143be175414dbfe09fada97a8ba837ad0a01ec28a36b943418f1d5a04",
+          "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+          "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+          "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+          "source-manifest.json": "563d040ec1fe942ccce40707ccaa4efb2dcdb587c0d9cf4bd4be193f4d6dcd90",
+          "summary.json": "144c49015d66b37b2cf77883b5f7832c1db044f66edc278b95500cbd27317644"
         }
+      }
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v3",
-        "include": [
-            "cases.jsonl",
-            "label-manifest.json",
-            "native.held.jsonl",
-            "rejections.jsonl",
-            "replay.failures.jsonl",
-            "replay.results.jsonl",
-            "scorer-manifest.json",
-            "source-manifest.json",
-            "summary.json"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "source-bound-static-choice-label-derivative",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "source labels V9 / static derivative v3 supersedes derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
-        "snapshot_pin": {
-            "files": 9,
-            "bytes": 388913,
-            "file_sha256": {
-                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
-                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
-                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
-                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
-                "source-manifest.json": "049ad8a5aba6b0593005eeb0f2126f564b8c6c364fb4c05e59d404246c47a60e",
-                "summary.json": "986e54cc78163fe41d8388b15f82a142938c9a8ac4b76d7b7e176db1ce3de2b0"
-            }
+      "id": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v3",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-bound-static-choice-label-derivative",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "source labels V9 / static derivative v3 supersedes derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
+      "snapshot_pin": {
+        "files": 9,
+        "bytes": 388913,
+        "file_sha256": {
+          "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+          "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+          "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+          "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+          "source-manifest.json": "049ad8a5aba6b0593005eeb0f2126f564b8c6c364fb4c05e59d404246c47a60e",
+          "summary.json": "986e54cc78163fe41d8388b15f82a142938c9a8ac4b76d7b7e176db1ce3de2b0"
         }
+      }
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v4",
-        "include": [
-            "cases.jsonl",
-            "label-manifest.json",
-            "native.held.jsonl",
-            "rejections.jsonl",
-            "replay.failures.jsonl",
-            "replay.results.jsonl",
-            "scorer-manifest.json",
-            "source-manifest.json",
-            "summary.json"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "source-bound-static-choice-label-derivative",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "source labels V9 / static derivative v4 supersedes derivative v3; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
-        "snapshot_pin": {
-            "files": 9,
-            "bytes": 388913,
-            "file_sha256": {
-                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
-                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
-                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
-                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
-                "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
-                "summary.json": "48b1ffd05401def6388dea860b7f9a7f01128bcd89badca86bd6d19f21f2b2f4"
-            }
+      "id": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v4",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-bound-static-choice-label-derivative",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "source labels V9 / static derivative v4 supersedes derivative v3; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
+      "snapshot_pin": {
+        "files": 9,
+        "bytes": 388913,
+        "file_sha256": {
+          "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+          "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+          "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+          "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+          "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
+          "summary.json": "48b1ffd05401def6388dea860b7f9a7f01128bcd89badca86bd6d19f21f2b2f4"
         }
+      }
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v5",
-        "include": [
-            "cases.jsonl",
-            "label-manifest.json",
-            "native.held.jsonl",
-            "rejections.jsonl",
-            "replay.failures.jsonl",
-            "replay.results.jsonl",
-            "scorer-manifest.json",
-            "source-manifest.json",
-            "summary.json"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "source-bound-static-choice-label-derivative",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "source labels V9 / static derivative v5 supersedes derivative v4; 148 native turns/10 reference replays are scripted authored references, not provider teacher trajectories; no root admission; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
-        "snapshot_pin": {
-            "files": 9,
-            "bytes": 17446211,
-            "file_sha256": {
-                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
-                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
-                "native.held.jsonl": "470008fa0eef9ad0e40195d8e08cb15eebd6760adc03374cec2a5f5ec41badf4",
-                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
-                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "replay.results.jsonl": "b050353e85169834cab816c903f16cdaa9b4822a05f2c640a5f8fed7f8a9ada1",
-                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
-                "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
-                "summary.json": "4c36e798edcb874cab8297bd53f304db1978ec97dad6c171b7c058db5d3a2876"
-            }
+      "id": "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v5",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-bound-static-choice-label-derivative",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "source labels V9 / static derivative v5 supersedes derivative v4; 148 native turns/10 reference replays are scripted authored references, not provider teacher trajectories; no root admission; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
+      "snapshot_pin": {
+        "files": 9,
+        "bytes": 17446211,
+        "file_sha256": {
+          "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+          "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+          "native.held.jsonl": "470008fa0eef9ad0e40195d8e08cb15eebd6760adc03374cec2a5f5ec41badf4",
+          "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+          "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "replay.results.jsonl": "b050353e85169834cab816c903f16cdaa9b4822a05f2c640a5f8fed7f8a9ada1",
+          "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+          "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
+          "summary.json": "4c36e798edcb874cab8297bd53f304db1978ec97dad6c171b7c058db5d3a2876"
         }
+      }
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/quality-review-v26-google-choice-confidence-v9-complete",
-        "include": [
-            "review.json",
-            "review.md"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "quality-review-evidence",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "V9 quality review V26; earlier quality review snapshot superseded by V27; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "free-provider-google-v9-partial-quality-held-20261010-v1",
-        "snapshot_pin": {
-            "files": 2,
-            "bytes": 79214,
-            "file_sha256": {
-                "review.json": "a4f8c61382e2845a220b862652313d63f4614fe1fb604b409eb5d467221fad45",
-                "review.md": "b23e523adafe2b183a375c7d744b17ddbfe7e46522539d85b7624512d1b96a63"
-            }
+      "id": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v26-google-choice-confidence-v9-complete",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "quality-review-evidence",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "V9 quality review V26; earlier quality review snapshot superseded by V27; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "free-provider-google-v9-partial-quality-held-20261010-v1",
+      "snapshot_pin": {
+        "files": 2,
+        "bytes": 79214,
+        "file_sha256": {
+          "review.json": "a4f8c61382e2845a220b862652313d63f4614fe1fb604b409eb5d467221fad45",
+          "review.md": "b23e523adafe2b183a375c7d744b17ddbfe7e46522539d85b7624512d1b96a63"
         }
+      }
     },
     {
-        "id": "free-provider-google-choice-confidence-v9-quality-review-v27-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-google-choice-confidence-v9-final",
-        "include": [
-            "review.json",
-            "review.md"
-        ],
-        "split": "evidence-only-inherited-groups",
-        "source_class": "quality-review-evidence",
-        "training_admission": false,
-        "admission": "held-derivative-or-review-evidence-only",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
-            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
-        ],
-        "notes": "V9 final quality review V27 supersedes V26; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
-        "supersedes": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
-        "snapshot_pin": {
-            "files": 2,
-            "bytes": 79892,
-            "file_sha256": {
-                "review.json": "cf397e04009a54bdd42b8afedd65e6d11f0cf8f08a9ac1aa46e5cf6a38fd40bd",
-                "review.md": "b10381f0d7db9e4dfb8e818b9b013d8765a8d4bd9905f0c34cb33b54a11e8b01"
-            }
+      "id": "free-provider-google-choice-confidence-v9-quality-review-v27-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-google-choice-confidence-v9-final",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "quality-review-evidence",
+      "training_admission": false,
+      "admission": "held-derivative-or-review-evidence-only",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+        "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+      ],
+      "notes": "V9 final quality review V27 supersedes V26; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+      "supersedes": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
+      "snapshot_pin": {
+        "files": 2,
+        "bytes": 79892,
+        "file_sha256": {
+          "review.json": "cf397e04009a54bdd42b8afedd65e6d11f0cf8f08a9ac1aa46e5cf6a38fd40bd",
+          "review.md": "b10381f0d7db9e4dfb8e818b9b013d8765a8d4bd9905f0c34cb33b54a11e8b01"
         }
+      }
     },
     {
-        "id": "free-provider-luna-choice-folder-v36-inputs-held-20261010-v1",
-        "owner": "pop",
-        "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-ten-runtimev11-v1",
-        "include": [
-            "reviewed-plan-v1.json",
-            "root-generation-source-review-v1.json",
-            "root-launch-receipt-v1.json",
-            "worker-01/queue.jsonl",
-            "worker-02/queue.jsonl",
-            "worker-03/queue.jsonl",
-            "worker-04/queue.jsonl",
-            "worker-05/queue.jsonl"
-        ],
-        "exclude_dirs": [
-            "__pycache__"
-        ],
-        "split": "inherited-train-only",
-        "source_class": "reviewed-held-native-semantic-folder-decision-queues",
-        "training_admission": false,
-        "admission": "held-input-and-plan-evidence-only-active-output-excluded",
-        "derived_from": [
-            "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1"
-        ],
-        "notes": "Input/plan snapshot for ten Luna folder-decision programs sourced from V9 static derivative V5; root-reviewed exact source/annotation matches and authored-reference visible-context replay. Includes plan, root source review, root launch receipt, and five worker queues only. campaign-launch.waiting.json, launcher.log, and all live worker outputs intentionally excluded. Ten training cases reuse inherited source groups; no independent cases and no teacher/trajectory admission."
+      "id": "free-provider-luna-choice-folder-v36-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-ten-runtimev11-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-held-native-semantic-folder-decision-queues",
+      "training_admission": false,
+      "admission": "held-input-and-plan-evidence-only-active-output-excluded",
+      "derived_from": [
+        "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1"
+      ],
+      "notes": "Input/plan snapshot for ten Luna folder-decision programs sourced from V9 static derivative V5; root-reviewed exact source/annotation matches and authored-reference visible-context replay. Includes plan, root source review, root launch receipt, and five worker queues only. campaign-launch.waiting.json, launcher.log, and all live worker outputs intentionally excluded. Ten training cases reuse inherited source groups; no independent cases and no teacher/trajectory admission."
     },
     {
       "id": "free-provider-google-choice-confidence-v9-source-admission-review-held-20261010-v1",
@@ -24366,6 +24366,137 @@
       "training_admission": false,
       "admission": "generation-input-or-quality-review-only-not-training-data",
       "notes": "Freshrootreview afterclosedV35journals31complete+1failed, alloldPIDs exited; originalV36V1guardcorrectlyblockedandpreserved. Fiveworkers3/2/2/2/2usingfixedfrozenV12;10trainfolderdecisioncompositions64items +1heldV35sourceindex20freshrepair. Sources/golds/splits unchanged, noautomaticadmission/independent-worldcredit. Activejournals/logs/results excluded."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v10-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v10",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "193closedattempts192valid133exactsourceagreement59wrong1malformedJSON; allheld exactrawresponses/frozenadapter."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v10-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-google-choice-confidence-v10-final",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Closedpercase choiceconfidenceaudit; confidencesheldscalar not calibratedtargets."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v10-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v10-derivative-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "19authoredprograms133selectedsource labels60rejects19actualreferenceaccepted304nativeheldturns. Groups/splitsinherited; noadmission."
+    },
+    {
+      "id": "free-provider-google-v9-upstream-reconstruction-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-v9-upstream-reconstruction-v4",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Freshupstream reconstruction92uniqueclippedstate/mappedlabel matches explicitrawrowhash/revisions; notprooforiginalOct4revision. Licensesprovenanceonly, source/split/qualityclosurepending."
+    },
+    {
+      "id": "free-provider-google-v9-upstream-raw-shards-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v9-source-reconstruction-v1",
+      "include": [
+        "raw/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "ThreepinnedAGNews emotionTREC trainshards. Boardgameshardalreadyregisteredprior sourcebound24snapshot. Dependenciesexcluded."
+    },
+    {
+      "id": "free-provider-luna-v34-final-quality-held-20261010-v6",
+      "owner": "pop",
+      "path": "runs/quality-review-v26-luna-v34-final-20261010-v6",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Closed29cases28exactsemanticpasses1measureformatrejection;5manualtraversals not iterateOnqualification. Finalcorrectsearlierincompleteaudits allheld."
+    },
+    {
+      "id": "free-provider-luna-v36-v35repair-closed-raw-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-and-v35repair-runtimev12-v2",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "FreshfixedV12closed11cases10V9foldercompositions+1V35index20repair. Failedoriginalpreservedseparately nohistoryrewrite. Completionnotadmission finalauditpending."
+    },
+    {
+      "id": "free-provider-luna-v37-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v37-nineteen-runtimev12-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-source-generation-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Fourdisjointworkers19V10folderprograms133items inheritedtrain actualreferenceaccepted. FrozenV12activeoutputs/logs/journalsexcluded."
     }
   ],
   "coverage_backlog": [

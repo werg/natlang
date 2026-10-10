@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v9-upstream-reconstruction-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v29-v9-upstream-reconstruction-v4",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 6580,
+      "sha256": "64676fb60a92767db726e1880cc9fcdaea28a7a1a75fef90ff3e64c3fb5a05c5"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2561,
+      "sha256": "1afe89c94745eed977a148b9db84968a29a53ea68b75d738eff85f46ce4ec458"
+    },
+    {
+      "path": "source-pins.json",
+      "bytes": 3350,
+      "sha256": "36b25dd6a208f73ff74bb1301b0f9c33af5bde63f655913e12af56f1c21b93d7"
+    },
+    {
+      "path": "source-reconstruction-matches.jsonl",
+      "bytes": 85816,
+      "sha256": "df90ef015ba69130af91ccf03a9b424ee8ad98cf513ffacd979606bc13242fb8",
+      "lines": 92
+    }
+  ],
+  "bytes": 98307
+}

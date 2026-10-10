@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v9-upstream-raw-shards-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v9-source-reconstruction-v1",
+  "files": [
+    {
+      "path": "raw/ag-news-train-00000-of-00001.parquet",
+      "bytes": 18585438,
+      "sha256": "fc508d6d9868594e3da960a8cfeb63ab5a4746598b93428c224397080c1f52ee"
+    },
+    {
+      "path": "raw/emotion-train-00000-of-00001.parquet",
+      "bytes": 1030740,
+      "sha256": "10817f0f2ea42358bc62f69a09dfb8bd71701727df6d5a387bea742f3ea06417"
+    },
+    {
+      "path": "raw/trec-qc-train.jsonl",
+      "bytes": 1272405,
+      "sha256": "2ccf359da160a8e461c4d85cc4b20aafe5defc3175489fc4f93e9ede20f0f215",
+      "lines": 5452
+    }
+  ],
+  "bytes": 20888583
+}
