@@ -25832,6 +25832,38 @@
       "training_admission": false,
       "admission": "held-source-split-semantic-trace-review-required",
       "notes": "Four medium workers queued behind actual V45 predecessor PIDs and immutable queues. 50 source programs, 389 items. No admission."
+    },
+    {
+      "id": "free-provider-luna-v45-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "closed-iterative-case-trace-review",
+      "training_admission": false,
+      "admission": "held-source-trace-and-curriculum-fidelity-review",
+      "notes": "Closed four original train iterative cases. All four result/file/source derived checks pass; prior failures remain separate. No admission."
+    },
+    {
+      "id": "free-provider-luna-v45-iterative-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v45-four-train-iterative-quality-audit-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "evidence-only-inherited-train-groups",
+      "source_class": "closed-iterative-case-trace-review",
+      "training_admission": false,
+      "admission": "held-source-trace-and-curriculum-fidelity-review",
+      "notes": "All four final results match source. Three iterateOn trajectories; PROV-521 manually sequences passes, so curriculum fidelity is separately held. EXPT-532 recovered from three model errors/rejections. No proven runtime bug or new-world credit."
     }
   ],
   "coverage_backlog": [
