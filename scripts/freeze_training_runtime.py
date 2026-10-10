@@ -18,6 +18,105 @@ from run_training_pipeline import atomic_json, digest_file
 SOURCE_REVIEWS = Path("training") / "source-reviews"
 
 
+def _node_dependency_roots(source):
+    """Local workspace dependencies override repository-root fallback packages."""
+    candidates = [source / 'node_modules', source.parent / 'node_modules']
+    roots = []
+    for path in candidates:
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved not in roots:
+                roots.append(resolved)
+    return roots
+
+
+def _link_first_package(candidates, destination):
+    for candidate in candidates:
+        if candidate.exists() or candidate.is_symlink():
+            destination.symlink_to(candidate.resolve(), target_is_directory=candidate.is_dir())
+            return candidate.resolve()
+    return None
+
+
+def _merge_node_modules(roots, destination):
+    """Link packages into a frozen local directory, merging scopes with local precedence."""
+    destination.mkdir()
+    names = sorted({entry.name for root in roots for entry in root.iterdir()
+                    if entry.name not in {'.package-lock.json', '.cache'}})
+    links = {}
+    for name in names:
+        candidates = [root / name for root in roots]
+        target = destination / name
+        if name.startswith('@'):
+            scopes = [candidate for candidate in candidates if candidate.is_dir()]
+            if not scopes:
+                _link_first_package(candidates, target)
+                continue
+            target.mkdir()
+            packages = sorted({entry.name for scope in scopes for entry in scope.iterdir()})
+            for package in packages:
+                link = target / package
+                resolved = _link_first_package([scope / package for scope in scopes], link)
+                if resolved is not None:
+                    links[f'{name}/{package}'] = str(resolved)
+        elif name == '.bin':
+            bins = [candidate for candidate in candidates if candidate.is_dir()]
+            if not bins:
+                continue
+            target.mkdir()
+            commands = sorted({entry.name for folder in bins for entry in folder.iterdir()})
+            for command in commands:
+                resolved = _link_first_package([folder / command for folder in bins], target / command)
+                if resolved is not None:
+                    links[f'.bin/{command}'] = str(resolved)
+        else:
+            resolved = _link_first_package(candidates, target)
+            if resolved is not None:
+                links[name] = str(resolved)
+    return links
+
+
+def _node_dependency_links(root):
+    """Return the exact linked package targets, failing on a dangling dependency link."""
+    folder = root / 'node_modules'
+    if not folder.is_dir():
+        raise ValueError(f'frozen Node dependency directory is missing: {folder}')
+    links = {}
+    for entry in sorted(folder.iterdir()):
+        if entry.name.startswith('@') and entry.is_dir() and not entry.is_symlink():
+            for package in sorted(entry.iterdir()):
+                if package.is_symlink():
+                    if not package.exists():
+                        raise ValueError(f'frozen Node dependency link is dangling: {package}')
+                    links[f'{entry.name}/{package.name}'] = str(package.resolve())
+        elif entry.name == '.bin' and entry.is_dir() and not entry.is_symlink():
+            for command in sorted(entry.iterdir()):
+                if command.is_symlink():
+                    if not command.exists():
+                        raise ValueError(f'frozen Node executable link is dangling: {command}')
+                    links[f'.bin/{command.name}'] = str(command.resolve())
+        elif entry.is_symlink():
+            if not entry.exists():
+                raise ValueError(f'frozen Node dependency link is dangling: {entry}')
+            links[entry.name] = str(entry.resolve())
+    return links
+
+
+def _preflight_provider_import(runtime):
+    """Exercise ESM dependency resolution from the frozen provider entrypoint only; no API calls."""
+    entrypoint = runtime / 'dist' / 'model' / 'pi-provider.js'
+    if not entrypoint.is_file():
+        raise ValueError('frozen runtime omits dist/model/pi-provider.js')
+    script = "import(process.argv[1]).then(()=>process.stdout.write('provider_import_ok\\n')).catch(error=>{process.stderr.write(`${error.code ?? error.name}: ${error.message}\\n`);process.exitCode=1})"
+    result = subprocess.run(['node', '--input-type=module', '-e', script, entrypoint.as_uri()],
+                            cwd=runtime, text=True, capture_output=True)
+    if result.returncode:
+        details = (result.stderr + result.stdout)[-2500:]
+        raise ValueError(f'frozen provider module dependency preflight failed: {details}')
+    if 'provider_import_ok' not in result.stdout:
+        raise ValueError('frozen provider module dependency preflight did not complete')
+
+
 def source_reviews_folder(root):
     """The source-review registry a runtime reads: frozen inside it, else beside a checkout's ts-host."""
     for folder in (root / SOURCE_REVIEWS, root.parent / SOURCE_REVIEWS):
@@ -163,19 +262,35 @@ def _freeze_new(source, output, compiled_dist, compiled_src=None, build=None):
         for name in ("prelude.js", "package.json", "package-lock.json"):
             if (source / name).exists():
                 shutil.copy2(source / name, staging / name)
-        (staging / "node_modules").symlink_to(source / "node_modules", target_is_directory=True)
+        dependency_roots = _node_dependency_roots(source)
+        if not dependency_roots:
+            raise ValueError('no Node dependency roots are available to freeze')
+        dependency_links = _merge_node_modules(dependency_roots, staging / 'node_modules')
+        observed_dependency_links = _node_dependency_links(staging)
+        if dependency_links != observed_dependency_links:
+            raise ValueError('frozen Node dependency links differ from the selected dependency roots')
         copied = tree_identity(staging)
         if before != copied or before != tree_identity(source, compiled_dist, compiled_src):
             raise ValueError("runtime changed while freezing; retry after the build finishes")
         if build is not None and build.get('mode') == 'isolated_typescript' and _build_input_identity(source) != build['source_inputs']:
             raise ValueError('runtime source inputs changed while freezing; retry from a stable checkout')
+        _preflight_provider_import(staging)
         data = {"version": "natlang.frozen_runtime/1", "files": copied,
                 "compiled_dist_source": str(compiled_dist) if build is None else 'isolated build created for this freeze',
                 "build": build or {'mode': 'explicit_compiled_dist', 'compiled_dist_source': str(compiled_dist),
                                     'compiled_dist_files': {key.removeprefix('dist/'): value
                                                             for key, value in tree_identity(source, compiled_dist).items()
                                                             if key.startswith('dist/')}},
-                "node_modules": str(source / "node_modules"),
+                "node_modules": str(output / "node_modules"),
+                "node_dependencies": {
+                    "roots": [str(root) for root in dependency_roots],
+                    "links": dependency_links,
+                    "preflight": {
+                        "entrypoint": "dist/model/pi-provider.js",
+                        "mode": "esm-import-no-api-calls",
+                        "passed": True,
+                    },
+                },
                 "note": "Runtime and scripts copied; installed Node dependencies are shared and must not be changed during a run."}
         atomic_json(staging / "frozen-runtime.json", data)
         staging.rename(output)
@@ -189,6 +304,10 @@ def freeze(source, output, compiled_dist=None):
         data = json.loads(manifest.read_text())
         if tree_identity(output) != data["files"]:
             raise ValueError("frozen runtime changed")
+        if 'node_dependencies' in data:
+            if _node_dependency_links(output) != data['node_dependencies'].get('links'):
+                raise ValueError('frozen Node dependencies differ from their recorded package links')
+            _preflight_provider_import(output)
         # An existing snapshot is immutable and reusable without compiling newer source.
         return data
     # A caller-supplied dist is an explicit reviewed input. The default always builds
