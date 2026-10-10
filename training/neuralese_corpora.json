@@ -25678,6 +25678,49 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "49programs376items/fourworkers runtimeV13, genericprepareractualreferencecounts/pins/sourceIDschecked. Rootapprovedcandidateafterreview, V43predecessorsclosed; max4newworkers. Sourcequalityheld."
+    },
+    {
+      "id": "free-provider-luna-v44-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v44-fortynine-runtimev13-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "49operationallyclosed349/376sourceannotationmatches28exactmaps;425inputfilesintact992caller-linkedinvocations977captures. Missing15resultsinfailedindices27/39, diagnosispending; noadmission."
+    },
+    {
+      "id": "free-provider-luna-v44-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v44-choice-folder-final-20261010-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Independentclosedaudit. Evalokdoesnotimplytypedhostreturn. Directexactsource-state-in-childtoolcontext349/376conservativevisibilitynotinvisibility. BillableIOunavailable; no wireprompt/sourcequalityadmissionclaim."
+    },
+    {
+      "id": "free-provider-luna-v45-train-iterative-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1",
+      "include": [
+        "root-generation-source-review-v1.json",
+        "reviewed-plan-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-quality-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "FourfreshtrajectoriesoriginalV35trainindices1/5/10/14, source/instructions/goldunchanged; iterative-state tracecoverage notnewworlds. Protected16..31excluded. V44closedbeforefournewworkers; sameV13runtime/medium/384budget."
     }
   ],
   "coverage_backlog": [

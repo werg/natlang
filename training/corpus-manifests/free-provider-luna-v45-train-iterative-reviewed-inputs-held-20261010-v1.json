@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v45-train-iterative-reviewed-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v45-runtimev13-v1",
+  "files": [
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 4786,
+      "sha256": "6073187adc3ad6e00cb86836e5df8c34463774079426c1eca12f4695537f3f35"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 1714,
+      "sha256": "cd55c49c0cde26a13963ebbf6293d078b2e0f9860a23adf699a28c9fe21d8e7d"
+    },
+    {
+      "path": "root-launch-receipt-v1.json",
+      "bytes": 465,
+      "sha256": "f317a714ad76a28b483a730c89e1db62b77fafcdc66ae4b31d2eaa57a73eb883"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 897,
+      "sha256": "e3f93f23269057da5d80bbb77ca8418dba86623fcd61e38807c28af3edfcb874",
+      "lines": 1
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 897,
+      "sha256": "7354789f6802208a2acbc67d51cbce273724e3d3dd19b2ce80cde2fdf8aa9d3d",
+      "lines": 1
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 899,
+      "sha256": "136dce692db12f69f8acfd53c01313f11e5074166e6fda2106f293f082390c3c",
+      "lines": 1
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 899,
+      "sha256": "90895689ba3a45d05dc71655fa5781b5df0974f184c398a8b762fe5f169e50c2",
+      "lines": 1
+    }
+  ],
+  "bytes": 10557
+}
