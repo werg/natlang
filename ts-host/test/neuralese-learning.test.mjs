@@ -462,7 +462,12 @@ test('replay records: a function output keeps its calls as producers, and the re
   const plain = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
   const returnWritten = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced:
     ["<|tool_call_start|>[return_result(status='success', value='", { neuralese: 'write' }, "')]<|tool_call_end|>"] } });
-  const driver = Object.assign((request, signal) => (request.template ? plain : returnWritten)(request, signal), { neuralese: true });
+  // Guard: the scripted run takes a handful of turns; a runtime that keeps asking again fails here, not by OOM.
+  let turns = 0;
+  const driver = Object.assign((request, signal) => {
+    if (++turns > 12) throw new Error(`replay test: ${turns} model turns; last request ends ${JSON.stringify(request.messages.at(-1)).slice(0, 400)}`);
+    return (request.template ? plain : returnWritten)(request, signal);
+  }, { neuralese: true });
   const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
   const out = join(mkdtempSync(join(tmpdir(), 'natlang-replay-')), 'records.jsonl');
   const sink = replayRecordSink({ path: out, endpoint, annotate: () => ({ operator: 'map' }) });

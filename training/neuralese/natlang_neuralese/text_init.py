@@ -131,20 +131,23 @@ def init_gate(engine, messages, tools, body_id: str, text: str, *, reply_tokens:
     text_items = _text_call_items(session, prompt, at, text)
     backbone = engine.backbone
 
-    def logits(items, reply):
+    def logits(items, reply, last: int):
+        # Only the compared positions are projected: full-sequence logits of a rendered call (thousands of
+        # positions x the vocabulary) are gigabytes per forward.
         embeds = session._embed_items(items + [("tok", t) for t in reply], {})
-        return backbone.forward_embeds(embeds)["logits"][0].float()
+        h = backbone.forward_embeds(embeds, logits=False)["h_final"]
+        return backbone.logits(h[:, -last:])[0].float()
 
     reply: list[int] = []
     eos = {engine.tokenizer.convert_tokens_to_ids("<|im_end|>"), engine.tokenizer.eos_token_id}
     for _ in range(reply_tokens):
-        token = int(logits(text_items, reply)[-1].argmax())
+        token = int(logits(text_items, reply, 1)[-1].argmax())
         reply.append(token)
         if token in eos:
             break
     n = len(reply)
-    text_logits = logits(text_items, reply)[-(n + 1):-1] if n else logits(text_items, reply)[-1:]
-    soft_logits = logits(soft_items, reply)[-(n + 1):-1] if n else logits(soft_items, reply)[-1:]
+    text_logits = logits(text_items, reply, n + 1)[:-1] if n else logits(text_items, reply, 1)
+    soft_logits = logits(soft_items, reply, n + 1)[:-1] if n else logits(soft_items, reply, 1)
     t = torch.log_softmax(text_logits, -1)
     s = torch.log_softmax(soft_logits, -1)
     kl = float((t.exp() * (t - s)).sum(-1).mean())

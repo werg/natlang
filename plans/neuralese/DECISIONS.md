@@ -1461,8 +1461,9 @@ instruction.
   trajectory; template readout stays only where the value must be forced: `read` (a validated `T`), kernel
   representation-generic Neuralese results and `view`. Spec: spec/ext/neuralese.md "Combinators"; skills updated.
 - The combinator description wording is kept until measured live (plans/MODEL_FACING_CHANGES.md).
-- The S5 operator full-size run restarts on the new library with Pop's LFM closed-output heads (identity transport);
-  shards collected on the old bodies were discarded.
+- The S5 operator full-size run was restarted on the new library and stopped again: the Luna closed-output best-heads
+  are step 29440, after the 28793 split exposure, and map's normal call trajectory stalled. It waits for Pop's clean
+  28793 heads. Shards collected on the old bodies were discarded.
 - `init-body` is a reference-only capability. Open: the llama.cpp fork (native and the vendored wasm builds) still
   answers 404 rather than 501 `neuralese-init-body-unavailable` for the path; one line beside the `grad`/`optim`
   stubs in `tools/neuralese/neuralese-service.cpp`, then a conformance `lacking` entry, at the next fork rebuild.
