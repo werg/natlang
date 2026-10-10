@@ -23822,6 +23822,250 @@
         "training_admission": false,
         "admission": "held-generation-inputs-only-live-output-excluded",
         "notes": "Immutable input snapshot for queued Gemini choice-confidence V11. Exact cases/source manifest/launch receipt and frozen adapter files only; active worker.log and live labels/output artifacts intentionally excluded. Cases use new source IDs/groups disjoint from existing provider choice inputs per approved source selection; no output or training admission."
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v2",
+        "include": [
+            "cases.jsonl",
+            "label-manifest.json",
+            "native.held.jsonl",
+            "rejections.jsonl",
+            "replay.failures.jsonl",
+            "replay.results.jsonl",
+            "scorer-manifest.json",
+            "source-manifest.json",
+            "summary.json"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "source-bound-static-choice-label-derivative",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "source labels V9 / static derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "held-static-choice-confidence-v9-derivative",
+        "snapshot_pin": {
+            "files": 9,
+            "bytes": 390113,
+            "file_sha256": {
+                "cases.jsonl": "6b8083b143be175414dbfe09fada97a8ba837ad0a01ec28a36b943418f1d5a04",
+                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+                "source-manifest.json": "563d040ec1fe942ccce40707ccaa4efb2dcdb587c0d9cf4bd4be193f4d6dcd90",
+                "summary.json": "144c49015d66b37b2cf77883b5f7832c1db044f66edc278b95500cbd27317644"
+            }
+        }
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v3",
+        "include": [
+            "cases.jsonl",
+            "label-manifest.json",
+            "native.held.jsonl",
+            "rejections.jsonl",
+            "replay.failures.jsonl",
+            "replay.results.jsonl",
+            "scorer-manifest.json",
+            "source-manifest.json",
+            "summary.json"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "source-bound-static-choice-label-derivative",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "source labels V9 / static derivative v3 supersedes derivative v2; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v2-held-20261010-v1",
+        "snapshot_pin": {
+            "files": 9,
+            "bytes": 388913,
+            "file_sha256": {
+                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+                "source-manifest.json": "049ad8a5aba6b0593005eeb0f2126f564b8c6c364fb4c05e59d404246c47a60e",
+                "summary.json": "986e54cc78163fe41d8388b15f82a142938c9a8ac4b76d7b7e176db1ce3de2b0"
+            }
+        }
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v4",
+        "include": [
+            "cases.jsonl",
+            "label-manifest.json",
+            "native.held.jsonl",
+            "rejections.jsonl",
+            "replay.failures.jsonl",
+            "replay.results.jsonl",
+            "scorer-manifest.json",
+            "source-manifest.json",
+            "summary.json"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "source-bound-static-choice-label-derivative",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "source labels V9 / static derivative v4 supersedes derivative v3; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v3-held-20261010-v1",
+        "snapshot_pin": {
+            "files": 9,
+            "bytes": 388913,
+            "file_sha256": {
+                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+                "native.held.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "replay.results.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+                "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
+                "summary.json": "48b1ffd05401def6388dea860b7f9a7f01128bcd89badca86bd6d19f21f2b2f4"
+            }
+        }
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v9-derivative-v5",
+        "include": [
+            "cases.jsonl",
+            "label-manifest.json",
+            "native.held.jsonl",
+            "rejections.jsonl",
+            "replay.failures.jsonl",
+            "replay.results.jsonl",
+            "scorer-manifest.json",
+            "source-manifest.json",
+            "summary.json"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "source-bound-static-choice-label-derivative",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "source labels V9 / static derivative v5 supersedes derivative v4; 148 native turns/10 reference replays are scripted authored references, not provider teacher trajectories; no root admission; no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "free-provider-google-choice-confidence-v9-static-derivative-v4-held-20261010-v1",
+        "snapshot_pin": {
+            "files": 9,
+            "bytes": 17446211,
+            "file_sha256": {
+                "cases.jsonl": "b2e6de5d5b7b1c02426dd6b9130eb213bdced65a1c394feeab237f47f0187890",
+                "label-manifest.json": "bc4842cf812a00a5c2aaf65f776f1f2e81b4ad7371f899486fc59ccb3710ce0d",
+                "native.held.jsonl": "470008fa0eef9ad0e40195d8e08cb15eebd6760adc03374cec2a5f5ec41badf4",
+                "rejections.jsonl": "3c9496947e91631598cfa69c7a780fea7ba55521d5d44d59febc9f5113759298",
+                "replay.failures.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "replay.results.jsonl": "b050353e85169834cab816c903f16cdaa9b4822a05f2c640a5f8fed7f8a9ada1",
+                "scorer-manifest.json": "cb8ab2bb5961416788b4b95d60ab8e29b2f5235cd2af9776eb09b0f448eca0f5",
+                "source-manifest.json": "955cd8e3eb64bf4a239ea1c5855af322a46629bb674d12e030ebe02be9f88310",
+                "summary.json": "4c36e798edcb874cab8297bd53f304db1978ec97dad6c171b7c058db5d3a2876"
+            }
+        }
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/quality-review-v26-google-choice-confidence-v9-complete",
+        "include": [
+            "review.json",
+            "review.md"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "quality-review-evidence",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "V9 quality review V26; earlier quality review snapshot superseded by V27; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "free-provider-google-v9-partial-quality-held-20261010-v1",
+        "snapshot_pin": {
+            "files": 2,
+            "bytes": 79214,
+            "file_sha256": {
+                "review.json": "a4f8c61382e2845a220b862652313d63f4614fe1fb604b409eb5d467221fad45",
+                "review.md": "b23e523adafe2b183a375c7d744b17ddbfe7e46522539d85b7624512d1b96a63"
+            }
+        }
+    },
+    {
+        "id": "free-provider-google-choice-confidence-v9-quality-review-v27-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/quality-review-v27-google-choice-confidence-v9-final",
+        "include": [
+            "review.json",
+            "review.md"
+        ],
+        "split": "evidence-only-inherited-groups",
+        "source_class": "quality-review-evidence",
+        "training_admission": false,
+        "admission": "held-derivative-or-review-evidence-only",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-inputs-held-20261010-v2",
+            "free-provider-google-choice-confidence-v9-output-held-20261010-v1"
+        ],
+        "notes": "V9 final quality review V27 supersedes V26; review evidence only, no independent cases. Static/history snapshot only; all descendants reuse the same 92 source cases and existing labels, with 64 labels accepted / 28 rejected in the static conversion family. No additional independent examples or training admission.",
+        "supersedes": "free-provider-google-choice-confidence-v9-quality-review-v26-held-20261010-v1",
+        "snapshot_pin": {
+            "files": 2,
+            "bytes": 79892,
+            "file_sha256": {
+                "review.json": "cf397e04009a54bdd42b8afedd65e6d11f0cf8f08a9ac1aa46e5cf6a38fd40bd",
+                "review.md": "b10381f0d7db9e4dfb8e818b9b013d8765a8d4bd9905f0c34cb33b54a11e8b01"
+            }
+        }
+    },
+    {
+        "id": "free-provider-luna-choice-folder-v36-inputs-held-20261010-v1",
+        "owner": "pop",
+        "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v36-ten-runtimev11-v1",
+        "include": [
+            "reviewed-plan-v1.json",
+            "root-generation-source-review-v1.json",
+            "root-launch-receipt-v1.json",
+            "worker-01/queue.jsonl",
+            "worker-02/queue.jsonl",
+            "worker-03/queue.jsonl",
+            "worker-04/queue.jsonl",
+            "worker-05/queue.jsonl"
+        ],
+        "exclude_dirs": [
+            "__pycache__"
+        ],
+        "split": "inherited-train-only",
+        "source_class": "reviewed-held-native-semantic-folder-decision-queues",
+        "training_admission": false,
+        "admission": "held-input-and-plan-evidence-only-active-output-excluded",
+        "derived_from": [
+            "free-provider-google-choice-confidence-v9-static-derivative-v5-held-20261010-v1"
+        ],
+        "notes": "Input/plan snapshot for ten Luna folder-decision programs sourced from V9 static derivative V5; root-reviewed exact source/annotation matches and authored-reference visible-context replay. Includes plan, root source review, root launch receipt, and five worker queues only. campaign-launch.waiting.json, launcher.log, and all live worker outputs intentionally excluded. Ten training cases reuse inherited source groups; no independent cases and no teacher/trajectory admission."
     }
   ],
   "coverage_backlog": [
