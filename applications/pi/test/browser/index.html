@@ -1,0 +1,58 @@
+<!doctype html>
+<!--
+  pi in a browser page, for a manual check and the later Chromium smoke: serve the repository root over HTTP (for
+  example `python3 -m http.server 8000` there) after ts-host's build:browser and
+  `node ts-host/scripts/build-application-browser.mjs applications/pi`, then open /applications/pi/test/browser/.
+  The page's main thread has no OPFS sync access handles, so its session is kept in memory (README.md, "In the browser").
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pi in the browser</title>
+  <script type="importmap">{ "imports": { "@natlang/browser": "/ts-host/dist/browser/natlang.js" } }</script>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; max-width: 960px; }
+    label { display: block; margin: 6px 0; }
+    input, textarea { width: 100%; box-sizing: border-box; font: inherit; }
+    pre { background: #f4f4f4; padding: 8px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>pi in the browser</h1>
+  <label>Executor endpoint <input id="executor-endpoint" value="http://127.0.0.1:8083"></label>
+  <label>Executor model <input id="executor-model" value="nvidia/Qwen3.6-35B-A3B-NVFP4"></label>
+  <label>Agent endpoint <input id="agent-endpoint" value="http://127.0.0.1:8083"></label>
+  <label>Agent model <input id="agent-model" value="nvidia/Qwen3.6-35B-A3B-NVFP4"></label>
+  <label>Task <textarea id="task" rows="3">Add a function double(n) to math.js that returns twice n, and show the file.</textarea></label>
+  <button id="run">Run</button>
+  <h2>Answer</h2><pre id="answer"></pre>
+  <h2>Workspace</h2><pre id="files"></pre>
+  <h2>Log</h2><pre id="log"></pre>
+  <script type="module">
+    import { createNatlangRuntime, openAICompatibleModelTurn } from '@natlang/browser';
+    import { Folder, openBrowserPi } from '/applications/pi/dist/browser/browser.js';
+
+    const $ = id => document.getElementById(id);
+    const log = line => { $('log').textContent += `${line}\n`; };
+    const folder = new Folder({ 'math.js': 'export function add(a, b) {\n  return a + b;\n}\n' });
+    const show = async () => {
+      const files = await Promise.all(folder.filePaths().sort().map(async path => `== ${path}\n${await folder.readText(path)}`));
+      $('files').textContent = files.join('\n');
+    };
+    await show();
+    $('run').onclick = async () => {
+      $('answer').textContent = '';
+      const natlang = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint: $('executor-endpoint').value, model: $('executor-model').value }) });
+      const pi = await openBrowserPi({ natlang, folder, agent: { endpoint: $('agent-endpoint').value, model: $('agent-model').value },
+        onReport: error => log(`[report] ${error instanceof Error ? error.message : String(error)}`),
+        onPhase: event => log(`${event.kind}#${event.taskId} ${event.phase}${event.error ? ` failed: ${event.error}` : ''}`) });
+      log(`session: ${pi.session}`);
+      try {
+        const result = await pi.run($('task').value);
+        $('answer').textContent = result.answer || `(${result.status}${result.reason ? `: ${result.reason}` : ''})`;
+      } finally { await pi.close(); await show(); }
+    };
+  </script>
+</body>
+</html>

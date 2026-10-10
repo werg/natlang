@@ -18,11 +18,14 @@ The agent is a provider model the harness calls through pi-ai (`ai.turn`). The f
 none of them is the agent.
 
 ```
-index.ts                 openPi(): pi-durable's Harness with the natural-language task kinds
-main.ts                  print-mode CLI and eval over tasks/
+index.ts                 openPi(): pi-durable's Harness with the natural-language task kinds; runPiTask()
+main.ts                  print-mode CLI and eval over tasks/ (the Node host)
+browser.ts               openBrowserPi(): the browser host (see "In the browser")
 types.ts                 every record the functions read and write, with its rules in doc comments
 ops.ts                   durable.commit: the write operations, applied atomically with guards
-host/                    services: durable, ai, tools, env, resources; the task kinds; policies
+host/                    services: durable, ai, tools, env, resources; the task kinds; policies; agent-models.ts
+                         (the agent's provider); node.ts (Node envs and prompt), folder-env.ts and sqlite-wasm.ts
+                         (the browser host's environment and session storage)
 generation.nl generation/  prepare, request, classify, answer, startToolRound, finishToolRound, abort
 tool.nl tool/            beginCall, run (+ exact result formats), fromSlot
 compaction.nl compaction/  select, summarize (+ pi's verbatim prompts and transcript format)
@@ -93,12 +96,73 @@ once per call: memoized in the session, pinned on the server, restored from the 
 server lost it. The view is started right after the tool result; a view that cannot be written fails the turn
 (retried by pi's retry policy when the server was unreachable or overloaded).
 
+## In the browser
+
+The same harness runs in a browser page or worker (`browser.ts`, `openBrowserPi`). The code is split in three:
+
+- the platform-neutral core: everything the harness is (index.ts, host/, harness/, the task kinds, extensions/,
+  vendor/durable without its Node files). It imports natlang as `natlang:runtime`, the neutral runtime specifier,
+  which every build binds to the runtime it targets (ts-host `NEUTRAL_RUNTIME_SPECIFIER`, bound with the build's
+  `runtimeModule` specifiers): the Node runtime under `natlang run`, the application builds and the tests (the Vite
+  plugin resolves it too), the browser runtime in the browser build. No core module imports `node:*`;
+- the Node host: main.ts, host/node.ts (pi-durable's NodeExecutionEnv per directory), host/resources.ts and
+  extensions/pi-prompt/node.ts (context files and skills from the file system), SQLite through `node:sqlite`, the
+  Neuralese block archive in a directory (ts-host FileNeuraleseStore);
+- the browser host: browser.ts, over the core and the browser runtime (`@natlang/browser`).
+
+In the browser:
+
+- The workspace is a natlang `Folder`, mounted at `/workspace` (host/folder-env.ts, pi-durable's `ExecutionEnv` over
+  it). read, write and edit change the folder; bash runs natlang's folder shell (just-bash, `runFolderBash`) over the
+  same folder, with timeouts, aborts and the long-output spill (to the environment's own `/tmp`). Paths outside both
+  mounts do not exist and cannot be written. A folder has no empty directories, symbolic links or file times: an
+  empty directory made by `createDir` lives in the environment only, times are the environment's clock, and `watch`
+  is not supported. Network access for commands is off unless `network: true`.
+- The session is pi-durable's SQLite storage on sqlite-wasm (host/sqlite-wasm.ts), in the origin private file system
+  through ts-host's `openOpfsSqlite` (pool `natlang-pi`, database `session` names it, default `pi-session`). OPFS
+  databases need a dedicated worker; on a page's main thread, or where OPFS refuses, the session is kept in memory and
+  `onReport` says why. A `Storage` or a sqlite-wasm database can be given instead.
+- The executor is the page's natlang runtime. The agent model is reached through natlang's model transport (default
+  here; `transport: 'pi-ai'` uses pi-ai's OpenAI-compatible provider): an HTTP endpoint, or the in-page WebAssembly
+  Neuralese engine's endpoint (`startBrowserNeuralese`). A Neuralese reader (`reader: DIALECT`) is checked against the
+  server as on the CLI, and its blocks are archived in the OPFS block store (ts-host `OpfsNeuraleseStore`).
+- The companion (`companion: true`) reads, lists and searches the workspace through the conversation's environment,
+  so it sees the folder; its search is the environment's grep.
+- The prompt has no project context files or skills (they are loaded from the file system on Node); its docs section
+  names `packageDir` (default `/pi`).
+
+Build (after ts-host's `npm run build:node` and `npm run build:browser`):
+
+```sh
+node ts-host/scripts/build-application-browser.mjs applications/pi    # applications/pi/dist/browser/browser.js
+```
+
+The build type-checks `tsconfig.browser.json` (the core and browser.ts, against the browser runtime's declarations)
+and bundles it under ts-host's browser policy: a `node:*` module reachable from the entry fails the build with the
+import chain. The runtime is left as the module `@natlang/browser`, which the page maps with an import map to ts-host's
+`dist/browser/natlang.js`, so pi shares the page's runtime. `test/browser/index.html` is such a page (serve the
+repository root): it runs a task against an executor and an agent endpoint on a small folder.
+
+```js
+import { createNatlangRuntime, openAICompatibleModelTurn } from '@natlang/browser';
+import { Folder, openBrowserPi } from './dist/browser/browser.js';
+const pi = await openBrowserPi({ natlang: createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint, model }) }),
+  agent: { endpoint, model }, folder: new Folder({ 'math.js': '...' }) });
+const { answer } = await pi.run('Add a function double(n) to math.js');
+await pi.close();
+```
+
 ## Verification
 
-- `npm test` in this directory: scripted wiring tests (52). The crisp helpers are compared with pi's own code on
+- `npm test` in this directory: scripted wiring tests. The crisp helpers are compared with pi's own code on
   thousands of random inputs (result bounding, truncation, transcript serialization, edit matching, image sniffing);
   the coding tools run through the runtime and are compared with pi's `CodingTools` (results, files, diagnostics);
-  the policy path drives a real Harness through the scheduler and admission functions.
+  the policy path drives a real Harness through the scheduler and admission functions. The browser host:
+  `browser-host.test.mjs` (the folder environment, the sqlite-wasm storage, pi's env service on the folder) and
+  `browser-bundle.test.mjs` (the entry builds under the browser policy; the built bundle, loaded with the browser
+  runtime and Node's `process` hidden, runs a coding task end to end on a virtual folder with a scripted executor and
+  a fake agent server, the companion searching the folder; the session's memory fallback; the OPFS block archive with
+  a stand-in OPFS). A Chromium smoke of test/browser/index.html is for browser CI.
 - `npm run test:vendor`: pi-durable's own suite with the crisp defaults (967 tests; three files need other packages
   of pi's monorepo and do not load). `npm run test:policy`: the same suite through the guarded read-decide-commit
   policy path.

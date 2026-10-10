@@ -273,7 +273,8 @@ applications/pi/
   PORT.md, port/              this plan and the inventory
   natlang.json, package.json
   index.ts                    host: Harness on SQLite, the task kinds, the services
-  main.ts                     print-mode CLI
+  main.ts                     print-mode CLI (the Node host)
+  browser.ts                  the browser host: openBrowserPi (see "Hosts: Node and the browser")
   services.ts                 durable, ai, tools, env, resources, with their declarations
   types.ts                    records with doc comments: messages, entries, live state, checkpoints, ops
   text/                       package pi-text: crisp text mechanics shared by the tools and the tool task
@@ -546,6 +547,25 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | Loading context files and skills | host | `resources` | File reads. |
 | `subagent`, in order: find or create the child (one commit), details, submit with a request ID, wait, answer text | fn | `extensions/subagent/subagent` | Delegation with its own replay rule. |
 | `ensureChildConversation` | crisp | an op of the tool's api | A commit body that reads before it writes. |
+
+### Hosts: Node and the browser (owner-approved, 2026-10-10)
+
+The port runs on two hosts. What the harness is stays one platform-neutral core; each host supplies the outside world.
+
+| Part | Decision | Unit | Why |
+|---|---|---|---|
+| The runtime import of the core | host | `natlang:runtime` (ts-host `NEUTRAL_RUNTIME_SPECIFIER`) | One source for both hosts: every build binds the neutral specifier to the runtime it targets, as it binds `@natlang/node` (the Node runtime under `natlang run`, the application builds, the tests and Vite; the browser runtime in the browser build). In callable-folder modules it is the natlang surface. |
+| The agent's provider | crisp | `host/agent-models.ts` | Shared by main.ts (flags, profile) and browser.ts (options); only where the settings come from differs. |
+| A run to its answer | crisp | `index.ts` `runPiTask` | Shared by both hosts. |
+| Execution environment, Node | host | pi-durable's `NodeExecutionEnv` per directory (`host/node.ts`) | The local file system and shell. |
+| Execution environment, browser | host | `host/folder-env.ts`: pi-durable's `ExecutionEnv` over a natlang Folder at `/workspace`; commands run in natlang's folder shell (just-bash) over the same folder; `/tmp` for spilled output | No file system or processes in a browser. Node's error codes and messages, so the tools' messages are the same. A folder has no empty directories, links or times: the environment keeps those it makes, and watching is not supported. |
+| The companion's workspace services (file, list, search) | host | `extensions/companion/index.ts`, through the conversation's `ExecutionEnv` (`runtime.env`): its grep is the environment's | They run on either host; without an environment no file exists. The file hash is SHA-256 by Web Crypto (the same 16 digits as before). |
+| Context files and skills | host | Node: `host/resources.ts` through `extensions/pi-prompt/node.ts`; browser: none | They are files of the user's machine. `piPrompt` takes them as `resources`. |
+| Session storage, Node | host | pi-durable's SQLite on `node:sqlite` | As before. |
+| Session storage, browser | host | `host/sqlite-wasm.ts`: pi-durable's `SqliteDatabase` over sqlite-wasm, in OPFS through ts-host `openOpfsSqlite` (a dedicated worker); memory elsewhere, reported | pi-durable's own schema and transactions; OPFS sync access handles exist only in workers. |
+| Neuralese block archive | host | Node: a directory (`FileNeuraleseStore`); browser: OPFS (`OpfsNeuraleseStore`) | Blocks outlive the engine that wrote them on both hosts. |
+| The agent model, browser | host | natlang's model transport to an HTTP endpoint or the in-page WebAssembly engine's endpoint | The Neuralese wire standard as on the CLI. |
+| The browser build | host | ts-host `scripts/build-application-browser.mjs` over `tsconfig.browser.json` | Type-checks the core against the browser runtime's declarations and bundles it under the browser policy: a reachable `node:*` module fails the build with its import chain. |
 
 ## Shared functions (decided: `uses:`)
 
