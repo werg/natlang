@@ -25015,6 +25015,32 @@
       "training_admission": false,
       "admission": "evidence-only-no-training-admission",
       "notes": "OriginalV39launch blockedbyV38index12budgetincomplete beforeworkers. Freshreview-v2rootapproved unrelated48foldercases4mediumworkers; priorpartialheldnotadmitted."
+    },
+    {
+      "id": "free-provider-luna-v38-targeted-recovery-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "mixed-inherited-protected-evidence-only",
+      "source_class": "provider-repair-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Fourclosedattempts3exactsemanticfinals1requestbudgetpartial; oldV35evidence unchanged, protectedtestidx18retainednottraining."
+    },
+    {
+      "id": "free-provider-luna-v38-targeted-recovery-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v38-targeted-recovery-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "split": "mixed-inherited-protected-evidence-only",
+      "source_class": "provider-repair-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Independentexactsemantic/5stateedgeaudit3complete; 2iterateOnonefourmanualpasses. Index12partialbudgetnotnegative ornontermination. Allsource/splitclosureandadmissionheld."
     }
   ],
   "coverage_backlog": [
