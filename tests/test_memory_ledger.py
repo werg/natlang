@@ -7,6 +7,17 @@ SPEC.loader.exec_module(ledger)
 GIB = 2**30
 
 
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def no_real_machine_effects(monkeypatch):
+    """Tests never touch real memory state: the balloon and systemd/docker calls fail loudly unless a test stubs them."""
+    def refuse(*_args, **_kwargs):
+        raise AssertionError('a ledger test reached the real machine (balloon_reclaim)')
+    monkeypatch.setattr(ledger, 'balloon_reclaim', refuse)
+
+
 def claim(cls, budget, used, admitted):
     return {'class': cls, 'budget': budget * GIB, 'used': used * GIB, 'admitted': admitted}
 
@@ -84,6 +95,8 @@ def test_a_settled_claim_counts_up_to_its_measured_peak(monkeypatch):
 
 def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    # Never the real balloon: it touches up to 24 GB of anonymous memory (a ledgered suite was OOM-killed by it).
+    monkeypatch.setattr(ledger, 'balloon_reclaim', lambda *a, **k: 0)
     holder = open(str(tmp_path / 'ledger.json.release.lock'), 'w')
     ledger.fcntl.flock(holder, ledger.fcntl.LOCK_EX)
     assert ledger.release_cache([str(tmp_path)]) == {'skipped': 'another cache release is running'}

@@ -2599,11 +2599,15 @@ def main(argv=None):
             improved=best is None or score<best['score']
             if improved:best={'step':step,'score':score,'report':report}
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-            try:
-                save(report,write_export=improved,retain_best=improved)
-            except Exception as error:
-                recover_postcommit_persistence_failure(error)
-                return
+            # The full state is written for a new best (retained as best-checkpoint.pt: exact continuation from the
+            # best, verified_heads_handoff) or on the wall-clock cadence (3 h), not at every evaluation (owner
+            # 2026-10-10: "checkpoint every few hours"); stops and the end write it too.
+            if improved or checkpoint_cadence.due(step):
+                try:
+                    save(report,write_export=improved,retain_best=improved)
+                except Exception as error:
+                    recover_postcommit_persistence_failure(error)
+                    return
         elif checkpoint_cadence.due(step):
             try:
                 save(write_export=False)
