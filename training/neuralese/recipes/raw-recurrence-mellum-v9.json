@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-mellum-v9",
+  "extends": "raw-recurrence-mellum-v8",
+  "description": "raw-recurrence-mellum-v8 with the latent policy's memory-lean optimizer in the text stages: backbone weight matrices step under LionSR (one BF16 momentum, stochastic-rounding writes, per-row step qat_latent_lr x the row's ternary scale; conversion v3's optimizer and rate 3e-4), heads and norms on Muon/AdamW. run-v7's backbone phase refused at its first update: Muon's BF16 latents would also lose updates below BF16 resolution (no stochastic rounding), and its preflight forecast 115 GB from projection-phase calibration. Backbone-inherent (BF16 latents of a ternary-deployed MoE). History: recipes/HISTORY.md.",
+  "overrides": {
+    "stage_parameter_defaults": {
+      "core_text_warmup": {
+        "latent_optimizer": "lionsr",
+        "qat_latent_lr": 0.0003
+      }
+    }
+  }
+}

@@ -166,3 +166,32 @@ def test_weights_digest_is_a_cheap_on_device_fingerprint_that_sees_every_element
         assert weights_digest(changed, heads) != first
     swapped = {'w': backbone['w'].flip(0), 'b': backbone['b']}  # same values, other positions
     assert weights_digest(swapped, heads) != first
+
+
+def test_port_optimizer_steps_latents_with_lionsr_and_round_trips_its_state():
+    """The latent policy's memory-lean path: BF16 latents under LionSR (one BF16 momentum), the rest Muon/AdamW."""
+    pytest.importorskip('torch.optim', reason='needs torch.optim.Muon').__dict__.get('Muon') or pytest.skip('no Muon')
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    from natlang_neuralese.train.checkpoint_safety import optimizer_state_size_upper_bound
+    torch.manual_seed(0)
+    head = torch.nn.Parameter(torch.randn(8, 8))
+    norm = torch.nn.Parameter(torch.ones(8))
+    latent = torch.nn.Parameter(torch.randn(16, 8).to(torch.bfloat16))
+    scale = torch.full((16, 1), 0.5)
+
+    def build():
+        return PortMuonAdamW([('heads.w', head), ('backbone.norm', norm)], lr=1e-3, vocab_size=100,
+                             latent=[('backbone.w', latent, 1e-2, scale)])
+    optimizer = build()
+    assert [row['optimizer'] for row in optimizer.schema] == ['muon', 'adamw', 'lion']
+    assert optimizer_state_size_upper_bound(optimizer) >= latent.numel() * 2  # its lazy BF16 momentum
+    before = latent.detach().clone()
+    for parameter in (head, norm, latent):
+        parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+    moved = (latent.detach().float() - before.float()) / 0.5
+    # Sign step of lr per row-scale unit, written with unbiased stochastic rounding: -0.01 on average.
+    assert abs(float(moved.mean()) + 0.01) < 0.005 and optimizer.latent.state[latent]['momentum'].dtype == torch.bfloat16
+    again = build()
+    again.load_state_dict(optimizer.state_dict())
+    assert torch.equal(again.latent.state[latent]['momentum'], optimizer.latent.state[latent]['momentum'])

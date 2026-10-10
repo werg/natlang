@@ -32,7 +32,10 @@ def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding
 
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
-                 ns_steps: int = 5):
+                 ns_steps: int = 5, latent=()):
+        """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped by ``LionSR`` (one BF16 momentum,
+        stochastic rounding, per-row step ``lr x row_scale``): the memory-lean path of Mellum's conversion v3, for
+        the latent backbone policy. Their ``lr`` is in units of each row's ternary scale."""
         if not hasattr(torch.optim, "Muon"):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
@@ -45,6 +48,16 @@ class PortMuonAdamW(torch.optim.Optimizer):
             (muon if use_muon else auxiliary).append(parameter)
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
                                 "optimizer": "muon" if use_muon else "adamw"})
+        latent = list(latent)
+        for name, parameter, _, _ in latent:
+            if id(parameter) in seen:
+                raise ValueError(f"duplicate trainable parameter {name}")
+            seen.add(id(parameter))
+            self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
+                                "optimizer": "lion"})
+        self.latent = (LionSR([{"params": [parameter], "lr": rate, "row_scale": scale, "qat_latent_lr": rate,
+                                "weight_decay": 0.0, "name": name} for name, parameter, rate, scale in latent],
+                              lr=latent[0][2], fused=True) if latent else None)
         if not muon:
             raise ValueError("the muon policy found no eligible hidden matrices")
         self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
@@ -55,7 +68,8 @@ class PortMuonAdamW(torch.optim.Optimizer):
         self._constructed = True
 
     def _groups(self):
-        return self.muon.param_groups + (self.auxiliary.param_groups if self.auxiliary else [])
+        return (self.muon.param_groups + (self.auxiliary.param_groups if self.auxiliary else [])
+                + (self.latent.param_groups if self.latent else []))
 
     def add_param_group(self, group: dict) -> None:
         """Groups added during a run (LoRA layers) are AdamW groups."""
@@ -79,19 +93,28 @@ class PortMuonAdamW(torch.optim.Optimizer):
         self.muon.step()
         if self.auxiliary is not None:
             self.auxiliary.step()
+        if self.latent is not None:
+            self.latent.step()
 
     def state_dict(self):
-        return {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
-                "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
+        state = {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
+                 "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
+        if self.latent is not None:
+            state["lion"] = self.latent.state_dict()
+        return state
 
     def load_state_dict(self, state_dict):
         if state_dict.get("format") != FORMAT or state_dict.get("schema") != self.schema:
             raise ValueError("port optimiser checkpoint parameter names/shapes/dtypes/partition differ")
         if (state_dict.get("adamw") is None) != (self.auxiliary is None):
             raise ValueError("port optimiser checkpoint AdamW partition differs")
+        if (state_dict.get("lion") is None) != (self.latent is None):
+            raise ValueError("port optimiser checkpoint LionSR latent partition differs")
         self.muon.load_state_dict(state_dict["muon"])
         if self.auxiliary is not None:
             self.auxiliary.load_state_dict(state_dict["adamw"])
+        if self.latent is not None:
+            self.latent.load_state_dict(state_dict["lion"])
         # Child loads replace group dictionaries; reconnect the trainer's view of them.
         self.param_groups = self._groups()
 

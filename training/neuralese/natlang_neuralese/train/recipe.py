@@ -26,7 +26,7 @@ HANDLERS = {
                           'cohort_weights','qualification_cohort','context_weight','feedback_weight',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
-                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
+                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','latent_optimizer','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
                           'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
                           'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',

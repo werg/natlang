@@ -238,10 +238,12 @@ def _normalize_context_valid_strata(strata):
 
 
 def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128,
-                        ffn_chunk_tokens=1024):
+                        ffn_chunk_tokens=1024, bootstrap=False):
+    # The projection-only phase calibrates a different regime (no backbone gradient or optimizer state): its
+    # observed/raw ratio must not scale the backbone phase's forecast (run-v7 predicted 115 GB for a ~50 GB update).
     return (f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:'
             f'passes{int(sequence_passes)}:readout{int(readout_chunk_tokens)}:'
-            f'ffn{int(ffn_chunk_tokens)}')
+            f'ffn{int(ffn_chunk_tokens)}'+(':projection' if bootstrap else ''))
 
 
 def _warmup_readout_calibration_state(state, *, default_ffn_chunk_tokens=1024):
@@ -309,7 +311,7 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
                 candidate_chunk_tokens=ffn_chunk)
             bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
             raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk,ffn_chunk),
+            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk,ffn_chunk,bootstrap),
                               context,target,raw,peak-start)
             seeded+=1
     return seeded
@@ -321,19 +323,20 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
             name.startswith(('heads.feedback.','heads.input_map.','heads.content.proj.'))]
     grad_bytes=sum(param.numel()*param.element_size() for _,param in active)
     active_params={id(param):param for _,param in active}
-    children=(getattr(optimizer,'muon',None),getattr(optimizer,'auxiliary',None)) if hasattr(optimizer,'muon') else (optimizer,)
+    children=((getattr(optimizer,'muon',None),getattr(optimizer,'auxiliary',None),getattr(optimizer,'latent',None))
+              if hasattr(optimizer,'muon') else (optimizer,))
     lazy_state_bytes=0
     for child in children:
         if child is None:continue
-        is_muon=type(child).__name__.lower().startswith('muon')
+        family=type(child).__name__.lower()
         for group in child.param_groups:
             for param in group['params']:
                 if id(param) not in active_params or child.state.get(param):continue
-                # Muon allocates a momentum tensor; AdamW allocates exp_avg and
-                # exp_avg_sq. Use FP32 as a conservative minimum state element
-                # size for low-precision parameters.
-                slots=1 if is_muon else 2
-                lazy_state_bytes += slots*param.numel()*max(4,param.element_size())
+                # LionSR: one BF16 momentum; torch Muon: one momentum like the gradient (parameter dtype); AdamW:
+                # exp_avg and exp_avg_sq, FP32 as a conservative minimum element size.
+                if family.startswith('lion'):lazy_state_bytes += param.numel()*2
+                elif family.startswith('muon'):lazy_state_bytes += param.numel()*param.element_size()
+                else:lazy_state_bytes += 2*param.numel()*max(4,param.element_size())
     return int(grad_bytes+lazy_state_bytes)
 
 
@@ -1254,6 +1257,9 @@ def main(argv=None):
                    help='train the mapped-input consumer on a detached full-depth autoregressive history; '
                         'the gold targets stay fixed')
     p.add_argument('--input-map-kernel',type=int,default=4);p.add_argument('--input-map-rank',type=int,default=64)
+    p.add_argument('--latent-optimizer',choices=['muon','lionsr'],default='muon',
+                   help='lionsr: the latent policy steps backbone weight matrices with LionSR (one BF16 momentum, '
+                        'stochastic rounding, --qat-latent-lr per row ternary scale; Mellum conversion v3)')
     p.add_argument('--qat-latent-lr',type=float,default=0.,
                    help='Maple QAT dense latents get their own AdamW groups at this rate times their matrix ternary scale '
                         '(a code flips after its latent moves ~0.5 of it); 0: Muon at the backbone rate, under which '
@@ -1486,8 +1492,21 @@ def main(argv=None):
             latent_lrs={'backbone.'+n:a.qat_latent_lr*v for n,v in qat_latent_scales(backbone).items()}
             print(json.dumps({'event':'qat_latent_groups','latents':len(latent_lrs),
                               'lr_min':min(latent_lrs.values(),default=None),'lr_max':max(latent_lrs.values(),default=None)}),flush=True)
-        optimizer=PortMuonAdamW([(n,q) for n,q in named if n not in latent_lrs],lr=a.lr,vocab_size=backbone.embedding_weight.shape[0])
-        for child in (optimizer.muon,optimizer.auxiliary):
+        lion=[]
+        if a.latent_optimizer=='lionsr':
+            # The latent policy's memory-lean path (Mellum conversion v3): every backbone weight matrix steps under
+            # LionSR - one BF16 momentum, stochastic-rounding writes (updates below BF16 resolution survive), per-row
+            # step --qat-latent-lr x the row's ternary scale. Norms and heads stay on Muon/AdamW.
+            if a.backbone_training!='latent' or not a.qat_latent_lr:
+                raise ValueError('--latent-optimizer lionsr needs --backbone-training latent and --qat-latent-lr')
+            from ..maple.qat_convert import row_scale
+            lion=[(n,q,a.qat_latent_lr,row_scale(q)) for n,q in named if n.startswith('backbone.') and q.ndim>=2]
+            latent_lrs={n:a.qat_latent_lr for n,*_ in lion}
+            print(json.dumps({'event':'latent_optimizer','optimizer':'lionsr','latents':len(lion),
+                              'elements':sum(q.numel() for _,q,*_ in lion),'lr_row_scale_units':a.qat_latent_lr}),flush=True)
+        optimizer=PortMuonAdamW([(n,q) for n,q in named if n not in latent_lrs],lr=a.lr,
+                                vocab_size=backbone.embedding_weight.shape[0],latent=lion)
+        for child in (optimizer.muon,optimizer.auxiliary):  # LionSR latents keep their own per-latent groups
             if child is None:continue
             original=dict(child.param_groups[0]); buckets={}
             for q in original['params']:buckets.setdefault(a.sketch_lr if any(q is v for n,v in named if n.startswith('heads.')) else a.lr,[]).append(q)
@@ -1495,7 +1514,7 @@ def main(argv=None):
             for rate,qs in rest:child.add_param_group({**original,'params':qs,'lr':rate})
         optimizer.param_groups=optimizer._groups()
         for n,q in named:
-            if n in latent_lrs:
+            if n in latent_lrs and not lion:
                 optimizer.add_param_group({'params':[q],'lr':latent_lrs[n],'weight_decay':0.,'qat_latent_lr':latent_lrs[n]})
                 optimizer.schema[-1]['name']=n
     else:
@@ -2475,7 +2494,7 @@ def main(argv=None):
                     readout_chunk_tokens=chunk,channel_consistency=a.ar_feedback_fixup)
                 candidate_raw=candidate_geometry+update_floor
                 candidate_kind=_warmup_memory_kind(len(batch),passes,chunk,
-                                                   default_ffn_chunk_tokens)
+                                                   default_ffn_chunk_tokens,bootstrap)
                 native_prediction=memory_estimator.predict(
                     candidate_kind,prefix+target-1,target,candidate_raw)
                 calibration_count=len(memory_estimator.calibration(
@@ -2497,7 +2516,7 @@ def main(argv=None):
                         candidate_chunk_tokens=ffn_chunk)
                     geometry=candidate_geometry+ffn_delta
                     raw=geometry+update_floor
-                    kind=_warmup_memory_kind(len(batch),passes,chunk,ffn_chunk)
+                    kind=_warmup_memory_kind(len(batch),passes,chunk,ffn_chunk,bootstrap)
                     native=memory_estimator.predict(kind,prefix+target-1,target,raw)
                     observations=len(memory_estimator.calibration(kind,prefix+target-1,target))
                     if ffn_chunk==default_ffn_chunk_tokens:
@@ -2539,14 +2558,14 @@ def main(argv=None):
             predictor_raw=raw_geometry+update_floor
             saved_activation_geometry=raw_geometry
             predictor_geometry=raw_geometry
-            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens)
+            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap)
             predicted=memory_estimator.predict(kind,prefix+target-1,target,predictor_raw)
         # The successful-update calibration measures the complete incremental
         # peak, including gradient buffers and lazy optimizer slots. Seed the
         # same floor once in the uncalibrated geometry; do not add it again to
         # the calibrated observation.
         context=prefix+target-1
-        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens)
+        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens,bootstrap)
         if a.device.startswith('cuda'):
             plan=plan_saved_activation_offload(predicted,effective_free,int(total),
                 saved_activation_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
@@ -2571,6 +2590,12 @@ def main(argv=None):
                 'headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
                 'context_tokens':context,'target_tokens':target,'batch':len(batch),
                 'sequence_passes':passes}
+            if not plan.predicted_fit and memory_start+predicted>int(total)*(1-TEXT_WARMUP_MEMORY_HEADROOM):
+                # More than the whole device could ever hold: waiting for memory to free up cannot help.
+                raise MemoryError('warm-up update cannot fit this device at all: '
+                    f'{memory_start} B allocated + {predicted} B predicted increment > {int(total)} B total less the '
+                    f'{TEXT_WARMUP_MEMORY_HEADROOM:.0%} reserve; reduce the optimizer/gradient footprint (the latent '
+                    'policy\'s LionSR, --latent-optimizer lionsr), the batch or the context')
             if not plan.predicted_fit:
                 raise RuntimeError('warm-up memory preflight refused before forward: '
                     f'predicted update increment {predicted} B, usable free '
@@ -2598,7 +2623,8 @@ def main(argv=None):
                 'channel_consistency':a.ar_feedback_fixup,
                 'ffn_chunk_tokens':ffn_chunk_tokens,
                 'context_tokens':context,'target_tokens':target,
-                'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
+                'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes,
+                'bootstrap':bool(bootstrap)}
 
     def finish_committed_update(prepared,memory_plan,passes,controls):
         """Persist one already-committed optimizer update; return a stop reason."""
@@ -2620,7 +2646,7 @@ def main(argv=None):
                 # target quantity. An offloaded peak is censored telemetry.
                 memory_estimator.observe(_warmup_memory_kind(
                     a.batch,memory_passes,int(memory_plan['readout_chunk_tokens']),
-                    int(memory_plan['ffn_chunk_tokens'])),
+                    int(memory_plan['ffn_chunk_tokens']),memory_plan.get('bootstrap',False)),
                     memory_plan['context_tokens'],memory_plan['target_tokens'],
                     memory_plan['predictor_raw_bytes'],actual_increment)
             memory_record={'start_allocated_bytes':prepared['memory_start'],

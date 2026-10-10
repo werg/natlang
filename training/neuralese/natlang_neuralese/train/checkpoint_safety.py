@@ -142,6 +142,8 @@ def _state_tensor_bytes(value):
 def _optimizer_family(optimizer):
     import torch
 
+    if type(optimizer).__name__ == 'LionSR':
+        return 'lion'
     muon_type = getattr(torch.optim, 'Muon', None)
     if (muon_type is not None and isinstance(optimizer, muon_type)) or type(optimizer).__name__ == 'Muon':
         return 'muon'
@@ -153,7 +155,8 @@ def _optimizer_family(optimizer):
 
 def optimizer_state_size_upper_bound(optimizer, lazy=True):
     """Exact initialized slots plus (``lazy``) layout-specific lazy state for warm-up optimizers."""
-    children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None))
+    children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None),
+                 getattr(optimizer, 'latent', None))
                 if hasattr(optimizer, 'muon') else (optimizer,))
     seen = set()
     total = 0
@@ -170,7 +173,10 @@ def optimizer_state_size_upper_bound(optimizer, lazy=True):
                 total += _state_tensor_bytes(state)
                 if not lazy:
                     continue
-                if family == 'muon':
+                if family == 'lion':
+                    if 'momentum' not in state:
+                        total += parameter.numel() * 2  # one BF16 momentum
+                elif family == 'muon':
                     if 'momentum_buffer' not in state:
                         total += parameter.numel() * parameter.element_size()
                 else:

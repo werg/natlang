@@ -217,3 +217,15 @@ on-device fingerprint (shared code). v8 also halves the held sample (8 documents
 each), evaluates the precision gate columns on the first 8 held documents; ar_control_steps (not a recipe parameter) stays 256, it cost nothing measurable. Projection
 phase 0.5 s/step; the backbone phase is to be measured; re-size from the trainers' logged eval_share.
 
+## raw-recurrence-mellum-v9 (2026-10-10): LionSR for the latent policy's text stages
+
+run-v7 (mellum-v8) stalled at its first backbone update (step 2561): the preflight forecast a 115 GB increment
+(gradients 23 GB + an FP32-assumed Muon momentum 46 GB, scaled by the projection phase's calibration ratio) against
+34 GB usable. Two fixes in shared code (text_warmup): the memory forecast's calibration is per phase (projection vs
+backbone) and the optimizer floor uses each optimizer's real state layout; a forecast above the whole device fails fast
+(MemoryError) instead of waiting. mellum-v9 steps the backbone weight matrices with LionSR as conversion v3 did
+(train/optim.py; PortMuonAdamW latent partition): one BF16 momentum and stochastic-rounding writes, so updates below
+BF16 resolution are not lost; lr 3e-4 per row ternary scale (v3). Expected increment ~ gradients 23 GB + momentum 23 GB +
+activations, peak ~73 GB. Updates still happen after the full backward (step-in-backward, which would also drop the
+gradient buffer, needs one backward per update; the warm-up runs one per pass, precision and preserve stream).
+
