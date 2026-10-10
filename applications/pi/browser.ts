@@ -15,17 +15,18 @@
  */
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { NatlangRuntime, Folder, openBrowserNeuraleseStore, openOpfsSqlite, opfsSqliteAvailable, type NeuraleseStore,
-  type OpfsStorage } from '@natlang/browser';
+  type OpfsStorage, type PluggableSetting } from '@natlang/browser';
 import { Harness } from './vendor/durable/src/harness/harness.ts';
 import type { Storage } from './vendor/durable/src/types.ts';
 import { MemoryStorage } from './vendor/durable/src/storage/memory.ts';
-import { openPi, runPiTask, type Implementations, type RunResult } from './index.ts';
+import { openPi, runPiTask, openDrafts, type Drafts, type Implementations, type RunResult } from './index.ts';
 import { agentModels, type AgentModels, type AgentTransport } from './host/agent-models.ts';
 import { declareReader, type AgentReader } from './host/natlang-provider.ts';
 import { FolderExecutionEnv, WORKSPACE } from './host/folder-env.ts';
 import { openWasmSqliteStorage, type WasmSqliteDb } from './host/sqlite-wasm.ts';
 import { codingRegistry, ExecutionEnvs } from './extensions/index.ts';
-import { companion, CompanionDoc } from './extensions/companion/index.ts';
+import { companion, CompanionDoc, type SpeculationEvent } from './extensions/companion/index.ts';
+import { companionDraftHelper } from './extensions/companion/draft.ts';
 
 // The parts, for pages that compose their own harness (pi-durable's Harness and MemoryStorage, as the tests do).
 export { Folder, FolderExecutionEnv, WORKSPACE, openWasmSqliteStorage, agentModels, codingRegistry, ExecutionEnvs, runPiTask, Harness,
@@ -69,8 +70,12 @@ export type BrowserPiOptions = {
   blocks?: NeuraleseStore | OpfsStorage;
   /** Network access for the agent's shell commands (default off). */
   network?: boolean;
-  /** Run the companion beside the agent (COMPANION.md). */
-  companion?: boolean;
+  /**
+   * Run the companion beside the agent (COMPANION.md), with its pluggable policies (each crisp, nl or shadow; default
+   * crisp): `shaping` of long tool outputs, `hints` read from the agent's live stream, `offers` beside the user's draft.
+   */
+  companion?: boolean | { shaping?: PluggableSetting; hints?: PluggableSetting; offers?: PluggableSetting;
+    onSpeculation?(event: SpeculationEvent): void };
   /** Pluggable hot paths: `crisp` (the default), `nl` or `shadow` per point. */
   implementations?: Partial<Implementations>;
   /** pi's package directory, as the prompt's docs section names it (default /pi). */
@@ -87,6 +92,11 @@ export type BrowserPi = {
   envs: ExecutionEnvs<FolderExecutionEnv>;
   /** The executor, with the block archive when the agent reads Neuralese. */
   natlang: NatlangRuntime;
+  /**
+   * The user's drafts (plans/STREAMING.md §3): the page sends edit deltas while the user types (`drafts.edit`), shows
+   * `drafts.read`'s offers beside the draft, and `drafts.send` submits it. With the companion, it offers help.
+   */
+  drafts: Drafts;
   /** Run one task to its answer. */
   run(task: string, signal?: AbortSignal): Promise<RunResult>;
   close(): Promise<void>;
@@ -139,12 +149,17 @@ export async function openBrowserPi(options: BrowserPiOptions): Promise<BrowserP
   const envs = new ExecutionEnvs(cwd, dir => new FolderExecutionEnv({ folder: options.folder, cwd: dir, network: options.network ?? false }));
   const registry = codingRegistry(natlang, { prompt: { cwd, packageDir: options.packageDir ?? '/pi' } });
   let opened: Harness | undefined;
-  if (options.companion) registry.install(companion(natlang, { harness: () => opened!, onReport: options.onReport }));
+  const companionOptions = options.companion === true ? {} : options.companion || undefined;
+  if (companionOptions) registry.install(companion(natlang, { harness: () => opened!, onReport: options.onReport,
+    shaping: companionOptions.shaping, hints: companionOptions.hints,
+    ...(companionOptions.onSpeculation ? { onSpeculation: companionOptions.onSpeculation } : {}) }));
   const harness = await openPi({ storage, natlang, models: models.models, registry, env: envs.env,
     ...(options.implementations ? { implementations: options.implementations } : {}),
     ...(options.onReport ? { onReport: options.onReport } : {}), ...(options.onPhase ? { onPhase: options.onPhase } : {}) }, context);
   opened = harness;
-  return { harness, session: kind, envs, natlang,
+  const drafts = openDrafts(harness, { env: envs.env, ...(options.onReport ? { onReport: options.onReport } : {}),
+    helpers: companionOptions ? [companionDraftHelper(natlang, { offers: companionOptions.offers })] : [] });
+  return { harness, session: kind, envs, natlang, drafts,
     run: (task, signal) => runPiTask(harness, { model: models.ref, thinkingLevel: options.thinking ?? 'off', cwd }, task, context, signal),
-    async close() { await harness.close(context); await envs.cleanup(context); } };
+    async close() { drafts.close(); await harness.close(context); await envs.cleanup(context); } };
 }

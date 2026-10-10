@@ -95,3 +95,6 @@ export async function runPiTask(harness: Harness, agent: RunAgent, task: string,
 
 export type { Extension, Harness, Implementations };
 export { substituteTasks };
+// The user's draft as a stream (plans/STREAMING.md §3): the harness UI's edit deltas, helpers' offers, send.
+export { openDrafts, applyDraftDeltas, DraftDoc, DraftOffers, type DraftDelta, type DraftHelper, type DraftInput, type Drafts,
+  type DraftsOptions, type DraftState, type ShownOffer } from './host/drafts.ts';
