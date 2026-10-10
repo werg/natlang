@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v21-filtered-v4-launch-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v21-v4-runtimev15-v1",
+  "files": [
+    {
+      "path": "quality-hold-exclusion-check.json",
+      "bytes": 8746,
+      "sha256": "108683dd25ace2cb74369e0cf3ea2cff1e02de5736f39b1f1c9cf024d195db42"
+    },
+    {
+      "path": "reviewed-plan-v1.json",
+      "bytes": 7879,
+      "sha256": "1576ee24878f49cc764af830fe0803496b6a28a6c0e26e3f81671a617643077d"
+    },
+    {
+      "path": "reviewed-plan-v2-root-approved.json",
+      "bytes": 7755,
+      "sha256": "d1704ead4ffc2feec0724de46b2bf3b0d01400f7e1fcc09405d55f6f816b9e68"
+    },
+    {
+      "path": "root-generation-source-review-v1.json",
+      "bytes": 2650,
+      "sha256": "6233deee03ff03edc0495f59ceaf992a9dda0da7c9da7850e84583447eee860b"
+    },
+    {
+      "path": "worker-01/queue.jsonl",
+      "bytes": 934,
+      "sha256": "008042b0d3c44838a2040506e6ff6d8761c7edebe6bf6509f8f2d48c299f8941",
+      "lines": 1
+    },
+    {
+      "path": "worker-02/queue.jsonl",
+      "bytes": 934,
+      "sha256": "cc37c010ecc773f8d4891e4b1cc7367c09abfa44def27f60b0bf02026c06591b",
+      "lines": 1
+    },
+    {
+      "path": "worker-03/queue.jsonl",
+      "bytes": 934,
+      "sha256": "b47618bd1fb4411881946a4afdb9c851cfd153ee0be9050a27874072d945b9df",
+      "lines": 1
+    },
+    {
+      "path": "worker-04/queue.jsonl",
+      "bytes": 934,
+      "sha256": "c4721886a371ca8d3c256a04deaca6358bb5dfd33383867b58802009e020a7d1",
+      "lines": 1
+    },
+    {
+      "path": "worker-05/queue.jsonl",
+      "bytes": 934,
+      "sha256": "af19107ca0df4050b8e8f0408f3e3e2497fa9913e0611183c47290615b48aa6f",
+      "lines": 1
+    }
+  ],
+  "bytes": 31700
+}

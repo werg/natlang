@@ -27173,6 +27173,68 @@
         "launch-receipt-v1.json",
         "frozen-adapter-v1/**/*"
       ]
+    },
+    {
+      "id": "luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
+      "split": "inherited-train-diagnostic-evidence",
+      "source_class": "training-alignment-diagnostic",
+      "training_admission": false,
+      "admission": "held-diagnostic-with-correction",
+      "notes": "Read-only V5/V6 alignment diagnosis. correction.json supersedes the original diagnostic target-drift interpretation without altering the historical diagnostic. Model weights were not loaded; no code/jobs/tests changed; no training examples or admission."
+    },
+    {
+      "id": "free-provider-luna-v21-filtered-v4-launch-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-pubmedqa-full-abstract-v21-v4-runtimev15-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "reviewed-plan-v2-root-approved.json",
+        "root-generation-source-review-v1.json",
+        "quality-hold-exclusion-check.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Five Luna workers, five filtered full-abstract programs and37 retained source items. All seven canonical holds excluded. Source/reference proof and approved plan pinned; active outputs excluded. Generation approval does not grant training admission."
+    },
+    {
+      "id": "free-provider-google-v21-filtered-v4-closure-packet-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-static-filtered-v4-v1/source-closure-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Changed batch composition requires full-S1 closure.37 retained train source decisions, five programs; root/source/quality and semantic source projection pins. Held until explicit quality and split decisions."
+    },
+    {
+      "id": "free-provider-luna-v58-closed-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v58-choice-folder-final-v2",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "All53 outputs closed;33 accepted exact-map/files,20 rejected.30/394 source decisions differ. Scope failures under investigation. Input records match pinned source; nested request wire visibility not established. No admission."
     }
   ],
   "coverage_backlog": [

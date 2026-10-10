@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-alignment-v6-diagnostic-correction-held-20261010-v1",
+  "files": [
+    {
+      "path": "diagnostic.json",
+      "bytes": 32576,
+      "sha256": "bb835602ff9ecd0054b06ff1c90da5a41f8a9afe5876f1f0b94abec7cedb22f8"
+    },
+    {
+      "path": "diagnostic.md",
+      "bytes": 2024,
+      "sha256": "a49cb62af837b7f7597af9d0abd7314859542f701dc0397ae3881105c651eb69"
+    },
+    {
+      "path": "correction.json",
+      "bytes": 3622,
+      "sha256": "15b23e5afdee1583dfdaf0a1b1edcc9a5b2ea00f4bcd40bce25a5e9f8cb0afbd"
+    },
+    {
+      "path": "correction.md",
+      "bytes": 1063,
+      "sha256": "86e769116fcea7f4358b6ba6d3e3abe73591f3ff1583fedac1aabae00da1513c"
+    }
+  ],
+  "bytes": 39285
+}
