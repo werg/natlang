@@ -24497,6 +24497,25 @@
       "training_admission": false,
       "admission": "held-source-split-semantic-review-required",
       "notes": "Fourdisjointworkers19V10folderprograms133items inheritedtrain actualreferenceaccepted. FrozenV12activeoutputs/logs/journalsexcluded."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v12-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v12",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-generation-reviewed-inputs",
+      "training_admission": false,
+      "admission": "generation-input-only-no-training-admission",
+      "notes": "512freshtrain exactoriginaldecision-v1rows, IDsANDgroupsdisjointallpriorproviderinputs includingV11; fivefamilies roundrobin2..8options state<=1000JSONchars. Sharedquotaownerwait4requests2/group7secstartpacing no paidfallback. Activeoutputs excluded."
     }
   ],
   "coverage_backlog": [
