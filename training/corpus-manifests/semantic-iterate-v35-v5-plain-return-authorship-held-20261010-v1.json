@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-v5-plain-return-authorship-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1/held-analysis",
+  "files": [
+    {
+      "path": "direct-plain-return-producer-audit-v1.json",
+      "bytes": 19041,
+      "sha256": "fb8b1519537d787022a158ea55c8ac314bc285454162d2cc2793594a9a5cbb7d"
+    }
+  ],
+  "bytes": 19041
+}

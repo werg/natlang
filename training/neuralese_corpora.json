@@ -27496,6 +27496,22 @@
       "training_admission": false,
       "admission": "held-pending-full-s1-source-trace-review",
       "notes": "Original32-case source with explicit train/test partitions plus exact16-train selected subset, actual results and485 native turns. Harness4 closure16/16 green; full-S1 delegatedDGX.31 pinned artifacts184MB include missing-S1-sketches receipt; do not substitute rebuilt index. Four original train families, no independent-world credit. Source/trace approval and soft-state proof remain pending."
+    },
+    {
+      "id": "semantic-iterate-v35-v5-plain-return-authorship-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-source-closure-packet-v1/held-analysis",
+      "include": [
+        "direct-plain-return-producer-audit-v1.json"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "held-native-conversion-proposal",
+      "training_admission": false,
+      "admission": "held-pending-source-trace-review-and-authored-output-proof",
+      "notes": "Separate addition after source closure packet sealed; does not change original packet manifest. Ten of96 graph writes across eight actual results have exact plain return_result body at same invocation, typed graph readers.76 equal-text returns from different invocations explicitly nonqualifying. Proposed native authored output proof, not computed host result or admission."
     }
   ],
   "coverage_backlog": [
