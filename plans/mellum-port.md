@@ -328,3 +328,110 @@ size; keep 512 only if the extra held positions are wanted, declared as such. He
 match (full depth). Relaunch the lineage from token_identity with v6 (the heads/init-gate receipts are reusable if the
 heads' cutoff is not baked in; otherwise rebuild them). No threshold change: a shallow-cutoff projection is a separate,
 optional efficiency variant (sketch/MTP initializer), gated on its own and not part of the foundation.
+
+## 2026-10-10 — Warm-up step profile (core_text_warmup backbone phase, run-v9)
+
+Question: where does a whole_transformer_adaptation update of `runs/mellum-foundation-qat-20261010/run-v9`
+(raw-recurrence-mellum-v10, text_warmup.py, LionSR in backward) spend its time, and why does the ledger see ~40 GB
+more than CUDA-allocated memory. Sources: `core_text_warmup/train.jsonl` (steps 2561–2606), py-spy (150 s,
+3,660 samples) of the live trainer, `/proc` and cgroup memory of the container, and two ledgered one-layer probes
+(`training/neuralese/scripts/bench_mellum_qat_layer.py`, `bench_mellum_qat_kernels.py`; synthetic Mellum expert
+shapes, ≤ 12 GB). The probes shared the GPU with the live job (~2.3× slower than alone); ratios are reliable.
+
+### Step time
+
+The 42.9 s of step 2561 is not typical. It was the first backbone update (one-time `torch.compile` of
+`_fused_lion_rows` per latent shape). Over the next 45 updates, time depends on the sampled precision point:
+
+| point | updates | mean | median | range |
+|---|---|---|---|---|
+| q4 (mix ≈ 0.47) | 14 | 34.1 s | 33.4 s | 28–52 s |
+| bf16 | 31 | 9.7 s | 8.8 s | 5–15 s |
+| all | 45 | 17.3 s | | |
+
+At the current mix, the ~1,535 remaining warm-up updates take about 7.4 h, not 18 h. The step gets slower later in
+the stage: ternary-experts (weight 1.0) starts at curriculum progress 0.3 (step ~3,510), and sequence passes ramp
+from 1 to 3.
+
+**Cause: eager fake-quant of the experts, recomputed at every forward.** `DenseExperts._value` →
+`precision_value` → `q4_0` + `_PrecisionRamp` runs eagerly in FP32 over all 64 experts of a layer
+(396 M elements). It makes about 15 full-size FP32 passes over memory, uses 3.9 GB of temporaries, and takes
+452 ms per layer in the probe. A bf16 copy of the same weights takes 21 ms. `shared_parametrized_weights` caches
+only the parametrized attention weights. The experts (`precision_group`) are re-quantized at each of the 4
+forwards of a q4 update: main stream, its checkpoint recompute, preserve stream, and its recompute. The q4−bf16
+gap is 24.4 s = 4 passes × 28 layers × ~0.22 s. That is ~72% of a q4 update and ~45% of the mean update. With
+3 sequence passes it becomes 8 passes, ~48 s per quantized update. py-spy agrees: 58% of samples wait at
+`maple/model.py:441` (`bincount(...).tolist()`, the first host sync after the queued quantization kernels). GPU
+utilisation is 96%: the update is GPU-bound and memory-bandwidth-bound, not host-bound.
+
+**bf16 update (~9.7 s)**, from probe ratios scaled to the live run:
+- per-expert MoE loop forward + recompute + backward (main ~1k tokens, preserve ~3k tokens): ~5 s;
+- FP64 gradient norm in the LionSR hook (`vector_norm(dtype=float64)`; FP64 is slow on GB10): ~1.2 s;
+- LionSR step: ~1 s;
+- attention, readout/KL chunks, Python and the rest: ~2.5 s.
+
+Not significant now:
+- eval: ~52 s per 256 updates, < 1% in this phase (the logged 14% share comes from the fast projection phase);
+- host data/tokenisation: < 1% of samples;
+- unified-memory paging: no swapping of trainer pages, offload 0 bytes.
+
+### Memory
+
+| | GB |
+|---|---|
+| CUDA allocated at update start | 48.9 (BF16 weights ~24.3; LionSR BF16 momentum ~23.4; heads + Muon/AdamW ~1.2) |
+| CUDA peak allocated / reserved | 55.5 / 57.2 (+6.6 GB per update; ~3.9 GB of it is the eager fake-quant temporaries of one layer) |
+| nvidia-smi (what the ledger counts for CUDA) | 55.8 ≈ reserved + context; reserved − allocated ≈ 7.8 GB at update start (cached blocks, expandable segments) |
+| container host anon (cgroup) | 28.7; trainer RSS 27.8 |
+| of which `LazyFree` | **22.6**: host memory freed by torch's CPU allocator (mimalloc in `libc10.so`, `[anon:mimalloc]` arenas) with `MADV_FREE`; still counted as RSS until the kernel reclaims it |
+| live host anon | ~4.6 (Private_Dirty): records, Python, CUDA/driver, inductor |
+| teacher top-64 shards | file-backed mmap (not anon) |
+
+The ~40 GB gap is: ~8 GB of caching-allocator reserve, ~22.6 GB of lazily freed host pages, ~4.6 GB of live host
+memory, and transient host spikes. The likely sources of the freed pages: host staging of tensors at load
+(`safe_open(device="cpu")` / `torch.load` before `.to(cuda)`) and the checkpoint writers' host copies. VmHWM is
+50.8 GB. The 20 forked inductor compile workers at the first backbone update (Lion kernels) add a short spike.
+These pages are reclaimable, but the ledger counts them. On GB10 a CUDA allocation may also fail before the kernel
+reclaims them, as with page cache.
+
+### Ranked speedups (estimates for the live mix: mean 17.3 s/update)
+
+1. **Fused fake-quant** (restart). Compute `w + mix·(Q(w) − w)` in one kernel, bf16 in and bf16 out: `torch.compile`
+   of `q4_0` + ramp, or a hand-written Triton kernel. The probe shows 452 → 21 ms per layer, at the bandwidth floor.
+   The compiled kernel matched eager bit-exactly on a 0.4 G-element layer only with
+   `torch._inductor.config.emulate_precision_casts = True`; the default differs on 1.4e-4 of elements, by one
+   int4 step (FMA contraction). Keep the eager rule as the exact verifier and add an equivalence test over every
+   expert/attention tensor of the real checkpoint. Ternary is the same story: 419 → 23 ms, but compiled differs
+   on 58% of elements (row-mean/alpha reduction order flips the BF16 row scale). Compute the row reductions with
+   the eager kernels and fuse only the elementwise part, or make one shared rule for training and export.
+   Gain: about −24 s per q4 update; mean 17.3 → ~9.6 s (−45%); remaining stage 7.4 h → ~4.1 h. The gain is larger
+   later (ternary-experts, 3 passes). It also removes ~3.9 GB of peak temporaries.
+2. **Grouped-GEMM MoE for trainable dense experts** (restart). Replace the 64-way Python loop + `unbind` with
+   `torch._grouped_mm` over expert-sorted tokens. Extend `maple/fused_moe.py`, which today serves only frozen
+   ternary experts, so the MoE keeps one implementation. The probe shows 222 → 81 ms per layer forward+backward at
+   3k tokens (2.75×). It also removes the per-layer `bincount().tolist()` host sync. Gain: ~−3 s per update (all
+   points). Needs a BF16 equivalence test against the loop (rounding-level differences).
+3. **FP32 gradient norm in the LionSR hook** (`train/optim.py:211`): `vector_norm(dtype=float32)` per tensor,
+   accumulated in FP64. The probe shows 47 → 5 ms on one expert tensor (9×). Gain: ~−1 s per update. A trivial
+   change.
+4. **Main stream without per-layer checkpointing** (restart). Keep checkpointing for the 4k-token preserve stream.
+   After (1), the main stream's recompute is compute only. Gain ~−0.5 s; cost ~+4.5 GB (28 × ~0.16 GB per 1k
+   tokens).
+5. **LionSR kernel**: 38 ms per layer against a ~16 ms bandwidth floor. Gain ≤ 0.5 s. Low priority.
+6. **Not recommended**: caching all 28 layers' quantized experts for the whole update. It would save the 3 repeat
+   quantizations but costs ~22 GB, and after (1) the gain is < 1 s.
+
+Combined (1)–(3): ~17.3 → ~5.5–6.5 s per mean update (~3×). The remaining stage then takes ~2.5 h at the current
+mix, against ~7.4 h now and more than 12 h once ternary and 3 passes arrive.
+
+**Memory actions** (no speed effect):
+- (a) The ledger can subtract `LazyFree` (from the container processes' `smaps_rollup`) as it subtracts page
+  cache. This needs no restart and frees ~22 GB of admission headroom.
+- (b) At the next restart, test `MIMALLOC_PURGE_DECOMMITS=1` (purge with `MADV_DONTNEED` instead of `MADV_FREE`).
+  Alternatively, load latents straight to the device (`safe_open(..., device="cuda")`) so the host copies are
+  never made.
+- (c) The 100 GB claim can come down to ~70 GB once (a) or (b) holds.
+
+Every code change, (3) included, touches the code the trainer imported at start (the `run-v9/runtime` snapshot), so
+it takes effect only at the next resume from checkpoint. The ledger change (a) is the only one that needs no restart. Per "newest code always",
+restart at the next checkpoint after (1) lands with its exactness test.
