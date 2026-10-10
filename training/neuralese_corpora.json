@@ -22778,6 +22778,38 @@
         "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
       ],
       "notes": "8805documents6227train2578held; zero1835groupcross-cohort splitconflicts. Nativequalificationstratum unchanged/harnessnotqualification. Nativeparent S1duplicateclosure not independently certified; correctedharness followsS1repo placement."
+    },
+    {
+      "id": "free-provider-google-v4-mass-repair-v7-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v4-mass-repair-v7",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-typed-decision-generation-closed-held",
+      "training_admission": false,
+      "admission": "held-semantic-quality-and-explicit-root-review-required",
+      "notes": "178sameIDrepairfinals/204attempts;88typedvalid40goldargmax43wrong5tie;90invalid89mass1JSON. 9.53attemptrecords/min8.32finalrows/min; noautomaticsemanticadmission."
+    },
+    {
+      "id": "free-provider-google-v7-mass-repair-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-v7-mass-repair",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-typed-decision-quality-review",
+      "training_admission": false,
+      "admission": "held-semantic-quality-and-explicit-root-review-required",
+      "notes": "ImmutableV4/V7pins andperfamilymodelquality review. Proposedsinglechoiceboundedconfidence formatfuturecontrolledvariant only; nooldrownormalization/admission."
     }
   ],
   "coverage_backlog": [

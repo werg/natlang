@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v7-mass-repair-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v23-gemini-v7-mass-repair",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 6618,
+      "sha256": "c5f88b54232223d010356abe2441aab2916756483cbe4c38982314dd76b080a7"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2748,
+      "sha256": "e855829d7282935fb6305ae2b8a7a9d0b9369a2f7933f19914f96abde6f5634f"
+    }
+  ],
+  "bytes": 9366
+}
