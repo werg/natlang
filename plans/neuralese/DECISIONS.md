@@ -1321,3 +1321,11 @@ of text windows mixed into the native text, whole-trajectory supervision (contex
 mechanical feedback 0.25), and the recurrence stage with `--view written --distill` after each student's runtime
 qualification and the view gate. Admission takes effect when the trainer supports per-cohort document sampling,
 per-role loss weights and the recurrence options; that trainer work is part of this decision.
+
+### 2026-10-10 — history reasoning follows each backbone's post-training
+
+Owner decision. Target-turn reasoning is trained for both students. Reasoning of earlier assistant turns follows each
+backbone's chat template as post-trained: LFM2.5 keeps only the last assistant turn's reasoning (template default),
+Mellum keeps every turn's. This is a declared backbone-inherent difference, applied identically in rendering and
+serving. Known cost for LFM: at each agent step the prompt diverges at the previous assistant turn, so the prefix cache
+is recomputed from there.
