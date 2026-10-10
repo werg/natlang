@@ -51,8 +51,17 @@ HANDLERS = {
                                                'member_mask_system', 'member_full_weight',
                                                'view', 'view_window', 'context_weight', 'feedback_weight',
                                                'context_coverage', 'cohort_weights', 'qualification_cohort',
+                                               'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
                                                'optimizer_state', 'optimizer_added'},
                                 'result': 'checkpoint.pt'},
+    # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
+    # the view stage it requires (that stage's recurrence checkpoint).
+    'view_operator_gate': {'module': 'natlang_neuralese.eval.view_gate', 'required_inputs': {'records'},
+                           'optional_inputs': {'pieces', 'harness_records', 'harness_pieces'},
+                           'parameters': {'split', 'per_artifact', 'harness_limit', 'seed', 'view_window',
+                                          'min_reconstruction_recovery', 'min_qa_recovery', 'min_shuffle_margin',
+                                          'min_purpose_margin', 'max_next_action_delta'},
+                           'result': 'view-gate.json'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
     'verified_heads_handoff': {'module':'natlang_neuralese.train.verified_heads_handoff',
@@ -102,6 +111,11 @@ def validate_recurrence_parameters(parameters):
         raise ValueError('context_coverage must be last-reply or records')
     if 'cohort_weights' in parameters:
         validate_cohort_weights(parameters['cohort_weights'])
+    for name in ('stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector'):
+        if name in parameters and (not _finite_number(parameters[name]) or parameters[name] < 0):
+            raise ValueError(name + ' must be finite and nonnegative')
+    if parameters.get('purpose_contrast') and parameters.get('view') != 'written':
+        raise ValueError('purpose_contrast requires view written')
     if 'qualification_cohort' in parameters:
         cohort = parameters['qualification_cohort']
         if not isinstance(cohort, str) or not cohort:
@@ -220,7 +234,7 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     for role in ('records', 'pieces', 'text_data', 'continue_from', 'student_checkpoint', 'warmup_checkpoint',
-                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report'):
+                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
     return args
@@ -291,8 +305,9 @@ def resolve_recipe_data(path, _chain=()):
 
     ``extends`` names a recipe id; the parent is the sibling file in the same directory whose ``id`` equals it.
     ``overrides`` is an object. Its ``stages`` member maps stage ids to objects deep-merged into the parent's stage of
-    that id (``{"$delete": true}`` drops the stage; an unknown id is an error); every other member deep-merges into the
-    top level. The child's own ``id`` and ``description`` always win. Resolution happens before validation, so the
+    that id (``{"$delete": true}`` drops the stage; an unknown id is an error); ``stages_added`` lists new stages, each
+    ``{"after": stage id, "stage": {...}}`` inserted after that stage; every other member deep-merges into the top
+    level. The child's own ``id`` and ``description`` always win. Resolution happens before validation, so the
     handler parameter whitelist applies to the merged result.
     """
     path = Path(path).resolve()
@@ -321,7 +336,7 @@ def resolve_recipe_data(path, _chain=()):
     parent = resolve_recipe_data(candidates[0], chain)
     if parent.get('schema') != recipe.get('schema') or not isinstance(parent.get('stages'), list):
         raise ValueError('recipe and parent must share a multi-stage schema')
-    top = {key: value for key, value in overrides.items() if key != 'stages'}
+    top = {key: value for key, value in overrides.items() if key not in ('stages', 'stages_added')}
     for forbidden in ('id', 'schema', 'extends', 'overrides'):
         if forbidden in top:
             raise ValueError('overrides may not set ' + forbidden)
@@ -342,6 +357,20 @@ def resolve_recipe_data(path, _chain=()):
         if change is not None and 'id' in change:
             raise ValueError('stage overrides may not change a stage id')
         stages.append(deep_merge(stage, change) if change is not None else stage)
+    # ``stages_added``: new stages, each inserted after the named stage (an addition, never a change of the parent's).
+    added = overrides.get('stages_added', [])
+    if not isinstance(added, list):
+        raise ValueError('overrides.stages_added must be a list of {"after", "stage"} objects')
+    for entry in added:
+        if (not isinstance(entry, dict) or set(entry) != {'after', 'stage'} or not isinstance(entry['stage'], dict)
+                or not isinstance(entry['stage'].get('id'), str)):
+            raise ValueError('each added stage is {"after": stage id, "stage": object with an id}')
+        ids = [stage['id'] for stage in stages]
+        if entry['stage']['id'] in ids or entry['stage']['id'] in stage_overrides:
+            raise ValueError('added stage id already exists: ' + entry['stage']['id'])
+        if entry['after'] not in ids:
+            raise ValueError('added stage follows an unknown stage: ' + str(entry['after']))
+        stages.insert(ids.index(entry['after']) + 1, json.loads(json.dumps(entry['stage'])))
     resolved['stages'] = stages
     resolved['id'] = recipe['id']
     if 'description' in recipe:
@@ -449,6 +478,9 @@ def load_recipe(path):
             if 'heads' not in stage.get('inputs', {}) and not any(
                     s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
                 raise ValueError('recurrence requires a core warm-up predecessor or exact stage heads binding')
+        if kind == 'view_operator_gate' and not any(
+                s['id'] in required and s['kind'] == 'raw_recurrence_training' for s in recipe['stages']):
+            raise ValueError('the view operator gate requires the view stage (a raw_recurrence_training stage) it measures')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -532,6 +564,9 @@ def require_gate(report, kind):
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
+    elif kind == 'view_operator_gate':
+        if report.get('view_gate_passed') is not True:
+            raise ValueError('view operator gate failed')
     else:
         raise ValueError('no gate adapter for stage')
 
@@ -896,6 +931,11 @@ def main(argv=None):
                 if sha(report['artifact']) != report['artifact_sha256']:
                     raise ValueError('qualified artifact changed')
             else:
+                if stage.get('admitted') is False:
+                    # A declared stage whose data or method is held (e.g. the view operator stage pending licence
+                    # review): it never runs until its declaration admits it; run earlier stages with --until.
+                    raise ValueError('stage is declared but not admitted: ' + stage['id'] +
+                                     (' (' + stage['admission'] + ')' if isinstance(stage.get('admission'), str) else ''))
                 for dependency in stage['requires']:
                     predecessor = next(report for report in reports if report['id'] == dependency)
                     require_gate(predecessor['gate'], predecessor['kind'])
@@ -930,6 +970,10 @@ def main(argv=None):
                     command += ['--continue-from', continuation_checkpoint]
                 if kind == 'raw_runtime_qualification':
                     command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
+                if kind == 'view_operator_gate':
+                    measured = next(r for r in reversed(reports)
+                                    if r['id'] in stage['requires'] and r['kind'] == 'raw_recurrence_training')
+                    command += ['--checkpoint', measured['artifact']]
                 if kind == 'verified_heads_handoff':
                     raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
                     command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
@@ -956,6 +1000,8 @@ def main(argv=None):
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind=='core_text_warmup':
                     gate=json.loads((directory/'report.json').read_text())
+                elif kind == 'view_operator_gate':
+                    gate = json.loads(output.read_text())
                 else:
                     import torch
                     state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')

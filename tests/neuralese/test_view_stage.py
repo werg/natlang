@@ -79,3 +79,54 @@ def test_gate_selection_pairs_purposes_over_one_value():
     assert [x["id"] for x in chosen["reconstruct"]["prose"]] == ["r"]
     pairs = {(p["id"], q["id"]) for p, q in chosen["compare"]["prose"]}
     assert pairs == {("a", "b"), ("b", "a")}
+
+
+class _PlanTokenizer:
+    """Whitespace tokens: enough for the view write plan's arithmetic."""
+
+    def __call__(self, text, add_special_tokens=False):
+        words = text.split()
+        self._last = words
+        return {"input_ids": list(range(len(words)))}
+
+    def decode(self, ids):
+        return " ".join(self._last[i] for i in ids)
+
+
+def _plan(value, window=4096, r=4, bound=512):
+    from natlang_neuralese.train.trajectories import view_write_plan
+
+    tok = _PlanTokenizer()
+    return view_write_plan(tok, value, window, r, bound)
+
+
+def test_view_writes_never_exceed_the_bound():
+    chunks, lengths, combine = _plan(" ".join(f"w{i}" for i in range(100)))
+    assert len(chunks) == 1 and lengths == [25] and combine == 25
+    chunks, lengths, combine = _plan(" ".join(f"w{i}" for i in range(9000)))  # 9000 tokens / 4 > 512
+    assert len(chunks) > 1 and max(lengths) <= 512 and combine == 512
+    chunks, lengths, combine = _plan(" ".join(f"w{i}" for i in range(9000)), r=0)
+    assert lengths == [None] * len(chunks) and combine is None
+    chunks, lengths, _ = _plan(" ".join(f"w{i}" for i in range(5000)), r=1, bound=512)  # R=1: chunks of <= 480
+    assert max(lengths) <= 512 and all(len(c.split()) <= 512 - 32 for c in chunks)
+
+
+def test_harness_bench_view_writes_fit_the_declared_bound():
+    """Every view part of the harness-bench v3 records, at the recipes' declared R=4 and bound 512 (whitespace tokens
+    stand in for the tokenizer; the bound holds by construction for any tokenizer)."""
+    path = ROOT / "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-20261010-v3/records.jsonl"
+    if not path.exists():
+        import pytest
+        pytest.skip("harness-bench v3 records not on this machine")
+    worst, parts = 0, 0
+    with open(path) as stream:
+        for k, line in enumerate(stream):
+            if k >= 300:
+                break
+            for m in json.loads(line)["messages"]:
+                for p in m.get("content") if isinstance(m.get("content"), list) else []:
+                    if p.get("type") == "view":
+                        _, lengths, combine = _plan(p["source"])
+                        worst = max(worst, *lengths, combine)
+                        parts += 1
+    assert parts and worst <= 512

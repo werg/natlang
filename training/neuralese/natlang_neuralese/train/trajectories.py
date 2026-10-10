@@ -32,7 +32,10 @@ head decides unless a caller passes a length hint. Otherwise stop decisions are 
 against a running baseline (`--stop-pg λ`); without it they are detached and the length is the stop head's choice. With the crisp modes, notes are rendered as the crisp note and
 views as the listing's preview. A view part may carry its own `instructions` (what it is written for, for example an
 agent's intent at the tool call whose output it views) and `note` (how the reader gets the whole value); otherwise the
-view is written for the receiving call (view.listing_instructions) and the variable note applies. Records converted
+view is written for the receiving call (view.listing_instructions) and the variable note applies; a part marked
+`faithful` is written without instructions (`view(x)`: the view stage's reconstruction records, data/view_records.py).
+The view stage's `--purpose-contrast w` adds, for records with `view_stage.contrast_instructions`, a hinge on the
+reader's CE with the same value viewed for a partner purpose (`--purpose-margin`). Records converted
 before the rename carry `digest` parts, which are rejected with the conversion to run. Records that read written values add a self-distillation term (weight `--distill`)
 from the same model given the crisp note and preview.
 
@@ -66,7 +69,8 @@ import torch
 
 from .memory import cuda_allocated_bytes
 
-from ..view import TOOLS as VIEW_TOOLS, listing_instructions, reject_digest_part, reply_prefix, view_note, write_view
+from ..view import TOOLS as VIEW_TOOLS, combine_site, listing_instructions, part_site, plan as view_plan, \
+    reject_digest_part, reply_prefix, view_note, view_site
 
 INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
 
@@ -118,6 +122,29 @@ def apply_consumer_defaults(parser):
         if choices is not None and value not in choices:
             raise ValueError("invalid canonical consumer default: " + name)
     parser.set_defaults(**CONSUMER_TRAINING_DEFAULTS)
+
+
+VIEW_CHUNK_MARGIN = 32  # tokens: a decoded chunk can retokenize slightly longer than its window
+
+
+def view_write_plan(tokenizer, value: str, window: int, tokens_per_vector: float, bound: int):
+    """(chunks, per-chunk write lengths, combining write length) of a written view in training.
+
+    The port's block bound caps every write. With a declared tokens-per-vector R > 0 a write is teacher-forced to
+    ceil(tokens / R) vectors, so a chunk holds at most bound * R tokens (less a retokenization margin) and the view
+    window shrinks to that; a value whose write would exceed the bound is chunked at the view site. Lengths are then
+    min(bound, ceil(tokens / R)); the combining write is sized like its parts together, capped at the bound.
+    Without R (0) lengths are None: the stop head decides, and it cannot exceed the bound."""
+    if bound < 1:
+        raise ValueError('the view bound must be positive')
+    if tokens_per_vector and tokens_per_vector > 0:
+        window = max(1, min(window, int(bound * tokens_per_vector) - VIEW_CHUNK_MARGIN))
+    chunks = view_plan(tokenizer, value, window).chunks
+    if not tokens_per_vector or tokens_per_vector <= 0:
+        return chunks, [None] * len(chunks), None
+    lengths = [min(bound, max(1, math.ceil(len(tokenizer(c, add_special_tokens=False)["input_ids"]) / tokens_per_vector)))
+               for c in chunks]
+    return chunks, lengths, min(bound, sum(lengths))
 
 
 def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str, str], *,
@@ -737,6 +764,15 @@ def main(argv=None):
                         help="view parts: the crisp preview, or the view the model writes at view's template write site")
     parser.add_argument("--view-window", type=int, default=4096,
                         help="value tokens per view write site in training (longer values are viewed in chunks)")
+    parser.add_argument("--view-tokens-per-vector", type=float, default=None,
+                        help="teacher-forced length of written views in training: ceil(tokens of each write's own text / "
+                             "this), every write within the port's block bound (values chunked to fit; "
+                             "view_write_plan); 0: the stop head decides; default: --tokens-per-vector")
+    parser.add_argument("--purpose-contrast", type=float, default=0.0,
+                        help="view stage: weight of the purpose contrast on records with view_stage.contrast_instructions "
+                             "(a second view of the same value written for a partner purpose must serve this record's "
+                             "reader worse by --purpose-margin nats/token; hinge; requires --view written; 0: off)")
+    parser.add_argument("--purpose-margin", type=float, default=0.1, help="margin of the purpose contrast (nats/token)")
     parser.add_argument("--stop-pg", type=float, default=0.0,
                         help="train the stop head on written values by policy gradient with this length cost per vector (0: off)")
     parser.add_argument("--tokens-per-vector", type=float, default=0.0,
@@ -864,8 +900,17 @@ def main(argv=None):
         raise ValueError('projection anchor backbone scale must be finite and between zero and one')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
         raise ValueError('invalid graph memory budget')
+    if args.backward_policy == 'auto' and (args.stop_pg or args.view == 'written'):
+        # Staged backward needs deterministic handoffs and preview views; with written views or the stop policy the
+        # auto policy is the joint graph (its memory envelope still applies).
+        print(json.dumps({'backward_policy': 'joint', 'declared': 'auto',
+                          'reason': 'written views or stop policy: staging needs deterministic handoffs and previews'}), flush=True)
+        args.backward_policy = 'joint'
     if args.backward_policy != 'joint' and (args.stop_pg or args.view == 'written'):
         raise ValueError('staging currently requires deterministic handoffs and preview views')
+    if args.purpose_contrast and (args.view != 'written' or args.purpose_contrast < 0 or
+                                  not math.isfinite(args.purpose_contrast) or not math.isfinite(args.purpose_margin)):
+        raise ValueError('the purpose contrast needs --view written and a finite nonnegative weight and margin')
     if args.device.startswith('cuda'):
         free, total = torch.cuda.mem_get_info()
         args.memory_gb = args.memory_gb or float(os.environ.get('NATLANG_CUDA_MEMORY_GB') or free / 2**30 * .9)
@@ -1062,14 +1107,16 @@ def main(argv=None):
         for name, producer in producers.items():
             source_length(producer_source(name, producer))
 
-    def write(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None, gold_stop_supervised=False):
+    def write(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None, gold_stop_supervised=False,
+              length: int | None = None):
         previous = backbone.checkpoint_attention_only
         try:
-            return write_impl(messages, tools, prefix, leaves, source, resource_choice, gold_stop_supervised)
+            return write_impl(messages, tools, prefix, leaves, source, resource_choice, gold_stop_supervised, length)
         finally:
             backbone.checkpoint_attention_only = previous
 
-    def write_impl(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None, gold_stop_supervised=False):
+    def write_impl(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None, gold_stop_supervised=False,
+                   length: int | None = None):
         """The write procedure with gradients (S3 `unroll_write`): the site's prompt (soft parts from `leaves`), the
         forced prefix and the open marker, then the sketch recurrence until the stop head stops. The stop decisions
         are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
@@ -1097,7 +1144,7 @@ def main(argv=None):
             print(json.dumps({'status': 'producer_out_of_memory', 'context_tokens': context.shape[1],
                               'ffn_chunk_tokens': args.ffn_chunk_tokens}), flush=True)
             raise
-        target = source_length(source)
+        target = length if length is not None else source_length(source)
         if target is not None:
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
             written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, local_stage_batch_size=args.local_stage_batch_size, length=target)
@@ -1125,6 +1172,7 @@ def main(argv=None):
 
     lengths: list[int] = []
     projection_anchor_values: list[float] = []
+    contrast_values: list[float] = []  # purpose contrast: CE(partner-purpose view) - CE(own view), this update
     write_context_lengths: list[int] = []
     writer_batches: list[int] = []
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
@@ -1320,30 +1368,50 @@ def main(argv=None):
         return {name: memo.values[(name, depth)] for name in chosen}
 
     view_prefix = []
+    view_tokens_per_vector = args.tokens_per_vector if args.view_tokens_per_vector is None else args.view_tokens_per_vector
+    if not math.isfinite(view_tokens_per_vector) or view_tokens_per_vector < 0:
+        raise ValueError('view tokens per vector must be finite and nonnegative')
+    view_lengths: list[int] = []  # vectors of each view write (all within the port's block bound)
 
     def view_payload(record, part, leaves):
-        """The view of a value by its plan (view.py) at view's template write site, every write differentiable."""
+        """The view of a value by its plan at view's template write site, every write differentiable. Lengths
+        (view_write_plan): a write never exceeds the port's block bound; a value whose write would is chunked at
+        the site so that each chunk's write fits; with --view-tokens-per-vector R a write's teacher-forced length is
+        ceil(its own text's tokens / R) (the stop head learns that boundary), else the stop head decides."""
         if not view_prefix:
             view_prefix.append(reply_prefix(
                 lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g)))
         system = [{"type": "neuralese", "id": leaf_ids["prompt:view"]}]
         written = {}
 
-        def site_write(messages):
-            payload = write(messages, VIEW_TOOLS, view_prefix[0], {**leaves, **written}, source=part.get("preview"))
+        def site_write(messages, length):
+            payload = write(messages, VIEW_TOOLS, view_prefix[0], {**leaves, **written}, length=length)
             block = placeholder(f"{part['name']}#{len(written)}")
             written[block] = payload
             return block
 
         # A view part may carry the instructions it is written for (an agent's intent at the tool call whose output
-        # it views, HARNESS_BENCH.md); otherwise it is written for the receiving call, as the runtime's listing does.
+        # it views, HARNESS_BENCH.md); a faithful part (view-stage reconstruction, data/view_records.py) is written
+        # without instructions, `view(x)`; otherwise it is written for the receiving call, as the runtime's listing does.
         instructions = part.get("instructions")
-        if not instructions:
+        if part.get("faithful"):
+            instructions = None
+        elif not instructions:
             crisp = crisp_messages(record["messages"], texts, handover_notes(record))
             opening = next((m["content"] for m in crisp if m["role"] == "user" and isinstance(m["content"], str)), "")
             found = INSTRUCTIONS.search(opening)
             instructions = listing_instructions(part["holder"], part["value_type"], found.group(1) if found else "")
-        block, _ = write_view(site_write, system, part["source"], instructions, engine.tokenizer, args.view_window)
+        chunks, lengths, combine = view_write_plan(engine.tokenizer, part["source"], args.view_window,
+                                                   view_tokens_per_vector, heads.max_length)
+        if len(chunks) == 1:
+            block = site_write(view_site(system, chunks[0], instructions), lengths[0])
+        else:
+            parts = [site_write(part_site(system, chunk, instructions, i, len(chunks)), n)
+                     for i, (chunk, n) in enumerate(zip(chunks, lengths))]
+            # The combining write: sized like its parts together (at most the bound) when sized, except under the
+            # stop policy (--stop-pg), where its length is the stop head's choice at the length cost.
+            block = site_write(combine_site(system, instructions, parts), None if args.stop_pg else combine)
+        view_lengths.extend(int(written[b].shape[0]) for b in written)
         return written[block]
 
     def written_values(record, leaves, depth=0, visiting=(), memo=None, reader_only=False):
@@ -1712,6 +1780,31 @@ def main(argv=None):
                                       vocab_size=backbone.embedding_weight.shape[0])
         memory_estimator.observe('writer', context, vectors, raw, retained_bytes)
 
+    def purpose_contrast(record, base_leaves, names, leaves, messages, target):
+        """View stage (data/view_records.py): the record's one view rewritten for a partner purpose over the same value
+        (`view_stage.contrast_instructions`); hinge on the reader's target CE: the partner-purpose view must serve this
+        reader at least --purpose-margin nats/token worse than the view written for its own purpose. The partner
+        write's stop and boundary terms are not trained here (its length is not this record's choice)."""
+        alternatives = (record.get("view_stage") or {}).get("contrast_instructions") or []
+        parts = [p for m in record["messages"] for p in (m.get("content") if isinstance(m.get("content"), list) else [])
+                 if p.get("type") == "view"]
+        if not alternatives or len(parts) != 1:
+            return None
+        part = parts[0]
+        stops, boundaries = len(stop_terms), len(boundary_terms)
+        partner = dict(part, instructions=alternatives[0], name=part["name"] + "#contrast")
+        partner.pop("faithful", None)
+        payload = view_payload(record, partner, base_leaves)
+        del stop_terms[stops:], boundary_terms[boundaries:]
+        partner_names = dict(names)
+        partner_names[part["name"]] = placeholder(partner["name"])
+        partner_leaves = resolve_values({**leaves, partner_names[part["name"]]: payload})
+        own = session.supervised_text_loss({"messages": messages, "tools": record.get("tools"), "target": target}, leaves)
+        other = session.supervised_text_loss({"messages": soft_messages(record, partner_names), "tools": record.get("tools"),
+                                              "target": target}, partner_leaves)
+        contrast_values.append(float(other.detach() - own.detach()))
+        return torch.relu(args.purpose_margin - (other - own))
+
     def loss_of(record, leaves, soft=True, training_objective=True):
         if not soft:
             crisp = crisp_messages(record["messages"], texts, handover_notes(record))
@@ -1720,6 +1813,7 @@ def main(argv=None):
         # Notes and views are written afresh by the current writer; their payloads are leaves of this loss.
         stop_terms.clear()
         boundary_terms.clear()
+        base_leaves = leaves
         names, payloads = written_values(record, leaves)
         leaves = resolve_values({**leaves, **payloads})
         messages, target = soft_messages(record, names), target_of(record, names)
@@ -1735,6 +1829,10 @@ def main(argv=None):
             projection_anchor_backbone_scale=args.projection_anchor_backbone_scale)
         if training_objective and anchor_now[0]:
             projection_anchor_values.append(float(session.last_projection_anchor_loss))
+        if training_objective and args.purpose_contrast and args.view == "written":
+            contrast = purpose_contrast(record, base_leaves, names, leaves, messages, target)
+            if contrast is not None:
+                loss = loss + args.purpose_contrast * contrast
         if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
             plan = reader_geometry[0]
             memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
@@ -2057,6 +2155,8 @@ def main(argv=None):
             losses = []
             crisp_losses = []
             projection_anchor_values.clear()
+            contrast_values.clear()
+            view_lengths.clear()
             released_graph_bytes = 0
             offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
@@ -2256,6 +2356,9 @@ def main(argv=None):
                      "phase_wall_seconds": dict(phase_wall_seconds),
                      **({"projection_anchor_loss": sum(projection_anchor_values) / len(projection_anchor_values)}
                         if projection_anchor_values else {}),
+                     **({"purpose_contrast_gap": sum(contrast_values) / len(contrast_values)} if contrast_values else {}),
+                     **({"view_writes_this_update": len(view_lengths), "max_view_length_this_update": max(view_lengths)}
+                        if view_lengths else {}),
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length, **({"family": family_record} if family_record else {})}
             if args.device.startswith("cuda"):
