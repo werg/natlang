@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-closed-builder-exact-dedup-evidence-20261010-v1",
+  "owner": "pop",
+  "path": "runs/data-lineage-20261002/storage-review-readonly-v1",
+  "files": [
+    {
+      "path": "dedup-execution-v1.jsonl",
+      "bytes": 7860,
+      "sha256": "2b2cd398274e3726bb1d123d11d458226b2289c57dd9c8ffa0da56c8e3518e76",
+      "lines": 11
+    },
+    {
+      "path": "dedup-execution-v1.jsonl.summary.json",
+      "bytes": 9436,
+      "sha256": "0f4f413b61b377c37e166e928020377ba57e1807ae2ddb25f2570d414770aaf9"
+    },
+    {
+      "path": "dedup-proposal.json",
+      "bytes": 14153,
+      "sha256": "45149099e8069469ba36a421f4b6241de8633ce899fc1890db4fb7b21f68c2e8"
+    }
+  ],
+  "bytes": 31449
+}

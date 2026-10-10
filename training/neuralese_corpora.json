@@ -24799,6 +24799,133 @@
       "training_admission": false,
       "admission": "held-source-split-semantic-closure-pending",
       "notes": "V9folder57/64source labels7mismatches6programs, calmjoysource-suspect notcleanmodelnegative. RepairV35index20exacttypedmanual4passcalls noiterateOn qualification. Allheld sourcequalityreviewpending."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v11-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v11",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "512validclosedlabels357sourceagreement155disagree;582attempts512HTTP20057HTTP50013HTTP503, actualretries. Freezeinputs/runtime/rawoutputsheld noadmission."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v11-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v11-adapter-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "357sourceagreeinglabels48authoredprograms48actualreferenceaccepted810nativeheldturns155disagreementsretained. Notteacherreasoningtraces, noadmission/sourcequalitypending."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v11-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v11-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "Closedchoiceconfidenceauditandsharedactualstaticreferenceproof sourcequality/calibrationheld."
+    },
+    {
+      "id": "free-provider-v36-v37-label-adjudication-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-v37-source-label-adjudication-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "19mismatchitemsproposal9supportedsourceanchors10ambiguous/suspect/insufficientvisibleevidence pendingreview; no goldrewrite/admission."
+    },
+    {
+      "id": "free-provider-luna-v37-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v37-nineteen-runtimev12-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "19durablefolderresults133sourceitems121sourceagreement12mismatches9wholemapsaccepted10rejects53unsuccessfulactionevents. Parentgrade notsourcequality/trajectoryadmission; frozenV12."
+    },
+    {
+      "id": "free-provider-luna-v37-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v37-choice-folder-v12-final-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "source_class": "closed-provider-static-quality-evidence",
+      "split": "evidence-only-inherited-groups",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-review-required",
+      "notes": "FinalactualLuna19casequalityaudit sourcebindings/choiceerrors/keysets/capture/actions allheld separatefromreference810turns."
+    },
+    {
+      "id": "pop-closed-builder-exact-dedup-evidence-20261010-v1",
+      "owner": "pop",
+      "path": "runs/data-lineage-20261002/storage-review-readonly-v1",
+      "include": [
+        "dedup-proposal.json",
+        "dedup-execution-v1.jsonl",
+        "dedup-execution-v1.jsonl.summary.json"
+      ],
+      "split": "evidence-only",
+      "source_class": "storage-maintenance-provenance",
+      "training_admission": false,
+      "admission": "maintenance-evidence-only",
+      "notes": "11byteidenticalV11/V12closedbuilderpairs SHAverified replacedbyreadonlyhardlinks preservingbothpaths;20760555520physicalbytes reclaimed. Uniqueoutputs/manifest/logs retained. Sourcecachedeletionnotauthorizedbythisrecord."
+    },
+    {
+      "id": "free-provider-luna-v39-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v39-fortyeight-runtimev12-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "train-inherited-evidence-only",
+      "source_class": "provider-generation-reviewed-inputs",
+      "training_admission": false,
+      "admission": "generation-input-only-no-training-admission",
+      "notes": "Fourmediumworkers48V11sourcefolderprograms357itemsactualauthoredreferenceaccepted/capturevisible. Originalgroups/splits/golds unchangedsourcequalitypending. <=5workersincludingoneV38qualityrepair; activeoutputs excluded."
     }
   ],
   "coverage_backlog": [

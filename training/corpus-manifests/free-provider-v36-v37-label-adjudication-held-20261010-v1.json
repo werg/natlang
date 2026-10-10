@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v36-v37-label-adjudication-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v36-v37-source-label-adjudication-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 28402,
+      "sha256": "3e473787ac11df71caab3fb0f96761ff66f875ac48262c05581b293c86983003"
+    },
+    {
+      "path": "review.md",
+      "bytes": 13832,
+      "sha256": "36c03e662440aa854094fabd117dfa2cbdfc2994212de84adc2adafeb33031d6"
+    }
+  ],
+  "bytes": 42234
+}
