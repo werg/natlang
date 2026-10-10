@@ -164,6 +164,17 @@ test('tool-call markup left in the text is a malformed call: retried once, and n
 });
 
 
+test('LFM2 pythonic call markers left in the text are a malformed call too', async () => {
+  // A Neuralese-typed call answered with an unparseable return_result (here `]]`) must not read as a text reply.
+  const leaked = "<|tool_call_start|>[return_result(status='success', value='x']]<|tool_call_end|>";
+  const model = await server((body, count) => count === 1 ? { choices: [{ finish_reason: 'stop', message: { content: leaked } }] } :
+    { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"1"}' } }] } }] });
+  try {
+    const turn = await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }))(request());
+    assert.deepEqual(turn.calls, [['eval', { code: '1' }]], 'the leak was retried');
+  } finally { await model.close(); }
+});
+
 test('configured output cap and runtime allowance both bound every request', async () => {
   for (const [configured, allowance, expected] of [
     [512, 2048, 512], [2048, 512, 512], [512, null, 512],

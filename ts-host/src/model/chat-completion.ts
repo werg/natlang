@@ -46,8 +46,8 @@ export type ChatCompletionOptions = {
   onTurn?: (stats: ChatTurnStats) => void;
 };
 
-/** Tool-call markup (Qwen-style XML or <tool_call> tags) left in a reply's text. */
-export const TOOL_MARKUP = /<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/;
+/** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
+export const TOOL_MARKUP = /<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>|<\|tool_call_start\|>|<\|tool_call_end\|>/;
 class LeakedCall extends Error {}
 
 /**

@@ -31,6 +31,8 @@ Independent tasks run concurrently, and sibling natlang calls in one task (`Prom
 
 `runtime.run(fn, { signal })` and `EventLoop.cancel()` abort the task; natlang calls in flight reject. Passing `AbortSignal.timeout(ms)` gives the whole task a deadline. Inside a call, cancellation follows the call tree: a call that fails stops the calls it started, and an eval that fails or times out stops the natural-language calls it started (the losers of a `Promise.race` are stopped when their eval ends). Native work already started keeps running unless the application cancels it. `limits` (`maxDepth`, `maxActions`, `maxToolCalls`, `maxEpisodes`) and model options are deployment policy; `maxDepth` counts nested natural-language calls.
 
+A call whose model keeps retrying the same failing eval is told so in the eval's error ("This is the code of your previous eval, and it failed the same way"). On LFM2 models, a reply that holds `<|tool_call_start|>` markup the server could not parse as a call (for example a `return_result(...]]` with a wrong bracket) is a malformed call: it is retried once with the malformed-call feedback and never read as the call's text answer. In traces, look for repeated identical `eval` codes or `model returned malformed tool arguments` when a call does not finish.
+
 ## Continuation and restart
 
 Long invocations keep one conversation; past the model's `contextTokens` budget the oldest tool outputs and eval code are elided, while the eval scope carries all values. That is not process restart recovery: persist application state, event IDs, operation receipts, and seeds, and rebuild native resources through the application's own recovery path.

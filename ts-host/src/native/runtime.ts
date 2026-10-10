@@ -1096,6 +1096,8 @@ export class NativeSession {
       });
     const sourceStack = error instanceof EvalFailure ? error.debug.sourceStack : error instanceof Error ? error.stack : undefined;
     const logs = error instanceof EvalFailure ? error.debug.logs ?? [] : [];
+    // The same code failing the same way again: the model is retrying without a change (it would retry forever).
+    const repeated = this.failureDebug?.code === code.slice(0, 16000) && this.failureDebug?.message === message;
     this.failureDebug = { version: 'natlang.scope_failure/1', serial: ++this.failureSerial,
       kind, message, code: code.slice(0, 16000), scope, trace, diagnostics,
       logs: logs.slice(0, 32).map(line => line.slice(0, 2000)),
@@ -1118,7 +1120,8 @@ export class NativeSession {
     const tool = /\b(\w+) is not defined/.exec(message)?.[1];
     const toolNote = tool && NATIVE_TOOLS.includes(tool) && tool !== 'return_result' ?
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
-    return toolNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
+    const repeatNote = repeated ? '\nThis is the code of your previous eval, and it failed the same way: change it before running it again.' : '';
+    return toolNote + repeatNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
       '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
