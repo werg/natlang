@@ -16,6 +16,7 @@ import { admitRow } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { renderValue } from '../../dist/native/agent.js';
 import { curriculumCase, evalCall, returnCall } from '../inline-curriculum/lib.mjs';
 import { referenceRow } from '../inline-curriculum/references.mjs';
 
@@ -313,7 +314,16 @@ function replayCaptureVisibility(row, record) {
     });
     const context = matching ? (matching.turn.context ?? []).map(message => String(message.content ?? '')).join('\n') : '';
     const fields = Object.keys(captures);
-    const visible = fields.filter(name => context.includes(JSON.stringify(captures[name])));
+    // Native scope declarations render values as typed expressions (for example,
+    // `criteria: unknown = { ... }`), not as JSON.stringify output. Require the
+    // entire exact value in either supported representation. Rendering with an
+    // infinite budget intentionally makes a truncated native preview fail this
+    // check; do not infer visibility from the host-side capture or partial fields.
+    const visible = fields.filter(name => {
+      const jsonValue = JSON.stringify(captures[name]);
+      const nativeValue = `unknown = ${renderValue(captures[name], { budget: Infinity })}`;
+      return context.includes(jsonValue) || context.includes(`${name}: ${nativeValue}`);
+    });
     results.push({ id: item.id, fields, visible_fields: visible,
       missing_fields: fields.filter(name => !visible.includes(name)), decision_turn_index: matching?.index ?? null });
   }
