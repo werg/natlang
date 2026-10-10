@@ -1,0 +1,274 @@
+{
+ "schema": "natlang.cross-corpus-closure-receipt/1",
+ "request": "2026-10-10T05:50:42.555510Z-pop-da39",
+ "subset": {
+  "registry_id": "free-provider-v28-local-split-review-held-20261010-v1",
+  "file": "runs/free-provider-generation-20261009-v1/held-v28-source-split-review-v1/source-bound-rows.jsonl",
+  "sha256": "f748e4e132414b820fb1e848a2a6132ee0dbbfd93b4c7664e636a30c19c081f0",
+  "rows": 5
+ },
+ "policy": "touching published train is allowed; any validation/test (held) or protected-benchmark touch rejects",
+ "protected_inventory": {
+  "path": "/mnt/external/natlang-development-data/data/neuralese/protected/bgkit-benchmarks.protected.json",
+  "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf",
+  "question_hashes": 24235,
+  "ids": 21404
+ },
+ "indexes": [
+  {
+   "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+   "corpus_id": "s1-full-final-20261003",
+   "records": 1870591,
+   "groups": 985434,
+   "sketches": 4734547,
+   "format": "port"
+  },
+  {
+   "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+   "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+   "records": 3843,
+   "groups": 769,
+   "sketches": 0,
+   "format": "turn"
+  }
+ ],
+ "code": {
+  "module": "scripts/neuralese_data/cross_corpus.py Index lookups; splits/records text_hash",
+  "origin_main": "e17b56d630215321850d96958d298df0cd81dcd5"
+ },
+ "method": "Per row: split-group lookup of id, group, source_groups, raw_record_sha256, source:id and label caseId; exact normalized-text digests of state, question, label and state+question against published sources (background sources, texts under >=3 groups, are listed separately and are not document identity, as in the finalizer); question/example digests with label as target (best-effort, port requests render differently); MinHash near-duplicates of the state (Jaccard >= 0.8); protected benchmark inventory: normalized question hashes of every checked text, ids of every key. The harness-bench index is group-only.",
+ "rows": {
+  "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-830-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3": {
+   "split": "train",
+   "group": "v26:GRANT-830:world",
+   "source_groups": [
+    "v26:GRANT-830:world"
+   ],
+   "keys_checked": [
+    "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-830-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "v26:GRANT-830:world",
+    "92519f05f27da04e35a302ac6bd0a9e35ea0c2b1152948cb7f4b4a7a9b2385d5",
+    "project-authored-v28:inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-830-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "GRANT-830"
+   ],
+   "texts_checked": [
+    "label",
+    "state",
+    "state+question",
+    "state+question (blank line)"
+   ],
+   "protected": {
+    "question_hash_hits": {},
+    "id_hits": {}
+   },
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable_state": true,
+   "published_splits_touched": [],
+   "verdict": "closed"
+  },
+  "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-831-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3": {
+   "split": "train",
+   "group": "v26:GRANT-831:world",
+   "source_groups": [
+    "v26:GRANT-831:world"
+   ],
+   "keys_checked": [
+    "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-831-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "v26:GRANT-831:world",
+    "ef1b51f157d7c66cc1881df5918f65e02c9f79de351c925857446566593a1f28",
+    "project-authored-v28:inline-curriculum:authored_semantic_iterate_reducers_v28:v28-grant-831-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "GRANT-831"
+   ],
+   "texts_checked": [
+    "label",
+    "state",
+    "state+question",
+    "state+question (blank line)"
+   ],
+   "protected": {
+    "question_hash_hits": {},
+    "id_hits": {}
+   },
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable_state": true,
+   "published_splits_touched": [],
+   "verdict": "closed"
+  },
+  "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-record-841-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3": {
+   "split": "train",
+   "group": "v26:RECORD-841:world",
+   "source_groups": [
+    "v26:RECORD-841:world"
+   ],
+   "keys_checked": [
+    "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-record-841-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "v26:RECORD-841:world",
+    "447b2dc33c1246b8cc5d516ccdfefcfdcc40891b9279f898de797be3b51e6489",
+    "project-authored-v28:inline-curriculum:authored_semantic_iterate_reducers_v28:v28-record-841-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "RECORD-841"
+   ],
+   "texts_checked": [
+    "label",
+    "state",
+    "state+question",
+    "state+question (blank line)"
+   ],
+   "protected": {
+    "question_hash_hits": {},
+    "id_hits": {}
+   },
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable_state": true,
+   "published_splits_touched": [],
+   "verdict": "closed"
+  },
+  "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-trn-520-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3": {
+   "split": "train",
+   "group": "v24:TRN-520:world",
+   "source_groups": [
+    "v24:TRN-520:world"
+   ],
+   "keys_checked": [
+    "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-trn-520-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "v24:TRN-520:world",
+    "ef9b4991c5dcd19098a0f3a7ad886428945185287d25ac1f3d34090da44263ae",
+    "project-authored-v28:inline-curriculum:authored_semantic_iterate_reducers_v28:v28-trn-520-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "TRN-520"
+   ],
+   "texts_checked": [
+    "label",
+    "state",
+    "state+question",
+    "state+question (blank line)"
+   ],
+   "protected": {
+    "question_hash_hits": {},
+    "id_hits": {}
+   },
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable_state": true,
+   "published_splits_touched": [],
+   "verdict": "closed"
+  },
+  "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-vax-721-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3": {
+   "split": "train",
+   "group": "v25:VAX-721:world",
+   "source_groups": [
+    "v25:VAX-721:world"
+   ],
+   "keys_checked": [
+    "inline-curriculum:authored_semantic_iterate_reducers_v28:v28-vax-721-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "v25:VAX-721:world",
+    "2e475a755a318c671da8d2b4b63ff17a43e32696883e8ad55f0321e6193acb1e",
+    "project-authored-v28:inline-curriculum:authored_semantic_iterate_reducers_v28:v28-vax-721-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v3",
+    "VAX-721"
+   ],
+   "texts_checked": [
+    "label",
+    "state",
+    "state+question",
+    "state+question (blank line)"
+   ],
+   "protected": {
+    "question_hash_hits": {},
+    "id_hits": {}
+   },
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": {},
+     "question_hits": {},
+     "example_hit": null,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable_state": true,
+   "published_splits_touched": [],
+   "verdict": "closed"
+  }
+ },
+ "verdict": "closed",
+ "admission": "evidence only; training admission stays with the data owner",
+ "dgx_run": {
+  "unit": "closure-v28-075312",
+  "date": "2026-10-10",
+  "positive_control": "same Index lookups validated on published S1 records in the static16 receipt (exact/group/near 4/4)"
+ }
+}
