@@ -25578,6 +25578,89 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "AuthoritativeV3audit;1880savedturns261099observedcompletiontokensnotbilling. Exactstateinchildsavedtoolcontext349/368items, conservativeobservedvisibilitymetricnotinvisibilityclaim. Nowireprompt/admissionclaim."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v15-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v15",
+      "include": [
+        "*",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-source-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512closedtypedchoices376annotationmatches136disagreements, notsemantictruth."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v15-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v15-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-source-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "49referenceprograms376items actualreference49/49accepted/capturevisible, heldsourcequality."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v15-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v15-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-source-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Independentclosedchoiceconfidence/sourceagreementaudit; noindependenttruth oradmission."
+    },
+    {
+      "id": "free-provider-google-v15-source-closure-jsonleaf-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v15-gemini-choice-confidence-and-static-replay-v1/source-closure-v1",
+      "include": [
+        "README.md",
+        "build_v15_closure_inputs.py",
+        "check_raw_group_keys.py",
+        "closure-harness4-v1/candidate-source-case-bindings.json",
+        "closure-harness4-v1/closed-source-case-port-projection.jsonl",
+        "closure-harness4-v1/closure-report.json",
+        "closure-harness4-v1/source-case-port-projection.jsonl",
+        "closure-input-v1/closure-candidate-root-actions.jsonl",
+        "closure-input-v1/closure-source-cases.jsonl",
+        "closure-input-v1/closure-source-manifest.json",
+        "closure-input-v1/selected-program-index.jsonl",
+        "closure-input-v1/selected-source-case-index.jsonl",
+        "closure-packet-v1.json",
+        "raw-key-harness-v1.json"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-source-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "49programs376items752question/state leaves; harnessgroup-onlyclosureclean. Originalkeysretained, fullS1pendingDGX. Sourcequalityheld."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v17-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v17",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-source-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512freshtrainrowsdisjointIDsANDgroupspriorproviders. Boardgameeligiblepoolalmostexhausted1row, other4familiesfillremaining. SharedprojectlockbehindV16; activeoutputsexcluded."
     }
   ],
   "coverage_backlog": [
