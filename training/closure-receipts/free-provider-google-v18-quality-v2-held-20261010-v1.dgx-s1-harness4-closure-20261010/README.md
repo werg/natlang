@@ -1,6 +1,6 @@
 # DGX full-S1 + harness-v4 closure, V18 static decision programs (pop-a01c)
 
-Input: registry snapshot `free-provider-google-v18-quality-v2-held-20261010-v1` (0 files verified against its manifest on DGX), authoritative `closure-input-v2/` per Pop's
+Input: registry snapshot `free-provider-google-v18-quality-v2-held-20261010-v1` (18 files verified against its manifest on DGX), authoritative `closure-input-v2/` per Pop's
 `closure-packet-v2.json` (sha256 326016ed…); all packet pins matched, including `check_raw_group_keys.py`; shared
 `source_case_closure.py` 64b255e8… at origin/main 9a44436e. Run from an origin/main worktree under the memory ledger
 (8 GB, unit closure-v18-191912), fresh outputs:
