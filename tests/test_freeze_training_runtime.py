@@ -41,6 +41,23 @@ def test_freeze_copies_runtime_scripts_and_shares_node_modules(tmp_path):
     assert json.loads((output / 'frozen-runtime.json').read_text()) == manifest
 
 
+def test_freeze_keeps_the_source_review_registry_the_runtime_resolves(tmp_path):
+    source, output = tmp_path / 'ts-host', tmp_path / 'run' / 'runtime-host'
+    make_runtime(source)
+    reviews = tmp_path / 'training/source-reviews'
+    reviews.mkdir(parents=True)
+    (reviews / 'holds.jsonl').write_text('{"id":"hold-1"}\n')
+    (reviews / 'datasets.json').write_text('{}\n')
+
+    manifest = freeze(source, output, compiled_dist=source / 'dist')
+    (reviews / 'holds.jsonl').write_text('{"id":"hold-2"}\n')
+
+    # dist/teacher/source-review.js searches upward for training/source-reviews/holds.jsonl.
+    assert (output / 'training/source-reviews/holds.jsonl').read_text() == '{"id":"hold-1"}\n'
+    assert 'training/source-reviews/datasets.json' in manifest['files']
+    assert freeze(source, output, compiled_dist=source / 'dist') == manifest
+
+
 def test_existing_freeze_reuses_its_snapshot_after_source_edits(tmp_path):
     source, output = tmp_path / 'ts-host', tmp_path / 'run' / 'runtime-host'
     make_runtime(source)

@@ -15,8 +15,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json, digest_file
 
 
+SOURCE_REVIEWS = Path("training") / "source-reviews"
+
+
+def source_reviews_folder(root):
+    """The source-review registry a runtime reads: frozen inside it, else beside a checkout's ts-host."""
+    for folder in (root / SOURCE_REVIEWS, root.parent / SOURCE_REVIEWS):
+        if (folder / "holds.jsonl").exists():
+            return folder
+    return None
+
+
 def tree_identity(root, compiled_dist=None, compiled_src=None):
     folders = {name: root / name for name in ("dist", "scripts", "src")}
+    # The teacher runtime resolves its source-review verdicts above itself; a frozen run must keep the reviewed set.
+    if (reviews := source_reviews_folder(root)) is not None:
+        folders[str(SOURCE_REVIEWS)] = reviews
     if compiled_dist is not None:
         folders["dist"] = compiled_dist
     if compiled_src is not None:
@@ -144,6 +158,8 @@ def _freeze_new(source, output, compiled_dist, compiled_src=None, build=None):
         for name in ("dist", "scripts", "src"):
             selected = compiled_dist if name == 'dist' else compiled_src if name == 'src' and compiled_src is not None else source / name
             shutil.copytree(selected, staging / name)
+        if (reviews := source_reviews_folder(source)) is not None:
+            shutil.copytree(reviews, staging / SOURCE_REVIEWS)
         for name in ("prelude.js", "package.json", "package-lock.json"):
             if (source / name).exists():
                 shutil.copy2(source / name, staging / name)
