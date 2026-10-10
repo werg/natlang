@@ -469,3 +469,54 @@ Projected onto the live step times (q4 34.2 s, bf16 9.4 s, ternary ≈ 44 s):
 - after the change: q4 ≈ 10.5 s, bf16 ≈ 5.9 s, ternary ≈ 18 s;
 - now until ternary-experts starts (~step 3,510): mean 17.3 → ~7.5 s per update (2.3×);
 - after that: ~28 → ~12 s per update.
+
+### Restart onto v11 without losing progress (2026-10-10/11)
+
+**Stop path (checked before stopping).** SIGTERM reaches the trainer: systemd stops the unit, `docker start -a`
+forwards the signal, `ExecStopPost` runs `docker stop -t 600`, the recipe runner forwards it to its child, and
+`TimeoutStopSec` is 10.5 min. The trainer finishes its update and writes the full state:
+- latents, heads, Muon/AdamW state and the LionSR momenta;
+- Python/torch/CUDA RNG, schedule, step, best, memory estimator.
+
+The sampler is stateless (python RNG), and the preserve record and precision draw are keyed by step. The step-2842
+state was 47.0 GB, written in 307 s, with 196 LionSR momenta (23.4 GB) and 316 latents (23.5 GB).
+
+**Handoff.** `train/recipe.py --handoff` (171003f6) resumes the lineage on the newest code. The code is a clean
+origin/main snapshot under `/home/werg/data/code-snapshots/`. The recipe is raw-recurrence-mellum-v11, which differs
+from v10 only in an operational parameter. The lineage's `recipe_sha256` is kept, and the change goes into
+`recipe-plan.json` "handoffs". The trainer logged `code_handoff` with `options_added: {moe_kernel: grouped}`.
+`launch-v10.sh` drives it; it now also waits through "deactivating", which launch-v9 treated as finished.
+
+**Problems hit and fixed on the way:**
+1. **Registry not found (4a48df8b).** The snapshot resolved `training/neuralese_artifacts.json` relative to itself,
+   giving "unknown artifact" for the preserve teacher. `artifacts.REPO` is now `common.paths.root('repo')`.
+   - Finding: recipe children had always run the live checkout's code, not `<out>/runtime`. `python -m` puts the cwd
+     (`training/neuralese`) first on `sys.path`.
+2. **Resume leaked 38–48 GB of host anon memory** and stalled the preflight at step 2871.
+   - Cause (085713c7): main()'s loop variable `v`, a view of the `mmap=True` checkpoint, stayed bound after
+     `student_parameters` were restored. It kept the 47 GB mapping and every page the device copies dirtied. Found
+     with `py-spy dump --locals`.
+   - The copy now runs in `copy_restored_values`.
+   - Defensive fixes on the same path: LionSR owns its row scales (6fe98c8d); optimizer restore clones host tensors
+     (53fa56d6).
+   - The preflight now frees page cache through the ledger's `release-cache` before waiting (6fe98c8d).
+   - No progress was lost: an emergency state at 2870 and signal states at 3068 and 3141 carried the run over.
+   - After the fix, the trainer's RSS is 2.8 GB and the ledger reads 54.8 GB, against ~100 GB with the leak.
+
+**Measured on the live run** (seconds per update, mean):
+
+| range | code | bf16 | q4 | all |
+|---|---|---|---|---|
+| 2562–2842 | v10 | 9.4 (n=189) | 33.9 (n=92) | 17.4 |
+| 2843–3141 | v11, 1 sequence pass | 5.9 (n=201) | 9.3 (n=98) | 7.05 |
+| 3142–3162 | v11, 2 sequence passes | 7.0 (n=11) | 13.9 (n=10) | 10.3 |
+
+- **Speedup at 1 pass:** 1.6× bf16, 3.6× q4 and 2.5× overall, in line with the 3-layer bench (1.59×, 3.26×).
+- **Peak GPU memory:** 54.0 GB allocated / 55.1 GB reserved, against 56.4 / 58.2 GB on v10.
+- **Loss continuity across the resume:** no jump beyond per-batch noise.
+  - Last 60 v10 updates: CE 0.64, bf16 loss 1.34, q4 loss 0.82 (preserve KL 0.55).
+  - First 60 v11 updates: 0.87 / 1.52 / 1.83 (0.70).
+  - From 3142: 0.86 / 1.31 / 1.17 (0.60).
+  - Two things moved during the window. The q4 mix ramped from 0.47 to 0.80, and passes went from 1 to 2.
+- **Disk:** NVMe has 12 GB free beside the 49.6 GB checkpoint reserve. The step-2842 state was replaced in place by
+  the later writes.
