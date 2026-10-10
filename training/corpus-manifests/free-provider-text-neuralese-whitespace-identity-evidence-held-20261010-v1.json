@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-text-neuralese-whitespace-identity-evidence-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/text-neuralese-whitespace-identity-diagnostic-v1",
+  "files": [
+    {
+      "path": "diagnostic.json",
+      "bytes": 1064,
+      "sha256": "51d885d4b98dc79e29da05fb6099708378620b98e9d4a72e64bf7caac1b91aca"
+    }
+  ],
+  "bytes": 1064
+}
