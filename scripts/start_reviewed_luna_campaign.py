@@ -75,7 +75,8 @@ def main():
             launched.append({**worker, 'pid': process.pid, 'command': command})
             atomic_json(record, {'status': 'running', 'workers': launched, 'plan': str(args.plan)})
         codes = [process.wait() for process in processes]
-        atomic_json(record, {'status': 'finished', 'workers': launched, 'exit_codes': codes,
+        atomic_json(record, {'status': 'finished' if not any(codes) else 'finished_with_incomplete_work',
+                             'workers': launched, 'exit_codes': codes,
                              'plan': str(args.plan), 'time': time.time()})
         return int(any(codes))
     except BaseException as error:

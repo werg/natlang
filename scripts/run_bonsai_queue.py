@@ -500,7 +500,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 record(dict(event='storage_pause', key=entry['key'], time=time.time(),
                             free_mib=free_mib, minimum_free_mib=min_free_mib,
                             disposition='stopped_before_case; restart same queue/journal after freeing space'))
-                return
+                return 75
         if not remote:
             # An offline server must not consume every remaining queue key.
             # Waiting happens before the attempt starts or its case budget begins.
@@ -684,6 +684,19 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         for member in entry.get('members', []):
             record({'event': 'finish', 'key': member['key'], 'status': status, 'exit_code': code,
                     'batch_key': entry['key'], 'time': time.time()})
+    # Exhausting the attempt list is not successful completion. Preserve failed
+    # attempts and their cooldowns, but let callers distinguish them from a
+    # queue whose exact outputs (or explicit source-review skips) are closed.
+    latest = {}
+    if journal.exists():
+        for line in journal.read_text().splitlines():
+            if line.strip():
+                event = json.loads(line)
+                if event.get('event') == 'finish':
+                    latest[event['key']] = event
+    closed = {'complete', 'complete_with_skips', 'skipped'}
+    return 0 if all(latest.get(entry['key'], {}).get('status') in closed
+                    for entry in entries) else 2
 
 
 if __name__ == '__main__':
@@ -720,7 +733,7 @@ if __name__ == '__main__':
     def stop(signum, frame):
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
-    run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
+    raise SystemExit(run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
-              args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config)
+              args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config))
