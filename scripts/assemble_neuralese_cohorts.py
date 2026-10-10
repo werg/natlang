@@ -120,6 +120,7 @@ def main(argv=None):
                'cohorts': {}, 'admission_granted': False,
                'note': 'Assembly records sources and counts only; admission is the recipe\'s and the registry\'s.'}
     ids, tokenizers, pieces = set(), set(), {}
+    all_groups = {}
     data_path = args.out / data_name
     with data_path.open('w') as out:
         for name, source in cohorts.items():
@@ -144,6 +145,7 @@ def main(argv=None):
                 splits[split] = splits.get(split, 0) + 1
                 for group in row.get('source_groups') or []:
                     groups.setdefault(group, set()).add(split)
+                    all_groups.setdefault(group, set()).add(split)
                 row[label] = name
                 out.write(json.dumps(row, ensure_ascii=False) + '\n')
                 rows += 1
@@ -153,7 +155,7 @@ def main(argv=None):
                     piece = json.loads(line)
                     if pieces.setdefault(piece['name'], piece)['text'] != piece['text']:
                         raise ValueError('piece name with two texts across cohorts: ' + piece['name'])
-            leaking = sorted(group for group, seen in groups.items() if 'test' in seen and len(seen) > 1)
+            leaking = sorted(group for group, seen in groups.items() if len(seen) > 1)
             if leaking:
                 raise ValueError(f'cohort {name}: held and training rows share source groups, e.g. {leaking[:3]}')
             if not splits.get('train'):
@@ -161,6 +163,11 @@ def main(argv=None):
             receipt['cohorts'][name] = {**description, 'rows': rows, 'splits': splits, 'limit': limit,
                                         'inputs': {role: {'path': str(path), 'sha256': sha}
                                                    for role, (path, sha) in inputs.items()}}
+    leaking = sorted(group for group, seen in all_groups.items() if len(seen) > 1)
+    if leaking:
+        raise ValueError(f'assembled cohorts share source groups across splits, e.g. {leaking[:3]}')
+    receipt['source_group_closure'] = {'groups': len(all_groups), 'cross_cohort_split_conflicts': 0,
+                                       'scope': 'assembled inputs only; external corpus closure remains required'}
     if args.mode == 'text' and len(tokenizers) != 1:
         raise ValueError('cohorts were rendered with different tokenizers: ' + ', '.join(sorted(tokenizers)))
     if args.mode == 'text':
