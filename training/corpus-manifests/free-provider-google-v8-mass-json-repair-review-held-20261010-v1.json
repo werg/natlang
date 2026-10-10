@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v8-mass-json-repair-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-v8-mass-json-repair",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 9252,
+      "sha256": "d85a2e9f44b551f6f695368d70cc0d243d4dc0473f08abe2aafe4f87db36ed08"
+    },
+    {
+      "path": "review.md",
+      "bytes": 3326,
+      "sha256": "cb2122decfa83d75548e26fcfeee2642b288b901d148c9af01d932f38c20e5f1"
+    }
+  ],
+  "bytes": 12578
+}

@@ -22915,6 +22915,38 @@
       "training_admission": false,
       "admission": "held-native-parent-approval-capture-contract-and-recurrence-qualification",
       "notes": "Final exact-hash AST-span/empty-capture replay344turns:6mapped spans/4captureless sites,207holds,zero admitted writers/reads. Source/parent approval and native recurrence remain held; receipt e728788226ea89c214e2e1a7e9533f7b45db20fa4366792767ad8f7e366babe1."
+    },
+    {
+      "id": "free-provider-google-v5-mass-json-repair-v8-closed-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-model-pool-v5-mass-json-repair-v8",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-typed-decision-generation-closed-held",
+      "training_admission": false,
+      "admission": "held-semantic-quality-and-explicit-root-review-required",
+      "notes": "176sameIDrepairfinals/189attempts;96typedvalid47gold37wrong12ties;80invalid79mass1JSON;9.94attempts/min9.25finals/min. Noautomaticsemanticadmission."
+    },
+    {
+      "id": "free-provider-google-v8-mass-json-repair-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v24-gemini-v8-mass-json-repair",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-source-case-review-only",
+      "source_class": "provider-typed-decision-quality-review",
+      "training_admission": false,
+      "admission": "held-semantic-quality-and-explicit-root-review-required",
+      "notes": "Exactsource/output/attempt/model/familyaudit; strictvalidatorunchanged, noadmission. Futuretypedchoicevariant has separate schema/semantics, no normalization."
     }
   ],
   "coverage_backlog": [
