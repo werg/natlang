@@ -26221,6 +26221,116 @@
       "training_admission": false,
       "admission": "held-source-split-semantic-output-review",
       "notes": "512 unchanged original train rows, IDs and groups disjoint from all prior provider inputs;8families64each. Same projectquota lock waits for V18; no paid fallback. Source SHA58ce152499f9c318400cd783c2df4844ac8ef8cf4fc1c81630b8bbe94416a6ba."
+    },
+    {
+      "id": "free-provider-google-v18-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v18",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Closed 512 source-bound teacher labels; 399 annotation matches and 113 mismatches. Preserve all provider outcomes; label agreement is not independent semantic truth.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-google-v18-static-reference-v1-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v18-adapter-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Original 53 authored references with six visibility flags retained as original audit evidence. Corrected v2 replays unchanged source cases with complete native scope rendering.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-google-v18-static-reference-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v18-adapter-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "53 unchanged authored source programs and 399 original train items. Fresh replay accepts all 53 with complete capture visibility; 904 native turns held. No semantic truth or training admission inferred.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-google-v18-quality-v2-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-gemini-choice-confidence-and-static-replay-v2",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Sealed source and static replay review, including Pop small-harness source closure. DGX full S1 source closure and semantic quality review remain required.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v49-closed-partial-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-repaired-train-iterative-trace-v49-runtimev14-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Three exact completed V4 train repairs and one 384-request resource partial. Preserve original incomplete campaign status; partial is not a semantic negative or DPO preference pair.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v49-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v49-repaired-train-iterative-quality-audit-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Three completed cases match all six files and original gold. Fifteen exact typed carry links; two actual iterateOn trajectories. Fourth case remains unscored request-budget partial.",
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-luna-v51-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v51-runtimev14-v1",
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-source-bound-held-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-native-runtime-quality-review",
+      "notes": "Reviewed independent V18 successor, 53 original source-bound train programs / 399 items, five Luna workers. V49 closure and audit pinned; its partial status preserved. Inputs only while active; outputs require separate sealed closeout.",
+      "include": [
+        "reviewed-plan-v1.json",
+        "unapproved-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ]
+    },
+    {
+      "id": "free-provider-google-v18-quality-v1-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-gemini-choice-confidence-and-static-replay-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-original-quality-evidence",
+      "training_admission": false,
+      "admission": "superseded-audit-held",
+      "notes": "Original V18 source and visibility review preserved. Six checker false negatives are diagnosed and superseded by v2; raw source, labels, and cases unchanged. No automatic admission."
     }
   ],
   "coverage_backlog": [

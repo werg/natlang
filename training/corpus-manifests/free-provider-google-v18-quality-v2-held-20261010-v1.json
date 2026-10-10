@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v18-quality-v2-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-gemini-choice-confidence-and-static-replay-v2",
+  "files": [
+    {
+      "path": "build_v18_closure_inputs.py",
+      "bytes": 9910,
+      "sha256": "f4ce466872f4396aa29b18ce0e6026adfd8c91bd4c77801dfbc3139e2fd8b141"
+    },
+    {
+      "path": "review.json",
+      "bytes": 20445,
+      "sha256": "130ceb28d117ce84e7f55bd0796b339cff69a31bbcedb2c2060404b0a79a1d75"
+    },
+    {
+      "path": "review.md",
+      "bytes": 1316,
+      "sha256": "26d6920bdef7cfb0ddd91e0a2ed962c2c86e8a1b31b69887624c643dbb58a9ef"
+    },
+    {
+      "path": "source-closure-v1/README-v2.md",
+      "bytes": 1561,
+      "sha256": "4cffd503421c3cd76da1e12fa3d72ef0ca5cd15d9c638bf938b0b26731636b14"
+    },
+    {
+      "path": "source-closure-v1/build_v18_closure_inputs.py",
+      "bytes": 9910,
+      "sha256": "f4ce466872f4396aa29b18ce0e6026adfd8c91bd4c77801dfbc3139e2fd8b141"
+    },
+    {
+      "path": "source-closure-v1/check_raw_group_keys.py",
+      "bytes": 1933,
+      "sha256": "514f07a83b9119102f539b657d0d57137fb507cfe2a45a4e516339567d992e24"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v2/candidate-source-case-bindings.json",
+      "bytes": 30323,
+      "sha256": "af1585cf9011ce3a9bd1f26e573a9907dc6b69c58336d40fb5e59d52a1b77f25"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v2/closed-source-case-port-projection.jsonl",
+      "bytes": 1106430,
+      "sha256": "2b80be0e6549361bf4349c85a08c51b50a65c8d233f3eb8bafcbbb22d4ec6eff",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v2/closure-report.json",
+      "bytes": 16569,
+      "sha256": "dc216f21dc2bf76b56aca37d04eabbbf938d057299ed2fc56650d73cdb132e4c"
+    },
+    {
+      "path": "source-closure-v1/closure-harness4-v2/source-case-port-projection.jsonl",
+      "bytes": 1106430,
+      "sha256": "2b80be0e6549361bf4349c85a08c51b50a65c8d233f3eb8bafcbbb22d4ec6eff",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v2/closure-candidate-root-actions.jsonl",
+      "bytes": 6382445,
+      "sha256": "33becfae454d01df0442f41bc128e5778c30f5b91dada6691be6f04beb9c6157",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v2/closure-source-cases.jsonl",
+      "bytes": 1899372,
+      "sha256": "6cebee0aaa5a14c9eceab62cbcd3b6b92f9a8d7d16ca18101bd78304fdfa6115",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v2/closure-source-manifest.json",
+      "bytes": 6045,
+      "sha256": "4bda8433fe383168c69ccb8fb54844a3a1ed7ac9f876ac069eff144e133ce76a"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v2/selected-program-index.jsonl",
+      "bytes": 250835,
+      "sha256": "a568601fdd87255cbf8496af1554b7f928191c2fe49fb37daefe693c7f80947c",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v2/selected-source-case-index.jsonl",
+      "bytes": 368411,
+      "sha256": "fcfabd74f41b889f5b5dc7be252057bdfce1b6142bb06bb91e9ead53e761c15e",
+      "lines": 399
+    },
+    {
+      "path": "source-closure-v1/closure-packet-v2.json",
+      "bytes": 14060,
+      "sha256": "326016edaf62fe68e028f9808ae7274cdad78484d85ad3088b84965f4f8545cf"
+    },
+    {
+      "path": "source-closure-v1/make_v18_packet_v2.py",
+      "bytes": 9143,
+      "sha256": "fb83ecf1d6e3731985b1fe4e2c44ece13b51579fef0cbd1674543303cf8f9f5b"
+    },
+    {
+      "path": "source-closure-v1/raw-key-harness-v2.json",
+      "bytes": 1082,
+      "sha256": "0c74914921805f99a65e7d6596908be9e7841b1d790903f316c67c40634feb9d"
+    }
+  ],
+  "bytes": 11236220
+}

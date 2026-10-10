@@ -1,0 +1,53 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v18-quality-v1-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v18-gemini-choice-confidence-and-static-replay-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 22868,
+      "sha256": "e252a978d098a415ea250ae8c741098651da34d6eed1ee71bfaeec6f1ad70e22"
+    },
+    {
+      "path": "review.md",
+      "bytes": 2989,
+      "sha256": "3e2f923632ab5c75d59c4b10e41ab354db16d8194177730e591295dc6eaefa77"
+    },
+    {
+      "path": "source-closure-v1/build_v18_closure_inputs.py",
+      "bytes": 9910,
+      "sha256": "bd7fc183094d83c27f4cd73a354d6664011e681ef0327e4c396e4d259b1f5743"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "bytes": 6382445,
+      "sha256": "869873450f21958dcac46d0fc1837b1a7d628afd4f61bda3a3e360c90afc0282",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "bytes": 1899372,
+      "sha256": "6cebee0aaa5a14c9eceab62cbcd3b6b92f9a8d7d16ca18101bd78304fdfa6115",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "bytes": 6045,
+      "sha256": "ae39dbd377ed5178df28843dce56f47b07d1ef15c0056af6f6c1921ec9256974"
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "bytes": 250835,
+      "sha256": "a568601fdd87255cbf8496af1554b7f928191c2fe49fb37daefe693c7f80947c",
+      "lines": 53
+    },
+    {
+      "path": "source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "bytes": 368411,
+      "sha256": "fcfabd74f41b889f5b5dc7be252057bdfce1b6142bb06bb91e9ead53e761c15e",
+      "lines": 399
+    }
+  ],
+  "bytes": 8942875
+}
