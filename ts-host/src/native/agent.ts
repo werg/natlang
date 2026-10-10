@@ -12,7 +12,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl } from '../runtime/context.js';
 import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, note as cutNote } from './cutoff.js';
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -96,7 +96,8 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     // A large value written as a view (the builtin view's Neuralese instance) shows the view; the variable holds the value itself.
     const shown = views[field.name] ? neuraleseSentinel(views[field.name]!) + viewNote(field.name) :
-      renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
+      renderValue(value, { root, holder: field.name, budget: SCOPE_VALUE_CHARS,
+        liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
       if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
@@ -445,7 +446,8 @@ export class NativeToolAgent {
     for (const field of lam.type.params.fields) {
       if (!Object.hasOwn(lam.args, field.name)) continue;
       const value = lam.args[field.name]!;
-      if (!renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
+      if (!renderValue(value, { root, holder: field.name, budget: SCOPE_VALUE_CHARS,
+        liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
@@ -779,7 +781,8 @@ export class NativeToolAgent {
     const declared = (keyword: string, name: string, type: string, value: Value, note = ''): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
       const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
-      const expression = scopeExpression(value, root, name, SHOWN_CHARS, { nodes: 0, depth: 0, untrusted: session.runtime.untrusted });
+      const expression = scopeExpression(value, root, name, SCOPE_VALUE_CHARS,
+        { nodes: 0, depth: 0, untrusted: session.runtime.untrusted });
       names.push(name);
       return expression === undefined ?
         `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name, session.runtime.displayLiveId)}${note}` :

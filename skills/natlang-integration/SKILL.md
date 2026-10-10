@@ -27,6 +27,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 - Service calls and live-object writes happen immediately and are traced as effects; they are not rolled back when a call fails. Captured `let` variables are written back only after a successful eval.
 - Every call is recorded in the machine's call store (exact values within bounds) and may be served by a compiled crisp case; a case that fails hands the call back to the function. Exclude sensitive values with `"recording": { "exclude": [...] }` in `natlang.json`, and give embedded runtimes `programRoot`. See [records](references/records.md).
 - Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.
+- Native input and scope listings show up to 4,096 characters per value. A cut-off listing names the complete live eval variable; use ordinary code such as `value.slice(start, end)` to inspect omitted ranges. Tool-result text remains separately capped at 2,000 characters and is paged with `read_page`.
 - Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 
 Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.

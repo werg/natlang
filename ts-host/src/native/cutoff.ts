@@ -11,6 +11,9 @@
 /** How many characters of one output or value a message shows. */
 export const SHOWN_CHARS = 2000;
 
+/** Scope and input values may be longer than tool output; larger values remain available in eval. */
+export const SCOPE_VALUE_CHARS = 4096;
+
 /** Parts of a note: `holder` is the scope expression that holds all of it; `next` a call that shows the next part. */
 export type Where = { holder?: string; next?: string };
 
