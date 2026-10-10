@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v60-disagreement-scope-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v60-disagreement-scope-v1",
+  "files": [
+    {
+      "path": "quality-review.json",
+      "bytes": 76886,
+      "sha256": "d341a4357c4462c7e874f0e6c7aa6d842267b2f2f57a559ea84dedd26de2fb8a"
+    },
+    {
+      "path": "quality-review.md",
+      "bytes": 35976,
+      "sha256": "704676f2148da032a829669525c48ab08ad4e36a5a6f2f10e4f59c7ffa3e7a7b"
+    }
+  ],
+  "bytes": 112862
+}

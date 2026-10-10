@@ -1,6 +1,6 @@
 {
   "schema": "natlang.decision-source-quality-holds/1",
-  "policy_id": "decision-visible-answerability-holds-v3",
+  "policy_id": "decision-visible-answerability-holds-v4",
   "status": "canonical_forward_source_filter",
   "training_admission": false,
   "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
@@ -264,10 +264,70 @@
         "source_record_sha256": "b19ba1ea723d68e3ca0947d1a2ed9439a73da55afca0f134b77680aba52b9570"
       },
       "decision_receipt_sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    },
+    {
+      "item_id": "dc-433c4e02fdbf3ed7e4ca",
+      "original_source_group": "g-0aa46cd5879386288187a34d",
+      "split": "train",
+      "reason": "Teaching hospital text describes institution and location without uniquely establishing Building over EducationalInstitution.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "4254abb213853c24c409e739e7404d0b07b5ea90e65a4a4afc7bf663cef2f635"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-f27ac074eae55538adf9",
+      "original_source_group": "g-1785ebe35b3ccc3d8e90fead",
+      "split": "train",
+      "reason": "Short personal reply mentioning David Koresh does not identify original atheist versus religion newsgroup without thread context.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "26a59e16e1e57fb4eaf0ead8fccde4f82483bb444e7f8d0cbc581491f6d928c0"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-0c173ed9923522ab8237",
+      "original_source_group": "g-ecca73f03b4b1d92c3ffbff8",
+      "split": "train",
+      "reason": "British-born describes birthplace, not citizenship; evidence does not entail the claimed citizenship.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "5c1290c9287b2e79345cac902507a44e42d6c1ae6af1e1d36c09272aec14f28c"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-14db3bb5a578383d3333",
+      "original_source_group": "g-b795a7ad085325ea867fff1b",
+      "split": "train",
+      "reason": "Contact/reply invitation does not explicitly express annotated joy or any unique listed emotion.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "fed6af32cade5cf20fe76f1ceddf73931120504ac4d3acc7d646331bfdcfbb1a"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
+    },
+    {
+      "item_id": "dc-90e64bed3c0325920be2",
+      "original_source_group": "g-8d9ca6fbac27e523cc66c242",
+      "split": "train",
+      "reason": "Positive residual extra costs and no viability criterion do not uniquely answer economically viable; stated self-funding aim is not achieved by reported savings.",
+      "evidence": {
+        "review_path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+        "review_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585",
+        "source_record_sha256": "9d47fa582678624872de897ef3318b165b6584dd048176b6a48bd188c6cd2fa1"
+      },
+      "decision_receipt_sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
     }
   ],
   "root_review": {
-    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v3/root-review.json",
-    "sha256": "72cb9cfee2aa264637160cbd7b6f4c926beeca08a6e03c52c25265b925862477"
+    "path": "runs/free-provider-generation-20261009-v1/decision-visible-answerability-root-review-v4/root-review.json",
+    "sha256": "9baae1105249cd054457274ff77180928ca1c4806e987901f5774c6951bcf585"
   }
 }
