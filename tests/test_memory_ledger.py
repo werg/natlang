@@ -221,6 +221,19 @@ def test_cgroup_usage_leaves_out_reclaimable_page_cache_but_keeps_shared_memory(
     assert ledger.cgroup_usage(str(tmp_path), {7: 5 * GIB}) == 30 * GIB - 10 * GIB + 5 * GIB
 
 
+def test_cgroup_usage_leaves_out_lazily_freed_anonymous_memory(tmp_path, monkeypatch):
+    cg = tmp_path / 'cg'
+    cg.mkdir()
+    (cg / 'memory.current').write_text(str(30 * GIB))
+    (cg / 'cgroup.procs').write_text('7\n8\n')
+    (cg / 'memory.stat').write_text(f'anon {28 * GIB}\nfile {2 * GIB}\nshmem 0\n')
+    proc = tmp_path / 'proc'
+    (proc / '7').mkdir(parents=True)
+    (proc / '7' / 'smaps_rollup').write_text(f'Rss: {27 * GIB // 1024} kB\nLazyFree: {22 * GIB // 1024} kB\n')
+    monkeypatch.setattr(ledger, 'PROC', str(proc))  # pid 8 has no readable smaps: counts nothing freed
+    assert ledger.cgroup_usage(str(cg), {7: 50 * GIB}) == 30 * GIB - 2 * GIB - 22 * GIB + 50 * GIB
+
+
 def test_a_guard_stop_waits_out_the_victims_grace_and_kills_only_in_an_emergency():
     pending = {'deadline': 1000.0, 'container': 'c'}
     emergency = 3 * GIB

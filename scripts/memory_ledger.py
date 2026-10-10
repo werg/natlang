@@ -183,7 +183,27 @@ def cgroup_usage(root, gpu):
         host -= max(0, int(stat.get('file', 0)) - int(stat.get('shmem', 0)))
     except (OSError, ValueError):
         pass
+    # Anonymous memory a process freed with MADV_FREE (torch's mimalloc CPU allocator on the GB10 build) stays charged
+    # as anon until the kernel reclaims it, but it is reclaimable like page cache: a 12B model's freed host staging
+    # read ~22 GB over the job's working set (plans/mellum-port.md "Warm-up step profile").
+    host -= sum(lazyfree_bytes(pid) for pid in pids)
     return max(0, host) + sum(gpu.get(pid, 0) for pid in pids)
+
+
+PROC = '/proc'
+
+
+def lazyfree_bytes(pid):
+    """``LazyFree`` of a process (``smaps_rollup``): freed anonymous pages the kernel may drop without writeback; 0
+    when unreadable."""
+    try:
+        with open(os.path.join(PROC, str(pid), 'smaps_rollup')) as f:
+            for line in f:
+                if line.startswith('LazyFree:'):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0
 
 
 def container_cgroup(command, unit=None):
