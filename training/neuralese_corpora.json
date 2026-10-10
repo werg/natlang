@@ -24516,6 +24516,19 @@
       "training_admission": false,
       "admission": "generation-input-only-no-training-admission",
       "notes": "512freshtrain exactoriginaldecision-v1rows, IDsANDgroupsdisjointallpriorproviderinputs includingV11; fivefamilies roundrobin2..8options state<=1000JSONchars. Sharedquotaownerwait4requests2/group7secstartpacing no paidfallback. Activeoutputs excluded."
+    },
+    {
+      "id": "free-provider-luna-v35-final-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v36-luna-v35-v11-final-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "closed-provider-semantic-action-quality-review",
+      "training_admission": false,
+      "admission": "quality-evidence-only-no-training-admission",
+      "notes": "OriginalV35V11only31durableresults29exactsemanticaccepted2wrongdecisions plusindex20digestinfra partial.1371actions30unsuccessful across18rows156sharedvalidatedactualtypededges;5manualtraversals andindex8seedreuse expose tracequality notparentgrade. FreshV12repairseparate; no automaticnegatives/admission."
     }
   ],
   "coverage_backlog": [
