@@ -25,7 +25,8 @@ Block IDs are content hashes of float payloads, so they differ whenever floats d
 and payload closeness are compared instead. Skipped unless the fork's CPU build exists. The fork also runs as
 WebAssembly (`final-wasm`: ts-host/vendor/neuralese-wasm through scripts/neuralese-wasm-server.mjs), the browser
 runtime's service, against the same checks; `final-wasm-mt` the threaded build with four threads (NATLANG_CONFORMANCE_WASM_MT=0
-leaves it out). The WebGPU build needs a browser's WebGPU and is not run under Node.
+leaves it out). The WebGPU build needs a browser's WebGPU and is not run under Node. Both servers compute on
+NATLANG_CONFORMANCE_THREADS CPU threads (default min(8, cores); `THREADS`).
 """
 
 from __future__ import annotations
@@ -46,6 +47,18 @@ ATOL_PAYLOAD = 2e-2
 ATOL_LOGPROB = 5e-2
 # The served context of every pair (the fork's -c, the reference Engine's context): view plans its write sites against it.
 CONTEXT = 8192
+# CPU threads of both servers: the reference's torch intra-op pool (torch.set_num_threads, process-wide, so also the
+# engine's and the HTTP handlers' threads) and the native fork's -t. NATLANG_CONFORMANCE_THREADS, default min(8, cores):
+# torch's default (every core) crawls when the machine is loaded. The threaded wasm build keeps its own four threads.
+THREADS = int(os.environ.get("NATLANG_CONFORMANCE_THREADS") or min(8, os.cpu_count() or 1))
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cpu_threads():
+    before = torch.get_num_threads()
+    torch.set_num_threads(THREADS)
+    yield THREADS
+    torch.set_num_threads(before)
 
 
 def _binary():
@@ -132,7 +145,7 @@ def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
     threading.Thread(target=reference.serve_forever, daemon=True).start()
     command = _wasm_command(model_gguf, heads_gguf) if impl == "wasm" else \
         _wasm_command(model_gguf, heads_gguf, "neuralese-wasm-mt") if impl == "wasm-mt" else \
-        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", str(engine.max_block),
+        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", str(THREADS), "--max-block", str(engine.max_block),
          "-c", str(CONTEXT)]
     fork, fork_url = _start(command)
     host, port = reference.server_address[:2]
@@ -932,3 +945,26 @@ def test_batched_item_errors_and_block_width_agree(servers):
         assert _request(f"{servers[name]}/v1/neuralese/blocks/{narrow.id}", "PUT", raw=encode_block(narrow))[0] == 201
     body = {"messages": [{"role": "user", "content": [{"type": "neuralese", "id": narrow.id}]}], "max_tokens": 2}
     assert _codes(_both(servers, "/v1/chat/completions", "POST", body)) == {(400, "neuralese-bad-block")}
+
+
+def test_max_tokens_zero_generates_nothing_and_bad_limits_fail(servers):
+    """SERVER_HARMONIZATION #20: `max_tokens` (else `max_completion_tokens`) is honoured as given, 0 included: no generated
+    token, the same empty message and finish_reason "length" on both, streamed and not (a template readout too); absent
+    or null is 512; a negative, fractional or non-numeric limit is 400 bad-max-tokens on both, before a stream opens."""
+    for body in ({"messages": OPENING, "max_tokens": 0},
+                 {"messages": OPENING, "max_tokens": None, "max_completion_tokens": 0},
+                 {"messages": OPENING, "max_tokens": 0, "neuralese_template": {"call": "return_result", "arguments": {
+                     "status": "success"}, "value": "write"}}):
+        ref, fork, message = _replies_agree(servers, body)
+        assert ref["choices"][0]["finish_reason"] == "length" and ref["usage"]["completion_tokens"] == 0, ref
+        assert not message.get("content") and not message.get("tool_calls") and not ref["neuralese"]["blocks"], message
+        for name in ("reference", "fork"):
+            _, final = _assemble(_stream(servers[name], body)[2])
+            assert final["choices"][0]["finish_reason"] == "length" and final["usage"] == ref["usage"], (name, final)
+    for bad in ({"max_tokens": -1}, {"max_tokens": 1.5}, {"max_tokens": "8"}, {"max_tokens": True},
+                {"max_completion_tokens": -2}):
+        for stream in (False, True):
+            body = {"messages": OPENING, **bad, **({"stream": True} if stream else {})}
+            got = {name: _request(servers[name] + "/v1/chat/completions", "POST", body) for name in ("reference", "fork")}
+            codes = {(status, json.loads(payload)["error"]["code"]) for status, payload in got.values()}
+            assert codes == {(400, "bad-max-tokens")}, (bad, stream, got)

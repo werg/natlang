@@ -107,6 +107,20 @@ def adapter_lora(engine: Engine, block_id: str) -> bytes:
     return cache[block_id]
 
 
+def completion_limit(body: dict) -> int:
+    """A chat completion's allowance (SERVER_HARMONIZATION #20, the fork's `engine::completion_limit`): `max_tokens`,
+    else `max_completion_tokens`, absent or null 512. A non-negative integer is honoured as given; 0 generates nothing
+    (empty reply, finish_reason "length"). Anything else is a 400 `bad-max-tokens`, not a silent default."""
+    for key in ("max_tokens", "max_completion_tokens"):
+        value = body.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise RequestError("bad-max-tokens", f"{key} must be a non-negative integer, got {json.dumps(value)}")
+        return value
+    return 512
+
+
 def make_handler(engine: Engine):
     import threading
 
@@ -333,7 +347,7 @@ def make_handler(engine: Engine):
         def _chat(self, body: dict):
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
-                max_tokens=int(body.get("max_tokens") or body.get("max_completion_tokens") or 512),
+                max_tokens=completion_limit(body),
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),

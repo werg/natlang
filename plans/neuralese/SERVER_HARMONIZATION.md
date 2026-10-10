@@ -50,7 +50,7 @@ Runtimes:
 | POST body not a JSON object | 400 `bad-json` | 400 `bad-json` (before any action) | — |
 | Unexpected failure | 500 `internal` (envelope) | 500 `internal` (envelope) | — |
 
-Defaults agree: `max_tokens` (or `max_completion_tokens`) 512, `temperature` 0,
+Defaults agree: `max_tokens` (or `max_completion_tokens`) 512 (0 generates nothing; see #20), `temperature` 0,
 `neuralese_temperature` 0, `max_block_length` capped by the server's hard maximum, BOS once at the
 start of the rendered prompt, the shallow/final stop source fixed by the loaded heads. Errors are
 `{"error": {"code", "message"}}` everywhere.
@@ -73,7 +73,7 @@ start of the rendered prompt, the shallow/final stop source fixed by the loaded 
 | 17 | Any exception other than `RequestError`/`KeyError`/`JSONDecodeError` dropped the reference's connection. | `do_POST` except clauses | fixed: 500 `internal` envelope |
 | 18 | **Fork bug:** `POST /collect` with a malformed body read "nothing referenced" and dropped every unpinned block. | fork `handle`: collect ran before the bad-json check | fixed: 400 `bad-json` first |
 | 19 | The TS decide driver treated only 404 as "unsupported". | `neuralese-server.ts` | fixed: 404 or 501 |
-| 20 | `max_tokens: 0`: the reference falls back to 512 (`or`), the fork honours 0. | `http.py` `_chat`; fork `generate` | open (edge case; would need an engine check for zero-length requests) |
+| 20 | `max_tokens: 0`: the reference falls back to 512 (`or`), the fork honours 0. | `http.py` `_chat`; fork `generate` | fixed (fork 76f7af592): one rule on both (`http.py` `completion_limit`, the fork's `engine::completion_limit`): `max_tokens`, else `max_completion_tokens`; absent or `null` 512; a non-negative integer as given, 0 included (no generated token: empty message, `finish_reason` `length`, `completion_tokens` 0; the engines already checked the allowance before the first token); anything else (negative, fractional, string, boolean) 400 `bad-max-tokens`, for a streamed request too, as a plain response before any event (the fork's `streams()` is false for it). `test_max_tokens_zero_generates_nothing_and_bad_limits_fail` |
 | 21 | Per-item `error` strings in batched scoring differ. | both | fixed (fork parity): `"<code>: <detail>"` for a request error on both, `"internal: …"` otherwise |
 | 22 | Tool-call parsing: the fork parses Pythonic calls and a complete `<think>…</think>`; the reference also parses `<tool_call>` JSON and a lone `</think>`. | spec "Response fields" | fixed (fork parity): the fork ports chat.build_message (needed for Mellum/Maple) |
 | 23 | Payload noise generators differ at `τ > 0`. | spec | inherent (different RNGs); documented |
@@ -127,3 +127,8 @@ final-wasm, final-wasm-mt): run 1 with test_serve*.py 140 passed, 2 skipped; run
 the vendored builds 116 passed, 2 skipped each (the skips: the client-leaves check on the two in-process wasm params).
 `npm run test:browser-neuralese-parity` (ts-host, after `node scripts/build-browser.mjs` refreshes dist/browser): 28/29
 gates passed plus one measurement note (exit 0), and 29/29 with `--build neuralese-wasm-mt`; decision scores now agree.
+
+`max_tokens` (2026-10-10, fork 76f7af592, #20): `test_max_tokens_zero_generates_nothing_and_bad_limits_fail`. Both
+servers now compute on `NATLANG_CONFORMANCE_THREADS` CPU threads (default min(8, cores): the reference's
+`torch.set_num_threads`, the native fork's `-t`; torch's default of every core crawled under machine load). Full run
+(shallow, final, final-wasm, final-wasm-mt, with test_serve*.py and test_runtime_versions.py): 146 passed, 2 skipped.

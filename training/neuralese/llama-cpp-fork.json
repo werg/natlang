@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "8b41aecff",
-  "working_status": "8b41aecff: a persistent ggml threadpool per thread count shared by the llama context and the CPU heads (no per-graph thread create/join; the threaded wasm build no longer deadlocks under Node), info.context and view's default window from the served context less the site's prompt, streamed requests cancelled when the client leaves (sink.is_writable() / nzwOnEvent false), decisions cut after the option's own generation prefix (as the reference), tool-call arguments compact JSON on both servers. The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 2d6557813: parity with the reference server (template value_type \"unknown\" and argument_path, parts typed unknown, POST /v1/neuralese/embed, Qwen <tool_call> JSON calls and a lone </think> parsed as the reference's chat.build_message, streamed chat completions in the reference's chunk format: native chunked transfer, wasm through nzw_handle's event hook; info fields aligned, decide_many item errors \"code: detail\", HEAD and other methods 405); only grad, optim and adapter creation/export/projection stay reference-only. The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 43b495c73 POST /v1/neuralese/view replaces /digest; batched decision readout; full-residual-v1 reader adapter in nz_read (raw-token and latent-sketch projectors remain unsupported; this does not qualify the new foundation C++ runtime).",
+  "working_commit": "76f7af592",
+  "working_status": "76f7af592: max_tokens 0 honoured (no generated token, finish_reason length) and a malformed max_tokens/max_completion_tokens answered 400 bad-max-tokens, streamed or not (SERVER_HARMONIZATION #20, as the reference's http.py completion_limit). The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 8b41aecff: a persistent ggml threadpool per thread count shared by the llama context and the CPU heads (no per-graph thread create/join; the threaded wasm build no longer deadlocks under Node), info.context and view's default window from the served context less the site's prompt, streamed requests cancelled when the client leaves (sink.is_writable() / nzwOnEvent false), decisions cut after the option's own generation prefix (as the reference), tool-call arguments compact JSON on both servers. The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 2d6557813: parity with the reference server (template value_type \"unknown\" and argument_path, parts typed unknown, POST /v1/neuralese/embed, Qwen <tool_call> JSON calls and a lone </think> parsed as the reference's chat.build_message, streamed chat completions in the reference's chunk format: native chunked transfer, wasm through nzw_handle's event hook; info fields aligned, decide_many item errors \"code: detail\", HEAD and other methods 405); only grad, optim and adapter creation/export/projection stay reference-only. The vendored browser wasm (ts-host/vendor/neuralese-wasm) is built from this commit. Earlier: 43b495c73 POST /v1/neuralese/view replaces /digest; batched decision readout; full-residual-v1 reader adapter in nz_read (raw-token and latent-sketch projectors remain unsupported; this does not qualify the new foundation C++ runtime).",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2",
-  "commit": "8b41aecff",
+  "commit": "76f7af592",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -46,7 +46,7 @@
     },
     "server_conformance": {
       "date": "2026-10-10",
-      "fork_commit": "8b41aecff",
+      "fork_commit": "76f7af592",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
@@ -66,13 +66,14 @@
         "batched scoring groups same-prompt items across the request and answers in request order",
         "one capability model: info.server and sorted info.capabilities on both; every capability the fork lacks (grad, grad.order2, optim, adapters.create, adapters.direct, adapters.lora-export, adapters.projection) answers 501 neuralese-<capability>-unavailable; the reference answers PUT \u2026/lora 501",
         "fork parity: info fields of the same shape, embed (identical content IDs), template value_type unknown and argument_path (write and decode, refused paths), parts typed unknown render unquoted (given or stored type), Qwen <tool_call> JSON calls and a lone </think>, streamed replies (role, held-back call markup, block parts, tool_calls, x_natlang_message) assembled equal to the non-streamed reply and equal across servers, stream error events, guidance {} on both, batched item errors \"code: detail\", neuralese-bad-block for a block of another width, HEAD/PATCH/OPTIONS 405, collect with a non-list referenced 400",
-        "follow-ups (8b41aecff): view's default window from the served context (info.context, same chunks at -c 1024 on both), tool-call arguments byte-equal canonical compact JSON (streamed and not), a client that leaves a stream stops generation (native), decisions after an assistant turn with reasoning score the generation-time prompt on both"
+        "follow-ups (8b41aecff): view's default window from the served context (info.context, same chunks at -c 1024 on both), tool-call arguments byte-equal canonical compact JSON (streamed and not), a client that leaves a stream stops generation (native), decisions after an assistant turn with reasoning score the generation-time prompt on both",
+        "max_tokens (76f7af592): 0 generates nothing on both (empty message, finish_reason length, plain, streamed and template readout); negative, fractional, string and boolean limits 400 bad-max-tokens on both, before a stream opens"
       ],
       "stop_sources": [
         "shallow",
         "final"
       ],
-      "result": "140 passed, 2 skipped on DGX CPU (shallow, final native build-cpu; final-wasm, final-wasm-mt vendored builds of the same commit; plus test_serve.py, test_serve_streaming.py, test_serve_grad.py); final-wasm-mt runs by default",
+      "result": "146 passed, 2 skipped on DGX CPU, fork 76f7af592 (shallow, final native build-cpu; final-wasm, final-wasm-mt vendored builds of the same commit; plus test_serve.py, test_serve_streaming.py, test_serve_grad.py, test_runtime_versions.py); final-wasm-mt runs by default",
       "decide_max_logprob_diff": 0.0041
     }
   },
