@@ -35,6 +35,8 @@ def main():
     p.add_argument('--api-key-env', default='GEMINI_API_KEY')
     p.add_argument('--exclude-model', action='append', default=[], help='reserve this model quota group for an existing worker')
     p.add_argument('--limit', type=int, default=0)
+    p.add_argument('--choice-contract', choices=['probabilities', 'label-confidence'], default='probabilities',
+                   help='choice response shape; score/noul cases retain the probability contract')
     p.add_argument('--timeout', type=float, default=120)
     p.add_argument('--workers', type=int, default=4, help='parallel quota groups; at most one in-flight call per group')
     p.add_argument('--wait', action='store_true', help='wait for cooldowns instead of exiting with unfinished cases')
@@ -72,6 +74,7 @@ def main():
     groups = state.setdefault('groups', {})
     identity = {'schema': 'natlang.gemini-decision-pool/1', 'training_admission': False,
                 'cases_sha256': hashlib.sha256(Path(args.cases).read_bytes()).hexdigest(),
+                'choice_contract': args.choice_contract,
                 'models': models, 'endpoint': ENDPOINT, 'workers': args.workers,
                 'adapter_sha256': hashlib.sha256(Path(__file__).with_name('label_decision_cases.py').read_bytes()).hexdigest(),
                 'scheduler_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -91,7 +94,7 @@ def main():
         return _http_teacher(case, endpoint=ENDPOINT, model=model['id'], api_key=key,
             timeout=args.timeout, retries=0, initial_backoff=30, max_backoff=300,
             reasoning_effort=model['reasoning_effort'], max_output_tokens=512,
-            response_format='json_schema')
+            response_format='json_schema', choice_contract=args.choice_contract)
     with ThreadPoolExecutor(max_workers=args.workers) as executor, out_path.open('a') as out, open(str(out_path) + '.attempts.jsonl', 'a') as journal:
         while cases or pending:
             now = time.time()
@@ -151,8 +154,12 @@ def main():
                 else:
                     group['failure_streak'] = 0
                     provider['cases_sha256'] = identity['cases_sha256']
+                    contract = ('natlang.choice-label-confidence/1'
+                                if case.get('kind') == 'choice' and args.choice_contract == 'label-confidence'
+                                else 'natlang.typed-decision-probabilities/1')
                     out.write(json.dumps({'id': case['id'], 'family': case['family'],
-                        'teacher': 'google/' + model['id'], 'answer': answer, 'provider': provider}) + '\n')
+                        'teacher': 'google/' + model['id'], 'decision_contract': contract,
+                        'answer': answer, 'provider': provider}) + '\n')
                     out.flush()
                     count += 1
                     print(json.dumps({'labelled': count, 'model': model['id'], 'error': answer.get('error')}), flush=True)
