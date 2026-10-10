@@ -1,0 +1,55 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native4962-source-closure-inventory-held-20261010-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v4-final",
+  "files": [
+    {
+      "path": "inventory.json",
+      "bytes": 121961,
+      "sha256": "c9707a89a44e7cb54905cf81de5c88eb68ed16d55342f4989f57ca4eeb673e92"
+    },
+    {
+      "path": "inventory.md",
+      "bytes": 1316,
+      "sha256": "fe351f54fae365bedfdd5d28ef2bd59e78d1e0045a15af72689f3ede8abe3e0d"
+    },
+    {
+      "path": "native-source-row-index.jsonl",
+      "bytes": 23792687,
+      "sha256": "c46b1d031e24486af45028d4842ee73b2cf9cca2cdceef9f2a2a116a7ef06020",
+      "lines": 5590
+    },
+    {
+      "path": "program-source-case-binding-index.jsonl",
+      "bytes": 1267394,
+      "sha256": "366c83e4e1462f48d3b9446546e7a788799a23469bf45418a9fb7e19ff3d7d35",
+      "lines": 479
+    },
+    {
+      "path": "teacher-request-receipt-index.jsonl",
+      "bytes": 3294705,
+      "sha256": "6e5ecdcffc6e5acd818457939b7cc519666bd62f2fc7661abd89fd3ffee3da07",
+      "lines": 5590
+    },
+    {
+      "path": "trace-invocation-index.jsonl",
+      "bytes": 13314451,
+      "sha256": "633cd3b70c77a953c5dda50882ae20e1b06faa03472e10f787d2f9f4b2b677f0",
+      "lines": 5590
+    },
+    {
+      "path": "v17-case-revision-map.jsonl",
+      "bytes": 109764,
+      "sha256": "9f11b6fa2d6b950d611f7ed7eff0a556b120a434507117123a794b54ef865562",
+      "lines": 112
+    },
+    {
+      "path": "v17-exact-source-case-bindings.jsonl",
+      "bytes": 27684,
+      "sha256": "b8773d78de8ccd6d469c6951a0c511a0c345a193cff6617de374c53781be1065",
+      "lines": 36
+    }
+  ],
+  "bytes": 41929962
+}

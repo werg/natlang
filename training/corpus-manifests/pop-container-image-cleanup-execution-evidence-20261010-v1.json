@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-container-image-cleanup-execution-evidence-20261010-v1",
+  "owner": "pop",
+  "path": "runs/storage-cleanup-execution-receipts-20261010-v1",
+  "files": [
+    {
+      "path": "storage-cleanup-pop-dangling-image-v1.json",
+      "bytes": 7616,
+      "sha256": "3d90691a0997e4f1ec15bcbcbfd6597cd6c9b02692c4b7d4433fd3468bee6353"
+    },
+    {
+      "path": "storage-cleanup-pop-stopped-container-removal-receipt-v1.json",
+      "bytes": 7130,
+      "sha256": "e676e7c3dcfac8f3608f664fae7c5e389de50997fe3cd6883801bd02c3df7bf7"
+    }
+  ],
+  "bytes": 14746
+}

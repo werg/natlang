@@ -24926,6 +24926,48 @@
       "training_admission": false,
       "admission": "generation-input-only-no-training-admission",
       "notes": "Fourmediumworkers48V11sourcefolderprograms357itemsactualauthoredreferenceaccepted/capturevisible. Originalgroups/splits/golds unchangedsourcequalitypending. <=5workersincludingoneV38qualityrepair; activeoutputs excluded."
+    },
+    {
+      "id": "pop-container-image-cleanup-execution-evidence-20261010-v1",
+      "owner": "pop",
+      "path": "runs/storage-cleanup-execution-receipts-20261010-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "storage-or-source-review-evidence",
+      "training_admission": false,
+      "admission": "evidence-only-no-training-admission",
+      "notes": "Cleanup receipt only:176selectedexitedcontainers removed after sanitizedlogs/metadata preservedandSSHverified; oneuntaggedunusedoldNVIDIAimage removed. Activejobs/currentimage retained."
+    },
+    {
+      "id": "neuralese-native4962-source-closure-inventory-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v4-final",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only",
+      "source_class": "storage-or-source-review-evidence",
+      "training_admission": false,
+      "admission": "evidence-only-no-training-admission",
+      "notes": "Finalcorrectedbindinginventory5590exactrefs215canonicalID/hash sourcepairs2694refs; trace696verified193callonly149pointer4552unmatched. Noautomaticadmission,143unresolvedunchanged."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v13-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v13",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only",
+      "source_class": "storage-or-source-review-evidence",
+      "training_admission": false,
+      "admission": "evidence-only-no-training-admission",
+      "notes": "512freshinheritedtrain exactcasesdisjointIDsANDgroupsfivefamilies; sameGoogleprojectquotawaitownerfourrequests2/group7secondpacing. Activeoutputs excluded."
     }
   ],
   "coverage_backlog": [
