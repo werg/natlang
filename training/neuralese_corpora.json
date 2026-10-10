@@ -26205,6 +26205,22 @@
       "training_admission": false,
       "admission": "held-source-semantic-and-trajectory-review",
       "notes": "Returned map and saved decision exact; all checks pass,9 input files unchanged56 child typed outputs. One execution only; no inferred item-level visibility/admission."
+    },
+    {
+      "id": "free-provider-google-v19-reviewed-source-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v19",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-expanded-choice-inputs",
+      "training_admission": false,
+      "admission": "held-source-split-semantic-output-review",
+      "notes": "512 unchanged original train rows, IDs and groups disjoint from all prior provider inputs;8families64each. Same projectquota lock waits for V18; no paid fallback. Source SHA58ce152499f9c318400cd783c2df4844ac8ef8cf4fc1c81630b8bbe94416a6ba."
     }
   ],
   "coverage_backlog": [
