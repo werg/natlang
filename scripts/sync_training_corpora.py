@@ -398,8 +398,7 @@ def local_references(paths, proc_root=Path('/proc')):
 
 
 def offload(repo, entry, manifest, args):
-    if entry['owner'] != args.machine:
-        raise ValueError(f'offload requires the local {args.machine} machine to own the registered snapshot')
+    local_owner = entry['owner'] == args.machine
     selected = select_manifest_files(manifest, args.files or [])
     root = repo / relative(manifest['path'])
     paths = [root / relative(item['path']) for item in selected['files']]
@@ -428,7 +427,8 @@ def offload(repo, entry, manifest, args):
                           'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
                           'local_references': references, 'unlink_permissions': unlink_permissions,
                           'remote': f'{args.host}:{args.remote_repo}/{relative(manifest["path"])}',
-                          'will_transfer_and_verify_before_unlink': True, 'restore': restore,
+                          'will_transfer_and_verify_before_unlink': local_owner,
+                          'will_verify_existing_remote_before_unlink': not local_owner, 'restore': restore,
                           'execute_command': f"python3 scripts/sync_training_corpora.py offload --machine {shlex.quote(args.machine)} --host {shlex.quote(args.host)} --remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " +
                                              ' '.join(f'--file {shlex.quote(item["path"])}' for item in selected['files']) + ' --execute'}), flush=True)
         return
@@ -438,7 +438,11 @@ def offload(repo, entry, manifest, args):
     transfer_args.files = [item['path'] for item in selected['files']]
     transfer_args.remote_receipt_group = 'artifact-offload-verifications'
     transfer_args.remote_receipt_key = verification_id
-    remote_receipt = sync(repo, entry, manifest, transfer_args)
+    # A non-owner holds a disposable local mirror. Verify the remote immutable
+    # copy directly; never push that mirror back over the owner's artifacts.
+    remote_receipt = (sync(repo, entry, manifest, transfer_args) if local_owner else
+                      verify_remote(selected, args, receipt_group='artifact-offload-verifications',
+                                    receipt_key=verification_id))
     if (not remote_receipt or remote_receipt.get('status') != 'verified' or
             remote_receipt.get('manifest_sha256') != hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).hexdigest()):
         raise ValueError('selected remote files were not transferred and verified against their exact manifest')
@@ -456,6 +460,8 @@ def offload(repo, entry, manifest, args):
 
     attempt_id = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='microseconds') + f'-pid{os.getpid()}'
     receipt = {'schema': 'natlang.artifact-offload/1', 'id': manifest['id'], 'verification_id': verification_id,
+               'snapshot_owner': entry['owner'], 'local_machine': args.machine,
+               'mode': 'owner-transfer' if local_owner else 'verified-local-mirror-eviction',
                'attempt_id': attempt_id,
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'selected_files': selected['files'], 'bytes': selected['bytes'], 'local_file_stats': final_stats,

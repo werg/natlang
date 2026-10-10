@@ -747,8 +747,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const sourceFile = ts.createSourceFile(`saved-helper-${helper.name}.ts`, helper.source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
       const fileName = `saved-helper:${helper.name}@${helper.sourceHash}`;
       const localSpan = (item: { file: string; start: number; end: number; line: number; column: number }) => {
-        const start = Math.max(0, item.start - helperOffset), end = Math.max(0, item.end - helperOffset);
-        const location = sourceFile.getLineAndCharacterOfPosition(Math.min(sourceFile.text.length, start));
+        if (!Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end) || item.start < helperOffset ||
+            item.end <= item.start || item.end > helperOffset + helper.source.length) return item;
+        const start = item.start - helperOffset, end = item.end - helperOffset;
+        const location = sourceFile.getLineAndCharacterOfPosition(start);
         return { file: fileName, start, end, line: location.line + 1, column: location.character + 1 };
       };
       for (const plan of plans) {
@@ -759,9 +761,38 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         plan.sourceSpan = localSpan(plan.sourceSpan);
         plan.templateSpan = localSpan(plan.templateSpan);
         plan.interpolations = plan.interpolations.map(item => ({ ...item, sourceSpan: localSpan(item.sourceSpan) }));
-        plan.captures = plan.captures.map(capture => ({ ...capture, mentionSpan: Math.max(0, capture.mentionSpan - helperOffset) }));
+        plan.captures = plan.captures.map(capture => ({ ...capture,
+          mentionSpan: Number.isSafeInteger(capture.mentionSpan) && capture.mentionSpan >= helperOffset &&
+            capture.mentionSpan < helperOffset + helper.source.length ? capture.mentionSpan - helperOffset : capture.mentionSpan }));
       }
       helperOffset += helper.source.length + 1;
+    }
+    // `analyze` receives helperPrefix + the current snippet so type checking can
+    // resolve saved declarations. Keep those absolute coordinates for lowering
+    // (planCoordinates above), but expose current-action plans with offsets into
+    // the exact snippet passed to eval. Otherwise runtime provenance spans point
+    // into the analysis prelude and cannot be checked against the written action.
+    const snippetFile = ts.createSourceFile('natlang-eval-action.ts', snippetSource,
+      ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const snippetSpan = (item: { file: string; start: number; end: number; line: number; column: number }) => {
+      const start = item.start - helperOffset, end = item.end - helperOffset;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start ||
+          end > snippetSource.length) return item;
+      const location = snippetFile.getLineAndCharacterOfPosition(start);
+      return { ...item, start, end, line: location.line + 1, column: location.character + 1 };
+    };
+    for (const plan of plans) {
+      if (plan.sourceBackedHelper) continue;
+      const coordinate = planCoordinates.get(plan)!;
+      // A plan outside both the saved-helper source ranges and the current
+      // snippet is intentionally left unmapped for downstream fail-closed checks.
+      if (coordinate.start < helperOffset || coordinate.end > helperOffset + snippetSource.length) continue;
+      plan.sourceSpan = snippetSpan(plan.sourceSpan);
+      plan.templateSpan = snippetSpan(plan.templateSpan);
+      plan.interpolations = plan.interpolations.map(item => ({ ...item, sourceSpan: snippetSpan(item.sourceSpan) }));
+      plan.captures = plan.captures.map(capture => ({ ...capture,
+        mentionSpan: Number.isSafeInteger(capture.mentionSpan) && capture.mentionSpan >= helperOffset &&
+          capture.mentionSpan < helperOffset + snippetSource.length ? capture.mentionSpan - helperOffset : capture.mentionSpan }));
     }
     literals = analysis.neuralese ?? [];
     readouts = analysis.readouts ?? [];

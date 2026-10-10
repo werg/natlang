@@ -4,6 +4,7 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from './nl-call.js';
 import { portablePrimitiveLiteral } from './targets.js';
+import { verifyInlineActionSpanMap } from './inline-action-spans.js';
 import * as ts from 'typescript';
 
 type Dict = Record<string, unknown>;
@@ -140,7 +141,13 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       const softBodyId = bodyId;
       const softCaptureSite = softBodyId !== undefined && site.explicit_captures === true && !!captures?.length;
       const explicitCaptureSite = site.explicit_captures === true && !!captures?.length;
-      if (!captures || (captures.length !== 0 && !explicitCaptureSite) || (site.explicit_captures === true && !explicitCaptureSite)) {
+      // An explicit `nl.with({})` has a real, exact empty capture contract. It
+      // is valid for a literal instruction with no soft body; keep nonempty
+      // captures and soft-body capture rules unchanged.
+      const explicitEmptyCaptureSite = site.explicit_captures === true && !!captures && captures.length === 0 &&
+        softBodyId === undefined;
+      if (!captures || (captures.length !== 0 && !explicitCaptureSite) ||
+          (site.explicit_captures === true && !explicitCaptureSite && !explicitEmptyCaptureSite)) {
         hold(row, 'unsupported-capture-contract'); continue;
       }
       if (!Array.isArray(site.parameters) || site.returns === undefined) { hold(row, 'typed-plan-incomplete'); continue; }
@@ -234,6 +241,9 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       }
       if (typeof code !== 'string' || typeof checkedSourceCode !== 'string' ||
           hexDigest(checkedSourceCode) !== origin.writtenCodeSha256) { hold(row, 'parent-code-hash-mismatch'); continue; }
+      if (site.action_local_span_map !== undefined && !verifyInlineActionSpanMap(code, site)) {
+        hold(row, 'action-local-span-map-invalid'); continue;
+      }
       const targetId = targetCall && typeof targetCall.id === 'string' ? targetCall.id : undefined;
       const targetFunction = asDict(targetCall?.function);
       const targetArgs = parseArguments(targetFunction?.arguments);
@@ -364,6 +374,9 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   // visible in the child. A callable parameter shadows its matching captured initializer.
   const captures = declaredCaptures.filter(capture => capture.shadowedByParameter !== true);
   const runtime = asDict(site.runtime_captures);
+  if (site.explicit_captures === true && captures.length === 0 && !bodyId &&
+      (!runtime || Object.keys(runtime).length !== 0))
+    return { valid: false, reason: 'explicit-empty-capture-runtime-map-mismatch' };
   if (!runtime && captures.length) return { valid: false, reason: 'runtime-capture-attestation-missing' };
   const bodySource = bodyId ? stringAt(site, 'raw_body_source') : (site.template_segments as string[])[0];
   const bodyHash = bodyId ? stringAt(site, 'raw_body_source_sha256') : typeof bodySource === 'string' ? hexDigest(bodySource) : undefined;

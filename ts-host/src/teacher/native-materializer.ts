@@ -7,6 +7,7 @@ import type { ProgramRecord } from './program.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
+import { deriveInlineActionSpanMap } from '../compiler/inline-action-spans.js';
 import { formatType, parseType, type Type } from '../native/types.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -1326,7 +1327,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           event.tool_call_id === origin.toolCallId && event.name === 'eval');
         const code = actions.length === 1 && typeof (actions[0]!.arguments as Dict | undefined)?.code === 'string' ?
           (actions[0]!.arguments as Dict).code as string : undefined;
-        const span = site.template_span && typeof site.template_span === 'object' ? site.template_span as Dict : {};
+        let span = site.template_span && typeof site.template_span === 'object' ? site.template_span as Dict : {};
         const segments = Array.isArray(site.template_segments) ? site.template_segments : [];
         const holes = Array.isArray(site.interpolations) ? site.interpolations : [];
         const softBodySite = typeof site.soft_body_id === 'string';
@@ -1335,6 +1336,45 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         let realized = bindingsValid ? String(segments[0]) + holes.map((value, index) =>
           String((value as Dict).rendered) + String(segments[index+1])).join('') : undefined;
         if (realized !== undefined && !realized.endsWith('\n')) realized += '\n';
+        // Some saved compiler plans used helper-prefixed source coordinates. Rebase
+        // only when the exact action hash and a unique TypeScript AST site prove it.
+        // Keep the original spans in a sidecar so the transformation is auditable.
+        if (code !== undefined && code.length && site.soft_body_id === undefined) {
+          const spanMap = deriveInlineActionSpanMap(code, site);
+          if (spanMap && spanMap.mapped && typeof spanMap.mapped === 'object') {
+            const mapped = spanMap.mapped as Dict;
+            const original = spanMap.original as Dict;
+            site.action_local_span_map = spanMap;
+            site.source_span = mapped.source_span;
+            site.template_span = mapped.template_span;
+            site.checked_template_span = mapped.checked_template_span;
+            span = mapped.template_span as Dict;
+            if (Array.isArray(site.interpolations) && Array.isArray(mapped.interpolation_spans)) {
+              site.interpolations = (site.interpolations as Dict[]).map((hole, index) => ({ ...hole,
+                sourceSpan: (mapped.interpolation_spans as unknown[])[index] ?? hole.sourceSpan }));
+            }
+            for (const capture of Array.isArray(site.captures) ? site.captures as Dict[] : []) {
+              const mention = capture.mentionSpan;
+              const delta = spanMap.prefix_characters;
+              if (typeof mention === 'number' && Number.isSafeInteger(mention) &&
+                  typeof delta === 'number' && Number.isSafeInteger(delta) && delta > 0 &&
+                  mention >= delta && mention < delta + code.length)
+                capture.mentionSpan = mention - delta;
+            }
+            const snapshots = site.runtime_capture_snapshots && typeof site.runtime_capture_snapshots === 'object' ?
+              site.runtime_capture_snapshots as Dict : undefined;
+            if (Array.isArray(snapshots?.captures)) for (const snapshotValue of snapshots!.captures as unknown[]) {
+              if (!snapshotValue || typeof snapshotValue !== 'object') continue;
+              const snapshot = snapshotValue as Dict, creation = snapshot.creation && typeof snapshot.creation === 'object' ?
+                snapshot.creation as Dict : undefined;
+              if (!creation) continue;
+              if (canonical(creation.sourceSpan) === canonical(original.source_span)) creation.sourceSpan = mapped.source_span;
+              if (canonical(creation.templateSpan) === canonical(original.template_span)) creation.templateSpan = mapped.template_span;
+              if (canonical(creation.checkedTemplateSpan) === canonical(original.checked_template_span))
+                creation.checkedTemplateSpan = mapped.checked_template_span;
+            }
+          }
+        }
         const reasons = [
           ...(site.schema !== 'natlang.inline_instruction_site/1' ? ['site-schema-mismatch'] : []),
           ...(!softBodySite && !bindingsValid ? ['interpolation-bindings-missing'] : []),
