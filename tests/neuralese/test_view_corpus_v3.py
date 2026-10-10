@@ -130,3 +130,20 @@ def test_pmc_structured_abstracts_are_whole_sections():
     text = "# T\n\n## Abstract\n\n### Background\n\nWhy.\n\n### Methods\n\nHow.\n\n## Body\n\nText.\n"
     _, rest, abstract, simple = vc.pmc_sections(text)
     assert abstract == "### Background\n\nWhy.\n\n### Methods\n\nHow." and simple is None and "Why." not in rest
+
+
+def test_registered_view_v3_is_gated_only_on_the_stage_and_pinned_by_the_recipe():
+    entries = {e["id"]: e for e in json.loads((ROOT / "training/neuralese_corpora.json").read_text())["corpora"]}
+    v3 = entries["view-ask-20261010-v3"]
+    assert v3["training_admission"] is False and v3["supersedes"] == "view-ask-20261010-v2"
+    for entry in (v3, entries["view-ask-20261010-v2"], entries["view-ask-slice-20261010-v1"]):
+        held = " ".join(str(entry.get(k, "")) for k in ("admission", "training_admission_reason")).lower()
+        assert "licen" not in held or "facts only" in held
+    for ix in v3["build"]["cross_corpus_indexes"]:
+        assert "path" not in ix and entries[ix["registry_id"]]["kind"] == "cross-corpus-index"
+    recipe = json.loads((ROOT / "training/neuralese/recipes/raw-recurrence-v4.json").read_text())["overrides"]
+    binding = recipe["input_bindings"]["view-stage-records"]
+    assert binding["path"] == v3["path"] + "/view-stage/records.jsonl"
+    assert binding["sha256"] in v3["build"]["view_stage_conversion"]
+    assert recipe["view_operator"]["corpus"]["id"] == v3["id"] and recipe["view_operator"]["admitted"] is False
+    assert "licence" not in recipe["view_operator"]["admission"].split("(")[0]

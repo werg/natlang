@@ -6,11 +6,11 @@
   "overrides": {
     "input_bindings": {
       "view-stage-records": {
-        "path": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/records.jsonl",
-        "sha256": "3e276b32bfc1a13dc7d588e03cd0f3e68e12dab95ea84b923e4689437090cf4c"
+        "path": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/records.jsonl",
+        "sha256": "85f693b7f5f943f183391715bd36678e8dea980aa3a094ce42213822544d4c78"
       },
       "view-stage-pieces": {
-        "path": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/pieces.jsonl",
+        "path": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/pieces.jsonl",
         "sha256": "a513ed464460664e38d7d7673f2fc0556e21cb5da7a2f42d9f18593dbec57fb0"
       },
       "harness-bench-records-v3": {
@@ -24,12 +24,12 @@
     },
     "view_operator": {
       "admitted": false,
-      "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+      "admission": "held: each student's exact-weight runtime qualification precedes this stage and the stage awaits its own qualification (licences are provenance facts only, owner rule 2026-10-10); the stage runs only when this declaration admits it",
       "decision": "DECISIONS.md 2026-10-09 'one summarizer family: view and ask'; TRAINING_RECIPE.md 'The view operator stage'",
       "corpus": {
-        "id": "view-ask-20261010-v2",
-        "records": "data/neuralese/corpora/view-ask-20261010-v2/view-stage/records.jsonl",
-        "conversion": "natlang_neuralese.data.view_records (view-ask port records -> trajectory-trainer records with one view part; validation split kept with the corpus)",
+        "id": "view-ask-20261010-v3",
+        "records": "data/neuralese/corpora/view-ask-20261010-v3/view-stage/records.jsonl",
+        "conversion": "natlang_neuralese.data.view_records@2 (view-ask port records -> trajectory-trainer records with one view part; multi-source records rendered as one value, Document k of n; validation split kept with the corpus)",
         "training_admission": false
       },
       "after": "each student's exact-weight runtime qualification (adapted_runtime) on the text warm-up's weights; the recurrence stage (recurrence_warmup) requires this stage's gate",
@@ -73,7 +73,7 @@
           "id": "view_operator",
           "kind": "raw_recurrence_training",
           "admitted": false,
-          "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+          "admission": "held: each student's exact-weight runtime qualification precedes this stage and the stage awaits its own qualification (licences are provenance facts only, owner rule 2026-10-10); the stage runs only when this declaration admits it",
           "requires": [
             "autoregressive_text_fixup",
             "adapted_runtime"
@@ -139,7 +139,7 @@
           "id": "view_gate",
           "kind": "view_operator_gate",
           "admitted": false,
-          "admission": "held: the view-ask corpus awaits the owner's licence review (VIEW_CORPUS.md section 6) and each student's exact-weight runtime qualification precedes this stage; the stage runs only when this declaration admits it",
+          "admission": "held: each student's exact-weight runtime qualification precedes this stage and the stage awaits its own qualification (licences are provenance facts only, owner rule 2026-10-10); the stage runs only when this declaration admits it",
           "requires": [
             "view_operator"
           ],

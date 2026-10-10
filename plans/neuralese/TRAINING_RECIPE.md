@@ -339,8 +339,9 @@ and converted by `scripts/neuralese_data/digest_to_view.py` into a new corpus.
 Declared (2026-10-10) as `view_operator` and its gate `view_gate` in raw-recurrence-v4 and raw-recurrence-mellum-v3
 (each its predecessor plus these stages, inserted after `adapted_runtime` with `overrides.stages_added`; the recurrence
 stage additionally requires the gate). Both are **held** (`admitted: false`; the runner refuses a stage so declared)
-until the owner's licence review of the corpus (VIEW_CORPUS.md §6) and each student's runtime qualification. Data:
-the view-ask corpus `view-ask-20261010-v2` converted by `natlang_neuralese.data.view_records` into trajectory-trainer
+until each student's runtime qualification and the stage's own qualification (licences are provenance facts only, owner
+rule 2026-10-10). Data:
+the view-ask corpus `view-ask-20261010-v3` converted by `natlang_neuralese.data.view_records` into trajectory-trainer
 records with one view part each (faithful parts for reconstruction; the purpose as the part's instructions
 otherwise; the full value as the preview, so `--distill` distils from the full-text reader). Objectives: reconstruct
 CE, consume/QA CE with the source withheld, the purpose contrast (`--purpose-contrast 0.25 --purpose-margin 0.1`:

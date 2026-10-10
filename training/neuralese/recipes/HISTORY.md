@@ -110,14 +110,18 @@ raw-recurrence-v1/v2 and raw-recurrence-mellum-v1 keep their identity.
 
 raw-recurrence-v3 and raw-recurrence-mellum-v2 (unchanged) plus the declared, **held** view operator stage
 (DECISIONS.md 2026-10-09 "one summarizer family"; TRAINING_RECIPE.md "The view operator stage"):
-- `view_operator` (raw_recurrence_training, after `adapted_runtime`): the view-stage records of `view-ask-20261010-v2`
+- `view_operator` (raw_recurrence_training, after `adapted_runtime`): the view-stage records of `view-ask-20261010-v2` (v3 since the repin below)
   (`view-stage/records.jsonl`, pinned by SHA-256), `--view written`, faithful parts for reconstruction, distill 1.0,
   purpose_contrast 0.25 / margin 0.1, view_tokens_per_vector 4 within max_write_vectors 512, stop_pg 0.01 (combining
   writes), backward_policy joint, cohort `view`.
 - `view_gate` (view_operator_gate, eval/view_gate.py) on that stage's checkpoint, with the harness-bench v3 records for
   pi's next-action loss; proposed thresholds as parameters.
 - `recurrence_warmup` additionally requires `view_gate`; the harness cohort's recurrence declaration gains
-  `view_tokens_per_vector 4`. Both stages carry `admitted: false` (licence review and runtime qualification).
+  `view_tokens_per_vector 4`. Both stages carry `admitted: false` (runtime qualification and the stage's own
+  qualification).
+- Repinned 2026-10-10 (stages held, never run): the view stage's records are those of `view-ask-20261010-v3`
+  (`view-stage/records.jsonl` SHA-256 85f693b7…, converter view_records@2); the licence hold is removed from the
+  admission texts (owner rule 2026-10-10: licences are provenance facts only).
 - New shared mechanism: `overrides.stages_added` (insert a stage after a named one). raw-recurrence-mellum-v3 repeats
   mellum-v2's backbone-inherent overrides and applies its recurrence overrides to `view_operator` too; a test proves
   both resolve to their predecessors plus these additions.
