@@ -1,0 +1,66 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v25-reviewed-launch-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 426631,
+      "sha256": "ab160b766f3ea6c576385b8b91264624e41b4b4800c18c5a4ce86481f720a998",
+      "lines": 512
+    },
+    {
+      "path": "frozen-adapter-v1/frozen-runtime.json",
+      "bytes": 1194,
+      "sha256": "b3103103058597205e2e9d89322cae332e78a02aad7ec30970720d9ff847eb40"
+    },
+    {
+      "path": "frozen-adapter-v1/models.json",
+      "bytes": 2806,
+      "sha256": "d82301681f47878de99f666ee58827c90cf6d7aae5025248f4cd4be7ecac6a26"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/label_decision_cases.py",
+      "bytes": 29670,
+      "sha256": "adccf20446070bad4d1b3d4cb445ca18f4a28e76fc11657f2dd7f36c532b045b"
+    },
+    {
+      "path": "frozen-adapter-v1/scripts/run_gemini_decision_pool.py",
+      "bytes": 10420,
+      "sha256": "418bb4f7dc5394063035471254c6d12b26c0e22526b0b25ea8e0bcb6da3d4e4d"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/__init__.py",
+      "bytes": 76,
+      "sha256": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/__init__.py",
+      "bytes": 157,
+      "sha256": "8352a509d51ef0dc0be958bdd4492caa968933866b171360be39fda43217364f"
+    },
+    {
+      "path": "frozen-adapter-v1/training/neuralese/natlang_neuralese/common/jsonio.py",
+      "bytes": 1755,
+      "sha256": "d4e71ae9211cd625ea5d74706f9e0d4cc7fbf59e731dd0cba34fddd04674e4d2"
+    },
+    {
+      "path": "launch-receipt-v1.json",
+      "bytes": 1347,
+      "sha256": "64aacddcd41bae368682de5db24ee4096cbe9f0e4c088170523b36f06fe16f72"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 4782537,
+      "sha256": "c145cabad2d6d87ff664203ec84613ee9cea0a37e0caafcd3d8944c8bcf4a63d",
+      "lines": 7609
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 12175,
+      "sha256": "bc671c498311fad17ef883030940e1386485c354cf1c64d4a93bc2813b4f6f91"
+    }
+  ],
+  "bytes": 5268768
+}
