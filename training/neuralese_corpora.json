@@ -25864,6 +25864,22 @@
       "training_admission": false,
       "admission": "held-source-trace-and-curriculum-fidelity-review",
       "notes": "All four final results match source. Three iterateOn trajectories; PROV-521 manually sequences passes, so curriculum fidelity is separately held. EXPT-532 recovered from three model errors/rejections. No proven runtime bug or new-world credit."
+    },
+    {
+      "id": "free-provider-google-v18-reviewed-source-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v18",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "free-provider-expanded-choice-inputs",
+      "training_admission": false,
+      "admission": "held; exact source/split and actual output quality checks pending",
+      "notes": "512 unchanged train source rows, disjoint IDs and groups from prior provider cases; eight available families with at most20 options and3000 state JSON chars. Adds DBpedia/newsgroups/language-id/PubMedQA. Same shared project quotas, waits for V17; no paid fallback."
     }
   ],
   "coverage_backlog": [
