@@ -25,6 +25,10 @@ def _identity():
         "pass_ramp_evals": 2,
         "mask_system_prompt": True, "held_documents": 16,
         "records": "records.jsonl", "pieces": "pieces.jsonl", "text_data": "text.jsonl",
+        # The cohort sampler and tool-context weighting (6ac34c38, 881ff257) are part of the foundation
+        # context; a saved identity declares them at their defaults.
+        "cohort_weights": None, "qualification_cohort": "native",
+        "context_weight": 1.0, "feedback_weight": 0.25,
     }
     return {
         "options": options,
@@ -74,13 +78,9 @@ def test_cosmetic_map_report_labels_preserve_saved_resume_semantics():
         text_history="gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass",
         sketch_gradient="detached_consumer",
         sketch_target_backbone_scale=0.0,
-        supervision_policy={
-            "all_positions_fraction": 0.5,
-            "observed_suffix_fraction": 0.5,
-            "unannotated_or_no_suffix_window": "uniform-all-positions",
-            "objectives": ["full_projection", "sketch_projection", "next_token_ce"],
-            "qualification": "unweighted full-history complete-window and last256 strata",
-        },
+        # Stored objective ids and tool-context weighting are checkpoint identity (37cc0077, 6ac34c38);
+        # only the display labels below are cosmetic.
+        supervision_policy=text_supervision_policy(),
     )
     after = {**before, "display": warmup_display_labels(),
              "supervision_policy": text_supervision_policy()}

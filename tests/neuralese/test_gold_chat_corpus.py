@@ -80,7 +80,9 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     assert all(p['token_ids_sha256'] for p in provenance)
     path=tmp_path/'text.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
     actual,_=load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)
-    assert actual==rows
+    # Loaded token IDs are stored compactly as unsigned arrays (881ff257); the coordinates are unchanged.
+    assert all(r['token_ids'].typecode=='I' for r in actual)
+    assert [{**r,'token_ids':list(r['token_ids'])} for r in actual]==rows
     assert tokenizer.length_calls==1
     tokenizer.chat_template='different'
     with pytest.raises(ValueError,match='fingerprint mismatch'):
@@ -143,7 +145,7 @@ def test_dedup_preserves_all_source_groups_and_records():
 def test_new_corpus_resets_plain_text_reference_without_resetting_phase():
     from natlang_neuralese.train.text_warmup import same_alignment_data
     policy={'mask_system_prompt':True,'held_documents':16,'tokens':16384,'prefix_tokens':32,
-            'rollout_passes':0,'rollout_start_passes':4,'max_sequence_passes':3}
+            'qualification_cohort':'native','rollout_passes':0,'rollout_start_passes':4,'max_sequence_passes':3}
     old={'options':{'records':'r','pieces':'p','text_data':'t',**policy},
          'inputs':{'r':'R','p':'P','t':'T'},'target':'gold-token','text_history':'gold-history',
          'supervision_policy':'token-ce'}
@@ -158,13 +160,13 @@ def test_new_corpus_resets_plain_text_reference_without_resetting_phase():
 def test_text_ce_baseline_is_not_reused_across_mask_or_held_window_changes():
     from natlang_neuralese.train.text_warmup import same_alignment_data
     options={'records':'r','pieces':'p','text_data':'t','mask_system_prompt':True,
-             'held_documents':16,'tokens':16384,'prefix_tokens':32,
+             'held_documents':16,'tokens':16384,'prefix_tokens':32,'qualification_cohort':'native',
              'rollout_passes':4,'rollout_start_passes':4,'max_sequence_passes':3}
     identity={'options':dict(options),'inputs':{'r':'R','p':'P','t':'T'},
               'target':'gold-token','text_history':'gold-history',
               'supervision_policy':'token-ce'}
     for changed in ({'mask_system_prompt':False}, {'held_documents':8}, {'tokens':8192},
-                    {'rollout_passes':8}, {'text_history':'greedy-history'}):
+                    {'qualification_cohort':'tools'}, {'text_history':'greedy-history'}):
         other={'options':dict(options),'inputs':dict(identity['inputs']),
                'target':identity['target'],'text_history':identity['text_history'],
                'supervision_policy':identity['supervision_policy']}

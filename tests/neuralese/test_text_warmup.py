@@ -104,7 +104,7 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     assert result[1]['close_top1']==0.
     assert result[1]['premature_close_top1']==0.
     assert result[0]['ce']==1.
-    assert result[1]['supervised_input_map_mse']==18.
+    assert result[1]['supervised_input_map_mse']==float(len(objective_metric_scalars()))  # packet values are 1..N in metric order; the supervised map MSE is last
     expected=0.
     for loss in losses:
         expected+=float(loss.detach())/2
@@ -884,10 +884,14 @@ def test_pre_optimizer_failure_checkpoints_last_commit_and_replays_attempt_rng(t
     def capture(device):
         state=original_capture(device);rng_snapshots.append(copy.deepcopy(state));return state
     monkeypatch.setattr(module,'capture_training_rng_state',capture)
-    sampled=[];original_randrange=random.randrange
-    def capture_randrange(*values):
-        value=original_randrange(*values);sampled.append(value);return value
-    monkeypatch.setattr(random,'randrange',capture_randrange)
+    # Batches come from the shared cohort sampler, which draws from the checkpointed
+    # module RNG; record each drawn batch (document and token ids per window).
+    from natlang_neuralese.train.text_supervision import DocumentWindowSampler
+    sampled=[];original_batch=DocumentWindowSampler.batch
+    def capture_batch(self,size,rng):
+        value=original_batch(self,size,rng)
+        sampled.append([(w['document'],tuple(w['ids'])) for w in value]);return value
+    monkeypatch.setattr(DocumentWindowSampler,'batch',capture_batch)
 
     from natlang_neuralese.train import trajectory_state
     atomic=trajectory_state.atomic_checkpoint;committed_state={}
@@ -1414,8 +1418,9 @@ def test_prepare_text_windows_shares_roles_mask_suffix_and_first_last_policy():
                     for w in expected]
         # Initial system-prompt tokens stay in context and never become targets.
         assert all(w['start']+w['prefix']>=5 for w in windows[split])
-    assert all('roles' not in w for w in windows['train'])
-    assert all(len(w['roles'])==len(w['ids']) for w in windows['test'])
+    # Training windows keep roles too: tool-context weighting (6ac34c38) reads them in training.
+    for split in ('train','test'):
+        assert all(len(w['roles'])==len(w['ids']) for w in windows[split])
     assert any(ROLE_CODES[w['roles'][i]]=='assistant_reply'
                for w in windows['test'] for i in range(len(w['roles'])))
     selected,metadata=select_held_document_windows(windows['test'],limit=1)

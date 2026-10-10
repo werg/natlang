@@ -1,6 +1,8 @@
 """A port trained on a merged crisp student records it (`backbone` in the checkpoint); servers rebuild that backbone
 from the checkpoint alone, and refuse a student adapter that changed since."""
 
+from pathlib import Path
+
 import pytest
 import torch
 
@@ -21,9 +23,11 @@ def _student(tmp_path, model):
 
 
 def test_a_checkpoint_rebuilds_its_student_backbone(tmp_path):
-    from natlang_neuralese.model.lfm2_port import backbone_identity, load_backbone
+    from natlang_neuralese.model.lfm2_port import backbone_identity, load_backbone, resolve_base
     from natlang_neuralese.serve import load_engine
 
+    if not Path(resolve_base(None)).exists():
+        pytest.skip("LFM2.5-350M is not in the local HF cache")
     base, _ = load_backbone(dtype=torch.float32)
     student = _student(tmp_path, base)
     identity = backbone_identity(str(student))
