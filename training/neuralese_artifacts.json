@@ -421,6 +421,36 @@
       ]
     },
     {
+      "id": "system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1",
+      "kind": "prompt-bank",
+      "owner": "dgx",
+      "dialect": "nd:natlang-latent-sketch@2",
+      "backbone": {
+        "model": "LiquidAI/LFM2.5-350M",
+        "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+        "family": "lfm2"
+      },
+      "init": {
+        "method": "text",
+        "source": "ts-host/src/native/system-prompts.ts (piece texts; provenance.pieces holds their sha256)",
+        "builder": "ts-host/scripts/neuralese-system-prompt-bank.mjs (in-context, --accept-failed-gate)"
+      },
+      "training": null,
+      "qualification": {
+        "status": "unqualified",
+        "evidence": []
+      },
+      "origin": {
+        "bank.nz": "/home/werg/.claude/jobs/9c849f00/tmp/opinit/bank-luna28793.nz"
+      },
+      "registered": "2026-10-10T14:06:08+00:00",
+      "notes": "In-context text init (owner 2026-10-10) of 24 runtime prompt pieces in the latent-sketch-v2 identity-transport space, built against runs/luna-ar-native-harness-8805-final28793-20261010-v1 closed-output best-heads. With an identity read transport the payload is the base LFM2.5-350M token embeddings of each piece's span; no head weight enters the bytes (heads only run the gate), so the lineage's split contamination does not reach the bank. 19/24 gates pass bit-exact; the rest (approach, compaction-notice, function-tools, generation-guidance, ...) are unaligned spans (the leading newline merges with the system header) with KL <= 0.005 and agreement 0.92-0.96, kept as recorded near-exact bodies (provenance.init_gates). Successor of the superseded context-free banks text-init-20261004-v1/v2 (those are nd:natlang@1 legacy space, where an exact in-context body is impossible).",
+      "path": "data/neuralese/artifacts/system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1",
+      "files": [
+        "bank.nz"
+      ]
+    },
+    {
       "id": "system-prompt-bank-lfm2.5-350m-text-init-20261004-v1",
       "kind": "prompt-bank",
       "owner": "dgx",
@@ -442,7 +472,7 @@
         "superseded": {
           "date": "2026-10-10",
           "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
-          "by": null
+          "by": "system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1"
         }
       },
       "origin": {
@@ -477,7 +507,7 @@
         "superseded": {
           "date": "2026-10-10",
           "reason": "context-free encoding: the bodies were initialised from the bare text (encode/token embeddings through the read transport), not in the context of the call that reads them; owner 2026-10-10, spec/ext/neuralese.md Combinators",
-          "by": null
+          "by": "system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1"
         }
       },
       "origin": {

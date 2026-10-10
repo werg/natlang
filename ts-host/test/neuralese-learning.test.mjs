@@ -458,7 +458,12 @@ test('replay records: a function output keeps its calls as producers, and the re
   const path = join(mkdtempSync(join(tmpdir(), 'natlang-stdlib-')), 'stdlib.nz');
   const { library } = await buildStandardLibrary({ endpoint, store, path, acceptFailedGate: true, gateReplyTokens: 2 });
   const lib = createNeuraleseLibrary(library);
-  const runtime = createNatlangRuntime({ model: neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store }), neuralese: { store } });
+  // map answers in the normal call trajectory (scripted: return a written block); read keeps template readout.
+  const plain = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const returnWritten = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced:
+    ["<|tool_call_start|>[return_result(status='success', value='", { neuralese: 'write' }, "')]<|tool_call_end|>"] } });
+  const driver = Object.assign((request, signal) => (request.template ? plain : returnWritten)(request, signal), { neuralese: true });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
   const out = join(mkdtempSync(join(tmpdir(), 'natlang-replay-')), 'records.jsonl');
   const sink = replayRecordSink({ path: out, endpoint, annotate: () => ({ operator: 'map' }) });
   const { valueAndGrad, objectives } = createLearning(learningService({ endpoint, store, replayRecords: sink }), { library });

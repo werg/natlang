@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.neuralese-artifact-snapshot/1",
+  "id": "system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1",
+  "kind": "prompt-bank",
+  "dialect": "nd:natlang-latent-sketch@2",
+  "backbone": {
+    "model": "LiquidAI/LFM2.5-350M",
+    "revision": "9e6c6ccf47cd318696e137d381a7ded8fe4df09f",
+    "family": "lfm2"
+  },
+  "path": "data/neuralese/artifacts/system-prompt-bank-lfm2.5-350m-luna28793-incontext-20261010-v1",
+  "files": [
+    {
+      "path": "bank.nz",
+      "bytes": 60249504,
+      "sha256": "f503140eaa6a9d1bee6f21e1b41c5661aab01c7a954e40f22e23ca63e2f6c39d",
+      "nz": {
+        "exports": [
+          "systemPrompts"
+        ],
+        "blocks": 24,
+        "dialects": [
+          "nd:natlang-latent-sketch@2"
+        ],
+        "widths": [
+          1024
+        ]
+      }
+    }
+  ],
+  "bytes": 60249504
+}
