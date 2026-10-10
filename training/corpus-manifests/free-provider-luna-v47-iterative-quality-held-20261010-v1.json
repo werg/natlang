@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v47-iterative-quality-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 59934,
+      "sha256": "e3d5e94e6b29b0dfff6dadc824a5bd85bc8a63a29a6200264744039a06257af1"
+    }
+  ],
+  "bytes": 59934
+}

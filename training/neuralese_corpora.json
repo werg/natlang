@@ -26013,6 +26013,38 @@
       "training_admission": false,
       "admission": "held-source-semantic-split-trace-quality-review",
       "notes": "Four medium workers on47 source-bound train programs354items afterV47closed; launcher906943. Plan80332c5effe57c788b3e2f0b8a4417a1ba7635ebccd29008f5cece2950979989. No admission/new-world credit."
+    },
+    {
+      "id": "free-provider-luna-v47-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-four-train-iterative-trace-v47-runtimev14-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "closed-iterative-source-quality-review",
+      "training_admission": false,
+      "admission": "held-source-contract-and-trajectory-fidelity-review",
+      "notes": "Four closed original train trajectories, preserved without automatic admission."
+    },
+    {
+      "id": "free-provider-luna-v47-iterative-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v47-four-train-iterative-quality-audit-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "closed-iterative-source-quality-review",
+      "training_admission": false,
+      "admission": "held-source-contract-and-trajectory-fidelity-review",
+      "notes": "Four final/file expected matches, no scope failures. Three iterateOn; EXPT-530 manual sequence, SCHED-541 conflicting cardinality in source contract. Source fix pending; do not claim unambiguous correctness or iterative fidelity for all four. Canonical alias resolves the original report directory date typo; immutable report bytes unchanged."
     }
   ],
   "coverage_backlog": [
