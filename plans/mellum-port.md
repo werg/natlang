@@ -191,3 +191,8 @@ Qualification criterion (paired against BF16 Mellum, runs/mellum-evaluation-2026
 - either mode: contract failures ≤ BF16 + 2 (protocol regression guard).
 The 23-case packet resolves only large differences (±2 cases is within run-to-run noise at temperature 0 across
 stacks); passing it means "not detectably worse", not "equal".
+- Early stop (coordinator, 2026-10-10 ~02:20): conversion v2 was stopped at step ~1248 of 2000 on a λ=1 plateau —
+  deployed held CE 1.555 @1000, 1.551 @1100, 1.551 @1200 — while train CE fell to ~0.3 (memorising the 512 train
+  windows, ~2.4 epochs). Final state = `convert-v2/checkpoint.pt` at step 1200 (λ=1, deployed held CE 1.551, KL 0.80
+  to the BF16 original; teacher CE 1.756). The qualification pipeline exports step 1200 and checks the export against
+  1.551. A longer conversion needs more (or fresh) recovery windows, not more steps on these 512.

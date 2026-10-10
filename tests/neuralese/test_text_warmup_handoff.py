@@ -7,7 +7,7 @@ import torch
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
 from natlang_neuralese.train.text_warmup import (
-    _apply_requested_sketch_cutoff,
+    apply_requested_channel_cutoff,
     same_alignment_data,
     same_foundation_context,
     same_resume_identity,
@@ -131,7 +131,7 @@ def test_requested_cli_cutoff_rebuilds_loaded_sketch_and_preserves_same_shaped_w
         previous.content.proj.weight.fill_(-0.25)
     old_state = {name: value.detach().clone() for name, value in previous.state_dict().items()}
 
-    result = _apply_requested_sketch_cutoff(engine, 3, "cpu")
+    result = apply_requested_channel_cutoff(engine, 3, "cpu")
 
     assert result is engine.heads
     assert result is not previous
@@ -148,4 +148,4 @@ def test_requested_cli_cutoff_rebuilds_loaded_sketch_and_preserves_same_shaped_w
 def test_requested_cutoff_is_not_rebuilt_when_already_correct():
     engine = _tiny_engine(cutoff=2)
     previous = engine.heads
-    assert _apply_requested_sketch_cutoff(engine, 2, "cpu") is previous
+    assert apply_requested_channel_cutoff(engine, 2, "cpu") is previous

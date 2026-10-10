@@ -2,9 +2,12 @@
 
 One rolling resumable slot written on a wall-clock cadence (and when the process is asked to stop), a weights-only
 "best" snapshot on eval improvement, and a weights-only final export alongside the
-preserved resumable slot. Writes are atomic and durable (pending, fsync, rename).
-Insufficient disk space fails the save without deleting the previous checkpoint.
-Pruning is a separate, explicitly authorized operation.
+preserved resumable slot. The slot with its optimizer state is the continuation parent: a weights-only
+final never replaces or deletes it, and nothing deletes the only complete checkpoint before a pending
+replacement is durably in place. Writes are atomic and durable (pending, fsync, rename) through the one writer
+every trainer uses (trajectory_state.atomic_checkpoint). Insufficient disk space fails the save without
+deleting the previous checkpoint. Pruning is a separate, explicitly authorized operation.
+Cadence and signals are the training-loop skeleton's (train/loop.py).
 
     policy = CheckpointPolicy(out, every_minutes=45).install_signal_handlers()
     for step in ...:
@@ -29,6 +32,9 @@ from pathlib import Path
 
 import torch
 
+from .loop import Cadence, StopSignal
+from .trajectory_state import atomic_checkpoint
+
 
 class CheckpointPolicy:
     def __init__(self, out_dir, *, every_minutes: float = 45.0, name: str = "checkpoint.pt",
@@ -36,12 +42,14 @@ class CheckpointPolicy:
                  free_factor: float = 1.2, clock=time.monotonic):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
-        self.every = every_minutes * 60.0
+        self.cadence = Cadence(every_minutes=every_minutes, clock=clock)
+        self.stop = StopSignal()
         self.slot, self.best_path, self.final_path = self.out / name, self.out / best_name, self.out / final_name
+        if len({name, best_name, final_name}) != 3:
+            raise ValueError('the rolling slot, best and final snapshots need distinct file names: a weights-only '
+                             'file must never share the optimizer-bearing continuation slot')
         self.free_factor = free_factor
         self.clock = clock
-        self.last = clock()
-        self.signaled = False
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -54,14 +62,15 @@ class CheckpointPolicy:
     # Cadence ----------------------------------------------------------------------------------------------------
     def install_signal_handlers(self, signals=(signal.SIGTERM, signal.SIGINT, signal.SIGUSR1)):
         """Ask for a checkpoint at the next ``due()`` check instead of dying mid-step."""
-        def handler(signum, frame):
-            self.signaled = True
-        for sig in signals:
-            signal.signal(sig, handler)
+        self.stop.install(signals)
         return self
 
+    @property
+    def signaled(self) -> bool:
+        return self.stop.requested
+
     def due(self) -> bool:
-        return self.signaled or self.clock() - self.last >= self.every
+        return self.stop.requested or self.cadence.due(0)
 
     # Writes -----------------------------------------------------------------------------------------------------
     def _write(self, state: dict, target: Path) -> dict:
@@ -69,21 +78,8 @@ class CheckpointPolicy:
         expected = target.stat().st_size if target.exists() else 0
         if expected and shutil.disk_usage(self.out).free < self.free_factor * expected:
             raise OSError(errno.ENOSPC, 'insufficient space for atomic checkpoint replacement; previous file preserved', str(target))
-        pending = target.with_name(target.name + ".pending")
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
-        try:
-            torch.save(state, pending)
-            with pending.open('rb') as stream:
-                os.fsync(stream.fileno())
-            os.replace(pending, target)
-            directory = os.open(self.out, os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        except BaseException:
-            pending.unlink(missing_ok=True)
-            raise
+        atomic_checkpoint(target, state)
         event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
                  "previous_preserved_until_replace": True}
         self.events.append(event)
@@ -92,7 +88,7 @@ class CheckpointPolicy:
     def save(self, state: dict) -> dict:
         """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes)."""
         event = self._write(state, self.slot)
-        self.last = self.clock()
+        self.cadence.mark()
         return event
 
     def save_best(self, weights_state: dict, metric: float, higher_is_better: bool = False) -> bool:

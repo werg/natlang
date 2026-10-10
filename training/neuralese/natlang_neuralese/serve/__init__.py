@@ -6,9 +6,12 @@ from __future__ import annotations
 
 def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoint: str | None = None,
                 cutoff: int | None = None, max_block: int | None = None, device: str = "cpu", dialect: str | None = None,
-                dtype=None):
+                dtype=None, artifacts=None):
     """Load the backbone (optionally merging a LoRA), the port heads (untrained unless a trainer checkpoint is
-    given) and an empty store."""
+    given) and an empty store.
+
+    ``artifacts`` (common.artifact_paths.ArtifactResolver) binds a student path that the checkpoint recorded relative;
+    the process working directory is never consulted for it."""
     import torch
 
     from ..model.dialect import DIALECT
@@ -35,7 +38,13 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         saved_length = max_block
     if metadata.get("cutoff") is not None and cutoff != metadata["cutoff"]:
         raise ValueError("cutoff differs from the trained checkpoint")
-    saved = (state or {}).get("backbone") or {}
+    saved = dict((state or {}).get("backbone") or {})
+    for role in ("student_lora", "student_state"):
+        if saved.get(role) and not Path(saved[role]).is_absolute():
+            if artifacts is None:
+                raise ValueError(f"the checkpoint records {role} as the relative path {saved[role]!r}; load it through "
+                                 f"a role-bound loader (artifacts=) or pass an override for {role!r}")
+            saved[role] = artifacts.path(role, required=True)
     if saved.get("student_lora"):
         # The port was trained on a merged student: rebuild exactly that backbone.
         if lora and Path(lora).resolve() != Path(saved["student_lora"]):

@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
+import argparse, atexit, hashlib, json, math, os, random, time, traceback
 from collections import Counter
 from array import array
 from collections.abc import Sequence
@@ -22,6 +22,9 @@ from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
 from .foundation_schedule import ProjectionFirstSchedule
+from . import warmup_export
+from .loop import (Cadence, StopSignal, TrainingLoop, capture_training_rng_state,
+                   commit_optimizer_step, restore_training_rng_state)
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
                             TEXT_WARMUP_FFN_CHUNKS,
@@ -38,12 +41,6 @@ from .text_supervision import (ROLE_CODES, TEXT_POSITION_WEIGHT_POLICY,
 
 def relative_mse(predicted, target):
     return relative_mse_positions(predicted,target).mean()
-
-
-def capture_training_rng_state(device):
-    """Capture every RNG stream used by a text warm-up update attempt."""
-    return {'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
-            'cuda_rng':torch.cuda.get_rng_state_all() if str(device).startswith('cuda') else []}
 
 
 TEXT_WARMUP_MEMORY_KIND='text-warmup-complete-update-v1'
@@ -293,14 +290,6 @@ def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
                 slots=1 if is_muon else 2
                 lazy_state_bytes += slots*param.numel()*max(4,param.element_size())
     return int(grad_bytes+lazy_state_bytes)
-
-
-def restore_training_rng_state(state, device):
-    """Restore the RNG boundary saved in a full-state warm-up checkpoint."""
-    random.setstate(state['python_rng'])
-    torch.set_rng_state(state['torch_rng'])
-    if str(device).startswith('cuda'):
-        torch.cuda.set_rng_state_all(state['cuda_rng'])
 
 
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
@@ -852,7 +841,6 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
                or not r['text'].strip() or not r.get('source_groups') for r in rows):
             raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
     else:
-        import hashlib
         from ..data.text_corpus import gold_text_rows
         records_path=Path(records)
         record_lines=[line for line in records_path.read_bytes().splitlines() if line]
@@ -981,11 +969,38 @@ def configure_student(engine, policy='full', rank=16, secondary_head='feedback')
     return named
 
 
-def _apply_requested_sketch_cutoff(engine, cutoff, device):
-    """Make the CLI cutoff the actual latent-sketch depth on the loaded engine."""
+def install_shallow_channel(engine, *, cutoff, max_length=None):
+    """A fresh shallow-latent channel (profile latent-sketch-v2) from a qualified full-depth raw reference.
+
+    An explicit architecture change, never an in-place checkpoint migration or an inherited generated-channel
+    qualification: the channel has fresh projection, content-residual and stop parameters. Payload j comes from the
+    top state at j - 1, the shallow state from j - 1 predicts it, and the close token comes from the last top state.
+    """
+    from ..model.heads import PortHeads
+    parent=engine.heads
+    proof=dict(getattr(engine,'foundation',None) or {})
+    if parent.profile!='raw-token-v1' or parent.cutoff!=engine.backbone.num_layers:
+        raise ValueError('channel handoff requires a full-depth raw causal reference')
+    if proof.get('qualified') is not True:
+        raise ValueError('channel handoff requires qualified foundation evidence')
+    heads=PortHeads(engine.backbone,cutoff=cutoff,max_length=max_length or parent.max_length,
+                    stop_source='final',stop_position=False,profile='latent-sketch-v2')
+    heads.content.reference.load_state_dict(parent.feedback.state_dict())
+    heads.to(device=engine.backbone.embedding_weight.device).eval()
+    heads.configure_frozen_reference()
+    engine.heads=heads
+    engine.max_block=heads.max_length
+    engine.dialect=heads.dialect
+    engine.foundation={**proof,'runtime_qualified':False,'autonomous_stopping_qualified':False,
+        'reference_foundation':proof,'channel_profile':heads.profile,
+        'scope':'Full-depth reference only; new shallow latent channel needs separate replay and consumer qualification.'}
+    return heads
+
+
+def apply_requested_channel_cutoff(engine, cutoff, device):
+    """Make the CLI cutoff the actual shallow-channel depth on the loaded engine."""
     if engine.heads.profile=='raw-token-v1':
-        from .sketch_handoff import install_latent_sketch
-        install_latent_sketch(engine,cutoff=cutoff,profile='latent-sketch-v2')
+        install_shallow_channel(engine,cutoff=cutoff)
     elif engine.heads.profile=='latent-sketch-v2' and engine.heads.cutoff!=cutoff:
         # A requested cutoff is part of this run's identity. Rebuild the
         # same-shaped projection modules at that depth instead of silently
@@ -1017,15 +1032,14 @@ def load_initial(heads, checkpoint, device, cutoff):
     else:
         from ..serve import load_engine
         engine=load_engine(heads_checkpoint=str(heads),device=device);parent=None
-    _apply_requested_sketch_cutoff(engine,cutoff,device)
+    apply_requested_channel_cutoff(engine,cutoff,device)
     return engine,parent
 
 
 def main(argv=None):
     # Installed before any loading: a container's PID 1 ignores signals without a handler, so a stop requested
     # while the model loads would otherwise be dropped. The training loop checks the flag before each update.
-    stop=[False]
-    for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
+    stop=StopSignal().install()
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('heads','records','out'):p.add_argument('--'+name,type=Path,required=True)
     for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
@@ -1132,6 +1146,9 @@ def main(argv=None):
     identity['supervision_policy'].update(context_weight=a.context_weight,feedback_weight=a.feedback_weight,
                                          sampler='cohort-then-document-then-window/1',
                                          cohort_weights=a.cohort_weights)
+    from ..common.artifact_paths import artifact_refs
+    input_roles=artifact_refs(options,identity['inputs'],
+        ('heads','records','pieces','text_data','student_checkpoint','continue_from'))
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     was_resumed=resumed is not None
@@ -1145,7 +1162,11 @@ def main(argv=None):
         option_changes=sorted(k for k in old_options.keys()&new_options.keys() if old_options[k]!=new_options[k])
         recipe_changes=[k for k in option_changes if k not in RESUME_OPERATIONAL_OPTIONS]
         if not same_resume_identity(resumed['identity'], identity):
-            raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else ''))
+            skipped={'code','options','display'}
+            fields=sorted(k for k in (resumed['identity'].keys()|identity.keys())-skipped
+                          if resumed['identity'].get(k)!=identity.get(k))
+            raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else '')
+                             +(f' (identity fields {fields})' if fields else ''))
         code_handoffs=list(resumed.get('code_handoffs',[]))
         old_code,new_code=resumed['identity'].get('code',{}),identity['code']
         added_options=sorted(new_options.keys()-old_options.keys())
@@ -1814,48 +1835,16 @@ def main(argv=None):
                                   checkpoint_step=None,heads_step=None):
         checkpoint_step=step if checkpoint_step is None else int(checkpoint_step)
         heads_step=serving_heads_step if heads_step is None else int(heads_step)
-        status={'schema':'natlang.neuralese-text-warmup-heads-export/1',
-            'checkpoint_step':checkpoint_step,'heads_step':heads_step,
-            'heads_step_known':heads_step>=0,'heads_current':heads_step==checkpoint_step,
-            'checkpoint_authoritative_for_resume':True,
-            'emergency_export_attempted':bool(emergency)}
-        if export_error is not None:
-            status['export_error']={'type':type(export_error).__name__,'message':str(export_error)[:1000]}
-        pending=a.out/'heads-export-status.json.pending'
-        try:
-            pending.write_text(json.dumps(status,indent=2)+'\n')
-            pending.replace(a.out/'heads-export-status.json')
-            return True
-        except OSError:
-            try:pending.unlink(missing_ok=True)
-            except OSError:pass
-            return False
+        return warmup_export.write_heads_export_status(a.out,warmup_export.heads_export_status(
+            checkpoint_step=checkpoint_step,heads_step=heads_step,
+            export_error=export_error,emergency=emergency))
 
     def build_heads_export(report=None, *, export_step=None, snapshot=False):
-        export_step=step if export_step is None else int(export_step)
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
-        from .adapters import lora_state,adapter_layers
-        initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
-        serving=heads.state_dict()
-        trained_map={k.removeprefix('input_map.'):v for k,v in serving.items() if k.startswith('input_map.')}
-        serving={k:v for k,v in serving.items() if not k.startswith('input_map.')}
-        control_rows=backbone.control_rows.detach()
-        if not snapshot:control_rows=control_rows.cpu()
-        exported={**initial,'heads':serving,**({'neuralese_input_map':trained_map} if trained_map else {}),'control_rows':control_rows,
-          'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
-          'backbone_trainables':{n:(q.detach() if snapshot else q.detach().cpu())
-                                 for n,q in backbone.hf.named_parameters() if n in backbone_names},
-          'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
-          'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
-          **({'maple_qat':True} if a.backbone_training=='qat' else {}),
-          'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
-          'warmup':{'step':export_step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
-                    'report_path':str((a.out/'report.json').resolve()),
-                    'report_sha256':sha(a.out/'report.json') if (a.out/'report.json').is_file() else None}}
-        # Parent adapters may have a different rank than the fresh-policy default.
-        ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
-        if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
-        return immutable_cpu_snapshot(exported) if snapshot else exported
+        return warmup_export.build_heads_export(
+            initial_heads_path=a.heads,heads=heads,backbone=backbone,backbone_names=backbone_names,
+            backbone_training=a.backbone_training,rank=a.rank,identity=identity,out=a.out,
+            report=report,export_step=step if export_step is None else int(export_step),snapshot=snapshot)
 
     def export_heads(report=None):
         nonlocal serving_heads_step
@@ -1864,11 +1853,12 @@ def main(argv=None):
         serving_heads_step=step
         return True
 
-    last_save=[time.monotonic()]
+    checkpoint_cadence=Cadence(a.checkpoint_every,a.checkpoint_minutes)
+    eval_cadence=Cadence(a.eval_every)
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True,
              retain_best=False, wait=False):
         checkpoint_writer.drain()
-        last_save[0]=time.monotonic()
+        checkpoint_cadence.mark()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
@@ -1877,7 +1867,7 @@ def main(argv=None):
         available=available_system_memory_bytes()
         async_write=(not wait and emergency_recovery is None and estimate is not None
                      and available is not None and available >= int(estimate*1.25))
-        state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
+        state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'artifact_refs':input_roles,'step':step,
           'student_parameters':{n:q.detach() if async_write else q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
           'optimizer':optimizer.state_dict(),'optimizer_param_names':optimizer_param_names(optimizer,dict(named)),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
           'cuda_rng':current_rng['cuda_rng'],
@@ -2262,7 +2252,7 @@ def main(argv=None):
         if memory_record is not None:m['memory']=memory_record
         log('train.jsonl',m)
         report=None
-        if step%a.eval_every==0:
+        if eval_cadence.due(step):
             report=evaluate()
             qualification_depth=_alignment_qualification_pass_depth(
                 schedule=schedule)
@@ -2280,7 +2270,7 @@ def main(argv=None):
             except Exception as error:
                 recover_postcommit_persistence_failure(error)
                 return
-        elif step%a.checkpoint_every==0 or time.monotonic()-last_save[0]>=60*a.checkpoint_minutes:
+        elif checkpoint_cadence.due(step):
             try:
                 save(write_export=False)
             except Exception as error:
@@ -2298,8 +2288,8 @@ def main(argv=None):
     # Restored tensors now live on the device: drop the read checkpoints' page cache (GB10 unified memory).
     for path in (state_path,a.continue_from,a.heads,a.student_checkpoint):
         if path and Path(path).is_file():drop_file_cache(path)
-    for _ in range(step,a.steps):
-        if stop[0]:break
+    loop=TrainingLoop(step,a.steps,stop)
+    for _ in loop:
         try:
             checkpoint_writer.check()
         except Exception as error:
@@ -2327,7 +2317,7 @@ def main(argv=None):
                     memory_passes=passes+int(a.ar_feedback_fixup)
                     memory_plan=prepare_update_memory(batch,memory_passes,bootstrap);break
                 except RuntimeError as error:
-                    if 'preflight refused' not in str(error) or wait==10 or stop[0]:raise
+                    if 'preflight refused' not in str(error) or wait==10 or stop.requested:raise
                     if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)
                     time.sleep(30)
             backbone.ffn_chunk_tokens=int(memory_plan['ffn_chunk_tokens'])
@@ -2379,9 +2369,7 @@ def main(argv=None):
         # Do not place optimizer.step inside the emergency-save handler: an
         # exception here can follow partial parameter or moment mutation, so
         # the only safe resume point is the last already-written checkpoint.
-        try:
-            optimizer.step()
-        except Exception:
+        def discard_partial_optimizer_step():
             # Gradients are not checkpointed. Clear them without writing any
             # state because parameters or optimizer moments may have mutated.
             optimizer.zero_grad(set_to_none=True)
@@ -2392,14 +2380,15 @@ def main(argv=None):
             # that catch the optimizer exception without exiting the process.
             try:checkpoint_writer.drain()
             except Exception:traceback.print_exc()
-            raise
+        commit_optimizer_step(optimizer,on_failure=discard_partial_optimizer_step)
         try:
             completion=finish_committed_update(prepared,memory_plan,passes,controls)
         except Exception as error:
             recover_postcommit_persistence_failure(error)
             return
-        if completion=='qualified':break
-    if stop[0]:
+        if completion=='qualified':
+            loop.finish('qualified');break
+    if stop.requested:
         # Interruptible: on a signal, persist the full resumable state at once. The held evaluation is not needed
         # to resume and would delay the stop past the container's kill timeout.
         try:
@@ -2415,7 +2404,7 @@ def main(argv=None):
     try:
         report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
         report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-          updates=display_update_flags(updates),status='checkpointed_on_signal' if stop[0] else 'complete',
+          updates=display_update_flags(updates),status='checkpointed_on_signal' if stop.requested else 'complete',
           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
         score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         improved=best is None or score<best['score']

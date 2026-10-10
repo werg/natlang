@@ -367,7 +367,7 @@ embeddings in their normal slots. This does not assert that a fresh random sketc
 already generates good consumer content.
 
 The canonical consumer setup is `sketch-training-defaults-v1.json`, implemented
-in `train/sketch_defaults.py` so frozen runtimes retain the exact defaults.
+as `CONSUMER_TRAINING_DEFAULTS` in `train/trajectories.py` (the retired `train/sketch_defaults.py` held the same values; a test pins them) so frozen runtimes retain the exact defaults.
 A bare trajectory trainer now selects `local_stage`, same-slot sketch target0.1,
 source-state auxiliary gradient0.05, control-row training, top-state transport,
 written child handoffs, depth5, source-sized uncompressed values, native writer and
@@ -482,7 +482,7 @@ the parent SHA. Existing resume still rejects changed controls. See the declared
 
 ## Cross-machine policy synchronization
 
-Pop and Maple consumer declarations use the same canonical `sketch_defaults.py`
+Pop and Maple consumer declarations use the same canonical `CONSUMER_TRAINING_DEFAULTS`
 policy. `latent-sketch-consumer-maple-v2.json` now selects `local_stage` explicitly.
 The earlier `latent-sketch-consumer-v2.json` records a historical Pop `one_step`
 run; it is not the current launch specification. Owners must inspect effective
@@ -710,6 +710,32 @@ launch intents, stage reports and certificates is the canonical-JSON SHA-256 of 
 their file-bytes hash. A resumed lineage whose recorded recipe content equals the resolved content keeps its original
 hash. `python -m natlang_neuralese.train.recipe resolve <id>` prints the resolved recipe and hash. Experiment history of
 converted recipes lives in `training/neuralese/recipes/HISTORY.md`.
+
+## Shared training skeleton (C1, 2026-10-10)
+
+`text_warmup` and `trajectories` run on the same pieces; a new trainer uses them instead of copying idioms.
+
+- `train/loop.py`: `StopSignal` (SIGTERM/SIGINT set a flag, observed at the next step boundary), `TrainingLoop` (the step
+  iterator; ends `complete`, `signal` or a trainer's own reason), `Cadence` (every N steps and/or wall-clock minutes),
+  RNG capture/restore, `accumulate_gradients`, `commit_optimizer_step`. The other trainers (delta_e2e, projection_e2e,
+  joint, causal_bootstrap, decision, maple/nested_train, the QAT conversion) migrate one at a time behind a golden run.
+  Golden parity: `tests/neuralese/test_training_loop_golden.py` (a tiny text warm-up through a resume, bit-exact with
+  `NATLANG_GOLDEN_EXACT=1`) and `test_legacy_checkpoint_resume.py` (a checkpoint written by the pre-skeleton code resumes).
+- `train/warmup_export.py`: the one warm-up-to-serving export. `build_heads_export` (live model) and
+  `export_from_checkpoint` (exact weights of a saved full-state checkpoint plus a same-run template export) produce the
+  same `heads.pt`; every export carries `warmup.source` = checkpoint path, sha256, checkpoint step, heads step and
+  `heads_current`. A heads file whose step trails its checkpoint is lagging and is never called current.
+- `common/artifact_paths.py`: role-bound input paths. New checkpoints carry `artifact_refs` =
+  `{role: {logical, resolved, sha256}}`; `ArtifactResolver` binds a role by override, recorded path, or (legacy) the
+  unique `identity.files`/`identity.inputs` key matching the normalized option suffix, always digest-verified, otherwise
+  an error naming the role to override. Used by `load_recurrence_checkpoint`, `load_engine` and `export_trajectory`.
+  The working directory is never read or changed.
+- `train/checkpoint_policy.py`: one rolling full-state slot (the continuation parent, optimizer included), weights-only
+  best/final beside it, never in its place; the only complete checkpoint is never removed before a replacement is
+  durably written (`trajectory_state.atomic_checkpoint`, shared by the trainers); a short disk fails the save.
+  Dropping the optimizer slot stays an explicit `drop_resumable=True` after a successful final export.
+- The generated-history channel KL is `train/channel_objective.py` (Pop); `eval/self_feedback.py` and the text warm-up
+  both call it.
 
 ## Pop matched own-history review (2026-10-09; proposal, not adoption)
 

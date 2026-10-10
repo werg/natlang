@@ -1,0 +1,9 @@
+{
+  "schema": "natlang.neuralese-text-warmup-heads-export/1",
+  "checkpoint_step": 4,
+  "heads_step": 4,
+  "heads_step_known": true,
+  "heads_current": true,
+  "checkpoint_authoritative_for_resume": true,
+  "emergency_export_attempted": false
+}

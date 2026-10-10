@@ -82,7 +82,7 @@ Indexing, with `h_k`/`h_D` the shallow and top states and position `−1` the on
 
 At init, with greedy tokens supplied as inputs, the block is greedy text in the slots text would use
 (`tests/neuralese/test_raw_port.py`). `latent-sketch-v1` projected each position's own top state, one slot early
-against text, with a separate stop head. It stays loadable; new handoffs use v2 (`train/sketch_handoff.py`). The
+against text, with a separate stop head. It stays loadable; new handoffs use v2 (`install_shallow_channel` in `train/text_warmup.py`). The
 one-step sketch gradient's self-target is same-slot under v2 (`sketch[j]` vs `p[j]`, every position). C++ fork: v2
 is not served there yet (payload shift and close-token stop pending).
 

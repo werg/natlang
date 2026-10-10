@@ -520,7 +520,7 @@ def test_shared_text_recipe_uses_one_mapped_graph_and_inherits_common_parameters
     assert 'neuralese_input' not in core and 'rollout_passes' not in core
     assert by_id['core_text_warmup']['parameters']=={'steps':4096}
     assert by_id['autoregressive_text_fixup']['parameters']=={
-        'steps':1024,'ar_feedback_fixup':True,'tokens':16384,'target_tokens':256}
+        'steps':1024,'ar_feedback_fixup':True,'channel_consistency_weight':1.0,'tokens':16384,'target_tokens':256}
 
 
 def test_active_core_text_recipe_has_no_objective_choice_or_sketch_rollout(tmp_path):
