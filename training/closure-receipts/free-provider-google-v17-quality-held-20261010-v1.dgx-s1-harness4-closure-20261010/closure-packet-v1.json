@@ -1,0 +1,190 @@
+{
+  "schema": "natlang.v17-choice-confidence-semantic-source-closure-packet/1",
+  "date": "2026-10-10",
+  "training_admission": false,
+  "source_truth_reviewed": false,
+  "dpo_eligibility": false,
+  "status": "held-harness4-closed-full-s1-text-and-near-duplicate-pending-dgx",
+  "authoritative_method": "V12 closure-input-v4 and shared harness4-v3 pattern, adapted to V17 selected exact semantic leaves and current V17 static programs. This V17 closure uses closure-input-v1 and closure-harness4-v1 only; no prior V17 draft is authoritative.",
+  "facts": {
+    "static_program_cases": 47,
+    "accepted_source_items": 354,
+    "unique_original_source_ids": 354,
+    "unique_original_source_groups": 354,
+    "all_source_cases_train": true,
+    "family_program_counts": {
+      "curriculum_teacher_decision_labels_decision_ag_news_choice": 14,
+      "curriculum_teacher_decision_labels_decision_boardgame_qa_choice": 1,
+      "curriculum_teacher_decision_labels_decision_emotion_choice": 9,
+      "curriculum_teacher_decision_labels_decision_trec_question_choice": 12,
+      "curriculum_teacher_decision_labels_decision_vitaminc_choice": 11
+    },
+    "selected_native_root_actions": 47,
+    "native_action_selection": "one actual decision:0000 root action per program; child actions omitted",
+    "candidate_actions_as_gold": "false; target remains source_case.semantics.expected",
+    "independent_new_world_credit": 0
+  },
+  "semantic_selection": {
+    "pointer_standard": "RFC 6901 JSON Pointer",
+    "selected_file_glob": "items/*.json",
+    "selected_pointers": [
+      {
+        "pointer": "/question",
+        "selected_count": 354
+      },
+      {
+        "pointer": "/state",
+        "selected_count": 354
+      }
+    ],
+    "emitted_field_values": 708,
+    "value_and_container_hashes": "Per-item item file SHA and exact /question and /state SHA256 are recorded in selected-source-case-index.jsonl and source-case-port-projection.jsonl.",
+    "task_json": "visible task contract, pinned as expected input, zero semantic text pointers; taxonomy/options/criteria are not asserted as source evidence.",
+    "gold_boundary": "semantics.expected is closure target only and not projected source. decisions.json is the output_path and is excluded as generated output.",
+    "coverage_limit": "The shared closure projects callable root and expected_files; auxiliary types.ts is present in program semantics.files but not expected_files, so it is omitted. No all-visible-code or all-visible-schema claim."
+  },
+  "lineage_and_aliases": {
+    "original_keys_preserved": "Raw dc-* IDs and g-* groups remain in source_ids_original/source_groups_original and selected-source-case-index.jsonl. Namespaced aliases are only for helper split_groups/binding; separate exact raw-key check is retained.",
+    "raw_harness_check": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/raw-key-harness-v1.json",
+      "sha256": "954f135cbfdc33d986e0d1bfa58cd0f38ebf12ce37e48fcac09955b231ee4607",
+      "original_source_id_hits": 0,
+      "original_source_group_hits": 0,
+      "namespace_alias_hits": 0,
+      "index": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1",
+      "scope": "Exact key membership only against the supplied groups.json; no text, near-duplicate, answer, or full-S1 check."
+    }
+  },
+  "pop_small_harness_closure": {
+    "report": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-harness4-v1/closure-report.json",
+      "sha256": "0329e1648020e4779ba3a16de2e135b5c32487ae395750d66210adbb6adc50d7",
+      "bytes": 15532
+    },
+    "status": "held-closed-no-cross-corpus-violations",
+    "records_in": 47,
+    "records_kept": 47,
+    "candidate_rows": 47,
+    "cross_corpus_check_errors": [],
+    "internal_split_group_errors": [],
+    "harness_index_sha256": "7df97307d0702ab06ad44e2c6a868b50040cdf665a9d44bdd76b158e06f9595f",
+    "index_manifest_sha256": "18bf74c8c2b599e19af99a46ede0553b0b9c91d574b6f0aaaea9498b4a8f0f1b",
+    "protected_sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf",
+    "scope_limit": "Harness turn/group-only check on Pop. It checks no exact/near-duplicate question/state text and is not full S1 closure."
+  },
+  "full_s1_dgx_request": {
+    "action": "DGX owner to perform exact raw-key group-table check and shared text/near-duplicate closure against the registered full S1 index plus harness4. No full S1 sketches were loaded/restored on Pop.",
+    "raw_key_command": "python3 /srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/check_raw_group_keys.py --source-cases /srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-cases.jsonl --groups-json <DGX_S1_INDEX>/groups.json --out <DGX_OUTPUT>/raw-key-v17-s1.json",
+    "shared_closure_command": "python3 -m scripts.neuralese_data.source_case_closure --source /srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-cases.jsonl --candidate-rows /srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl --source-manifest /srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-manifest.json --index cross-corpus-index-s1-full-final-20261003-v1 --index cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1 --protected data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json --out <DGX_OUTPUT>/closure-v17-s1-v1",
+    "admission_effect": "None; closure does not establish source truth, annotation quality, trajectory quality or training admission."
+  },
+  "pins": {
+    "closure-input-v1/closure-source-cases.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-cases.jsonl",
+      "sha256": "429dc3e9ab4093f301abf81c9b4fdb8d8580df58bd40debeb8efb4466a227a14",
+      "bytes": 1449265
+    },
+    "closure-input-v1/closure-candidate-root-actions.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-candidate-root-actions.jsonl",
+      "sha256": "3f5205e799a50f2377a6d22fb6b8b38a999f952bd0332eef2abc886b51f9b255",
+      "bytes": 5409962
+    },
+    "closure-input-v1/closure-source-manifest.json": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/closure-source-manifest.json",
+      "sha256": "05ed2db577cc28fbb55e4138f5c048880f198e3879d191fdebfee43fea63f902",
+      "bytes": 6045
+    },
+    "closure-input-v1/selected-program-index.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/selected-program-index.jsonl",
+      "sha256": "9a559384268605d576d87567b0284218b539459b9c24c14f45fad1e239263cb6",
+      "bytes": 222359
+    },
+    "closure-input-v1/selected-source-case-index.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-input-v1/selected-source-case-index.jsonl",
+      "sha256": "408003211586c96ee466c5bc5fdd055d358385526a046ccc5f0d23368cb39340",
+      "bytes": 325400
+    },
+    "closure-harness4-v1/candidate-source-case-bindings.json": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-harness4-v1/candidate-source-case-bindings.json",
+      "sha256": "52f7bd63fcf58d5506bbff016cc2f4d21a0c3d19de953204ae2ee4ecd19e7ba6",
+      "bytes": 26916
+    },
+    "closure-harness4-v1/closure-report.json": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-harness4-v1/closure-report.json",
+      "sha256": "0329e1648020e4779ba3a16de2e135b5c32487ae395750d66210adbb6adc50d7",
+      "bytes": 15532
+    },
+    "closure-harness4-v1/source-case-port-projection.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-harness4-v1/source-case-port-projection.jsonl",
+      "sha256": "0494d5a9b683074b408858c60439e68dc5832723b83296b165e99d760bfe9cf4",
+      "bytes": 884954
+    },
+    "closure-harness4-v1/closed-source-case-port-projection.jsonl": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/closure-harness4-v1/closed-source-case-port-projection.jsonl",
+      "sha256": "0494d5a9b683074b408858c60439e68dc5832723b83296b165e99d760bfe9cf4",
+      "bytes": 884954
+    },
+    "raw-key-harness-v1.json": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/raw-key-harness-v1.json",
+      "sha256": "954f135cbfdc33d986e0d1bfa58cd0f38ebf12ce37e48fcac09955b231ee4607",
+      "bytes": 1082
+    },
+    "build_v17_closure_inputs.py": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/build_v17_closure_inputs.py",
+      "sha256": "a4f71144f6a87c67906e6c0d1a54f0c6307b5b906a15cec92907bb0ee715ef3a",
+      "bytes": 9910
+    },
+    "check_raw_group_keys.py": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/source-closure-v1/check_raw_group_keys.py",
+      "sha256": "8674e32d808d757855f4c4325581bc64e8c331d13977b7b7c3c41c0f0ee09d30",
+      "bytes": 1933
+    }
+  },
+  "parent_pins": {
+    "v17_review": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/quality-review-v17-gemini-choice-confidence-and-static-replay-v1/review.json",
+      "sha256": "b680e13145387b491552a2ebd959c8812d810bf8ae9cf41ace51dd245529cedc",
+      "bytes": 14473
+    },
+    "v17_provider_cases": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-google-choice-confidence-v17/cases.jsonl",
+      "sha256": "48dda6ae7533d400cca3e705b8e4c975589122debd64225f1e596e9e2564c839",
+      "bytes": 291974
+    },
+    "v17_provider_labels": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-google-choice-confidence-v17/labels.jsonl",
+      "sha256": "97139ae0fd8d7b68dc4e4e9a04fed7ee1d033e06908e3de6efe37192c0517def",
+      "bytes": 602362
+    },
+    "v17_source_manifest": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-google-choice-confidence-v17/source-manifest.json",
+      "sha256": "d87e00f0519543057643cbe039633dc61cdef0648cd1e3626f99112ac1b4c5a4",
+      "bytes": 5649
+    },
+    "v17_label_manifest": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/provider-google-choice-confidence-v17/labels.jsonl.manifest.json",
+      "sha256": "75316cddcd1fe00aa84dcd9822a03bb07c1a1c3bf9df9bac2e6f45cf32eec535",
+      "bytes": 2520
+    },
+    "v17_static_cases": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v17-adapter-v1/cases.jsonl",
+      "sha256": "9db4f39d5c91e9d8969fc2eae247bf249da0f36121105cd2f3aae502f6d4d83a",
+      "bytes": 1303101
+    },
+    "v17_native_held": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v17-adapter-v1/native.held.jsonl",
+      "sha256": "cdf7aa1b54e45817d67d0c1c33dd76f6ab1fc3b18006943d49c9768c449efa1e",
+      "bytes": 69807615
+    },
+    "v17_replay_summary": {
+      "path": "/srv/storage/natlang-artifacts/free-provider-generation-20261010-v1/held-static-choice-confidence-v17-adapter-v1/summary.json",
+      "sha256": "1683644f4960c9e971296154bc71f17f403773a2e9119a8d90e37f131a5caef2",
+      "bytes": 1221
+    }
+  },
+  "shared_closure_implementation": {
+    "path": "/home/werg/natlang/scripts/neuralese_data/source_case_closure.py",
+    "sha256": "64b255e854c30fccc197d69af3a1a632068d144b5a047441a3df4c218fe7e9af",
+    "bytes": 32159
+  }
+}
