@@ -209,7 +209,7 @@ def fetch_csn_licenses(raw: Path, languages=CSN_LANGUAGES, log=print) -> list[di
                 entries = [(str(p), str(t)) for p, t in files]
                 spdx = next((d for d in (detect_license(t) for _, t in entries) if d), None)
                 repos[str(repo)] = {"spdx": spdx, "files": [p for p, _ in entries],
-                                    "sha256": [hashlib.sha256(t.encode("utf-8")).hexdigest() for _, t in entries]}
+                                    "sha256": [hashlib.sha256(t.encode("utf-8", "surrogatepass")).hexdigest() for _, t in entries]}
             _write(dest, (json.dumps(repos, indent=0, sort_keys=True) + "\n").encode("utf-8"))
         url = f"https://huggingface.co/{hf_path}#{lang}_licenses.pkl"
         out.append(_entry(raw, pkl, dataset="codesearchnet-licenses", language=lang, url=url, upstream=f"hf:{CSN['repo']}",
