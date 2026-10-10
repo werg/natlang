@@ -23,7 +23,10 @@ it arrives; user input streams too (edit deltas while typing), so the harness ca
 5. **Blocks shown to people.** A block streams as one unit when complete and shows as a block reference. Its content is
    shown by forcing its stored call at `string` (DECISIONS 2026-10-09) only when the user asks.
 6. **Natlang programs.** The runtime passes a function's model deltas into its live events, so a host can show a natlang
-   function working.
+   function working. Done (2026-10-10): `onLive` on the runtime or a task receives `model_delta` events (`LiveEvent`,
+   `runtime/runtime.ts`) tagged with the task, call, caller, function and turn; a request that fails or is sent again
+   after streaming gives a `reset`; without a subscriber the driver gets no turn options
+   (`test/live-events.test.mjs`).
 
 ## 2. Semantic processing while output streams
 

@@ -5,7 +5,7 @@ import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './
 import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import { undeclaredServiceType } from './introspection.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
@@ -72,7 +72,7 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
     !((message.tool_calls as { id?: string }[] | undefined) ?? []).some(call => String(call.id).startsWith('scope_'))).length;
 }
 
-export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
+export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
   scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
   prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
@@ -411,6 +411,12 @@ export class NativeToolAgent {
       refinement?: { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge };
       /** Tensor store and write port for soft values (S0 §3). */
       neuralese?: NeuraleseRuntimeOptions;
+      /**
+       * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
+       * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
+       * Without it the driver is called with no turn options.
+       */
+      onDelta?: (turn: number, delta: ModelTurnDelta) => void;
       /**
        * Context budget in prompt tokens (default 16384; null never compacts). Past three quarters of it the oldest
        * tool outputs are elided until the prompt is back under half.
@@ -967,6 +973,8 @@ export class NativeToolAgent {
     let compactedTurn = -1;
     // Requests of this turn the server refused as longer than its context.
     let overflowRetries = 0;
+    // The current turn's request has streamed deltas to `onDelta` and has not yet returned.
+    let streamed = false;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0, refinementRepairs = 0, lastRefinementFailure = '';
@@ -1058,7 +1066,9 @@ export class NativeToolAgent {
             value_type: session.lam.type.returns.kind === 'neuralese' && !(session.lam.type.returns.element.kind === 'prim' && session.lam.type.returns.element.name === 'string') ? 'unknown' as const : 'string' as const,
             value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
-        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+        const observer = this.options.onDelta, turn = turns + 1;
+        const turnOptions: ModelTurnOptions | undefined = observer && { onDelta: delta => { streamed = true; observer(turn, delta); } };
+        const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),
           messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
@@ -1067,8 +1077,13 @@ export class NativeToolAgent {
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
-          max_tokens: limit }, session.runtime.signal);
+          max_tokens: limit };
+        response = await (turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
+          this.driver(turnRequest, session.runtime.signal));
+        streamed = false;
       } catch (error) {
+        // What the failed request streamed belongs to an abandoned attempt, whether the turn is taken again or not.
+        if (streamed) { streamed = false; this.options.onDelta!(turns + 1, { type: 'reset' }); }
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
           duration_ms: Math.round(performance.now() - started),
           error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });

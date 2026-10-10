@@ -15,7 +15,7 @@ import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, checkServiceResults, failureError, refinementCodeOf, type RefinementCode } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
-import { recordingServices } from './runtime.js';
+import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { engageFusion } from './fusion.js';
 import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
@@ -606,6 +606,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,
     guidance: model.guidance,
+    // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
+    ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
+      definitionId: definition.id, name: definition.name }) } : {}),
     ...(signature?.refinedReturns ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
     decisionSystemPrompt: () => DECISION_SYSTEM_PROMPT + (addendum ? `\n\n${addendum}` : '') }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
@@ -728,6 +731,12 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
     console.warn(`natlang: call recording failed for ${definition.name}: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
+}
+
+/** The agent's delta observer for one call: each delta of turn `turn` as a `model_delta` live event of the call. */
+function liveDeltas(live: LiveSink, call: Omit<Extract<LiveEvent, { type: 'model_delta' }>, 'type' | 'turn' | 'delta'>):
+  (turn: number, delta: import('../contracts.js').ModelTurnDelta) => void {
+  return (turn, delta) => live({ type: 'model_delta', ...call, turn, delta });
 }
 
 /** The model named by the runtime's executor identity (the CLI's profile), when there is one. */

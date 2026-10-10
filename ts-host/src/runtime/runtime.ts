@@ -4,7 +4,7 @@ import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import type { NativeReviewOptions } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
@@ -19,7 +19,7 @@ import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, t
 export type SpecializationMode = 'off' | 'shadow' | 'on';
 const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2 };
 
-export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
+export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver;
   /** Model identity and revision, recorded in execution-graph manifests (spec/NEURALESE_GRAPH.md). */
   id?: string; revision?: string;
@@ -40,6 +40,18 @@ export type ModelConfig = { driver: ModelDriver;
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
   adaptation?: Record<string, unknown>; definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
 export type TraceSink = (trace: InvocationTrace) => void;
+/**
+ * A live event of a running task (plans/STREAMING.md §1.6), delivered while it happens so a host can show a natlang
+ * function at work. `model_delta`: a piece of one of the call's model turns as it streams (`ModelTurnDelta`), tagged
+ * with the call (`callId`, the caller's `parentCallId`, the function's `name` and `definitionId`) and the turn
+ * (`turn`, the number its `model_request` trace events carry). A `reset` delta means the turn's request is sent
+ * again: discard what the call's turn showed so far. Live events are hints: the call's trace and records are
+ * unchanged by them, and a turn its driver received whole has none.
+ */
+export type LiveEvent = { type: 'model_delta'; taskId: string; callId: string; parentCallId: string | null;
+  definitionId: string; name: string; turn: number; delta: ModelTurnDelta };
+/** Receives live events synchronously as they occur; it must be quick, and what it throws is ignored. */
+export type LiveSink = (event: LiveEvent) => void;
 /** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. */
 export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean };
 
@@ -78,6 +90,8 @@ export type NatlangRuntimeOptions = {
   /** Services only some functions may use, by each function's source path (`review/assess.nl`); see SPEC. */
   serviceScopes?: Record<string, string[]>;
   trace?: TraceSink;
+  /** Live events of every task (`LiveEvent`); without a subscriber the runtime does no live work. */
+  onLive?: LiveSink;
   /**
    * Exact host-only invocation I/O capture. Inputs use the named source allowlist;
    * captureAllOutputs explicitly includes arbitrary inline/named return values. Disabled
@@ -126,6 +140,8 @@ export type NatlangRuntimeOptions = {
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
+  /** Live events of this task (`LiveEvent`), besides the runtime's `onLive`. */
+  onLive?: LiveSink;
   /** Compilations for this task's calls (an audit or replay runs with `off`). */
   specialization?: SpecializationMode;
   /** Set on an audit run: the call whose inputs it re-runs through the agent. */
@@ -253,10 +269,14 @@ export class NatlangTask {
     const timeout = runtime.options.limits?.timeoutMs;
     if (timeout !== undefined) this.timer = setTimeout(() => this.cancel(new Error('natlang task timed out')), timeout);
     this.traceSink = options.trace;
+    const sinks = [options.onLive, runtime.options.onLive].filter((sink): sink is LiveSink => !!sink);
+    this.live = sinks.length ? event => { for (const sink of sinks) try { sink(event); } catch { /* observers never affect the task */ } } : undefined;
     this.specialization = options.specialization;
     this.auditOf = options.auditOf;
   }
   private readonly traceSink?: TraceSink;
+  /** The task's live subscribers (task and runtime `onLive`), undefined when there are none. */
+  readonly live?: LiveSink;
   /** How far compilations may serve this task's calls: the machine, runtime and task settings, whichever is lowest. */
   specializationMode(): SpecializationMode {
     const store = this.runtime.callStore();
