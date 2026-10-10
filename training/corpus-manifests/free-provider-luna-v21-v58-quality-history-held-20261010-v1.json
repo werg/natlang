@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-luna-v21-v58-quality-history-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-history-v21-v58-v1",
+  "files": [
+    {
+      "path": "quality-review-v21-luna-pubmedqa-final-diagnostic-supplement-v1/diagnostic.json",
+      "bytes": 9568,
+      "sha256": "20488ab704ca30247f7e404600c204676b7816448753179e852f1ca984539731"
+    },
+    {
+      "path": "quality-review-v21-luna-pubmedqa-final-diagnostic-supplement-v1/diagnostic.md",
+      "bytes": 680,
+      "sha256": "1fb2d457e9f023be5a7630c48561beace844ae50bb6c3e1ded8483b0355b284d"
+    },
+    {
+      "path": "quality-review-v21-luna-pubmedqa-full-abstract-final-v2/audit.json",
+      "bytes": 38254,
+      "sha256": "1dfeabdeded66cc3ce29ac3cdbdd77f0a3acec249568b46d25969e89bc184be3"
+    },
+    {
+      "path": "quality-review-v21-luna-pubmedqa-full-abstract-final-v2/audit.md",
+      "bytes": 1099,
+      "sha256": "7892f4ec7291f6d0e78b55dd5123ac66dab1e8e7ce1082a31ecd005b3687546e"
+    },
+    {
+      "path": "quality-review-v21-luna-pubmedqa-full-abstract-final-v3/audit.json",
+      "bytes": 55557,
+      "sha256": "a29df0340ace800e78889aa4652be09465901dfac3b8ce842fc1264abd31d4b4"
+    },
+    {
+      "path": "quality-review-v21-luna-pubmedqa-full-abstract-final-v3/audit.md",
+      "bytes": 656,
+      "sha256": "cb0f32a215eb59a7d151d0bc37c27933918c4da99d1de6de91cb7b0392d85506"
+    },
+    {
+      "path": "quality-review-v21-pubmedqa-seven-disagreement-review-v1/review.json",
+      "bytes": 26744,
+      "sha256": "89dc246c3fb413c43e0ad732737cc79b1ff18cc7caba284e2896ea4723478065"
+    },
+    {
+      "path": "quality-review-v21-pubmedqa-seven-disagreement-review-v1/review.md",
+      "bytes": 15099,
+      "sha256": "fb35f15bf984d52ff79287ee1304dba907d7a5ed8f473682a7a32bd27ba63abc"
+    },
+    {
+      "path": "quality-review-v58-request-visibility-shared-v1/audit.json",
+      "bytes": 627879,
+      "sha256": "5d784018224aa949073998affa9f343e1bcbb27d9514cb830b3c58121562f913"
+    },
+    {
+      "path": "quality-review-v58-request-visibility-shared-v1/audit.md",
+      "bytes": 593,
+      "sha256": "c49d579d824c005b08c995b2e1211a2acd148b3b769d8b54dd7c67b5463b25a5"
+    }
+  ],
+  "bytes": 776129
+}

@@ -27386,7 +27386,7 @@
       "source_class": "source-bound-native-quality-evidence",
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
-      "notes": "397 retained items in53 static programs;53 full reference/visibility checks passed and894 native turns. Explicit canonical quality holds applied; full-S1 closure pending."
+      "notes": "397 retained items in53 static programs;53 full reference/visibility checks passed and900 native turns. Explicit canonical quality holds applied; full-S1 closure pending."
     },
     {
       "id": "free-provider-google-v23-quality-closure-held-20261010-v1",
@@ -27457,6 +27457,19 @@
       "training_admission": false,
       "admission": "held-unqualified-alignment-or-source-quality-evidence",
       "notes": "Shared request audit preserves1059 request turns and explicit per-item invocationIDs;394/394 states exact in saved requests. Supersedes narrower prior visibility counts, not outcome/admission decisions."
+    },
+    {
+      "id": "free-provider-luna-v21-v58-quality-history-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-history-v21-v58-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-unqualified-alignment-or-source-quality-evidence",
+      "notes": "Preserve older V21 and V58 shared audit revisions plus seven-disagreement/full-state review. V21v4 and V58 sharedv2 supersede weaker request-matching counts; history not admission. Root reviewed seven V21 inputs: no additional canonical source holds; study-level non-significant/direct subgroup prognostic evidence supports saved labels with uncertainty nuance. Do not equate non-significance with proof of zero biological effect."
     }
   ],
   "coverage_backlog": [
