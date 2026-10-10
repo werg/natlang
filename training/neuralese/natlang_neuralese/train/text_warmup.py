@@ -639,7 +639,7 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     window as its crisp prefix, but are never targets, so they carry no loss and no held metric. With
     ``target_tokens``, ``tokens`` is the maximum total window and each lazy window advances by at most
     that supervised span, using all available preceding document tokens as context."""
-    ids=[open_id]+list(token_ids)+[close_id]
+    ids=array('I',[open_id]);ids.extend(token_ids);ids.append(close_id)
     bounded_target = target_tokens is not None
     if bounded_target:
         if type(target_tokens) is not int or target_tokens < 1 or target_tokens >= tokens:
@@ -654,7 +654,7 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, sup
     for offset in range(0,len(ids),stride):
         start=max(0,offset-context_capacity)
         end=min(len(ids),offset+stride)
-        chunk=_TokenWindow(ids,start,end) if bounded_target else ids[start:end]
+        chunk=_TokenWindow(ids,start,end)
         width=max(1 if offset==0 else offset-start,context_end-start)
         if len(chunk)<=width:continue
         window={'ids':chunk,'prefix':width,'offset':offset,'start':start}
@@ -696,7 +696,7 @@ class _TokenWindow(Sequence):
 def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None):
     """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens
     split into reasoning (inside the think block) and reply. Structural start tokens count as 'other'."""
-    codes=[];role='other';thinking=False;header=False
+    codes=array('B');role='other';thinking=False;header=False
     for token in ids:
         if token==start_id:
             role='other';thinking=False;header=True;codes.append(0);continue
@@ -748,9 +748,10 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
         labels=None
         context=0
         if role_start is not None:
-            labels=array('B',chat_roles([backbone.controls.open_id]+list(row_tokens)+[backbone.controls.close_id],
+            role_tokens=array('I',[backbone.controls.open_id]);role_tokens.extend(row_tokens);role_tokens.append(backbone.controls.close_id)
+            labels=chat_roles(role_tokens,
                 start_id=role_start,role_ids=role_ids,
-                think_open=token_id('<think>'),think_close=token_id('</think>')))
+                think_open=token_id('<think>'),think_close=token_id('</think>'))
             if mask_system_prompt:
                 index=1
                 while index<len(labels) and labels[index]==0:index+=1
@@ -763,10 +764,7 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 supervised_suffix_start=row.get('supervised_suffix_start'),
                 context_tokens=context,target_tokens=target_tokens):
             if labels is not None:
-                if target_tokens is not None:
-                    window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
-                else:
-                    window['roles']=labels[window['start']:window['start']+len(window['ids'])]
+                window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
             windows[split].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'cohort':row.get('text_cohort','native'),
@@ -840,7 +838,16 @@ def select_held_document_windows(windows, limit):
 def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
-        rows=list(map(json.loads,Path(text_data).open()))
+        rows=[]
+        with Path(text_data).open() as source:
+            for line in source:
+                row=json.loads(line)
+                if 'token_ids' in row:
+                    ids=row['token_ids']
+                    if not isinstance(ids,list) or any(type(i) is not int or not 0<=i<2**32 for i in ids):
+                        raise ValueError('text token IDs must be unsigned integer coordinates')
+                    row['token_ids']=array('I',ids)
+                rows.append(row)
         if any(r.get('split') not in ('train','test') or not isinstance(r.get('text'),str)
                or not r['text'].strip() or not r.get('source_groups') for r in rows):
             raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
@@ -867,7 +874,7 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
         vocab_size=len(tokenizer)
         for row in encoded:
             ids=row['token_ids']
-            if row.get('tokenizer_sha256')!=fingerprint or not isinstance(ids,list) or not ids or any(
+            if row.get('tokenizer_sha256')!=fingerprint or not isinstance(ids,(list,array)) or not ids or any(
                     type(i) is not int or i<0 or i>=vocab_size for i in ids):
                 raise ValueError('gold token IDs or tokenizer fingerprint mismatch')
             if 'supervised_suffix_start' in row and (type(row['supervised_suffix_start']) is not int or
@@ -880,7 +887,8 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     dedup={}; excluded=0
     for row in rows:
         if row['split']=='train' and row['text'] in held:excluded+=1;continue
-        key=(row['split'],row['text'],tuple(row.get('token_ids',[])),row.get('supervised_suffix_start'))
+        ids_digest=hashlib.sha256(array('I',row.get('token_ids',[])).tobytes()).digest()
+        key=(row['split'],row['text'],ids_digest,row.get('supervised_suffix_start'))
         if key in dedup and dedup[key].get('text_cohort','native')!=row.get('text_cohort','native'):
             raise ValueError('an identical document belongs to multiple cohorts; resolve ownership before training')
         dedup.setdefault(key,row)

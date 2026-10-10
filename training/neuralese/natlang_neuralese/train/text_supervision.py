@@ -52,23 +52,23 @@ ordinary text, not an inferred tool observation.
     return weighted * span.shape[1] / weighted.sum(1, keepdim=True)
 
 
-class DocumentWindowSampler:
-    """Draw cohort, document, then window, using the caller's checkpointed RNG.
+class CohortDocumentSampler:
+    """Shared text/trajectory sampler, using the caller's checkpointed RNG.
 
-Batch companions keep the first draw's cohort and exact shape. They are also
-document-uniform within that shape, rather than window-count weighted.
-"""
-    def __init__(self, windows, cohort_weights=None):
+    Keys explicitly identify the cohort and source document. Several windows or
+    target records from one document do not multiply its sampling probability.
+    """
+    def __init__(self, items, cohort_weights=None, *, cohort_key, document_key):
         self.documents = {}
-        self.by_shape = {}
-        for window in windows:
-            cohort = window.get('cohort', 'native')
+        self.cohort_key = cohort_key
+        for item in items:
+            cohort = cohort_key(item)
             if not isinstance(cohort, str) or not cohort:
                 raise ValueError('text cohort names must be nonempty strings')
-            document = window['document']
-            self.documents.setdefault(cohort, {}).setdefault(document, []).append(window)
-            shape = (cohort, window['prefix'], len(window['ids']))
-            self.by_shape.setdefault(shape, {}).setdefault(document, []).append(window)
+            document = document_key(item)
+            if not isinstance(document, str) or not document:
+                raise ValueError('document keys must be explicit nonempty strings')
+            self.documents.setdefault(cohort, {}).setdefault(document, []).append(item)
         if not self.documents:
             raise ValueError('no training documents')
         self.cohorts = sorted(self.documents)
@@ -83,23 +83,46 @@ document-uniform within that shape, rather than window-count weighted.
             raise ValueError('cohort fractions must be positive, finite, and sum to one')
         self.weights = [cohort_weights[c] for c in self.cohorts]
         self.documents = {c: list(d.values()) for c, d in self.documents.items()}
-        self.by_shape = {k: list(d.values()) for k, d in self.by_shape.items()}
 
     @staticmethod
     def _window(documents, rng):
         return rng.choice(rng.choice(documents))
 
+    def sample(self, rng):
+        cohort = rng.choices(self.cohorts, weights=self.weights, k=1)[0]
+        return self._window(self.documents[cohort], rng)
+
+    def receipt(self):
+        return {'policy': 'cohort-then-document-then-item/1',
+                'cohort_weights': dict(zip(self.cohorts, self.weights)),
+                'documents': {c: len(d) for c, d in self.documents.items()},
+                'admission_granted': False}
+
+
+class DocumentWindowSampler(CohortDocumentSampler):
+    """Text batches with document-uniform companions conditional on shape.
+
+    Batch companions keep the first draw's cohort and exact shape. They are
+    document-uniform within that shape, rather than window-count weighted.
+    """
+    def __init__(self, windows, cohort_weights=None):
+        super().__init__(windows, cohort_weights,
+                         cohort_key=lambda w: w.get('cohort', 'native'),
+                         document_key=lambda w: w['document'])
+        shapes = {}
+        for w in windows:
+            shape = (self.cohort_key(w), w['prefix'], len(w['ids']))
+            shapes.setdefault(shape, {}).setdefault(w['document'], []).append(w)
+        self.by_shape = {k: list(d.values()) for k, d in shapes.items()}
+
     def batch(self, size, rng):
         if size < 1:
             raise ValueError('batch size must be positive')
-        cohort = rng.choices(self.cohorts, weights=self.weights, k=1)[0]
-        first = self._window(self.documents[cohort], rng)
+        first = self.sample(rng)
+        cohort = self.cohort_key(first)
         companions = self.by_shape[(cohort, first['prefix'], len(first['ids']))]
         return [first] + [self._window(companions, rng) for _ in range(size - 1)]
 
     def receipt(self):
-        return {'policy': 'cohort-then-document-then-window/1',
-                'cohort_weights': dict(zip(self.cohorts, self.weights)),
-                'documents': {c: len(d) for c, d in self.documents.items()},
-                'batch_companions': 'same cohort and shape; uniform document then window',
-                'admission_granted': False}
+        return {**super().receipt(), 'policy': 'cohort-then-document-then-window/1',
+                'batch_companions': 'same cohort and shape; uniform document then window'}
