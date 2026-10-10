@@ -22947,6 +22947,54 @@
       "training_admission": false,
       "admission": "held-semantic-quality-and-explicit-root-review-required",
       "notes": "Exactsource/output/attempt/model/familyaudit; strictvalidatorunchanged, noadmission. Futuretypedchoicevariant has separate schema/semantics, no normalization."
+    },
+    {
+      "id": "free-provider-v29-source-case-closure-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-v29-s1-harness-closure-20261010-v1",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "train-source-components-review-only",
+      "source_class": "source-case-provenance-cross-corpus-closure",
+      "training_admission": false,
+      "admission": "superseded-closure-attempt-evidence-only",
+      "notes": "Earlier immutable closure analysis; superseded by hardened shared adapter V3. No admission or independent examples."
+    },
+    {
+      "id": "free-provider-v29-source-case-closure-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/luna-v29-s1-harness-closure-20261010-v2",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "train-source-components-review-only",
+      "source_class": "source-case-provenance-cross-corpus-closure",
+      "training_admission": false,
+      "admission": "superseded-closure-attempt-evidence-only",
+      "notes": "Earlier immutable closure analysis; superseded by hardened shared adapter V3. No admission or independent examples."
+    },
+    {
+      "id": "free-provider-v29-source-case-closure-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/luna-v29-s1-harness-closure-20261010-v3",
+      "include": [
+        "**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "train-source-components-review-only",
+      "source_class": "source-case-provenance-cross-corpus-closure",
+      "training_admission": false,
+      "admission": "held-per-turn-semantic-quality-and-root-review-required",
+      "notes": "Shared9d106d05db source_case_closure final V3 report42fca8ec6cb25248e7de4a6598d25c51cbd2c62a99e499b2b0b920bdf96d9793. Five source components bind321clean actions, no S1/harness split/hits or exact protected question/ID hits. EarlierV1/V2immutable audits included as evidence, not duplicated samples. Real row2/3 skipped requested passes and row1 reader pattern require per-turn selection; no wholetrajectory/native/recurrence admission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v29-source-case-closure-held-20261010-v2",
+  "owner": "pop",
+  "path": "runs/luna-v29-s1-harness-closure-20261010-v2",
+  "files": [
+    {
+      "path": "candidate-source-case-bindings.json",
+      "bytes": 22648,
+      "sha256": "58aa739be98cc1ed2a5b3c95823d20716a3da8bfa93ab2eac14f0cec6fb4ecb3"
+    },
+    {
+      "path": "closed-source-case-port-projection.jsonl",
+      "bytes": 6643941,
+      "sha256": "25e9c13c9342a39caec3c44e22ea293f002530bd395adb7cba5eff3c07ff3cbc",
+      "lines": 5
+    },
+    {
+      "path": "closure-report.json",
+      "bytes": 9160,
+      "sha256": "705aaf8b606ada153bd9266f28a891c76285d76e67d7e9db549e0cf21fc5f7ed"
+    },
+    {
+      "path": "source-case-port-projection.jsonl",
+      "bytes": 6643941,
+      "sha256": "25e9c13c9342a39caec3c44e22ea293f002530bd395adb7cba5eff3c07ff3cbc",
+      "lines": 5
+    }
+  ],
+  "bytes": 13319690
+}
