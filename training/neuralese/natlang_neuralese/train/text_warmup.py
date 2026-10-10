@@ -56,6 +56,7 @@ _OBJECTIVE_METRIC_SCALARS = (
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
     'context_valid_gold_tokens', 'context_valid_gold_fraction',
     'channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens',
+    'generated_tail_projection_mse', 'generated_tail_projection_tokens',
 )
 
 _EVALUATION_CONTEXT_METRICS = (
@@ -311,7 +312,8 @@ def same_resume_identity(previous, current):
 
 def text_supervision_policy():
     return {**TEXT_POSITION_WEIGHT_POLICY,
-            'objectives':['full_projection', 'input_map_self_consistency', 'next_token_ce']}
+            'objectives':['full_projection', 'input_map_self_consistency', 'next_token_ce',
+                          'generated_tail_full_projection_after_gold_fork']}
 
 
 def warmup_display_labels():
@@ -1148,7 +1150,8 @@ def main(argv=None):
                               'gold seed; detached causal token-to-Neuralese input map; one parallel consumer pass'),
               'channel_consistency':{'target':'live stop-gradient ordinary conditional distribution on the same generated history',
                                      'mask':'through first generated close, inclusive',
-                                     'effective_update_weight':a.channel_consistency_weight}
+                                     'effective_update_weight':a.channel_consistency_weight,
+                                     'post_gold_fork_projection_target':'raw embedding of live ordinary-greedy next token; detached states; through close'}
                   if a.ar_feedback_fixup else None,
               'ar_feedback_handoff_optimizer':'restore when parameter groups match; otherwise record a fresh optimizer with its reason'
                   if a.ar_feedback_fixup else None,
@@ -1408,13 +1411,20 @@ def main(argv=None):
         if not bootstrap:
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         channel_metrics = {name: top.new_zeros((), dtype=torch.float32) for name in
-                           ('channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens')}
+                           ('channel_consistency_kl', 'channel_consistency_agreement', 'channel_consistency_tokens',
+                            'generated_tail_projection_mse', 'generated_tail_projection_tokens')}
         if 'ordinary_generated_top' in out:
-            from .channel_objective import generated_history_channel_loss
-            channel_loss, channel_metrics = generated_history_channel_loss(
+            from .channel_objective import generated_history_channel_loss, generated_tail_projection_loss
+            channel_loss, consistency_metrics = generated_history_channel_loss(
                 backbone, out['ordinary_generated_top'], top, out['producer_predictions'],
                 backbone.controls.close_id, chunk_size=readout_chunk_tokens,
                 gradients=not bootstrap)
+            channel_metrics.update(consistency_metrics)
+            tail_projection, tail_metrics = generated_tail_projection_loss(
+                backbone, heads, out['ordinary_generated_top'], out['producer_predictions'],
+                out['gold_prefix_mask'], backbone.controls.close_id, chunk_size=readout_chunk_tokens)
+            channel_metrics.update(tail_metrics)
+            loss = loss + objective_passes * a.embedding_weight * tail_projection
             if not bootstrap:
                 # Updates average their objective passes. Compensate here so the
                 # declared weight is the coefficient in the complete update.
