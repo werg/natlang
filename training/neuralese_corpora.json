@@ -26515,6 +26515,25 @@
       "training_admission": false,
       "admission": "held-fresh-teacher-native-source-quality-review",
       "notes": "43 exact pinned official PubMedQA question/full-abstract cases, original retained IDs/groups/train splits/labels. Excludes 18041059 and 12690589 with explicit source-quality reasons. 20 abstracts exceed old 1500-character cap. No long_answer or gold in task state; old source/traces preserved. Repeated original worlds, no independent-world credit."
+    },
+    {
+      "id": "free-provider-google-v21-full-abstract-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-pubmedqa-full-abstract-v21",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "launch-receipt-v1.json",
+        "frozen-adapter-v1/**/*"
+      ],
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-full-evidence-regeneration-inputs",
+      "training_admission": false,
+      "admission": "held-fresh-teacher-native-source-quality-review",
+      "notes": "43 original PubMedQA train items with complete pinned abstracts, same IDs/groups/labels as corrected source derivative. Two source conflicts excluded in parent; no new-world credit. Same project quota waits for V20, no paid fallback. Active outputs require separate sealed publication."
     }
   ],
   "coverage_backlog": [
