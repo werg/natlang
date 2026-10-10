@@ -10299,3 +10299,7 @@ V38's exhausted SCHED-540 attempt has concrete model-code mistakes (free `decisi
 
 - V15closed512typedlabels376sourceannotationmatches136disagreements;49staticreferenceprograms376items all49actualreferenceaccepted/capturevisible. Raw/static/qualityheldregistered. Exact752question/state semanticleafclosure49/49cleanharnessonly, fullS1ownerrequestpending. V16active/V17queued512freshgroups; V17Boardgameeligiblepoolhas1remainingitem, fourotherfamiliesfillmix(noforcednewworldcredit).
 - SharedpreparationCLIassignedtoexistingLunahelper toreplacebrittle/tmpcopies: dynamiccounts, referencechecks, source/runtime/queuepins, noautomaticlaunch/admission. V44willuseV15sourceactual49referenceprograms whenhelperready. Currenttrainingfrozen/samegatescontinues.
+
+### Pop 2026-10-10T13:28:03.230729+00:00 — shared campaign preparation exercised
+
+- Added scripts/prepare_luna_folder_campaign.py preparation-onlyCLI, replacing brittle/tmpcount/pathsubstitutions. Itderivescounts/physicalsourceindices, checksalltrainsplits, exactreferenceIDs/admission/capturevisibility andfrozentree, pinsactualpredecessorqueues, writesfreshcandidatequeues/plan. Rootreviewsealsplanbeforeexplicitstarter; noautomaticlaunch/admission. ActualV44preparationpassedon49cases376items; rootapprovedplanSHAedf7b2a6801c58fc54173c005aef13a0001e5e4d39cf9091aa7f7c883e7a984c, launchPID894986. Candidateoriginalpreservedseparately; max4freshworkersafterV43complete. No testsrun; --help/syntax andactualpreparation/executionexercised.

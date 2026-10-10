@@ -25661,6 +25661,23 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "512freshtrainrowsdisjointIDsANDgroupspriorproviders. Boardgameeligiblepoolalmostexhausted1row, other4familiesfillremaining. SharedprojectlockbehindV16; activeoutputsexcluded."
+    },
+    {
+      "id": "free-provider-luna-v44-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v44-fortynine-runtimev13-v1",
+      "include": [
+        "candidate-plan-v1.json",
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-input-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "49programs376items/fourworkers runtimeV13, genericprepareractualreferencecounts/pins/sourceIDschecked. Rootapprovedcandidateafterreview, V43predecessorsclosed; max4newworkers. Sourcequalityheld."
     }
   ],
   "coverage_backlog": [
