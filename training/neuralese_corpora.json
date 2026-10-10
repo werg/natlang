@@ -25274,6 +25274,62 @@
       "training_admission": false,
       "admission": "held-review-no-training-admission",
       "notes": "512fresh inheritedtrain rows IDsANDgroupsdisjointallpriorprovider cases; sharedprojectquotaqueuebehindV14. Activeoutputs excluded; sourcequalityheld."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v13-closed-raw-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v13",
+      "include": [
+        "*",
+        "frozen-adapter-v1/**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "512closed typedresponses382sourceannotationagreements130differences. Noindependentsemantictruth/sourceadmission."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v13-static-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-choice-confidence-v13-adapter-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "50staticfolderprograms382items864heldnative turns;50actualreferenceaccepted/capturevisible. Generatedreferenceplansnotteacherreasoning. Sourcequalityheld."
+    },
+    {
+      "id": "free-provider-google-choice-confidence-v13-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/quality-review-v13-gemini-choice-confidence-and-static-replay-v1",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "Independentclosed512review; frozeninputpins/IDs/groups/sourcechoices checked. Nottrainingadmission."
+    },
+    {
+      "id": "free-provider-luna-v41-reviewed-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v41-fifty-runtimev13-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-generation-source-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "provider-or-static-evidence",
+      "training_admission": false,
+      "admission": "held-review-no-training-admission",
+      "notes": "FourfreshworkersqueuedbehindallV40queues;50programs382items;runtimeV13guidance. Activejournals/outputs excluded."
     }
   ],
   "coverage_backlog": [
