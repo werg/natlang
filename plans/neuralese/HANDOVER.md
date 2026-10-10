@@ -587,8 +587,9 @@ natlang-neuralese-full-current-quality-audit-20261004, standalone pinned audit
 venv,8GiBcap. Exact checker/spec/manifest/dependencies in
 runs/neuralese-integration-20261004/full-candidate-audit-v1/input-receipt.json.
 Small local mirrored receipts in full-candidate-audit-receipts; full bytes stay
-external. Candidate remains held; source-policy/unknown-license and protected
-split checks are separate admission obligations. Do not feed it into the full
+external. Candidate remains held for source binding, quality and protected
+split checks. Under the 2026-10-10 owner rule, licenses are provenance facts,
+including unknown licenses, and do not independently hold admission. Do not feed it into the full
 port training run on the strength of the earlier finalizer's old checker alone.
 
 Reviewed Luna exact provider-failed0134 retry now has a waiting controller,
