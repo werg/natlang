@@ -24615,6 +24615,48 @@
       "training_admission": false,
       "admission": "quality-evidence-only-no-training-admission",
       "notes": "OriginalV35V11only31durableresults29exactsemanticaccepted2wrongdecisions plusindex20digestinfra partial.1371actions30unsuccessful across18rows156sharedvalidatedactualtypededges;5manualtraversals andindex8seedreuse expose tracequality notparentgrade. FreshV12repairseparate; no automaticnegatives/admission."
+    },
+    {
+      "id": "neuralese-native4962-source-closure-inventory-held-20261010-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v2",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-provenance-quality-recovery-evidence",
+      "training_admission": false,
+      "admission": "held-source-quality-closure-pending",
+      "notes": "Supersededdiagnostic exactrefmap omitted multisourcerows; V3 corrects1126missingmatches/perstreamcounters. Preserveevidence noadmission."
+    },
+    {
+      "id": "neuralese-native4962-source-closure-inventory-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-native4962-source-closure-inventory-20261010-v3",
+      "include": [
+        "*"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-provenance-quality-recovery-evidence",
+      "training_admission": false,
+      "admission": "held-source-quality-closure-pending",
+      "notes": "Corrected5590/5733exactrefs5421base+169delta;143unresolved140rows including46sameIDhashmismatch97absent. V2multisourceaccountingbug correctedfreshversion. Groups/sourcecasesactualclosure pending noadmission."
+    },
+    {
+      "id": "free-provider-luna-v38-reviewed-quality-recovery-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-v35-targeted-quality-recovery-v38-runtimev12-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-recovery-review-v1.json",
+        "root-launch-receipt-v1.json",
+        "worker-*/queue.jsonl"
+      ],
+      "split": "evidence-only-inherited-groups",
+      "source_class": "source-provenance-quality-recovery-evidence",
+      "training_admission": false,
+      "admission": "held-source-quality-closure-pending",
+      "notes": "FourmediumreasoningfreshV12qualityrecovery attempts V35indices8/10/12/18;1brokenstatechain2wrongdecisions1incompleteedgecount. Sourcegroups/golds unchanged noindependentworldcredit noautoDPO/admission. Max5includingoneV37remainingworker. Activeoutputsexcluded."
     }
   ],
   "coverage_backlog": [
