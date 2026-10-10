@@ -21327,6 +21327,34 @@
       "admission": "diagnostic evidence only; no generated trajectory admission",
       "independent_new_worlds": 0,
       "notes": "ZAI research index2 actually lost raw evidence in pass4 by returning final decision JSON; final parser defaulted to no_action. Runtime capture was intact. Apparent trace hash mismatch is false: canonical root-only events match recorded hash; raw sidecar includes child events. Correction supplement supersedes only that diagnostic claim, old review bytes retained. Native tool schema metadata fixed centrally for future runtime, not rewritten."
+    },
+    {
+      "id": "luna-ar-native-harness-29466-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-native-harness-8805-final28793-20261010-v1/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "closed-full-optimizer-checkpoint-and-failed-channel-evidence",
+      "training_admission": false,
+      "admission": "unqualified model lineage; archive/restore state only",
+      "independent_new_worlds": 0,
+      "notes": "Stopped at29466 by SIGTERM with complete model/optimizer/RNG checkpoint. Immutable closed source for new matching-history-reference continuation; no inherited qualification. Best and current checkpoint retained with reports. Alias roots exact closed /srv output; storage transfer preserves bytes before inactive best checkpoint offload."
+    },
+    {
+      "id": "luna-ar-prefix-inactive-full-state-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-ar-feedback-prefix-4962-best23936-20261009-v1/closed-output-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "model-checkpoint-not-data",
+      "source_class": "inactive-complete-optimizer-state",
+      "training_admission": false,
+      "admission": "archival/restore evidence only; no channel qualification inherited",
+      "independent_new_worlds": 0,
+      "notes": "Inactive prefix AR experiment complete full state retained by exact manifests. Pop active29466 matching-history lineage references other immutable source checkpoint/heads; these inactive large files are eligible for verified offload to canonical DGX artifact storage."
     }
   ],
   "coverage_backlog": [
