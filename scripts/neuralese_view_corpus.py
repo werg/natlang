@@ -3,7 +3,12 @@
 
 Subcommands:
   fetch   download the pinned public-dataset slices to the raw directory (network; run under the memory ledger)
-  build   build port records from the raw directory and local caches, close splits, validate, write a manifest
+  build   build port records from the raw directory and local caches, close splits (also against published
+          corpora: --cross-index, see neuralese_data/cross_corpus.py), validate, write a manifest
+  filter  copy a built corpus keeping only records whose licence review class is allowed (a licence review's cut)
+
+v2 (view-ask-20261010-v2): fetch --v2 into a new raw directory, then build --preset v2 --cross-index <S1 index>
+--cross-index <harness-bench index> (VIEW_CORPUS.md §4 and §5).
 
 Example (under the ledger):
   python3 scripts/memory_ledger.py run --unit natlang-view-corpus-HHMM --budget-gb 8 --class experiment --wait 600 \
@@ -29,6 +34,8 @@ def main(argv=None) -> int:
     f.add_argument("--raw", type=Path, default=view_sources.DEFAULT_RAW)
     f.add_argument("--csn-train-rows", type=int, default=20000)
     f.add_argument("--websrc-pages-per-site", type=int, default=12)
+    f.add_argument("--v2", action="store_true", help="v2 slices: 80k Python rows, 15k rows of each other CodeSearchNet "
+                   "language, licence files, 40 WebSRC pages per site, TabFact tables")
     b = sub.add_parser("build")
     b.add_argument("--raw", type=Path, default=view_sources.DEFAULT_RAW)
     b.add_argument("--out", type=Path, required=True)
@@ -39,18 +46,34 @@ def main(argv=None) -> int:
     b.add_argument("--seed", type=int, default=0)
     b.add_argument("--protected", type=Path, default=view_corpus.PROTECTED_INDEX)
     b.add_argument("--only", action="append", default=None, help="restrict to these source adapters")
+    b.add_argument("--preset", choices=("v1", "v2"), default="v1", help="caps preset (v2 adds the v2 sources)")
+    b.add_argument("--cross-index", action="append", type=Path, default=[],
+                   help="published-corpus index directory (cross_corpus.index_corpus); repeatable")
+    fl = sub.add_parser("filter")
+    fl.add_argument("--src", type=Path, required=True)
+    fl.add_argument("--out", type=Path, required=True)
+    fl.add_argument("--allow", nargs="+", required=True, help="licence review classes to keep (view_extract.CLASS_ORDER)")
     args = parser.parse_args(argv)
     if args.cmd == "fetch":
-        report = view_sources.fetch(args.raw, csn_train_rows=args.csn_train_rows,
-                                    websrc_pages_per_site=args.websrc_pages_per_site)
+        if args.v2:
+            report = view_sources.fetch(args.raw, csn_train_rows=80000, websrc_pages_per_site=40,
+                                        csn_languages=view_sources.CSN_LANGUAGES, csn_lang_train_rows=15000,
+                                        csn_licenses=True, tabfact_tables={"train": 2600, "validation": 160, "test": 160})
+        else:
+            report = view_sources.fetch(args.raw, csn_train_rows=args.csn_train_rows,
+                                        websrc_pages_per_site=args.websrc_pages_per_site)
         print(json.dumps({"files": len(report["files"]), "raw": report["raw"]}))
         return 0
-    caps = dict(view_corpus.DEFAULT_CAPS)
+    if args.cmd == "filter":
+        print(json.dumps(view_corpus.filter_by_license(args.src, args.out, set(args.allow)), indent=1))
+        return 0
+    caps = dict(view_corpus.DEFAULT_CAPS if args.preset == "v1" else view_corpus.V2_CAPS)
     if args.caps:
         caps.update(json.loads(args.caps))
     manifest = view_corpus.build(args.raw, args.out, corpus_id=args.corpus_id or args.out.name, caps=caps,
                                  max_source_chars=args.max_source_chars, min_source_chars=args.min_source_chars,
-                                 seed=args.seed, protected_path=args.protected, only=args.only)
+                                 seed=args.seed, protected_path=args.protected, only=args.only,
+                                 cross_indexes=args.cross_index, log=lambda m: print(m, flush=True))
     print(json.dumps({k: manifest[k] for k in ("records", "by_artifact", "by_task", "by_split")}, indent=1))
     return 0
 

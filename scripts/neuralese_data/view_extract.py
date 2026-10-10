@@ -358,3 +358,57 @@ def final_exception(text: str) -> dict | None:
 
 def grep_hits(text: str) -> list[tuple[str, int]]:
     return [(p, int(n)) for p, n in _GREP.findall(text)]
+
+
+# ---------------------------------------------------------------------------------------------- licences
+
+# Ordered: more specific texts first (LGPL/AGPL before GPL; BSD-3 before BSD-2). Matching is on the licence file's
+# text, so a reviewer should spot-check (VIEW_CORPUS.md §6); an unmatched file is "unknown", never guessed.
+LICENSE_PATTERNS = [
+    ("AGPL-3.0", re.compile(r"GNU AFFERO GENERAL PUBLIC LICENSE", re.I)),
+    ("LGPL-3.0", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3", re.I)),
+    ("LGPL-2.1", re.compile(r"GNU LESSER GENERAL PUBLIC LICENSE|GNU LIBRARY GENERAL PUBLIC LICENSE", re.I)),
+    ("GPL-3.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 3", re.I)),
+    ("GPL-2.0", re.compile(r"GNU GENERAL PUBLIC LICENSE\s+Version 2", re.I)),
+    ("MPL-2.0", re.compile(r"Mozilla Public License,?\s+(?:Version|v\.?)\s*2\.0", re.I)),
+    ("EPL-1.0", re.compile(r"Eclipse Public License", re.I)),
+    ("Apache-2.0", re.compile(r"Apache License,?\s+Version 2\.0", re.I)),
+    ("MIT", re.compile(r"Permission is hereby granted, free of charge", re.I)),
+    ("BSD-3-Clause", re.compile(r"Redistribution and use in source and binary forms[\s\S]*(?:Neither the name|names of its\s+contributors)", re.I)),
+    ("BSD-2-Clause", re.compile(r"Redistribution and use in source and binary forms", re.I)),
+    ("ISC", re.compile(r"Permission to use, copy, modify, and/or distribute this software for any purpose", re.I)),
+    ("Unlicense", re.compile(r"This is free and unencumbered software released into the public domain", re.I)),
+    ("CC0-1.0", re.compile(r"CC0 1\.0 Universal|Creative Commons Zero", re.I)),
+    ("Zlib", re.compile(r"This software is provided 'as-is', without any express or implied\s+warranty", re.I)),
+    ("BSL-1.0", re.compile(r"Boost Software License", re.I)),
+    ("WTFPL", re.compile(r"DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE", re.I)),
+]
+
+LICENSE_CLASSES = {
+    "permissive": {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unlicense", "CC0-1.0", "Zlib", "BSL-1.0",
+                   "WTFPL", "0BSD", "LicenseRef-PublicDomain"},
+    "attribution": {"CC-BY-4.0", "CC-BY-3.0"},
+    "share-alike": {"CC-BY-SA-4.0", "CC-BY-SA-3.0"},
+    "weak-copyleft": {"LGPL-2.1", "LGPL-3.0", "MPL-2.0", "EPL-1.0"},
+    "copyleft": {"GPL-2.0", "GPL-3.0", "AGPL-3.0"},
+}
+# Ordered from least to most restrictive for a training-data licence review.
+CLASS_ORDER = ("permissive", "attribution", "share-alike", "weak-copyleft", "copyleft", "unverified", "noncommercial")
+
+
+def detect_license(text: str) -> str | None:
+    for spdx, pattern in LICENSE_PATTERNS:
+        if pattern.search(text):
+            return spdx
+    return None
+
+
+def license_class(spdx: str | None) -> str:
+    if not spdx:
+        return "unverified"
+    if "-NC" in spdx:
+        return "noncommercial"
+    for name, members in LICENSE_CLASSES.items():
+        if spdx in members:
+            return name
+    return "unverified"
