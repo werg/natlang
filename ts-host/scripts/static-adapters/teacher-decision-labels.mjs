@@ -21,6 +21,7 @@ import { curriculumCase, evalCall, returnCall } from '../inline-curriculum/lib.m
 import { referenceRow } from '../inline-curriculum/references.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(here, '../../../');
 const sha = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
   Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
@@ -57,6 +58,24 @@ const pubmedReferenceFields = ['config', 'dataset', 'local_file_sha256', 'local_
   'row_group', 'row_in_group', 'source_row_sha256', 'split', 'upstream', 'upstream_metadata_status'];
 const pubmedUpstreamFields = ['config', 'lfs_sha256', 'path', 'revision'];
 const sha256Hex = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
+async function loadCanonicalSourceHolds() {
+  const path = resolve(repositoryRoot, 'training/decision_source_quality_holds.json');
+  const raw = await readFile(path);
+  const policy = parse(raw.toString('utf8'));
+  if (policy?.schema !== 'natlang.decision-source-quality-holds/1' ||
+      !Array.isArray(policy.excluded_items))
+    throw new Error(`${path}: invalid canonical decision source-quality hold policy`);
+  const holds = new Map();
+  for (const item of policy.excluded_items) {
+    if (!nonempty(item?.item_id) || !nonempty(item?.original_source_group) ||
+        !nonempty(item?.split) || !nonempty(item?.reason))
+      throw new Error(`${path}: each hold requires item_id, original_source_group, split, and reason`);
+    if (holds.has(item.item_id)) throw new Error(`${path}: duplicate hold for ${item.item_id}`);
+    holds.set(item.item_id, item);
+  }
+  return { path, sha256: sha(raw), policy_id: policy.policy_id, holds };
+}
 
 function validateSourceProvenance(source) {
   const hasIdentityHash = Object.hasOwn(source, 'identity_state_sha256');
@@ -372,12 +391,15 @@ function replayCaptureVisibility(row, record) {
 }
 
 async function main() {
+  const usage = 'usage: teacher-decision-labels.mjs --cases CASES.jsonl --labels LABELS.jsonl [--labels ...] --out NEW_DIR [--batch-size 8] [--replay-limit 3]';
   const { values } = parseArgs({ options: {
+    help: { type: 'boolean' },
     cases: { type: 'string' }, labels: { type: 'string', multiple: true }, out: { type: 'string' },
     'batch-size': { type: 'string', default: '8' }, 'replay-limit': { type: 'string', default: '3' },
   } });
+  if (values.help) { console.log(usage); return; }
   if (!values.cases || !values.labels?.length || !values.out)
-    throw new Error('usage: teacher-decision-labels.mjs --cases CASES.jsonl --labels LABELS.jsonl [--labels ...] --out NEW_DIR [--batch-size 8] [--replay-limit 3]');
+    throw new Error(usage);
   const casesPath = resolve(values.cases), labelPaths = values.labels.map(path => resolve(path)), outDir = resolve(values.out);
   const batchSize = Number(values['batch-size']), replayLimit = Number(values['replay-limit']);
   if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 64 || !Number.isSafeInteger(replayLimit) || replayLimit < 0)
@@ -394,6 +416,7 @@ async function main() {
     if (cases.has(row.value.id)) throw new Error(`duplicate source id ${row.value.id}`);
     cases.set(row.value.id, row.value);
   }
+  const sourceQualityPolicy = await loadCanonicalSourceHolds();
   const artifacts = [];
   const labelById = new Map(), rejections = [];
   for (const path of labelPaths) {
@@ -426,12 +449,32 @@ async function main() {
   }
   const sourceMeta = { cases_path: casesPath, cases_sha256: casesSha, source_manifest_path: sourceManifestPath,
     source_manifest_sha256: sha(await readFile(sourceManifestPath)), source_manifest: sourceManifest,
+    source_quality_holds: { path: sourceQualityPolicy.path, sha256: sourceQualityPolicy.sha256,
+      merge_semantics: 'Canonical holds are always applied before strict-label eligibility; each held source ID is rejected regardless of annotation match.' },
     scorer: 'scoreGraded from ts-host/src/skills/graded.ts; schema natlang.skill-graded/1',
     scorer_source_sha256: await hashFile(resolve(here, '../../src/skills/graded.ts')),
     scorer_dist_sha256: await hashFile(resolve(here, '../../dist/skills/graded.js')) };
   const sourceFields = [...new Set([...cases.values()].flatMap(source => Object.keys(source)))].sort();
   const eligible = [];
   for (const [id, source] of cases) {
+    const sourceHold = sourceQualityPolicy.holds.get(id);
+    if (sourceHold) {
+      if (source.group !== sourceHold.original_source_group || source.role !== sourceHold.split)
+        throw new Error(`${id}: canonical source-quality hold group/split does not match pinned source row`);
+      reject(rejections, id, 'canonical_source_quality_hold', {
+        detail: sourceHold.reason,
+        source_group: source.group,
+        split: source.role,
+        policy_path: sourceQualityPolicy.path,
+        policy_sha256: sourceQualityPolicy.sha256,
+        policy_id: sourceQualityPolicy.policy_id,
+        evidence: sourceHold.evidence ?? {},
+        decision_receipt_sha256: sourceHold.decision_receipt_sha256,
+        adapter_code_path: fileURLToPath(import.meta.url),
+        adapter_code_sha256: await hashFile(fileURLToPath(import.meta.url))
+      });
+      continue;
+    }
     const unknownFields = Object.keys(source).filter(key => !reviewedSourceFields.has(key));
     if (unknownFields.length) { reject(rejections, id, 'unreviewed_source_fields_not_exposed', {
       fields: unknownFields, source_record_canonical_sha256: sha(JSON.stringify(canonical(source))) }); continue; }
@@ -535,6 +578,7 @@ async function main() {
     source_field_review: { observed_fields: sourceFields, reviewed_visible_fields: sourceFields.filter(key => key !== 'answer'),
       hidden_source_fields: sourceFields.filter(key => key === 'answer'),
       unreviewed_fields_rejected_without_prompt_exposure: true },
+    source_quality_hold_policy: sourceMeta.source_quality_holds,
     source_cases_without_generated_static_row: cases.size - eligible.length,
     label_rejection_records: rejections.length }, null, 2) + '\n');
   await writeExclusive(outDir, 'label-manifest.json', JSON.stringify({ schema: 'natlang.held-static-decision-label-manifest/1',

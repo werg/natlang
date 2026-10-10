@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-google-v25-prepared-unclipped-inputs-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 426631,
+      "sha256": "ab160b766f3ea6c576385b8b91264624e41b4b4800c18c5a4ce86481f720a998",
+      "lines": 512
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 4782537,
+      "sha256": "c145cabad2d6d87ff664203ec84613ee9cea0a37e0caafcd3d8944c8bcf4a63d",
+      "lines": 7609
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 12175,
+      "sha256": "bc671c498311fad17ef883030940e1386485c354cf1c64d4a93bc2813b4f6f91"
+    }
+  ],
+  "bytes": 5221343
+}

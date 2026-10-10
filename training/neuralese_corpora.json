@@ -27096,6 +27096,63 @@
       "training_admission": false,
       "admission": "held-independent-quality-review",
       "notes": "Root reviewed five ambiguous V56source questions; combined with two earlier exclusions for seven exact original train ID/group/split holds. Raw labels/results preserved; no admission for remaining samples."
+    },
+    {
+      "id": "free-provider-google-v21-static-filtered-v4-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-pubmedqa-full-abstract-v21-adapter-v4-qualityfiltered",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-quality-review",
+      "notes": "Five static reference programs37items after5quality exclusions and1label disagreement; all reference replays pass. Original derivatives untouched, source groups preserved; no new-world or admission credit."
+    },
+    {
+      "id": "free-provider-google-v21-static-filtered-v4-quality-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v21-static-filtered-v4-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-quality-review",
+      "notes": "Root actual replay receipt and immutable policy snapshot; complete source-held exclusion evidence. No source-semantic admission."
+    },
+    {
+      "id": "free-provider-google-v25-prepared-unclipped-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-google-choice-confidence-v25",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-source-semantic-quality-review",
+      "notes": "Prepared only512new complete train inputs; canonical7quality holds always applied,669legacy clipped evidence omissions; no provider launch yet.",
+      "include": [
+        "cases.jsonl",
+        "source-manifest.json",
+        "omissions.jsonl"
+      ]
+    },
+    {
+      "id": "semantic-iterate-v35-v5-sixteen-typed-candidate-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1",
+      "exclude_dirs": [
+        "__pycache__"
+      ],
+      "split": "inherited-train-evidence",
+      "source_class": "source-bound-native-quality-evidence",
+      "training_admission": false,
+      "admission": "held-candidate-conversion-closure-and-quality-review",
+      "notes": "All16original train V35V5cases, selected V54eleven/V57one/V59three/V52one traces accepted exact6files and genuine four typediterateOn transitions/finalDraft. Four originaltrainfamilygroups, no new-worldcredit. Candidate manifest binds exactsource/result/IR lineage; conversion pending."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-iterate-v35-v5-sixteen-typed-candidate-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v35-v5-sixteen-typed-iterate-candidate-v1",
+  "files": [
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 90900,
+      "sha256": "6df6e0769d6a07920df29c295624260b146d4a33fe7b31ffa9ef16a2d0ed324c"
+    }
+  ],
+  "bytes": 90900
+}

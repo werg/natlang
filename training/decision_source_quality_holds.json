@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.decision-source-quality-holds/1",
+  "policy_id": "pubmedqa-visible-answerability-holds-v2",
+  "status": "canonical_forward_source_filter",
+  "training_admission": false,
+  "decision": "Hold these source items from future strict-label derivatives. Preserve their source annotations and raw attempts; do not relabel or alter sealed artifacts.",
+  "merge_semantics": "Canonical holds are always applied. Optional hold receipts add exclusions. Duplicate item IDs merge their distinct receipt reasons/evidence; all entries for an ID must agree on original_source_group and split.",
+  "parent_decision_receipt": {
+    "path": "runs/free-provider-generation-20261009-v1/pubmedqa-visible-answerability-holds-v2/source-quality-holds.json",
+    "sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+  },
+  "source": {
+    "path": "runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl",
+    "sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097"
+  },
+  "semantic_review": {
+    "path": "runs/free-provider-generation-20261009-v1/quality-review-v56-pubmedqa-disagreements-v1/review.json",
+    "sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+  },
+  "excluded_items": [
+    {
+      "item_id": "dc-69522cb3e1b5d8c52d11",
+      "original_source_group": "g-36762ffd97b257fedc14536d",
+      "split": "train",
+      "reason": "Source-internal comparator-direction conflict: the abstract says “tamoxifen versus AI” RR=1.31 while its separate long_answer attributes higher CVAE risk to AI; the task label cannot be safely source-aligned without adjudication.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "a8d5e6dfa98ffe62094173cb9e74bafea2018f2fe5ec4ebfb69787cdb69fb270",
+        "official_row_index": 548,
+        "pubmed_id": 18041059
+      },
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-c063cb9086e165f435db",
+      "original_source_group": "g-a900ffb76994aac16a79e6b6",
+      "split": "train",
+      "reason": "The yes annotation depends on a long_answer inference about exercise adapting aging muscle; the abstract reports no age-related fatigue-index difference in active subjects and does not directly demonstrate that training caused the proposed effect.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "official_row_sha256": "05c5e2d8cfb70179a910781a7a3ba6679906a6b7f6add76564b3f86425c10e62",
+        "official_row_index": 505,
+        "pubmed_id": 12690589
+      },
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-4c2f9df175a623b83303",
+      "original_source_group": "g-ffe725df39df7940c00e77ca",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract says it evaluates feasibility of GFRUP limitation-of-treatment guidelines and describes case inclusion, meetings, decisions, and implementation timing. It does not state a direct feasibility result or explicitly conclude that the recommendations are applicable. “Maybe” is plausible; the gold “yes” is not established by the reported outcomes alone.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "166fdd888a8174180c4bf6eba403e57d3806f4604a6ec1c7bacd3c51784167cd",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "gold_not_fully_supported; applicability_uncertain",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-845c16d1dc3af5b9d3e0",
+      "original_source_group": "g-6a51fa7e97e5b89fe5aaa49d",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract lists common characteristics among young men who died (poisoning, unemployment, single status, self-destructive behavior). It is a retrospective description of cases and does not test whether these factors are preventable or whether changing them reduces mortality. “Maybe” appropriately reflects the unsupported amenability step; “yes” is not established by this abstract.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "01d8e0c917a17d2102f693ee48325ab2eea1e3e31e8ca8182f88672c6f14cf51",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "answerability_uncertain; gold_overstates_preventability",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-e3eb31373ee4d551eef9",
+      "original_source_group": "g-fa9a289591200ad71f6b0e4b",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract proposes progression criteria and states thresholds make future surgery probable, but gives no accuracy statistic, calibration, sensitivity/specificity, or validation result. The gold “yes” is stronger than the visible evidence about accurate prediction. “Maybe” is a defensible answer to the stated accuracy question.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "6319779c26e6cd81e122d71d7cbb3fd84976ba2e51bd63c54ab9c1b2c3554cde",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "answerability_uncertain; predictive_accuracy_not_demonstrated",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-e68969a87c8a662215b3",
+      "original_source_group": "g-4341e8795b6c6a09e6682c94",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract reports a higher response rate for exon 11 than non-exon-11 mutations (84% vs 40%, p=.01), which supports a possible predictive role. It then says there were no differences between exon variants in outcomes and responses. Because these statements conflict at the level relevant to “pathfinder,” the abstract alone does not yield a clear yes/no; “maybe” is defensible, while the gold “yes” is not unambiguous.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "0c85d22028deb08fe3c89d25ee53aca77628d3bcec917246c2156e351c1e79e1",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "abstract_internal_tension; no_clear_single_label",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    },
+    {
+      "item_id": "dc-ee6743fb9c22812bd3e5",
+      "original_source_group": "g-82d4ca091a2fd32fc7a2c2a1",
+      "split": "train",
+      "reason": "Root hold for strict single-label supervision: The abstract reports inverse cross-sectional relationships in both sexes and prospective inverse associations in women, but prospective results among men were equivocal and no association appeared for recurrence among people with baseline pain. “Yes” is supported for some endpoints/subgroups, not uniformly for the broad question; “maybe” is a plausible cautious interpretation.",
+      "evidence": {
+        "source_file_sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+        "visible_state_sha256": "1a0a49819e0a328c17c96316ff09199e190c53601dd42d7669eb020b73aa06ae",
+        "semantic_review_sha256": "174c4a9048a6a068165c4761738c201349b32eefb650058f703b1976a41b796c"
+      },
+      "assessment": "partial_association; population_scope_uncertain",
+      "decision_receipt_sha256": "b5ecd1d526c457ff5eb5b60040d88c07aba9d70b7010e11eb851f02d530d2dae"
+    }
+  ]
+}

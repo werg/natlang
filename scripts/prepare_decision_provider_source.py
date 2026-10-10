@@ -39,22 +39,48 @@ def source_ref_summary(case):
     }
 
 
-def load_quality_holds(path):
-    if not path:
-        return {}, None
-    hold_path = Path(path).resolve()
-    raw = hold_path.read_bytes()
-    doc = json.loads(raw)
-    if not isinstance(doc, dict) or not isinstance(doc.get('excluded_items'), list):
-        raise ValueError('source-quality hold receipt must contain an excluded_items array')
-    holds = {}
-    for item in doc['excluded_items']:
-        if not isinstance(item, dict) or not isinstance(item.get('item_id'), str) or not isinstance(item.get('reason'), str):
-            raise ValueError('each source-quality exclusion needs item_id and reason')
-        if item['item_id'] in holds:
-            raise ValueError(f"duplicate source-quality hold for {item['item_id']}")
-        holds[item['item_id']] = item
-    return holds, {'path': str(hold_path), 'sha256': sha256_bytes(raw), 'schema': doc.get('schema')}
+def load_quality_holds(paths):
+    """Merge canonical and caller-supplied holds without allowing overrides."""
+    holds, receipts = {}, []
+    for raw_path, canonical_policy in paths:
+        if not raw_path:
+            continue
+        hold_path = Path(raw_path).resolve()
+        raw = hold_path.read_bytes()
+        doc = json.loads(raw)
+        if not isinstance(doc, dict) or not isinstance(doc.get('excluded_items'), list):
+            raise ValueError(f'{hold_path}: source-quality holds must contain an excluded_items array')
+        if canonical_policy and doc.get('schema') != 'natlang.decision-source-quality-holds/1':
+            raise ValueError(f'{hold_path}: invalid canonical source-quality policy schema')
+        receipt = {'path': str(hold_path), 'sha256': sha256_bytes(raw), 'schema': doc.get('schema'),
+                   'canonical_policy': canonical_policy}
+        receipts.append(receipt)
+        for item in doc['excluded_items']:
+            if not isinstance(item, dict) or not isinstance(item.get('item_id'), str) or not isinstance(item.get('reason'), str):
+                raise ValueError(f'{hold_path}: each source-quality exclusion needs item_id and reason')
+            item_group = item.get('original_source_group', item.get('group'))
+            item_split = item.get('split')
+            if canonical_policy and (not item_group or not item_split):
+                raise ValueError(f"{hold_path}: canonical hold needs source group and split for {item['item_id']}")
+            if item_group is not None and not isinstance(item_group, str):
+                raise ValueError(f"{hold_path}: invalid group for {item['item_id']}")
+            if item_split is not None and not isinstance(item_split, str):
+                raise ValueError(f"{hold_path}: invalid split for {item['item_id']}")
+            entry = holds.setdefault(item['item_id'], {'group': item_group, 'split': item_split, 'holds': []})
+            if entry['group'] is not None and item_group is not None and entry['group'] != item_group:
+                raise ValueError(f"{item['item_id']}: quality hold receipts disagree on source group")
+            if entry['split'] is not None and item_split is not None and entry['split'] != item_split:
+                raise ValueError(f"{item['item_id']}: quality hold receipts disagree on split")
+            entry['group'] = entry['group'] or item_group
+            entry['split'] = entry['split'] or item_split
+            held = {'reason': item['reason'], 'receipt_item_id': item['item_id'],
+                    'receipt_group': item_group, 'receipt_split': item_split,
+                    'receipt_sha256': receipt['sha256'], 'receipt_path': receipt['path'],
+                    'canonical_policy': canonical_policy, 'evidence': item.get('evidence', {}),
+                    'official_row_sha256': item.get('official_row_sha256')}
+            if held not in entry['holds']:
+                entry['holds'].append(held)
+    return holds, receipts
 
 
 def omission(case, source_path, source_sha, line_number, row_sha, reasons):
@@ -99,7 +125,11 @@ def build(args):
     source_path = Path(args.source).resolve()
     prior_root, used_ids, used_groups, prior_files = read_prior_cases(args.prior_root)
     source_bytes_sha = sha256_file(source_path)
-    quality_holds, quality_receipt = load_quality_holds(args.source_quality_holds)
+    canonical_policy_path = Path(__file__).resolve().parents[1] / 'training' / 'decision_source_quality_holds.json'
+    quality_holds, quality_receipts = load_quality_holds([
+        (canonical_policy_path, True), (args.source_quality_holds, False)
+    ])
+    preparation_code_sha = sha256_file(Path(__file__).resolve())
     destination = Path(args.out).resolve()
     if destination.exists():
         raise FileExistsError(f'output directory must be fresh: {destination}')
@@ -138,18 +168,21 @@ def build(args):
             reasons = []
             if case_id in quality_holds:
                 hold = quality_holds[case_id]
-                expected_group = hold.get('original_source_group')
-                expected_split = hold.get('split')
+                expected_group = hold['group']
+                expected_split = hold['split']
                 if expected_group is not None and expected_group != case.get('group'):
                     raise ValueError(f'{case_id}: quality hold group does not match source row')
                 if expected_split is not None and expected_split != case.get('role'):
                     raise ValueError(f'{case_id}: quality hold split does not match source row')
-                reasons.append({
-                    'code': 'explicit_source_quality_hold', 'detail': hold['reason'],
-                    'receipt_item_id': hold['item_id'], 'receipt_group': expected_group,
-                    'receipt_split': expected_split,
-                    'upstream_row_sha256': hold.get('official_row_sha256')
-                })
+                reasons.extend({
+                    'code': 'explicit_source_quality_hold', 'detail': item['reason'],
+                    'receipt_item_id': item['receipt_item_id'], 'receipt_group': expected_group,
+                    'receipt_split': expected_split, 'receipt_path': item['receipt_path'],
+                    'receipt_sha256': item['receipt_sha256'], 'canonical_policy': item['canonical_policy'],
+                    'evidence': item['evidence'], 'upstream_row_sha256': item['official_row_sha256'],
+                    'policy_sha256': quality_receipts[0]['sha256'],
+                    'preparation_code_sha256': preparation_code_sha
+                } for item in hold['holds'])
                 seen_quality_hold_ids.add(case_id)
             state = case.get('state')
             options = case.get('options')
@@ -184,7 +217,9 @@ def build(args):
                 'source_row_sha256': row_sha
             })
 
-    stale_holds = sorted(set(quality_holds) - seen_quality_hold_ids)
+    optional_hold_ids = {item_id for item_id in quality_holds
+                         if any(not hold['canonical_policy'] for hold in quality_holds[item_id]['holds'])}
+    stale_holds = sorted(optional_hold_ids - seen_quality_hold_ids)
     if stale_holds:
         raise ValueError('source-quality hold receipt contains item IDs not found in the requested train choice scope: '
                          + ', '.join(stale_holds))
@@ -240,7 +275,14 @@ def build(args):
             'scope_row_count': source_scope_rows,
             'row_hash_contract': 'SHA-256 of exact UTF-8 JSONL row bytes excluding the line terminator'
         },
-        'source_quality_hold_receipt': quality_receipt,
+        'source_quality_holds': {
+            'policy_path': str(canonical_policy_path.resolve()),
+            'policy_sha256': quality_receipts[0]['sha256'],
+            'preparation_code_path': str(Path(__file__).resolve()),
+            'preparation_code_sha256': preparation_code_sha,
+            'merge_semantics': 'Canonical holds are always applied; optional receipts add holds. Duplicate IDs merge distinct reasons/evidence after group/split agreement checks.',
+            'receipts': quality_receipts
+        },
         'selection': {
             'families_round_robin_order': families,
             'requested_count': args.count,
@@ -283,7 +325,7 @@ def main():
     parser.add_argument('--families', action='append', required=True,
                         help='Family name or comma-separated family names; may be repeated')
     parser.add_argument('--source-quality-holds',
-                        help='Optional JSON receipt with excluded_items [{item_id, reason, original_source_group, split}]')
+                        help='Optional additional JSON hold receipt; canonical training policy is always applied')
     args = parser.parse_args()
     if args.count <= 0 or args.max_state_chars <= 0 or args.max_options < 2:
         parser.error('--count and --max-state-chars must be positive; --max-options must be at least 2')
