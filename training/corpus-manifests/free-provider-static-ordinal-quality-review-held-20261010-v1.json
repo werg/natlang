@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-static-ordinal-quality-review-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/quality-review-v12",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 104812,
+      "sha256": "e38642ef6e3edcdb949af138d38c38fcb47efa8405adb6bc0e34f546066d53a6"
+    },
+    {
+      "path": "review.md",
+      "bytes": 9044,
+      "sha256": "eaf8ed5efbb8898f0f44bec59973cff1254a1560e91ec96819d34f7f0b182903"
+    }
+  ],
+  "bytes": 113856
+}

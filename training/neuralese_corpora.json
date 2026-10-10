@@ -20706,7 +20706,8 @@
       ],
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
-      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds."
+      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
+      "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v3"
     },
     {
       "id": "free-provider-zai45-first3-native-and-partial-held-20261010-v1",
@@ -20877,6 +20878,98 @@
       ],
       "license": "Inherited authored V22 same-world source provenance",
       "notes": "Closed REC-976 and source-v5 DOC-954 have exact accepted final decisions and all scoped file checks. Same-seed/runtime DOC-954 prompt-only recovery took716.7s versus old1800.7s incomplete. One paired case only. Real child-call/argument topology uses text-marker stand-ins and does not qualify learned soft-state transport. Old resource cutoff is not a semantic negative or DPO rejection. Remaining case5 active and excluded."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v3",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/static-decision-label-adapter-google-pool-v1-held-v6-ordinal-fixed",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "authored-static-current-IR-from-typed-provider-decisions",
+      "admission": "held-pending-source-and-static-reference-quality-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-pool-v1-closed-held-20261009-v1"
+      ],
+      "license": "Inherited exact source licenses, preserved per compatible batch",
+      "independent_new_worlds": 0,
+      "notes": "162 eligible labels, 94 explicit rejected rows, 29 authored collection IR cases; all 29 scripted replays passed; 382 held native turns. Ordinal labels use the shared zero-based ordinalDistribution source mapping, with earlier declared level on equal mass. All six scope captures are retained. Zero provider calls or teacher-written scaffold/reasoning claims. Scripted acceptance does not grant semantic admission or learned-channel qualification."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v4",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-decision-labels-google-poolv2-v2-ordinal-fixed",
+      "include": [
+        "cases.jsonl",
+        "label-manifest.json",
+        "native.held.jsonl",
+        "rejections.jsonl",
+        "replay.failures.jsonl",
+        "replay.results.jsonl",
+        "scorer-manifest.json",
+        "source-manifest.json",
+        "summary.json"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "authored-static-current-IR-from-typed-provider-decisions",
+      "admission": "held-pending-source-and-static-reference-quality-review",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-google-pool-v2-closed-held-20261010-v1"
+      ],
+      "license": "Inherited exact source licenses, preserved per compatible batch",
+      "independent_new_worlds": 0,
+      "notes": "599 eligible labels, 425 explicit rejected rows, 84 authored collection IR cases; all 84 scripted replays passed; 1366 held native turns. Ordinal labels use the shared zero-based ordinalDistribution source mapping, with earlier declared level on equal mass. All six scope captures are retained. Zero provider calls or teacher-written scaffold/reasoning claims. Scripted acceptance does not grant semantic admission or learned-channel qualification."
+    },
+    {
+      "id": "pop-action45-inactive-original-checkpoint-exports-held-20261010-v1",
+      "owner": "pop",
+      "path": ".local/retained-checkpoints/action45-original-exports-20261009-v1",
+      "include": [
+        "best-heads.pt",
+        "best-checkpoint.pt",
+        "heads.pt",
+        "relocation-receipt.json"
+      ],
+      "split": "not-training-data",
+      "source_class": "inactive-full-checkpoint-and-projection-export-preservation",
+      "admission": "retained-checkpoint-evidence-only",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "independent_new_worlds": 0,
+      "notes": "Inactive original Action45 exports, including full optimizer checkpoint. Preserved for reproducibility and recovery, not admitted samples or neuralese qualification. Current active training has its own full checkpoint on /srv/storage. SHA-verified offload may remove these local inactive bytes; restore via sync_training_corpora.py before using the original /srv symlink paths. Relocation receipt preserves original paths and exact hashes."
+    },
+    {
+      "id": "free-provider-static-ordinal-quality-review-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v12",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "inherited-train-source-groups",
+      "source_class": "quality-review-evidence",
+      "admission": "evidence-only-no-training-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "free-provider-static-decision-inline-lambdas-held-20261010-v3",
+        "free-provider-static-decision-inline-lambdas-held-20261010-v4"
+      ],
+      "independent_new_worlds": 0,
+      "notes": "Independent Luna audit: 761/761 six-field capture bindings, zero accepted ordinal disagreements (154 accepted ordinal rows), no false accepted ordinal labels found in previous snapshots. Three fractional tie disagreements correctly remain rejected under shared earlier-level tie policy. Source rows role=train, no explicit split field. Outputs remain held; no learned-channel qualification or automatic semantic admission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "pop-action45-inactive-original-checkpoint-exports-held-20261010-v1",
+  "owner": "pop",
+  "path": ".local/retained-checkpoints/action45-original-exports-20261009-v1",
+  "files": [
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1225546757,
+      "sha256": "742ea647b335fb0aab20f596307623cc6a18a77ed5fc1e4d1b680576bee946fd"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628874261,
+      "sha256": "d6281b54021e514a341d24a99f8632300640a7d694e36f2371e08505e348f3c0"
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628874261,
+      "sha256": "4dbe82b83a57d57bb5c3c06f92beae250879a5bcd10582fae20b1086615546dc"
+    },
+    {
+      "path": "relocation-receipt.json",
+      "bytes": 1700,
+      "sha256": "1b19be706f4ba392a98f8dce069c04587488485a0db9549818566ba4a9f8bfb3"
+    }
+  ],
+  "bytes": 2483296979
+}
