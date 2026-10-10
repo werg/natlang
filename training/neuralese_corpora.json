@@ -21680,6 +21680,40 @@
       "admission": "execution evidence only, not a training corpus",
       "independent_new_worlds": 0,
       "notes": "Frozen runtime artifact for native Luna V28 campaign, 1330 pinned files. Includes shared scope-eval-v2 metadata correction; active older runtimes are unchanged. Source development synchronizes through Git; this snapshot preserves exact generation execution."
+    },
+    {
+      "id": "free-provider-luna-v28-five-closed-native-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev28-five-runtimev7-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "closed-native-teacher-sampled-trajectories",
+      "training_admission": false,
+      "admission": "five case-oracle successes pending independent trajectory/source/split quality review",
+      "independent_new_worlds": 0,
+      "notes": "gpt-6-luna/runtimev7, 5/5 case accepted; 313 saved model replies and78633completion tokens. Exact terminal result accounting verified by supervisor; immutable journals preserve counts. Existing V28 train worlds, not independent new worlds. Case acceptance does not qualify learned neuralese channel or automatic SFT/DPO admission."
+    },
+    {
+      "id": "free-provider-luna-v29-five-runtimev7-queued-inputs-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/provider-luna-sourcev29-five-runtimev7-v1",
+      "include": [
+        "reviewed-plan-v1.json",
+        "root-dispatch-receipt-v1.json",
+        "worker-01/queue.jsonl",
+        "worker-02/queue.jsonl",
+        "worker-03/queue.jsonl",
+        "worker-04/queue.jsonl",
+        "worker-05/queue.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "reviewed-native-teacher-generation-queue",
+      "training_admission": false,
+      "admission": "immutable launch inputs only; outputs held pending quality review",
+      "independent_new_worlds": 0,
+      "notes": "Five fresh native workers on exact previously reviewed V29source-v2, two source repairs plus three counterfactuals, unchanged gold. SHA/source approval pinned. gpt-6-luna, runtimev7, one model request per worker, 32K context; evolving journals/results excluded."
     }
   ],
   "coverage_backlog": [
