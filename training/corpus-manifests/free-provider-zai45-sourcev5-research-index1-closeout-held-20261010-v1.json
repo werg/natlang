@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1",
+  "files": [
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/case-001/jobs/000001-c29d8a38d02c60e8.result.json",
+      "bytes": 1961125,
+      "sha256": "bf3bca498e73ae5d4648e453f6d65cce64db82ba7cb44b2ab3c50078e9335208"
+    },
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/case-001/jobs/000001-c29d8a38d02c60e8.trace.jsonl",
+      "bytes": 422999,
+      "sha256": "c1912bccb2a6badf4082ca1c5e69225f42a53bb647c080de8714fc6bf034db2c",
+      "lines": 262
+    },
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/journal.jsonl",
+      "bytes": 28145,
+      "sha256": "ea129f9b0d1bb9be1b2a23c57655d5ece009b87734114c71c3fc27610125ab55",
+      "lines": 41
+    },
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/launch-receipt-v1.json",
+      "bytes": 1366,
+      "sha256": "de43568355091b8d3e7efdf12d944c45772190106ac447a31de2043c994b9557"
+    },
+    {
+      "path": "provider-zai45-sourcev5-research-pair-v1/queue.jsonl",
+      "bytes": 1594,
+      "sha256": "160ddab562cbb5772617ad26ae1b7ef38675c70c9dfd292ca4129d3ba8fdf388",
+      "lines": 2
+    },
+    {
+      "path": "runtime-small-teachers-v5/frozen-runtime.json",
+      "bytes": 176513,
+      "sha256": "64125271f4791e1c6ac8ebc725a7042eba837ef3ee81c664059669bb00c98ae1"
+    }
+  ],
+  "bytes": 2591742
+}

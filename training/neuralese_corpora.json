@@ -21151,6 +21151,53 @@
       "admission": "held pending corrected static conversion, replay and explicit source admission",
       "independent_new_worlds": 0,
       "notes": "1024 final labels, 852 typed-valid, 549 all existing scorer gates; invalid distributions unchanged and rejected. Review also records ZAI research index1 accepted exact scoped result; underlying ZAI artifacts need separate publication."
+    },
+    {
+      "id": "free-provider-static-decision-inline-lambdas-held-20261010-v5",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-static-decision-labels-google-poolv3-v1",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "typed-provider-label-derived-static-trajectories",
+      "training_admission": false,
+      "admission": "held pending source admission and full-case replay; representative scripted replay is not teacher trace evidence",
+      "independent_new_worlds": 0,
+      "notes": "Corrected shared ordinal source mapping; 527 strict labels in72 cases;497 rejected;36 representative replays passed;614 held native turns. No hidden answer/provider probabilities in visible prompts. Static plans and tool results are authored. V16 receipt pins all inputs."
+    },
+    {
+      "id": "free-provider-static-google-poolv3-quality-review-v16-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/quality-review-v16",
+      "include": [
+        "review.json",
+        "review.md"
+      ],
+      "split": "not-training-data",
+      "source_class": "quality-and-conversion-review",
+      "training_admission": false,
+      "admission": "read-only evidence",
+      "independent_new_worlds": 0
+    },
+    {
+      "id": "free-provider-zai45-sourcev5-research-index1-closeout-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1",
+      "include": [
+        "provider-zai45-sourcev5-research-pair-v1/case-001/**/*",
+        "provider-zai45-sourcev5-research-pair-v1/queue.jsonl",
+        "provider-zai45-sourcev5-research-pair-v1/journal.jsonl",
+        "provider-zai45-sourcev5-research-pair-v1/launch-receipt-v1.json",
+        "runtime-small-teachers-v5/frozen-runtime.json"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "provider-native-trajectory",
+      "training_admission": false,
+      "admission": "held for native admission and teacher trace review",
+      "independent_new_worlds": 0,
+      "notes": "RES-832 passed six scoped checks with COHORT-C4-A34 /240/include. 20 turns,12382tokens. Exact V15 review pins source/runtime/output/trace. Old index2 storage pause remains preserved; fresh runtimev6 retry separate."
     }
   ],
   "coverage_backlog": [
