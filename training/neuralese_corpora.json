@@ -22255,6 +22255,48 @@
       "training_admission": false,
       "admission": "runtime-only-not-training-data",
       "notes": "1331frozenfiles+rootdiffreceipt;10changed1addedvsV8,nativepromptunchanged. Snapshot newfuturegenerationonly, existingV32 frozenv8untouched. Livequality unmeasured."
+    },
+    {
+      "id": "free-provider-luna-v33-source-v4-generation-reviewed-20261010-v1",
+      "owner": "pop",
+      "path": "runs/luna-v33-source-proposal-20261010-v4",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "explicit-fact-and-numeric-list-successor-source",
+      "training_admission": false,
+      "admission": "generation-source-reviewed-training-held",
+      "independent_new_worlds": 0,
+      "notes": "Five V32 successors,4inheritedgroups. Root verified candidate-local NEWFACT station evidence and unchanged exactgold; numericlistmeasure optin/order exact; sourcefactv3scope rejected. No generated-output admission."
+    },
+    {
+      "id": "free-provider-v28-targetbound-text-source-held-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "held-targetbound-provider-conversion",
+      "training_admission": false,
+      "admission": "native-IR-and-trace-held-scoped-text-derivative-separate",
+      "independent_new_worlds": 0,
+      "notes": "Exact source conversion and296cleanrowinput for separately root-approved ordinary-text-only delta;17failedactions excluded; native/trace and recurrence held. V10separatecohortpreview281 is not combinedcorpus count280."
+    },
+    {
+      "id": "free-provider-v28-root-ordinary-text-decision-20261010-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261009-v1/v28-root-ordinary-text-admission-v1",
+      "include": [
+        "**/*"
+      ],
+      "split": "inherited-train-only",
+      "source_class": "root-scoped-text-admission-decision",
+      "training_admission": false,
+      "admission": "review-evidence-not-training-targets",
+      "independent_new_worlds": 0,
+      "notes": "Exact296clean assistantaction rows bound to rawinputline/source/target/split/groups; approves only ordinarytext render. No native IR/trace/recurrence/channeladmission; currentGPUinput unchanged."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v28-root-ordinary-text-decision-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/v28-root-ordinary-text-admission-v1",
+  "files": [
+    {
+      "path": "root-ordinary-text-admission.json",
+      "bytes": 267159,
+      "sha256": "cc2d7c63da21af781f9e9a72aa7facf0705e0209d81fb2c30fa9b7455e48d0c7"
+    }
+  ],
+  "bytes": 267159
+}

@@ -1,0 +1,130 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "free-provider-v28-targetbound-text-source-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261009-v1/held-v28-visible-input-native-text-v10-target-binding",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1826,
+      "sha256": "a9bbd7788d46faf928c026213816874f2ae33dbe7c010e6c5fe61e56428e894f"
+    },
+    {
+      "path": "converted-turns.jsonl",
+      "bytes": 43397879,
+      "sha256": "c7b6142ad24f340c988533bee22ad21bb2f5babd82a64db0ca92a916db91634c",
+      "lines": 313
+    },
+    {
+      "path": "excluded-failed-action-turns.jsonl",
+      "bytes": 2121923,
+      "sha256": "571a087195f10b15c17e24a3992f3fee9b27ebdb5e760d43d8303d01fb770849",
+      "lines": 17
+    },
+    {
+      "path": "manual_four_step_no_iterateOn.omissions.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "manual_four_step_no_iterateOn.provenance.jsonl",
+      "bytes": 546402,
+      "sha256": "da1340650483d9dbfb8dec539e4a52513dc99b60d675c128ec8fc3d0a73c31d8",
+      "lines": 108
+    },
+    {
+      "path": "manual_four_step_no_iterateOn.receipt.json",
+      "bytes": 2331,
+      "sha256": "9650c6b66739984b70dbfdffa488596f47111879f7dcee71069653a7756c9d59"
+    },
+    {
+      "path": "manual_four_step_no_iterateOn.rendered.jsonl",
+      "bytes": 9531657,
+      "sha256": "1a5f64105ec3d1439b120bcb593b92d9f8d532659ac69c822209dafb1dd629b9",
+      "lines": 108
+    },
+    {
+      "path": "native-turns-render-input.jsonl",
+      "bytes": 41300228,
+      "sha256": "8ef006ce5b201e3ce8497920e5e1f3de8ba30faee474d9a59533c6f9f65d2595",
+      "lines": 296
+    },
+    {
+      "path": "native-turns.jsonl",
+      "bytes": 48599569,
+      "sha256": "276d8128085e4c7bf500e42228fc119e16510c4361125c30742bbff922b0149a",
+      "lines": 313
+    },
+    {
+      "path": "observed_iterateOn.omissions.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "observed_iterateOn.provenance.jsonl",
+      "bytes": 366851,
+      "sha256": "4d885f25b63a0a91f26884df66baefd7a255e5598898d840ad46fe576f0cab7f",
+      "lines": 173
+    },
+    {
+      "path": "observed_iterateOn.receipt.json",
+      "bytes": 2329,
+      "sha256": "401574d498188c6d03cf3e5ad8395fd3dd19b8667826feb5bdd88abd24543e5c"
+    },
+    {
+      "path": "observed_iterateOn.rendered.jsonl",
+      "bytes": 13792624,
+      "sha256": "57002ef8df00b94554ffd89123d76d5d37a84df8f64749848a6c22e906f36e65",
+      "lines": 173
+    },
+    {
+      "path": "ordinary-text-admission-proposal.json",
+      "bytes": 12147,
+      "sha256": "1b05c7fe4d3d547b98ff87019a0223df94b03443ed09f0c979e212f27ddc78f8"
+    },
+    {
+      "path": "ordinary-text-admission-review.md",
+      "bytes": 2307,
+      "sha256": "3cbaf92ea14cd9a2f9546c6e9379bcfec4b98c71bf0c42d70d2c9ecba0c32853"
+    },
+    {
+      "path": "ordinary-text-candidate-index.jsonl",
+      "bytes": 1021899,
+      "sha256": "b14235d54e489fcf0490d0d67e80b480715e0f21720ddc6931096ea6fb0fb76a",
+      "lines": 281
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 80332,
+      "sha256": "edc897feca4ad16cf28e488f49ed82f6a59bfd4af5701b28207101d5be57ab42",
+      "lines": 22
+    },
+    {
+      "path": "raw-results.jsonl",
+      "bytes": 28136975,
+      "sha256": "5f839e5641cc60225b856fade1ca39e8a215d77d497904d6d1986dc8812a3aa1",
+      "lines": 5
+    },
+    {
+      "path": "render-preview.py",
+      "bytes": 10364,
+      "sha256": "e402a79e0aeefa6519a22237dc78ffb419260dfc20193df17af31951f131f73a"
+    },
+    {
+      "path": "render-receipt.json",
+      "bytes": 2300,
+      "sha256": "dae5dd5eb9af23c985c88047cbba83a3ca2eb52a556d66afa66781b166f72078"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 3879,
+      "sha256": "a8b2b3b9bf64fc9d2538a19824f9463da1fc10267c930c7db2cb4233df25bdc3"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2372,
+      "sha256": "08ff57687e1f65f1502e2f01b1a5dfe7cfe96c5df7235cb600d5060b36273faf"
+    }
+  ],
+  "bytes": 188936200
+}
