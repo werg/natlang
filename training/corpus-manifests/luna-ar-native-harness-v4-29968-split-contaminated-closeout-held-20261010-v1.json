@@ -1,0 +1,72 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-native-harness-v4-29968-split-contaminated-closeout-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-gentle-29696-20261010-v4/closed-output-v1",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 460397,
+      "sha256": "691cdcf5a7b1cde312e833bcbf1ac692894c51b93a749ea9dce2215c423ae718"
+    },
+    {
+      "path": "best-checkpoint.json",
+      "bytes": 482978,
+      "sha256": "b6b729e5fb56d2533067493ae9f85938c5172c3ad0a840d75f640dee86025eae"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1220955274,
+      "sha256": "381b43fe4a954c7e8a6ad9ccfa026661f29c2e4a60a6fafcd5eb58352e3cf138"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628880725,
+      "sha256": "3eb61c243afaad9a8b575c4331c00b6d30c352dc69cd32b48c28cc986760c91b"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1225596869,
+      "sha256": "60bcfdccaf3ed56183199bbe9bafd6518fe938168952f31d7fedc8cbd9915fdf"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 1006549,
+      "sha256": "224fd0334e3015086c61094aa943cc9dd223caebaf5efbb2537e8a0aced6387f",
+      "lines": 3
+    },
+    {
+      "path": "heads-export-status.json",
+      "bytes": 254,
+      "sha256": "2b8bbff7d648e7313cd07eff02f638e6ef453d4f225c2bfb5507dcf6cb177fbb"
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628880725,
+      "sha256": "3eb61c243afaad9a8b575c4331c00b6d30c352dc69cd32b48c28cc986760c91b"
+    },
+    {
+      "path": "optimizer-restore.jsonl",
+      "bytes": 511,
+      "sha256": "1b04f01c23134f63c865e972022734ab6e5ad06a1948b1d1dbcedb09c02dc7d8",
+      "lines": 1
+    },
+    {
+      "path": "plan.json",
+      "bytes": 122560,
+      "sha256": "ea10a6bcc5b19d98c19287d35d86d92c88048f3c39fc92d5a321848e489d962b"
+    },
+    {
+      "path": "report.json",
+      "bytes": 460755,
+      "sha256": "6f325beccb953dcf18254354bdcaa3bd65d53ae1d04a38c5c1fe5d1a65b8142c"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 2644381,
+      "sha256": "62f596c5c4b0320cddf9ed59c616986d555d8a371de7abea17290d985d2f39c4",
+      "lines": 272
+    }
+  ],
+  "bytes": 3709491978
+}
