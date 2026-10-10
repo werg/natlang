@@ -1,0 +1,645 @@
+{
+ "schema": "natlang.cross-corpus-closure-receipt/1",
+ "request": "2026-10-10T04:05:37.964944Z-pop-d56c (Pop status 2026-10-10T05:15Z)",
+ "subset": {
+  "registry_id": "free-provider-sourcebound16-logical-static-review-held-20261010-v1",
+  "file": "runs/free-provider-generation-20261009-v1/gemini-poolv3-static-sourcebound-boardgame-ruletaker-16-v1/source-bound-rows.jsonl",
+  "sha256": "4ff554268baf4b30d7997f87e4866acb93b84f2eb453c32bdab5e02b0123cf4a",
+  "rows": 16
+ },
+ "indexes": [
+  {
+   "registry_id": "cross-corpus-index-s1-full-final-20261003-v1",
+   "corpus_id": "s1-full-final-20261003",
+   "records": 1870591,
+   "groups": 985434,
+   "sources": 5449304,
+   "sketches": 4734547,
+   "format": "port"
+  },
+  {
+   "registry_id": "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1",
+   "corpus_id": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
+   "records": 3843,
+   "groups": 769,
+   "sources": 0,
+   "sketches": 0,
+   "format": "turn"
+  }
+ ],
+ "code": {
+  "module": "scripts/neuralese_data/cross_corpus.py (Index.groups/source/question/example/near)",
+  "origin_main": "5dfb0dd605ed8824559caf1c6ef9048f524c3530"
+ },
+ "method": "Per row: split-group lookup of the row group, case id, source:id and raw_record_sha256; exact normalized-text digest of state, question and state+question against published non-background sources (background sources, i.e. texts under >=3 groups, are listed separately); question/example digests with state/question as request and the label as target (port records render requests differently, so these are best-effort); MinHash near-duplicates of the state (Jaccard >= 0.8, finalizer sketch) against all published sketches. The harness-bench index is group-only.",
+ "rows": {
+  "dc-034ca300b05dbbdb882f": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-0d32ad2878b2ac602942026f",
+   "config": "ZeroConflict-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-0d32ad2878b2ac602942026f",
+      "dc-034ca300b05dbbdb882f",
+      "tasksource/Boardgame-QA:dc-034ca300b05dbbdb882f",
+      "9514a67b7d568e05e9c72d3681745eee6436d7e0f198dd82f0086380584ec631"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-0d32ad2878b2ac602942026f",
+      "dc-034ca300b05dbbdb882f",
+      "tasksource/Boardgame-QA:dc-034ca300b05dbbdb882f",
+      "9514a67b7d568e05e9c72d3681745eee6436d7e0f198dd82f0086380584ec631"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-0352b9bde6a9a5dd4cc2": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-54f216ad48dabac1869599d2",
+   "config": "KnowledgeLight-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-54f216ad48dabac1869599d2",
+      "dc-0352b9bde6a9a5dd4cc2",
+      "tasksource/Boardgame-QA:dc-0352b9bde6a9a5dd4cc2",
+      "6bbad75d2fb36826204ee0d27971825ae4e9731567d02ed4b06ebb05392bde94"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-54f216ad48dabac1869599d2",
+      "dc-0352b9bde6a9a5dd4cc2",
+      "tasksource/Boardgame-QA:dc-0352b9bde6a9a5dd4cc2",
+      "6bbad75d2fb36826204ee0d27971825ae4e9731567d02ed4b06ebb05392bde94"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-0367aadda81f8331d5bb": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-70178cf69db0aa5ba60ba409",
+   "config": "KnowledgeHeavy-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-70178cf69db0aa5ba60ba409",
+      "dc-0367aadda81f8331d5bb",
+      "tasksource/Boardgame-QA:dc-0367aadda81f8331d5bb",
+      "d49a4202cbca6763ff855aeb1c6e93e26debb786536db72ee8351c7787f44a61"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-70178cf69db0aa5ba60ba409",
+      "dc-0367aadda81f8331d5bb",
+      "tasksource/Boardgame-QA:dc-0367aadda81f8331d5bb",
+      "d49a4202cbca6763ff855aeb1c6e93e26debb786536db72ee8351c7787f44a61"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-0370a68cc3b7fcf267ef": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-c3d35faccc49ca409feb34a4",
+   "config": "LowConflict-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-c3d35faccc49ca409feb34a4",
+      "dc-0370a68cc3b7fcf267ef",
+      "tasksource/Boardgame-QA:dc-0370a68cc3b7fcf267ef",
+      "37bc81ea029816155052dbeeaf869702d58a26cf8135c27bed7e34a2c9ceeeb3"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-c3d35faccc49ca409feb34a4",
+      "dc-0370a68cc3b7fcf267ef",
+      "tasksource/Boardgame-QA:dc-0370a68cc3b7fcf267ef",
+      "37bc81ea029816155052dbeeaf869702d58a26cf8135c27bed7e34a2c9ceeeb3"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-0373077f50f0ddf203da": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-7ae2cce3c4238fe48f6e1a1f",
+   "config": "Main-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-7ae2cce3c4238fe48f6e1a1f",
+      "dc-0373077f50f0ddf203da",
+      "tasksource/Boardgame-QA:dc-0373077f50f0ddf203da",
+      "74fc9ccc8d104ce8a63a43f3be2720ea5e962064837b3f7c8e6b31ab51f0fea8"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-7ae2cce3c4238fe48f6e1a1f",
+      "dc-0373077f50f0ddf203da",
+      "tasksource/Boardgame-QA:dc-0373077f50f0ddf203da",
+      "74fc9ccc8d104ce8a63a43f3be2720ea5e962064837b3f7c8e6b31ab51f0fea8"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-03790ce037ca3afa8138": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-c7e16732051c86c8eae05b5c",
+   "config": "KnowledgeLight-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-c7e16732051c86c8eae05b5c",
+      "dc-03790ce037ca3afa8138",
+      "tasksource/Boardgame-QA:dc-03790ce037ca3afa8138",
+      "09f0a73e5806aeecca38fcfd24dcd0df2d106cbac258323f099545d47bd34a40"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-c7e16732051c86c8eae05b5c",
+      "dc-03790ce037ca3afa8138",
+      "tasksource/Boardgame-QA:dc-03790ce037ca3afa8138",
+      "09f0a73e5806aeecca38fcfd24dcd0df2d106cbac258323f099545d47bd34a40"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-038c45fbe956ce3b549e": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-78de5ddb517bf46e386dfbfc",
+   "config": "ZeroConflict-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-78de5ddb517bf46e386dfbfc",
+      "dc-038c45fbe956ce3b549e",
+      "tasksource/Boardgame-QA:dc-038c45fbe956ce3b549e",
+      "01cec8b206a32ddd548289ada73a0dcd1bd2cf93ec8fa87f1a5591cae3b27082"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-78de5ddb517bf46e386dfbfc",
+      "dc-038c45fbe956ce3b549e",
+      "tasksource/Boardgame-QA:dc-038c45fbe956ce3b549e",
+      "01cec8b206a32ddd548289ada73a0dcd1bd2cf93ec8fa87f1a5591cae3b27082"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-038f730a910cbbea17f6": {
+   "source": "tasksource/Boardgame-QA",
+   "group": "g-60e71d66fd931ec46aaa3d17",
+   "config": "KnowledgeHeavy-depth2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-60e71d66fd931ec46aaa3d17",
+      "dc-038f730a910cbbea17f6",
+      "tasksource/Boardgame-QA:dc-038f730a910cbbea17f6",
+      "640762704336a4b97caf8cc06d2b566f946ead6fc36eda16a0e45dcf352360d7"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-60e71d66fd931ec46aaa3d17",
+      "dc-038f730a910cbbea17f6",
+      "tasksource/Boardgame-QA:dc-038f730a910cbbea17f6",
+      "640762704336a4b97caf8cc06d2b566f946ead6fc36eda16a0e45dcf352360d7"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-00b9e0cc289e689d0b68": {
+   "source": "tasksource/ruletaker",
+   "group": "g-73527f13c9ba23398e6d3315",
+   "config": "depth-3ext-NatLang",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-73527f13c9ba23398e6d3315",
+      "dc-00b9e0cc289e689d0b68",
+      "tasksource/ruletaker:dc-00b9e0cc289e689d0b68",
+      "a8fbb2b0a4e0a565163fc5fda85982fb5a1424d7dafecf406d69cd7e59a75d53"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-73527f13c9ba23398e6d3315",
+      "dc-00b9e0cc289e689d0b68",
+      "tasksource/ruletaker:dc-00b9e0cc289e689d0b68",
+      "a8fbb2b0a4e0a565163fc5fda85982fb5a1424d7dafecf406d69cd7e59a75d53"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-0495a1b58d9bfb222f29": {
+   "source": "tasksource/ruletaker",
+   "group": "g-62732c4c1337f91143988a98",
+   "config": "depth-2",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-62732c4c1337f91143988a98",
+      "dc-0495a1b58d9bfb222f29",
+      "tasksource/ruletaker:dc-0495a1b58d9bfb222f29",
+      "9af0fbe4f5c663437a71c30cf08bf27c109409841aceee4349bce005ec01c3e7"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-62732c4c1337f91143988a98",
+      "dc-0495a1b58d9bfb222f29",
+      "tasksource/ruletaker:dc-0495a1b58d9bfb222f29",
+      "9af0fbe4f5c663437a71c30cf08bf27c109409841aceee4349bce005ec01c3e7"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-11d40940018405dd2c6d": {
+   "source": "tasksource/ruletaker",
+   "group": "g-5646e9354b9e28b6068af974",
+   "config": "depth-3ext",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-5646e9354b9e28b6068af974",
+      "dc-11d40940018405dd2c6d",
+      "tasksource/ruletaker:dc-11d40940018405dd2c6d",
+      "721037c1343d73f74bd36b159ab0fe338485e1c9549cf0c0d23c5f0addae7057"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-5646e9354b9e28b6068af974",
+      "dc-11d40940018405dd2c6d",
+      "tasksource/ruletaker:dc-11d40940018405dd2c6d",
+      "721037c1343d73f74bd36b159ab0fe338485e1c9549cf0c0d23c5f0addae7057"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-16886a7478f494360d2f": {
+   "source": "tasksource/ruletaker",
+   "group": "g-c328dcc462ea1bed24b89b1f",
+   "config": "depth-1",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-c328dcc462ea1bed24b89b1f",
+      "dc-16886a7478f494360d2f",
+      "tasksource/ruletaker:dc-16886a7478f494360d2f",
+      "9fd15c010738290c99850a5ef1eff5a76a5d941597df44519f4de2c1ee2c4ca6"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-c328dcc462ea1bed24b89b1f",
+      "dc-16886a7478f494360d2f",
+      "tasksource/ruletaker:dc-16886a7478f494360d2f",
+      "9fd15c010738290c99850a5ef1eff5a76a5d941597df44519f4de2c1ee2c4ca6"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-1922964ed352c201cf4f": {
+   "source": "tasksource/ruletaker",
+   "group": "g-56db6388872a15467287f5ec",
+   "config": "depth-1",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-56db6388872a15467287f5ec",
+      "dc-1922964ed352c201cf4f",
+      "tasksource/ruletaker:dc-1922964ed352c201cf4f",
+      "a79cdd58183ca097c20c46d8e610f694d57b559baefd5a887f5d55c709933d96"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-56db6388872a15467287f5ec",
+      "dc-1922964ed352c201cf4f",
+      "tasksource/ruletaker:dc-1922964ed352c201cf4f",
+      "a79cdd58183ca097c20c46d8e610f694d57b559baefd5a887f5d55c709933d96"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-1d3252319be672f5255e": {
+   "source": "tasksource/ruletaker",
+   "group": "g-54cb88bff703e4ec037905e3",
+   "config": "depth-0",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-54cb88bff703e4ec037905e3",
+      "dc-1d3252319be672f5255e",
+      "tasksource/ruletaker:dc-1d3252319be672f5255e",
+      "2d3781b089c82e2d502e00cd41e25eee068a304efa0ff6f3df67b2821488eb57"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-54cb88bff703e4ec037905e3",
+      "dc-1d3252319be672f5255e",
+      "tasksource/ruletaker:dc-1d3252319be672f5255e",
+      "2d3781b089c82e2d502e00cd41e25eee068a304efa0ff6f3df67b2821488eb57"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-210657d39f54ac3da2df": {
+   "source": "tasksource/ruletaker",
+   "group": "g-0866bf48afb62086f8f15c94",
+   "config": "depth-3ext",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-0866bf48afb62086f8f15c94",
+      "dc-210657d39f54ac3da2df",
+      "tasksource/ruletaker:dc-210657d39f54ac3da2df",
+      "156c58a7402fbae423157996868b30632df8054e5826e959e1c5113348fa1622"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-0866bf48afb62086f8f15c94",
+      "dc-210657d39f54ac3da2df",
+      "tasksource/ruletaker:dc-210657d39f54ac3da2df",
+      "156c58a7402fbae423157996868b30632df8054e5826e959e1c5113348fa1622"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  },
+  "dc-3229089f301ec18a7c6d": {
+   "source": "tasksource/ruletaker",
+   "group": "g-8441d6bdadea97fa8c42db04",
+   "config": "depth-3",
+   "indexes": {
+    "cross-corpus-index-s1-full-final-20261003-v1": {
+     "group_keys_checked": [
+      "g-8441d6bdadea97fa8c42db04",
+      "dc-3229089f301ec18a7c6d",
+      "tasksource/ruletaker:dc-3229089f301ec18a7c6d",
+      "fc5f3623fef16418a04bca9eebc62a31dc2f60934ffaf27f8767ea66f5392236"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    },
+    "cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v3-v1": {
+     "group_keys_checked": [
+      "g-8441d6bdadea97fa8c42db04",
+      "dc-3229089f301ec18a7c6d",
+      "tasksource/ruletaker:dc-3229089f301ec18a7c6d",
+      "fc5f3623fef16418a04bca9eebc62a31dc2f60934ffaf27f8767ea66f5392236"
+     ],
+     "group_hits": {},
+     "exact_source_hits": {},
+     "background_source_hits": [],
+     "question_hits": {},
+     "example_hit": false,
+     "near_duplicates_jaccard_ge_0.8": []
+    }
+   },
+   "sketchable": true,
+   "verdict": "closed"
+  }
+ },
+ "verdict": "closed",
+ "admission": "evidence only; training admission stays with the data owner",
+ "positive_control": {
+  "what": "4 published S1 train records (qa_narrative.port-records.jsonl, every 200th line) checked with the same code",
+  "exact_source_hits": "4/4",
+  "group_hits": "4/4",
+  "near_duplicate_hits": "4/4 original (jaccard 1.0) and 4/4 with one inserted word (jaccard 0.953-1.0)",
+  "note": "sources under >=3 groups (background, e.g. synlogic tool/rule text) are excluded from exact/near matching by design; none of the 16 rows matched even a background source"
+ },
+ "dgx_run": {
+  "units": [
+   "closure16-073023",
+   "closure16-ctl-073204"
+  ],
+  "date": "2026-10-10"
+ }
+}
