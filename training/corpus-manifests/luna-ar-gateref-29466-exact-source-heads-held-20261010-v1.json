@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-ar-gateref-29466-exact-source-heads-held-20261010-v1",
+  "owner": "pop",
+  "path": "runs/luna-ar-native-harness-gateref-29466-20261010-v1/exact-source-export-v1",
+  "files": [
+    {
+      "path": "source-heads.json",
+      "bytes": 361,
+      "sha256": "ea633c4bc868d9e75d2339b243600abe4ebfa2fec4e08f42b0ca1c503102bd84"
+    },
+    {
+      "path": "source-heads.pt",
+      "bytes": 616841268,
+      "sha256": "a9e04eb9717b4d061896827d3aa9dde506b148fd9de0832d4925a677efc1e806"
+    }
+  ],
+  "bytes": 616841629
+}
