@@ -22,6 +22,7 @@ from .output_embedding_projection import sha
 HANDLERS = {
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
                         'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
+                          'cohort_weights','qualification_cohort','context_weight','feedback_weight',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'projection_patience','projection_min_evals','projection_min_improvement',
                           'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','checkpoint_minutes','eval_every','held_documents','seed','checkpoint_layers',
@@ -569,6 +570,11 @@ def stage_parameter_args(parameters):
     """Serialize a validated stage's typed options into CLI arguments."""
     command = []
     for key, value in parameters.items():
+        if key=='cohort_weights':
+            if not isinstance(value,dict):
+                raise ValueError('cohort_weights must be an object of explicit fractions')
+            command += ['--cohort-weights',json.dumps(value,sort_keys=True,separators=(',',':'))]
+            continue
         if key == 'optimizer_added':
             if not isinstance(value, list) or any(not isinstance(prefix, str) or not prefix for prefix in value):
                 raise ValueError('optimizer_added must be a list of nonempty parameter-name prefixes')

@@ -635,7 +635,12 @@ token between rendered context and rendered context plus target. Boundary tokens
 changed by the template are included; content escaping and exact token IDs remain
 unchanged. Each annotated window allocates half its loss to all positions and
 half to that observed suffix, including a real document close when present.
-Windows before the response and unannotated ordinary text remain uniform. This
+The shared `train/text_supervision.py` weights tool-result tokens at 0.25 relative
+to other context, then normalizes the context term per document. Assistant
+reasoning and replies retain full weight; the observed target suffix is not
+downweighted. Windows before the response and unannotated text use the same
+context weighting (uniform when no tool tokens are present). Held alignment
+metrics remain unweighted. This
 weights the full projection against fixed gold embeddings and applies the
 declared secondary objective: detached-projection self-consistency for the
 training-only input map. It also
@@ -644,6 +649,20 @@ detached metrics as training loss. The run identity names the trainable
 input map and reports its metrics as `input_map_*`. Both mapped adaptation and
 autoregressive feedback fixup use this shared loss implementation; their
 conditioning histories differ.
+
+Training samples are drawn by cohort, then uniformly by document, then uniformly
+by that document's windows. This prevents long repeated trajectory prefixes from
+dominating the mix. Same-shape batch companions stay in the first draw's cohort
+and are also drawn by document. The sampler uses the checkpointed Python RNG.
+An assembled text input may label rows with `text_cohort`; multiple cohorts
+require explicit `cohort_weights` fractions that name exactly the loaded training
+cohorts and sum to one. Every cohort needs its own source-disjoint held split.
+`qualification_cohort` (default `native`) supplies the unchanged foundation gate;
+other held cohorts are selected and reported independently in `cohort_strata`
+and `cohort_role_strata`. Their diagnostic results do not qualify them.
+Mixing, copying, and the presence of a cohort name grant no source admission.
+The current frozen Pop run predates this change; adopt it only at a declared
+handoff with the new objective recorded, preserving optimizer state.
 
 Qualification still uses unweighted metrics with full preceding history and
 requires both complete-window and final256 strata to pass unchanged thresholds.

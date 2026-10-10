@@ -67,7 +67,7 @@
           "context_weight": 1.0,
           "feedback_weight": 0.25,
           "feedback_weight_meaning": "relative weight, inside the context term, of tool results and other mechanical feedback (the trajectory trainer's --feedback-weight semantics)",
-          "feedback_weight_status": "text_warmup has no per-role context weight yet (roles are labelled by chat_roles for reporting only); until it does, tool output in the text stages carries the same all-positions weight as other context. Implementing it is a precondition for admission in the text stages."
+          "feedback_weight_status": "implemented in shared train/text_supervision.py and the text_warmup loader/objective; tool-result context is weighted at 0.25, reasoning and replies remain full weight. Controlled training handoff and admission review are still required; the frozen Pop job is unchanged."
         },
         "recurrence": {
           "stage": "recurrence_warmup",
@@ -84,7 +84,7 @@
             "context_weight": 1.0,
             "feedback_weight": 0.25
           },
-          "status": "declared, not admitted; the raw_recurrence_training handler whitelist does not carry view, view_window, context_weight or feedback_weight yet, so these are declared here for its owner to add"
+          "status": "declared, not admitted; shared raw_recurrence_training handler now carries view, view_window, context_weight and feedback_weight. Exact-weight runtime and view-operator qualification remain required."
         },
         "notes": "Each document is one record (task, whole earlier trajectory, one target turn); a trajectory contributes up to 8 records, so its prefix recurs in each, and about 1% of a twin's tokens are target suffix. The window sampler should therefore draw windows per document, not per token."
       }

@@ -9917,3 +9917,15 @@ and these derivatives earn zero independent-world credit.
 if complete, check trainer/gates/checkpoint headroom, and prepare the controlled
 shared-KL continuation when the current frozen training run ends. Continue the
 50-minute monitoring cadence and check the coordination inbox each cycle.
+
+
+## Pop update — 2026-10-10 00:04 UTC
+
+- Current frozen LFM AR run remains active (about step 27,200/28,032), with complete optimizer state; no live objective changes. It remains unqualified outside its passing short strata.
+- Shared `train/text_supervision.py` now samples cohort, document, then window. Same-shape companions are document-uniform conditional on the first draw's cohort/shape. Multiple assembled cohorts require explicit fractions and independent held splits; native remains the qualification cohort, other held cohorts have separate diagnostic strata.
+- Tool-output context receives relative weight 0.25; teacher reasoning and assistant replies remain full weight. Byte role arrays are shared by overlapping windows. ChatML inputs must have effective role parsing. The shared loss applies to both text stages. Changing mix/weight policy invalidates the old plateau schedule while preserving full model/optimizer state. Adoption needs a controlled handoff. AST parsing and independent Luna source review were performed; no tests or new GPU run for this patch yet.
+- The owner admitted the harness cohort in DGX decision a1a44ab9, contingent on trainer support. DGX owns recurrence-handler/trajectory work and the planned smoke; Pop owns this shared sampler/loss integration. Do not confuse declaration, implementation, and successful runtime qualification.
+- Gemini v2 closed at 1,024 unique inherited train cases: 899 typed-valid, 125 invalid probability sums. Review v10 and its correction supplement pin results. The correction fixes a displayed family error-count bug without erasing the original receipt. Pool v3 automatically acquired the project lock and is producing its next 1,024 cases. Source and semantic admission remain separate from typed validity.
+- Both previous ZAI workers closed. REC-976 and source-v5 DOC-954 match exact final gold and scoped file checks. The DOC-954 prompt-only recovery took 716.7 seconds versus the old 1,800.7-second incomplete attempt; this is one paired case, not a general performance claim. Quality review v9 retains request/source/output evidence. Marker emulation does not qualify learned transport.
+- ZAI PID 781611 now generates the fifth remaining source-v5 case, one request/case at a time, with the same frozen runtime and resource budget. Secrets stay in the environment.
+- LFM2.5-350M is the instruction variant. Current training input contains genuine nonempty think blocks in 4,941/4,962 documents; there is no blanket teacher-reasoning removal. Standard SFT masks only explicitly synthetic scaffolding or rows explicitly marked as untrained reasoning.

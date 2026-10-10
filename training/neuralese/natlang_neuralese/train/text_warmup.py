@@ -8,6 +8,7 @@ No task, compression, autonomous stopping or transport certificate is issued.
 from __future__ import annotations
 import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
 from collections import Counter
+from array import array
 from collections.abc import Sequence
 from pathlib import Path
 import torch
@@ -32,6 +33,8 @@ from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
                                 persist_postcommit_recovery,
                                 warmup_checkpoint_size_upper_bound)
 from .projection_anchor import relative_mse_positions, gold_aligned_projection_errors
+from .text_supervision import (ROLE_CODES, TEXT_POSITION_WEIGHT_POLICY,
+                               balanced_position_weights, DocumentWindowSampler)
 
 def relative_mse(predicted, target):
     return relative_mse_positions(predicted,target).mean()
@@ -317,13 +320,6 @@ def same_resume_identity(previous, current):
             and not (old_options.keys() - new_options.keys()))
 
 
-TEXT_POSITION_WEIGHT_POLICY={
-    "all_positions_fraction": .5, "observed_suffix_fraction": .5,
-    "unannotated_or_no_suffix_window": "uniform-all-positions",
-    "qualification": "unweighted full-history complete-window and last256 strata",
-}
-
-
 def text_supervision_policy():
     return {**TEXT_POSITION_WEIGHT_POLICY,
             'objectives':['full_projection', 'input_map_self_consistency', 'next_token_ce']}
@@ -348,22 +344,6 @@ def display_update_flags(updates):
             raise ValueError('conflicting input-map update metadata')
         result['input_map'] = previous
     return result
-
-
-def balanced_position_weights(span, suffix_starts):
-    """Half all-token supervision, half observed response suffix per document.
-
-    Unlabeled ordinary text and windows without a response retain uniform
-    all-token supervision. Context is never removed or detached by this weighting.
-    """
-    if len(suffix_starts)!=span.shape[0]:raise ValueError('one suffix coordinate per document required')
-    starts=torch.tensor([span.shape[1] if start is None else start for start in suffix_starts],device=span.device)
-    mask=torch.arange(span.shape[1],device=span.device)[None]>=starts[:,None]
-    counts=mask.sum(1,keepdim=True)
-    weighted=(TEXT_POSITION_WEIGHT_POLICY["all_positions_fraction"]+
-              TEXT_POSITION_WEIGHT_POLICY["observed_suffix_fraction"]*mask.float()*span.shape[1]/counts.clamp_min(1)
-             )
-    return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
 from ..maple.family import evaluate_members, leading_system_tokens, member_backward, window_labels
@@ -713,9 +693,6 @@ class _TokenWindow(Sequence):
         return NotImplemented
 
 
-ROLE_CODES=('other','system','user','tool','assistant_reasoning','assistant_reply')
-
-
 def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None):
     """Per-token chat role of a rendered document: the role named after each ``<|im_start|>``; assistant tokens
     split into reasoning (inside the think block) and reply. Structural start tokens count as 'other'."""
@@ -741,7 +718,8 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
 
     System prompt tokens remain in the crisp context but can be excluded from
     supervised targets. Held windows retain per-token role labels for role
-    diagnostics; training windows preserve the existing unannotated layout.
+    diagnostics and the shared context loss. Labels use one byte per token and
+    are shared across overlapping windows, including training windows.
     """
     tokenizer=engine.tokenizer
     backbone=engine.backbone
@@ -756,6 +734,9 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
     role_start=token_id('<|im_start|>')
     role_ids=({i:name for name in ('system','user','assistant','tool')
                for i in [token_id(name)] if i is not None} if role_start is not None else {})
+    if any('<|im_start|>' in row['text'] for row in rows) and (
+            role_start is None or set(role_ids.values())!={'system','user','assistant','tool'}):
+        raise ValueError('ChatML text requires effective role parsing before tool-feedback weighting')
     system_code=ROLE_CODES.index('system')
     windows={'train':[],'test':[]}
     masked_system_tokens=0
@@ -767,9 +748,9 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
         labels=None
         context=0
         if role_start is not None:
-            labels=chat_roles([backbone.controls.open_id]+list(row_tokens)+[backbone.controls.close_id],
+            labels=array('B',chat_roles([backbone.controls.open_id]+list(row_tokens)+[backbone.controls.close_id],
                 start_id=role_start,role_ids=role_ids,
-                think_open=token_id('<think>'),think_close=token_id('</think>'))
+                think_open=token_id('<think>'),think_close=token_id('</think>')))
             if mask_system_prompt:
                 index=1
                 while index<len(labels) and labels[index]==0:index+=1
@@ -781,13 +762,14 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 tokens=tokens,prefix_tokens=prefix_tokens,
                 supervised_suffix_start=row.get('supervised_suffix_start'),
                 context_tokens=context,target_tokens=target_tokens):
-            if labels is not None and split=='test':
+            if labels is not None:
                 if target_tokens is not None:
                     window['roles']=_TokenWindow(labels,window['start'],window['start']+len(window['ids']))
                 else:
                     window['roles']=labels[window['start']:window['start']+len(window['ids'])]
             windows[split].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'cohort':row.get('text_cohort','native'),
                 'groups':row['source_groups']})
     receipt={'enabled':bool(mask_system_prompt and role_start is not None),
              'requested':bool(mask_system_prompt),'role_start_id':role_start,
@@ -803,9 +785,9 @@ def evaluation_batches(windows, limit, max_tokens=None):
     if limit<1:raise ValueError('positive evaluation batch required')
     buckets={}
     for window in windows:
-        key=(window['prefix'],len(window['ids']),window['offset']==0)
+        key=(window.get('cohort','native'),window['prefix'],len(window['ids']),window['offset']==0)
         buckets.setdefault(key,[]).append(window)
-    for (_,length,_),bucket in buckets.items():
+    for (_,_,length,_),bucket in buckets.items():
         size=limit if max_tokens is None else max(1,min(limit,max_tokens//max(1,length)))
         for start in range(0,len(bucket),size):yield bucket[start:start+size]
 
@@ -873,6 +855,8 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
         pieces_path=Path(pieces) if pieces else records_path.parent/'pieces.jsonl'
         piece_rows=list(map(json.loads,pieces_path.open())) if pieces_path.is_file() else []
         rows,_,_,_=gold_text_rows(record_rows,piece_rows,tokenizer=tokenizer)
+    if any(not isinstance(r.get('text_cohort','native'),str) or not r.get('text_cohort','native') for r in rows):
+        raise ValueError('text_cohort must be a nonempty string')
     if any('supervised_suffix_start' in r and 'token_ids' not in r for r in rows):
         raise ValueError('supervised suffix requires native token IDs')
     encoded=[r for r in rows if 'token_ids' in r]
@@ -896,7 +880,10 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     dedup={}; excluded=0
     for row in rows:
         if row['split']=='train' and row['text'] in held:excluded+=1;continue
-        dedup.setdefault((row['split'],row['text'],tuple(row.get('token_ids',[])),row.get('supervised_suffix_start')),row)
+        key=(row['split'],row['text'],tuple(row.get('token_ids',[])),row.get('supervised_suffix_start'))
+        if key in dedup and dedup[key].get('text_cohort','native')!=row.get('text_cohort','native'):
+            raise ValueError('an identical document belongs to multiple cohorts; resolve ownership before training')
+        dedup.setdefault(key,row)
     rows=list(dedup.values())
     if not all(any(r['split']==s for r in rows) for s in ('train','test')):
         raise ValueError('nonempty independent train and held text required')
@@ -923,7 +910,8 @@ def same_alignment_data(previous, current):
     # the held text-CE baseline. Missing fields in legacy checkpoints are
     # intentionally unequal: the old diagnostic's evaluation policy is not
     # authenticated well enough to reuse its value.
-    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens', 'target_tokens')
+    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens', 'target_tokens',
+              'qualification_cohort')
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     if any(key not in old_options or key not in new_options
            for key in fields if key!='target_tokens'):
@@ -941,6 +929,7 @@ _FOUNDATION_CONTEXT_OPTIONS = (
     # whose held projection plateau and recurrence alignment were measured.
     'cutoff', 'tokens', 'prefix_tokens', 'target_tokens',
     'embedding_weight', 'sketch_weight', 'text_weight',
+    'cohort_weights', 'qualification_cohort', 'context_weight', 'feedback_weight',
     'projection_patience', 'projection_min_evals',
     'projection_min_improvement', 'backbone_ramp_evals', 'pass_ramp_evals',
 )
@@ -1036,6 +1025,13 @@ def main(argv=None):
     p.add_argument('--tokens',type=int,default=1024);p.add_argument('--prefix-tokens',type=int,default=32)
     p.add_argument('--target-tokens',type=int,default=None,
                    help='optional bounded supervised span; tokens remains the total context capacity')
+    p.add_argument('--cohort-weights',type=json.loads,default=None,
+                   help='explicit JSON fractions for text_cohort names in an already admitted assembled input')
+    p.add_argument('--qualification-cohort',default='native',
+                   help='held cohort used for foundation gates; other held cohorts are reported separately')
+    p.add_argument('--context-weight',type=float,default=1.)
+    p.add_argument('--feedback-weight',type=float,default=.25,
+                   help='relative tool-output weight inside context supervision; reasoning remains fully weighted')
     p.add_argument('--cutoff',type=int,default=4)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
@@ -1096,6 +1092,8 @@ def main(argv=None):
         p.error('invalid schedule or optimizer controls')
     if not math.isfinite(a.channel_consistency_weight) or a.channel_consistency_weight <= 0:
         p.error('channel consistency weight must be finite and positive')
+    if not math.isfinite(a.context_weight) or a.context_weight<=0 or not math.isfinite(a.feedback_weight) or not 0<a.feedback_weight<=1:
+        p.error('context weight must be positive and feedback weight in (0,1], both finite')
     if a.target_tokens is None and a.prefix_tokens>=a.tokens-1:p.error('prefix must leave at least two target tokens')
     if a.target_tokens is not None and (a.target_tokens<1 or a.target_tokens>=a.tokens):
         p.error('--target-tokens must be positive and smaller than --tokens')
@@ -1123,6 +1121,9 @@ def main(argv=None):
               'supervision_policy':text_supervision_policy(),
               'display':warmup_display_labels(),
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
+    identity['supervision_policy'].update(context_weight=a.context_weight,feedback_weight=a.feedback_weight,
+                                         sampler='cohort-then-document-then-window/1',
+                                         cohort_weights=a.cohort_weights)
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     was_resumed=resumed is not None
@@ -1270,11 +1271,24 @@ def main(argv=None):
         mask_system_prompt=a.mask_system_prompt)
     if not all(windows.values()):raise ValueError('no token windows for a split')
     print(json.dumps({'event':'system_prompt_masking',**mask_receipt}),flush=True)
-    held,held_selection=select_held_document_windows(windows['test'],a.held_documents)
+    sampler=DocumentWindowSampler(windows['train'],a.cohort_weights)
+    held_by_cohort={}
+    for window in windows['test']:
+        held_by_cohort.setdefault(window['cohort'],[]).append(window)
+    if set(held_by_cohort)!=set(sampler.cohorts) or a.qualification_cohort not in held_by_cohort:
+        raise ValueError('each training cohort needs its own held split, including the qualification cohort')
+    held=[];cohort_selections={}
+    for cohort,values in held_by_cohort.items():
+        selected,selection=select_held_document_windows(values,a.held_documents)
+        held.extend(selected);cohort_selections[cohort]=selection
+    held_selection=cohort_selections[a.qualification_cohort]
     group_order_sha256=hashlib.sha256(json.dumps(held_selection['group_order'],ensure_ascii=False,
         sort_keys=True,separators=(',',':')).encode()).hexdigest()
     held_selection_eval={k:held_selection[k] for k in ('policy','limit_documents','selected_documents','window_policy')}
     held_selection_eval.update(group_count=len(held_selection['group_order']),group_order_sha256=group_order_sha256)
+    held_selection_eval['qualification_cohort']=a.qualification_cohort
+    held_selection_eval['other_cohorts']={c:{k:v for k,v in s.items() if k!='group_order'}
+                                        for c,s in cohort_selections.items() if c!=a.qualification_cohort}
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
                    held_selection=held_selection,
                    serving_heads_export_policy={
@@ -1283,6 +1297,7 @@ def main(argv=None):
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
+    receipt['training_sampler']=sampler.receipt()
     receipt['memory_preflight']={'policy':'exact-shape geometry plus successful full-update calibration',
         'geometry_version':memory_geometry_version,'geometry_bootstrap_updates':memory_bootstrap_count,
         'predictor_margin':0.,'device_headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
@@ -1300,7 +1315,11 @@ def main(argv=None):
         rows=[w] if isinstance(w,dict) else w
         ids=torch.tensor([list(r['ids']) for r in rows],device=a.device)
         span=ids[:,rows[0]['prefix']:]
-        return ids[:,:rows[0]['prefix']],span,balanced_position_weights(span,[r.get('supervised_suffix_start') for r in rows])
+        roles=(torch.tensor([list(r['roles'][r['prefix']:]) for r in rows],device=span.device)
+               if all('roles' in r for r in rows) else None)
+        return ids[:,:rows[0]['prefix']],span,balanced_position_weights(
+            span,[r.get('supervised_suffix_start') for r in rows],roles=roles,
+            context_weight=a.context_weight,feedback_weight=a.feedback_weight)
     mask_system=bool(a.member_weight and a.member_mask_system)
     if mask_system:
         system_start=engine.tokenizer('<|im_start|>system',add_special_tokens=False).input_ids
@@ -1316,9 +1335,6 @@ def main(argv=None):
                                                       engine.tokenizer.bos_token_id))
         labels=window_labels(ids,min(max(1,context),ids.shape[1]-1))
         return ids[:,-a.member_tokens:],labels[:,-a.member_tokens:]
-    buckets={}
-    for window in windows['train']:
-        buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
     def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens,projected_observer=None,roles=None,objective_passes=1):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
@@ -1496,9 +1512,13 @@ def main(argv=None):
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
         elif continuation:
-            same_foundation=(same_foundation_context(continuation['identity'],identity) or
-                             (a.ar_feedback_fixup and any(str(key).startswith('input_map.')
-                                for key in continuation.get('heads',{}))))
+            # The initial mapped-to-AR handoff preserves its established phase,
+            # but not across a changed sampling or context-supervision policy.
+            initial_ar_handoff=(a.ar_feedback_fixup and
+                not continuation['identity'].get('options',{}).get('ar_feedback_fixup',False) and
+                continuation['identity'].get('supervision_policy')==identity['supervision_policy'] and
+                any(str(key).startswith('input_map.') for key in continuation.get('heads',{})))
+            same_foundation=same_foundation_context(continuation['identity'],identity) or initial_ar_handoff
             if same_foundation and continuation.get('schedule'):
                 # An unchanged objective may continue its plateau/ramp phase.
                 saved_schedule_heads=(continuation['schedule'].get('config') or {}).get('heads')
@@ -1571,14 +1591,16 @@ def main(argv=None):
     def evaluate(*,observe_schedule=True,baseline_reason=None,baseline_rng_preserved=False):
         nonlocal last_schedule_step,last_report
         evaluation_passes=text_history_pass_count(3, ar_feedback_fixup=a.ar_feedback_fixup)
-        strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
-        ar_batch=None;ar_fallback=None;role_strata={}
+        strata={};cohort_strata={};matched_history_rows=[];boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
+        ar_batch=None;ar_fallback=None;role_strata={};cohort_role_strata={}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch,a.tokens):
                 w=batch[0]
+                cohort=w['cohort'];qualifying=cohort==a.qualification_cohort
+                active_strata=strata if qualifying else cohort_strata.setdefault(cohort,{})
                 prefix,span,_=ids_for(batch)
-                if ar_fallback is None:ar_fallback=(prefix,span)
-                if ar_batch is None and 'roles' in batch[0]:
+                if qualifying and ar_fallback is None:ar_fallback=(prefix,span)
+                if qualifying and ar_batch is None and 'roles' in batch[0]:
                     # Self-fed rollouts start at the first assistant token: the shared system prompt is memorized
                     # boilerplate and would make every rollout trivially exact.
                     assistant={ROLE_CODES.index('assistant_reasoning'),ROLE_CODES.index('assistant_reply')}
@@ -1594,22 +1616,24 @@ def main(argv=None):
                         consumers=MATCHED_CONSUMERS,per_window=True)
                     for window,window_scores in zip(batch,diagnostic['windows']):
                         matched_history_rows.append({'document_sha256':window['document'],
+                            'cohort':cohort,
                             'source_groups':window['groups'],'offset':window['offset'],
                             'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
                             'scores':window_scores})
                 for _,m in objective(batch,evaluation_passes,projected_observer=observe_projected_history):
-                    if m['pass_index']==1:
+                    if qualifying and m['pass_index']==1:
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
                             boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
                             boundaries['close_top1_sum']+=m['close_top1']*m['close_targets']
                     for name,values in m.get('roles',{}).items():
-                        row=role_strata.setdefault('pass-'+str(m['pass_index']),{}).setdefault(name,{'tokens':0})
+                        active_roles=role_strata if qualifying else cohort_role_strata.setdefault(cohort,{})
+                        row=active_roles.setdefault('pass-'+str(m['pass_index']),{}).setdefault(name,{'tokens':0})
                         for n,value in values.items():
                             if n!='tokens':row[n]=row.get(n,0.)+value*values['tokens']
                         row['tokens']+=values['tokens']
                     key='pass-'+str(m['pass_index'])+'-length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
-                    row=strata.setdefault(key,{'tokens':0})
+                    row=active_strata.setdefault(key,{'tokens':0})
                     for n in ('ce','text_ce','ce_delta','relative_mse',secondary_metric_name+'_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                         row[n]=row.get(n,0.)+m[n]*m['tokens']
                     row['tokens']+=m['tokens']
@@ -1639,7 +1663,7 @@ def main(argv=None):
                             'source_groups':window['groups'],'offset':window['offset'],
                             'prefix_tokens':window['prefix']})
                     for region,values in m.get('regions',{}).items():
-                        regional=strata.setdefault(key+'-'+region,{'tokens':0})
+                        regional=active_strata.setdefault(key+'-'+region,{'tokens':0})
                         for n,value in values.items():
                             if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
                         regional['tokens']+=values['tokens']
@@ -1673,6 +1697,8 @@ def main(argv=None):
                 autoregressive_controls['seconds']=time.perf_counter()-started_ar
                 autoregressive_controls['start']='first assistant token' if ar_batch is not ar_fallback else 'window start'
         _normalize_context_valid_strata(strata)
+        for values in cohort_strata.values():
+            _normalize_context_valid_strata(values)
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
@@ -1692,7 +1718,9 @@ def main(argv=None):
         if observe_schedule and (last_schedule_step is None or step>last_schedule_step):
             schedule.observe(errors);last_schedule_step=step
         from .trajectory_state import weights_digest
-        report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
+        report={'step':step,'strata':strata,'cohort_strata':cohort_strata,
+                'qualification_cohort':a.qualification_cohort,
+                'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'held_probe_selection':held_selection_eval,
                 'text_ce_baseline_domain':{
@@ -1721,15 +1749,18 @@ def main(argv=None):
         if autoregressive_controls is not None:report['autoregressive_controls']=autoregressive_controls
         if family and a.member_eval_windows:
             report['family']=evaluate_members(backbone,[member_window(w) for w in held[:a.member_eval_windows]])
-        for roles_of_pass in role_strata.values():
-            for row in roles_of_pass.values():
-                for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
+        for collection in (role_strata,*cohort_role_strata.values()):
+            for roles_of_pass in collection.values():
+                for row in roles_of_pass.values():
+                    for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         if role_strata:report['role_strata']=role_strata  # diagnostic: chat-role breakdown, not a gate
+        if cohort_role_strata:report['cohort_role_strata']=cohort_role_strata
         matched_summary={}
         for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}
             for region in ('whole','last256'):
-                scores=[row['scores'][consumer][region] for row in matched_history_rows]
+                scores=[row['scores'][consumer][region] for row in matched_history_rows
+                        if row['cohort']==a.qualification_cohort]
                 token_count=sum(score['tokens'] for score in scores)
                 history_count=sum(score['history_positions'] for score in scores)
                 fields=('ce','gold_accuracy','ce_delta_from_live_greedy','argmax_agreement_with_live_greedy')
@@ -2276,9 +2307,7 @@ def main(argv=None):
                 q.requires_grad_(not bootstrap or name.startswith((secondary_prefix,'heads.content.proj.')))
             for group in optimizer.param_groups:
                 group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
-            w=windows['train'][random.randrange(len(windows['train']))]
-            pool=buckets[(w['prefix'],len(w['ids']))]
-            batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
+            batch=sampler.batch(a.batch,random)
             optimizer.zero_grad(set_to_none=True)
             # Free memory on the GB10 moves with page cache and other jobs: re-measure for up to five minutes
             # before refusing, which would cost a full reload.
