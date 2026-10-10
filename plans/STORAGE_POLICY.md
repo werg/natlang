@@ -121,3 +121,26 @@ manifest-driven verified offload or an explicit reproducibility review.
 On Pop, run the storage-report/retention tools with `python3.11`; their shared
 configuration reader uses Python's `tomllib`. Override scan roots for the local
 machine rather than using the DGX external-drive roots.
+
+## 7. Checkpoint cleanup (2026-10-10 ~12:00)
+
+Owner: "let's make sure to delete all the excessive checkpoints we have accumulated" (standing deletion authorization).
+Inventory of every weight file over 300 MB on NVMe and the external drive (189 files, 334 GB); every file named in a
+corpus manifest or the artifact registry (123 files, 161.5 GB) was kept. Deleted, with the exact path list in the DGX
+deletion log (`owner-approved-deletions.sh` §8): 74.2 GB on NVMe, 65.5 GB on the external drive, plus 20 NVMe
+symlinks into the archive.
+
+- Mellum conversion v3 (stopped by decision): the 47 GB rolling slot and the original `best-weights.pt` (the registered
+  copy `mellum21-convert-v3-latents-20261010` is what the QAT foundation reads).
+- Failed v2's heads (`runs/mellum-qualify-20261010/heads/heads.pt`).
+- Retired Maple line: member-warmup smoke, native text warm-up v10, QAT latent smoke (incl. a partial `.pending`),
+  raw-recurrence v1–v4 and ablation m0, `maple-foundation-20261005/heads-c23.pt`, the 8x16 member GGUFs. Kept:
+  `maple-nested-20261005/n2b-v1/nested-state.pt` (named by recipe latent-sketch-consumer-maple-v2).
+- S3 pilot lineage: 20261003, 20261003-v2, resume-d-v1, 20261005-v3, the AdamW/Muon optimizer comparison and three
+  stream-Muon smokes. Kept: resume-ef-v1 (S3_FULL_RUN_HANDOFF) and 20261005-v4 (S3_FULL_RUN_PLAN parent).
+- Unregistered local-recurrence experiments: fit-v5…v9, resume-proof-v1, wide-chain-v1…v3, and the external
+  `inputs/port-checkpoint.pt` (byte-identical to the registered NVMe copy).
+
+Kept on purpose: base models, teacher outputs (teacher-v7*, teacher-v3 on NVMe as the fast copy of the registered
+artifact), `models/decision/clef-flash` (Clef scripts), the Phase F export (HANDOVER), the browser-CI LFM GGUFs,
+the fork follow-ups' GGUFs, `ling-lora` (unreferenced, pre-Neuralese; owner call), and Pop-owned `runs/luna-*`.
